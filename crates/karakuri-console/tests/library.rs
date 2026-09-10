@@ -1190,10 +1190,10 @@ fn a_press_names_the_chip_it_landed_on_and_never_the_next_one() {
         // asked for. A `SelectScope` there would be indistinguishable from a
         // press on `all`, because that payload cannot say which.
         assert_eq!(
-            chosen.operation,
+            chosen.asked(Some("night01")),
             match scope {
                 Scope::History => karakuri_operation::Operation::WalkHistory {
-                    step: karakuri_operation::Undecided
+                    set: Some("night01".to_owned())
                 },
                 _ => karakuri_operation::Operation::SelectScope {
                     scope: karakuri_operation::Undecided
@@ -3536,11 +3536,20 @@ fn the_history_chip_is_the_fifth_and_a_press_on_it_asks_for_the_walk() {
         .expect("no chip answered a press on `history`");
     assert_eq!(chosen.scope, Scope::History);
     assert_eq!(
-        chosen.operation,
+        chosen.asked(Some("night01")),
         Operation::WalkHistory {
-            step: karakuri_operation::Undecided
+            set: Some("night01".to_owned())
         },
         "the `history` chip asked for something other than `Walk the edit history`"
+    );
+    // **And the Set is the host's answer rather than the chip's**: the console
+    // holds a deck letter, the id rides the aim, and a walk aimed at a deck
+    // running the pair the run launched with names no Set — which lists
+    // nothing rather than everything (ADR-0276, ADR-0308).
+    assert_eq!(
+        chosen.asked(None),
+        Operation::WalkHistory { set: None },
+        "a walk with no Set aimed at invented one"
     );
 
     assert!(view.select_scope(Scope::History), "the mark did not move");

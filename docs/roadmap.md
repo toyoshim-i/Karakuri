@@ -622,12 +622,37 @@ an arm in the drain, and *Load a procedure over a layer* turned out never to hav
 press arm sits in `App::performed` beside the fold and the Set load, exactly as *Narrow the
 published interface*'s did, so the sentence refusing it had stopped being true before it was read.
 
-**What stays is three rows, and none of them is work on this surface.** *Walk the edit history*,
-*Edit the file instead* and *Move a boundary* each carry an `Undecided` payload and no surface can
-say them, so what they wait on is the **vocabulary** settling what the operation acts on rather than
-a route. **`plan` in this column now means exactly that**: `mcp.rs`'s classification lost the answer
-*named, and nothing on this frame performs it yet* when the last row carrying it left, so a badge
-that is not `has` or `gap` is an unsettled payload and nothing else.
+**And the last three went on 2026-09-10**
+([ADR-0342](adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md)) — the
+three that carried an `Undecided` payload, which is what a `plan` badge in this column had come to
+mean. One of them was the payload arriving and two were the question being asked properly:
+
+- ***Walk the edit history* names the Set it is a walk of**, and is `has walk_history`. What it was
+  waiting for was *which history*, which ADR-0308 called *"the one thing no surface spells"* — and a
+  model spells a Set id in `read_set`, so the sentence had stopped being true about this surface. It
+  is a **ninth tool** beside `read_set` and `list_sets` rather than a name `operate` takes, and that
+  is ADR-0199's own division rather than a second route: it reads the store and answers with rows,
+  which is what only the server can do, and a directory walk handed to the drain's frame is a walk
+  on the path that must not wait. The panel's route is unchanged — the chip asks for the walk and
+  the host answers the id off the pulldown deck's aim.
+- ***Edit the file instead* is `gap`.** The row names an *event*, somebody saving a file in another
+  program; a model does not do that, it calls `write_procedure`, which **is** its edit. There is
+  nothing here a model would say that the write does not already say, so nothing is owed
+  ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)'s kind of
+  answer). The payload stays `Undecided` as the row's marker for `--watch`.
+- ***Move a boundary* is `gap`**, with
+  [ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)'s own
+  sentence: a divider's position is the arrangement's own state, exactly as the twelve rows below it
+  are, and that record's consequences already called this the thirteenth — held out only because its
+  payload is open. The payload stays open for
+  [ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)'s
+  reason, a key cannot mean a viewport pixel, and settling it would not have moved the badge.
+
+**So `plan` in this column now means nothing at all**, which is this sub-milestone's exit read from
+the inside: `mcp.rs`'s classification lost *named, and nothing on this frame performs it yet* when
+its last row left (ADR-0341) and lost *the payload is undecided* when these two turned out to be
+`gap` for reasons of their own. Every operation the vocabulary names is performed, has a tool, is a
+window's, or is refused with a sentence saying nothing is owed.
 
 ***Element capacity, seeds, the camera* left this list the day ADR-0334 was written**, which is the
 shape all six of 2026-09-10's took: ADR-0328 gave the Inspector's deck head two chips, `resized` and
@@ -636,10 +661,9 @@ this surface changing.
 
 **The server exists in the instrument**, which is a change to what this sub-milestone is. `karakuri
 --mcp PORT` runs `karakuri_environment::mcp::serve` against the panel's own `Opening` and publishes
-seven tools, so the mechanism
+eight tools, so the mechanism
 ([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)) is not only settled, it
-is running, and so is the eighth tool. **What is left here is the audit's surface**, the
-operations the panel does not reach being the ten above.
+is running, and so is the ninth, `operate`. **What is left here is the audit's surface**.
 
 **The audit's surface.** `gate` is the audit and has no wildcard arm, so a new operation stops the
 build until it is classed (ADR-0235, ADR-0236). The console draws four class pills. Four switches do
@@ -677,10 +701,12 @@ in the Library bay whose rows are one Set's versions, with a landing on them
 
 **Blocked on.** Nothing, and that changed with ADR-0334. It read *the bays above, for the rest* —
 a row whose operation the engine cannot yet perform has nothing for MCP to route to — and **every
-bay has closed**; the open sub-milestones carrying bays' rows are M5.15 and M5.16. What is left is
-three payloads for the vocabulary to settle, and not one of them is work on this surface — there is
-no performer owed anywhere any more. MCP is still a mouth rather than the control stick, which is
-why the list is short.
+bay has closed**; the open sub-milestone carrying bays' rows is M5.16. Nothing is owed here: no
+performer, no payload and no tool. MCP is still a mouth rather than the control stick, which is why
+the list is short.
+
+**Exit, checked.** `grep -c 'rt plan">MCP' docs/manual/operations.html` answers **0** on 2026-09-10.
+The sub-milestone is not closed here — that is the maintainer's.
 
 #### M5.11 — Hover tooltips
 
@@ -791,6 +817,14 @@ or any bay's — `grep -c 'rt plan">key' docs/manual/operations.html` is the cou
 written down here.
 
 **Exit.** No `plan` badge in the key column of [every operation](manual/operations.html).
+**`grep -c 'rt plan">key' docs/manual/operations.html` returns 7 as of 2026-09-10**, against 27 the
+day before, and each of the seven waits on a control rather than on a bay: *Attach a beat source*,
+*Save the arrangement* and *Put a saved arrangement back* on the two cards the address does not
+descend into — the audio-in pill's inputs and the arrangement pill's menu — *Point a lane at what it
+drives* on the sequencer's `+ lane` chooser, which is the third, *Set the free-run tempo* on the
+tempo figure being a track a press positions rather than a level with a step, and *Fade a deck out
+or in* and *Crossfade to the next deck* on the transition row drawing one `go` capsule, which asks
+for a wipe. **The column reads 38 `has` / 7 `plan` / 23 `gap`**, against 17 / 27 / 24.
 
 **The maintainer has deferred the letters to this milestone and taken four cells off the page in
 the meantime.** On 2026-09-08 *Scrub a deck a quarter beat* (`u i`), *Fade a deck out or in*
@@ -817,10 +851,11 @@ a key press is addressed to the bay that has focus, `Tab` walks the arrangement 
 then across, and the keys that act inside a bay are the same six everywhere because they are rules
 about kinds of thing rather than about bays. A global letter survives only where the operation it
 names has no operand, or where its only operand is the choice the key itself spells — seven keys of
-the thirty-one this file bound when the record was written. **It binds twenty-three now**: `tab`,
-`esc` and the four keys of the grammar, the rub-out, and thirteen letters. Twelve of the twenty-one
-the record makes focus-relative have gone, each on its own condition — the grammar reaches the same
-row in the Mixer or the Library — and the other nine wait for the bays they are in (item 2).
+the thirty-one this file bound when the record was written. **It binds eighteen now**: `tab`, `esc`
+and the four keys of the grammar, the rub-out, and eight letters. Seventeen of the twenty-one the
+record makes focus-relative have gone, each on its own condition — the grammar reaches the same row
+— and what is left is the seven globals the operand rule keeps, plus `g`, which is addressed to the
+focused bay because the grammar reaches no *pane*, and `k`, which the Library draws no control for.
 
 **Blocked on. Nothing.** The one uncertainty the record carried was whether `egui` swallows `Tab`
 before the window loop's `match` sees it, which would have been the failure that looks like nothing
@@ -889,6 +924,20 @@ invariant a test holds.
    folded bay is still in the ring with no key that acts on it. The seven bays with no grammar
    decline the four keys and say where the six are.
    [ADR-0333](adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md).
+   **Item 2 is complete since 2026-09-10**: the grammar is built in all nine bays, `space` on a bay
+   is bound and is the fold in every one of them, and the panel paints the mark a folded bay owes —
+   the head alone over the edge a fold leaves, with the dashed ring on it. The transition row is the
+   Mixer's **head**, which is where ADR-0333 left it open: the settings carry no slot, so they are
+   about the bay rather than about any one strip, and `go` acts on the addressed strip. A library
+   row's own controls are its star and its `params` chip; its **menu is drawn and is not addressed**,
+   because a card the grammar can open and cannot then walk is a control that traps the address.
+   **Five more letters are unbound**, each because the grammar reaches its rows: `f` and `s` with
+   `Readout::target` — `space` on a bay is the fold and `space` on the Program head's `solo` is the
+   solo — `u` with `s`, and `o` and `p` with the arrows on the Transport's offset. **`g` is what is
+   left of the pointer half and it takes the focus instead**: it folds the split enclosing the
+   focused bay, which is a pane every time, and that is the one row of this page the grammar does
+   not reach.
+   [ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md).
 3. **`map.rs` moves to `karakuri-map`.** A global key is a complete line exactly as a `cc` is, so it
    is a third `Key` beside `Cc` and `Note`; the crate holding the layer between a surface and the
    vocabulary then stops being named for a wire. Keys reached under focus are deliberately not
@@ -909,6 +958,17 @@ invariant a test holds.
    `&uarr;&darr;` and `&larr;&rarr;` both resolve to *the arrows*, so a badge naming the wrong pair
    passes.
    [ADR-0333](adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md).
+   **Item 4 is complete since 2026-09-10.** `ROWS` holds thirty-one routes over the nine bays,
+   `BAYS` still holds the nine, and a tenth spelling — `&middot; in any bay` — resolves to
+   `karakuri_console::focus::ANY`, which is what a press addressed to *whichever* bay has focus
+   needs and what *Fold a bay away* and *Fold a pane away* carry. The reverse badge check reads it
+   as the strong claim it is: a badge saying *any bay* fails unless the dispatch table declares all
+   nine. **The axis is checked**, which is what that record left owed: `karakuri-console`'s
+   `grammar.rs` holds the Sequencer against it in both directions — its lanes are a column and a
+   lane's cells are a row, so `←→` are refused on the lanes and `↑↓` on a cell, and each refusal
+   names the axis that works. What the *page* is still not held to is which pair a badge spells,
+   which is one reading further out and is named here rather than left to look covered.
+   [ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md).
 5. **The routes closed bays have rescheduled onto it, none of which is a letter.** The Library bay
    closed owing these: the split `load` button and its pulldown
    ([ADR-0305](adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)),
@@ -1122,8 +1182,8 @@ loaded over a layer — an L5 could be dragged from the Library onto the master 
 [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) is the
 record and [ir-spec.md](ir-spec.md)'s specification moved first for a file format the way the
 operations page moves first for an operation (`docs/contributing.md` §6) — the kind, its three
-builtins and its cost are in the present tense there now, and *L5's chain — specified, not built*
-is what is left. **This meets
+builtins, its cost, the slot list, the cuts and the record are in the present tense there now, and
+*L5's chain — built, and its surface is not* is what is left. **This meets
 [ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)'s own
 revival condition** — *somebody writing the compositing down* — which that record wrote into its
 own rejection, so the deferral is taken up rather than reversed.
@@ -1143,8 +1203,8 @@ second time, and this sub-milestone exists partly because it has to be. M5.8 clo
 with three rows reading `has`; retiring them for three that start at `plan` turns it red, so the
 page and the panel land together here or a closed sub-milestone reopens with nobody owning it.
 
-**Blocked on M5.15 and on nothing else.** The library row, the `L5` badge, the kind filter's
-seventh toggle and the drag are
+**Blocked on nothing.** M5.15 closed on 2026-09-10, which is the one thing this waited on. The
+library row, the `L5` badge, the kind filter's seventh toggle and the drag are
 [ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md)'s
 and none is worth building twice. **Half of that record's load transfers literally and half does
 not**: the re-aim writes one file over one layer of a deck's material, which is exactly right for a
@@ -1173,25 +1233,45 @@ which no aim carries — a drop there appends a chain slot and writes `Record::M
    where a slot is loaded, with the reason, and MCP's `LAYERS` stays five — advertising a layer
    a slot cannot hold would offer a client an address that cannot resolve. Pass 2 is what makes
    the kind reachable.
-2. **The engine's chain as slots.** `master.rs` from three fixed passes to a list, `master.wgsl`
-   retired with them, `present.rs`'s targets two plus one per retained cut instead of four, and the
-   retained frame sanitised where it is copied instead of where it is read.
-3. **The record and the vocabulary.** `Record::MasterChain` from four scalars to a list of slots
-   written whole; `mix::change`'s arm; `karakuri-cli`'s replay driver resolving each slot's address
-   against the store before the first frame; three operations out and three in, `gate.rs` classing
-   them with no wildcard arm and `karakuri-operation-record` saying what each writes; and a refusal
-   naming the four-field record rather than defaulting past it, which here would play an empty
-   chain where the session had three passes.
-4. **Console and host.** The chain's rows as a third set of rectangles a release can land on
+2. **The engine's chain as slots — done (pass 2a).** `master.rs` is a list: `Chain` is
+   `Vec<Slot>`, a slot holds one compiled L5 with its cut and its params, and the three
+   hand-written fragment entry points are gone. `master.wgsl` **kept one pass** and it is the
+   retention — sanitising the retained frame where it is *written* is what turns a
+   `copy_texture_to_texture` into a pass, which is a clause of ADR-0340 rather than a liberty.
+   The targets are the entry, up to two to ping-pong between, and one per retained cut: **an
+   empty chain now takes none** where four were always allocated. The entry is held apart from
+   the pair so that the `mix` cut's copy is position-independent, which is what a list needs and
+   what ADR-0317's between-two-passes copy could not give. `tests/master.rs` holds each shipped
+   procedure to the pass it replaced on a GPU — feedback and rgb shift **bit-identical**, bloom
+   within 0.1% of the frame's peak.
+3. **The record and the decode — done (pass 2a).** `Record::MasterChain` is `{"slots":[…]}` with
+   `proc` a content address, `cut` present exactly where the procedure declares `retains`, and
+   `params` keyed by declaration name; the four-field form is refused with the key it found named
+   (`#[serde(deny_unknown_fields)]` on this variant and on no other), because a silent default
+   would play an empty chain where the session had three passes. `mix::change`'s arm reads each
+   cut word back refused rather than defaulted, `mix::apply_chain` puts a list on the `Present` —
+   a uniform write where the shape is the one running, a build otherwise — and `karakuri-cli`'s
+   replay resolves each slot's address against the store. **The vocabulary is pass 2b's**:
+   `SetFeedback` / `SetBloom` / `SetRgbShift` still work, each resolving to the slot whose
+   procedure is the matching shipped address and appending one where the chain has not got it.
+4. **Console and host — pass 2b.** The three operations out and three in, `gate.rs` classing them
+   with no wildcard arm and `karakuri-operation-record` saying what each writes; the chain's rows
+   as a third set of rectangles a release can land on
    ([ADR-0273](adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md), and the mark
-   says *where* and never *whether*), the Master bay's `+ add` appending a slot, and the bay's
-   tooltips rewritten to say what a chain is now.
-5. **The three shipped effects.** `examples/feedback.kir`, `examples/bloom.kir` and
-   `examples/rgb_shift.kir`, in the presets tier nothing in this program writes (P-0096). Two are
-   the hand-written bodies term for term; **`bloom.kir` is not**, because a chain slot cannot name
-   the intermediate target a separable blur needs, so it is one 9×9 pass at **81 fetches per texel
-   against the pair's 19** — same radius, same picture, different price. **This pass owes a fresh
-   measurement**: ADR-0317's 0.80 ms was taken on the two-pass form and does not describe this one.
+   says *where* and never *whether*); the Master bay's `+ add` appending a slot; and the bay's
+   tooltips rewritten to say what a chain is now. **This is what is left of M5.16**, together with
+   the page's three rows and the Library's drop, and the exit condition below is its.
+5. **The three shipped effects — done (pass 2a).** `examples/feedback.kir`, `examples/bloom.kir`
+   and `examples/rgb_shift.kir` are what the chain runs, compiled into `karakuri-environment` and
+   addressed by the hash of their bytes so a chain of presets resolves with no store at all. Two
+   are the hand-written bodies term for term; **`bloom.kir` is not**, because a chain slot cannot
+   name the intermediate target a separable blur needs, so it is one 9×9 pass at **81 fetches per
+   texel against the pair's 19**. **The measurement is taken**: at 1280x720 on this machine the
+   single pass is **0.92 ms** against ADR-0317's 0.80 ms for the pair — 1.2x for 4.3x the fetches
+   — and the three together are **0.98 ms**, 5.9% of a 60 Hz frame, where the fixed passes were
+   1.14 ms. Nothing is owed a second output. What the same run exposes is the **estimate**:
+   `cost.rs` prices bloom at 3889 of 4096 and over-predicts a cached tap by about four to one
+   here, which is named for whoever re-weights it rather than taken.
 
 **The Master bay's `+ add` leaves the arena's gap list**, and for the Sequencer's reason rather
 than a new one: `+ lane` left it on 2026-09-09 because a lane is a row from `Pattern::lanes` and

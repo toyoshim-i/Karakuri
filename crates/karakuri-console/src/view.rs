@@ -6378,7 +6378,7 @@ impl LookRow {
 /// this order. Two crates naming the same order is what P-0090 costs a
 /// vocabulary that depends on nothing, and the test above is what stops the
 /// two drifting on this side.
-fn next_tonemap(tonemap: Tonemap) -> Tonemap {
+pub(crate) fn next_tonemap(tonemap: Tonemap) -> Tonemap {
     match tonemap {
         Tonemap::Clamp => Tonemap::Reinhard,
         Tonemap::Reinhard => Tonemap::Aces,
@@ -8721,14 +8721,14 @@ impl TransitionSettings {
 
     /// **The next shape round the cycle**, as the setting an operation
     /// carries.
-    fn next_wipe_shape(&self) -> TransitionSetting {
+    pub(crate) fn next_wipe_shape(&self) -> TransitionSetting {
         let (kind, angle, _) = WIPE_SHAPES[(self.shape_at() + 1) % WIPE_SHAPES.len()];
         TransitionSetting::WipeShape { kind, angle }
     }
 
     /// **The next quantum round the cycle**, as the setting an operation
     /// carries.
-    fn next_quantum(&self) -> TransitionSetting {
+    pub(crate) fn next_quantum(&self) -> TransitionSetting {
         TransitionSetting::Quantum {
             beats: QUANTA[(self.quantum_at() + 1) % QUANTA.len()].0,
         }
@@ -8736,7 +8736,7 @@ impl TransitionSettings {
 
     /// **The next length round the cycle**, as the setting an operation
     /// carries.
-    fn next_length(&self) -> TransitionSetting {
+    pub(crate) fn next_length(&self) -> TransitionSetting {
         TransitionSetting::Length {
             beats: FADE_BEATS[(self.length_at() + 1) % FADE_BEATS.len()].0,
         }
@@ -9851,6 +9851,52 @@ fn wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
         &mut dashes,
     );
     ui.painter().extend(dashes);
+}
+
+/// **A folded bay's mark, painted** — the head alone, and the whole of what a
+/// folded bay draws.
+///
+/// `docs/manual/console.html` is the specification, term for term: a
+/// `.bay-head` with `border-bottom: 0`, the bay's title in the head's own
+/// spaced-out capitals, and [`focus::OPENS`] beside it in the code face at
+/// `--c-faint`. The dashed ring is the caller's, so this paints a head and
+/// nothing else.
+///
+/// **It says there is a bay here and that `space` opens it, and nothing
+/// else** — not a bay's contents in miniature, and not a count of what is
+/// inside. While focus is on a folded bay a digit, `enter` and the arrows
+/// decline and say why, so a mark standing in for those would be offering a
+/// press that is refused.
+fn folded_head_into(ui: &Ui, pal: &Palette, at: Rect, title: &str) {
+    card(ui, pal, at);
+    let painter = ui.painter().with_clip_rect(at);
+    let mid = at.center().y;
+    let job = spaced(
+        &title.to_uppercase(),
+        size::HEAD_SIZE,
+        pal.faint,
+        size::HEAD_TRACKING,
+    );
+    let galley = painter.layout_job(job);
+    let left = at.min.x + size::HEAD_PAD_X;
+    painter.galley(
+        Pos2::new(left, mid - galley.size().y * 0.5),
+        galley.clone(),
+        pal.faint,
+    );
+    // **The word goes after the title and not at the far end**, because a
+    // folded row is as wide as the bay was and the two would part company on
+    // a wide panel — the mark is one statement, read left to right.
+    let says = painter.layout_no_wrap(
+        focus::OPENS.to_owned(),
+        FontId::new(size::HEAD_SIZE, FontFamily::Monospace),
+        pal.faint,
+    );
+    let after = match title.is_empty() {
+        true => left,
+        false => left + galley.size().x + size::HEAD_PAD_X,
+    };
+    painter.galley(Pos2::new(after, mid - says.size().y * 0.5), says, pal.faint);
 }
 
 /// **The Mixer bay's transition row, painted**, term for term from
@@ -12996,11 +13042,40 @@ pub struct Chosen {
     /// console was handed rather than a position in it: the caller marks it
     /// through [`View::select_scope`], which refuses a scope with no chip.
     pub scope: Scope,
+}
+
+impl Chosen {
     /// **What the press names**: [`Operation::SelectScope`] for the four
     /// library chips, whose payload is `Undecided`, and
     /// [`Operation::WalkHistory`] for [`Scope::History`] — see this type's own
     /// documentation for both.
-    pub operation: Operation,
+    ///
+    /// **`aimed` is the Set the walk is of**, which is [`View::aimed`] and is
+    /// the one thing about this press the console cannot answer for itself: the
+    /// bay holds a deck letter and a Set id rides the aim (ADR-0308). It is a
+    /// method rather than a field for that reason — the press names the row and
+    /// the value the row needs is read where it lives, on the way out, so there
+    /// is no moment at which a `Chosen` is carrying a Set nobody has checked
+    /// against the deck the pulldown is on.
+    ///
+    /// **`None` is not *no answer*, it is *no Set*.** A deck playing the pair
+    /// the run launched with has its versions filed under no Set, and a
+    /// narrowing to a Set matches none of them — so the walk lists nothing and
+    /// the bay says why, which is the same value `history::Version::set`
+    /// carries for those rows (ADR-0276).
+    ///
+    /// **The four beside it ignore it**, because `SelectScope` says nothing
+    /// about which library was chosen — the press *knows* and the payload
+    /// cannot carry it, which is what put the fifth chip on a row of its own.
+    #[must_use]
+    pub fn asked(&self, aimed: Option<&str>) -> Operation {
+        match self.scope {
+            Scope::History => Operation::WalkHistory {
+                set: aimed.map(str::to_owned),
+            },
+            _ => Operation::SelectScope { scope: Undecided },
+        }
+    }
 }
 
 /// **One scope chip's width**: the word at [`size::BASE`] inside
@@ -14655,18 +14730,11 @@ impl LibraryBay {
         }
         self.chips(ctx, scopes)
             .find(|(_, chip)| chip.contains(p))
-            .map(|(scope, _)| Chosen {
-                scope,
-                // **The row the press names follows the chip**, which is
-                // [`Chosen`]'s own section and not a special case here: four
-                // chips choose among libraries of Sets and the fifth asks for
-                // an edit history, and those are two rows of
-                // `docs/manual/operations.html`.
-                operation: match scope {
-                    Scope::History => Operation::WalkHistory { step: Undecided },
-                    _ => Operation::SelectScope { scope: Undecided },
-                },
-            })
+            // **The row the press names follows the chip**, which is
+            // [`Chosen::asked`] and not a special case here: four chips choose
+            // among libraries of Sets and the fifth asks for an edit history,
+            // and those are two rows of `docs/manual/operations.html`.
+            .map(|(scope, _)| Chosen { scope })
     }
 
     /// **One filter field's box**, or `None` for a bay with no filter row.
@@ -16913,7 +16981,7 @@ pub const SYNCS: [Sync; 3] = [Sync::Free, Sync::Tempo, Sync::Beat];
 ///
 /// `Free` is refused by nothing, so the loop always finds something and there
 /// is no `None` to answer.
-fn next_sync(at: Sync, allows: [bool; SYNCS.len()]) -> Sync {
+pub(crate) fn next_sync(at: Sync, allows: [bool; SYNCS.len()]) -> Sync {
     let from = SYNCS.iter().position(|s| *s == at).unwrap_or(0);
     (1..=SYNCS.len())
         .map(|step| (from + step) % SYNCS.len())
@@ -21474,6 +21542,28 @@ pub struct View {
     /// what takes it; a mark left behind by a file somebody deleted draws no
     /// row and is not this field's to prune.
     pub starred: std::collections::BTreeSet<String>,
+    /// **Which Set the load pulldown's deck is running**, as the host reads it
+    /// off that deck's aim — and `None` for a deck playing the pair the run was
+    /// launched with, which is where every run starts.
+    ///
+    /// **It is here because a walk names a Set and this console cannot spell
+    /// one.** [`Operation::WalkHistory`] carries the id of the history it is a
+    /// walk of; the id rides the aim a library load sends and this crate reads
+    /// no engine (ADR-0156), so the host answers it here, exactly as it answers
+    /// the rows of that walk into [`View::library`] — see [`Chosen::asked`],
+    /// which is the one place this is read.
+    ///
+    /// **A readout rebuilt per frame, like [`View::mixer`] beside it**, rather
+    /// than written on the press that changes the aim: the pulldown's deck can
+    /// be re-pointed by a load, by a key, by a mapped control and by a model,
+    /// and a value written at one of those four is a value stale after the
+    /// other three.
+    ///
+    /// **The deck it is read off is the load pulldown's and not the
+    /// selection's** ([`View::target_deck`], ADR-0305): the walk is drawn under
+    /// the pulldown that says which deck the bay is preparing, and the landing
+    /// it feeds lands there.
+    pub aimed: Option<String>,
     /// **Which libraries this console has to offer**, in the order the chips
     /// are drawn — and **empty** for a console nobody has told, which is every
     /// test in this crate that does not say otherwise and what the bay then
@@ -22021,6 +22111,11 @@ impl View {
             // and is every test in this crate that does not say otherwise —
             // `View::library`'s rule one field down.
             starred: std::collections::BTreeSet::new(),
+            // **And no Set aimed at**, which is a console with no engine behind
+            // it and is also where every real run starts: a slot plays the pair
+            // the command line settled until somebody loads a Set (ADR-0304),
+            // so a walk asked for before that names no Set and lists nothing.
+            aimed: None,
             // And nothing said about what libraries there are, which is the
             // same console from the other side: no chips, and so no scope
             // row. Room for the four the mock draws, so a host that says so
@@ -22258,6 +22353,29 @@ impl View {
     /// one.
     pub fn focus_mark(&self, panel: &Panel) -> Option<Rect> {
         focus::mark(panel.layout(), self.focus.bay(panel.layout())?)
+    }
+
+    /// **The mark a *folded* bay holding focus wears**, or `None` where the
+    /// focused bay is not folded — [`focus::folded_head`], with the bay this
+    /// console has focus on, and the title to paint in it.
+    ///
+    /// **A folded region has no rectangle**, so the ring alone would land on
+    /// nothing an operator could read; `docs/manual/console.html` specifies the
+    /// head alone, and this is where the panel draws it. It is [`View::draw`]'s
+    /// one mark painted over the bays rather than inside one, for the reason
+    /// the five cards are: the edge a fold leaves belongs to whatever is drawn
+    /// next to it, and this is only ever drawn while an operator has
+    /// deliberately tabbed onto the bay that is not there.
+    ///
+    /// `panel` must be solved: [`Layout::rect`] refuses to answer from a dirty
+    /// one.
+    pub fn folded_mark(&self, panel: &Panel) -> Option<(Rect, &'static str)> {
+        let bay = self.focus.bay(panel.layout())?;
+        let mark = focus::folded_head(panel.layout(), bay)?;
+        // A headless row has no title to draw, and the mark is what says a bay
+        // is there — so the word alone stands for it, exactly as the row
+        // stands in for the head that is not drawn (ADR-0159, ADR-0259).
+        Some((mark, head_of(bay).map_or("", |head| head.title)))
     }
 
     /// **What the Library bay's load control is aimed at**, as the one value
@@ -23715,6 +23833,10 @@ impl View {
         // which is the derivation this paints from rather than a second
         // reading of where focus is.
         let focused = self.focus_mark(panel);
+        // **And the mark a folded bay wears**, read here for the reason above
+        // it: it is the same pointer asked a second question, and a folded bay
+        // has no rectangle for the ring alone to sit on.
+        let folded = self.folded_mark(panel);
         // **The third of them**, and it is read the same way and for the same
         // reason: which chip is marked is a position in the row this frame is
         // drawing, and a scope past its end is the last chip there is.
@@ -24256,6 +24378,10 @@ impl View {
             // on one bay**, because focus is in one place — see
             // [`View::focus_mark`], which is the derivation and where the
             // folded case is argued.
+            if let Some((mark, title)) = folded {
+                folded_head_into(ui, &pal, mark, title);
+                wfocus_into(ui, &pal, mark);
+            }
             if let Some(mark) = focused {
                 wfocus_into(ui, &pal, mark);
             }

@@ -301,3 +301,11 @@ this workspace can assert.
 nothing there, which is honest — there is no rectangle — and it means an operator who tabs onto a
 folded bay has no mark until that drawing exists. It is ADR-0259's own open question and this record
 does not close it.
+
+**Closed on 2026-09-10**
+([ADR-0343](0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)). There is no
+rectangle and there **is** an edge: a closed child keeps its divider, so it still solves to a
+rectangle with no extent along its parent's axis, sitting where the bay was. `focus::folded_head`
+grows that edge to a head's height and `View::draw` paints the head and the ring on it — over the
+bays, and only while that bay holds focus. `space` on a bay is bound with it, which is what the mark
+tells an operator to press.

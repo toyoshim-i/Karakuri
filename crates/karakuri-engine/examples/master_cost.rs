@@ -1,14 +1,24 @@
-//! **What the master chain costs, per pass and all together** — the
+//! **What the master chain costs, per slot and all together** — the
 //! measurement `docs/contributing.md` §1 asks of a change that touches the
 //! frame path, for
-//! [ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md).
+//! [ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
+//! and beside
+//! [ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)'s
+//! figures for the three hand-written passes these replace.
 //!
 //! `examples/frame_cost.rs`'s harness, narrowed to one question: the same deck,
-//! the same frame, at the same 1280x720, with the chain off and then with each
-//! pass on and then with all three. The interesting number is the **difference**
-//! — what a pass adds to a frame that was already being drawn — and the
-//! interesting claim is that the first row and a build with no chain in it are
-//! the same frame, which is `tests/master.rs`'s job and not this file's.
+//! the same frame, at the same 1280x720, with the chain empty and then with
+//! each shipped procedure in it alone and then with all three. The interesting
+//! number is the **difference** — what a slot adds to a frame that was already
+//! being drawn — and the interesting claim is that the first row and a build
+//! with no chain in it are the same frame, which is `tests/master.rs`'s job and
+//! not this file's.
+//!
+//! **Bloom is the row ADR-0340 owes a number for.** The 0.80 ms on record was
+//! taken on the two-pass separable form; the shipped procedure is one 9x9
+//! kernel, 81 fetches per texel against the pair's 19, because a chain slot's
+//! output replaces the frame and the pair's second half needs both. This is
+//! what that costs.
 //!
 //! **Host clock throughout, and it says so** — `frame_cost.rs`'s reasoning
 //! verbatim: GPU timestamps do not survive `Probe::new`'s calibration on this
@@ -22,8 +32,10 @@
 
 use std::time::{Duration, Instant};
 
+use std::collections::BTreeMap;
+
 use karakuri_engine::deck::Deck;
-use karakuri_engine::master::{Chain, Cut};
+use karakuri_engine::master::{Chain, Cut, Slot};
 use karakuri_engine::swap::HotSwap;
 use karakuri_engine::{Gpu, Present, Set};
 use karakuri_ir::typed::Checked;
@@ -35,6 +47,12 @@ const OUTPUT: (u32, u32) = (1280, 720);
 
 const L1: &str = "examples/coil_vortex.kir";
 const L4: &str = "examples/star_flares.kir";
+
+/// The three shipped procedures, compiled in so that a figure does not depend
+/// on a working directory the way the deck's two do.
+const FEEDBACK: &str = include_str!("../../../examples/feedback.kir");
+const BLOOM: &str = include_str!("../../../examples/bloom.kir");
+const RGB_SHIFT: &str = include_str!("../../../examples/rgb_shift.kir");
 const CAPACITY: u32 = 10_240;
 const SLOTS: u32 = 4;
 const FRAMES: usize = 120;
@@ -43,8 +61,25 @@ const STEPS: u8 = 1;
 
 fn compile(path: &str) -> Checked {
     let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let proc = karakuri_ir::parse(&src).unwrap_or_else(|e| panic!("{path}: parse: {e:?}"));
-    karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{path}: check: {e:?}"))
+    check(&src)
+}
+
+fn check(src: &str) -> Checked {
+    let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+    karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"))
+}
+
+fn slot(gpu: &Gpu, present: &Present, source: &str, cut: Option<Cut>, amount: f32) -> Slot {
+    let params: BTreeMap<String, f32> = [("amount".to_string(), amount)].into_iter().collect();
+    Slot::build(
+        &gpu.device,
+        present.chain_layout(),
+        format!("example:{}", source.len()),
+        &check(source),
+        cut,
+        params,
+    )
+    .expect("a shipped procedure is a legal chain slot")
 }
 
 fn deck_of(gpu: &Gpu, l1: &Checked, l4: &Checked) -> Deck {
@@ -70,20 +105,20 @@ fn median(xs: &mut [f64]) -> f64 {
 /// **The chain alone, timed as its own submission.**
 ///
 /// The deck is drawn *outside* the timed stretch, once, so that what is timed
-/// is the chain's passes and the copy and nothing else. That is the number
-/// P-0091 asks for — what a pass costs per frame — and it is the one a whole
-/// frame cannot give: four slots and a composite are 4.6 ms of GPU on this
-/// machine and the chain is a fraction of a millisecond, so a difference of
-/// differences is inside the drift.
+/// is the chain's passes and the retentions and nothing else. That is the
+/// number P-0091 asks for — what a pass costs per frame — and it is the one a
+/// whole frame cannot give: four slots and a composite are 4.6 ms of GPU on
+/// this machine and the chain is a fraction of a millisecond, so a difference
+/// of differences is inside the drift.
 ///
 /// **The chain-off row is not zero and is not meant to be**: it is an encoder,
 /// a submit and a poll with nothing recorded between them, which is exactly the
 /// floor every other row is over.
 fn run(gpu: &Gpu, deck: &mut Deck, present: &mut Present, chain: Chain) -> f64 {
-    present.set_chain(&gpu.queue, chain);
+    present.set_chain(&gpu.device, &gpu.queue, chain);
     // One real frame into whatever the mix writes now, so the chain's entry
     // holds material rather than whatever the last setting left — and so a
-    // feedback pass has a history that is a picture.
+    // retaining slot has a history that is a picture.
     for _ in 0..2 {
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
         frame.render(present.mix_target(), present.size(), STEPS);
@@ -123,47 +158,39 @@ fn main() {
     let mut deck = deck_of(&gpu, &l1, &l4);
     let mut present = Present::new(&gpu.device, Present::HDR_FORMAT, OUTPUT.0, OUTPUT.1);
 
-    let off = Chain::default();
-    let settings: [(&str, Chain); 6] = [
-        ("chain off (no pass recorded)", off),
-        (
-            "feedback 0.5, mix cut",
-            Chain {
-                feedback: 0.5,
-                cut: Cut::Mix,
-                ..off
-            },
-        ),
-        (
-            "feedback 0.5, exit cut",
-            Chain {
-                feedback: 0.5,
-                cut: Cut::Exit,
-                ..off
-            },
-        ),
-        ("bloom 0.6", Chain { bloom: 0.6, ..off }),
-        (
-            "rgb shift 0.4",
-            Chain {
-                rgb_shift: 0.4,
-                ..off
-            },
-        ),
-        (
-            "all three",
-            Chain {
-                feedback: 0.5,
-                cut: Cut::Exit,
-                bloom: 0.6,
-                rgb_shift: 0.4,
-            },
-        ),
+    // **Each list is made fresh**, because a `Chain` owns its slots' pipelines
+    // and installing one moves it: what is being timed is a chain running, not
+    // a chain being built, and building is what `Present::set_chain` is
+    // measured as costing by the resize figure beside it (ADR-0325).
+    // A named type because a list is built fresh per row — see below.
+    type Make = fn(&Gpu, &Present) -> Chain;
+    let lists: [(&str, Make); 6] = [
+        ("empty chain (no pass recorded)", |_, _| Chain::default()),
+        ("feedback 0.5, mix cut", |gpu, present| {
+            Chain::new(vec![slot(gpu, present, FEEDBACK, Some(Cut::Mix), 0.5)])
+        }),
+        ("feedback 0.5, exit cut", |gpu, present| {
+            Chain::new(vec![slot(gpu, present, FEEDBACK, Some(Cut::Exit), 0.5)])
+        }),
+        ("bloom 0.6 (one 9x9 pass)", |gpu, present| {
+            Chain::new(vec![slot(gpu, present, BLOOM, None, 0.6)])
+        }),
+        ("rgb shift 0.4", |gpu, present| {
+            Chain::new(vec![slot(gpu, present, RGB_SHIFT, None, 0.4)])
+        }),
+        ("all three, exit cut", |gpu, present| {
+            Chain::new(vec![
+                slot(gpu, present, FEEDBACK, Some(Cut::Exit), 0.5),
+                slot(gpu, present, BLOOM, None, 0.6),
+                slot(gpu, present, RGB_SHIFT, None, 0.4),
+            ])
+        }),
     ];
 
-    // A cold pass over every setting first, so that no row pays for another
-    // row's pipeline or cache state — the same reason `WARMUP` exists.
-    for (_, chain) in settings {
+    // A cold pass over every list first, so that no row pays for another row's
+    // pipeline or cache state — the same reason `WARMUP` exists.
+    for (_, make) in lists {
+        let chain = make(&gpu, &present);
         run(&gpu, &mut deck, &mut present, chain);
     }
 
@@ -176,9 +203,15 @@ fn main() {
         FRAMES - WARMUP
     );
     let mut baseline = None;
-    for (name, chain) in settings {
+    let mut ops = Vec::new();
+    let mut targets = Vec::new();
+    for (name, make) in lists {
+        let chain = make(&gpu, &present);
+        let price = chain.ops_per_fragment();
         let took = run(&gpu, &mut deck, &mut present, chain);
         let base = *baseline.get_or_insert(took);
+        ops.push((name, price));
+        targets.push((name, present.chain_targets()));
         println!(
             "  {name:<30} {took:6.3} ms   ({:+.3} ms over an empty submission, \
              {:.1}% of a 60 Hz frame)",
@@ -194,11 +227,26 @@ fn main() {
          frame of four slots is an order of magnitude more than this and the difference \
          would be inside its drift."
     );
+    println!();
+    println!("  the estimate, before anything was built — ops per fragment:");
+    for (name, price) in ops {
+        println!("    {name:<30} {price:>6}");
+    }
+    println!();
     println!(
-        "  memory: four frame-sized Rgba16Float targets at {}x{} is {:.1} MB, allocated at \
-         build and at resize whatever the chain is set to.",
+        "  memory: one frame-sized Rgba16Float target at {}x{} is {:.2} MB, and a chain \
+         holds the entry, at most two to ping-pong between, and one per retained cut — \
+         allocated when the list is installed and when the frame is resized, never when \
+         a parameter moves.",
         OUTPUT.0,
         OUTPUT.1,
-        4.0 * f64::from(OUTPUT.0) * f64::from(OUTPUT.1) * 8.0 / 1_048_576.0
+        f64::from(OUTPUT.0) * f64::from(OUTPUT.1) * 8.0 / 1_048_576.0
     );
+    for (name, held) in targets {
+        println!(
+            "    {name:<30} {held} target{} — {:.2} MB",
+            if held == 1 { "" } else { "s" },
+            held as f64 * f64::from(OUTPUT.0) * f64::from(OUTPUT.1) * 8.0 / 1_048_576.0
+        );
+    }
 }

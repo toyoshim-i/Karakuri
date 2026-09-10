@@ -409,6 +409,43 @@ pub struct Version {
     pub file: PathBuf,
 }
 
+impl Version {
+    /// **The name a surface lists this row under, and the name a landing names
+    /// it back by** — [`Snapshots::record`]'s own name with [`Version::at`] in
+    /// front of the time half, less the `.kir` and less the `@<set>` every row
+    /// of one walk shares.
+    ///
+    /// `20260908-143052-271_slot0_L4_beat_strokes`: when, which slot, which
+    /// layer and index, and what the procedure called itself. **The date is the
+    /// day directory**, which is where the file's own name leaves it — see
+    /// [`Version::at`], which is the two put back together and is the field
+    /// this reads.
+    ///
+    /// **One spelling, because two surfaces hand it to each other.** The
+    /// Library bay draws this and hands it back at the press, a model reads it
+    /// out of a walk and puts it in `Revision::Picked`, and whoever performs
+    /// that landing rebuilds it per candidate to find the file again — so a row
+    /// somebody pressed or typed and the version that is landed cannot come
+    /// apart. It is here rather than at either surface for that reason: this
+    /// module named the file, so this module says what the row is called.
+    ///
+    /// **The index is spelled only when it is not the first**, which is
+    /// `record`'s own rule read back rather than a second one: a `_0` on every
+    /// L4 of every ordinary run is noise in the way of what a person is
+    /// scanning for.
+    #[must_use]
+    pub fn filed_as(&self) -> String {
+        let index = match self.index {
+            0 => String::new(),
+            index => index.to_string(),
+        };
+        format!(
+            "{}_slot{}_{}{index}_{}",
+            self.at, self.slot, self.layer, self.proc_name
+        )
+    }
+}
+
 /// **What [`list`] found**, and what it did not.
 ///
 /// Three fields because a listing off a directory that grows on its own has
@@ -1424,6 +1461,84 @@ mod tests {
         assert!(
             at.starts_with(&chrono::Local::now().format("%Y%m%d").to_string()),
             "{at} is not today's local date"
+        );
+    }
+
+    /// **What a row is called is the file's own name**, less the `.kir` and
+    /// less the `@<set>` every row of one walk shares.
+    ///
+    /// [`Version::filed_as`] is the one spelling of it, because two surfaces
+    /// hand it to each other: the Library bay draws it and hands it back at the
+    /// press, a model reads it out of `walk_history` and hands it back in
+    /// `Revision::Picked`, and whoever lands one rebuilds it per candidate to
+    /// find the file again. So it is checked against the **name on disk**
+    /// rather than against a second `format!` — a copy of the spelling asserted
+    /// against itself would agree with anything
+    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
+    ///
+    /// **Watched to fail** with the index spelled on every row, which is the
+    /// difference between `…_L4_beat_strokes` and `…_L40_beat_strokes` and is
+    /// a landing that finds no file.
+    #[test]
+    fn a_rows_name_is_the_snapshots_own_name_without_the_suffix_or_the_set() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+        for (index, set, name) in [
+            (0, Some("night01"), "beat_strokes"),
+            (10, Some("night01"), "far"),
+            (0, None, "nobodys"),
+        ] {
+            snaps
+                .record(1, "L4", index, set, name, name.as_bytes())
+                .expect("record")
+                .expect("new");
+        }
+
+        let listing = list(tmp.path(), 100).expect("listed");
+        assert_eq!(listing.versions.len(), 3, "{listing:?}");
+        for version in &listing.versions {
+            let on_disk = version
+                .file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("a snapshot's name");
+            let tail = match &version.set {
+                Some(set) => format!("@{set}.kir"),
+                None => ".kir".to_string(),
+            };
+            // **The date is the day directory and not the file's name**, which
+            // is what `Version::at` is: the two put back together, with the
+            // hyphen `stamped_id` spells them with. So the row is the file's
+            // name with those nine characters in front of it.
+            let row = version.filed_as();
+            let (date, rest) = row.split_at(9);
+            let date = &date[..8];
+            assert_eq!(
+                format!("{rest}{tail}"),
+                on_disk,
+                "the row a surface hands back is not the name the store filed it under"
+            );
+            assert!(
+                version.file.ancestors().any(|dir| dir
+                    .strip_prefix(tmp.path().join(DIR))
+                    .is_ok_and(|under| under
+                        .components()
+                        .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                        .collect::<Vec<_>>()
+                        .join("")
+                        == date)),
+                "the row's date is not the day directory the file is in: {row}"
+            );
+        }
+        let far = listing
+            .versions
+            .iter()
+            .find(|version| version.proc_name == "far")
+            .expect("the eleventh renderer's row");
+        assert!(
+            far.filed_as().ends_with("_L410_far"),
+            "an index past the first is not in the row: {}",
+            far.filed_as()
         );
     }
 

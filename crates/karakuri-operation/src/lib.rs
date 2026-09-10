@@ -146,11 +146,20 @@
 //!
 //! # Where a payload is not decided
 //!
-//! Four rows name an operation whose payload cannot be written down without
-//! a decision nobody has made, and one third of a fifth, the camera arm
-//! of [`Property`]. They are the four that have been here longest —
-//! [`Operation::MoveBoundary`], [`Operation::WalkHistory`],
-//! [`Operation::WatchFiles`] and [`Operation::RouteFrame`].
+//! Three rows name an operation whose payload cannot be written down without
+//! a decision nobody has made, and one third of a fourth, the camera arm
+//! of [`Property`]. They are [`Operation::MoveBoundary`],
+//! [`Operation::WatchFiles`] and [`Operation::SelectScope`], and the first two
+//! are the oldest members this crate has.
+//!
+//! **Two left the group on their own days.** [`Operation::RouteFrame`] carries
+//! an [`Output`] and a `bool` since 2026-09-09, and
+//! [`Operation::WalkHistory`] carries the Set it is a walk of since
+//! 2026-09-10 — not because a decision was taken about a step, but because the
+//! thing the payload was waiting for turned out to be sayable: a model spells
+//! a Set id in `read_set`, so *which history* stopped being the one thing no
+//! surface spells
+//! (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
 //!
 //! **The sequencer's five left on 2026-09-09** ([`Operation::SetStep`],
 //! [`Operation::SetLaneMute`], [`Operation::PointLane`],
@@ -172,7 +181,7 @@
 //! is what this marker is for, since replacing it was a compile error at every
 //! construction site rather than a search.
 //!
-//! The nine carry [`Undecided`], which is a marker and not a
+//! The three carry [`Undecided`], which is a marker and not a
 //! placeholder: it says *this operation exists and what it acts on is an open
 //! question*, and it is greppable. Nothing here guesses, because nothing in
 //! this repository draws or declares something that claims an answer exists
@@ -2238,23 +2247,41 @@ operations! {
     /// versions has this had* is a list, landing on one is a load, and neither
     /// word is *undo*.
     ///
-    /// **The payload is still [`Undecided`], and the three shapes it was
-    /// choosing between are answered rather than open.** A cursor and a
+    /// **What a walk carries is *which history*, and it is a Set id since
+    /// 2026-09-10.** The three shapes this was choosing between were answered
+    /// by [ADR-0308](../../../docs/adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)
+    /// and the fourth was left open for want of a surface: a cursor and a
     /// direction is the console's own mark, which has no row on the page at
-    /// all; a count of steps is something no surface offers; and a revision to
-    /// land on is the landing's, where it now is. What is left for a walk to
-    /// carry is *which history*, and that is the one thing no surface spells.
+    /// all; a count of steps is something no surface offers; a revision to land
+    /// on is the landing's; and *which history* was *"the one thing no surface
+    /// spells"*. **A model spells one**: `read_set` takes a Set id and
+    /// `list_sets` hands the ids out, so the sentence that kept this
+    /// [`Undecided`] had stopped being true about the surfaces this vocabulary
+    /// serves
+    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
     ///
-    /// **A walk is narrowed by a Set and not by a deck**, which is why the
-    /// deck the panel can say is not the answer either: two decks running one
+    /// **A walk is narrowed by a Set and not by a deck.** Two decks running one
     /// Set have one history between them, and a version is filed under the Set
     /// the slot was running
-    /// (`docs/adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md`).
-    /// The id rides the aim, so it is the host's answer and never a surface's —
-    /// which is [`Operation::ListSets`]'s own division read on a history:
-    /// *which* store is being asked at all is the scope's question and never
-    /// that operation's payload.
-    WalkHistory { step: Undecided } => "Walk the edit history",
+    /// (`docs/adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md`),
+    /// so a deck is how a console *arrives* at an id and never what the listing
+    /// is about — which is why the field is the id and not the deck the panel
+    /// could have said.
+    ///
+    /// **`None` is a Set the walk does not name, and it is a state rather than
+    /// an absence.** The deck a panel aims this at can be running the pair the
+    /// run launched with; those versions are filed under **no** Set, and a
+    /// narrowing to a Set matches none of them rather than all of them
+    /// (`docs/adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md`),
+    /// so a walk that names no Set lists nothing and the surface says why. It
+    /// is `karakuri_environment::history::Version::set`'s own `Option` read
+    /// from the asking side, and the one derivation of it on the panel is the
+    /// aim (`Aiming::at`).
+    ///
+    /// **A model names one and is not offered the `None`**: `walk_history`
+    /// requires `set`, because a walk of no Set is not a question anybody can
+    /// be answered.
+    WalkHistory { set: Option<String> } => "Walk the edit history",
 
     /// **One layer of what a deck is playing, replaced, and everything else
     /// left where it is.** A procedure declares one `kind`, and the press
@@ -2318,6 +2345,23 @@ operations! {
     /// which files it would take if it could. Whether the row is that
     /// operation, or belongs on the page at all, is a decision about the
     /// manual.
+    ///
+    /// **So this payload is the row's marker for one flag**, and that is what
+    /// it is for: `--watch` is the only thing in this program that turns the
+    /// watching on, it takes no argument and nothing turns it off, so there is
+    /// no state for a payload to name until somebody decides the row is an
+    /// operation. It stays [`Undecided`] rather than becoming a `bool` nothing
+    /// can set.
+    ///
+    /// **A model has no route here, and nothing is owed for one.** A model does
+    /// not edit a file in another program: it calls `write_procedure`, which
+    /// **is** its edit — checked, written and swapped at a frame boundary — so
+    /// there is nothing a model would say on this row that the write does not
+    /// already say. That is
+    /// `docs/adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md`'s
+    /// kind of answer rather than a missing route, and it is why the page's MCP
+    /// badge is `gap` and not `plan`
+    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
     WatchFiles { watching: Undecided } => "Edit the file instead",
 
     /// Landed, overloaded for costing too much, or failed to build. A write
@@ -2355,8 +2399,9 @@ operations! {
     /// checked, written, built on a worker and swapped at a frame boundary, so
     /// the candidate for a node **is** what that node is playing. Choosing
     /// among several older versions is a different operation and it is
-    /// [`Operation::WalkHistory`], which is still undecided for want of the
-    /// address this row is able to do without.
+    /// [`Operation::WalkHistory`], which names the **Set** whose versions are
+    /// being chosen among rather than the node this row addresses — a walk is
+    /// narrowed by a Set and a keep is settled at a node.
     ///
     /// **And the surface that says a node is the staging lane, since
     /// 2026-09-09.** A lane row is one node a build changed rather than one
@@ -2434,6 +2479,25 @@ operations! {
     /// say. And `Layout::set_divider` takes a position in the viewport's own
     /// coordinates, which is a pixel: a number a drag produces and a key press
     /// or a model has no way to mean.
+    ///
+    /// **The payload stays [`Undecided`] for the keyboard's reason**, which is
+    /// the second of the two above read at a key:
+    /// `docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md`
+    /// is where a key that can only *step* is refused, and a viewport pixel is
+    /// not something a press can mean. Settling the address half alone would
+    /// not settle it.
+    ///
+    /// **And a model has no window, so the page's MCP badge is `gap`.** A
+    /// divider's position is the arrangement's own state, which is what the
+    /// twelve rows of
+    /// `docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md`
+    /// are — this was the thirteenth, left `plan` only because its payload is
+    /// open, and that record's own consequences say so. **The two facts are
+    /// held apart**: the badge is `gap` because a route into a surface's own
+    /// state is a route into a window the model is not looking at, and the
+    /// payload is open because no surface but the pointer can say a boundary.
+    /// Settling one would not settle the other
+    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
     MoveBoundary { boundary: Undecided } => "Move a boundary",
 
     /// A folded bay takes no space at all and no divider is drawn beside it;

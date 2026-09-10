@@ -422,13 +422,14 @@ fn sample(variant: &str) -> Operation {
         // neighbours ask for a different row: `history` is not a library of
         // Sets, so a press on it names *Walk the edit history* where a press
         // on `all` names *Choose which scope the library shows*
-        // (`view::Chosen`, ADR-0308). The payload is `Undecided` for
-        // `SelectScope`'s reason read on a history: what a walk would carry is
-        // *which* history, and no surface spells a Set id — the panel narrows
-        // it to whatever the load pulldown's deck is running, which is the
-        // host's answer.
+        // (`view::Chosen`, ADR-0308). **The payload is the Set the walk is
+        // of**, since 2026-09-10: what a walk carries is *which* history, the
+        // console holds a deck letter rather than an id, and the host answers
+        // it into `view::View::aimed` — which `Chosen::asked` reads on the way
+        // out. The value is any Set, because what the badge claims is that an
+        // operator reaches the row.
         "WalkHistory" => Operation::WalkHistory {
-            step: karakuri_operation::Undecided,
+            set: Some("night01".to_owned()),
         },
         // **A press on a row of that scope**, and the one emission in this
         // list whose operand is a *version* rather than a Set: the row is the

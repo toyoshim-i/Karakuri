@@ -244,6 +244,56 @@ pub struct Source {
     pub noise: Option<BindNoise>,
 }
 
+/// **The master chain**, as [`Record::MasterChain`] carries it: the ordered
+/// list of its slots and nothing else.
+///
+/// A struct rather than the variant's own fields because
+/// `#[serde(deny_unknown_fields)]` has no variant form — see
+/// [`Record::MasterChain`], which is where the refusal it buys is argued.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Chain {
+    /// **The slots, in the order they run.** Empty is a real value and the
+    /// default one: an empty chain draws nothing and the frame is the mix.
+    pub slots: Vec<ChainSlot>,
+}
+
+/// **One slot of the master chain**, as [`Chain`] carries it.
+///
+/// A procedure, the cut it answers where it declares `retains`, and what its
+/// params are set to. Nothing else: `src` is implicit — the chain's position
+/// supplies it — and a chain slot's L5 declares no `uses`, so there is no edge
+/// to record. See
+/// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChainSlot {
+    /// **A content address**, so the procedures become part of the state a
+    /// replay reproduces: a stream naming one the store does not hold is
+    /// refused with the address in the message. The same terms a Set file's
+    /// `slot` record uses.
+    #[serde(rename = "proc")]
+    pub procedure: String,
+    /// **Which retained frame this slot reads** — `mix` or `exit` — and
+    /// absent where its procedure declares no `retains`.
+    ///
+    /// **A `String` and not an enum**, which is [`Record::Blend`]'s and
+    /// [`Record::Residency`]'s rule: a word an older stream does not know is
+    /// the engine's to diagnose against what it actually supports, rather than
+    /// a parse failure that takes the whole line with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut: Option<String>,
+    /// **What this slot's params are set to**, keyed by the name the procedure
+    /// declared. A param nobody moved is absent and the declaration's own
+    /// default is what runs — the record carries what was asked for.
+    ///
+    /// A `BTreeMap` so the line is byte-stable: a record written twice from the
+    /// same chain has to be the same bytes, which is what
+    /// `a_record_round_trips_to_the_same_bytes` asks of every record here.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub params: std::collections::BTreeMap<String, f32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum Record {
@@ -724,9 +774,9 @@ pub enum Record {
     /// that carried more would have been recording defaults nobody chose.
     ///
     /// **The chain landed on 2026-09-09 and this record did not grow — a
-    /// second one did.** [`Record::MasterChain`] carries the three passes'
-    /// settings, and the two are apart for the reason this record is not a
-    /// field of [`Record::Look`], one paragraph up: they are different values
+    /// second one did.** [`Record::MasterChain`] carries the chain's slots and
+    /// what each is set to, and the two are apart for the reason this record is
+    /// not a field of [`Record::Look`], one paragraph up: they are different values
     /// in different passes, and folding them would make a fader ride rewrite
     /// four settings sixty times a second and a settings change rewrite the
     /// level a hand is holding. This one is a **level**, rode continuously by
@@ -740,16 +790,15 @@ pub enum Record {
     MasterOut {
         value: f32,
     },
-    /// **What the three fixed passes of the master chain are set to**, whole.
+    /// **What the master chain is**, whole: the ordered list of its slots.
     ///
-    /// The chain is feedback, then bloom, then rgb shift, between
-    /// [`Record::MasterOut`]'s level at its entry and [`Record::Look`]'s
-    /// exposure at the tone mapper's input — `karakuri_engine::master` is the
-    /// implementation and
-    /// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`
-    /// is the decision. **Nothing here names which effects are in the chain or
-    /// in what order**: the chain is fixed built-in presets, so a record that
-    /// carried the order would be recording a constant.
+    /// The chain sits between [`Record::MasterOut`]'s level at its entry and
+    /// [`Record::Look`]'s exposure at the tone mapper's input —
+    /// `karakuri_engine::master` is the implementation and
+    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`
+    /// is the decision. **The order is here because it is no longer a
+    /// constant**: a slot holds one `kind L5` procedure, named by a content
+    /// address, and a chain is whichever of them an operator put in it.
     ///
     /// **One record and not three**, which is [`Record::Look`]'s shape and its
     /// argument: `feedback` without `cut` beside it is not a picture anybody
@@ -773,31 +822,31 @@ pub enum Record {
     /// serialise. This is the first half only; no store directory is added
     /// here.
     ///
-    /// Every amount is floored at zero and capped by the engine —
-    /// `karakuri_engine::master::Chain::clamped` — which is the same division
-    /// of labour [`Record::Gain`] has: the record carries what was asked for,
-    /// the engine holds the range.
-    MasterChain {
-        /// `[0, 0.95]`. An amount of zero is the pass not being recorded at
-        /// all, which is [`Record::Gain`]'s zero one bay up.
-        feedback: f32,
-        /// Which frame feedback reads: `mix` — the frame as the mix wrote it,
-        /// before this chain — or `exit`, the chain's own output.
-        ///
-        /// **A `String` and not an enum**, which is [`Record::Blend`]'s and
-        /// [`Record::Residency`]'s rule: a word an older stream does not know
-        /// is the engine's to diagnose against what it actually supports,
-        /// rather than a parse failure that takes the whole line with it.
-        cut: String,
-        /// `[0, 1]`. What the pass blooms *from* is not here: the knee is 1.0
-        /// and the radius is fixed, both in `karakuri_engine::master` and
-        /// neither a control.
-        bloom: f32,
-        /// `[0, 1]` of 2% of the frame's height. In fractions of the frame and
-        /// never in texels, so a session replayed at another resolution shifts
-        /// the same distance.
-        rgb_shift: f32,
-    },
+    /// Every value is brought into the range its procedure declared, by the
+    /// engine — `karakuri_engine::master::Slot::resolved` — which is the same
+    /// division of labour [`Record::Gain`] has: the record carries what was
+    /// asked for, the engine holds the range.
+    ///
+    /// **The four-field form is refused rather than read**, which is
+    /// `#[serde(deny_unknown_fields)]` on this one variant and on no other.
+    /// Between 2026-09-09 and M5.16 this record was
+    /// `{feedback, cut, bloom, rgb_shift}`; the shape changed under the same
+    /// `t`, so an unrecognised key here is not a field from the future, it is
+    /// the old form — and dropping it silently, which is what this format does
+    /// everywhere else, would play an **empty chain** where the session had
+    /// three passes. A refusal that names the key it found is what
+    /// `docs/adr/0340-…` asks for in place of that default, and the bill for
+    /// reading both shapes is a decoder carrying two of them for the length of
+    /// the project
+    /// (`docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md`).
+    ///
+    /// **A newtype variant and not a struct one**, which is the whole of how
+    /// that refusal is spelled: `deny_unknown_fields` is a *struct* attribute
+    /// and serde has no variant form of it, so the payload is a struct and the
+    /// variant wraps it. On the wire it is the same object it would have been —
+    /// `{"t":"master_chain","slots":[…]}` — because an internally tagged enum
+    /// folds a newtype variant's struct into the tag's own object.
+    MasterChain(Chain),
     /// **The procedure a deck slot is playing, from this moment on.**
     ///
     /// Written when a hot swap lands, which since ADR-0316 is the one moment
@@ -1613,7 +1662,7 @@ impl Record {
             | Record::Residency { .. }
             | Record::Look { .. }
             | Record::MasterOut { .. }
-            | Record::MasterChain { .. }
+            | Record::MasterChain(_)
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             | Record::Authority { .. }
@@ -1996,6 +2045,68 @@ mod tests {
             err.to_string().contains("scrub_beats"),
             "the error does not name the field that is missing: {err}"
         );
+    }
+
+    /// **The four-field `master_chain` is refused, and the refusal names the
+    /// shape it found.**
+    ///
+    /// The record changed shape under the same `t` between 2026-09-09 and
+    /// M5.16 — four scalars became a list — and
+    /// `docs/adr/0340-…` refused reading both, on
+    /// P-0085: a compatibility cost before v1 is a bill and not an argument,
+    /// and this bill is a handful of sessions against a decoder carrying two
+    /// shapes for the length of the project. What it owed instead is this: not
+    /// a silent default, which here would play an **empty chain** where the
+    /// session had three passes, but a refusal that says which shape it met.
+    #[test]
+    fn the_four_field_master_chain_is_refused_naming_the_shape() {
+        let old = r#"{"t":"master_chain","feedback":0.5,"cut":"exit","bloom":0.6,"rgb_shift":0.4}"#;
+        let err = serde_json::from_str::<Record>(old)
+            .expect_err("the four-field form parsed — the list did not replace it");
+        let said = err.to_string();
+        assert!(
+            said.contains("feedback"),
+            "the refusal does not name the shape it found: {said}"
+        );
+        assert!(
+            said.contains("slots"),
+            "the refusal does not name the shape it wants: {said}"
+        );
+    }
+
+    /// **A slot list round-trips**, and an empty one is a real value rather
+    /// than an absence: the default chain is empty and that is what keeps the
+    /// default look free.
+    #[test]
+    fn a_master_chain_slot_list_round_trips() {
+        let line = r#"{"t":"master_chain","slots":[{"proc":"sha256:a3","cut":"exit","params":{"amount":0.5}},{"proc":"sha256:77","params":{"amount":0.8}}]}"#;
+        let Record::MasterChain(chain) = round_trip(line) else {
+            panic!("not a master_chain");
+        };
+        assert_eq!(chain.slots.len(), 2);
+        assert_eq!(chain.slots[0].procedure, "sha256:a3");
+        assert_eq!(chain.slots[0].cut.as_deref(), Some("exit"));
+        assert_eq!(chain.slots[0].params.get("amount"), Some(&0.5));
+        // **No cut where the procedure declares no `retains`**, and the field
+        // is absent rather than null: a slot that answered a cut it was not
+        // asked for is refused by the engine, so writing one would be writing
+        // a record this build refuses to obey.
+        assert_eq!(chain.slots[1].cut, None);
+        assert_eq!(
+            round_trip(r#"{"t":"master_chain","slots":[]}"#),
+            Record::MasterChain(Chain::default())
+        );
+    }
+
+    /// **A slot carrying a key this build has never heard of is refused too**,
+    /// for [`Record::MasterChain`]'s own reason one level down: the four-field
+    /// form's keys would otherwise land here as a slot nobody wrote.
+    #[test]
+    fn a_chain_slot_with_an_unknown_key_is_refused() {
+        let line = r#"{"t":"master_chain","slots":[{"proc":"sha256:a3","amount":0.5}]}"#;
+        let err = serde_json::from_str::<Record>(line)
+            .expect_err("an unknown key on a chain slot was dropped");
+        assert!(err.to_string().contains("amount"), "{err}");
     }
 
     fn round_trip(line: &str) -> Record {

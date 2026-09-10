@@ -367,6 +367,8 @@ number; new records continue from the end.
 | [ADR-0339](0339-a-rebuild-inherits-the-attachments-somebody-made.md) | A rebuild inherits the attachments somebody made | 2026-09-10 | accepted |
 | [ADR-0340](0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) | `kind L5` is written, and the master chain is an ordered list of them | 2026-09-10 | accepted |
 | [ADR-0341](0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md) | A route that answers is built, and a send that ends in a dialog is `gap` | 2026-09-10 | accepted |
+| [ADR-0342](0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md) | A walk names the Set it is of, and the two rows beside it are `gap` | 2026-09-10 | accepted |
+| [ADR-0343](0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md) | The grammar reaches all nine bays, and `space` on a bay is the fold | 2026-09-10 | accepted |
 
 ## Retired numbers
 

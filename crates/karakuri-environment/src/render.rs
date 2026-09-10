@@ -19,7 +19,7 @@
 use std::path::Path;
 
 use karakuri_engine::frame::{self, Committed, Sink, Skip};
-use karakuri_engine::{Chain, Deck, Gpu, Look, Present};
+use karakuri_engine::{Deck, Gpu, Look, Present};
 
 /// Rows in a texture-to-buffer copy must be a multiple of this.
 const COPY_ALIGN: u32 = 256;
@@ -64,14 +64,27 @@ pub fn to_sequence(
 ///
 /// `drive` is called once before each frame with its index and the deck, and
 /// returns the step count that frame's `tick` recorded, **the look that frame
-/// is under, and the master chain it is under**. There is no `look` parameter
-/// and no `chain` parameter beside it on purpose: see [`sequence_driven`].
+/// is under, and a master chain where the stream just changed one**. There is
+/// no `look` parameter and no `chain` parameter beside it on purpose: see
+/// [`sequence_driven`].
 ///
 /// **The chain is the third for the look's reason exactly.** A `master_chain`
 /// record moves it mid-session, so a run that took it as a parameter would
 /// replay every frame under whatever the stream started with — which is what
 /// happened to the look before it was returned rather than passed, and is the
 /// paragraph `karakuri-cli`'s replay loop writes about its own `look`.
+///
+/// **`Option`, and the look beside it is not, because the two are not the same
+/// kind of value.** A look is three numbers written to a uniform every frame;
+/// a chain is a list of procedures, and putting one on the `Present` may mean
+/// compiling them. So the driver hands one over on the frames the stream
+/// changed it and `None` on every other, and a chain that did not move is not
+/// touched (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
+///
+/// **A description and not a built chain**, because the `Present` a slot is
+/// built against is made inside this module: the driver says what the chain
+/// *is* and `resolve` says what an address's source is —
+/// `crate::mix::resolve_procedure` is what a caller with a store hands in.
 #[allow(clippy::too_many_arguments)]
 pub fn replay(
     gpu: &Gpu,
@@ -80,9 +93,10 @@ pub fn replay(
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
-    drive: impl FnMut(u32, &mut Deck) -> (u8, Look, Chain),
+    resolve: &dyn Fn(&str) -> Option<String>,
+    drive: impl FnMut(u32, &mut Deck) -> (u8, Look, Option<Vec<karakuri_engine::SlotSpec>>),
 ) -> Result<(), String> {
-    sequence_driven(gpu, deck, width, height, frames, wanted, drive)
+    sequence_driven(gpu, deck, width, height, frames, wanted, resolve, drive)
 }
 
 fn sequence(
@@ -95,13 +109,20 @@ fn sequence(
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
 ) -> Result<(), String> {
     // One step a frame, the same look throughout and no master chain at all,
-    // which is what an offscreen run with no stream driving it means.
-    // `Chain::default` is every amount at zero, which records no pass — so a
+    // which is what an offscreen run with no stream driving it means. The chain
+    // is never installed, so it stays empty, so no pass is recorded — a
     // `--render` is the frame this program drew before the chain existed, and
     // is bit for bit what it was.
-    sequence_driven(gpu, deck, width, height, frames, wanted, move |_, _| {
-        (1, look, Chain::default())
-    })
+    sequence_driven(
+        gpu,
+        deck,
+        width,
+        height,
+        frames,
+        wanted,
+        &|_| None,
+        move |_, _| (1, look, None),
+    )
 }
 
 /// A [`Sink`] that writes chosen frames to PNG files.
@@ -269,6 +290,7 @@ impl Sink for PngSink {
 /// **The loop itself is [`frame::compose`]**, which is also what the
 /// window runs. This function is now the offscreen half of the seam and nothing
 /// else: a sink, a driver, and the decision to stop after `frames`.
+#[allow(clippy::too_many_arguments)]
 fn sequence_driven(
     gpu: &Gpu,
     deck: &mut Deck,
@@ -276,7 +298,8 @@ fn sequence_driven(
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
-    mut drive: impl FnMut(u32, &mut Deck) -> (u8, Look, Chain),
+    resolve: &dyn Fn(&str) -> Option<String>,
+    mut drive: impl FnMut(u32, &mut Deck) -> (u8, Look, Option<Vec<karakuri_engine::SlotSpec>>),
 ) -> Result<(), String> {
     let mut sink = PngSink::new(gpu, width, height);
     let mut present = Present::new(&gpu.device, sink.format(), width, height);
@@ -303,10 +326,22 @@ fn sequence_driven(
         // keeps the commit closure, which is `karakuri`'s window and
         // `karakuri-cli`'s.
         let (steps, look, chain) = drive(i, deck);
-        // Per frame and unconditionally, which is `compose`'s own treatment of
-        // the tone map at the other end of the same chain: one
-        // `queue.write_buffer` into storage sized at construction.
-        present.set_chain(&gpu.queue, chain);
+        // **On the frames the stream moved it and on no others**, which is
+        // where this parts company with the tone map at the other end of the
+        // same chain: that is a `queue.write_buffer` into storage sized at
+        // construction and this is a build.
+        if let Some(slots) = chain {
+            // **A refusal is said and the chain that is running stays**, which
+            // is this file's rule for everything else a stream can get wrong: a
+            // replay that met a procedure the store does not hold has a frame
+            // to draw either way, and stopping the render over it would lose
+            // every frame after it as well.
+            if let Err(refusal) =
+                crate::mix::apply_chain(&mut present, &gpu.device, &gpu.queue, &slots, resolve)
+            {
+                eprintln!("  {refusal} — the chain keeps what it had");
+            }
+        }
         // Where a refusal would be said, if one could happen. See the check
         // below the call.
         let mut refusal = None;

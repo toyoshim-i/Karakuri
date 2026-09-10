@@ -1316,10 +1316,10 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // the things that went into it. See `Record::MasterOut`.
             | Record::MasterOut { .. }
             // And what that fold's output is put through, one pass along: a
-            // Set file carrying the master chain's settings would reconfigure
-            // the master the moment it was loaded into any deck. See
+            // Set file carrying the master chain's slots would reconfigure the
+            // master the moment it was loaded into any deck. See
             // `Record::MasterChain`.
-            | Record::MasterChain { .. }
+            | Record::MasterChain(_)
             | Record::Canvas { .. }
             | Record::Procedure { .. }
             // An authority names a node the way the records above it do, and
