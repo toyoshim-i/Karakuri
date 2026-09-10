@@ -202,23 +202,25 @@ of this list* stopped locating them.
 Inspector was the last of them, on 2026-09-10 — and so have M5.14 and *The console's own shape*. What
 is left of the cross-cutting run is **M5.10 MCP, M5.11 hover tooltips and M5.13 the keyboard**, each
 of which is a column of [every operation](manual/operations.html) rather than a bay and none of which
-the panel column's grep reads; **M5.12 MIDI closed on 2026-09-10** when its column's grep returned 0.
-After them are **M5.15** and **M5.16**, in that order. Each closed entry above is a stub naming what
+the panel column's grep reads; **M5.12 MIDI closed on 2026-09-10** when its column's grep returned 0,
+and **M5.15 closed the same day** when the panel column's grep over the rows it named returned
+nothing. After them is **M5.16**. Each closed entry above is a stub naming what
 it decided, when its exit was met and where every owed item went;
 [history/m5.md](history/m5.md) keeps them whole.
 
-**M5.15 is the first sub-milestone whose rows are in two bays, and its exit says so.** It is a
+**M5.15 was the first sub-milestone whose rows are in two bays, and its exit said so.** It was a
 change to what a library row *is* — a procedure is one, and loading one writes a single layer over
 what a deck is playing
 ([ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md))
-— so it lands in the Library and in the Inspector at once and belongs to neither. Its exit is
-therefore a grep over the **panel** column of the four rows it names rather than over a bay's, which
-is the same test read on the list the sub-milestone owns. **The four rows are M5.15's and not the
-two bays'**, which has to be said rather than assumed: M5.3 and M5.5 each closed their column
-against the rows on their own list, and neither list is *Inside a Set*, so two `plan` panel badges
-arriving there would otherwise reopen an exit already met. M5.5's rows are **enumerated by name** — ten
-of them, spread over five sections and deliberately not *Inside a Set* — and neither of these two is
-on that list. They are named in M5.15 and nowhere else.
+— so it landed in the Library and in the Inspector at once and belonged to neither. Its exit was
+therefore a grep over the **panel** column of the rows it named rather than over a bay's, which is
+the same test read on the list the sub-milestone owns. **Those rows were M5.15's and not the two
+bays'**, which had to be said rather than assumed: M5.3 and M5.5 each closed their column against
+the rows on their own list, and neither list is *Inside a Set*, so `plan` panel badges arriving
+there would otherwise have reopened an exit already met. M5.5's rows are **enumerated by name**,
+spread over several sections and deliberately not *Inside a Set*, and neither of the two that
+arrived there is on that list. They were named in M5.15 and nowhere else, and the stub that closed
+it keeps them named.
 
 **M5.16 sits after the bays and after the cross-cutting run, and it is neither of those things.**
 It is a language change wearing a bay's surface — `kind L5`, and the master chain as an ordered
@@ -425,10 +427,7 @@ mark, which is what emptied *Rows the manual has not given a home*
 
 **Exit, met on 2026-09-10**: no `plan` badge in the panel column of this bay's **ten** rows on
 [every operation](manual/operations.html), a `gap` meeting it as a `has` does. Every one of the ten
-reads `has`. The `plan` panel badges left on the page are M5.15's — *Keep a node's procedure* and
-*Point an Inspector pane at a deck* under *Inside a Set*, *Filter the library by kind* and *Load a
-procedure over a layer* under *The library* — and not one of them is on this bay's list, which is why
-two of them arriving under *Inside a Set* enlarges nothing here.
+reads `has`. The four `plan` panel badges left on the page on the day of the close were M5.15's, and M5.15 closed on them the same day, so the panel column carries none.
 
 What M5.5 left owed is rescheduled, and all of it is under *Mx — TODO*: **a narrowing survives no replay
 and no keep**, which is a gap in the record format rather than a decision and the one row where a keep
@@ -1059,117 +1058,59 @@ of item 6, caching a bay to a texture**, whose precondition and whose measuremen
 and **the badge's estimated/measured mark**, which is what mark the page gains and is the
 maintainer's.
 
-#### M5.15 — Procedures in the library
+#### M5.15 — Procedures in the library — **closed**
 
-**Rows.** Four, all new and all written on 2026-09-10:
-*Filter the library by kind* and *Load a procedure over a layer* under **The library**, and
-*Keep a node's procedure* and *Point an Inspector pane at a deck* under **Inside a Set**
-([every operation](manual/operations.html)).
+A procedure is a row of the library, and one loaded over a layer makes a Set with no name
+([ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md)),
+from the maintainer's request of 2026-09-10. A procedure is a row in the two tiers every other kind
+of library data is in — what ships under the presets root, the operator's under
+`<store>/procedures/` — a badge at the right of a row's name says which layer it implements, and a
+row of kind chips says which kinds show, OR across the ones that are on. A load re-aims the slot with
+that one file replaced and every other field restated, which is ADR-0314's derivation and ADR-0228's
+path, so what the deck plays afterwards is a **derived Set with no name**: the strip reads
+`<base> + <kir>`, `keep` is what names it, and `Aim::set` stays the base id so the snapshot every
+compile takes stays alive. The Inspector keeps a node's source into the operator's tier, refusing a
+name already kept, and a pane is pointed at a deck by a pulldown per pane — which is what makes slots
+C and D reachable at all. It is the first sub-milestone whose rows sit in two bays and belong to
+neither. [history/m5.md](history/m5.md).
 
-**Exit.** No `plan` badge in the **panel** column of those four rows. That is M5.1 to M5.9's grep
-narrowed to a list of rows rather than to a bay, because the four sit in two bays — the Library and
-the Inspector — and neither bay's own column is what this sub-milestone is. The key, MIDI and MCP
-columns are out of scope for the reason they are there, being M5.13's, M5.12's and M5.10's: three of
-the four carry a `plan` MCP badge and are M5.10's owed list rather than this exit's.
+**Exit, met on 2026-09-10**: no `plan` badge in the panel column of the rows it named on
+[every operation](manual/operations.html), which is M5.1 to M5.9's grep narrowed to a list of rows
+rather than to a bay.
+`awk '/<h2/{h=$0} /rt plan">panel/{print h" || "$0}' docs/manual/operations.html` prints nothing at
+all, under any `<h2>` — so the narrowed reading and the whole-page reading agree, and every row this
+sub-milestone named reads `has`. The key, MIDI and MCP columns were out of scope for the reason they
+are there, being M5.13's, M5.12's and M5.10's; **the MCP column moved anyway and on merit**. *Load a
+procedure over a layer* and *Keep a node's procedure* read `operate` rather than waiting on M5.10 —
+the load's performer was never missing, and the keep gained its arm on the frame the capsule did —
+while *Filter the library by kind* and *Point an Inspector pane at a deck* read `gap`, which says a
+model has no window ([ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md))
+rather than that a performer is owed.
 
-**What it is.**
-[ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md),
-from the maintainer's request of 2026-09-10. A procedure is a row of the library in the two tiers
-every other kind of library data is in — what ships under `examples/`, the operator's under
-`<store>/procedures/` — and a badge at the right of a row's name says which layer it implements: one
-kind for a procedure, the layers its slots fill for a Set. Six toggles say which kinds show, OR
-across the ones that are on. **A procedure loaded over a layer re-aims the slot with that one file
-replaced and every other field restated**, which is ADR-0314's derivation and ADR-0228's path, and
-what the deck plays afterwards is a **derived Set with no name**: the strip reads `base + kir`,
-`keep` is what names it, and its versions go on being filed under the Set it started from so the
-snapshot every compile takes stays alive. The Inspector keeps one node's source into the operator's
-tier, and a pane is pointed at a deck by a pulldown per pane, A–D.
+What M5.15 left owed is rescheduled, and all of it is under *Mx — TODO*: **a `params` press on a
+procedure row asks nothing**, the reading a `ReadSet` opens being a Set's and a procedure row's own
+card a reading nobody has drawn; **a preset Set row carries no badge**, which
+[P-0091](principles/0091-cost-is-known-before-it-is-paid.md) prices rather than refuses — the reading
+is known before it is paid and is off the frame path — so what stands is the badge the mock draws on
+a row the panel leaves bare; **listing procedures over MCP**, which is *List what the store holds*'
+to grow and a decision nobody has taken; **a procedure load landing on node 0 of its kind**, whose
+revival condition ADR-0338 writes down — the day the Inspector's node head grows a *replace this
+node* control is the day the payload gains a `NodeAt`; and **what a keep does to a derived deck's own
+identity**, since `keep` names the material and re-points nothing.
 
-**Blocked on. Nothing.** Both passes are work in files that exist, against decisions that record
-settles, and neither waits on the other: the Inspector pass writes the tier the Library pass lists,
-and an empty `<store>/procedures/` is a listing with nothing in it rather than a broken one — the
-presets tier fills the list from the first run.
-
-**The two implementation passes, named by the files they touch.**
-
-1. **The Library and host pass — built on 2026-09-10**, and both its rows read `has` in the panel
-   column. `store.rs` gained `procedures/` — established by `Store::open` the way `arrangements/`
-   is — with `Store::PROCEDURES`, `PROCEDURE_FILE_SUFFIX`, `list_procedures`, `read_procedure` and
-   `StoreError::NoProcedure`; **it reads no `kind` line**, because this module keeps files it does
-   not parse, so `history::declared_kind` stays the one scanner and the callers pair it with the
-   listing. `places.rs` gained `PresetProcedure` and `Presets::list_procedures`, which **does** open
-   each file for its kind — one small read per row, on the press and never on a frame — and lists a
-   `.kir` that declares none as a row with no badge rather than dropping it.
-   `view.rs` carries `RowKind` and `Rows` for the seam, `LibraryBay::badges` for the readout,
-   `KindChip` with `LibraryBay::kinds`, `kind_chips` and `kind` for the six toggles, and
-   `Field::Layer`, `LAYER_UNSET` and `stepped_layer` retired with the `layer…` field; `Filters`
-   carries `kinds` where it carried `layer`, and `View::narrow` takes `LibraryKinds`. `RowMenu`'s
-   send became an `Option`, because a procedure row's menu is the loads and no separator — nothing
-   takes a bare `.kir` in. `room.rs` gained `LIB_KINDS_*`, `KIND_*` and `BADGE_*`; `input.rs` two
-   `PROBES` rows, one of them a readout that is claimed and **not** swallowed; `hover.rs` a `TIPS`
-   entry per chip and one for the badges, with the `layer field` entry deleted with the field it
-   cites. `panel.rs`'s carry says which load a drop names. `main.rs` carries `procedures`,
-   `ListedProcedure`, `set_row`/`kept_row`/`shipped_row`, `shows_kept` and `showing` for the
-   listing, and `overlaid`/`overlaying` beside `played` — the arm that re-aims a slot with one file
-   replaced, adds the procedure as node 0 where the slot has no node of that kind, keeps the node
-   name the edges resolve against, and leaves `Aim::set` where it is; `base_material` and
-   `derived_material` are the strip's `<base> + <kir>`. `mcp.rs`'s
-   `Load a procedure over a layer` gained its `make` and `shape`; **`sayable` stays
-   `Unperformed`**, because the drain the MCP tool lands on is not the press path this pass wired,
-   which is M5.10's owed row rather than this one's.
-2. **The Inspector pass — built on 2026-09-10**, and both its rows read `has` in the panel column.
-   `view.rs` carries `Node::keep`, `node_keep`, `auth_head` and `InspectorPane::keep_procedure` for
-   the capsule; `PaneTarget`, `pane_target`, `Pointing` and `View::pane_deck` behind `point_pane`,
-   `open_pane_target` and `shut_pane_target` for the pulldown, which is `DeckName::chevron` made
-   live — ADR-0292 reserved that rectangle and this is what took it. **`room.rs` gained no
-   constant**: the capsule is a `.mini` at the node head's own `gap: 7px` and the mark is
-   `CHEVRON_W`, so both were already spelled. `input.rs` gained two `PROBES` rows — the pulldown
-   claims two controls, the mark and its card — and `claim`'s rule 2 a sixth card; `hover.rs` a
-   `TIPS` entry each, citing the mock's own words. `main.rs` carries `Kept` and
-   `Keeping::keep_procedure` with `finished_keeps` beside `finished_saves`, `pointed_pane` beside
-   `pointed`, and `inspector` taking the per-pane targets instead of filling pane *n* from slot *n*
-   — which is what makes slots C and D reachable at all. `store.rs` gained `write_procedure` and
-   `write_sandbox_procedure` beside the listing the Library pass added, refusing a name already
-   kept. **`mcp.rs`'s `Keep a node's procedure` is `operate` rather than `plan`**: the drain hands
-   it to the same writer with `Asked::Model`, so a model's lands in `<store>/sandbox/`, and its MCP
-   badge went `has` with the panel's — one row of M5.10's owed list closed early rather than
-   deferred.
-
-**What it owes beyond the badges.**
-
-1. **The `layer…` filter field is gone**, taken off the mock and off the panel together by the
-   Library pass — *a control the panel draws that the mock does not is a defect* and the converse
-   (`docs/contributing.md` §5) — with `hover::TIPS`' `layer field` entry deleted with it.
-   `Operation::ListSets` keeps its `layer` field and the panel now sends it unset: `list_sets` and
-   `--list-sets` are where *which Sets hold a node on this layer* lives, and the panel's way to it
-   is `holds…`, which asks by node name.
-2. **Two limits are recorded and not fixed**, and either is a later record rather than a defect. A
-   procedure load lands on **node 0** of its kind, so the second renderer of a three-renderer Set is
-   unreachable from a library row; and a `.kir` in a folder somebody dropped on the window is **not**
-   a row, because a folder row is a take and nothing takes in a bare `.kir`. **Three more the
-   Library pass recorded where they bite.** A preset **Set** row carries no badge, because
-   `Presets::list_sets` opens no file and reading twenty-two Set files on a press is a cost nobody
-   asked for — a procedure's kind is known there because that listing does read one small file per
-   row. A `params` press on a **procedure** row asks nothing: the reading a `ReadSet` opens is a
-   Set's, and what a procedure row's own card would be is a reading nobody has drawn. And a
-   procedure whose file declares no `kind` is a row with no badge that shows only while no chip is
-   on, and a load off it is refused by name — a file somebody kept is listed rather than dropped.
-3. **Listing procedures over MCP is nobody's yet.** *Filter the library by kind* is `gap` because a
-   model has no window, and the question a model actually has — *what procedures does this store
-   hold* — is *List what the store holds*' to grow. It is written here because a `gap` standing in
-   front of a real gap is what this list exists to stop.
-4. **A node head with nothing to keep draws no capsule**, and there are two of those. A head
-   standing over several nodes carries none, which is *Set a node's authority*'s own rule on the
-   same head; and the **built-in camera** carries none, because it is a node with no procedure
-   behind it and there is no source to write. The mock draws both absences, and the pass reproduced
-   them: `view::Node::keep` is an `Option` beside the authority rather than that field read again,
-   because the two absences are not the same set — the camera has an authority and has nothing to
-   keep — and the host answers it off `Set::cameras`' own sentence, *the last camera node is always
-   the built-in orbit*.
-5. **A node's keep has no key and cannot have a map line**, which the two rows already say and this
-   list records once: a map line names a slot, a range or a word from a closed list, and neither a
-   node address nor a pane's name is any of the three. Both rows' key and MIDI columns are `gap`
-   and stay there.
+What it does not owe, each named so it is met as a decision rather than as a surprise. **The
+`layer…` filter field is gone**, off the mock and off the panel together, with `hover::TIPS`' `layer
+field` entry deleted with it — `.lib-filters` draws `holds…` alone and `Field` is down to that one
+variant — so nothing is owed for it; *which Sets hold a node on this layer* lives in `list_sets` and
+`--list-sets`, and the panel's way to it is `holds…`, which asks by node name. **A bare `.kir` in a
+dropped folder is not a row**, because a folder row is a take and nothing takes a loose file in.
+**A `.kir` declaring no `kind` is listed rather than dropped**, badgeless, showing while no chip is
+on, with a load off it refused by name. **A node head with nothing to keep draws no capsule** — a
+head standing over several nodes, and the built-in camera, which has an authority and no source to
+write. **A node's keep and a pane's target have no key and can have no map line**, a map line naming
+a slot, a range or a word from a closed list and neither a node address nor a pane's name being one
+of the three. **The seventh kind chip and the `L5` badge word are M5.16's**, and **14-bit learn is
+M5.12's**.
 
 #### M5.16 — L5, the writable frame effect
 
@@ -1583,6 +1524,42 @@ have.
   waited on it — a learned line goes into `<store>/maps/default.map` and is loaded from there on the
   next start. From M5.12.
 
+- **A `params` press on a procedure row asks nothing.** The chip is on every row of the Library bay
+  and the reading a `ReadSet` opens is a **Set's** — its slots, its params, its ranges — so a
+  procedure row has the chip and no answer behind it. What a procedure row's own card would be is a
+  reading nobody has drawn, and drawing it is a page change before it is code: the reading's shape is
+  specified in [the console page](manual/console.html) for a Set alone. From M5.15.
+
+- **A preset Set row carries no badge, and the mock draws one.** `Presets::list_sets` opens no file,
+  so the shipped tier's Set rows have no layers to say, while the shipped tier's *procedure* rows are
+  badged because that listing does read one small file per row. The reason recorded at the code is
+  the cost of opening every Set file in the presets root on a press —
+  [P-0091](principles/0091-cost-is-known-before-it-is-paid.md) **prices that rather than refusing
+  it**: the reading is known before it is paid, bounded by the directory, and off the frame path,
+  which is where that principle's rule bites, and the mock's own bar is *a listing costs a directory
+  read and never a compile*. So this is owed rather than settled, and what is owed is either the
+  badge or a sentence on the page saying the shipped Sets do not carry one. From M5.15.
+
+- **Listing procedures over MCP is nobody's.** *Filter the library by kind* is `gap` because a bay's
+  own narrowing is a window and a model has no window (ADR-0315), so the question a model actually
+  has — *what procedures does this store hold* — has no route: it is *List what the store holds*' to
+  grow rather than that row's, and nobody has decided what a listing hands back for a row that is a
+  procedure. A `gap` standing in front of a real gap is what this entry exists to stop. From M5.15.
+
+- **A procedure load lands on node 0 of its kind.** A procedure declares one `kind` and nothing about
+  where it goes, and a library row cannot say an index, so the second renderer of a three-renderer
+  Set is unreachable from a row and a `kind L4` always replaces `L4:0`. **The revival condition is
+  written into ADR-0338**: the day the Inspector's node head grows a *replace this node* control is
+  the day the payload gains a `NodeAt`. A limit stated where it bites rather than a defect. From
+  M5.15.
+
+- **A keep of a derived deck names a Set and re-points nothing.** `keep` is what gives derived
+  material a name and it files the aim's own files as any other deck's are filed — but only `played`
+  and `overlaid` write the strip's readout, so it goes on reading `<base> + <kir>` after the keep, and
+  `Aim::set` goes on being the base id. That is ADR-0338's own answer for the **load**, deliberately,
+  so the `history` chip does not go blank on the deck being edited; it is not an answer for what
+  follows a keep, and whether a keep adopts the name it just wrote is undecided. From M5.15.
+
 ---
 
 ## The handover
@@ -1594,10 +1571,10 @@ what nobody has decided. Everything else is in the sub-milestone above, in the c
 
 **The work starts at M5.10 — MCP.** The order is this file's own, top to bottom, and M5.10 is the
 first sub-milestone above still open: **every bay has closed**, M5.5 — Inspector last on 2026-09-10,
-with M5.14 and *The console's own shape* among them, and M5.12 — MIDI closed the same day. What is
-left of the cross-cutting run is M5.10, M5.11 and M5.13, which is a column of [every
-operation](manual/operations.html) apiece rather than a bay, and after them M5.15 and M5.16 in that
-order. Each entry names its rows, its exit condition and what it is blocked on, and is the one place
+with M5.14 and *The console's own shape* among them, and M5.12 — MIDI and M5.15 — Procedures in the
+library closed the same day. What is left of the cross-cutting run is M5.10, M5.11 and M5.13, which
+is a column of [every operation](manual/operations.html) apiece rather than a bay, and after them
+M5.16. Each entry names its rows, its exit condition and what it is blocked on, and is the one place
 those are written down; what a closed sub-milestone left owed is under *Mx — TODO* and in
 [history/m5.md](history/m5.md).
 
