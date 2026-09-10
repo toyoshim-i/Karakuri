@@ -4,10 +4,13 @@
 //! Six things, and the first three are what stop the layer becoming a second
 //! copy of the manual:
 //!
-//! 1. **The table is the console's own rows.** `hover::TIPS` is one entry per
-//!    row of `input::PROBES`, in that order, so a control registered there
-//!    and never given a tip is a compile error and an entry cannot answer for
-//!    its neighbour.
+//! 1. **The table is the console's own rows, at the granularity they claim.**
+//!    `hover::TIPS` is one entry per row of `input::PROBES`, in that order, so
+//!    a control registered there and never given a tip is a compile error and
+//!    an entry cannot answer for its neighbour — and a row that claims five
+//!    controls carries five entries unless `UNEVEN` says why it does not,
+//!    which is the half of *every compact control explains itself* that the
+//!    array's length cannot hold.
 //! 2. **Every citation resolves to the one element it names**, in
 //!    `docs/manual/console.html`. This is the half that goes stale in silence:
 //!    nothing about editing the page tells you a `Cite` was reading it, so the
@@ -140,6 +143,153 @@ fn a_row_with_no_tips_is_one_the_mock_is_silent_about() {
                 true => "it has none",
                 false => "it has some",
             }
+        );
+    }
+    // **And there are exactly four of them**, which is the reading rule as a
+    // number: the four above and no other row. The loop is an `iff` per row
+    // and would still pass with a name in `SILENT` that no row has, which is
+    // how a row renamed out of this list stops being checked at all.
+    let empty: Vec<&str> = TIPS
+        .iter()
+        .filter(|(_, tips)| tips.is_empty())
+        .map(|(name, _)| *name)
+        .collect();
+    assert_eq!(
+        empty, SILENT,
+        "the rows the mock is silent about are {empty:?} and `SILENT` names {SILENT:?}"
+    );
+}
+
+/// **The rows whose slice is not one entry per control the row claims, and
+/// why each one is not.**
+///
+/// `input::PROBES` counts what the pointer reaches through a row and `TIPS`
+/// says what explains itself, so the two numbers agree wherever the mock tips
+/// a row's controls one at a time. Where they do not, the reason is one of
+/// four and it is written down here rather than being a number that drifts:
+/// the page tips one element over several controls, it tips several elements
+/// for one, the second control is a card the page says nothing about, or the
+/// tips are owed.
+///
+/// **The third column is how many entries the row does carry**, and it is here
+/// for the reason the check exists at all: an excused row is out from under
+/// `PROBES`' count, so without a number of its own an entry could be deleted
+/// from one and nothing would say so. It is a transcribed count and it moves
+/// with the bay, which is what makes touching one of these rows a line to
+/// re-read rather than a number to bump.
+///
+/// **A row that gains its missing entries is a line to delete from here**, and
+/// deleting it is what puts the row back under the count.
+const UNEVEN: [(&str, &str, usize); 8] = [
+    // One kind of control and four chips drawn: the page tips all four sinks
+    // and the two plugin chips switch nothing, so `Outputs::chip_at` answers
+    // `None` on them and there is nothing for a cite to resolve against.
+    ("the Outputs row's sinks", "two of the four chips answer", 2),
+    // **The effect rows are owed**, and to `docs/roadmap.md`'s M5.16 pass 2b
+    // rather than to this milestone: ADR-0340 makes the master chain an
+    // ordered list of kind L5 procedures, and a tip per row of the chain the
+    // mock draws would be a citation of a bay about to be rebuilt.
+    (
+        "the Master bay's five",
+        "the chain's rows are M5.16 pass 2b's",
+        2,
+    ),
+    // The second control is the card the mark puts down, and the mock draws
+    // the mark alone.
+    (
+        "the Inspector pane heads' deck pulldown",
+        "the card carries no tip",
+        1,
+    ),
+    // Seven controls and six tips: `.scrub` is one element over both arrows,
+    // which is one control to a hand and `DeckHead::scrub`'s own answer.
+    (
+        "a deck head's seven",
+        "the scrub's two arrows are one tip",
+        6,
+    ),
+    // One control and two entries: the mark is drawn as a number where the
+    // interface carries the control and as a dot where it does not, and the
+    // page tips both faces.
+    (
+        "a parameter row's publish mark",
+        "the mark has two faces",
+        2,
+    ),
+    // The capsule is tipped and the card it opens is not.
+    (
+        "a node group's `uses` capsule and its card",
+        "the card carries no tip",
+        1,
+    ),
+    // `.auth` is one element the page tips once, and the three chips inside it
+    // are one reading — which is why `AUTHORITIES.len()` is the claim and one
+    // cite is the tip.
+    (
+        "a node head's three authority chips",
+        "one element over the three",
+        1,
+    ),
+    // A cell per drawn step and a label per lane are as many as the pattern
+    // has: the page draws four lanes of sixteen and this console draws
+    // whatever the host handed it, so the cells and the labels are one entry
+    // each and the fixed controls — four banks, the mode pill, `+ lane` — are
+    // one apiece.
+    (
+        "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
+        "the cells and the labels are per lane",
+        8,
+    ),
+];
+
+/// **A row claiming several controls carries several tips**, which is the
+/// exit `docs/roadmap.md`'s M5.11 names: *every compact control explains
+/// itself on hover*.
+///
+/// The array being `PROBES.len()` long is what stops a *row* going untipped,
+/// and it says nothing about a row that claims five controls and explains one
+/// of them — the pointer then resolves to the entry that is there, and four
+/// controls quietly say a fifth's words. This is that half: the count is
+/// `PROBES`' own, so a control added to a row arrives here as a failure with
+/// the row named.
+#[test]
+fn a_row_is_tipped_at_the_granularity_it_claims() {
+    for (at, (name, tips)) in TIPS.iter().enumerate() {
+        if SILENT.contains(name) || UNEVEN.iter().any(|(row, _, _)| row == name) {
+            continue;
+        }
+        assert_eq!(
+            tips.len(),
+            PROBES[at].claims,
+            "`{name}` claims {} controls in `input::PROBES` and explains {} of them — either \
+             it is a control short, or the row belongs in `UNEVEN` with the reason",
+            PROBES[at].claims,
+            tips.len()
+        );
+    }
+    // **And every exception is a row that needs one, and carries what it
+    // says it carries.** A name that no row has, or a row that has since been
+    // tipped whole, is a line to delete: left there it takes that row out of
+    // the check above for good. The count is what keeps an excused row from
+    // quietly losing an entry — the one thing the check above would have
+    // caught for it.
+    for (name, why, entries) in UNEVEN {
+        let (at, (_, tips)) = TIPS
+            .iter()
+            .enumerate()
+            .find(|(_, (row, _))| *row == name)
+            .unwrap_or_else(|| panic!("`UNEVEN` names `{name}`, which is no row of `TIPS`"));
+        assert_eq!(
+            tips.len(),
+            entries,
+            "`{name}` is excused as `{why}` and carries {} tips where this list says {entries}",
+            tips.len()
+        );
+        assert_ne!(
+            tips.len(),
+            PROBES[at].claims,
+            "`{name}` is excused as `{why}` and now carries one tip per control it claims — \
+             the line is to delete"
         );
     }
 }

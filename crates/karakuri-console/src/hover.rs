@@ -97,7 +97,7 @@ use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Galley, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::Point;
 use karakuri_operation::gate::Class;
-use karakuri_operation::{Layer, Output};
+use karakuri_operation::{Layer, Operation, Output};
 
 use crate::input::{Claim, PROBES};
 use crate::panel::Panel;
@@ -483,9 +483,19 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_pane_target,
         }],
     ),
-    // **Four of the row's seven.** The two that landed with the deck head's
-    // second row are not tipped here yet, and a fifth entry is what closes
-    // that — the row's own count is `input::PROBES`' and moves with the bay.
+    // **Six entries for the row's seven controls**, in the order the press
+    // handler asks them: the scrub is one entry and the mock draws two arrows
+    // — `.scrub` carries the tip and the arrows inside it are one control to a
+    // hand, which is `DeckHead::scrub`'s own answer.
+    //
+    // **The capacity chip and `re-salt` are the head's second row**
+    // (ADR-0328), and the two cites are the *first* pane's: the mock draws
+    // each of them twice and gives the first the whole of what the control is
+    // — a number somebody asked for and what a step does to it, a salt and
+    // what moves with it — where the second pane's pair says what those two
+    // are on `lattice_shell`. This is the node head keep capsule's rule, for
+    // its reason: the long one is the one an operator meeting the control
+    // needs.
     (
         "a deck head's seven",
         &[
@@ -515,6 +525,24 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
                     nth: 0,
                 },
                 at: on_scrub,
+            },
+            Tipped {
+                control: "the capacity chip",
+                cites: Cite {
+                    class: "mini sel",
+                    text: "524288",
+                    nth: 0,
+                },
+                at: on_size,
+            },
+            Tipped {
+                control: "the re-salt capsule",
+                cites: Cite {
+                    class: "mini",
+                    text: "re-salt",
+                    nth: 0,
+                },
+                at: on_salt,
             },
             Tipped {
                 control: "the composite chip",
@@ -629,17 +657,32 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_node_keep,
         }],
     ),
+    // **The row's two controls and not its four chips.** `SensChip::ALL` is
+    // four and the mock tips all four; the signal and the range are readouts
+    // that `SensChip::operation` answers `None` for, so a press reaches two of
+    // them and this table is what a press reaches.
     (
         "a sensitivity row's curve and take back",
-        &[Tipped {
-            control: "a sensitivity row",
-            cites: Cite {
-                class: "pill",
-                text: "pow2",
-                nth: 0,
+        &[
+            Tipped {
+                control: "the curve chip",
+                cites: Cite {
+                    class: "pill",
+                    text: "pow2",
+                    nth: 0,
+                },
+                at: on_curve,
             },
-            at: on_sens,
-        }],
+            Tipped {
+                control: "the take back capsule",
+                cites: Cite {
+                    class: "pill",
+                    text: "take back",
+                    nth: 0,
+                },
+                at: on_take_back,
+            },
+        ],
     ),
     (
         "the Program bay head's solo",
@@ -656,17 +699,55 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
     // **A bay head's grip has no tip in the mock.** The page draws it as
     // `.grip` and explains folding in its prose rather than on the control.
     ("the grip in a bay head", &[]),
+    // **Four cells and four tips**, in `DECK_LETTERS` order, which is the
+    // order the page draws them in: `ProgramBay::cell` answers *which* deck
+    // the pointer is over, so each cell explains its own. The mock's classes
+    // run out after two — A and B are `.preview.a` and `.preview.b` and the
+    // last two are bare `.preview` — which is what `Cite::nth` is for.
+    //
+    // **The words are the mock's decks and not this run's**, which is
+    // ADR-0330's third consequence: D's tip says nothing is behind that cell
+    // because nothing is behind the mock's.
     (
         "the deck preview cells",
-        &[Tipped {
-            control: "a deck preview cell",
-            cites: Cite {
-                class: "preview a",
-                text: "",
-                nth: 0,
+        &[
+            Tipped {
+                control: "deck A's preview cell",
+                cites: Cite {
+                    class: "preview a",
+                    text: "",
+                    nth: 0,
+                },
+                at: on_cell_a,
             },
-            at: on_cells,
-        }],
+            Tipped {
+                control: "deck B's preview cell",
+                cites: Cite {
+                    class: "preview b",
+                    text: "",
+                    nth: 0,
+                },
+                at: on_cell_b,
+            },
+            Tipped {
+                control: "deck C's preview cell",
+                cites: Cite {
+                    class: "preview",
+                    text: "",
+                    nth: 0,
+                },
+                at: on_cell_c,
+            },
+            Tipped {
+                control: "deck D's preview cell",
+                cites: Cite {
+                    class: "preview",
+                    text: "",
+                    nth: 1,
+                },
+                at: on_cell_d,
+            },
+        ],
     ),
     (
         "the Library bay's scope chips",
@@ -852,29 +933,146 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
     // of a *reading* — `declares 6 knobs` and its kin — and the menu items a
     // secondary press puts down, and neither is the row this probe claims.
     ("the Library bay's list", &[]),
+    // **One entry per class**, in `Class::ALL`'s order, which is the order the
+    // four pills appear in the page: the Program bay's, the Mixer's, the
+    // Master's and the Outputs row's. Every one of them is a bare
+    // `.pill` reading `mcp &middot; shut`, so the four cites are one pair and
+    // four ordinals — the one place on this console where `Cite::nth` is
+    // carrying the whole of the distinction.
+    //
+    // **And the four tips are four different sentences**: each names the
+    // operations its own class refuses while it reads shut, which is the thing
+    // an operator hovers one of these to find out.
     (
         "the class pills",
-        &[Tipped {
-            control: "a class pill",
-            cites: Cite {
-                class: "pill",
-                text: "mcp &middot; shut",
-                nth: 0,
+        &[
+            Tipped {
+                control: "the Program bay's class pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "mcp &middot; shut",
+                    nth: 0,
+                },
+                at: on_mcp_live_deck,
             },
-            at: on_mcp,
-        }],
+            Tipped {
+                control: "the Mixer bay's class pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "mcp &middot; shut",
+                    nth: 1,
+                },
+                at: on_mcp_mix_faders,
+            },
+            Tipped {
+                control: "the Master bay's class pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "mcp &middot; shut",
+                    nth: 2,
+                },
+                at: on_mcp_master_effects,
+            },
+            Tipped {
+                control: "the Outputs row's class pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "mcp &middot; shut",
+                    nth: 3,
+                },
+                at: on_mcp_inputs_and_outputs,
+            },
+        ],
     ),
+    // **Five kinds of control and eight entries**, in `Sequencer::press`'s own
+    // order — the bank pills, a cell, a label, the mode pill — and then
+    // `+ lane`, whose press is not an operation and comes back through
+    // `Sequencer::chose`.
+    //
+    // **The four banks are four entries and the cells and the labels are
+    // one each.** A bank is one of `karakuri_pattern::BANKS` fixed pills that
+    // the page tips one at a time — `seq 3` is where the plus went and its tip
+    // says so, which is not what `seq 1`'s says — and `SelectPattern` carries
+    // which one. A cell and a label are per drawn step and per lane of a
+    // pattern the host handed in: the page tips lane A's row and this console
+    // draws whatever lanes there are, so a second entry there would be a cite
+    // for a lane the mock does not have.
     (
         "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
-        &[Tipped {
-            control: "the Sequencer bay's controls",
-            cites: Cite {
-                class: "seq-lane",
-                text: "",
-                nth: 0,
+        &[
+            Tipped {
+                control: "the seq 1 bank pill",
+                cites: Cite {
+                    class: "pill armed",
+                    text: "seq 1",
+                    nth: 0,
+                },
+                at: on_bank_1,
             },
-            at: on_step,
-        }],
+            Tipped {
+                control: "the seq 2 bank pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "seq 2",
+                    nth: 0,
+                },
+                at: on_bank_2,
+            },
+            Tipped {
+                control: "the seq 3 bank pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "seq 3",
+                    nth: 0,
+                },
+                at: on_bank_3,
+            },
+            Tipped {
+                control: "the seq 4 bank pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "seq 4",
+                    nth: 0,
+                },
+                at: on_bank_4,
+            },
+            Tipped {
+                control: "a lane's cell",
+                cites: Cite {
+                    class: "seq-lane",
+                    text: "",
+                    nth: 0,
+                },
+                at: on_step,
+            },
+            Tipped {
+                control: "a lane's label",
+                cites: Cite {
+                    class: "seq-label",
+                    text: "A&#9646;",
+                    nth: 0,
+                },
+                at: on_lane_label,
+            },
+            Tipped {
+                control: "the mode pill",
+                cites: Cite {
+                    class: "pill armed",
+                    text: "1/16",
+                    nth: 0,
+                },
+                at: on_step_mode,
+            },
+            Tipped {
+                control: "the + lane pill",
+                cites: Cite {
+                    class: "pill",
+                    text: "+ lane",
+                    nth: 0,
+                },
+                at: on_add_lane,
+            },
+        ],
     ),
     // **The `back` capsule has no tip of its own in the mock**: the page tips
     // the candidate row it sits in, which is the entry below.
@@ -1126,6 +1324,22 @@ fn on_scrub(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.scrub(p).is_some())
 }
 
+/// **The capacity chip, and it is `resized` rather than `hit_size`.** The two
+/// are one question — `DeckHead::hit_size` is the chip *and* somewhere to step
+/// to — and this is the one the press handler asks, so a chip that is drawn
+/// and claims nothing (a deck whose geometries share no range) explains itself
+/// exactly where a press on it does something.
+fn on_size(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_head(panel, ctx, view, |head| head.resized(p).is_some())
+}
+
+/// **The `re-salt` capsule.** There is no state in which it is drawn and
+/// inert, so this is `hit_salt` and `re_salted` at once; it is the latter for
+/// the chip above's reason and for the press handler's.
+fn on_salt(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_head(panel, ctx, view, |head| head.re_salted(p).is_some())
+}
+
 fn on_compositing(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.compositing(p).is_some())
 }
@@ -1190,10 +1404,35 @@ fn on_auth(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     })
 }
 
-fn on_sens(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+fn on_curve(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_sens(panel, ctx, view, p, |op| {
+        matches!(op, Operation::AttachSignal { .. })
+    })
+}
+
+fn on_take_back(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_sens(panel, ctx, view, p, |op| {
+        matches!(op, Operation::TakeParamBack { .. })
+    })
+}
+
+/// **Which of a sensitivity row's two controls the pointer is on**, told apart
+/// by what a press on it would ask for — `InspectorPane::sensitivity` walks the
+/// row's four chips and answers the operation the one under the pointer names,
+/// which is `SensChip::operation` and is where the signal and the range being
+/// readouts is already decided. A second walk here would be a second answer to
+/// *which chip is this*.
+fn on_sens(
+    panel: &Panel,
+    ctx: &egui::Context,
+    view: &View,
+    p: Point,
+    which: impl Fn(&Operation) -> bool,
+) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
-            .is_some_and(|at| at.sensitivity(ctx, pane, p).is_some())
+            .and_then(|at| at.sensitivity(ctx, pane, p))
+            .is_some_and(|op| which(&op))
     })
 }
 
@@ -1201,8 +1440,30 @@ fn on_solo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     program_head(ctx, panel.layout(), view.opening).is_some_and(|head| head.hit(p))
 }
 
-fn on_cells(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
-    program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.owns(p))
+fn on_cell_a(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_cell(panel, view, p, 0)
+}
+
+fn on_cell_b(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_cell(panel, view, p, 1)
+}
+
+fn on_cell_c(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_cell(panel, view, p, 2)
+}
+
+fn on_cell_d(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_cell(panel, view, p, 3)
+}
+
+/// **One preview cell**, told from the three beside it by the deck
+/// `ProgramBay::cell` says the pointer is over — the row's own answer, which
+/// is what `ProgramBay::owns` is the union of and what a release on the row
+/// is resolved against. The cell of a deck with no slot is a cell like any
+/// other here: it is drawn, so it is pointed at, and `dropped`'s refusal is
+/// about the carry rather than about the rectangle.
+fn on_cell(panel: &Panel, view: &View, p: Point, deck: u8) -> bool {
+    program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.cell(p) == Some(deck))
 }
 
 fn on_scope_all(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
@@ -1333,20 +1594,127 @@ fn library_bay(panel: &Panel, view: &View) -> Option<crate::view::LibraryBay> {
     )
 }
 
-fn on_mcp(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    Class::ALL.iter().any(|class| {
-        mcp_pill(ctx, panel.layout(), *class, view.opening).is_some_and(|pill| pill.hit(p))
-    })
+fn on_mcp_live_deck(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_mcp(panel, ctx, view, p, Class::LiveDeck)
+}
+
+fn on_mcp_mix_faders(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_mcp(panel, ctx, view, p, Class::MixFaders)
+}
+
+fn on_mcp_master_effects(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_mcp(panel, ctx, view, p, Class::MasterEffects)
+}
+
+fn on_mcp_inputs_and_outputs(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_mcp(panel, ctx, view, p, Class::InputsAndOutputs)
+}
+
+/// **One class pill.** The four are in four different bay heads and cannot be
+/// one laid-out box, so the class is the argument that lays one out — which is
+/// the press handler's own arrangement, one derivation asked four times.
+fn on_mcp(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, class: Class) -> bool {
+    mcp_pill(ctx, panel.layout(), class, view.opening).is_some_and(|pill| pill.hit(p))
+}
+
+fn on_bank_1(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_bank(panel, ctx, view, p, 0)
+}
+
+fn on_bank_2(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_bank(panel, ctx, view, p, 1)
+}
+
+fn on_bank_3(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_bank(panel, ctx, view, p, 2)
+}
+
+fn on_bank_4(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_bank(panel, ctx, view, p, 3)
+}
+
+/// **One bank pill**, told from the three beside it by the pattern the press
+/// would name: `Sequencer::press` answers `SelectPattern` carrying the bank,
+/// which is this bay's own rule that *every arm names the bank*.
+fn on_bank(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, bank: u8) -> bool {
+    on_seq(
+        panel,
+        ctx,
+        view,
+        p,
+        |op| matches!(op, Operation::SelectPattern { pattern } if *pattern == bank),
+    )
 }
 
 fn on_step(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_seq(panel, ctx, view, p, |op| {
+        matches!(op, Operation::SetStep { .. })
+    })
+}
+
+fn on_lane_label(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_seq(panel, ctx, view, p, |op| {
+        matches!(op, Operation::SetLaneMute { .. })
+    })
+}
+
+fn on_step_mode(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_seq(panel, ctx, view, p, |op| {
+        matches!(op, Operation::SetPatternGrid { .. })
+    })
+}
+
+/// **Which kind of control the pointer is on in the Sequencer bay**, told
+/// apart by the operation a press there would ask for.
+///
+/// `Sequencer::press` is *four controls and one answer*, and which of them it
+/// was is inside the operation it hands back — the press handler's own
+/// sentence about this bay. So the sub-question is that operation read, and
+/// there is no second walk of the cells here to disagree with the one the
+/// paint made.
+fn on_seq(
+    panel: &Panel,
+    ctx: &egui::Context,
+    view: &View,
+    p: Point,
+    which: impl Fn(&Operation) -> bool,
+) -> bool {
+    sequencer_bay(panel, ctx, view)
+        .and_then(|bay| bay.press(p))
+        .is_some_and(|op| which(&op))
+}
+
+/// **The `+ lane` pill, which is the one control in this bay whose press is
+/// not an operation**: it puts a card down, so `Sequencer::chose` is what
+/// answers for it and `Chose::Open` is the pill itself.
+///
+/// **`Shut` is every other point on the console while the card is down**, and
+/// that is what keeps this from claiming the whole window: with the card up
+/// this answers `Open` on the pill and `None` everywhere else, and with one
+/// down it answers `Shut` — which is not this control — everywhere including
+/// on the pill. A tip under an open card is ADR-0330's own open seam.
+fn on_add_lane(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    // The one derivation, and the choices it was laid out from asked again:
+    // the card's items are the chooser's own listing, so a bay drawn from one
+    // reading and asked against another would answer for a card it did not
+    // draw — `Sequencer::chose`'s own re-check, from this side.
+    let choices = view.lane_choices();
+    sequencer(ctx, panel.layout(), view.sequencer.as_ref(), &choices)
+        .is_some_and(|bay| matches!(bay.chose(p, &choices), Some(crate::view::Chose::Open)))
+}
+
+/// The Sequencer bay, derived the one way [`crate::input::claim`] derives it.
+fn sequencer_bay(
+    panel: &Panel,
+    ctx: &egui::Context,
+    view: &View,
+) -> Option<crate::view::Sequencer> {
     sequencer(
         ctx,
         panel.layout(),
         view.sequencer.as_ref(),
         &view.lane_choices(),
     )
-    .is_some_and(|bay| bay.owns(p))
 }
 
 fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {

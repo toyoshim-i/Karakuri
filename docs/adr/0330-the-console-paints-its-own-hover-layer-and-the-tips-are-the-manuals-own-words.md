@@ -161,3 +161,35 @@ is a five-line deletion, and that is the thing to do rather than this.
   so a pointer resting over a control an open card covers still resolves to that control. Closing
   it is a seam in `input` that answers *is a card down* for both; it is written down here rather
   than in a comment nobody meets.
+
+**2026-09-10, the coverage.** The fourth consequence above is paid. `hover::TIPS` carries **76
+controls across 34 of its 38 rows** — the table was thirty rows when this was accepted — and the
+four empty slices are still the four: a pane head's name, a bay head's grip, the Library bay's list
+and the Staging lane's `back` capsules. Five rows gained entries. The Sequencer bay's one tip is
+eight: the four bank pills, a lane's cell, a lane's label, the mode pill and `+ lane`. The class
+pills and the deck preview cells are four entries each, which is the one place `Cite::nth` carries
+the whole of a distinction — the four class pills are one class and one text in the page and are
+told apart by their ordinal. A sensitivity row has its `take back` capsule beside its curve chip,
+and the deck head has the capacity chip and `re-salt`.
+
+**Every sub-question is the press handler's own derivation asked one question finer**, which is
+what this record said those entries were: `Sequencer::press` answers *four controls and one answer*
+and the operation says which, `ProgramBay::cell` says which deck, `SensChip::operation` says which
+chip, and `DeckHead::resized` and `re_salted` are the two build chips. Nothing was derived here that
+could disagree with what the frame drew. Three entries are not one per control and say so:
+`.scrub` is one element over both arrows, `.auth` is one over the three authority chips, and a
+lane's cells and labels are as many as the pattern has rather than as many as the mock draws.
+
+**The Master bay's five is what is left, and it is left deliberately.** Its three effect rows are
+[ADR-0340](0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)'s: the chain
+becomes an ordered list of kind L5 procedures, so a citation per row would be written against a bay
+about to be rebuilt. They are owed to the roadmap's M5.16 pass 2b rather than to M5.11.
+
+**And `tests/hover.rs` gained the count.** The array being `PROBES.len()` long stops a *row* going
+untipped and says nothing about a row that claims five controls and explains one — the failure this
+record described as *"the pointer resolves to the entry that is"*, which is a control confidently
+saying its neighbour's words. A row now carries one entry per control `input::PROBES` says it
+claims, unless `UNEVEN` names it with the reason and with the count it does carry — an excused row
+is out from under `PROBES`' number, so without one of its own it could lose an entry in silence. What is still not caught is a control the page
+tips that no row of `PROBES` claims: the register is the console's own and this layer reads it,
+which is that table's documented blind spot rather than a second one.
