@@ -489,7 +489,7 @@ proc dots {
             &[MORPH],
             &[Edge {
                 node: "morph".to_string(),
-                slot: "far".to_string(),
+                slot: "far".into(),
                 to: "far".to_string(),
             }],
         );
@@ -610,7 +610,7 @@ proc dots {
             &[MORPH],
             &[Edge {
                 node: "morph".to_string(),
-                slot: "far".to_string(),
+                slot: "far".into(),
                 to: "far".to_string(),
             }],
             "the far geometry a pairing Set holds",

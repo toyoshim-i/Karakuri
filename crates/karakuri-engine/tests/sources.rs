@@ -101,7 +101,7 @@ proc dots {
     pub(super) fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
         karakuri_engine::set::Edge {
             node: node.to_string(),
-            slot: slot.to_string(),
+            slot: slot.into(),
             to: to.to_string(),
         }
     }

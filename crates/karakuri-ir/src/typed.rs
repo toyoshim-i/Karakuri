@@ -24,6 +24,50 @@ use crate::ast::{
 use crate::builtin::Builtin;
 use crate::span::Span;
 
+/// **The name a procedure's header gives one declared input** — `far` in
+/// `uses far : Geometry`. It is what an `edge` is written against and what a
+/// Set's `--edge <node>.<slot>=<node>` names on the near side of the dot.
+///
+/// **Its own type because `slot` names three unrelated things in this
+/// workspace**: a layer's position inside a Set, a Set's position in the
+/// deck, and this — the name a procedure reads a binding through, resolved
+/// nowhere else. See
+/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
+///
+/// **`karakuri_store::record::InputPort` and `karakuri_operation::InputPort`
+/// are the same concept, mirrored rather than shared.** Neither
+/// `karakuri-store` nor `karakuri-operation` depends on this crate —
+/// `karakuri-operation` is a leaf by charter and a serialised record wants its
+/// own `Serialize`/`Deserialize` — so each defines its own copy, on
+/// `karakuri_operation::NodeAt`'s precedent: three definitions agreeing costs
+/// less than a dependency none of the three crates already pays for.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InputPort(pub String);
+
+impl InputPort {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for InputPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for InputPort {
+    fn from(name: String) -> InputPort {
+        InputPort(name)
+    }
+}
+
+impl From<&str> for InputPort {
+    fn from(name: &str) -> InputPort {
+        InputPort(name.to_string())
+    }
+}
+
 /// **One slot a procedure declares**, checked — the name it is read through
 /// and the type it takes.
 ///
@@ -33,7 +77,7 @@ use crate::span::Span;
 /// the wrong one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Slot {
-    pub name: String,
+    pub name: InputPort,
     pub ty: SlotTy,
 }
 
@@ -55,7 +99,7 @@ pub enum TexRef {
     /// name is carried for the reason [`TExprKind::Field`]'s is: it is what the
     /// lowering addresses the binding under, and what an `edge` is written
     /// against.
-    Slot(String),
+    Slot(InputPort),
 }
 
 /// A procedure that has passed parsing, type checking, and contract checking.

@@ -944,7 +944,7 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
     for edge in edges {
         lines.push(Line::new(Record::Edge {
             node: edge.node.clone(),
-            slot: edge.slot.clone(),
+            slot: edge.slot.as_str().into(),
             to: edge.to.clone(),
         }));
     }
@@ -1207,7 +1207,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // asked there, once, rather than here and again there.
             Record::Edge { node, slot, to } => edges.push(karakuri_engine::set::Edge {
                 node: node.clone(),
-                slot: slot.clone(),
+                slot: slot.as_str().into(),
                 to: to.clone(),
             }),
             record @ Record::Bind { .. } => match binding_from_record(record) {
@@ -2819,7 +2819,7 @@ proc blob {
         ];
         let edges = vec![karakuri_engine::set::Edge {
             node: "warp".to_string(),
-            slot: "far".to_string(),
+            slot: "far".into(),
             to: "far".to_string(),
         }];
         save(
@@ -2924,7 +2924,7 @@ proc dissolve {
         ];
         let edges = vec![karakuri_engine::set::Edge {
             node: "dissolve".to_string(),
-            slot: "only".to_string(),
+            slot: "only".into(),
             to: "victim".to_string(),
         }];
         save(
@@ -3754,7 +3754,7 @@ proc glowing {
                 bindings: &[],
                 edges: &[karakuri_engine::set::Edge {
                     node: "points".to_string(),
-                    slot: "cutter".to_string(),
+                    slot: "cutter".into(),
                     to: "knife".to_string(),
                 }],
                 camera: &DEFAULT_CAMERA,

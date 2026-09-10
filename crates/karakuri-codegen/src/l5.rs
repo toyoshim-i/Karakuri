@@ -283,7 +283,7 @@ impl Resolver for L5Resolver {
         match tex {
             TexRef::Src => SRC.to_string(),
             TexRef::Held => HELD.to_string(),
-            TexRef::Slot(name) => slot_binding(name),
+            TexRef::Slot(name) => slot_binding(name.as_str()),
         }
     }
 

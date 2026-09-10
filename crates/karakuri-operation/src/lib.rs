@@ -215,6 +215,47 @@ pub mod gate;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Undecided;
 
+/// **The name a procedure's header gives one declared input** — `far` in
+/// `uses far : Geometry` — carried by [`Operation::WireInput`]'s `slot` field.
+///
+/// **Its own type because `slot` names two unrelated things on this
+/// operation's neighbours**: a member of the deck, on every operation that
+/// takes one, and this — the name a procedure reads a binding through. See
+/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
+///
+/// **Mirrors `karakuri_ir::typed::InputPort` and
+/// `karakuri_store::record::InputPort` rather than depending on either.**
+/// This crate is a leaf by charter — see the crate documentation on why it
+/// has no dependencies — so a shared type is not an option here the way it is
+/// between `karakuri-engine` and `karakuri-ir`; three definitions of the same
+/// concept is the cost, on [`NodeAt`]'s own precedent below.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InputPort(pub String);
+
+impl InputPort {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for InputPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for InputPort {
+    fn from(name: String) -> InputPort {
+        InputPort(name)
+    }
+}
+
+impl From<&str> for InputPort {
+    fn from(name: &str) -> InputPort {
+        InputPort(name.to_string())
+    }
+}
+
 /// Which node of a deck's Set, on the terms `--param L4:1:name=value`,
 /// `--publish level=L4:0:exposure`, the console's `L2:0` node heads and
 /// `read_procedure`'s `{layer, index}` all already use.
@@ -2002,7 +2043,7 @@ operations! {
         /// The node that declares the slot: `morph` in `--edge morph.far=…`.
         node: String,
         /// What that node's procedure calls it: `far`.
-        slot: String,
+        slot: InputPort,
         /// The node bound to it: `sphere_shell`.
         to: String,
     } => "Wire a procedure's input to a node",

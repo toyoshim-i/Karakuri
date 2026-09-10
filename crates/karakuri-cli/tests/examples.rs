@@ -341,7 +341,7 @@ mod gpu {
                 .iter()
                 .map(|e| karakuri_engine::set::Edge {
                     node: e.node.clone(),
-                    slot: e.slot.clone(),
+                    slot: e.slot.as_str().into(),
                     to: e.to.clone(),
                 })
                 .collect();

@@ -26,24 +26,35 @@
 //! decoder would come back [`Record::Unknown`], and the format promises to pass
 //! over exactly that.
 //!
-//! **`slot` is three things in this vocabulary, and only the prose keeps them apart.**
+//! **`slot` is three things in this vocabulary, and the third now has its own type.**
 //! [`Record::Slot`] is **a node of a Set** — a procedure at a `(layer, index)` address,
 //! optionally with a name. The `slot: u8` field on [`Record::Gain`], [`Record::Opacity`],
 //! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Authority`],
 //! [`Record::Ride`], [`Record::Source`], [`Record::Mask`],
 //! [`Record::Transition`], [`Record::Select`], [`Record::Transport`]
 //! and [`Record::Save`] is **a member of the deck** — an index into the mixer, and nothing
-//! about the Set in it. [`Record::Edge`]'s `slot: String` is the third: **an input a node
-//! declares**, which is what `uses far : Geometry` names.
+//! about the Set in it. [`Record::Edge`]'s `slot` is [`InputPort`], the third: **an input a
+//! node declares**, which is what `uses far : Geometry` names.
 //!
-//! None of the three is renamed.
-//! `docs/adr/0049-slot-means-two-things-and-the-clash-is-recorded.md` recorded the first
-//! clash rather than resolving it, and the bill is the reason it stayed recorded: `slot`
-//! is a field of thirteen record types across all three files, so no rename of it is a
-//! rename of one field. What the prose does instead is **never write the deck one bare**:
-//! it is *a deck slot*, everywhere, so
+//! **The first two are not renamed; the third is, at the Rust identifier only.**
+//! `docs/adr/0049-slot-means-two-things-and-the-clash-is-recorded.md` recorded the
+//! ambiguity rather than resolving it; `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`
+//! supersedes it and gives an input a node declares its own type first, because
+//! nothing about that sense was ever waiting on a GUI or a settled record
+//! format the way the other two were — a rename here costs one field, not the
+//! thirteen-record sweep the deck sense and the Set-node sense still owe. The
+//! wire key is unchanged: [`InputPort`] serialises as the bare string `slot`
+//! always was, on [`Record::Slot`]'s `proc_hash` precedent
+//! (`#[serde(rename = "proc")]`) of renaming the Rust side and pinning the
+//! wire side.
+//!
+//! The other two stay exactly as this section already described: `slot`
+//! is a field of thirteen record types across all three files for the deck
+//! sense alone, so no rename of it is a rename of one field. What the prose
+//! does for them is **never write the deck one bare**: it is *a deck slot*,
+//! everywhere, so
 //! `docs/contributing.md` §4's *"they have to be
-//! disjoint by name"* is met by the sentence where the field cannot meet it.
+//! disjoint by name"* is met by the sentence where the field cannot yet meet it.
 //!
 //! **A wire field can be renamed, and one has been.** [`Record::Transport`]'s scrub was
 //! spelled `offset_beats` and collided with the operator's latency offset; it is
@@ -70,6 +81,53 @@
 use serde::{Deserialize, Serialize};
 
 use crate::hash::Hash;
+
+/// **The name a procedure's header gives one declared input** — `far` in
+/// `uses far : Geometry` — carried by [`Record::Edge`]'s `slot` field.
+///
+/// **Its own type because `slot` names three unrelated things in this
+/// module's vocabulary**: a node of a Set, a member of the deck, and this. See
+/// the module documentation and
+/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
+///
+/// **On the wire it is unchanged: a bare JSON string.** `#[derive(Serialize,
+/// Deserialize)]` on a one-field tuple struct writes and reads the inner
+/// value directly — the same newtype behaviour `karakuri_layout::layout::NodeId`
+/// already relies on — so a `.kbset` file or a session stream sees no
+/// difference from the plain `String` this replaced.
+///
+/// **Mirrors `karakuri_ir::typed::InputPort` and `karakuri_operation::InputPort`
+/// rather than depending on either.** This crate has no dependency on
+/// `karakuri-ir` and none is being added for one field; the three are the same
+/// concept with three definitions, on `karakuri_operation::NodeAt`'s own
+/// precedent (see [`NodeAt`]'s documentation) for a type more than one
+/// dependency-isolated crate needs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct InputPort(pub String);
+
+impl InputPort {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for InputPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for InputPort {
+    fn from(name: String) -> InputPort {
+        InputPort(name)
+    }
+}
+
+impl From<&str> for InputPort {
+    fn from(name: &str) -> InputPort {
+        InputPort(name.to_string())
+    }
+}
 
 /// Which kind of procedure a record addresses.
 ///
@@ -647,7 +705,7 @@ pub enum Record {
         /// The node that declares the input slot.
         node: String,
         /// What that node's procedure calls that input slot.
-        slot: String,
+        slot: InputPort,
         /// The node bound to it.
         to: String,
     },
@@ -2176,6 +2234,29 @@ mod tests {
                 index: 1,
                 name: Some("veil".to_string()),
                 path: "parts/soft_points.kir".to_string(),
+            }
+        );
+    }
+
+    /// **`Record::Edge`'s `slot` is `InputPort` in Rust and a bare string on
+    /// the wire**, which is the whole claim
+    /// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`
+    /// makes about it: the Rust identifier gets a type that cannot be confused
+    /// with a deck member or a Set-node address, and a `.kbset` file or a
+    /// session stream written before this change parses exactly as it did —
+    /// `round_trip_verbatim` is what catches `InputPort` serialising as
+    /// `{"0":"far"}` or any other shape a naive newtype wrapper could produce
+    /// instead of the plain `"far"` this asserts.
+    #[test]
+    fn an_edge_round_trips_with_slot_as_a_bare_string() {
+        let line = r#"{"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::Edge {
+                node: "morph".to_string(),
+                slot: InputPort("far".to_string()),
+                to: "sphere_shell".to_string(),
             }
         );
     }
