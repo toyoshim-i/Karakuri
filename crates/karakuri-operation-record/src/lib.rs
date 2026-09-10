@@ -162,16 +162,24 @@ pub struct Look {
 /// [`Operation::SetFeedback`], [`Operation::SetBloom`] and
 /// [`Operation::SetRgbShift`] needs the other two thirds of.
 ///
-/// [`Look`]'s arrangement exactly, and for ADR-0192's reason: `Record::MasterChain`
-/// is written whole — three amounts and a cut — and each of the three
-/// operations asks for one pass of it. A bloom amount written without the
-/// feedback beside it would put the trail back wherever a default left it,
-/// mid-set.
+/// [`Look`]'s arrangement exactly, and for ADR-0192's reason:
+/// `Record::MasterChain` is written whole — the ordered list of slots — and
+/// each of the three operations asks for one parameter of one slot. A bloom
+/// amount written without the rest of the list beside it would describe a chain
+/// a replay cannot put back.
+///
+/// **The list is the record's shape and the three fields above it are the
+/// rows'.** `karakuri-console`'s Master bay still draws *Feedback*, *Bloom* and
+/// *RGB shift*, so the three amounts are read back for it; what a press writes
+/// is a slot of the list, found by the procedure's content address. The rows
+/// retire in M5.16's second pass
+/// (`docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`
+/// §7) and the three fields go with them.
 ///
 /// The vocabulary's [`karakuri_operation::Cut`] rather than a wire word, for
 /// [`Look::tonemap`]'s reason: a `String` here would make this crate the place
 /// a typo arrives.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Chain {
     /// How much of the retained frame comes back, and which frame that is.
     /// One field pair rather than two fields for
@@ -179,6 +187,65 @@ pub struct Chain {
     pub feedback: karakuri_operation::Feedback,
     pub bloom: f32,
     pub rgb_shift: f32,
+    /// **The chain that is running**, in the record's own shape, so that a
+    /// press on one row rewrites one slot and leaves every other where it is.
+    pub slots: Vec<karakuri_store::record::ChainSlot>,
+    /// **Where the three rows point.** See [`Shipped`].
+    pub shipped: Shipped,
+}
+
+/// **The content address of each shipped procedure a Master bay row still
+/// names**, so that a press on a row resolves to a slot of the list.
+///
+/// **It is handed in rather than computed here**, because an address is a hash
+/// of bytes and this crate holds none: the host reads `examples/feedback.kir`
+/// and the other two, puts them in the store when first used the way a Set's
+/// sources are, and hands the three addresses down with the reading.
+///
+/// **A row naming a procedure the chain has not got appends one**, which is the
+/// *for now* in ADR-0340 §7: with a list, a surface asking for *feedback* is
+/// asking for a pass that may not be in the chain, and until the rows retire
+/// the honest answer to *turn feedback up* is a chain with feedback in it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Shipped {
+    pub feedback: String,
+    pub bloom: String,
+    pub rgb_shift: String,
+}
+
+impl Chain {
+    /// **The list, with one slot's one parameter moved** — appending the slot
+    /// where the chain has not got it. See [`Shipped`].
+    ///
+    /// `cut` is written only where the caller has one to write, which is
+    /// feedback's row alone: a slot whose procedure declares no `retains` is
+    /// refused a cut by the engine, so writing one would be writing a record
+    /// this build refuses to obey.
+    fn moved(
+        &self,
+        procedure: &str,
+        cut: Option<&karakuri_operation::Cut>,
+        key: &str,
+        value: f32,
+    ) -> Vec<karakuri_store::record::ChainSlot> {
+        let mut slots = self.slots.clone();
+        let at = match slots.iter().position(|s| s.procedure == procedure) {
+            Some(at) => at,
+            None => {
+                slots.push(karakuri_store::record::ChainSlot {
+                    procedure: procedure.to_string(),
+                    cut: None,
+                    params: Default::default(),
+                });
+                slots.len() - 1
+            }
+        };
+        slots[at].params.insert(key.to_string(), value);
+        if let Some(cut) = cut {
+            slots[at].cut = Some(cut.name().to_string());
+        }
+        slots
+    }
 }
 
 /// **The mask a deck's layer is wearing**, which is what
@@ -447,7 +514,11 @@ pub struct Mix {
 /// that belong to no deck at all — one is the room's and one is the surface's,
 /// and a crossfade naming two decks reads the same transition for both halves
 /// because that is what makes it one gesture.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+/// **Not `Copy` since the chain became a list**, which is the one thing that
+/// changed about this struct on 2026-09-10: [`Chain`] carries the slots the
+/// record is written from, and a `Vec` cannot be copied. Every reading here is
+/// still made where the press is answered and read once.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Current {
     pub look: Option<Look>,
     /// **What the master chain is running at**, which is what each of its
@@ -656,9 +727,12 @@ pub enum Owed {
     /// caller's to fix, and the only one of the three that is.
     NotRead(Reading),
     /// **The vocabulary itself says what this acts on is open** —
-    /// `karakuri_operation::Undecided`, at four variants, each with its
-    /// question written at its own definition. Nothing can be written down
-    /// here that is not already decided there.
+    /// `karakuri_operation::Undecided`, at three variants, each with its
+    /// question written at its own definition, and two of the three answer
+    /// here: `Operation::SelectScope` is the third and is
+    /// [`Silent::Surface`]'s, because a mark on a chip is a surface's own
+    /// state whether or not the payload can say which chip. Nothing can be
+    /// written down here that is not already decided there.
     ///
     /// **Eight of them once arrived together and were two whole bays**: the
     /// master chain's three effects and the sequencer's five, specified on the
@@ -984,44 +1058,44 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             None => Written::Owed(Owed::NotRead(Reading::Look)),
         },
         // **The master chain's three, and they are the look pair's argument
-        // with one more row in it.** `Record::MasterChain` is written whole,
-        // each operation names one pass of it, and the other two come from the
-        // chain that is running — so a press on the bloom row cannot put the
-        // feedback back where a default left it. These carried
+        // with a list in it.** `Record::MasterChain` is written whole, each
+        // operation names one parameter of one slot, and every other slot comes
+        // from the chain that is running — so a press on the bloom row cannot
+        // put the feedback back where a default left it. **Which slot** is the
+        // procedure's content address, which is the *for now* ADR-0340 §7
+        // names: the three rows retire in M5.16's second pass and are answered
+        // here in the meantime by finding — or appending — the slot whose
+        // procedure is the matching shipped one. These carried
         // `karakuri_operation::Undecided` and answered `Owed::Undecided` until
         // 2026-09-09, on the ground that *"a record kept for a thing that does
         // not exist would be inventing its contents"* (ADR-0227); the chain
         // exists now and the contents are three amounts and a cut. See
         // `docs/adr/0317-…`.
         //
-        // **And no clamp**, on `SetMasterOut`'s terms: the ranges are
-        // `karakuri_engine::master::Chain::clamped`'s, where the record is
-        // applied, so every route in meets one wall.
-        Operation::SetFeedback { params } => match current.master_chain {
-            Some(chain) => one(Record::MasterChain {
-                feedback: params.amount,
-                cut: params.cut.name().to_string(),
-                bloom: chain.bloom,
-                rgb_shift: chain.rgb_shift,
-            }),
+        // **And no clamp**, on `SetMasterOut`'s terms: the range is the one the
+        // procedure declared and the wall is `karakuri_engine::master::Slot`,
+        // where the record is applied, so every route in meets one.
+        Operation::SetFeedback { params } => match &current.master_chain {
+            Some(chain) => one(Record::MasterChain(karakuri_store::record::Chain {
+                slots: chain.moved(
+                    &chain.shipped.feedback,
+                    Some(&params.cut),
+                    "amount",
+                    params.amount,
+                ),
+            })),
             None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
         },
-        Operation::SetBloom { params } => match current.master_chain {
-            Some(chain) => one(Record::MasterChain {
-                feedback: chain.feedback.amount,
-                cut: chain.feedback.cut.name().to_string(),
-                bloom: params.amount,
-                rgb_shift: chain.rgb_shift,
-            }),
+        Operation::SetBloom { params } => match &current.master_chain {
+            Some(chain) => one(Record::MasterChain(karakuri_store::record::Chain {
+                slots: chain.moved(&chain.shipped.bloom, None, "amount", params.amount),
+            })),
             None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
         },
-        Operation::SetRgbShift { params } => match current.master_chain {
-            Some(chain) => one(Record::MasterChain {
-                feedback: chain.feedback.amount,
-                cut: chain.feedback.cut.name().to_string(),
-                bloom: chain.bloom,
-                rgb_shift: params.amount,
-            }),
+        Operation::SetRgbShift { params } => match &current.master_chain {
+            Some(chain) => one(Record::MasterChain(karakuri_store::record::Chain {
+                slots: chain.moved(&chain.shipped.rgb_shift, None, "amount", params.amount),
+            })),
             None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
         },
         // **Half a mask each, and the record is whole.** The half that was
@@ -1328,9 +1402,16 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // says what an operation acts on is an open question, what it writes
         // cannot be answered either, and this is the arm that says so out
         // loud.
-        Operation::MoveBoundary { .. }
-        | Operation::WalkHistory { .. }
-        | Operation::WatchFiles { .. } => Written::Owed(Owed::Undecided),
+        //
+        // **`Operation::WalkHistory` left on 2026-09-10**, the way
+        // `Operation::RouteFrame` left below: by having its payload decided
+        // rather than by this rule bending. It carries the Set it is a walk of
+        // now, so *what it acts on* is answered and *what it writes* could be
+        // asked — and the answer is `Silent::Question`, three arms down
+        // (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
+        Operation::MoveBoundary { .. } | Operation::WatchFiles { .. } => {
+            Written::Owed(Owed::Undecided)
+        }
 
         // ----- Silent: publishing is not the performance -------------------
         //
@@ -1518,10 +1599,28 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // presets' — so the press is a narrowed *ask* of the library and the
         // answer goes back to the surface that asked, exactly as `holds` and
         // `layer` do on the row beside it. Nothing on any deck moves.
+        //
+        // **A walk is a listing of the store and nothing else** — the fifth
+        // member of this arm since 2026-09-10, and it arrived from
+        // `Owed(Undecided)` rather than from anywhere else. *What versions has
+        // this Set had* is `karakuri_environment::history::list` narrowed to
+        // one id, opening no file and moving no deck; **landing on one of them
+        // is `Operation::RestoreProcedure`**, which is a write, writes
+        // `Record::Procedure` where the swap lands, and is a row of its own on
+        // the page (ADR-0308). `docs/adr/0281-…`'s consequence *"Walk the edit
+        // history is a write"* was written while this payload was going to be
+        // *a revision to land on*; that half moved to the landing's row the
+        // same day and this one is what is left, which is the question
+        // (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
+        //
+        // **The chip press that asks for it is not this answer's business.**
+        // Marking a scope is a surface's own state and it is `SelectScope`'s
+        // arm above; what a walk *writes* is nothing, whoever asked.
         Operation::ListSets { .. }
         | Operation::FilterLibrary { .. }
         | Operation::ReadSet { .. }
         | Operation::ReadProcedure { .. }
+        | Operation::WalkHistory { .. }
         | Operation::SwapOutcome => Written::Silent(Silent::Question),
 
         // ----- Silent: the record is written where the work lands ----------
@@ -1768,8 +1867,11 @@ mod tests {
     /// not the first in the list and a white point that is not the default, so
     /// a conversion filling either in from thin air is visible rather than
     /// coincidentally right.
-    /// A chain with all four values distinct, so a record that copied the
-    /// wrong one is a failing assertion rather than a coincidence.
+    /// A chain of the three shipped procedures with every value distinct, so a
+    /// record that copied the wrong one is a failing assertion rather than a
+    /// coincidence. The addresses are short stand-ins for the real content
+    /// addresses: what this crate does with one is compare it, never resolve
+    /// it.
     fn chain() -> Chain {
         Chain {
             feedback: karakuri_operation::Feedback {
@@ -1778,7 +1880,29 @@ mod tests {
             },
             bloom: 0.6,
             rgb_shift: 0.25,
+            slots: vec![
+                slot("sha256:feedback", Some("exit"), 0.34),
+                slot("sha256:bloom", None, 0.6),
+                slot("sha256:rgb_shift", None, 0.25),
+            ],
+            shipped: Shipped {
+                feedback: "sha256:feedback".into(),
+                bloom: "sha256:bloom".into(),
+                rgb_shift: "sha256:rgb_shift".into(),
+            },
         }
+    }
+
+    fn slot(procedure: &str, cut: Option<&str>, amount: f32) -> karakuri_store::record::ChainSlot {
+        karakuri_store::record::ChainSlot {
+            procedure: procedure.to_string(),
+            cut: cut.map(str::to_string),
+            params: [("amount".to_string(), amount)].into_iter().collect(),
+        }
+    }
+
+    fn chain_record(slots: Vec<karakuri_store::record::ChainSlot>) -> Record {
+        Record::MasterChain(karakuri_store::record::Chain { slots })
     }
 
     fn look() -> Look {
@@ -1875,14 +1999,13 @@ mod tests {
         );
         assert_eq!(
             records(written),
-            vec![Record::MasterChain {
-                feedback: 0.34,
-                cut: "exit".to_string(),
-                bloom: 0.6,
-                rgb_shift: 0.25,
-            }],
-            "a bloom press rewrote a pass it did not name — the record carries all \
-             four and only the bloom was asked for"
+            vec![chain_record(vec![
+                slot("sha256:feedback", Some("exit"), 0.34),
+                slot("sha256:bloom", None, 0.6),
+                slot("sha256:rgb_shift", None, 0.25),
+            ])],
+            "a bloom press rewrote a slot it did not name — the record carries the \
+             whole list and only the bloom slot was asked for"
         );
     }
 
@@ -1907,12 +2030,11 @@ mod tests {
         );
         assert_eq!(
             records(written),
-            vec![Record::MasterChain {
-                feedback: 0.9,
-                cut: "mix".to_string(),
-                bloom: 0.6,
-                rgb_shift: 0.25,
-            }]
+            vec![chain_record(vec![
+                slot("sha256:feedback", Some("mix"), 0.9),
+                slot("sha256:bloom", None, 0.6),
+                slot("sha256:rgb_shift", None, 0.25),
+            ])]
         );
     }
 
@@ -1933,12 +2055,43 @@ mod tests {
         );
         assert_eq!(
             records(written),
-            vec![Record::MasterChain {
-                feedback: 0.34,
-                cut: "exit".to_string(),
-                bloom: 0.6,
-                rgb_shift: 0.0,
-            }]
+            vec![chain_record(vec![
+                slot("sha256:feedback", Some("exit"), 0.34),
+                slot("sha256:bloom", None, 0.6),
+                slot("sha256:rgb_shift", None, 0.0),
+            ])]
+        );
+    }
+
+    /// **A row naming a procedure the chain has not got appends a slot**, which
+    /// is the *for now* in ADR-0340 §7: with a list, *feedback* is a pass that
+    /// may not be in the chain, and until the three rows retire the honest
+    /// answer to *turn feedback up* is a chain with feedback in it. It lands at
+    /// the end, which is where a drop on the chain lands one too.
+    #[test]
+    fn a_row_naming_a_procedure_the_chain_has_not_got_appends_a_slot() {
+        let mut chain = chain();
+        chain.slots = vec![slot("sha256:rgb_shift", None, 0.25)];
+        let current = Current {
+            master_chain: Some(chain),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetFeedback {
+                params: karakuri_operation::Feedback {
+                    amount: 0.5,
+                    cut: karakuri_operation::Cut::Mix,
+                },
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![chain_record(vec![
+                slot("sha256:rgb_shift", None, 0.25),
+                slot("sha256:feedback", Some("mix"), 0.5),
+            ])],
+            "a row naming a procedure the chain has not got wrote a chain without it"
         );
     }
 
@@ -3218,14 +3371,49 @@ mod tests {
         );
         assert_eq!(
             written(
-                &Operation::WalkHistory {
-                    step: karakuri_operation::Undecided
+                &Operation::MoveBoundary {
+                    boundary: karakuri_operation::Undecided
                 },
                 &Current::default()
             ),
             Written::Owed(Owed::Undecided),
-            "walking the edit history is the vocabulary's own open question and not \
-             this crate's"
+            "moving a boundary is the vocabulary's own open question and not this crate's"
+        );
+    }
+
+    /// **A walk asks and changes nothing**, and it answers here rather than in
+    /// `Owed(Undecided)` because the payload it was waiting for arrived: it
+    /// names the Set it is a walk of
+    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
+    ///
+    /// **Landing is the other row and is not silent in this way.**
+    /// `Operation::RestoreProcedure` is `Silent(OnLanding)` — a procedure
+    /// change whose `Record::Procedure` is written where the swap lands — so a
+    /// walk answering `Question` cannot be read as the store's history being
+    /// outside the stream.
+    #[test]
+    fn a_walk_asks_and_a_landing_writes() {
+        for set in [None, Some("night01".to_string())] {
+            assert_eq!(
+                written(&Operation::WalkHistory { set }, &Current::default()),
+                Written::Silent(Silent::Question),
+                "walking one Set's versions is a listing of the store: it opens no file, \
+                 moves no deck, and a question writes no record"
+            );
+        }
+        assert_eq!(
+            written(
+                &Operation::RestoreProcedure {
+                    deck: 0,
+                    revision: karakuri_operation::Revision::Picked(
+                        "20260908-143052-271_slot0_L4_beat_strokes".to_string()
+                    ),
+                },
+                &Current::default()
+            ),
+            Written::Silent(Silent::OnLanding),
+            "landing a version is a procedure change and its record is written where the \
+             swap lands — the walk is the listing it was picked out of"
         );
     }
 }

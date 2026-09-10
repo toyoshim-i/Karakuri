@@ -236,6 +236,16 @@ grammar reaches the same row, and not before.
   `karakuri-operation-record` and `karakuri-store::record` are untouched — checked rather than
   assumed: every variant the new code constructs is one this program already emitted from a chip.
 
+**Everything below was owed on 2026-09-10 and was paid the same day**
+([ADR-0343](0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)): the seven
+remaining bays are in `BUILT`, the transition row is the Mixer's **head** — the settings carry no
+slot, so they are about the bay rather than about any one strip — a library row's controls are its
+star and its `params` chip, `space` at bay level is bound and is the fold in all nine, and the axis
+is checked where a bay uses both. **The clause that declined `space` on a bay is the clause that
+asked for it**: a badge naming two of the nine would have misled, and one naming all nine does not.
+Five more letters went with it — `f`, `s`, `u`, `o` and `p` — and `g` stopped taking its region from
+the pointer and takes it from the focus.
+
 ## What this record does not do, and what was not checked
 
 **It builds the grammar in two bays of nine.** The Transport, Staging, the Program bay, the

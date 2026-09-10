@@ -67,14 +67,15 @@ arrangement rather than a new one: `crate::node::Merge` keeps its place beside t
 exactly where the built-in orbit camera keeps its place beside `kind L3` — a node with no
 procedure has no `kind`, gets no `slot` record, and is described by a record of its own.
 
-**What is not built is the chain**, and the division is worth stating because the kind is
-useless without it: `kind L5` parses, checks, costs and lowers to a fullscreen pass, and the
-master chain is still **three hand-written passes** in `master.wgsl` rather than an ordered list
-of slots. So there is nowhere to *put* an L5 yet — `karakuri-environment`'s
-`compile::sort_compiled` refuses one where it is loaded, with the reason — and the three shipped
-procedures under `examples/` compile, cost and lower without running. The list, its record and
-its surface stay under [L5's chain](#l5s-chain--specified-not-built), which is where they were specified
-and is the half M5.16 has left.
+**What is not built is the surface**, and the division is worth stating: `kind L5` parses,
+checks, costs and lowers to a fullscreen pass, and the master chain **is** an ordered list of L5
+slots — `karakuri-engine`'s `master.rs` runs the three shipped procedures under `examples/`
+through that lowering and `master.wgsl` is down to the retention. What no control reaches yet is
+the list itself: the Library's drop onto the chain, `+ add` and `— remove`, and the Master bay's
+three named rows retiring in favour of one addressed by position. A **Set's** L5 still has
+nowhere to go — `karakuri-environment`'s `compile::sort_compiled` refuses one where it is loaded,
+with the reason. All of it stays under [L5's chain](#l5s-chain--built-and-its-surface-is-not),
+which is where the list was specified and is where what is left of it is named.
 
 **A note on the word, because it is used in two senses here.** A bare **layer** in this
 specification is a **kind** — the `layer` field on a record names one, and so does every
@@ -1876,7 +1877,7 @@ know — P-0086 again, and the same division `uses` and `edge` already draw: the
 the place that instantiates it answers. `retains mix` in the file would be two procedures where
 there is one, `feedback_mix.kir` and `feedback_exit.kir`, with the operator's choice spelled as
 a library swap. **The cuts and which one a slot answers with are the chain's**, and the chain is
-[L5's chain](#l5s-chain--specified-not-built).
+[L5's chain](#l5s-chain--built-and-its-surface-is-not).
 
 `held` outside `retains` is refused with a sentence about the *declaration* rather than about
 the name, because the name is right and the header is what is missing. `retains` on any other
@@ -3045,33 +3046,31 @@ for `look`'s reason: it is applied to the fold rather than to anything folded. F
 zero and **open above 1.0**, because the pipeline is linear HDR and this level is applied to
 values no tone mapper has seen yet.
 
-**`master_chain` is what the three fixed passes of the master chain are set to**, whole:
+**`master_chain` is what the master chain is**, whole: the ordered list of its slots.
 
 ```ndjson
-{"t":"master_chain","feedback":0.5,"cut":"exit","bloom":0.8,"rgb_shift":0.2}
+{"t":"master_chain","slots":[
+  {"proc":"sha256:a3f2c1…","cut":"exit","params":{"amount":0.5}},
+  {"proc":"sha256:77b9e0…","params":{"amount":0.8}}]}
 ```
 
-The passes are feedback, then bloom, then rgb shift, between `master_out`'s level at the chain's
-entry and `look`'s exposure at the tone mapper's input. **Nothing here names which effects are in
-the chain or in what order**: they are fixed built-in presets, so a record carrying the order would
-be recording a constant
-([ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
-`feedback` is `[0, 0.95]`, and the ceiling is short of 1.0 on purpose — under the `exit` cut the
-pass is an accumulator, so an amount of 1.0 has no decay in it and a still frame runs away with
-nothing in the picture to warn anybody first. `bloom` and `rgb_shift` are `[0, 1]`, and the second
-is a fraction of 2% of the frame's **height** rather than a count of texels, so a session replayed
-at another resolution shifts the same distance. `cut` is which frame feedback reads: `mix`, the
+The chain runs between `master_out`'s level at its entry and `look`'s exposure at the tone
+mapper's input. **The order is on the line because it stopped being a constant**: a slot holds one
+`kind L5` procedure named by a content address, and a chain is whichever of them an operator put in
+it ([ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)).
+`params` is keyed by the name the procedure declared, a param nobody moved is absent and the
+declaration's own default is what runs, and the range each is brought into is the one the
+declaration gave it. `cut` is present exactly where the procedure declares `retains`: `mix`, the
 frame as the mixer wrote it before this chain touched it — one echo and not a trail — or `exit`,
-this chain's own output, which compounds. What a bloom blooms *from* is not on the line: the knee is
-1.0 and the radius is fixed, and neither is a control.
+this chain's own output, which compounds. An **empty** `slots` is a real value and the default one:
+an empty chain draws nothing and the frame is the mix, bit for bit.
 
 **Written whole, which is `look`'s argument at one more row.** The same 0.5 is a one-frame echo
 under `mix` and a compounding trail under `exit`, so an amount without its cut is not a picture
-anybody can reconstruct, and a stream that moved the bloom without saying where the feedback stood
-would describe a chain a replay could not put back. Three records, one per pass, was refused on
-exactly that; the place that turns a press into this one already knows the chain that is running and
-fills the rest in, the way a `look` record is completed with the operator a control change cannot
-say.
+anybody can reconstruct, and a stream that moved one slot without saying where the others stood
+would describe a chain a replay could not put back. A record per slot was refused on exactly that;
+the place that turns a press into this one already knows the chain that is running and fills the
+rest in, the way a `look` record is completed with the operator a control change cannot say.
 
 Session-wide and never per slot, for `master_out`'s reason: the chain reads what the fold produced,
 after every deck's edge has been applied. **And a record of its own rather than a fifth field on
@@ -3080,20 +3079,22 @@ after every deck's edge has been applied. **And a record of its own rather than 
 folded, a fader ride would rewrite four settings sixty times a second and a settings change would
 rewrite the level a hand was holding.
 
-Every amount is floored at zero and capped where the record is **applied** and at no surface, and a
-cut word this build has not got is refused rather than defaulted: a default there would not report a
+Every value is brought into the range its procedure declared where the record is **applied** and at
+no surface, and a cut word this build has not got is refused rather than defaulted: a default there would not report a
 wrong level, it would silently play one echo where the session had a trail. A replay decodes the
-line in `karakuri-cli`'s `mix::change` and puts it back through `Present::set_chain`, the same
-setter a live press reaches, so no path sets a chain behind the record's back. `--replay` starts
-from every amount at zero, which records no pass at all, because no flag names a pass of this chain
-and a flag writes into a record rather than inventing one
+line in `karakuri-cli`'s `mix::change` and puts it back through `mix::apply_chain`, which reaches
+the same `Present::set_chain` a live press does, so no path sets a chain behind the record's back.
+`--replay` starts from an **empty** chain, which draws nothing at all, because no flag names a slot
+of this chain and a flag writes into a record rather than inventing one
 ([ADR-0046](adr/0046-a-flag-writes-into-the-record-it-does-not-invent-one.md)). **What has no writer
-yet is the press**: no key on the CLI's surface names a pass, so a stream `--record-session` writes
+yet is the press**: no key on the CLI's surface names a slot, so a stream `--record-session` writes
 carries none of these today.
 
-**The four fields are the shape M5.16 replaces.** [*L5's chain*](#l5s-chain--specified-not-built), under
-*Beyond v0.2*, specifies the chain as an ordered list of L5 slots and this record as a `slots`
-array, and says the four-field form is refused rather than read once that lands.
+**The four-field shape this replaced is refused rather than read.**
+`{"t":"master_chain","feedback":…,"cut":…,"bloom":…,"rgb_shift":…}` is what streams recorded
+between 2026-09-09 and M5.16 carry; the decoder says `unknown field 'feedback', expected 'slots'`
+with the line number, because a silent default here would play an empty chain where the session had
+three passes. See [*L5's chain*](#l5s-chain--built-and-its-surface-is-not).
 
 `level`, `mode`, `op` and `cut` are strings for the same reason `curve` and `noise.kind` are: an
 unrecognised value is the engine's to diagnose against what it actually supports, not the
@@ -3789,7 +3790,7 @@ stays exactly where the built-in orbit camera stays, and the `merge` record keep
 for the reason the `camera` record describes that. **Feedback is the one effect that does not
 follow**: reading the previous frame is a cycle, and which cut is read is answered where a pass
 is instantiated rather than in the file that declares `retains` — see
-[L5's chain](#l5s-chain--specified-not-built), which is the half that is still nobody's.
+[L5's chain](#l5s-chain--built-and-its-surface-is-not), which is the half that is still nobody's.
 
 A Set says which it wants with `karakuri_engine::set::Layering`, reached from the command
 line as `--merge <slot>`, **and a Set file records it** — the `merge` record, see [Set file
@@ -3848,23 +3849,26 @@ L4s) and may merge (several L4s into an L5, several geometries into one node); a
 takes one texture, so a Set has one output; and "grouping" is not a hierarchy level but a
 name drawn around some nodes.
 
-### L5's chain — specified, not built
+### L5's chain — built, and its surface is not
 
-**The kind is built and the chain is not**, which is the whole of what this section now is. As
-of M5.16's IR/codegen pass `kind L5` parses, checks, costs and lowers to a fullscreen pass —
+**The list is built and its surface is not**, which is the whole of what this section now is.
+As of M5.16's IR/codegen pass `kind L5` parses, checks, costs and lowers to a fullscreen pass —
 that half moved above the boundary and lives at [The `frame` block (L5)](#the-frame-block-l5) —
-and the three fixed passes ship as `examples/feedback.kir`, `examples/bloom.kir` and
-`examples/rgb_shift.kir`, which compile and cost and have nowhere to run. What is specified and
-not built is the **list**: an ordered chain of slots at the master, each holding one procedure,
-its params and its `cut`; the record that carries it; and the surface that edits it.
-`karakuri-engine`'s `master.rs` is still three hand-written passes, a Set holds no L5 node, and
-`compile::sort_compiled` refuses an L5 where one is loaded, with the reason. The record is
+and as of M5.16's engine pass the master chain **is** the ordered list below: slots, cuts,
+retentions and the record. `examples/feedback.kir`, `examples/bloom.kir` and
+`examples/rgb_shift.kir` are what runs there, `karakuri-engine`'s `master.rs` holds no
+hand-written effect, and `shaders/master.wgsl` is down to the one pass that writes a retention.
+
+**What is left is the surface**, and it stays here rather than moving up: the three named rows
+of the Master bay, *Add* and *Remove*, the Library's drop onto the chain, and `+ add` becoming a
+control. A **Set's** nested L5 is left with it — `compile::sort_compiled` still refuses one where
+a slot is loaded, with the reason. The record is
 [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) and
-the remaining work is [roadmap.md](roadmap.md)'s M5.16.
+what remains is [roadmap.md](roadmap.md)'s M5.16 second pass.
 
 **Which cut a slot answers `retains` with** — `mix` or `exit` — is this section's and not the
 kind's, which is [`retains`](#retains-l5-only)'s own point: the file declares, the place that
-instantiates it answers, and the place does not exist yet.
+instantiates it answers, and the place that answers is a chain slot.
 
 - **`mix`** — the frame as the mixer wrote it, before the chain touched it. One echo and not a
   trail.
@@ -3880,10 +3884,25 @@ frame. A `cut` on a slot whose procedure does not declare `retains` is refused r
 ignored, and a slot whose procedure declares `retains` and whose record carries no `cut` is
 refused the way an unbound slot is.
 
+**Both cuts are copied at the chain's end, and the position stopped mattering.** ADR-0317 copied
+the `mix` cut *between* two passes, because the mix's own target was also the second pass's
+destination and the copy had to be recorded while it was still true. A list cannot honour that:
+the slot that reads the cut may sit anywhere. So the **entry** — what the mix writes into — is
+held apart from the pair the rest of the chain ping-pongs between, the frame as the mix wrote it
+survives the whole chain, and a slot reading `mix` reads the *previous* frame's mix wherever it
+sits. The two pictures ADR-0317 named are the same two bytes for byte.
+
+**A retention is written by a pass and not by a `copy_texture_to_texture`**, which is what
+sanitising it *where it is written* costs: `master.wgsl`'s `keepable` is the whole of what is
+left of that file, and it is why a `.kir` neither needs the guard nor can leave it out. The pass
+is a `textureLoad` and a `select`, exact for every value that is not a NaN or an infinity, so a
+retained frame is still bit for bit the frame it was taken from.
+
 **A chain slot's L5 declares no `uses`.** The master chain is an ordered list and its only
 fan-in is that order; there is no Set for an `edge` to be written in, so a procedure with a
-Texture slot is refused *from a chain slot* rather than from the language. That refusal is where
-the chain is built, beside the one that refuses an unbound slot.
+Texture slot is refused *from a chain slot* rather than from the language. That refusal is
+`karakuri_engine::master::Slot::build`'s, beside the two that pair `retains` with a cut, and each
+names the fix rather than the rule.
 
 #### The two roles
 
@@ -3949,6 +3968,22 @@ not controls, and ADR-0317's argument for that is untouched — the tap count is
 costs — but a different radius is now a different procedure, priced when it is compiled instead
 of refused as a knob.
 
+**The measurement is taken and the answer is a fifth.** At 1280x720 on this machine (Metal,
+Apple M4 Pro, 2026-09-10) the single 9x9 pass costs **0.92 ms** against ADR-0317's **0.80 ms**
+for the separable pair — 1.2x for 4.3x the fetches, because eighty-one taps into one frame hit
+cache where a second pass hits bandwidth. So nothing is owed a second output: the shape that
+would close the gap costs more to specify than the gap is worth
+([ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md),
+and `examples/master_cost.rs` is what took it).
+
+**What the same measurement says about the estimate is sharper.** `cost.rs` prices this pass at
+**3889** ops per fragment against a ceiling of 4096, 95% of it, and prices the whole three-slot
+chain at 3947 — and the GPU says the three together cost 0.98 ms, 5.9% of a 60 Hz frame. The
+weights behind that figure (`texel` 2, `tap` 4, `frame_step` 2) over-predict a cached tap by
+about four to one on this hardware, which is the question ADR-0340 said a GPU would have to
+answer. Re-weighting is a change to `cost.rs` and to every artifact's price with it, so it is
+named here and not taken.
+
 #### What a chain costs, which is a chain's question and not a slot's
 
 **A chain's cost is the sum over its slots, and that is not the addition ADR-0013 forbids.** The
@@ -3969,14 +4004,20 @@ and the chain is charged against the frame beside the decks rather than against 
 
 **Where each ceiling is checked is the [validation pipeline](#validation-pipeline)'s own
 division**, extended and not amended: stages 1–5 are per artifact, so stage 4 rejects one L5
-above the per-fragment ceiling and knows nothing about a chain — that half is **built** — and
-stages 6–8 are per Set and per frame, which is where a chain of slots has a total at all, in the
-same place `capacity` and the frame budget become known. That half is this section's.
+above the per-fragment ceiling and knows nothing about a chain, and stages 6–8 are per Set and
+per frame, which is where a chain of slots has a total at all. The **total exists**:
+`Present::chain_ops_per_fragment` is the sum over the slots and is read back off the running
+chain. **What spends it does not**: nothing sets an estimate on this side of the frame today
+(ADR-0325 recorded the same gap for a slot's), so the governor is handed nothing and the number
+is owed a reader by M5.16's second pass.
 
-**Memory is a chain property too.** Two frame-sized `Rgba16Float` targets to ping-pong between
-where the chain has any slot, plus one per retained cut some slot asks for — allocated at build
-and at resize and never when a parameter moves, which is P-0091 and is what ADR-0317 already does
-for four fixed targets.
+**Memory is a chain property too.** The **entry** where the chain has any slot, plus one target
+per slot that is not the last up to a ping-pong pair, plus one per retained cut some slot asks
+for — so nothing at all for an empty chain, 7.03 MB for one slot at 1280x720, 21.1 MB for three,
+and 7.03 MB more per cut. They are allocated when the list is installed and when the frame is
+resized and never when a parameter moves, which is P-0091: a record whose *shape* is the shape
+already running is applied as a `queue.write_buffer` per slot and allocates nothing, and only a
+different list is a build.
 
 #### Records
 
@@ -4001,16 +4042,21 @@ had four scalars.**
 - **`cut` is present exactly where the procedure declares `retains`**, carrying `mix` or `exit` as
   a word for `Record::Blend`'s reason — a word an older build does not know is the engine's to
   diagnose against what it supports rather than a parse failure that takes the line with it.
-- **The four-field form is not read.** `{"t":"master_chain","feedback":…,"cut":…,"bloom":…,"rgb_shift":…}`
-  is what streams recorded between 2026-09-09 and M5.16 carry, and a build that read both would be
-  carrying two shapes of one record for the length of the project. Before v1 a compatibility cost
-  is a bill rather than an argument
-  ([P-0085](principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)); the bill here
-  is those sessions, and what is owed for it is a refusal that says which shape it found rather
-  than a silent default.
+- **The four-field form is not read**, and the refusal names the key it met.
+  `{"t":"master_chain","feedback":…,"cut":…,"bloom":…,"rgb_shift":…}` is what streams recorded
+  between 2026-09-09 and M5.16 carry, and a build that read both would be carrying two shapes of
+  one record for the length of the project. Before v1 a compatibility cost is a bill rather than
+  an argument
+  ([P-0085](principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)); the bill
+  here is those sessions. What was owed for it is paid as `#[serde(deny_unknown_fields)]` on this
+  record and on no other — `unknown field 'feedback', expected 'slots'`, with the line number —
+  because here an unrecognised key is not a field from the future, it is the old form, and
+  dropping it the way this format drops every other would play an **empty chain** where the
+  session had three passes.
 - **The retained frame stays part of closed state**, which is ADR-0317's determinism paragraph
-  word for word: a copy of a target this chain wrote, from a parameter a record carries, into a
-  target that reads as zero until it is written (P-0092).
+  with one word changed: a **pass** over a target this chain wrote, from a parameter a record
+  carries, into a target that reads as zero until it is written (P-0092). The pass sanitises and
+  does nothing else, so it is still the copy for every value that is a number.
 
 **A Set file gains nothing for the chain and one line for a nested L5.** The chain is not Set
 state and `Store::write_set` refuses it, on ADR-0227's argument. A **written** nested L5 is a node
@@ -4039,7 +4085,9 @@ bytes the store hands over whole. The directory's name and the shipped tier's co
 - A procedure knows only what it declares: `src` is implicit, the cut is answered where the slot
   is, and a `.kir` names no node (P-0086).
 - The retained frame is part of what a replay reproduces (P-0092).
-- Targets are allocated at build and at resize, never when a parameter moves (P-0091).
+- Targets are allocated when a list is installed and when the frame is resized, never when a
+  parameter moves (P-0091) — which is why applying a whole record whose shape has not changed is
+  a uniform write and only a different list is a build.
 - The cost is computable before anything is built, which is what the literal loop bound is for
   (ADR-0252), and the three axes are not summed (ADR-0013).
 - One kind with two roles, one implementation (ADR-0098).
@@ -4049,8 +4097,8 @@ bytes the store hands over whole. The directory's name and the shipped tier's co
 reserved names in it (`src`, `held`). The three builtins' names and shapes. `retains` as a bare
 declaration with the cut answered by the slot, rather than `retains mix` in the file. No zero-skip.
 A chain slot's L5 declaring no `uses`. `uses … : Field` refused on an L5. One chain, at the master,
-rather than one per deck. The shipped `bloom.kir` as a single 81-tap pass. And that the four-field
-`master_chain` record is refused rather than read.
+rather than one per deck. The shipped `bloom.kir` as a single 81-tap pass, which is now measured
+rather than feared. And that the four-field `master_chain` record is refused rather than read.
 
 ### Metadata file format — partly built
 

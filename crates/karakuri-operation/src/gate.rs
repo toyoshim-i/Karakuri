@@ -787,7 +787,9 @@ mod tests {
             Operation::TransferSet {
                 transfer: SetTransfer::Send { id: "a".into() },
             },
-            Operation::WalkHistory { step: Undecided },
+            Operation::WalkHistory {
+                set: Some("a".into()),
+            },
             Operation::LoadProcedure {
                 deck: 0,
                 procedure: "orbit_wide".into(),

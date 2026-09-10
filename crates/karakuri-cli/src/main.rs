@@ -58,7 +58,7 @@ use karakuri_engine::frame;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::Sync;
 use karakuri_engine::{
-    Binding, Blend, Chain, Deck, Gpu, HotSwap, Look, MaskKind, ParamWrite, Present, Residency, Set,
+    Binding, Blend, Deck, Gpu, HotSwap, Look, MaskKind, ParamWrite, Present, Residency, Set,
     Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_operation::Operation;
@@ -2176,11 +2176,16 @@ fn replay_session(args: &Args, id: &str) {
     let mut look = args.look;
     // **And the master chain, on the same terms and from nothing.** There is no
     // flag for it — a flag writes into a record it does not invent (ADR-0046)
-    // and no flag names a pass of this chain — so a replay starts with every
-    // amount at zero, which records no pass at all, and the stream's first
-    // `master_chain` record is the first *change*. That is exactly what
-    // `playing` above is seeded from nothing for.
-    let mut chain = Chain::default();
+    // and no flag names a slot of this chain — so a replay starts with an empty
+    // chain, which draws nothing at all, and the stream's first `master_chain`
+    // record is the first *change*. That is exactly what `playing` above is
+    // seeded from nothing for.
+    //
+    // **Handed on only where a record moved it**, which is `render::replay`'s
+    // own rule for the third value: putting a chain on the `Present` may mean
+    // compiling procedures, so the frames nothing changed hand `None`.
+    let mut chain: Vec<karakuri_engine::SlotSpec> = Vec::new();
+    let mut chain_moved = false;
     let result = render::replay(
         &gpu,
         &mut deck,
@@ -2196,6 +2201,13 @@ fn replay_session(args: &Args, id: &str) {
                 None
             }
         },
+        // **The shipped three first, then the store**, which is the order
+        // `mix::resolve_procedure` states: a chain of presets replays with no
+        // store at all, and any other slot's source is one a session's
+        // `procedure` records already put there. An address nothing holds is
+        // refused **with the address in the message**, which is what a replay
+        // meeting a procedure the store does not have is owed (ADR-0340).
+        &|address| mix::resolve_procedure(Some(&store), address),
         |i, deck| {
             let frame = &stream.frames[i as usize];
             // **Procedures are gathered and applied together, after the rest.**
@@ -2276,7 +2288,7 @@ fn replay_session(args: &Args, id: &str) {
                     eprintln!("{}", skipped_save(*slot, id));
                     continue;
                 }
-                apply_replayed(deck, &mut look, &mut chain, record);
+                apply_replayed(deck, &mut look, &mut chain, &mut chain_moved, record);
             }
             for slot in changed {
                 match rebuild(&gpu, &store, &playing[slot], args, slot, layering, live) {
@@ -2284,7 +2296,14 @@ fn replay_session(args: &Args, id: &str) {
                     Err(e) => eprintln!("  slot {slot}: {e} — it keeps what it had"),
                 }
             }
-            (frame.steps, look, chain)
+            (
+                frame.steps,
+                look,
+                chain_moved.then(|| {
+                    chain_moved = false;
+                    chain.clone()
+                }),
+            )
         },
     );
     if let Err(e) = result {
@@ -2399,7 +2418,8 @@ fn rebuild(
 fn apply_replayed(
     deck: &mut Deck,
     look: &mut Look,
-    chain: &mut Chain,
+    chain: &mut Vec<karakuri_engine::SlotSpec>,
+    chain_moved: &mut bool,
     record: &karakuri_store::record::Record,
 ) {
     // The two the signal bus takes, through the same decoders the live path
@@ -2536,7 +2556,10 @@ fn apply_replayed(
         // driver holds, so they are carried out the way the look is
         // (ADR-0224, ADR-0317).
         Ok(Some(mix::Change::MasterOut(value))) => deck.set_out(value),
-        Ok(Some(mix::Change::MasterChain(c))) => *chain = c,
+        Ok(Some(mix::Change::MasterChain(slots))) => {
+            *chain = slots;
+            *chain_moved = true;
+        }
         Ok(Some(mix::Change::Transport {
             slot,
             sync,
@@ -7154,7 +7177,7 @@ impl Live {
             // because what decides whether a chain operation can be answered
             // is whether the reading was taken and not which surface asked
             // (ADR-0317, and `written`'s `Owed::NotRead`).
-            master_chain: Some(mix::current_chain(&self.present.chain())),
+            master_chain: Some(mix::current_chain(&self.present.chain_spec())),
             transport,
             mask,
             tempo,
@@ -7324,13 +7347,40 @@ impl Live {
             mix::Change::MasterOut(value) => self.deck.set_out(value),
             // **And the chain itself, applied and not stored, which is the
             // opposite of the look one arm up and for a stated reason.** The
-            // `Present` is where a chain lives — it owns the four targets the
-            // passes ping-pong between — so there is nowhere else to put it,
-            // and a copy on this struct beside it would be the second writer
-            // the look arm refuses. `Present::set_chain` is a
-            // `queue.write_buffer` and a field, so this costs what storing it
-            // would (ADR-0317).
-            mix::Change::MasterChain(chain) => self.present.set_chain(&self.gpu.queue, chain),
+            // `Present` is where a chain lives — it owns the targets its slots
+            // read and write — so there is nowhere else to put it, and a copy
+            // on this struct beside it would be the second writer the look arm
+            // refuses (ADR-0317, and `Present::chain_spec` is how it is read
+            // back).
+            //
+            // **What it costs is now two things and the record decides
+            // which**: a list whose shape is the shape already running is a
+            // uniform write per slot, and any other is a build. See
+            // `mix::apply_chain`.
+            //
+            // **A refusal is said and the chain that is running stays.** An
+            // address the store does not hold is a record this build cannot
+            // obey, which is reported at the operation rather than drawn as a
+            // wrong picture.
+            mix::Change::MasterChain(slots) => {
+                if let Err(refusal) = mix::apply_chain(
+                    &mut self.present,
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    &slots,
+                    // **The shipped three and nothing else, and the refusal
+                    // says which address it could not find.** This surface has
+                    // no key that names a slot of the chain — `written` is
+                    // handed the reading all the same, for its own reason — so
+                    // the only lists it can be handed are ones made of the
+                    // presets. An address out of a store is what M5.16's second
+                    // pass owes, with the Library's drop; opening one here
+                    // would create a store a plain run never asked for.
+                    &|address| mix::resolve_procedure(None, address),
+                ) {
+                    eprintln!("  {refusal} — the chain keeps what it had");
+                }
+            }
             mix::Change::Transport {
                 slot,
                 sync,

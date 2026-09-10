@@ -1675,8 +1675,53 @@ fn tools() -> Value {
                 },
             },
         },
-        // **The eighth, and it is generated** — see [`operate_tool`] and
-        // [`SPELLED`]. The seven above are written out because each of them
+        {
+            // **The eighth, and it is one of the seven's kind rather than
+            // `operate`'s**: it reads the store — `history::list` walks
+            // `<store>/history/` newest first and opens no file — which is
+            // what `list_sets` and `read_set` do and what nothing on the
+            // render loop's frame can do without paying for a directory walk
+            // on the path that must not wait
+            // ([ADR-0199](../../../docs/adr/0199-mcp-names-its-operations-and-performs-them-itself.md),
+            // `docs/adr/0342-…`). The reply is the listing, which is where a
+            // read's answer goes: back to the surface that asked
+            // ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+            "name": "walk_history",
+            "description":
+                "Every version of one Set's material that compiled, most recent first. \
+                 Every build this instrument accepts is filed under `<store>/history/` \
+                 whether or not it stayed on screen — the gate is **compiling** and not \
+                 landing, so the version that cost too much to run is in here too — and \
+                 a row is the name the store filed it under: when it was written, which \
+                 slot, which node of that slot, and what the procedure called itself. \
+                 **This is the listing and not the landing**: put one of these versions \
+                 back with `operate` naming *Put a node's previous version back* and \
+                 `{\"deck\": <the row's slot>, \"revision\": {\"picked\": \"<row>\"}}`, \
+                 which is what a row is a name for. **Narrowed to one Set and never to a deck**: two decks playing one \
+                 Set have one history between them, and a version written while a slot \
+                 was running no Set is filed under none and is matched by no id. **The \
+                 walk is capped and says so**: it stops entering day directories once it \
+                 has enough, so an answer that says the walk stopped short is part of \
+                 what is there rather than all of it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "set": {
+                        "type": "string",
+                        "pattern": ID_PATTERN,
+                        "maxLength": MAX_ID,
+                        "description":
+                            "the Set whose versions to walk, by the id it is filed under \
+                             — `list_sets` names them. Required: a walk that names no Set \
+                             lists nothing, because those versions are filed under no Set \
+                             rather than under all of them.",
+                    },
+                },
+                "required": ["set"],
+            },
+        },
+        // **The ninth, and it is generated** — see [`operate_tool`] and
+        // [`SPELLED`]. The eight above are written out because each of them
         // performs something only this server can; this one is the vocabulary,
         // and a hand-written copy of it beside the vocabulary is the drift
         // `karakuri-operation` exists to end.
@@ -1755,12 +1800,20 @@ fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, String> {
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
         },
+        // **The store's other listing**, beside `list_sets` for its reason: the
+        // walk is a directory read this thread can do and the render loop
+        // cannot afford, and its answer is rows rather than a report that
+        // something was performed (`docs/adr/0342-…`).
+        "walk_history" => match walked_history(args) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
         "save_set" => match kept(args, slots) {
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
         },
-        // **The eighth tool, and the one that names rather than does.** The
-        // seven above each turn a tool's own arguments into the operation the
+        // **The ninth tool, and the one that names rather than does.** The
+        // eight above each turn a tool's own arguments into the operation the
         // manual specifies; this one is handed the operation's own name and
         // looks it up — see [`operated`] and [`SPELLED`]. It is here at the end
         // rather than first so that a tool with a name of its own is still
@@ -2004,6 +2057,30 @@ fn listing(args: &Value) -> Result<Operation, String> {
     Ok(Operation::ListSets { holds, layer })
 }
 
+/// `walk_history`'s arguments as the operation they name.
+///
+/// **`set` is required where the payload's own field is an `Option`**, and the
+/// two do not disagree: `None` there is *a walk that names no Set*, which is
+/// the panel's answer for a deck running the pair the run launched with — those
+/// versions are filed under no Set and a narrowing matches none of them
+/// (ADR-0276). A model asking for that would be asking for a listing that is
+/// empty by construction, so this surface does not offer it and says so.
+///
+/// **[`checked_id`] for [`named_set`]'s reason**: a Set id is one path
+/// component, and the walk matches it against what the store filed a version
+/// under.
+fn walked_history(args: &Value) -> Result<Operation, String> {
+    let set = args.get("set").and_then(Value::as_str).ok_or(
+        "`set` is required and is a string: which Set's versions to walk. A walk is \
+         narrowed to one Set — `list_sets` names the ids — because two decks playing one \
+         Set have one history between them and a version written under no Set is matched \
+         by no id",
+    )?;
+    Ok(Operation::WalkHistory {
+        set: Some(checked_id(set)?),
+    })
+}
+
 // -- `operate`: one operation of the vocabulary, named on the wire ----------
 
 /// **How long an `operate` call waits for the render loop to perform it.**
@@ -2045,9 +2122,6 @@ enum Sayable {
     /// [ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)'s,
     /// worded once here as it is worded once on the page.
     Window,
-    /// **The payload is `karakuri_operation::Undecided`.** A surface can say
-    /// only what the vocabulary has settled, and these three are not settled.
-    Undecided,
     /// **This surface will not reach it, and the clause says why and where the
     /// route that does is.** The row's MCP badge is `gap`, and what makes it
     /// `gap` rather than `plan` is that **nothing is owed**: no performer
@@ -2158,6 +2232,15 @@ fn sayable(operation: &Operation) -> Sayable {
         Operation::SaveSet { .. } => Sayable::Tool("save_set"),
         Operation::ReadSet { .. } => Sayable::Tool("read_set"),
         Operation::ListSets { .. } => Sayable::Tool("list_sets"),
+        // **The eighth, and it joined the seven on 2026-09-10 by having its
+        // payload settled** — it names the Set it is a walk of now, so this
+        // surface can say it. It is a tool rather than an `operate` name for
+        // the property that puts the other seven here and not for its shape: it
+        // reads the store and answers with rows, which is what only this server
+        // can do, and a walk performed on the drain's frame would be a
+        // directory walk on the path that must not wait. See
+        // `docs/adr/0342-…`.
+        Operation::WalkHistory { .. } => Sayable::Tool("walk_history"),
 
         // ----- the seventeen a model has no window for ---------------------
         //
@@ -2193,16 +2276,30 @@ fn sayable(operation: &Operation) -> Sayable {
         // selection two groups up and for its sentence.
         | Operation::PointPane { .. } => Sayable::Window,
 
-        // ----- the three the vocabulary has not settled --------------------
+        // ----- the group that emptied on 2026-09-10 ------------------------
         //
-        // `Operation::SelectScope` carries `Undecided` too and is not here: its
-        // row is `gap` for the window's reason, which is the answer that was
-        // taken first and is the one a reader of the page meets.
-        Operation::WalkHistory { .. }
-        | Operation::WatchFiles { .. }
-        | Operation::MoveBoundary { .. } => Sayable::Undecided,
+        // **There were three here — the payloads the vocabulary had not
+        // settled — and all three left on one day** (`docs/adr/0342-…`).
+        // `Operation::WalkHistory` left by having its payload settled and is a
+        // tool above. The other two left by being asked the question this
+        // classification is actually about: **not** *is the payload settled*
+        // but *what can this surface reach*. `Operation::MoveBoundary` is a
+        // surface's own state and is [`Sayable::Window`] with ADR-0315's
+        // sentence — it was that record's own thirteenth row, held out of it
+        // only because its payload is open. `Operation::WatchFiles` names an
+        // event a model does not perform and is [`Sayable::Never`] below.
+        //
+        // **So `Sayable::Undecided` is gone**, the way `Unperformed` went in
+        // ADR-0341 and for its reason: a variant nothing constructs is dead
+        // code that says something false about the program, and this `match`
+        // has no wildcard, so the day an operation arrives that a surface
+        // cannot say the build stops until somebody puts an answer back.
+        //
+        // `Operation::SelectScope` is here for the window's reason too, which
+        // is where it has always been.
+        Operation::MoveBoundary { .. } => Sayable::Window,
 
-        // ----- the one no route here will ever take -------------------------
+        // ----- the two no route here will ever take -------------------------
         //
         // **This was the last group and it used to have a neighbour**: rows
         // the vocabulary named that nothing on the drain's frame performed
@@ -2220,7 +2317,21 @@ fn sayable(operation: &Operation) -> Sayable {
              this protocol. The route is the command line: `--package ID > FILE.kbset` sends \
              one and `--take-in FILE` takes one in",
         ),
-
+        // **A model does not edit a file in another program**, which is the
+        // whole of what that row names: somebody saving a source a watcher is
+        // looking at, and the rebuild that follows. What a model has instead is
+        // the act itself — `write_procedure` **is** its edit — so there is
+        // nothing here it would say that the write does not already say, and
+        // nothing is owed. That is `docs/adr/0205-…`'s kind of answer: a route
+        // whose only content is a second spelling of one that exists is not a
+        // route somebody has yet to build (`docs/adr/0342-…`).
+        Operation::WatchFiles { .. } => Sayable::Never(
+            "a model does not edit a file in another program: it calls `write_procedure`, \
+             which **is** its edit — checked, written, built on a worker and swapped at a \
+             frame boundary — and there is nothing this row would add to it. The row names \
+             an event rather than an act, somebody saving a source a watcher is looking at, \
+             and the watching itself is the command line's: `--watch` turns it on for a run",
+        ),
     }
 }
 
@@ -3822,8 +3933,11 @@ const SPELLED: &[Spelled] = &[
     Spelled {
         sample: || {
             (
+                // **A tool of its own, so `operate` does not spell it** — the
+                // sample is here to name the row and the schema is
+                // `walk_history`'s own, beside `read_set`'s and `list_sets`'.
                 Operation::WalkHistory {
-                    step: karakuri_operation::Undecided,
+                    set: Some("night01".to_string()),
                 },
                 Value::Null,
             )
@@ -4273,11 +4387,6 @@ fn operated(args: &Value, slots: &Slots) -> Result<Operation, String> {
                  is a route into a window a model is not looking at. Nothing here can ask \
                  for it, and the person at the panel is who it belongs to"
             ),
-            Sayable::Undecided => format!(
-                "`{named}` carries a payload this vocabulary has not settled — what the \
-                 operation acts on is an open question — so no surface can say it yet, \
-                 including this one"
-            ),
             Sayable::Never(why) => format!(
                 "`{named}` is named by this vocabulary and has no route on this surface: \
                  {why}"
@@ -4469,6 +4578,12 @@ fn perform(allowed: &Allowed<'_>, state: &mut State) -> Called {
         Operation::ListSets { holds, layer } => {
             Called::Answered(list_sets(holds.as_deref(), *layer, state))
         }
+        // **The store's other listing, and no file is opened at all** — see
+        // [`walk_history`]. Answered here for `list_sets`' reason, and it is
+        // the reason this row is a tool rather than a name `operate` takes:
+        // handing a directory walk to the render loop would put it on the path
+        // that must not wait.
+        Operation::WalkHistory { set } => Called::Answered(walk_history(set.as_deref(), state)),
         // **Refused before it is sent and waited for elsewhere.** Everything
         // this module can decide by itself — a slot that does not exist, an `id`
         // that is not a name — was decided in [`asked`] under the lock like any
@@ -5147,6 +5262,136 @@ fn describe_filters(holds: Option<&str>, layer: Option<Layer>) -> String {
             layer_spelled(layer)
         ),
     }
+}
+
+/// **How many rows the walk asks for before the narrowing**, and it is a
+/// number this surface chooses rather than one `history::list` has.
+///
+/// `list`'s cap is on **days opened** and the narrowing to one Set happens
+/// after it, so a store whose day directories hold several Sets' versions
+/// yields fewer of each — asking for two hundred is asking for the last two
+/// hundred versions *this store* wrote, of which some are the Set that was
+/// asked about. Larger than the twenty a reply renders, so an ordinary Set's
+/// recent history survives the narrowing whole; small enough that the walk
+/// stops after a handful of day directories, which is the whole of what it
+/// costs
+/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
+/// What lies past it is not counted — counting it is the cost the cap exists
+/// not to pay — and `Listing::stopped_short` is what says the walk stopped.
+const WALKED: usize = 200;
+
+/// **Every version of one Set that compiled**, most recent first, as rows a
+/// landing can name back.
+///
+/// **A read, answered on this thread**, which is why the row is a tool beside
+/// `read_set` and `list_sets` rather than a name `operate` takes: it walks
+/// `<store>/history/` and opens no file at all, and a directory walk handed to
+/// the render loop is a directory walk on the path that must not wait
+/// (`docs/adr/0342-…`, ADR-0199).
+///
+/// **Narrowed to one Set here rather than in `history::list`**, which is that
+/// module's own rule — *"which rows an operator is looking at is a question the
+/// surface asks"* — and the same division `list_sets`' two filters are applied
+/// under. **A row filed under no Set matches no id** and is never folded in:
+/// those versions were written where the slot was running the pair a run
+/// launched with, and a filter that let them through would be inventing a
+/// history for whichever Set was asked about (ADR-0276, ADR-0308).
+///
+/// **The three things a walk has to say beside its rows** are said: the walk
+/// stopping short, the entries under `history/` the layout does not claim, and
+/// a rendering shorter than what matched. Each of the three is a way for a
+/// listing to read as the whole of something it is not.
+fn walk_history(set: Option<&str>, state: &State) -> Result<String, String> {
+    // Cannot happen from this surface — [`walked_history`] requires `set` — and
+    // written out rather than unwrapped, because the payload's `None` is a real
+    // value on another surface and this is what it would mean here.
+    let Some(id) = set else {
+        return Err(
+            "this walk names no Set, and a walk of no Set lists nothing: versions written \
+             while a slot was running material nobody had saved are filed under no Set, and \
+             no id matches them. Name a Set — `list_sets` says which ones this store holds"
+                .to_string(),
+        );
+    };
+    let found = crate::history::list(&state.store, WALKED)?;
+    let rows: Vec<&crate::history::Version> = found
+        .versions
+        .iter()
+        .filter(|version| version.set.as_deref() == Some(id))
+        .collect();
+    let mut out = String::new();
+    if rows.is_empty() {
+        out.push_str(&format!(
+            "no version of set `{id}` is in this store's edit history. Every build that \
+             compiles is filed there, so this is a Set nothing has been edited on in what \
+             the walk covers — or one this store has never played. `read_set` says what \
+             `{id}` holds and `list_sets` says what else is here.\n"
+        ));
+    } else {
+        let shown = rows.len().min(LISTED);
+        if rows.len() > shown {
+            // **Never a truncated list that reads as a whole one**, which is
+            // [`list_sets`]' rule on its own truncation.
+            out.push_str(&format!(
+                "{} version{} of set `{id}` are in what this walk covered, and the {shown} \
+                 most recent are below — **this is not all of them**: {} more matched and \
+                 are not listed.\n",
+                rows.len(),
+                plural(rows.len()),
+                rows.len() - shown,
+            ));
+        } else {
+            out.push_str(&format!(
+                "{} version{} of set `{id}`, most recent first — all of the ones this walk \
+                 covered are below.\n",
+                rows.len(),
+                plural(rows.len()),
+            ));
+        }
+        for version in rows.iter().take(shown) {
+            out.push_str(&format!("`{}`\n", version.filed_as()));
+        }
+    }
+    if found.stopped_short {
+        out.push_str(
+            "\nThe walk stopped with day directories unread, so this is part of what is \
+             there rather than all of it: it asks for the last few hundred versions this \
+             store wrote and narrows them to the Set afterwards, so a store several Sets \
+             are being edited in shows fewer of each.\n",
+        );
+    }
+    if found.unclaimed > 0 {
+        out.push_str(&format!(
+            "\n{} entr{} under `history/` that this layout does not claim {} passed over. A \
+             day directory is a place an operator works in by hand — `rm -rf \
+             history/2026/07` is this store's whole retention policy — so whatever else is \
+             in there is theirs.\n",
+            found.unclaimed,
+            match found.unclaimed {
+                1 => "y",
+                _ => "ies",
+            },
+            match found.unclaimed {
+                1 => "was",
+                _ => "were",
+            }
+        ));
+    }
+    // **The closing paragraph is the rows' own and is not printed under an
+    // empty answer**, where every sentence in it would be about something that
+    // is not there.
+    if !rows.is_empty() {
+        out.push_str(
+            "\nEach row is the name the store filed a version under: when it was written, \
+             which slot, which node of that slot, and what the procedure called itself. To \
+             put one back, call `operate` with `Put a node's previous version back` and \
+             `{\"deck\": <the row's slot>, \"revision\": {\"picked\": \"<row>\"}}` — the \
+             version's bytes are written over that node's working copy and built like any \
+             other edit. The gate on this history is **compiling** and not landing, so a \
+             version that cost too much to run is in here too.\n",
+        );
+    }
+    Ok(out)
 }
 
 /// The `s` on a count, in the one place, because every sentence here has one.
@@ -7246,6 +7491,102 @@ proc probe_knobs {
         );
     }
 
+    /// **A walk answers one Set's versions, and a row filed under another Set
+    /// or under none is never in it.**
+    ///
+    /// The narrowing is this surface's — `history::list` hands over one ordered
+    /// listing with the whole address on every row — so the filter is written
+    /// here and has to be checked here. **The `None` row is the half that
+    /// matters**: a version written while a slot was running material nobody
+    /// had saved is a version of *nothing*, and a filter that let it through
+    /// would be inventing a history for whichever Set was asked about
+    /// (ADR-0276, ADR-0308).
+    ///
+    /// **Watched to fail** against three defects: a narrowing on
+    /// `version.set.is_none() || version.set.as_deref() == Some(id)`, which is
+    /// the wildcard reading and puts `bend` in the answer; a walk that returned
+    /// the whole listing, which puts `drift_shell` in it; and a `set` argument
+    /// read as optional, which answers a call that named no Set with somebody
+    /// else's edits.
+    #[test]
+    fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
+        let server = start(true);
+        let root = store_root(&server.dir);
+        let mut snaps = crate::history::Snapshots::new(&root);
+        for (slot, layer, set, name, source) in [
+            (0usize, "L4", Some("night01"), "beat_strokes", &b"one"[..]),
+            (0, "L4", Some("night01"), "beat_strokes", &b"two"[..]),
+            (1, "L1", Some("day02"), "drift_shell", &b"three"[..]),
+            // **Filed under no Set**, which is a run playing the pair it was
+            // launched with — the row no id matches.
+            (2, "L2", None, "bend", &b"four"[..]),
+        ] {
+            snaps
+                .record(slot, layer, 0, set, name, source)
+                .expect("a snapshot is written");
+        }
+
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string(),
+        );
+        let listed: Value = serde_json::from_str(&listed).expect("json");
+        let names: Vec<String> = listed["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .map(|t| t["name"].as_str().expect("name").to_string())
+            .collect();
+        assert!(
+            names.iter().any(|name| name == "walk_history"),
+            "a client is never told the tool exists: {names:?}"
+        );
+
+        let (failed, said) = call(server.port, "walk_history", json!({"set":"night01"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("beat_strokes"),
+            "the Set's own versions are not in its walk: {said}"
+        );
+        assert!(
+            !said.contains("drift_shell"),
+            "another Set's version is in this one's history: {said}"
+        );
+        assert!(
+            !said.contains("bend"),
+            "a version filed under no Set was folded into a Set's history, which is the \
+             wildcard reading ADR-0276 refuses: {said}"
+        );
+        // **A row is the name a landing names it back by**, which is the name
+        // less the `@<set>` every row of one walk shares.
+        assert!(
+            !said.contains("@night01") && !said.contains(".kir"),
+            "a row is not the name `Revision::Picked` takes: {said}"
+        );
+
+        let (failed, said) = call(server.port, "walk_history", json!({"set":"day02"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("drift_shell") && !said.contains("beat_strokes"),
+            "the other Set's walk is not its own: {said}"
+        );
+
+        // **A Set with no versions is an answer and not a failure**, and it is
+        // a different answer from a store with no history at all.
+        let (failed, said) = call(server.port, "walk_history", json!({"set":"nothing_here"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("no version of set `nothing_here`"),
+            "an empty walk does not say it is empty: {said}"
+        );
+
+        // **And a call that names no Set is refused rather than answered with
+        // whatever the store holds.**
+        let (failed, said) = call(server.port, "walk_history", json!({}));
+        assert!(failed, "a walk with no Set was answered: {said}");
+        assert!(said.contains("`set` is required"), "{said}");
+    }
+
     /// **Both filters, apart and together.**
     ///
     /// `holds` is the "which of these use `drift_shell`" question and `layer` is
@@ -9101,6 +9442,7 @@ mod tests {
             ("swap_outcome", json!({})),
             ("read_set", json!({"id": "a"})),
             ("list_sets", json!({})),
+            ("walk_history", json!({"set": "a"})),
             ("save_set", json!({"slot": 0})),
             // **`operate` names thirty operations and twenty-nine of them are
             // closed**, so what is driven here is the one the audit lets
@@ -9354,19 +9696,44 @@ mod tests {
             .expect_err("a model has no window");
         assert!(refusal.contains("window"), "{refusal}");
 
+        // **The walk is a tool of its own since 2026-09-10**, and this case
+        // was *its payload is undecided* until then: settling the payload did
+        // not make `operate` take it, because what decides that is whether the
+        // work is something only this server can do, and a walk reads the
+        // store (`docs/adr/0342-…`).
         let refusal = operated(&json!({ "operation": "Walk the edit history" }), &slots)
-            .expect_err("its payload is undecided");
-        assert!(refusal.contains("settled"), "{refusal}");
+            .expect_err("`walk_history` is that row's tool");
+        assert!(refusal.contains("walk_history"), "{refusal}");
+
+        // **The two rows the page marks `gap` for MCP**, each refused with its
+        // own sentence rather than with one answer covering both: a divider is
+        // a surface's own state and a watched file is an event a model does not
+        // perform, and a model told the wrong one of those would go looking for
+        // the wrong thing (`docs/adr/0342-…`).
+        let refusal = operated(&json!({ "operation": "Move a boundary" }), &slots)
+            .expect_err("a model has no window");
+        assert!(
+            refusal.contains("surface's own state") && refusal.contains("window"),
+            "{refusal}"
+        );
+
+        let refusal = operated(&json!({ "operation": "Edit the file instead" }), &slots)
+            .expect_err("a model's edit is `write_procedure`");
+        assert!(
+            refusal.contains("no route on this surface") && refusal.contains("write_procedure"),
+            "{refusal}"
+        );
 
         // **And the row that is waiting for nothing.** This case named a row
         // *waiting for a performer* until 2026-09-10 — *Record the session*,
         // then ADR-0338's two as each moved — and there is no such row left:
-        // `Sayable::Unperformed` went with its last one (ADR-0341), so a
-        // `plan` badge in the MCP column is now only an unsettled payload,
-        // which the case above this one covers. What is left is the opposite
-        // answer, and it reads differently on purpose: a model told *not yet*
-        // about a send would go on asking, where what it needs is the flag its
-        // operator has.
+        // `Sayable::Unperformed` went with its last one (ADR-0341). The
+        // `Undecided` answer beside it went the same way on the same day, when
+        // the last two rows carrying it turned out to be `gap` for reasons of
+        // their own — so a `plan` badge in the MCP column now means nothing at
+        // all. What is left is this answer, and it reads differently on
+        // purpose: a model told *not yet* about a send would go on asking,
+        // where what it needs is the flag its operator has.
         let refusal = operated(
             &json!({ "operation": "Send a Set to somebody, and take one in" }),
             &slots,
@@ -9718,6 +10085,7 @@ mod tests {
             "save_set" => json!({ "slot": 0 }),
             "read_set" => json!({ "id": "a_set" }),
             "list_sets" => json!({}),
+            "walk_history" => json!({ "set": "a_set" }),
             // **The one operation `operate` names that the audit lets through**,
             // which is what makes this survey mean the same thing for the eighth
             // tool as it does for the seven: the other twenty-nine are refused
@@ -9917,7 +10285,6 @@ mod tests {
                     match sayable(&(row.sample)().0) {
                         Sayable::Tool(tool) => format!("`{tool}` is its tool"),
                         Sayable::Window => "a model has no window".to_string(),
-                        Sayable::Undecided => "its payload is undecided".to_string(),
                         Sayable::Never(why) => why.to_string(),
                         Sayable::Operable => "it does not".to_string(),
                     }
@@ -9951,7 +10318,16 @@ mod tests {
             let written = karakuri_operation_record::written(&operation, &Current::default());
             let expected = match name.as_str() {
                 // It asks rather than changes, and a question writes no record.
-                "read_procedure" | "read_set" | "list_sets" | "swap_outcome" => Silent::Question,
+                //
+                // **`walk_history` is here on the day it arrived**, which is
+                // the whole of why it is a tool: what it does is a listing of
+                // the store, and `written` says so rather than this file
+                // asserting it (`docs/adr/0342-…`). Landing one of the rows it
+                // returns is `RestoreProcedure`, which is `OnLanding` two arms
+                // down and reaches the frame through `operate`.
+                "read_procedure" | "read_set" | "list_sets" | "walk_history" | "swap_outcome" => {
+                    Silent::Question
+                }
                 // Its record is written where the work lands: `Record::Save` at
                 // the frame the save landed, `Record::Procedure` when a swap
                 // lands.

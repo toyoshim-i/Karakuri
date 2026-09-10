@@ -20,7 +20,7 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use crate::master::{Chain, MasterChain};
+use crate::master::{Chain, Clock, Cut, MasterChain};
 
 /// The transfer from unbounded linear HDR to a displayable `[0, 1]`. Compared
 /// side by side by `examples/tonemap_compare.rs`, on the material this project
@@ -107,8 +107,8 @@ pub struct Present {
     /// indistinguishable in the picture.
     tonemap: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
-    /// **The master chain**, which is the three fixed passes between the mix's
-    /// write and this pass's read — see [`crate::master`].
+    /// **The master chain**, which is the ordered list of L5 slots between the
+    /// mix's write and this pass's read — see [`crate::master`].
     ///
     /// **Here because this module already owns every frame-sized target
     /// between the fold and the surface**, and resizing them is one call: a
@@ -273,7 +273,12 @@ impl Present {
     }
 
     /// Reallocation, so never from the render thread mid-frame.
-    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
+    ///
+    /// **The queue is here because the chain's slots carry the frame's size in
+    /// their uniforms**: `frame_step` converts a fraction of the frame's height
+    /// into the coordinates `tap` takes, and a slot resized without that write
+    /// would displace by the old frame's number.
+    pub fn resize(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, width: u32, height: u32) {
         if (width, height) == (self.width, self.height) {
             return;
         }
@@ -288,10 +293,14 @@ impl Present {
         self.hdr = hdr;
         self.hdr_view = view;
         self.bind_group = bind_group;
-        // The chain's four targets are frame-sized for the same reason `hdr`
-        // is, so they move with it and there is one call rather than two to
-        // forget.
-        self.chain.resize(device, width, height);
+        // The chain's targets are frame-sized for the same reason `hdr` is, so
+        // they move with it and there is one call rather than two to forget.
+        //
+        // **After the target above is replaced, never before.** The chain binds
+        // this view to copy the `exit` cut out of, so a chain resized first
+        // would hold last size's frame — which wgpu accepts and draws wrong.
+        self.chain
+            .resize(device, queue, &self.hdr_view, width, height);
         self.width = width;
         self.height = height;
     }
@@ -342,34 +351,120 @@ impl Present {
         self.chain.entry().unwrap_or(&self.hdr_view)
     }
 
-    /// **What the master chain is set to.** One value, read back the way
-    /// `Deck::out` is — the Master bay's rows draw from it and
-    /// `karakuri-operation-record` completes a record from it.
-    pub fn chain(&self) -> Chain {
-        self.chain.chain()
+    /// **How many slots the chain is running**, and **what identifies them**.
+    ///
+    /// The shape is the pair a slot is recognised by — its procedure's content
+    /// address and its cut — which is what a caller compares a record against
+    /// before deciding whether it has a parameter move or a list to build. See
+    /// [`Present::set_chain_params`].
+    pub fn chain_len(&self) -> usize {
+        self.chain.chain_len()
     }
 
-    /// Set the master chain. Clamped by the engine, on
-    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`'s terms —
-    /// see `Chain::clamped`.
+    /// See [`Present::chain_len`].
+    pub fn chain_shape(&self) -> Vec<(String, Option<Cut>)> {
+        self.chain.shape()
+    }
+
+    /// **What the master chain is**, described the way a record carries it.
     ///
-    /// **A `queue.write_buffer` and nothing else**, exactly as
-    /// [`Present::set_tonemap`] is: the pipelines and the targets exist from
-    /// construction, so turning an effect up mid-performance costs a uniform
-    /// write and the pass it turns on.
-    pub fn set_chain(&mut self, queue: &wgpu::Queue, chain: Chain) {
-        self.chain.set(queue, chain);
+    /// One value, read back the way `Deck::out` is: this is the one writer of
+    /// the chain (ADR-0317's *applied and not stored*), so the Master bay's
+    /// rows draw from it and `karakuri-operation-record` completes a record
+    /// from it, and there is nowhere else the two could disagree.
+    pub fn chain_spec(&self) -> Vec<crate::master::SlotSpec> {
+        self.chain.spec()
+    }
+
+    /// **Which cuts the running chain is holding**, and **how many frame-sized
+    /// targets it has taken** — the entry, the ping-pong pair and the
+    /// retentions.
+    ///
+    /// Read back rather than computed by a caller because it is what P-0091 is
+    /// met by here: a retention is allocated only where a slot's answer names
+    /// one, at most two ever, and an empty chain takes nothing.
+    pub fn chain_retained(&self) -> Vec<Cut> {
+        self.chain.retained()
+    }
+
+    /// See [`Present::chain_retained`].
+    pub fn chain_targets(&self) -> usize {
+        self.chain.targets()
+    }
+
+    /// **What the running chain costs per texel**, the sum over its slots —
+    /// the number a governor spends against the frame's area beside the decks
+    /// rather than against any one of them (ADR-0340 §5).
+    pub fn chain_ops_per_fragment(&self) -> u32 {
+        self.chain.ops_per_fragment()
+    }
+
+    /// **The chain's bind group layout**, so a slot can be compiled against it
+    /// away from the render thread.
+    ///
+    /// Handed out rather than made twice: a bind group names the layout object
+    /// it was created with, and a slot built against a second one would be a
+    /// pipeline this `Present` cannot bind its own targets into. Cloning the
+    /// handle is what lets [`crate::master::Slot::build`] run on a worker.
+    pub fn chain_layout(&self) -> &wgpu::BindGroupLayout {
+        self.chain.layout()
+    }
+
+    /// **Install a master chain**, which is a build and is spelled as one.
+    ///
+    /// This is where the chain's memory is taken and given back: the entry, at
+    /// most two targets to ping-pong between, and one per retained cut some
+    /// slot asked for. It is the shape [`Present::resize`] has and it belongs
+    /// at a frame boundary for the same reason — never from the render thread
+    /// mid-frame (P-0091, ADR-0033).
+    ///
+    /// **A parameter move does not come through here.** See
+    /// [`Present::set_chain_params`], which is a `queue.write_buffer` per slot
+    /// and allocates nothing.
+    pub fn set_chain(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, chain: Chain) {
+        let Present {
+            chain: master,
+            hdr_view,
+            ..
+        } = self;
+        master.set(device, queue, hdr_view, chain);
+    }
+
+    /// **Move the running chain's parameters and nothing else**, or answer
+    /// `false` because the list itself has changed.
+    ///
+    /// `Record::MasterChain` is written whole — a stream that moved one slot
+    /// without saying where the others stood describes a chain a replay cannot
+    /// put back — so the common case of applying one is a record whose *shape*
+    /// is the shape already running with one number different. This is what
+    /// keeps that from costing an allocation, and the caller that gets `false`
+    /// resolves the addresses and builds a list instead.
+    pub fn set_chain_params(
+        &mut self,
+        queue: &wgpu::Queue,
+        shape: &[(String, Option<Cut>)],
+        params: &[std::collections::BTreeMap<String, f32>],
+    ) -> bool {
+        self.chain.set_params(queue, shape, params)
+    }
+
+    /// **The clock the chain's `frame` blocks read**, which is the host's
+    /// answer and not the engine's — see [`crate::master::Clock`]. One
+    /// `queue.write_buffer` per slot into storage sized at build, so it is safe
+    /// on the render thread for the reason [`Present::set_tonemap`] is.
+    pub fn set_chain_clock(&mut self, queue: &wgpu::Queue, clock: Clock) {
+        self.chain.set_clock(queue, clock);
     }
 
     /// **Record the master chain into this frame's encoder**, between the
     /// mix's write and this pass's read.
     ///
-    /// Nothing at all for a chain that does not run. Called by
-    /// [`crate::frame::compose`] immediately after `Frame::render` and before
-    /// any sink is drawn into, which is what puts the chain in linear HDR and
-    /// upstream of the one tone map.
+    /// Nothing at all for an empty chain. Called by [`crate::frame::compose`]
+    /// immediately after `Frame::render` and before any sink is drawn into,
+    /// which is what puts the chain in linear HDR and upstream of the one tone
+    /// map.
     pub fn draw_chain(&self, encoder: &mut wgpu::CommandEncoder) {
-        self.chain.record(encoder, &self.hdr_view, &self.hdr);
+        self.chain.record(encoder, &self.hdr_view);
     }
 
     pub fn hdr_texture(&self) -> &wgpu::Texture {

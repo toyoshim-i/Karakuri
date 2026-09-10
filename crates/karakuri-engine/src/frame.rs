@@ -328,12 +328,13 @@ pub fn compose(
     {
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
         // **`mix_target` and not `hdr_view`**, which are the same view until
-        // the master chain has an effect turned up in it: with one, the mix
-        // writes into the chain's entry and the chain's last pass writes into
-        // the target the present pass reads. See `crate::master`.
+        // the master chain has a slot in it: with one, the mix writes into the
+        // chain's entry and the chain's last slot writes into the target the
+        // present pass reads. See `crate::master`.
         frame.render(present.mix_target(), present.size(), steps);
         // **Between the fold and every sink**, in linear HDR and upstream of
-        // the one tone map. Nothing is recorded for a chain at zero.
+        // the one tone map. Nothing is recorded for an empty chain, which is
+        // the default one.
         present.draw_chain(frame.encoder());
         // **Drawn every frame, even by a sink that will not keep it.** A
         // sequence writing one frame in a hundred used to skip the present pass

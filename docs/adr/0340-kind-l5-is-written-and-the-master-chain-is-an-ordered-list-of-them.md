@@ -314,8 +314,8 @@ nothing owes that.
 ## Consequences
 
 **Dated 2026-09-10 and written as what M5.16 builds**, to be rewritten by that work as a
-description of the tree. **The language half is built as of 2026-09-10** and is marked below;
-everything unmarked is still what M5.16 owes.
+description of the tree. **The language half and the chain half are both built as of
+2026-09-10**; what is unmarked below is M5.16's second pass, which is the surface.
 
 ### The language half — built, 2026-09-10
 
@@ -367,11 +367,60 @@ everything unmarked is still what M5.16 owes.
   is left below it is the chain — the list, the cuts, the record, the surface — under *L5's chain
   — specified, not built*.
 
-### The chain half — still M5.16's
+### The chain half — built, 2026-09-10
 
-- **`karakuri-engine`'s `master.rs` stops being three passes and becomes a list**, `master.wgsl`
-  goes with the three procedures that replace it, and `present.rs`'s targets become two plus one
-  per retained cut instead of four.
+- **`karakuri-engine`'s `master.rs` is a list.** `Chain` is `Vec<Slot>`, a `Slot` is a compiled L5
+  with its cut and its params, `Present::set_chain` installs one and `Present::set_chain_params`
+  moves a running one's values without allocating. The three hand-written fragment entry points
+  are gone and `tests/master.rs` holds each shipped procedure to the pass it replaced on a GPU:
+  **feedback and rgb shift are bit-identical**, and bloom is within 0.1% of the frame's peak,
+  which is a bilinear tap's difference and not a different kernel.
+- **What `master.wgsl` kept is the retention**, and it kept it because of a clause of this record:
+  the retained frame is sanitised **where it is written**, so `keepable` had to become a pass
+  rather than a `copy_texture_to_texture`. That is the one hand-written thing left in this chain,
+  and it is exact for every value that is a number.
+- **The targets are the entry, up to two to ping-pong between, and one per retained cut.** An
+  empty chain takes **none** — where four were always allocated — and three slots with one cut
+  take four. **The entry is held apart from the pair on purpose**: it is what makes the `mix`
+  cut's copy position-independent, which a list needs and ADR-0317's between-two-passes copy
+  could not give. Both cuts are copied at the chain's end and are the same two pictures.
+- **Measured at 1280x720** (Metal, Apple M4 Pro, 2026-09-10, `examples/master_cost.rs`, medians
+  over 100 submissions with 20 discarded cold, each over that run's own empty-submission floor):
+  **feedback 0.16 ms** at the mix cut and **0.13 ms** at the exit cut, **bloom 0.92 ms**, **rgb
+  shift 0.15 ms**, **all three 0.98 ms** — 5.9% of a 60 Hz frame, each over that run's own
+  empty-submission floor of 0.019 ms and stable to about 3% over five runs. Beside ADR-0317's
+  0.38 / 0.41 / 0.80 / 0.34 / 1.14 on the same machine: two of the three got **cheaper** — a
+  retention is now a fullscreen pass rather than a 7.03 MB texture copy, and the chain holds
+  fewer targets — and bloom is the one that got dearer.
+- **Bloom's measurement is the one this record owed, and it is 0.92 ms against the pair's
+  0.80.** 1.2x for 4.3x the fetches, because eighty-one taps into one frame hit cache where a
+  second pass hits bandwidth. **So nothing is owed a second output.** The alternative *Bloom as
+  two chain slots* stays refused and the reason it named — a procedure that can name a second
+  output — stays unowed, now on a number rather than on a fear.
+- **What the same run says about the estimate is the sharper finding.** `cost.rs` prices the pass
+  at 3889 of 4096 and the three-slot chain at 3947, and the GPU says that chain is 5.9% of a
+  frame.
+  The three weights behind it (`texel` 2, `tap` 4, `frame_step` 2) over-predict a cached tap by
+  about four to one here. That is the question this record said a GPU would answer; re-weighting
+  is a change to every artifact's price and is named rather than taken.
+- **`Record::MasterChain` is `{"slots":[…]}`**, `mix::change`'s arm reads it back with each cut
+  word refused rather than defaulted, `karakuri-cli`'s replay resolves each slot's address before
+  the frame that needs it, and `crates/karakuri`'s `apply` writes the list onto `Engine::chain`
+  which the frame loop puts on the `Present` where the two differ. **The four-field form is
+  refused with the key it found named** — `#[serde(deny_unknown_fields)]` on this variant and on
+  no other, which is what this record asked for in place of a silent default.
+- **The shipped three are compiled into `karakuri-environment`** as `mix::shipped`, addressed by
+  the hash of their bytes, and a chain of presets therefore resolves with no store at all. Putting
+  them *in* a store stays a separate act, on `Placed::put`'s own division: a run that records
+  nothing creates nothing.
+- **`SetFeedback`, `SetBloom` and `SetRgbShift` still work**, which is this record's *for now*:
+  each resolves to the slot whose procedure is the matching shipped address, **appending one where
+  the chain has not got it**, and every other slot comes from the chain that is running.
+  `karakuri_operation_record::Chain` carries the list and the three addresses beside the three
+  amounts the Master bay's rows still draw.
+
+### Still M5.16's, and it is the surface
+
 - **[Every operation](../manual/operations.html) loses three rows and gains three**, and the page
   moves first (`docs/contributing.md` §5). **This reopens a closed sub-milestone's exit if the two
   halves land apart**: M5.8 closed on *no `plan` badge in the panel column of this bay's rows*, and
@@ -383,8 +432,16 @@ everything unmarked is still what M5.16 owes.
   seven named booleans rather than six.
 - **`Record::MasterChain` changes shape**, `mix::change`'s arm with it, and `karakuri-cli`'s replay
   driver resolves each slot's address against the store before the first frame.
-- **`karakuri-store` gains nothing for the session half** and a `chains/` directory when the
-  library half is taken, which is *Mx — TODO*'s.
+- **`karakuri-store` gained the record's new shape and nothing else**; a `chains/` directory is
+  still owed when the library half is taken, which is *Mx — TODO*'s.
+- **Nothing spends the chain's cost.** `Present::chain_ops_per_fragment` is the sum over the slots
+  and is read back off the running chain; no governor is handed it, because nothing sets an
+  estimate on this side of the frame at all (ADR-0325 recorded the same gap for a slot's).
+- **Where a slot is compiled is the second pass's to move.** `mix::build_chain` compiles and
+  builds pipelines on the thread that applies the record — which is before the frame's encoder
+  exists on every path that calls it, and is a press rather than a fader ride — where a Set's
+  build runs on `HotSwap`'s worker (ADR-0033). The Library's drop is what makes that worth
+  moving.
 - **`docs/architecture.md`'s two edits are made**, both having been sentences about a count
   rather than about the layer: *The Layer Model*'s L5 paragraph now says the kind is built and the
   chain is not, and *Words that carry more than one sense* says there are six, with
@@ -399,5 +456,6 @@ everything unmarked is still what M5.16 owes.
   the rest of it, the two cuts and the retention rule above all, is carried forward intact.
 - **No new principle.** This applies P-0064, P-0085, P-0086, P-0091 and P-0092 and takes nothing
   back from any of them.
-- **Blocked on M5.15 and on nothing else.** The Library row, the kind badge, the filter row and the
-  drag are ADR-0338's, and none of them is worth building twice.
+- **Blocked on nothing.** M5.15 closed on 2026-09-10, which is what this record waited on; the
+  Library row, the kind badge, the filter row and the drag are ADR-0338's and are there to be
+  reused.

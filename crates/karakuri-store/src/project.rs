@@ -170,7 +170,7 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // the moment that Set was loaded into any deck — which is
         // `docs/adr/0227-…`'s own argument for why a chain setting is not a
         // Set file's.
-        | Record::MasterChain { .. }
+        | Record::MasterChain(_)
         | Record::Canvas { .. }
         | Record::Procedure { .. }
         // **A node's address and still dropped**, which none of its neighbours

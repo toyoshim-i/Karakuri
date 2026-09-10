@@ -165,7 +165,7 @@
 
 use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
-use karakuri_engine::master::{Chain, Cut};
+use karakuri_engine::master::{Chain, Cut, Slot, SlotSpec};
 use karakuri_engine::present::TonemapOp;
 use karakuri_engine::set::Authority;
 use karakuri_engine::transition::Control;
@@ -304,16 +304,20 @@ pub enum Change {
     /// `karakuri_engine::deck::Deck::set_out` is what it decodes to, and says
     /// *"Not per slot"* at the setter (ADR-0224).
     MasterOut(f32),
-    /// **What the three fixed passes of the master chain are set to**, whole —
-    /// and it names no slot for [`Change::MasterOut`]'s reason, one pass
-    /// downstream of it. `karakuri_engine::present::Present::set_chain` is what
-    /// it decodes to.
+    /// **What the master chain is**, whole — the ordered list of its slots,
+    /// and it names no deck slot for [`Change::MasterOut`]'s reason, one pass
+    /// downstream of it.
     ///
-    /// Carried as a value rather than as three amounts and a word, for
-    /// [`Change::Transport`]'s reason: the record says all four and a replay
-    /// must not fill one of them in from the build it is running on
-    /// (ADR-0317).
-    MasterChain(Chain),
+    /// **A description and not a built chain**: each entry is an address, a cut
+    /// and a map of params, because a compiled chain is pipelines and buffers
+    /// and this decoder holds no device. [`build_chain`] is what turns one into
+    /// a `karakuri_engine::master::Chain`, and
+    /// `karakuri_engine::present::Present::set_chain` is what installs it.
+    ///
+    /// Carried whole for [`Change::Transport`]'s reason: the record says every
+    /// slot and a replay must not fill one of them in from the build it is
+    /// running on (ADR-0340).
+    MasterChain(Vec<SlotSpec>),
     /// What a slot's clock does with the session's. Carried as a value rather
     /// than applied as a mode change, because the record says all three and a
     /// replay must not recompute one of them from the machine it is on.
@@ -323,6 +327,163 @@ pub enum Change {
         anchor_bpm: f32,
         scrub_beats: f64,
     },
+}
+
+/// **The three procedures this repository ships as the master chain's presets**,
+/// and their content addresses.
+///
+/// They were `master.wgsl`'s three fragment entry points until 2026-09-10 and
+/// are `.kir` files now (ADR-0340). They are compiled in rather than read from
+/// disk for one reason: an address has to be the same number on every machine
+/// and in every working directory, and a file read relative to a cwd is not
+/// that. **Putting them in a store is a separate act**, done by whoever is
+/// recording — `store.put_artifact(source)` — exactly as a Set's sources are,
+/// so a run that records nothing creates nothing.
+pub mod shipped {
+    use std::sync::OnceLock;
+
+    /// `examples/feedback.kir` — the one of the three that declares `retains`.
+    pub const FEEDBACK: &str = include_str!("../../../examples/feedback.kir");
+    /// `examples/bloom.kir` — one 9x9 pass where the hand-written form was two.
+    pub const BLOOM: &str = include_str!("../../../examples/bloom.kir");
+    /// `examples/rgb_shift.kir`.
+    pub const RGB_SHIFT: &str = include_str!("../../../examples/rgb_shift.kir");
+
+    /// The three, in the order the Master bay draws them.
+    pub const ALL: [(&str, &str); 3] = [
+        ("feedback", FEEDBACK),
+        ("bloom", BLOOM),
+        ("rgb_shift", RGB_SHIFT),
+    ];
+
+    /// **The content address of one shipped source**, spelled the way a record
+    /// spells one.
+    pub fn address(source: &str) -> String {
+        // `Display` already writes the `sha256:` prefix — see
+        // `karakuri_store::hash::Hash`, whose `FromStr` requires it.
+        karakuri_store::hash::Hash::of(source.as_bytes()).to_string()
+    }
+
+    /// The three addresses, computed once. Hashing three files is a few
+    /// microseconds and it is still done once, because this is asked per press.
+    pub fn addresses() -> &'static karakuri_operation_record::Shipped {
+        static ONCE: OnceLock<karakuri_operation_record::Shipped> = OnceLock::new();
+        ONCE.get_or_init(|| karakuri_operation_record::Shipped {
+            feedback: address(FEEDBACK),
+            bloom: address(BLOOM),
+            rgb_shift: address(RGB_SHIFT),
+        })
+    }
+
+    /// The source one address names, where it is one of the three.
+    ///
+    /// **This is the only resolver that needs no store**, which is what lets a
+    /// windowed run with no store at all put the shipped presets in its chain.
+    /// Anything else is the store's to answer, and a stream naming an address
+    /// nothing holds is refused with the address in the message.
+    pub fn source(address_of: &str) -> Option<&'static str> {
+        ALL.into_iter()
+            .map(|(_, src)| src)
+            .find(|src| address(src) == address_of)
+    }
+}
+
+/// **Compile a described chain into one the engine can run.**
+///
+/// `resolve` answers what an address's source is — the shipped three without a
+/// store, anything else out of one — and a slot whose address nothing holds is
+/// refused **with the address in the message**, which is what ADR-0340 asks of
+/// a replay meeting a procedure the store does not have.
+///
+/// **Where the work happens is the caller's answer and not this function's.**
+/// It compiles and it builds pipelines, so it belongs off the render thread —
+/// a Set's build runs on `HotSwap`'s worker for exactly this reason
+/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`,
+/// `docs/adr/0033-…`) — and the built list is installed at a frame boundary by
+/// `Present::set_chain`.
+pub fn build_chain(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    slots: &[SlotSpec],
+    resolve: &dyn Fn(&str) -> Option<String>,
+) -> Result<Chain, String> {
+    let mut built = Vec::with_capacity(slots.len());
+    for (at, spec) in slots.iter().enumerate() {
+        let source = resolve(&spec.procedure)
+            .ok_or_else(|| format!("master chain slot {at}: nothing holds `{}`", spec.procedure))?;
+        let checked = crate::compile::check(&source)
+            .map_err(|e| format!("master chain slot {at}: {}: {e}", spec.procedure))?;
+        built.push(
+            Slot::build(
+                device,
+                layout,
+                spec.procedure.clone(),
+                &checked,
+                spec.cut,
+                spec.params.clone(),
+            )
+            .map_err(|e| format!("master chain slot {at}: {e}"))?,
+        );
+    }
+    Ok(Chain::new(built))
+}
+
+/// **What an address resolves to**, for [`apply_chain`] and [`build_chain`].
+///
+/// The shipped three first and without a store at all — a windowed run that has
+/// never saved anything can still put a preset in its chain — and then whatever
+/// store the caller has. **A store is optional and that is the point**: a run
+/// recording nothing creates nothing (`Placed::put`'s own division).
+pub fn resolve_procedure(
+    store: Option<&karakuri_store::store::Store>,
+    address: &str,
+) -> Option<String> {
+    if let Some(source) = shipped::source(address) {
+        return Some(source.to_string());
+    }
+    let hash: karakuri_store::hash::Hash = address.parse().ok()?;
+    let bytes = store?.get_artifact(&hash).ok()?;
+    String::from_utf8(bytes).ok()
+}
+
+/// **Put a described chain on a `Present`**, building a list only where the
+/// list itself changed.
+///
+/// **Two paths, and which one is taken is P-0091's question rather than a
+/// convenience.** `Record::MasterChain` is written whole — a stream that moved
+/// one slot without saying where the others stood describes a chain a replay
+/// cannot put back — so the ordinary case of applying one is a record whose
+/// *shape* is the shape already running with one number different. That is a
+/// `queue.write_buffer` per slot and nothing else. A record whose shape differs
+/// is a build: sources resolved, procedures compiled, pipelines made, targets
+/// allocated.
+///
+/// **The build is on the caller's thread and this says so rather than hiding
+/// it.** A Set's build runs on `HotSwap`'s worker
+/// (`docs/adr/0033-freeing-on-the-render-thread-is-the-same-invariant-as-allocating.md`);
+/// a chain's runs here, at the point in the frame loop where a record is
+/// applied, which is before the frame's encoder exists on every path that calls
+/// it. What that costs is a `naga` pass and a pipeline per slot, on the frames
+/// an operator changed the *list* — which is a press, not a fader ride.
+/// Compiling it on a worker instead is what M5.16's second pass owes when the
+/// Library can drop a procedure on the chain.
+pub fn apply_chain(
+    present: &mut karakuri_engine::Present,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    slots: &[SlotSpec],
+    resolve: &dyn Fn(&str) -> Option<String>,
+) -> Result<(), String> {
+    let shape: Vec<(String, Option<Cut>)> =
+        slots.iter().map(|s| (s.procedure.clone(), s.cut)).collect();
+    let params: Vec<std::collections::BTreeMap<String, f32>> =
+        slots.iter().map(|s| s.params.clone()).collect();
+    if present.set_chain_params(queue, &shape, &params) {
+        return Ok(());
+    }
+    let chain = build_chain(device, present.chain_layout(), slots, resolve)?;
+    present.set_chain(device, queue, chain);
+    Ok(())
 }
 
 /// **The engine's list, as the vocabulary's** — one function per list, and
@@ -472,14 +633,36 @@ pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
 /// **The amount is the engine's and not a track position.** A fader draws where
 /// it is along its own travel and divides by `Feedback::MAX` to do it; a
 /// reading is what the pass is *at*, which is what the record carries.
-pub fn current_chain(chain: &Chain) -> karakuri_operation_record::Chain {
+pub fn current_chain(slots: &[SlotSpec]) -> karakuri_operation_record::Chain {
+    let shipped = shipped::addresses();
+    // **The three rows read the three shipped slots**, and a row whose slot is
+    // not in the chain reads zero — which is the honest reading of *this pass
+    // is not running*, and is what the row will stop asking for when the rows
+    // retire (ADR-0340 §7).
+    let amount = |address: &str| {
+        slots
+            .iter()
+            .find(|s| s.procedure == address)
+            .and_then(|s| s.params.get("amount").copied())
+            .unwrap_or(0.0)
+    };
+    let feedback_slot = slots.iter().find(|s| s.procedure == shipped.feedback);
     karakuri_operation_record::Chain {
         feedback: karakuri_operation::Feedback {
-            amount: chain.feedback,
-            cut: cut(chain.cut),
+            amount: amount(&shipped.feedback),
+            cut: cut(feedback_slot.and_then(|s| s.cut).unwrap_or_default()),
         },
-        bloom: chain.bloom,
-        rgb_shift: chain.rgb_shift,
+        bloom: amount(&shipped.bloom),
+        rgb_shift: amount(&shipped.rgb_shift),
+        slots: slots
+            .iter()
+            .map(|s| karakuri_store::record::ChainSlot {
+                procedure: s.procedure.clone(),
+                cut: s.cut.map(|c| c.name().to_string()),
+                params: s.params.clone(),
+            })
+            .collect(),
+        shipped: shipped.clone(),
     }
 }
 
@@ -1032,33 +1215,35 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
         // `Chain::clamped` for the chain — so a second opinion here would be a
         // range written down twice.
         Record::MasterOut { value } => Ok(Some(Change::MasterOut(*value))),
-        Record::MasterChain {
-            feedback,
-            cut,
-            bloom,
-            rgb_shift,
-        } => {
-            // **The cut comes back off the wire word, refused rather than
-            // defaulted**, exactly as the tone map operator above does and for
-            // the same reason: a cut this build has not got is a stream saying
-            // something it cannot draw, and a default would silently play the
-            // other picture.
-            let cut = Cut::parse(cut).ok_or_else(|| {
-                format!(
-                    "feedback cut `{cut}` — expected {}",
-                    Cut::ALL
-                        .iter()
-                        .map(|c| format!("`{}`", c.name()))
-                        .collect::<Vec<_>>()
-                        .join(" or ")
-                )
-            })?;
-            Ok(Some(Change::MasterChain(Chain {
-                feedback: *feedback,
-                cut,
-                bloom: *bloom,
-                rgb_shift: *rgb_shift,
-            })))
+        Record::MasterChain(chain) => {
+            let mut slots = Vec::with_capacity(chain.slots.len());
+            for slot in &chain.slots {
+                // **The cut comes back off the wire word, refused rather than
+                // defaulted**, exactly as the tone map operator above does and
+                // for the same reason: a cut this build has not got is a stream
+                // saying something it cannot draw, and a default would silently
+                // play the other picture — one echo where the session had a
+                // trail.
+                let cut = match &slot.cut {
+                    None => None,
+                    Some(word) => Some(Cut::parse(word).ok_or_else(|| {
+                        format!(
+                            "feedback cut `{word}` — expected {}",
+                            Cut::ALL
+                                .iter()
+                                .map(|c| format!("`{}`", c.name()))
+                                .collect::<Vec<_>>()
+                                .join(" or ")
+                        )
+                    })?),
+                };
+                slots.push(SlotSpec {
+                    procedure: slot.procedure.clone(),
+                    cut,
+                    params: slot.params.clone(),
+                });
+            }
+            Ok(Some(Change::MasterChain(slots)))
         }
         // **A wildcard rather than an exhaustive match, and it is the one
         // place a new record is placed silently.** Everything not named above
@@ -1720,7 +1905,7 @@ mod tests {
         // `f` key with the console's own defaults asked for.
         let current = scheduled(33, 4.0, 4.0, Curve::Smooth);
         assert_eq!(
-            from_operation_reading(Operation::FadeDeck { deck: 2, to: 0.0 }, current),
+            from_operation_reading(Operation::FadeDeck { deck: 2, to: 0.0 }, current.clone()),
             Record::Transition {
                 slot: 2,
                 control: "opacity".to_string(),
@@ -2403,27 +2588,52 @@ mod tests {
         // operator's test one bay along: a cut added to the engine and not to
         // the spelling fails here rather than in a replay.
         for want in Cut::ALL {
-            let record = Record::MasterChain {
-                feedback: 0.34,
-                cut: want.name().to_string(),
-                bloom: 0.6,
-                rgb_shift: 0.25,
-            };
-            let Some(Change::MasterChain(chain)) = change(&record, 1).expect("built here") else {
+            let record = Record::MasterChain(karakuri_store::record::Chain {
+                slots: vec![
+                    karakuri_store::record::ChainSlot {
+                        procedure: "sha256:feedback".into(),
+                        cut: Some(want.name().to_string()),
+                        params: [("amount".to_string(), 0.34)].into_iter().collect(),
+                    },
+                    karakuri_store::record::ChainSlot {
+                        procedure: "sha256:bloom".into(),
+                        cut: None,
+                        params: [("amount".to_string(), 0.6)].into_iter().collect(),
+                    },
+                ],
+            });
+            let Some(Change::MasterChain(slots)) = change(&record, 1).expect("built here") else {
                 panic!("a master chain record did not decode as one");
             };
+            assert_eq!(slots.len(), 2);
+            assert_eq!(slots[0].procedure, "sha256:feedback");
             assert_eq!(
-                chain,
-                Chain {
-                    feedback: 0.34,
-                    cut: want,
-                    bloom: 0.6,
-                    rgb_shift: 0.25,
-                },
-                "`{}` did not survive its wire word, or a value beside it moved",
+                slots[0].cut,
+                Some(want),
+                "`{}` did not survive its wire word",
                 want.name()
             );
+            assert_eq!(slots[0].params.get("amount"), Some(&0.34));
+            // **A slot whose procedure declares no `retains` carries no cut**,
+            // and the decode does not invent one: the engine refuses a cut that
+            // was not asked for, so a default here would build a chain this
+            // build then refuses to install.
+            assert_eq!(slots[1].cut, None);
+            assert_eq!(slots[1].params.get("amount"), Some(&0.6));
         }
+
+        // **An empty list is a chain and not an absence.** The default chain is
+        // empty, so this is the record a session writes when the last slot is
+        // taken out — and reading it as *nothing to do* would leave the chain
+        // that was running on air.
+        let Some(Change::MasterChain(slots)) = change(
+            &Record::MasterChain(karakuri_store::record::Chain::default()),
+            1,
+        )
+        .expect("built here") else {
+            panic!("an empty master chain record did not decode as one");
+        };
+        assert!(slots.is_empty());
     }
 
     /// A record this build cannot obey is **reported, not dropped**. Silently
@@ -2452,12 +2662,13 @@ mod tests {
         // map operator's terms and for the sharper reason: a default would not
         // report a wrong level, it would silently play the other picture — one
         // echo where the session had a trail.
-        let unknown_cut = Record::MasterChain {
-            feedback: 0.5,
-            cut: "previous".to_string(),
-            bloom: 0.0,
-            rgb_shift: 0.0,
-        };
+        let unknown_cut = Record::MasterChain(karakuri_store::record::Chain {
+            slots: vec![karakuri_store::record::ChainSlot {
+                procedure: "sha256:feedback".into(),
+                cut: Some("previous".to_string()),
+                params: Default::default(),
+            }],
+        });
         let message = change(&unknown_cut, 4).expect_err("`previous` is not a cut here");
         assert!(message.contains("previous"), "{message}");
         for cut in Cut::ALL {

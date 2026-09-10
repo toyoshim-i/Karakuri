@@ -364,15 +364,15 @@ use karakuri_engine::set::{Layering, Published};
 use karakuri_engine::transition::Selection;
 use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
-    compose, Blend, Chain, Committed, Control, Cut, Deck, Event, Gpu, HotSwap, Look, Mask,
-    MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink, DEFAULT_BUDGET_MS,
+    compose, Blend, Committed, Control, Cut, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind,
+    Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink, DEFAULT_BUDGET_MS,
 };
 use karakuri_environment::clock::Clock;
 use karakuri_environment::{
     audio, history, mcp, midi, mix, session, setfile, watch, Asked, Opening,
 };
 use karakuri_ir::Kind as Layer;
-use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
+use karakuri_layout::{Axis, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
     BeatSource, BlendMode, GridScale, Operation, Output, SetTransfer, Undecided,
@@ -3936,7 +3936,15 @@ impl Readout {
                 false => "already the library this bay reads, so this asks that one again",
             }
         );
-        Acted::Emitted(Some(chosen.operation))
+        // **The Set the walk is of is read on the way out**, and it is this
+        // side's answer rather than the chip's: `Operation::WalkHistory` names
+        // a Set, the console holds a deck letter, and the id rides the aim
+        // (ADR-0308). `View::aimed` is where this file writes it, per frame
+        // beside every other reading, and `Chosen::asked` is the one place it
+        // is read — so the operation this press emits and the listing the press
+        // below re-reads are narrowed by one value. The four library chips
+        // ignore it and emit `SelectScope`, which carries nothing.
+        Acted::Emitted(Some(chosen.asked(self.view.aimed.as_deref())))
     }
 
     /// **A press on one of the Library bay's two filter fields**, and it is
@@ -4239,50 +4247,6 @@ impl Readout {
             }
         );
         self.op(op)
-    }
-
-    /// **What the pointer is over, resolved to a target for a key press.**
-    ///
-    /// The half of an operation that used to be inside it: `f` means *fold*
-    /// and the pointer is how this surface says *which*. A key that lands on
-    /// a divider or outside every region names nothing, so nothing is emitted
-    /// — and the two sentences that used to be [`Outcome`]s are said here,
-    /// where the resolution failed, rather than by a model that was asked to
-    /// fold something nobody had named.
-    fn target(&mut self, key: &str) -> Option<NodeId> {
-        match self.panel.under() {
-            Hit::View(id) => Some(id),
-            Hit::Divider { split, index } => {
-                println!(
-                    "{key}: the pointer is on divider {}#{index} — move it into a region",
-                    self.label(split)
-                );
-                None
-            }
-            Hit::Nothing => {
-                println!("{key}: nothing under the pointer");
-                None
-            }
-        }
-    }
-
-    /// `g`'s target, which is the one resolution with two answers: **a
-    /// divider already names its split**, so over a gap the split to fold is
-    /// that one and the operation is a plain [`Op::Fold`] of it, while over a
-    /// region it is [`Op::FoldEnclosing`] and the model reads the parent.
-    ///
-    /// Both arms were inside `Op::FoldEnclosing` when an operation meant
-    /// *whatever is under the pointer*; they are the same two arms, out where
-    /// the pointer is.
-    fn enclosing(&mut self) -> Option<Op> {
-        match self.panel.under() {
-            Hit::View(id) => Some(Op::FoldEnclosing(id)),
-            Hit::Divider { split, .. } => Some(Op::Fold(split)),
-            Hit::Nothing => {
-                println!("g: nothing under the pointer");
-                None
-            }
-        }
     }
 
     // -- the legend -----------------------------------------------------
@@ -4891,9 +4855,9 @@ impl Readout {
         println!();
         println!(
             "keys — `tab` and `esc` move the address, drawn as a dashed ring on the bay \n\
-             that has it, and the four below them act on whatever that address is on. the \n\
-             mixer and the library have the grammar; the letters after it are global, and \n\
-             `f`, `g`, `s` and `u` still take their region from the pointer:"
+             that has it, and the four below them act on whatever that address is on. all \n\
+             nine bays have the grammar, and `space` on a bay is the fold wherever you are. \n\
+             `g` is addressed to the focused bay too; the letters after it are global:"
         );
         for (key, what) in KEYS {
             println!("  {key:<10}{what}");
@@ -4942,14 +4906,19 @@ impl Readout {
 /// operation it named is still `karakuri_console::panel::Op::Report` and
 /// nothing in this program asks for it.
 ///
-/// **Twelve letters left on 2026-09-10 and none of them was retired before the
-/// grammar reached its row.** `0`–`3` are the Mixer's `1`–`4`, `[ ] \` and
-/// `; '` are the arrows and `space` on the addressed trim and fader, `m` is
-/// `space` on the blend chip, `e` is `space` on the Library's head and `l` is
-/// `enter` on one of its rows (ADR-0259, ADR-0333). What is left is the seven
-/// globals the operand rule keeps, plus `f`, `g`, `s` and `u`, which take their
-/// region from the pointer and are owed the focus in a bay this slice does not
-/// build, and `k`, which the Library bay draws no control for.
+/// **Twelve letters left on 2026-09-10 and five more with the other seven
+/// bays, and none of them was retired before the grammar reached its row.**
+/// `0`–`3` are the Mixer's `1`–`4`, `[ ] \` and `; '` are the arrows and
+/// `space` on the addressed trim and fader, `m` is `space` on the blend chip,
+/// `e` is `space` on the Library's head and `l` is `enter` on one of its rows
+/// (ADR-0259, ADR-0333). Then `f` and `s` went with `Readout::target` — `space`
+/// on a bay is the fold and `space` on the Program head's `solo` is the solo —
+/// `u` with `s`, because one control is both states, and `o` and `p` became
+/// the arrows on the Transport's offset (ADR-0343).
+///
+/// What is left is the seven globals the operand rule keeps, plus `g`, which is
+/// addressed to the focused bay because the grammar reaches no pane, and `k`,
+/// which the Library bay draws no control for.
 const KEYS: &[(&str, &str)] = &[
     // **The two that move the address**, and they are the same in every bay
     // because they are not addressed to one.
@@ -4987,8 +4956,8 @@ const KEYS: &[(&str, &str)] = &[
     (
         "space",
         "the addressed thing's next state — a residency, a blend mode, a mask shape, a library \
-         scope — or, on a level, the value it was declared at. a space in a name while the \
-         arrangement pill is asking for one",
+         scope — or, on a level, the value it was declared at. on a bay it is the fold, in every \
+         one of the nine. a space in a name while the arrangement pill is asking for one",
     ),
     (
         "enter",
@@ -4996,18 +4965,25 @@ const KEYS: &[(&str, &str)] = &[
          deck. it takes the name the arrangement pill is asking for, while it asks",
     ),
     ("backspace", "rub out a letter of that name"),
-    // **The seven that survive as global letters**, plus the two the grammar
+    // **The one letter addressed to the focus**, which is the third category
+    // ADR-0259 creates and ADR-0343 names: its operand is the focused bay, so
+    // it is not global under the operand rule and it is not one of the six
+    // keys either. It is here because the grammar reaches no pane — `Tab`
+    // stops at a bay — and *Fold a pane away* has to be reachable from the
+    // keyboard alone.
+    (
+        "g",
+        "fold the split enclosing the focused bay — the pane it sits in. space folds the bay \
+         itself",
+    ),
+    // **The seven that survive as global letters**, plus the one the grammar
     // has not reached yet. A key is global where the operation it names has no
     // operand for focus to supply, or where its only operand is the choice the
     // key itself spells.
-    ("f", "fold the region under the pointer"),
-    ("g", "fold the split enclosing the region under the pointer"),
     (
         "z",
         "unfold everything folded — the pointer cannot reach one to unfold it",
     ),
-    ("s", "solo the region under the pointer"),
-    ("u", "undo the solo"),
     ("r", "reset to a fresh arrangement"),
     ("n", "the room: day or night"),
     (
@@ -5021,15 +4997,6 @@ const KEYS: &[(&str, &str)] = &[
     (
         ".",
         "double it — refused where the result leaves 60..200 BPM",
-    ),
-    (
-        "o",
-        "the latency offset, five milliseconds down — negative, and the picture waits for the \
-         music",
-    ),
-    (
-        "p",
-        "and five up — positive, and the picture leads it; held inside 200 ms either way",
     ),
     (
         "k",
@@ -6323,16 +6290,23 @@ struct Engine {
     ///
     /// Held here for `look`'s reason exactly: a press becomes
     /// `Operation::SetFeedback`, `SetBloom` or `SetRgbShift`, which become one
-    /// `Record::MasterChain`, which [`apply`] writes here; the frame loop hands
-    /// this to `Present::set_chain` and the chain's uniform is written from it.
-    /// Nothing calls that setter behind the record's back, which is P-0090 on
-    /// this value.
+    /// `Record::MasterChain`, which [`apply`] writes here; the frame loop puts
+    /// it on the `Present` and the slots' uniforms are written from it. Nothing
+    /// calls that setter behind the record's back, which is P-0090 on this
+    /// value.
     ///
-    /// **A struct where the out is a bare `f32` on the deck**, and the two are
+    /// **A list where the out is a bare `f32` on the deck**, and the two are
     /// apart for the reason their records are: the level at the chain's entry
-    /// is ridden by a fader and the chain's settings are moved by a press
-    /// ([ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
-    chain: Chain,
+    /// is ridden by a fader and the chain's slots are moved by a press
+    /// ([ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md),
+    /// [ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)).
+    ///
+    /// **A description and not the built chain**, which is the one thing that
+    /// changed when the chain became a list: `karakuri_engine::Present` holds
+    /// the compiled slots and is still the only writer of them, and this is
+    /// what a record says the chain should be. The frame loop puts one on the
+    /// other where the two differ.
+    chain: Vec<karakuri_engine::SlotSpec>,
     /// How many registrations have been freed, **over both textures**. The
     /// atlas leak this exists to prevent is invisible from outside: a resize
     /// that registers without freeing leaves a bind group per drag frame and
@@ -8047,10 +8021,11 @@ impl Engine {
             previews,
             slot_bind_groups,
             look: LOOK,
-            // **Nothing turned up**, which is the chain not being recorded at
-            // all: `Chain::default` is three zeros, so the frame this program
-            // opens on is the frame it drew before the chain existed.
-            chain: Chain::default(),
+            // **Nothing in it at all**, which is the default chain: with no
+            // slot the mix writes straight into the target the present pass
+            // reads, so the frame this program opens on is the frame it drew
+            // before the chain existed — bit for bit and for free.
+            chain: Vec::new(),
             freed: 0,
             aimed,
             pointing,
@@ -8305,7 +8280,7 @@ impl Engine {
                 // it beside the numbers it is about, which is what P-0095 asks
                 // of a measurement, and the console page's own size pill is
                 // where an operator reads it.
-                self.present.resize(&gpu.device, at.0, at.1);
+                self.present.resize(&gpu.device, &gpu.queue, at.0, at.1);
                 self.deck.resize(&gpu.device, at.0, at.1);
                 // **And every cell's bind group, because `Deck::resize`
                 // replaced the views they were made from.**
@@ -10151,14 +10126,12 @@ fn aimed_set(gfx: &Gfx, view: &View) -> Option<String> {
 /// own rule read back rather than a second one: a `_0` on every L4 of every
 /// ordinary run is noise in the way of what a person is scanning for.
 fn version_row(version: &karakuri_environment::history::Version) -> String {
-    let at = match version.index {
-        0 => String::new(),
-        index => index.to_string(),
-    };
-    format!(
-        "{}_slot{}_{}{at}_{}",
-        version.at, version.slot, version.layer, version.proc_name
-    )
+    // **The spelling is the history module's**, since 2026-09-10: a model
+    // walking the same history over MCP reads rows out of `walk_history` and
+    // hands one back in `Revision::Picked`, so a second `format!` here would be
+    // a second answer to *what is this row called* — and the two surfaces hand
+    // the name to each other (`docs/adr/0342-…`).
+    version.filed_as()
 }
 
 /// **What a take-in did**: the file it read, the id that file filed itself
@@ -12538,21 +12511,62 @@ fn answered(
         // so nothing in the arrangement moved and no `Outcome` says so.
         focus::Asked::Moved => return Change::Pointed(true).repaint(),
         focus::Asked::Emitted(operation) => Acted::Emitted(Some(operation.clone())),
+        // **A move of the arrangement**, which is not the vocabulary's: the
+        // fold `space` performs on a bay, and the Program head's solo. It
+        // leaves by `Readout::op` like every other arrangement press, so the
+        // sentence a fold prints and the frame it asks for are the ones `f`
+        // printed and asked for until 2026-09-10.
+        focus::Asked::Panel(op) => {
+            let outcome = readout.op(*op);
+            return Change::Operated(&outcome).repaint();
+        }
+        // **The picture's on and off, which is one press asking for two
+        // things** — `Readout::sink` is where the pair is said out loud, and
+        // it is the same method the Outputs row's dot goes through.
+        focus::Asked::Routed(asked, op) => {
+            let outcome = readout.sink(asked.clone(), *op);
+            return Change::Operated(&outcome).repaint();
+        }
         // **The level, named here because the step is this file's arithmetic**
         // — [`gain_key`] and [`opacity_key`], whose tenth is `karakuri-cli`'s
         // and whose clamp decides what the record says.
-        focus::Asked::Stepped { deck, level, step } => match held(&gfx.engine.deck, *deck) {
-            Some(slot) => match level {
-                focus::Level::Trim => Acted::Emitted(Some(Operation::SetGain {
-                    deck: *deck,
-                    gain: gain_key(*step, gfx.engine.deck.gain(slot)),
+        //
+        // **Five levels and one shape.** The two on a strip are read off the
+        // deck through [`held`]; the master out is read off the same deck one
+        // pass along, the exposure off the look and the offset off the audio
+        // session — each of them a value this file has in front of it and the
+        // console does not (ADR-0156, ADR-0333).
+        focus::Asked::Stepped { level, step } => match level {
+            focus::Level::Trim(deck) | focus::Level::Fader(deck) => {
+                match held(&gfx.engine.deck, *deck) {
+                    Some(slot) => match level {
+                        focus::Level::Trim(_) => Acted::Emitted(Some(Operation::SetGain {
+                            deck: *deck,
+                            gain: gain_key(*step, gfx.engine.deck.gain(slot)),
+                        })),
+                        _ => Acted::Emitted(Some(Operation::SetOpacity {
+                            deck: *deck,
+                            opacity: opacity_key(*step, gfx.engine.deck.opacity(slot)),
+                        })),
+                    },
+                    None => Acted::Nothing,
+                }
+            }
+            focus::Level::Out => Acted::Emitted(Some(Operation::SetMasterOut {
+                out: out_key(*step, gfx.engine.deck.out()),
+            })),
+            focus::Level::Exposure => Acted::Emitted(Some(Operation::SetExposure {
+                exposure: exposure_key(*step, gfx.engine.look.exposure),
+            })),
+            focus::Level::Offset => match gfx.audio.as_ref() {
+                Some(open) => Acted::Emitted(Some(Operation::SetLatencyOffset {
+                    ms: offset_key(*step, open.latency_offset_ms()),
                 })),
-                focus::Level::Fader => Acted::Emitted(Some(Operation::SetOpacity {
-                    deck: *deck,
-                    opacity: opacity_key(*step, gfx.engine.deck.opacity(slot)),
-                })),
+                None => {
+                    println!("{NO_ROOM_FOR_AN_OFFSET}");
+                    Acted::Nothing
+                }
             },
-            None => Acted::Nothing,
         },
         // The caller answers these two, and it returns before it gets here.
         focus::Asked::Scope | focus::Asked::Load => {
@@ -12633,6 +12647,84 @@ fn opacity_key(step: Step, from: f32) -> f32 {
         Step::Default => 1.0,
     };
     asked.clamp(0.0, 1.0)
+}
+
+/// **Where a press takes the master out** — [`gain_key`]'s function one bay
+/// down, and the three answers are the same three.
+///
+/// **A tenth, and the same tenth**: the trim, the fader and this are one
+/// gesture on three controls, and a keyboard that stepped each of them by a
+/// different amount would be three keyboards. **Held inside `[0, 1]` where
+/// the gain is only floored**, which is [`opacity_key`]'s distinction met on
+/// the level the whole programme leaves through: `Knob::Out` drags over
+/// exactly that range, so a key and a hand can reach the same values and no
+/// others.
+///
+/// **The default is unity**, which is where a run starts and what the row
+/// reads before anybody has touched it.
+fn out_key(step: Step, from: f32) -> f32 {
+    let asked = match step {
+        Step::Down => from - OPACITY_STEP,
+        Step::Up => from + OPACITY_STEP,
+        Step::Default => 1.0,
+    };
+    asked.clamp(0.0, 1.0)
+}
+
+/// **Where a press takes the exposure** — a **quarter stop**, which is the
+/// step the console's own track was built for.
+///
+/// `karakuri_console::view::EXPOSURE_TRACK_W`'s documentation is where that
+/// number comes from and it says the whole argument: *"one pixel a press …  a
+/// pointer on this track can ask for any of the 48 positions along it and a
+/// keyboard stepping a quarter stop at a time can ask for any of the 48 values
+/// between the ends, so neither surface can reach a value the other cannot"*.
+/// So the step is taken on the **track's** axis and converted back, rather
+/// than as a multiplier written here — the two surfaces then land on the same
+/// 48 values by construction.
+///
+/// **Clamped by the conversion rather than here**: `unit_of` holds a value
+/// past either end at that end and `exposure_at` runs over `[0, 1]`, which is
+/// where `--exposure 200` is allowed to be unclamped and a press is not.
+///
+/// **The default is 1.0**, which is the middle of the track and the level a
+/// run starts at — ADR-0259's *"`space` returns it to 1.0 — today's `` ` ``"*.
+fn exposure_key(step: Step, from: f32) -> f32 {
+    let at = view::unit_of(from);
+    match step {
+        Step::Down => view::exposure_at(at - 1.0 / view::EXPOSURE_TRACK_W),
+        Step::Up => view::exposure_at(at + 1.0 / view::EXPOSURE_TRACK_W),
+        Step::Default => 1.0,
+    }
+}
+
+/// **Where a press takes the latency offset** — five milliseconds, which is
+/// the page's own step and the one `karakuri-cli`'s `o` and `p` use.
+///
+/// **The sign is the half that gets read wrong at two in the morning**, and
+/// `docs/manual/console.html` says so: *"Negative and the picture waits for the
+/// music, positive and it leads."* So `Step::Down` is the picture waiting, and
+/// this function is where a test can ask which way each direction goes — a
+/// pair wired the wrong way round reads correct and points backwards.
+///
+/// `o` and `p` were this keyboard's letters until 2026-09-10, and what
+/// survived them is the step rather than the spelling: the constant is
+/// `karakuri_environment::audio`'s, which is what the command line steps by,
+/// and this program does not keep a second copy of it.
+///
+/// **Not clamped here**, which is the one place this differs from [`gain_key`]
+/// and [`opacity_key`]: the offset's range is `karakuri_environment::audio`'s
+/// and the session holds a press at the end of its travel and says so
+/// ([`offset_said`]). A second clamp here would decide the same thing twice.
+///
+/// **The default is zero**, which is the value the offset is declared at: a
+/// session nobody has nudged runs at no offset at all.
+fn offset_key(step: Step, from: f32) -> f32 {
+    match step {
+        Step::Down => from - audio::LATENCY_OFFSET_STEP_MS,
+        Step::Up => from + audio::LATENCY_OFFSET_STEP_MS,
+        Step::Default => 0.0,
+    }
 }
 
 /// **The slot a press or a record names, as an index this deck has**, or
@@ -14220,7 +14312,12 @@ fn put_back(
 /// keeps this one function the only place a record becomes a movement — a
 /// second `apply_look` beside it would be the second route into the engine
 /// that P-0090 exists to refuse.
-fn apply(record: &Record, deck: &mut Deck, look: &mut Look, chain: &mut Chain) -> Option<String> {
+fn apply(
+    record: &Record,
+    deck: &mut Deck,
+    look: &mut Look,
+    chain: &mut Vec<karakuri_engine::SlotSpec>,
+) -> Option<String> {
     // **A slot the deck has not got is refused rather than indexed**, and the
     // guard is [`held`] rather than a closure here, because the key arms in
     // `window_event` need the same answer one step earlier: a press reads the
@@ -14603,28 +14700,40 @@ fn apply(record: &Record, deck: &mut Deck, look: &mut Look, chain: &mut Chain) -
         // **No clamp here either.** `Chain::clamped` is the wall and it is
         // inside the setter, so a stream carrying 4.0 meets the same ceiling
         // a fader does.
-        Record::MasterChain {
-            feedback,
-            ref cut,
-            bloom,
-            rgb_shift,
-        } => {
-            let cut = Cut::parse(cut)?;
-            *chain = Chain {
-                feedback,
-                cut,
-                bloom,
-                rgb_shift,
-            };
-            Some(format!(
-                "  master: chain -> Record::MasterChain -> feedback {feedback:.3} of the \
-                 {} cut, bloom {bloom:.3}, rgb shift {rgb_shift:.3} — {} of three passes \
-                 recorded",
-                cut.name(),
-                usize::from(feedback > 0.0)
-                    + usize::from(bloom > 0.0)
-                    + usize::from(rgb_shift > 0.0),
-            ))
+        Record::MasterChain(ref want) => {
+            let mut slots = Vec::with_capacity(want.slots.len());
+            for slot in &want.slots {
+                slots.push(karakuri_engine::SlotSpec {
+                    procedure: slot.procedure.clone(),
+                    cut: match &slot.cut {
+                        None => None,
+                        Some(word) => Some(Cut::parse(word)?),
+                    },
+                    params: slot.params.clone(),
+                });
+            }
+            let said = format!(
+                "  master: chain -> Record::MasterChain -> {} slot{} — {}",
+                slots.len(),
+                if slots.len() == 1 { "" } else { "s" },
+                if slots.is_empty() {
+                    "the frame is the mix".to_string()
+                } else {
+                    slots
+                        .iter()
+                        .map(|s| {
+                            let cut = s
+                                .cut
+                                .map(|c| format!(" ({})", c.name()))
+                                .unwrap_or_default();
+                            format!("{}{cut}", &s.procedure[..s.procedure.len().min(14)])
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            );
+            *chain = slots;
+            Some(said)
         }
         // **The whole of one slot's clock, because the record is a state and
         // not an ask.** `Record::Transport` carries the sync mode, the anchor
@@ -14800,7 +14909,7 @@ fn reading(
     operation: &Operation,
     deck: &Deck,
     look: &Look,
-    chain: &Chain,
+    chain: &[karakuri_engine::SlotSpec],
     settings: TransitionSettings,
 ) -> Current {
     // **The whole chain, for whichever pass was asked for.** The look arm's
@@ -14810,14 +14919,7 @@ fn reading(
     let master_chain = match *operation {
         Operation::SetFeedback { .. }
         | Operation::SetBloom { .. }
-        | Operation::SetRgbShift { .. } => Some(karakuri_operation_record::Chain {
-            feedback: karakuri_operation::Feedback {
-                amount: chain.feedback,
-                cut: mix::cut(chain.cut),
-            },
-            bloom: chain.bloom,
-            rgb_shift: chain.rgb_shift,
-        }),
+        | Operation::SetRgbShift { .. } => Some(mix::current_chain(chain)),
         _ => None,
     };
     let look = match *operation {
@@ -15017,12 +15119,18 @@ fn reading(
 /// engine holds `[0, 0.95]`: a fader draws where it is along its own travel,
 /// and `Knob::Feedback` multiplies back by `Feedback::MAX` on the way out. The
 /// other two are `[0, 1]` at both ends and pass through.
-fn chain_view(chain: Chain) -> view::Chain {
+fn chain_view(chain: &[karakuri_engine::SlotSpec]) -> view::Chain {
+    // **The three rows read the three shipped slots**, which is
+    // `mix::current_chain`'s own arrangement and is here so the reading is made
+    // once: a row whose procedure is not in the chain reads zero, which is the
+    // honest reading of *this pass is not running*. The rows retire in M5.16's
+    // second pass (ADR-0340 §7) and this function goes with them.
+    let running = mix::current_chain(chain);
     view::Chain {
-        feedback: chain.feedback / karakuri_operation::Feedback::MAX,
-        cut: mix::cut(chain.cut),
-        bloom: chain.bloom,
-        rgb_shift: chain.rgb_shift,
+        feedback: running.feedback.amount / karakuri_operation::Feedback::MAX,
+        cut: running.feedback.cut,
+        bloom: running.bloom,
+        rgb_shift: running.rgb_shift,
     }
 }
 
@@ -17467,7 +17575,7 @@ impl ApplicationHandler for App {
         // And the three rows under it, off the `Present` that holds them — the
         // same seam one row down, and the reading rather than the state
         // (ADR-0156).
-        self.readout.view.master_chain = Some(chain_view(engine.chain));
+        self.readout.view.master_chain = Some(chain_view(&engine.chain));
         // **And the room, before the legend**, because the legend says which
         // input is open and the answer is the host's rather than a sentence
         // here. The session tempo is the deck's own oscillator: it is what the
@@ -17948,10 +18056,19 @@ impl ApplicationHandler for App {
                 // it is the same question for the same reason: what the bay
                 // draws is a listing and a set of marks, both of them read off
                 // a disk, and the write above changed one of them.
+                // **And a press on the `history` chip is a walk of the store**,
+                // which is the same branch because it is the same act: the
+                // fifth chip marks a scope like the four beside it and asks for
+                // a different row (ADR-0308), so a press that emitted
+                // `WalkHistory` and did not re-read left the bay drawing the
+                // listing it had before under a mark that says `history`. It
+                // was missing here until 2026-09-10 and is `docs/adr/0342-…`'s
+                // own defect.
                 if matches!(
                     acted,
                     Acted::Emitted(Some(
                         Operation::SelectScope { .. }
+                            | Operation::WalkHistory { .. }
                             | Operation::ListSets { .. }
                             | Operation::SetFavourite { .. }
                     ))
@@ -18805,25 +18922,33 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                    // **The pointer is resolved here and not inside the
-                    // operation.** `f` means fold and this is the surface
-                    // saying which region — see `karakuri_console::panel::Op`.
-                    // A key that names nothing emits nothing, and the readout
-                    // says why from `target`.
-                    Key::Character("f") => match self.readout.target("f") {
-                        Some(id) => Op::Fold(id),
-                        None => return,
-                    },
-                    Key::Character("g") => match self.readout.enclosing() {
-                        Some(op) => op,
-                        None => return,
-                    },
+                    // **The one letter left that names a region, and it
+                    // takes it from the focus rather than from the pointer**
+                    // (ADR-0259, ADR-0343). `g` folds the split enclosing the
+                    // focused bay, which is a pane every time — a bay's parent
+                    // is a split and never another bay — so this is the one
+                    // route to *Fold a pane away* from the keyboard alone, and
+                    // it is the row `space` on a bay does not reach.
+                    //
+                    // **`f` and `s` went with `Readout::target`.** The grammar
+                    // reaches both of their rows: `space` on a bay is the fold
+                    // and `space` on the Program head's `solo` is the solo, and
+                    // a letter goes when the grammar reaches the same row.
+                    // **Rule 01 is what it buys** — *every operation is
+                    // reachable from the keyboard alone* — because a key whose
+                    // region came from the pointer was not.
+                    Key::Character("g") => {
+                        match self
+                            .readout
+                            .view
+                            .focused(&self.readout.panel)
+                            .and_then(|bay| self.readout.panel.layout().find(bay.name))
+                        {
+                            Some(id) => Op::FoldEnclosing(id),
+                            None => return,
+                        }
+                    }
                     Key::Character("z") => Op::UnfoldAll,
-                    Key::Character("s") => match self.readout.target("s") {
-                        Some(id) => Op::Solo(id),
-                        None => return,
-                    },
-                    Key::Character("u") => Op::Unsolo,
                     Key::Character("r") => Op::Reset,
                     // **Keep what the selected deck is playing**, filed under a
                     // stamp because a bare key press cannot type a name — see
@@ -18918,59 +19043,6 @@ impl ApplicationHandler for App {
                             _ => GridScale::Double,
                         };
                         let acted = Acted::Emitted(Some(Operation::ScaleGrid { by }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The latency offset, and the third of the three keys
-                    // that need an input open.** Unlike `b`, `,` and `.` this
-                    // one goes through [`App::performed`] like every other
-                    // key on this panel: `written(SetLatencyOffset)` answers
-                    // `Silent(NoRecord)` rather than `Owed(NotSettled)` —
-                    // nothing in the session stream carries a delay between
-                    // what a room hears and what it sees — so the line
-                    // `unwritten` prints about it is true, where the tap's
-                    // would have been *"nothing moved, and nothing here
-                    // decides it"* about a press that moved the grid.
-                    //
-                    // **The operation is absolute and the key is the nudge**,
-                    // which is `Operation::SetLatencyOffset`'s own rule: *"an
-                    // absolute value can express every nudge and a nudge
-                    // cannot express a setting, and a fader has to be able to
-                    // reach it"*. So the press reads the value it is standing
-                    // on and adds a step, exactly as `karakuri-cli`'s two do.
-                    //
-                    // **With no input attached there is nothing to read**, and
-                    // no operation is emitted at all — the offset is a term in
-                    // the lead the tracker corrects against, and a value
-                    // dialled against no room would be dropped the moment one
-                    // opened, because `attached` starts a new session at the
-                    // offset the old one held and at the default when there
-                    // was none. Said out loud rather than swallowed, on
-                    // [`tapped`]'s and [`scaled`]'s terms: a key that does
-                    // nothing and a key that is not bound are the same
-                    // experience.
-                    Key::Character("o") | Key::Character("p") => {
-                        let Key::Character(name) = key.logical_key.as_ref() else {
-                            unreachable!("the arm this is in")
-                        };
-                        let step = offset_step(name).expect("the arm this is in");
-                        let acted = match gfx.audio.as_ref() {
-                            Some(open) => Acted::Emitted(Some(Operation::SetLatencyOffset {
-                                ms: open.latency_offset_ms() + step,
-                            })),
-                            None => {
-                                println!("{}", NO_ROOM_FOR_AN_OFFSET);
-                                Acted::Nothing
-                            }
-                        };
                         let repaint = App::performed(
                             gfx,
                             self.started,
@@ -19332,6 +19404,16 @@ impl ApplicationHandler for App {
                     bank: self.readout.sequencer.armed(),
                     step: self.readout.playhead.at(),
                 });
+                // **Which Set the Library bay's walk would be of**, read off
+                // the load pulldown's deck's aim and rebuilt per frame like
+                // every other reading in this block. It is the one value a
+                // `history` chip press needs and the console cannot spell: the
+                // bay holds a deck letter and the id rides the aim (ADR-0308,
+                // ADR-0304). Written here rather than on the press that changes
+                // it, because a load, a key, a mapped control and a model all
+                // re-point a slot — see `Readout::chose` and
+                // `view::Chosen::asked`.
+                self.readout.view.aimed = aimed_set(gfx, &self.readout.view);
                 self.readout.view.transport = transport(
                     &gfx.engine.deck,
                     &self.costs,
@@ -19367,7 +19449,7 @@ impl ApplicationHandler for App {
                 // present pass read it, so the two are read off two different
                 // objects and written here in the same breath (ADR-0224).
                 self.readout.view.master_out = Some(gfx.engine.deck.out());
-                self.readout.view.master_chain = Some(chain_view(gfx.engine.chain));
+                self.readout.view.master_chain = Some(chain_view(&gfx.engine.chain));
                 // **And which classes are open to a model**, read off the
                 // handle rather than remembered from the last press on a pill.
                 // Nothing but a pill writes it today; the handle exists because
@@ -19619,12 +19701,30 @@ impl ApplicationHandler for App {
                         chain,
                         ..
                     } = engine;
-                    // **Per frame and unconditionally**, which is
-                    // `compose`'s own treatment of the tone map one pass
-                    // along: one `queue.write_buffer` into storage sized at
-                    // construction, and tracking whether it changed would buy
-                    // nothing and cost a way to go stale.
-                    present.set_chain(&gpu.queue, *chain);
+                    // **On the frames it moved and on no others**, which is
+                    // where this parts company with the tone map one pass
+                    // along: that is one `queue.write_buffer` into storage
+                    // sized at construction, and this is a list whose *shape*
+                    // may have changed — new procedures to compile, new
+                    // targets to allocate. `mix::apply_chain` takes the cheap
+                    // path where the shape is the one already running, which
+                    // is what a press on a Master row produces
+                    // (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
+                    //
+                    // **The shipped three and nothing else**, and a refusal
+                    // names the address: the Library's drop onto the chain is
+                    // M5.16's second pass, and it is what brings a store in.
+                    if present.chain_spec() != *chain {
+                        if let Err(refusal) = karakuri_environment::mix::apply_chain(
+                            present,
+                            &gpu.device,
+                            &gpu.queue,
+                            chain,
+                            &|address| karakuri_environment::mix::resolve_procedure(None, address),
+                        ) {
+                            eprintln!("{refusal} — the chain keeps what it had");
+                        }
+                    }
                     let textures_delta = &mut output.textures_delta;
                     let cost = &mut cost;
                     // **The picture first, and the projector beside it
@@ -20395,27 +20495,6 @@ fn attached(
     }
 }
 
-/// **What a press on `o` or `p` moves the offset by**, and `None` for every
-/// other key.
-///
-/// A function rather than two literals in the arm so that the **sign** is
-/// something a test can ask about. `docs/manual/console.html` says which half
-/// gets read wrong — *"the sign is the half that gets read wrong at two in the
-/// morning, so it is said in words here rather than left to be worked out"* —
-/// and a pair of keys wired the wrong way round is a control that reads
-/// correct and points backwards.
-///
-/// The step is `karakuri_environment::audio`'s own constant, which is what
-/// `karakuri-cli`'s `o` and `p` step by: *five milliseconds a press* is one
-/// number and this program does not keep a second copy of it.
-fn offset_step(key: &str) -> Option<f32> {
-    match key {
-        "o" => Some(-audio::LATENCY_OFFSET_STEP_MS),
-        "p" => Some(audio::LATENCY_OFFSET_STEP_MS),
-        _ => None,
-    }
-}
-
 /// **What the offset keys say on a panel with no input attached.**
 ///
 /// `docs/manual/console.html` is the specification and it is plain about it:
@@ -21124,19 +21203,19 @@ mod tests {
     fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
         assert_eq!(
             karakuri_operation::Feedback::MAX,
-            Chain::FEEDBACK_MAX,
+            karakuri_engine::Chain::FEEDBACK_MAX,
             "the reach the console draws and the wall the engine clamps at have drifted"
         );
-        // The clamp is the identity on the top of the fader's own travel, which
-        // is what makes the two numbers being equal the thing that matters
-        // rather than a coincidence.
-        let top = Chain {
-            feedback: karakuri_operation::Feedback::MAX,
-            cut: Cut::Exit,
-            bloom: 1.0,
-            rgb_shift: 1.0,
-        };
-        assert_eq!(top.clamped(), top);
+        // **The wall itself moved into the file**, which is the one thing that
+        // changed here when the chain became a list: what a slot's `amount` is
+        // clamped to is the range `examples/feedback.kir` declares, and this
+        // constant is now the *vocabulary's* number rather than the engine's
+        // own — kept in the engine because this is the pair of spellings that
+        // has to be checked against each other and there has to be somewhere to
+        // check it. **The file declares a wider range than the fader draws**,
+        // `[0, 1]` against 0.95, and that is a gap named rather than closed:
+        // closing it is a `.kir` edit, which changes the procedure's content
+        // address and therefore every stream that names it.
         for cut in Cut::ALL {
             assert_eq!(
                 Cut::parse(mix::cut(cut).name()),
@@ -21332,24 +21411,27 @@ mod tests {
     /// read wrong at two in the morning: *"Negative and the picture waits for
     /// the music, positive and it leads."*
     ///
-    /// A pair of keys wired the wrong way round reads correct and points
-    /// backwards, and it is the sign the manual says is the half that gets read
-    /// wrong. The step is asked of
-    /// `karakuri_environment::audio` rather than transcribed, so this checks
-    /// which way each key goes and that both go by the one constant the
-    /// command line's own `o` and `p` use.
+    /// A pair wired the wrong way round reads correct and points backwards. The
+    /// letters went on 2026-09-10 and the arithmetic did not: `↑↓` on the
+    /// Transport's offset is what `o` and `p` were, and this asks
+    /// [`offset_key`] which way each direction goes and that both go by the one
+    /// constant the command line's own `o` and `p` use.
+    ///
+    /// **And that `space` on it is the value it was declared at**, which is
+    /// ADR-0259's rule for every level and the first way back to no offset at
+    /// all this control has had.
     #[test]
-    fn o_steps_the_offset_down_and_p_steps_it_up_by_the_one_step_both_keyboards_use() {
+    fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
         assert_eq!(
-            offset_step("o"),
-            Some(-audio::LATENCY_OFFSET_STEP_MS),
-            "`o` is the key that makes the picture wait for the music, so it steps the offset \
-             down"
+            offset_key(Step::Down, 0.0),
+            -audio::LATENCY_OFFSET_STEP_MS,
+            "down is the direction that makes the picture wait for the music, so it steps the \
+             offset down"
         );
         assert_eq!(
-            offset_step("p"),
-            Some(audio::LATENCY_OFFSET_STEP_MS),
-            "`p` is the key that makes the picture lead, so it steps the offset up"
+            offset_key(Step::Up, 0.0),
+            audio::LATENCY_OFFSET_STEP_MS,
+            "up is the direction that makes the picture lead, so it steps the offset up"
         );
         assert_eq!(
             audio::LATENCY_OFFSET_STEP_MS,
@@ -21357,15 +21439,68 @@ mod tests {
             "the page says five milliseconds a press and the constant says otherwise — the page \
              is the specification, so one of the two is wrong and it is not this test"
         );
-        // Every other key is somebody else's, which is what lets one arm read
-        // the step out of the letter rather than two arms carrying a literal.
-        for key in ["b", ",", ".", "r", "n", "0"] {
-            assert_eq!(
-                offset_step(key),
-                None,
-                "`{key}` is not an offset key and `offset_step` claimed it was"
-            );
+        assert_eq!(
+            offset_key(Step::Default, 37.0),
+            0.0,
+            "space on a level is the value it was declared at, and an offset is declared at none"
+        );
+        // **The press is counted from where the session is**, never from zero:
+        // a step that ignored what it was standing on would jump the offset to
+        // one step whatever a hand had dialled.
+        assert_eq!(offset_key(Step::Up, 20.0), 25.0);
+        assert_eq!(offset_key(Step::Down, 20.0), 15.0);
+    }
+
+    /// **The master out steps by the trim's tenth and is held inside `[0, 1]`**,
+    /// which is the range `Knob::Out` drags over — so a key and a hand can
+    /// reach the same values and no others.
+    #[test]
+    fn the_master_out_steps_by_a_tenth_and_is_held_inside_the_track() {
+        assert!((out_key(Step::Up, 0.5) - 0.6).abs() < 1e-5);
+        assert!((out_key(Step::Down, 0.5) - 0.4).abs() < 1e-5);
+        assert_eq!(
+            out_key(Step::Up, 1.0),
+            1.0,
+            "a press at the top of the track put the whole programme past unity"
+        );
+        assert_eq!(out_key(Step::Down, 0.0), 0.0);
+        assert_eq!(
+            out_key(Step::Default, 0.3),
+            1.0,
+            "space on the master out is not unity, which is where a run starts"
+        );
+    }
+
+    /// **The exposure steps a quarter stop**, taken on the console's own track
+    /// so that a key and a pointer land on the same forty-eight values —
+    /// `view::EXPOSURE_TRACK_W`'s whole argument, met from the keyboard's end.
+    ///
+    /// **Four presses are one stop**, which is what a quarter stop means and
+    /// the one claim here worth stating as arithmetic rather than as a
+    /// constant: a doubling.
+    #[test]
+    fn the_exposure_steps_a_quarter_stop_and_four_presses_double_it() {
+        let mut at = 1.0;
+        for _ in 0..4 {
+            at = exposure_key(Step::Up, at);
         }
+        assert!(
+            (at - 2.0).abs() < 1e-4,
+            "four presses up from 1.0 landed at {at} rather than at a stop"
+        );
+        let mut back = at;
+        for _ in 0..4 {
+            back = exposure_key(Step::Down, back);
+        }
+        assert!(
+            (back - 1.0).abs() < 1e-4,
+            "four presses back landed at {back}"
+        );
+        assert_eq!(
+            exposure_key(Step::Default, 8.0),
+            1.0,
+            "space on the exposure is not 1.0, which is the middle of the track"
+        );
     }
 
     /// **"Negative and the picture waits for the music, positive and it
@@ -29060,6 +29195,8 @@ mod key_column {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use karakuri_console::focus::ANY;
+
     use super::KEYS;
 
     /// The specification, relative to the workspace root.
@@ -29191,6 +29328,22 @@ mod key_column {
         ("the Outputs", "outputs"),
     ];
 
+    /// **How a badge names a press that is addressed in every bay**, and what
+    /// it resolves to.
+    ///
+    /// `space` at bay level is the fold and `g` is the split enclosing the
+    /// focused bay: neither is one bay's, and neither is global — the operand
+    /// is the bay that has focus, which is the third category ADR-0343 names.
+    /// So the page spells it `&middot; in any bay` and it resolves to
+    /// `karakuri_console::focus::ANY`, which is **not** one of [`BAYS`]' nine
+    /// and is deliberately not in that table: a badge naming one of the nine is
+    /// a claim about one place, and this is a claim about all of them.
+    ///
+    /// **The reverse check reads it as all nine**, which is the stronger
+    /// reading and the honest one — see
+    /// [`every_key_route_the_page_marks_built_is_bound_by_the_instrument`].
+    const ANY_BAY: (&str, &str) = ("any bay", karakuri_console::focus::ANY);
+
     /// **Every route this program binds, and the rows of [`PAGE`] it reaches.**
     ///
     /// `None` for a bay is a **global** key — one whose meaning does not depend
@@ -29225,19 +29378,12 @@ mod key_column {
         // The globals: a letter whose operation has no operand for focus to
         // supply, or whose only operand is the choice the key itself spells.
         // ------------------------------------------------------------------
-        // `Op::Fold` of the region under the pointer.
-        (None, "f", &["Fold a bay away", "Fold a pane away"]),
-        // `Op::FoldEnclosing` over a region, `Op::Fold` of the split over a
-        // gap — one step up the tree either way, so the same two rows.
-        (None, "g", &["Fold a bay away", "Fold a pane away"]),
         // The room's colours. Nothing in the arrangement moves and no
         // `Outcome` says so, which is why it is not an operation.
         (None, "n", &[]),
         (None, "r", &["Reset the arrangement"]),
-        (None, "s", &["Solo a region"]),
         // `Op::UnfoldAll` — the page carries the region and the everything
         // under one heading, as `vocabulary.rs` does.
-        (None, "u", &["Solo a region"]),
         (None, "z", &["Bring back what is folded"]),
         // **The three that need a room**, and they are the keys here that
         // reach neither the arrangement nor the deck. `b` is a tap and `,`
@@ -29247,8 +29393,6 @@ mod key_column {
         (None, "b", &["Tap the beat"]),
         (None, ",", &["Halve or double the grid"]),
         (None, ".", &["Halve or double the grid"]),
-        (None, "o", &["Nudge the latency offset"]),
-        (None, "p", &["Nudge the latency offset"]),
         // **The save, whose operand is the deck selection.**
         //
         // **It is the key column and not the panel column that this makes
@@ -29271,22 +29415,146 @@ mod key_column {
         // ADR-0221 records that **no key is bound to saving or restoring an
         // arrangement**, and that is still true: it does not *name* the
         // operation and cannot be pressed to reach it. A save is reached by
-        // opening the pill's menu and picking *save*, which is a pointer, and
-        // the *Save the arrangement* row's key badge says `&mdash;` because
-        // there is no way to that operation from the keyboard alone — which is
-        // what the key column means (ADR-0213).
+        // opening the pill's menu and picking *save*, which is a pointer.
         (None, "backspace", &[]),
+        // ------------------------------------------------------------------
+        // Addressed to the focused bay, wherever it is
+        // ------------------------------------------------------------------
+        // **`space` on a bay is the fold, in every one of the nine**, which is
+        // ADR-0259's rule and the narrow reason a folded bay keeps its place
+        // in the ring. It is one route naming all nine rather than nine routes
+        // naming one row: a badge reading `space &middot; in the Mixer` on
+        // *Fold a bay away* would name one of nine places the press works.
+        (Some(ANY), "space", &["Fold a bay away"]),
+        // **And `g` is the split enclosing the focused bay**, which is a pane
+        // every time — a bay's parent is a split and never another bay. It is
+        // the one route to this row from the keyboard alone, and it is why the
+        // letter survived `f` (ADR-0343).
+        (Some(ANY), "g", &["Fold a pane away"]),
+        // ------------------------------------------------------------------
+        // The Transport's grammar
+        // ------------------------------------------------------------------
+        // A headless row, so `0` names the row itself and a digit names one of
+        // the controls left to right. Naming one asks for nothing.
+        (Some("transport"), DIGIT, &[]),
+        // **`↑↓` on the exposure and on the offset**, which are this row's two
+        // levels. The tempo figure is a track a press positions and not a
+        // level with a step, so the arrows decline on it and say so.
+        (
+            Some("transport"),
+            "arrows",
+            &["Exposure", "Nudge the latency offset"],
+        ),
+        // **`space` on the tone map cycles the four operators**, and on the
+        // exposure it is the value the control was declared at.
+        (Some("transport"), "space", &["Tone map", "Exposure"]),
+        // ------------------------------------------------------------------
+        // The Library's grammar
+        // ------------------------------------------------------------------
+        // **A digit names the nth row and `0` the head**, and neither asks for
+        // an operation: the cursor is a pointer nothing in the vocabulary
+        // moves, which is `console.html`'s *How a Set reaches a deck*.
+        (Some("library"), DIGIT, &[]),
+        // The rows, walked — today's `up` and `down`, and the same nothing.
+        (Some("library"), "arrows", &[]),
+        // **`space` on the head's scope chips and on a row's star.** The chips
+        // are drawn by `karakuri-console` and pressed by nobody: `SelectScope`
+        // is emitted from this file and never from a control, so that row's
+        // panel column stays `plan` and this key is what makes its key column
+        // `has`.
+        (
+            Some("library"),
+            "space",
+            &[
+                "Choose which scope the library shows",
+                "Star a Set, or take the star off",
+            ],
+        ),
+        // **`enter` on a row is the load**, with both operands on screen
+        // before the press — the deck selection says which deck and the
+        // address says which Set. **`enter` on a row's `params` chip opens
+        // what that Set holds and declares**, which is the second act a row
+        // has and the reason a row's controls are numbered at all.
+        //
+        // **One key, and a preset row reaches a second page row through it.**
+        // Taking a Set in is not a row of its own — ADR-0229's *one operation,
+        // two moments* — so a press on a `presets` row performs *Send a Set to
+        // somebody, and take one in* at the moment of the press and then the
+        // load. That row's key badge names no key: what an operator reaches
+        // from the keyboard is a **load**.
+        (
+            Some("library"),
+            "enter",
+            &[
+                "Load material into a deck",
+                "Read what one Set holds and declares",
+            ],
+        ),
+        // ------------------------------------------------------------------
+        // The Staging lane's grammar
+        // ------------------------------------------------------------------
+        // **Nothing here has a state at all**, so this bay has no `space`
+        // route below the fold — ADR-0259's own finding, and the second of the
+        // two bays that are lists of things that happened rather than things
+        // you set.
+        (Some("staging"), DIGIT, &[]),
+        (Some("staging"), "arrows", &[]),
+        // **A row's two acts are two controls and a digit chooses between
+        // them**, which is the record's `n 1` and `n 2`.
+        (
+            Some("staging"),
+            "enter",
+            &["Keep a candidate", "Put a node's previous version back"],
+        ),
+        // ------------------------------------------------------------------
+        // The Program bay's grammar
+        // ------------------------------------------------------------------
+        // **The four cells answer to nothing** and the picture's on and off is
+        // the Outputs row's one control, so a digit lands, the ring is drawn,
+        // and `space` and `enter` decline and say why. It is the clearest case
+        // in the walk of items with neither a state nor an act.
+        (Some("program"), DIGIT, &[]),
+        (Some("program"), "arrows", &[]),
+        // **`space` on the head's `solo`**, which is `s` and `u` collapsed
+        // into the one control they always described (ADR-0259). The class
+        // pill beside it opens a class rather than cycling a state, and it
+        // reaches no row of this page.
+        (Some("program"), "space", &["Solo a region"]),
+        // ------------------------------------------------------------------
+        // The Inspector's grammar
+        // ------------------------------------------------------------------
+        // Three deep, and the deepest bay on the panel: `1 2 3` is the first
+        // pane's second thing's third control.
+        (Some("inspector"), DIGIT, &[]),
+        // **`↑↓` on the anchor scrub a quarter beat, and on a parameter row
+        // write it** — a tenth of what the control publishes.
+        (
+            Some("inspector"),
+            "arrows",
+            &["Scrub a deck a quarter beat", "Write a parameter"],
+        ),
+        // **`space` on the four chips**, each naming the state it arrives at
+        // rather than a flip, which is the chips' own rule (P-0090).
+        (
+            Some("inspector"),
+            "space",
+            &[
+                "Set a deck's sync mode",
+                "Composite a deck's renderers",
+                "Choose which renderer of a deck is live",
+                "Set a node's authority",
+            ],
+        ),
+        // **`enter` on a parameter row takes the attachment back**, which is
+        // the act of the control the row draws: a parameter with nothing
+        // holding it draws no sensitivity row at all.
+        (Some("inspector"), "enter", &["Take a parameter back"]),
         // ------------------------------------------------------------------
         // The Mixer's grammar
         // ------------------------------------------------------------------
         // **A digit names the nth strip, and naming a strip is the deck
         // selection** — which is why that row keeps a key badge rather than
-        // losing one. `Operation::SelectDeck` writes no record, so the surface
-        // performs it (`super::pointed`), reached through the same `performed`
-        // every control's operation goes through.
-        //
-        // A digit below a strip names one of its five controls and asks for
-        // nothing: the address descends and the press is a move.
+        // losing one.
         (Some("mixer"), DIGIT, &["Select a deck"]),
         // **The arrows walk the strips and step the two levels**, which is the
         // one entry where the same key reaches a row two ways: `&larr;&rarr;`
@@ -29298,11 +29566,10 @@ mod key_column {
             "arrows",
             &["Select a deck", "Gain", "Opacity"],
         ),
-        // **`space` is the whole of this bay's five controls.** Three of them
-        // are states and the cycle is the console's own affordance
-        // (P-0090) — the same three round the same way the chips cycle them —
-        // and two are levels, where the one state worth naming is the value
-        // the control was declared at.
+        // **`space` is the whole of this bay's five controls and three of its
+        // head's.** The transition row is the head's (ADR-0343): the settings
+        // decide what the next move means wherever it lands, which is what a
+        // head is for.
         (
             Some("mixer"),
             "space",
@@ -29312,56 +29579,89 @@ mod key_column {
                 "Opacity",
                 "Blend mode",
                 "Set a deck's mask shape",
+                "Choose the wipe shape, the quantum, the length",
+            ],
+        ),
+        // **`enter` on the head's `go` capsule runs the transition on the
+        // addressed strip**, which is the deck selection: this deck is covered
+        // and the next one round arrives over it. **Only the wipe**, because
+        // the row draws one capsule and `Operation::Wipe` is what it asks for
+        // — the fade and the crossfade have no control on this row and their
+        // panel badges say so.
+        (Some("mixer"), "enter", &["Wipe the next deck in"]),
+        // ------------------------------------------------------------------
+        // The Master chain's grammar
+        // ------------------------------------------------------------------
+        // **The three effects have no addressable controls**, because
+        // `Operation::SetFeedback { params: Undecided }` and its two
+        // neighbours carry no spelling for a parameter — so a digit reaches
+        // the effect and stops, which is ADR-0259's one place where a bay is
+        // drawn and its operations are not sayable.
+        (Some("master"), DIGIT, &[]),
+        (Some("master"), "arrows", &["Master out"]),
+        (Some("master"), "space", &["Master out"]),
+        // ------------------------------------------------------------------
+        // The Sequencer's grammar
+        // ------------------------------------------------------------------
+        // **Sixteen steps outrun ten digits**, so the digits reach a lane's
+        // label and the first eight of its cells and the rest are walked —
+        // which ADR-0259 calls *"honest and very nearly useless"*. Walking is
+        // not an operation, so neither key names a row.
+        (Some("sequencer"), DIGIT, &[]),
+        (Some("sequencer"), "arrows", &[]),
+        // **`space` is the whole of this bay**: the head's mode and bank
+        // pills, a lane's label and a lane's cells, each named as the state it
+        // arrives at. **`+ lane` is not here** — its press puts the chooser
+        // down and what a lane is pointed at is picked in that card, which the
+        // address does not descend into.
+        (
+            Some("sequencer"),
+            "space",
+            &[
+                "Choose what a step is worth",
+                "Choose which pattern the sequencer plays",
+                "Mute a lane",
+                "Toggle a step",
             ],
         ),
         // ------------------------------------------------------------------
-        // The Library's grammar
+        // The Outputs row's grammar
         // ------------------------------------------------------------------
-        // **A digit names the nth row and `0` the head**, and neither asks for
-        // an operation: the cursor is a pointer nothing in the vocabulary
-        // moves, which is `console.html`'s *How a Set reaches a deck* and the
-        // reason the two arrow keys reached no row before this grammar
-        // existed either.
-        (Some("library"), DIGIT, &[]),
-        // The rows, walked — today's `up` and `down`, and the same nothing.
-        (Some("library"), "arrows", &[]),
-        // **`space` on the head's scope chips.** The chips are drawn by
-        // `karakuri-console` and pressed by nobody: `SelectScope` is emitted
-        // from this file and never from a control, so the panel column stays
-        // `plan` and this key is what makes the key column `has`.
-        (
-            Some("library"),
-            "space",
-            &["Choose which scope the library shows"],
-        ),
-        // **`enter` on a row is the load**, with both operands on screen
-        // before the press — the deck selection says which deck and the
-        // address says which Set, which is what that argument was always
-        // about.
-        //
-        // **One key, and a preset row reaches a second row through it.**
-        // Taking a Set in is not a row of its own — ADR-0229's *one operation,
-        // two moments* — so a press on a `presets` row performs *Send a Set to
-        // somebody, and take one in* at the moment of the press and then this.
-        // That row's key badge names no key: what an operator reaches from the
-        // keyboard is a **load**.
-        (Some("library"), "enter", &["Load material into a deck"]),
+        // **The simplest of the nine**: items are the sinks, each has exactly
+        // one state, and `space` is the whole of it. The picture's on and off
+        // is one operation and one fold, which is `Readout::sink`.
+        (Some("outputs"), DIGIT, &[]),
+        (Some("outputs"), "arrows", &[]),
+        (Some("outputs"), "space", &["Choose where the frame goes"]),
     ];
 
     /// The routes that reach no row, so that one which starts reaching one
     /// stops being an exception, and a new exception is written down rather
     /// than discovered. The reasons are at the entries in [`ROWS`].
     ///
-    /// A pair rather than a key, for [`ROWS`]' reason: `space` reaches five
-    /// rows in the Mixer and one in the Library, and a list of *keys* that
+    /// A pair rather than a key, for [`ROWS`]' reason: `space` reaches six
+    /// rows in the Mixer and two in the Library, and a list of *keys* that
     /// reach nothing could not say that.
+    ///
+    /// **In [`ROWS`]' own order**, which is what the check compares.
     const NO_ROW: &[(Option<&str>, &str)] = &[
         (None, "n"),
         (None, "esc"),
         (None, "tab"),
         (None, "backspace"),
+        (Some("transport"), DIGIT),
         (Some("library"), DIGIT),
         (Some("library"), "arrows"),
+        (Some("staging"), DIGIT),
+        (Some("staging"), "arrows"),
+        (Some("program"), DIGIT),
+        (Some("program"), "arrows"),
+        (Some("inspector"), DIGIT),
+        (Some("master"), DIGIT),
+        (Some("sequencer"), DIGIT),
+        (Some("sequencer"), "arrows"),
+        (Some("outputs"), DIGIT),
+        (Some("outputs"), "arrows"),
     ];
 
     /// `pub(super)` for [`super::press_handler`]. Byte for byte what
@@ -29518,10 +29818,17 @@ mod key_column {
     fn parsed(badge: &str) -> Option<(Vec<String>, Option<&'static str>)> {
         let (keys, bay) = match badge.split_once(IN_THE) {
             Some((keys, bay)) => {
-                let bay = BAYS
-                    .iter()
-                    .find(|(page, _)| *page == bay.trim())
-                    .map(|(_, name)| *name)?;
+                let bay = bay.trim();
+                // **The any-bay spelling first**, because it is not one of the
+                // nine and resolving it against [`BAYS`] would answer `None`
+                // and read as a badge nobody can parse.
+                let bay = match bay == ANY_BAY.0 {
+                    true => ANY_BAY.1,
+                    false => BAYS
+                        .iter()
+                        .find(|(page, _)| *page == bay)
+                        .map(|(_, name)| *name)?,
+                };
                 (keys, Some(bay))
             }
             None => (badge, None),
@@ -29744,6 +30051,49 @@ mod key_column {
             );
         }
 
+        // **The three levels the world holds beyond the deck's two**, added
+        // with the seven bays (ADR-0343). Each is read off the thing that has
+        // it — the same deck one pass along, the look, the audio session — and
+        // named here because the step and the clamp decide what the record
+        // says, which is `gain_key`'s argument on three more controls.
+        for (reading, what) in [
+            ("out_key(*step, gfx.engine.deck.out())", "the master out"),
+            (
+                "exposure_key(*step, gfx.engine.look.exposure)",
+                "the exposure",
+            ),
+            (
+                "offset_key(*step, open.latency_offset_ms())",
+                "the latency offset",
+            ),
+        ] {
+            assert!(
+                code.contains(reading),
+                "{what} is not stepped from `{reading}` — the level it counts from is not the one \
+                 the world is holding, and a step counted from anything else is a step from a \
+                 number nothing is standing on"
+            );
+        }
+
+        // **And the two answers that are not operations at all**: the fold
+        // `space` performs on a bay and the picture's on and off, which is one
+        // press asking for an operation and a fold. Both leave through the
+        // methods the pointer already goes through, so a key and a hand cannot
+        // fold two different things.
+        for (reading, what) in [
+            ("focus::Asked::Panel(op) => {", "the fold and the solo"),
+            (
+                "readout.sink(asked.clone(), *op)",
+                "the picture's on and off",
+            ),
+        ] {
+            assert!(
+                code.contains(reading),
+                "{what} does not go through `{reading}` — a move of the arrangement is not an \
+                 operation of the vocabulary, and the route it takes is the one the pointer takes"
+            );
+        }
+
         // **And neither of them reaches for a strip**, which is the claim the
         // three arms carried before them. `view::Strip` is named all over this
         // file — `mixer` builds one per frame — so the scan is the two
@@ -29863,6 +30213,11 @@ mod key_column {
                     found.2,
                     said(named)
                 );
+                // **A row is reached by one route on this page**, which is
+                // what one badge per row comes to: a row reached both by a
+                // letter and by the grammar would need two badges, and the
+                // column has one. That is why `f`, `s` and `u` are unbound —
+                // see [`super::KEYS`], where each is named.
                 assert!(
                     keys.iter().any(|k| k == key),
                     "`{key}`{} performs `{row}` and {PAGE} marks that row built in the key column \
@@ -29911,6 +30266,21 @@ mod key_column {
                 )
             });
             for key in keys {
+                // **`in any bay` is read as all nine**, which is the stronger
+                // claim and the honest one: a badge that says a press works
+                // wherever focus is has to be true wherever focus is. The
+                // route is written down once, under `ANY`, and this is what
+                // holds the page's *any* to the console's.
+                if bay == Some(ANY) {
+                    assert!(
+                        karakuri_console::focus::BUILT.len() == BAYS.len(),
+                        "{PAGE} says `{title}` is reached in any bay and \
+                         `karakuri_console::focus::BUILT` declares {} of the {} the arrangement \
+                         has — a press that works in some of them is not one that works in any",
+                        karakuri_console::focus::BUILT.len(),
+                        BAYS.len()
+                    );
+                }
                 let rows = rows_of(bay, &key).unwrap_or_else(|| {
                     panic!(
                         "{PAGE} marks `{title}` built in the key column and names `{key}`{}, \
@@ -29935,6 +30305,7 @@ mod key_column {
     /// global.
     fn said(bay: Option<&str>) -> String {
         match bay {
+            Some(bay) if bay == ANY => String::from(" in any bay"),
             Some(bay) => format!(" in the {bay}"),
             None => String::from(" globally"),
         }
@@ -29980,6 +30351,13 @@ mod key_column {
             .collect();
         let written: BTreeSet<(&str, &str)> = ROWS
             .iter()
+            // **The four keys of the grammar and not every route with a bay in
+            // it.** `g` is addressed to the focused bay too — its operand is
+            // the bay that has focus — but it is a letter this file binds and
+            // not one of the four the console dispatches, so the console
+            // declares nothing about it and holding it against that table
+            // would be asking the wrong half.
+            .filter(|(_, key, _)| [DIGIT, "arrows", "space", "enter"].contains(key))
             .filter_map(|(bay, key, _)| bay.map(|bay| (bay, *key)))
             .collect();
         assert_eq!(
@@ -29990,9 +30368,9 @@ mod key_column {
              console does not declare is a badge naming a key that reaches nothing in that bay"
         );
         assert!(
-            declared.len() >= 6,
-            "only {} routes are declared by the dispatch table — the mixer has three and the \
-             library has four, so a scan finding fewer has stopped reading it",
+            declared.len() >= 31,
+            "only {} routes are declared by the dispatch table — nine bays and the fold that is \
+             addressed in all of them come to 31, so a scan finding fewer has stopped reading it",
             declared.len()
         );
     }
