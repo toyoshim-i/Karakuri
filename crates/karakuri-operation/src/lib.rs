@@ -83,6 +83,14 @@
 //! writes no record. So every variant that acts on a deck carries `deck: u8`,
 //! and the keyboard's translator fills it in from the selection.
 //!
+//! **What *the selection* is has since been named**, and it strengthens this
+//! rather than qualifying it: it is the Mixer bay's remembered address, one
+//! instance of the pointer `Tab` moves between bays
+//! ([ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md),
+//! [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
+//! An operation meaning *the focused one* would put that pointer inside the
+//! vocabulary, and there is now a name for exactly which pointer it would be.
+//!
 //! **There are no toggles and no cycles.** `karakuri_console::panel::Op`
 //! argues this at length and the argument is general: *"A toggle is an
 //! affordance built **over** two operations by whoever draws it … a MIDI map
@@ -352,6 +360,87 @@ pub enum Layer {
     L3,
     L4,
     Field,
+}
+
+/// **Which kinds of row a library listing shows**: the five procedure kinds and
+/// Sets, each on or off, with an **OR** across the ones that are on and
+/// **everything** where none is.
+///
+/// [`Operation::FilterLibrary`]'s payload, and the whole of it. Six named
+/// booleans rather than a list of members, because the list is closed by
+/// construction — a procedure declares one of [`Layer`]'s five kinds and the
+/// sixth row kind is a Set — and a `Vec` would admit a member said twice, which
+/// is a state this control cannot be in.
+///
+/// **Every state is said at once.** A press names the whole row and never one
+/// chip, which is [`Operation::Publish`]'s rule on a different list: *"adding
+/// or removing one at a time is a statement about an entry, and an interface
+/// that publishes nothing publishes everything is a statement about the list"*
+/// — and it is what keeps two hands on one bay from disagreeing about which
+/// kinds are showing.
+///
+/// **The affordance is the surface's.** Nothing here says *toggle*
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md));
+/// a chip that flips one field and sends all six is the console's arithmetic,
+/// exactly as the blend chip's cycle is.
+///
+/// See
+/// `docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LibraryKinds {
+    pub l1: bool,
+    pub l2: bool,
+    pub l3: bool,
+    pub l4: bool,
+    pub field: bool,
+    /// Sets, which is the one row kind that is not a procedure's `kind` — a
+    /// Set fills several layers and declares none, so *is this its kind* is not
+    /// a question it answers.
+    pub sets: bool,
+}
+
+impl LibraryKinds {
+    /// **Nothing narrowed**, which shows everything and is where a run begins.
+    /// It is also the state a press can always get back to, which is what
+    /// [`P-0090`](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+    /// asks of a control with more than two positions.
+    pub const EVERYTHING: LibraryKinds = LibraryKinds {
+        l1: false,
+        l2: false,
+        l3: false,
+        l4: false,
+        field: false,
+        sets: false,
+    };
+
+    /// Whether any button is on. `false` is [`LibraryKinds::EVERYTHING`], and
+    /// the two readings of it — *nothing shows* and *everything shows* — are
+    /// settled here rather than at each caller: **everything**, because a
+    /// filter row that could hide the whole listing would have a state an
+    /// operator cannot see their way out of.
+    pub fn narrowing(&self) -> bool {
+        self.l1 || self.l2 || self.l3 || self.l4 || self.field || self.sets
+    }
+
+    /// Whether a procedure of `layer` is shown. `true` for every layer while
+    /// nothing is on, which is [`LibraryKinds::narrowing`]'s answer applied.
+    pub fn shows_layer(&self, layer: Layer) -> bool {
+        if !self.narrowing() {
+            return true;
+        }
+        match layer {
+            Layer::L1 => self.l1,
+            Layer::L2 => self.l2,
+            Layer::L3 => self.l3,
+            Layer::L4 => self.l4,
+            Layer::Field => self.field,
+        }
+    }
+
+    /// Whether a Set is shown, on [`LibraryKinds::shows_layer`]'s terms.
+    pub fn shows_sets(&self) -> bool {
+        !self.narrowing() || self.sets
+    }
 }
 
 /// What a deck's clock is locked to. `karakuri_engine::transport::Sync`'s
@@ -1108,14 +1197,48 @@ pub struct Control {
 /// recorded as the one that lost, so it stays a one-line change if a reader
 /// disagrees.
 /// `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`.
+///
+/// # Neither arm names a node, and that is where the mismatch was closed
+///
+/// Both carried a [`NodeAt`] until 2026-09-09, and the capacity's was the
+/// standing reason the row could not be drawn: *"an aim carries one capacity
+/// for the whole slot where `Property::Capacity` addresses a node"*, which is
+/// [ADR-0228](../../docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)'s
+/// recorded limit read as a blocker. It was closed by narrowing the payload
+/// rather than by widening the aim. What a slot's watcher is pointed at carries
+/// **one** capacity and **one** seed for the whole slot, which is exactly what
+/// `--capacity` has always meant — *"`--capacity` overrides every source"* —
+/// so the operation names the deck it already names and no node.
+///
+/// **A payload nobody reads is a free variable**
+/// ([P-0087](../../docs/principles/0087-name-the-property-never-the-shape.md)):
+/// no route filled the address, nothing could have honoured it, and the one
+/// route that exists now — the Inspector deck head's two chips — is per slot.
+/// **What would revive it** is a pairing Set whose two geometries want two
+/// different capacities; the day that is a want, `watch::Aim::capacity` grows
+/// an entry per geometry and this arm grows its address back.
+/// `docs/adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Property {
-    /// How many elements a geometry runs at, overriding what its own
-    /// `capacity` declaration names. `--capacity`.
-    Capacity { node: NodeAt, elements: u32 },
-    /// The salt for one node's hash builtins, so re-seeding changes randomness
-    /// without touching anything structural. There is no flag for this.
-    Seed { node: NodeAt, salt: u64 },
+    /// How many elements each of a deck's geometries runs at, overriding what
+    /// their own `capacity` declarations name. `--capacity`.
+    ///
+    /// **A number in a range the material declares, and the refusal is the
+    /// engine's**: `Set::build` rejects a capacity outside the declared range
+    /// and names the range in the sentence, so a surface that offers a value
+    /// is offering rather than deciding
+    /// ([P-0090](../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    Capacity { elements: u32 },
+    /// The salt a deck's hash builtins are seeded from, so re-seeding changes
+    /// randomness without touching anything structural. There is no flag for
+    /// this.
+    ///
+    /// **`u32` and not `u64`**, which is the width the engine has always used:
+    /// `watch::Aim::seed_salt`, `Set::source_salts` and
+    /// `karakuri_engine::set::derived_salt` are all `u32`, and a payload twice
+    /// as wide as the field it lands in is a number that can be asked for and
+    /// cannot arrive.
+    Seed { salt: u32 },
 }
 
 /// Sending a Set and taking one in — **two operations under one heading**, and
@@ -1930,6 +2053,67 @@ operations! {
         authority: Authority,
     } => "Set a node's authority",
 
+    /// **Writes one node's source into the operator's own library**, at
+    /// `<store>/procedures/<name>.kir`, so that it can be loaded over a layer
+    /// of something else afterwards
+    /// ([`Operation::LoadProcedure`]).
+    ///
+    /// **It is the act that makes that tier exist**
+    /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)):
+    /// nothing else in this program writes there, and the procedures that ship
+    /// under the presets root are never written by anything. The
+    /// content-addressed sources every build leaves in the store are **not**
+    /// this — those are the edit history's, one per compile and named by a
+    /// hash, and `Operation::WalkHistory` is the surface over them.
+    ///
+    /// **`id` is [`Operation::SaveSet`]'s field one level down**, and it is the
+    /// same pair of presses: the capsule on a node group's head types nothing
+    /// and takes a stamp, and a name typed into the Inspector's pane head is
+    /// what a keep from there files under
+    /// (`docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md`,
+    /// `docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md`).
+    ///
+    /// **A model asked for this writes `<store>/sandbox/`**, stamped and
+    /// overwriting nothing, which is why a model is not refused here where its
+    /// star is: what it saves is a file, so it has a sandbox form to land in
+    /// (`docs/adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md`,
+    /// `docs/adr/0301-a-models-star-is-refused-because-a-favourite-has-no-sandbox-to-land-in.md`).
+    ///
+    /// **The node is one node.** A head standing over more than one carries no
+    /// capsule, which is [`Operation::SetAuthority`]'s own rule on the same
+    /// head: one control there would be one of several answers drawn as the
+    /// answer.
+    KeepProcedure {
+        deck: u8,
+        node: NodeAt,
+        /// What to file it under, or a stamp — [`Operation::SaveSet`]'s field
+        /// and its reason.
+        id: Option<String>,
+    } => "Keep a node's procedure",
+
+    /// **Which deck a pane of the Inspector is showing.** A pulldown on the
+    /// pane's own head over the decks the mixer is drawing strips for, which
+    /// is `View::select`'s refusal read again rather than a rule of its own.
+    ///
+    /// **It is not [`Operation::SelectDeck`]**, and the difference is the same
+    /// one the Library bay's load pulldown makes
+    /// (`docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md`):
+    /// that operation moves where the keys are addressed, and this mark exists
+    /// so that a pane can show a deck the keys are **not** on. A pick moves no
+    /// selection, no other pane and no load target.
+    ///
+    /// **A pulldown rather than a flip**, which is the maintainer's choice and
+    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+    /// underneath it: a flip is a step, two panes stepping cannot both be
+    /// aimed without knowing where they started, and a key, a map line or a
+    /// model would have to count presses to say *deck C*. This names the deck.
+    ///
+    /// **`pane` is a `String`**, which is [`Operation::FoldPane`]'s spelling
+    /// and for its reason: this crate has no dependencies and cannot hold the
+    /// arrangement's handle type, so a pane is named by the name the
+    /// arrangement gives it.
+    PointPane { pane: String, deck: u8 } => "Point an Inspector pane at a deck",
+
     // ----- The library --------------------------------------------------
 
     /// Writes the material **on screen** — the versions running, with their
@@ -1945,6 +2129,26 @@ operations! {
     /// Most recent first, narrowed by what a node is called or by which layer
     /// a Set uses, and it says how many it did not show.
     ListSets { holds: Option<String>, layer: Option<Layer> } => "List what the store holds",
+
+    /// **Which kinds of row the library listing shows** — the five procedure
+    /// kinds and Sets, OR across the ones that are on, everything where none
+    /// is. See [`LibraryKinds`], which is the whole of the payload.
+    ///
+    /// **It is not [`Operation::ListSets`]'s `layer`, and the two are two
+    /// facts.** That field asks *which Sets hold a node on this layer* — a
+    /// predicate over a Set's contents, over Sets alone — and a button here
+    /// asks *is this procedure of this kind*, which is a predicate over one
+    /// artifact. Folding them into one field would be a name meaning two
+    /// things (`docs/contributing.md` §4), so `ListSets` keeps its field and
+    /// this operation carries six states beside it. That is also why the
+    /// panel's `layer` field is superseded rather than extended
+    /// (`docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md`,
+    /// `docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+    ///
+    /// **`holds` is untouched** and stays on `ListSets`: it narrows by node
+    /// name and is a filter over what a listing holds, where this decides
+    /// which populations the listing is drawn from at all.
+    FilterLibrary { kinds: LibraryKinds } => "Filter the library by kind",
 
     /// **Which library is being read**, and the four chips the console draws
     /// are four questions rather than four acts — `docs/manual/operations.html`
@@ -2040,6 +2244,48 @@ operations! {
     /// *which* store is being asked at all is the scope's question and never
     /// that operation's payload.
     WalkHistory { step: Undecided } => "Walk the edit history",
+
+    /// **One layer of what a deck is playing, replaced, and everything else
+    /// left where it is.** A procedure declares one `kind`, and the press
+    /// re-points the slot with that one file swapped for the one that was
+    /// there — every other field of the aim restated, so the layering, the
+    /// fold, the capacities, the salts, the camera and the wiring come back as
+    /// the slot's own
+    /// (`docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md`).
+    /// Nothing is installed
+    /// (`docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md`).
+    ///
+    /// **`procedure` names a row of the library**, in either tier: one the
+    /// operator kept under `<store>/procedures/`, or one that ships under the
+    /// presets root. It is a name and never a path — the same rule
+    /// [`Operation::LoadSet`]'s `set` is under.
+    ///
+    /// **No node address, and the limit is recorded rather than designed
+    /// around.** It lands on the **first** node of that kind, so `L4:0` is the
+    /// renderer a `kind L4` replaces and the second renderer of a
+    /// three-renderer Set is unreachable from this operation. A library row
+    /// cannot say an index, and a field only one surface could ever fill would
+    /// be a payload for a control nobody has drawn; the day the Inspector's
+    /// node head grows a *replace this node* control is the day this gains a
+    /// [`NodeAt`]. Where the deck has no node of that kind the procedure is
+    /// added as node 0 of it, which is the case the row is for: a Set
+    /// declaring no camera holds the built-in orbit at `L3:0`.
+    ///
+    /// **What the slot runs afterwards is a derived Set with no name**, and
+    /// the versions it writes stay filed under the Set it started from —
+    /// `watch::Aim`'s `set` is not moved by this operation, where
+    /// [`Operation::LoadSet`] replaces it
+    /// (`docs/adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md`).
+    /// So the `history` walk goes on listing that deck's versions and the
+    /// snapshot every compile takes stays alive. Nothing is saved on the
+    /// press; [`Operation::SaveSet`] is what gives the result a name.
+    ///
+    /// **A separate operation from [`Operation::LoadSet`] rather than a second
+    /// arm of it.** That one names a Set the library holds and restates every
+    /// layer; this names a procedure and restates all but one; and only one of
+    /// the two leaves the slot running material with no name. What they share
+    /// is the class and the timing.
+    LoadProcedure { deck: u8, procedure: String } => "Load a procedure over a layer",
 
     // ----- Procedures ---------------------------------------------------
 
@@ -2358,6 +2604,20 @@ operations! {
 
     /// Waits up to five seconds for a save still being written, then says how
     /// many it left behind rather than letting a hung disk hold the quit.
+    ///
+    /// **The instrument binds no key to this, and stopped binding one on
+    /// 2026-09-09.** `esc` quit until then and now goes up one level of the
+    /// focused bay's address
+    /// ([ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md),
+    /// [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)):
+    /// a ladder of `esc` presses ends in something irreversible, in front of an
+    /// audience, reached by repeating one key
+    /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    /// **The way out is the window's own close**, which every platform already
+    /// has a gesture for and `crates/karakuri` already answers — so the key
+    /// column of this row is a `gap` and the badge that says the route is real
+    /// is in the fifth cell, which is
+    /// [`SizeWindow`](Operation::SizeWindow)'s argument one row back.
     Quit => "Quit",
 }
 

@@ -480,6 +480,17 @@ pub struct Request {
     /// params above: a binding is the restated field whose argument is still the
     /// plain one, where a parameter value has since become the one thing a Set
     /// can hand across a swap itself.
+    ///
+    /// **What this states is not the whole of what the new Set is bound by**,
+    /// and that is the params' arrangement met one field along: an attachment
+    /// made on a *live* slot — `Deck::bind`, a `source` record — is in no
+    /// request, and [`crate::set::Set::carry_bound_from`] hands it across at
+    /// the install for the reason [`crate::set::Set::carry_moved_from`] hands
+    /// a ride across
+    /// (`docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md`).
+    /// A binding stated here still wins at its own address: what the request
+    /// says is this build's answer, and only an address it did not name
+    /// carries.
     pub bindings: Vec<Binding>,
     /// What a swap or verdict message calls this.
     /// What each node of the rebuilt Set is called, in the same per-layer shape
@@ -1771,6 +1782,20 @@ impl HotSwap {
                 // per key it carries, once per swap rather than once per frame.
                 // A swap is already the frame that resizes render targets.
                 candidate.carry_moved_from(&self.live);
+                // **And what an operator attached, beside what they moved** —
+                // [`Set::carry_bound_from`], which is the same rule about a
+                // different writer and is here for the same reason: this is
+                // the only moment both Sets exist in one hand. A binding this
+                // request states is left where the loop above put it; one the
+                // outgoing Set holds at an address the request did not name is
+                // an attachment made on the live slot, and it carries.
+                //
+                // **Not in [`HotSwap::install`]**, on the line above's terms
+                // exactly: that is the replay path, where a `source` record
+                // lands at the frame it was made at and inheriting would be a
+                // second, unrecorded source of the same attachment
+                // (`docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md`).
+                candidate.carry_bound_from(&self.live);
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.cost = built.cost;
                 // The worker measures what it built and cannot estimate it —

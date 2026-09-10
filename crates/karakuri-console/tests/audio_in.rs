@@ -118,6 +118,7 @@ fn a_console_nobody_told_draws_no_pill_and_one_told_nothing_draws_none() {
         Some(mock()),
         None,
         None,
+        None,
         &Arrangement::NONE,
     )
     .expect("the arrangement pill");
@@ -147,6 +148,7 @@ fn a_console_nobody_told_draws_no_pill_and_one_told_nothing_draws_none() {
         panel.layout(),
         Some(mock()),
         Some(&nothing),
+        None,
         None,
         &Arrangement::NONE,
     )

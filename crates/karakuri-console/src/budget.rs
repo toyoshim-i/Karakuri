@@ -54,6 +54,20 @@
 //! budgeted"*. [`crate::repaint`] already reads that way — every arm on a
 //! gesture is `Repaint::Now` — and this module is about the frames nobody is
 //! touching.
+//!
+//! **The hover layer, and it is that clause rather than an exception to it.**
+//! [`crate::hover`] draws a tip after a dwell, and a hand held still on a
+//! control is a gesture: the frames it buys are frames somebody asked for. It
+//! is not a [`Declared`] for a second reason as well, and that one is about
+//! the type rather than the budget — a declaration's unit is a **region** of
+//! the arrangement, and a tip is drawn over the whole console and belongs to
+//! no node, so there is nothing for [`Declared::region`] to name and nothing
+//! for `tests/schedulable.rs` to find. What it does carry is the third number:
+//! `crate::repaint::Change::Tip` is the remainder of a dwell while one is
+//! running and nothing at all once the tip is up, which is
+//! [`Declared::moves_in`]'s question asked of a layer whose motion is a hand
+//! holding still
+//! ([ADR-0330](../../../docs/adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)).
 
 use std::time::Duration;
 

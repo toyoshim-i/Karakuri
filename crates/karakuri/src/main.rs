@@ -138,11 +138,11 @@
 //! charter twice. Each line below says what the thing would be *for*, so that
 //! whoever reaches one knows what they are reaching for.
 //!
-//! **Three of the five have since been wired, and the entries stay** — audio,
-//! MCP and the session recorder — because what each is *for* is the thing this
-//! section is worth reading for, and because a list that only ever names
-//! absences is the note that was read as a charter. **Two are still absent:
-//! MIDI and replay.**
+//! **Four of the five have since been wired, and the entries stay** — audio,
+//! MIDI, MCP and the session recorder — because what each is *for* is the
+//! thing this section is worth reading for, and because a list that only ever
+//! names absences is the note that was read as a charter. **One is still
+//! absent: replay.**
 //!
 //! - **Audio, and this one is wired now.** The window opens the host's
 //!   default input at startup and the transport row's `audio-in` pill says
@@ -162,10 +162,24 @@
 //!   for. **One of the four rows it was waiting on is still out of reach**:
 //!   *Attach a signal to a parameter* is a bay's worth of work of its own and
 //!   is nothing to do with a device being open.
-//! - **MIDI.** A control surface, so a hand reaches a fader without a mouse.
-//!   `karakuri-midi` and `examples/surface.map` exist and `--midi-in`
-//!   `--midi-map` drive them. **No operation names attaching one**, so this is
-//!   a hole in the vocabulary before it is a hole here.
+//! - **MIDI, and this one is wired now.** A control surface, so a hand
+//!   reaches a fader without a mouse. The window opens **the first MIDI input
+//!   there is** at startup — no flag, for
+//!   [ADR-0220](../../../docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)'s
+//!   reason one column along — loads a map in two tiers
+//!   (`<store>/maps/default.map`, then the `examples/surface.map` that ships)
+//!   and drains what arrives into [`App::performed`] beside the MCP drain, so
+//!   **a mapped knob writes the record the mixer's fader writes** ([`surfaced`],
+//!   [`App::mapped`],
+//!   [ADR-0335](../../../docs/adr/0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md)).
+//!   **And a learn is a map edit rather than an operation**, which is what is
+//!   left of the vocabulary half: arm the transport row's `learn` pill, point
+//!   at a control, move a knob, and the line goes into
+//!   `<store>/maps/default.map` — no `Operation`, no `Record` and no row on
+//!   the operations page, because its operand is the pointer and a record of
+//!   one would put the room's wiring in the session stream (ADR-0336). The
+//!   port and the map are still fixed for the run: the `map` pill is a
+//!   readout, and reaching a different map while running is not built.
 //! - **MCP, and this one is wired now.** The model's door — the whole reason
 //!   the instrument is AI-native — and `karakuri_environment::mcp` is the
 //!   server. `--mcp PORT` binds it before the window opens and hands it the
@@ -193,9 +207,10 @@
 //! **What is missing is named rather than left to be noticed**, and what is
 //! no longer missing is named in the same place rather than left to be
 //! discovered by running it. Audio, MIDI, MCP and replay are all
-//! `karakuri-environment`'s and all reachable from here; **MIDI and replay are
-//! the two that are not wired up**, because a slice that added them would be
-//! unreviewable. The watcher was in that list until the Staging lane needed a
+//! `karakuri-environment`'s and all reachable from here; **replay is the one
+//! that is not wired up**, and it is not scaffolding that is missing but a
+//! home — an offline render belongs in `karakuri-cli` and no row asks the
+//! panel for it. The watcher was in that list until the Staging lane needed a
 //! producer, and what it took was one function — which is the measure of how
 //! far the rest of them are, rather than an argument for doing them all now.
 //! Audio, MCP and the recorder have each since gone the same way, one function
@@ -316,6 +331,7 @@ use std::time::{Duration, Instant};
 use karakuri_console::{egui, egui_wgpu, egui_winit};
 
 use karakuri_console::budget::PANEL_PASS;
+use karakuri_console::focus::{self, Step};
 use karakuri_console::input::{claim, wheeled, Claim, Turned, CONTROLS};
 use karakuri_console::panel::{Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released};
 use karakuri_console::repaint::{Change, Repaint};
@@ -328,7 +344,7 @@ use karakuri_console::view::{
     staging as staging_bay, tracker_group, transition as transition_row,
     transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Basis, Budgeted, Chose, Chosen, Go,
     Kind, McpPill, Picked, Picture, Read, Reading, Scope, Sequenced, Taken, Tracker,
-    TransitionSettings, View, DECKS, DECK_LETTERS, REGIONS,
+    TransitionSettings, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
 };
 // **How many slots a deck can hold**, which is how many this one has — see
 // [`SLOTS`]. Not re-exported at the crate root, and asked of the module that
@@ -352,7 +368,9 @@ use karakuri_engine::{
     MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink, DEFAULT_BUDGET_MS,
 };
 use karakuri_environment::clock::Clock;
-use karakuri_environment::{audio, history, mcp, mix, session, setfile, watch, Asked, Opening};
+use karakuri_environment::{
+    audio, history, mcp, midi, mix, session, setfile, watch, Asked, Opening,
+};
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::gate::{Class, Open};
@@ -364,7 +382,7 @@ use karakuri_store::record::Record;
 use karakuri_store::store::Store;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
@@ -1943,7 +1961,8 @@ impl Readout {
             // **A Set was let go over a strip**, and the load leaves by the
             // door every other control's operation leaves by — `played` is
             // what performs it and says what the deck did about it, exactly as
-            // it does for `l`. The line here is the *gesture* ending: two ways
+            // it does for a load from the keyboard. The line here is the
+            // *gesture* ending: two ways
             // in, one name, and the same sentences after the naming.
             Some(Released::Dropped(operation)) => {
                 if let Operation::LoadSet { deck, set } = &operation {
@@ -1957,8 +1976,8 @@ impl Readout {
             // **A carry let go over nothing asks for nothing**, and it says so
             // rather than saying nothing: a row picked up, carried and then
             // silently forgotten reads as a panel that missed the press. The
-            // cursor is left on the row that was taken, which is where `l`
-            // would load from next.
+            // cursor is left on the row that was taken, which is where
+            // `enter` in the library would load from next.
             Some(Released::Nowhere { set }) => {
                 println!(
                     "release: `{set}` was let go over nothing, so nothing was loaded — a drop \
@@ -2217,6 +2236,7 @@ impl Readout {
                     self.view.transport,
                     self.view.audio.as_ref(),
                     self.view.tracker,
+                    None,
                     &self.view.arrangement,
                 );
                 let asked = pill
@@ -2228,6 +2248,64 @@ impl Readout {
                 }
                 if let Some(ask) = asked {
                     did = self.arranged(ask);
+                    return (claim, did);
+                }
+                // **A `uses` line's card, which is a fifth**, asked here for
+                // the four above it and its own: it hangs out of a line inside
+                // an Inspector pane and down over the groups under it, so while
+                // it is down a press anywhere on the console belongs to it
+                // (`input::claim`'s rule 2, `docs/adr/0329-…`), and a press
+                // outside it is the dismissal.
+                //
+                // **The pick is asked before the capsule.** A press inside the
+                // card belongs to the card, and the capsule the card came out
+                // of is under it: asking the capsule first would make a press
+                // on the row that happens to overlap it re-open the list it was
+                // picking from.
+                //
+                // **Derived inline, like the load control below it**, because
+                // the press handler is where a control's derivation and its ask
+                // are held together — `press_handler::ASKED` reads this body and
+                // a call in a helper is a control this window is claiming and
+                // then declining, which is the seam that module exists for.
+                let room = view::to_egui(self.panel.layout().viewport());
+                let picked = self.view.wiring_open().and_then(|(pane_at, node, input)| {
+                    let pane = self.view.inspector.get(pane_at)?;
+                    let laid = inspector_pane(
+                        self.panel.layout(),
+                        pane_at,
+                        pane,
+                        self.view.scroll_in(pane_at),
+                    )?;
+                    laid.wired(ctx, pane, room, (node, input), at)
+                        .map(Wiring::Pick)
+                });
+                let wiring = picked.or_else(|| {
+                    self.view
+                        .inspector
+                        .iter()
+                        .enumerate()
+                        .find_map(|(index, pane)| {
+                            let laid = inspector_pane(
+                                self.panel.layout(),
+                                index,
+                                pane,
+                                self.view.scroll_in(index),
+                            )?;
+                            let (node, input) = laid.uses_chip(ctx, pane, at)?;
+                            Some(Wiring::Chip {
+                                pane: index,
+                                node,
+                                input,
+                            })
+                        })
+                });
+                if self.view.wiring_open().is_some() {
+                    did = self.wired(wiring.unwrap_or(Wiring::Shut));
+                    return (claim, did);
+                }
+                if let Some(ask) = wiring {
+                    did = self.wired(ask);
                     return (claim, did);
                 }
                 // **The Library bay's load control, and its list is a third
@@ -2320,6 +2398,7 @@ impl Readout {
                     self.view.transport,
                     self.view.audio.as_ref(),
                     self.view.tracker,
+                    self.view.map.as_ref(),
                     &self.view.arrangement,
                     self.view.look,
                 );
@@ -2328,6 +2407,88 @@ impl Readout {
                 if let Some(operation) = tone.or(exposure) {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
+                // **The `learn` pill, and a press on it is not an
+                // operation.**
+                //
+                // It is the same kind of control as the four `mcp` pills and
+                // for a stronger version of their reason —
+                // [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md),
+                // and
+                // [ADR-0336](../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md),
+                // which carries the argument. **A learn edits the map**: the
+                // layer every surface reaches the vocabulary through, rather
+                // than a member of the vocabulary the map addresses. Three
+                // things make it not an operation, and the last one is
+                // mechanical:
+                //
+                // - **Its operand is the pointer.** Which control a knob binds
+                //   to is *what the pointer is on*, and a model has no window
+                //   (ADR-0315) while a map line has no pointer — so an
+                //   operation for it would be `gap` in three of the page's
+                //   four columns, which is a gesture rather than an operation.
+                // - **A permission an actor can grant itself is not a
+                //   permission**, which is the `mcp` pills' own sentence: a
+                //   learn reachable over MCP would let a model rewire the
+                //   operator's hands.
+                // - **It must not reach the session stream.** A session
+                //   recorded from a controller replays with neither controller
+                //   nor map attached
+                //   (`docs/principles/0092-the-same-inputs-produce-the-same-frame.md`),
+                //   because which knob is which is a property of the room's
+                //   hardware. An operation writes a record; a record of a
+                //   learn would put the room's wiring in the timeline and a
+                //   replay would re-learn against whatever map was there.
+                //
+                // So: no `Operation`, no `Record`, and `Acted::Opened` — the
+                // type that will not let this be quietly fixed into the
+                // vocabulary.
+                if let Some(pill) = view::learn_pill(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.transport,
+                    self.view.audio.as_ref(),
+                    self.view.tracker,
+                    self.view.map.as_ref(),
+                    self.view.learn,
+                ) {
+                    if pill.hit(at) {
+                        self.view.learn = pill.next();
+                        println!(
+                            "{}",
+                            match self.view.learn {
+                                true =>
+                                    "learn: armed. point at a control and move a knob or hit a                                      pad, and the two are bound — the line goes in your own map                                      file. nothing is played from the surface while this is                                      lit, and it stays lit until you press it again.",
+                                false => "learn: off. the surface plays again.",
+                            }
+                        );
+                        return (claim, Acted::Opened);
+                    }
+                }
+                // **The `map` pill is a readout, and the press is swallowed
+                // here rather than left to fall through.** `input::claim`
+                // already keeps it off `egui`, so this changes nothing an
+                // operator can see — what it buys is that *this control asks
+                // for nothing* is a line of code rather than an absence, and
+                // that `ASKED` can name a derivation for it instead of
+                // carrying an entry that passes vacuously.
+                //
+                // It asks for nothing because reaching a different map while
+                // running is not built, and a capsule that opened a menu with
+                // nothing in it would be the scaffolding `view::transport`
+                // refuses.
+                if view::map_pill(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.transport,
+                    self.view.audio.as_ref(),
+                    self.view.tracker,
+                    self.view.map.as_ref(),
+                )
+                .is_some_and(|row| row.pill.contains(egui::Pos2::new(at.x, at.y)))
+                {
+                    return (claim, Acted::Nothing);
+                }
+                //
                 // **The `rec` pill at the end of that row**, and the row is
                 // the whole derivation: the pill takes the row's right padding
                 // and the health capsule and the frame readout are laid out
@@ -2358,25 +2519,29 @@ impl Readout {
                 if let Some(operation) = tempo {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
-                // **The deck head's four, one pane at a time.** Each pane is
-                // derived once and asked for all four, exactly as the mixer
+                // **The deck head's six, one pane at a time.** Each pane is
+                // derived once and asked for all six, exactly as the mixer
                 // bay is asked for its four: the anchor's place is measured
-                // from the mode chip's and the arrows' from the anchor's, so
-                // they are four questions about one laid-out pane. Nothing
+                // from the mode chip's and the arrows' from the anchor's, and
+                // the three at the right are measured leftwards from the fold,
+                // so they are six questions about one laid-out pane. Nothing
                 // else on the panel overlaps a pane — the Inspector's card is
                 // its own bay — so the order against the mixer below is
                 // arbitrary.
                 //
-                // **The four are asked in the order they sit in the row**,
+                // **The six are asked in the order they sit in the row**,
                 // and no two of them can answer for one point:
-                // `DeckHead::owns` is the union of exactly these four, and
+                // `DeckHead::owns` is the union of exactly these six, and
                 // `tests/deck_head.rs` asserts a press is one of them or none.
                 //
-                // **The fold is the fourth and it is not a mix control**: it
-                // asks the slot to composite or to overdraw, and `composited`
-                // below is what turns that into a re-aim. It is asked here
-                // with the other three because it is the same laid-out row and
-                // the same derivation, not because it goes to the same place.
+                // **The last three are not mix controls**: each one asks for a
+                // different field of what this slot's watcher is pointed at —
+                // the layering, the capacity its geometries run at, and the
+                // salt its randomness comes from — and `composited`, `resized`
+                // and `re_salted` below are what turn those into a re-aim.
+                // They are asked here with the other three because it is the
+                // same laid-out row and the same derivation, not because they
+                // go to the same place (ADR-0314, ADR-0328).
                 let deck_head = self
                     .view
                     .inspector
@@ -2393,6 +2558,8 @@ impl Readout {
                         head.sync(at)
                             .or_else(|| head.reanchor(at))
                             .or_else(|| head.scrub(at))
+                            .or_else(|| head.resized(at))
+                            .or_else(|| head.re_salted(at))
                             .or_else(|| head.compositing(at))
                     });
                 if let Some(operation) = deck_head {
@@ -2523,6 +2690,37 @@ impl Readout {
                 if let Some(operation) = sensed {
                     return (claim, Acted::Emitted(Some(operation)));
                 }
+                // **A parameter row's publish mark, one pane at a time**, and
+                // it is the leftmost cell of the row the fader is on: the
+                // number where the control is on the deck's interface and a dot
+                // where it is not. It is asked *before* the fader below because
+                // the two are on one row and never overlap — the mark is a
+                // fixed track of the mock's grid and the fader begins two
+                // tracks along — so the order is arbitrary in fact and this one
+                // reads down the row.
+                //
+                // **What it asks for is the whole interface**, not this entry:
+                // a knob is learned against a position, so an operation that
+                // said *drop this one* would leave two surfaces disagreeing
+                // about what the positions are (`view::InspectorPane::publishing`,
+                // `docs/adr/0329-…`).
+                let published = self
+                    .view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
+                        at_pane.publishing(pane, at)
+                    });
+                if let Some(operation) = published {
+                    return (claim, Acted::Emitted(Some(operation)));
+                }
                 // **The Program bay head's `solo`**, and it is the one
                 // control on this panel that acts on the console's own shape
                 // from inside a bay rather than from the Outputs row. What it
@@ -2568,7 +2766,8 @@ impl Readout {
                 // is depends on the first three and a second walk would put
                 // the capsule a press lands on somewhere the wash is not.
                 //
-                // **A press names the chip; it does not step.** `e` steps and
+                // **A press names the chip; it does not step.** `space` on
+                // the addressed chip steps, and
                 // wraps because a bare press cannot say *which*, and this one
                 // can — P-0090's division met by two surfaces rather than an
                 // inconsistency between them. What comes back is `Chosen`: the
@@ -3216,6 +3415,63 @@ impl Readout {
         }
     }
 
+    /// **What a press on a `uses` line did** — the capsule, or a row of the
+    /// card it puts down (`docs/adr/0329-…`).
+    ///
+    /// [`App::aimed`]'s shape one bay along and the same division: every arm is
+    /// either this console's own state moving or one operation emitted down the
+    /// path every other operation takes. **Nothing is performed here** — a
+    /// `WireInput` is [`wired_input`]'s, which is the same re-aim a model's
+    /// `wire_input` already goes through.
+    ///
+    /// **A press on the capsule of a card that is down shuts it**, because the
+    /// capsule is *outside* the card and every press outside a card that is
+    /// down is the dismissal. Pressing it twice therefore opens and closes, and
+    /// no arm has to special-case it.
+    fn wired(&mut self, ask: Wiring) -> Acted {
+        match ask {
+            Wiring::Chip { pane, node, input } => {
+                let named = self
+                    .view
+                    .inspector
+                    .get(pane)
+                    .and_then(|pane| pane.nodes.get(node))
+                    .and_then(|node| node.uses.get(input));
+                match named {
+                    Some(uses) if uses.candidates.is_empty() => {
+                        println!(
+                            "wire: `{}` takes one node of its kind and this deck holds only the                              one it is already wired to — there is nothing to pick",
+                            uses.slot
+                        );
+                    }
+                    Some(uses) => println!(
+                        "wire: `{}` is wired to `{}` — pick a node to wire it to instead",
+                        uses.slot, uses.to
+                    ),
+                    None => {}
+                }
+                self.view.open_wiring(pane, node, input);
+                Acted::Nothing
+            }
+            Wiring::Shut => {
+                self.view.shut_wiring();
+                Acted::Nothing
+            }
+            // **The pick puts the card away, rewires, and emits**, which is one
+            // gesture: the card left down over the pane the rebuild is about
+            // would be a list to dismiss before the picture could be seen.
+            //
+            // **Emitted and performed where every other operation is**, which
+            // is [`App::performed`]: the run's edge list moved to [`Engine`] so
+            // that a press could reach it, because this type is the console's
+            // readout and holds no engine at all. See [`wired_input`].
+            Wiring::Pick(operation) => {
+                self.view.shut_wiring();
+                Acted::Emitted(Some(operation))
+            }
+        }
+    }
+
     /// **What a press on the Library bay's load control did** — the button,
     /// the pulldown, or a row of the list it puts down (ADR-0305).
     ///
@@ -3517,7 +3773,7 @@ impl Readout {
 
     /// **A press on a scope chip**, and it is the surface performing its own
     /// pointer — [`pointed`]'s shape one bay along, done here rather than in
-    /// `performed` for the reason the `e` key's is done at the key.
+    /// `performed` for the reason the scope key's is done at the key.
     ///
     /// `Operation::SelectScope`'s payload is `Undecided`, so a performer
     /// reading the operation could not tell which library was chosen and would
@@ -3655,7 +3911,7 @@ impl Readout {
     /// it: the row taken is the row marked, for the length of the carry and
     /// afterwards.
     ///
-    /// **Afterwards is deliberate.** The cursor is the operand `l` reads
+    /// **Afterwards is deliberate.** The cursor is the operand a load reads
     /// (`view::View::cursor_row`), so a drop that landed and a carry that was
     /// let go over nothing both leave the keyboard aimed at the Set the hand
     /// last touched — *two ways in, one name*, met at the pointer this bay
@@ -3731,7 +3987,7 @@ impl Readout {
     /// it is done, on the branch every emitted operation already takes.
     ///
     /// **The cursor is not moved.** A carry moves it because the mark on a row
-    /// is what a drag has to draw and because `l` reads it afterwards; a
+    /// is what a drag has to draw and because a load reads it afterwards; a
     /// landing reads neither — the row is the operand and the deck is the
     /// pulldown's — so moving the mark would be this press quietly re-aiming
     /// the key beside it.
@@ -3937,7 +4193,7 @@ impl Readout {
                  with the program, written by nobody, and what a run with no paths on \
                  the command line opens on. the Library bay's `presets` scope lists the \
                  {} `.kset` file{} in it — the parts beside them are what those files \
-                 name rather than rows of their own — and `l` on one takes it into the \
+                 name rather than rows of their own — and `enter` on one takes it into the \
                  store and then loads it, which is why opening a preset leaves a row \
                  under `all` — and under `my sets` only if you star it.",
                     presets.dir.display(),
@@ -4056,15 +4312,16 @@ impl Readout {
         // and named `landed` and `rec`, both of which left that list on
         // 2026-09-08 and both of which this panel draws.
         println!(
-            "two things the mock draws in that row are NOT drawn, and each is a control \
-             over machinery that is in neither this crate nor this program: learn and map. \
-             `view::transport` is where that list is kept and says what is missing behind \
-             each. it has only ever got shorter: `audio-in` left it when this program \
-             opened an input, `tap`, the octave and the offset track left it when the \
-             tracker group landed, and `rec` and `landed` left it when this program grew a \
-             session recorder and a watcher on every slot — all of them are drawn, they are \
-             pressed, and each emits the operation its key already emitted or reports a \
-             stream this program really has."
+            "every control the mock draws in that row is drawn, and that list is empty for \
+             the first time. `view::transport` is where it is kept. it has only ever got \
+             shorter: `audio-in` left it when this program opened an input, `tap`, the \
+             octave and the offset track left it when the tracker group landed, `rec` and \
+             `landed` left it when this program grew a session recorder and a watcher on \
+             every slot, and `learn` and `map` left it when this program opened a MIDI port \
+             — all of them are drawn, they are pressed, and each emits the operation its \
+             key already emitted or reports something this program really has. `map` is the \
+             one that is a READOUT: it names the file that is loaded, and reaching a \
+             different map while running is not built, so it has no chevron and no menu."
         );
         // **What the pill is actually reading, off the view rather than off a
         // sentence.** The legend was found lying five ways on 2026-08-30 by
@@ -4464,9 +4721,10 @@ impl Readout {
              in a gap takes the boundary and it follows the pointer. a press on a LIBRARY \n\
              row takes that Set in hand and nothing happens until you let it go: over a \n\
              mixer strip it loads that deck, anywhere else it loads nothing. that is the \n\
-             third way in to the same command `l` performs, and the only one that names \n\
-             both the Set and the deck in one gesture. the second is the `load` button in \n\
-             that bay's foot, which lands on the deck the pulldown beside it names rather \n\
+             third way in to the same load `enter` performs in the library, and the only \n\
+             one that names both the Set and the deck in one gesture. the second is the \n\
+             `load` button in that bay's foot, which lands on the deck the pulldown \n\
+             beside it names rather \n\
              than on the deck the keys are addressed to, so a load can be aimed without \n\
              moving the selection (ADR-0305). everywhere else \n\
              `karakuri_console::input::claim` decides, and the {CONTROLS} controls its rule \n\
@@ -4479,7 +4737,12 @@ impl Readout {
              name three controls while every one of them answered a press."
         );
         println!();
-        println!("keys — the pointer's position decides what each one acts on:");
+        println!(
+            "keys — `tab` and `esc` move the address, drawn as a dashed ring on the bay \n\
+             that has it, and the four below them act on whatever that address is on. the \n\
+             mixer and the library have the grammar; the letters after it are global, and \n\
+             `f`, `g`, `s` and `u` still take their region from the pointer:"
+        );
         for (key, what) in KEYS {
             println!("  {key:<10}{what}");
         }
@@ -4506,10 +4769,19 @@ impl Readout {
 /// module: a page heading is what a check reads, and it is not something this
 /// program says to anybody.
 ///
-/// The order is the order they print in — the arrangement's keys, then the
-/// deck, then the six that address the mix on it, then the library, then the
-/// five that address the room, then `esc`, then the three that are live only
-/// while the arrangement pill is asking for a name.
+/// The order is the order they print in, and it is the grammar's shape since
+/// 2026-09-10: the two keys that move the address, then the four that act
+/// inside a bay and the rub-out beside them, then the letters that survive
+/// globally.
+///
+/// **`digit` is one entry and not ten**, because a digit is one key of the
+/// grammar: `1` is the mixer's first strip and the library's first row, so ten
+/// entries would print ten sentences saying the same thing and the page would
+/// still have to name the bay. It is also the one key
+/// [`key_column::bound`](key_column) cannot read out of this file's text — the
+/// arm is a guard rather than ten literals — so it is contributed by
+/// `karakuri_console::focus::BUILT`, which is the dispatch table the grammar
+/// is written in (ADR-0333).
 ///
 /// **`p` is the latency offset here and was the report until 2026-08-31.**
 /// The page specifies the offset as `o` and `p`; a badge naming two keys with
@@ -4517,7 +4789,65 @@ impl Readout {
 /// no useful shortcut to point at loses the letter rather than keeping it. The
 /// operation it named is still `karakuri_console::panel::Op::Report` and
 /// nothing in this program asks for it.
+///
+/// **Twelve letters left on 2026-09-10 and none of them was retired before the
+/// grammar reached its row.** `0`–`3` are the Mixer's `1`–`4`, `[ ] \` and
+/// `; '` are the arrows and `space` on the addressed trim and fader, `m` is
+/// `space` on the blend chip, `e` is `space` on the Library's head and `l` is
+/// `enter` on one of its rows (ADR-0259, ADR-0333). What is left is the seven
+/// globals the operand rule keeps, plus `f`, `g`, `s` and `u`, which take their
+/// region from the pointer and are owed the focus in a bay this slice does not
+/// build, and `k`, which the Library bay draws no control for.
 const KEYS: &[(&str, &str)] = &[
+    // **The two that move the address**, and they are the same in every bay
+    // because they are not addressed to one.
+    (
+        "tab",
+        "focus the next bay, and shift-tab the one before — the ring is the arrangement's own \
+         order, down a column and then across",
+    ),
+    (
+        "esc",
+        "up one level of the focused bay's address — or, while a name is being typed, abandon \
+         the name. it does not quit: close the window",
+    ),
+    // **The four that act inside a bay**, and they are the same four in every
+    // bay because they are rules about kinds of thing rather than about bays
+    // (ADR-0259). Which bays have them is
+    // `karakuri_console::focus::BUILT` — the mixer and the library today.
+    (
+        "digit",
+        "the nth thing one level below the address, counting what the bay drew from one — and 0 \
+         the bay's own head",
+    ),
+    (
+        "up",
+        "the neighbour above, or a level's next value — a tenth on the trim and on the fader. \
+         the trim is not held at 1.0, because the mix is HDR; the fader is held inside 0 and 1",
+    ),
+    ("down", "and the neighbour below, or a tenth down"),
+    (
+        "left",
+        "the neighbour to the left, where a bay draws its items in a row — the mixer's strips \
+         are one, and naming a strip is the deck selection",
+    ),
+    ("right", "and the neighbour to the right"),
+    (
+        "space",
+        "the addressed thing's next state — a residency, a blend mode, a mask shape, a library \
+         scope — or, on a level, the value it was declared at. a space in a name while the \
+         arrangement pill is asking for one",
+    ),
+    (
+        "enter",
+        "the act the addressed thing is for: on a library row, load that Set onto the selected \
+         deck. it takes the name the arrangement pill is asking for, while it asks",
+    ),
+    ("backspace", "rub out a letter of that name"),
+    // **The seven that survive as global letters**, plus the two the grammar
+    // has not reached yet. A key is global where the operation it names has no
+    // operand for focus to supply, or where its only operand is the choice the
+    // key itself spells.
     ("f", "fold the region under the pointer"),
     ("g", "fold the split enclosing the region under the pointer"),
     (
@@ -4528,49 +4858,6 @@ const KEYS: &[(&str, &str)] = &[
     ("u", "undo the solo"),
     ("r", "reset to a fresh arrangement"),
     ("n", "the room: day or night"),
-    (
-        "0",
-        "select deck A, which is the deck a load is addressed to",
-    ),
-    ("1", "select deck B"),
-    ("2", "select deck C"),
-    (
-        "3",
-        "select deck D — bound whatever the deck has, and this deck has a slot for it",
-    ),
-    // **The six that address the mix, all of them on the selected deck**, and
-    // the one place a key here is spelled twice over: `\` is two characters in
-    // this table, because that is how the arm's own `Key::Character("\\")`
-    // reads to
-    // `key_column::bound`, which takes this file's text as it is written. The
-    // page's badge spells it the same way for the same reason, and the legend
-    // therefore prints two characters for a key that is one.
-    (
-        "[",
-        "the selected deck's trim, a tenth down — the level material arrives at, colour only",
-    ),
-    (
-        "]",
-        "and a tenth up — not held at 1.0, because the mix is HDR",
-    ),
-    ("\\\\", "the trim back to 1.0"),
-    (
-        ";",
-        "the selected deck's fader, a tenth down — the one of the two that silences under every \
-         blend mode",
-    ),
-    (
-        "'",
-        "and a tenth up — held inside 0 and 1, which a proportion of a blend is",
-    ),
-    (
-        "m",
-        "the blend mode: the next of add, over and max, and it wraps",
-    ),
-    (
-        "e",
-        "the library's scope: the next chip along, and it wraps",
-    ),
     (
         "b",
         "tap the beat — three taps set the tempo, any tap sets the phase",
@@ -4592,25 +4879,10 @@ const KEYS: &[(&str, &str)] = &[
         "p",
         "and five up — positive, and the picture leads it; held inside 200 ms either way",
     ),
-    ("up", "the library cursor, up a row"),
-    ("down", "and down, as far as the rows the bay drew"),
-    ("l", "load the Set under that cursor onto the selected deck"),
     (
         "k",
-        "keep what the selected deck is playing — a Set filed under the time you saved it",
-    ),
-    (
-        "esc",
-        "quit — or, while a name is being typed, abandon the name",
-    ),
-    (
-        "return",
-        "take the name the arrangement pill is asking for, while it asks",
-    ),
-    ("backspace", "rub out a letter of that name"),
-    (
-        "space",
-        "a space in it — text while the pill is open, and not a key",
+        "keep what the selected deck is playing — a Set filed under the time you saved it. the \
+         library bay draws no keep control, so the grammar has nothing to reach here yet",
     ),
 ];
 
@@ -5082,7 +5354,7 @@ impl Sources {
 /// program rather than about a flag, and the answer is that **this program is a
 /// `--watch` run that cannot be turned off**: every slot is built over a
 /// `watch::Watch` ([`watched`]), the deck's whole way of changing material is an
-/// edit picked up by a poll, and `l` over the Library bay writes into this same
+/// edit picked up by a poll, and a load off the Library bay writes into this same
 /// directory on a key press ([`loading`]). There is no run of this binary that
 /// opens a file read-only, so the condition is not *checked* here — it is
 /// **true**, and the copies are made once, before the first frame, rather than
@@ -5456,6 +5728,19 @@ fn number_for<T: std::str::FromStr>(
 /// would be frames spent on nothing; slower would be a surface answering more
 /// slowly than the files it is watching.
 const SERVED: Duration = Duration::from_millis(100);
+
+/// **What one frame of a control surface is sized for**, on this side of the
+/// channel.
+///
+/// A surface's fastest gesture is a fader sweep, which a device sends at a few
+/// hundred messages a second, and every one of them is coalesced to one
+/// operation per control before it reaches here
+/// (`karakuri_environment::midi`'s `Router::emit`). So a frame's worth is a
+/// map's continuous controls plus whatever pads were hit, which is single
+/// figures — and this is generous rather than measured, for the reason the
+/// buffer exists at all: it is reserved once so that the frame path never
+/// grows it (P-0091).
+const MAPPED: usize = 32;
 
 // -- where `STEPS_A_FRAME` was ------------------------------------------
 //
@@ -5925,6 +6210,24 @@ struct Engine {
     /// for the reason the whole of [`Engine`] is on this side: the channel is
     /// `karakuri-environment`'s and the engine takes no environment.
     aimed: Vec<Aiming>,
+    /// **The run's wiring** — every edge a `wire_input` has written, for the
+    /// whole run and not per slot.
+    ///
+    /// One list because `--edge` is one list: an edge names the node that
+    /// declares the input and what its procedure calls it, and a Set that has
+    /// not got that node passes it over where it is built. See [`rewired`].
+    ///
+    /// **What a rebuild carries and what a save records**, which is why it lives
+    /// here rather than inside a watcher: [`Aiming::re_aim`] restates it to the
+    /// worker and [`playing_values`] writes it into the file, and those are one
+    /// list or they are two answers to what the run is wired with.
+    ///
+    /// **It lives beside the aims rather than beside the saves**, and that is
+    /// what lets a press reach it: a rewiring writes this list and re-aims a
+    /// slot, and both halves are here. It was `Keeping`'s until 2026-09-09,
+    /// when the Inspector's `uses` line gave the list a second writer that is
+    /// not a model's request — see `docs/adr/0329-…`.
+    edges: Vec<karakuri_engine::set::Edge>,
     /// **Where this deck says which files its slots are running**, for the
     /// readers that are not on this thread — see [`Aiming::pointing`], which is
     /// a clone of this, and [`karakuri_environment::mcp::Slots`].
@@ -7446,6 +7749,10 @@ impl Engine {
         });
         Engine {
             deck,
+            // **Nothing wired by hand yet**, which is the state a run begins
+            // in: the launch aims carry whatever `--edge` said, and this is the
+            // list a rewiring writes and every later re-aim restates.
+            edges: Vec::new(),
             capacity,
             present,
             picture,
@@ -9511,17 +9818,18 @@ fn taking_in(root: &std::path::Path, from: Taking<'_>, row: &str) -> Result<Take
 /// performs two of the page's rows and names one, and the row it dropped would
 /// be the one **nothing in this workspace constructs**.
 ///
-/// # Naming what a surface performed is `e`'s rule, not a new one
+/// # Naming what a surface performed is the scope's rule, not a new one
 ///
-/// The scope key steps the mark itself and emits `Operation::SelectScope`
-/// anyway, *"so that the press is recorded as `Silent(Surface)` rather than as
+/// `space` on the Library's head steps the mark itself and emits
+/// `Operation::SelectScope` anyway, *"so that the press is recorded as `Silent(Surface)` rather than as
 /// nothing at all"*. This is that, one key along: `written` answers
 /// `Silent(NoRecord)` for a transfer, nothing in [`App::performed`] performs
 /// one, and the emission is the naming.
 ///
 /// # And it is not the key badge
 ///
-/// `key_column::ROWS` maps `l` to *Load material into a deck* alone, and that
+/// `key_column::ROWS` maps `enter` in the Library to *Load material into a
+/// deck* alone, and that
 /// stays true: what an operator reaches from the keyboard is a load, and the
 /// taking-in is what a load off `presets` does on the way. ADR-0213's
 /// distinction is between an operator **reaching** an operation and something
@@ -10347,11 +10655,7 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
         strip.gain_to = destination(deck, slot, Control::Gain);
         strip.opacity_to = destination(deck, slot, Control::Opacity);
         strip.blend = blend_mode(deck.blend(slot));
-        strip.mask = match deck.mask(slot).kind() {
-            MaskKind::None => view::Mask::None,
-            MaskKind::Linear => view::Mask::Linear,
-            MaskKind::Radial => view::Mask::Radial,
-        };
+        strip.mask = masked(deck.mask(slot).kind());
         // **Read for the press and painted nowhere**, which is what
         // `view::Strip::mask_angle` is for: the chip asks for a shape and the
         // operation carries an angle, so the angle it carries is the one the
@@ -10962,7 +11266,22 @@ fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Option<view::Sou
 /// **The other three arrived with ADR-0319 and ADR-0280**, which is what that
 /// sentence was waiting for: the writer the authority chip wanted is
 /// `Deck::set_authority`, and the parameter's is `Deck::write_param`.
-fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
+fn inspector(
+    deck: &Deck,
+    names: &[String],
+    // **Where each slot's watcher is pointed**, which is what a node's `uses`
+    // line reads: `Aiming::at.edges` is the wiring that slot was last sent, so
+    // a pane draws the wiring of the deck it is *showing* rather than a run
+    // list read once for four decks. It is the same list — `rewired` restates
+    // the run's whole wiring to every slot it names — and this is the copy that
+    // belongs to the slot the pane is about.
+    //
+    // **A pane with no aim behind it draws no `uses` line**, which is every
+    // test in this crate that hands none in and is honest either way: a slot
+    // nothing is pointed at is a slot nothing will rebuild.
+    aims: &[Aiming],
+    out: &mut Vec<view::Pane>,
+) {
     out.clear();
     for slot in 0..deck.slot_count().min(view::PANES) {
         // The strip's name for the same slot, and for [`mixer`]'s reason: a
@@ -10972,12 +11291,52 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
         let set = deck.slot(slot).set();
         let transport = deck.transport(slot);
         let composite = set.layering() == Layering::Composite;
+        // **The deck head's two build chips**, and all three readings are of
+        // what **landed** rather than of what was asked: the number the slot is
+        // running at, the declaration it is measured against, and the salt the
+        // next one is derived from. That is the fold's own division one field
+        // over — a build may still be rolled back, and the Staging lane is what
+        // says so — and it is what lets this be read off a `Set` with no aim in
+        // sight (ADR-0328).
+        let declared = set.declared_capacities();
+        let running = set.source_capacities();
+        let salts = set.source_salts();
+        let aimed = match (running.first(), declared.first(), salts.first()) {
+            (Some(&capacity), Some(&[_, _, default]), Some(&salt)) => Some(view::Aimed {
+                capacity,
+                // **Lit says the deck is not on what its material declares**,
+                // which is the fact a chip can state from what landed. *An aim
+                // carries a number* is the other candidate and is a reading of
+                // what was asked: a hand that steps round to the declared
+                // default would leave the chip lit over a slot running exactly
+                // what its files say.
+                stated: capacity != default,
+                capacities: capacity_ladder(declared),
+                salt: karakuri_engine::set::derived_salt(salt, 1),
+            }),
+            // **A deck with no geometry has neither chip**, which is the state
+            // this `Option` is: there is no element count to size and no
+            // randomness to seed.
+            _ => None,
+        };
 
         // Every published control, resolved to the node it belongs to and
         // numbered by its position in the interface — which is the number a
         // MIDI control is learned against, so it counts the controls that were
         // published and not the rows that could be placed.
         let published = set.published();
+        // **And every control the material declares**, which is what the
+        // publish mark is chosen *from*: a row taken off the interface has to
+        // stay drawn or the choice cannot be unmade, and its declared range is
+        // what putting it back is over. `Set::declared_interface` is the
+        // reading — the default interface, whether or not one is authored
+        // (ADR-0100, `docs/adr/0329-…`).
+        //
+        // **Identity is the address and the key together**, which is
+        // `Published`'s own pair: a wildcard control and an addressed one may
+        // share a key and are two controls, and comparing names would fold a
+        // renamed control onto the declaration it renames.
+        let declared = set.declared_interface();
         let mut rows: Vec<(Option<(Layer, u32)>, view::Param)> = Vec::new();
         for (at, control) in published.iter().enumerate() {
             // **By the address the control carries, not by its name.** The
@@ -10991,7 +11350,7 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
             rows.push((
                 node,
                 view::Param {
-                    ord: at + 1,
+                    ord: Some(at + 1),
                     name: control.name.clone(),
                     value,
                     // **The range and not the position.** A fader a hand can
@@ -11021,6 +11380,61 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
                     // Asked at the node the row was resolved to, which is the
                     // node the row *is*: `node_of` drops a control covering
                     // more than one.
+                    bound: node
+                        .and_then(|(layer, index)| source_of(set, layer, index, &control.key)),
+                },
+            ));
+        }
+        // **Then every declared control the interface leaves out**, drawn with
+        // no number, no fader and no figure — the mark that publishes them is
+        // the cell the number would be in, so a row that vanished would be a
+        // choice nobody could unmake (`docs/adr/0329-…`).
+        //
+        // **After the published ones**, which is the order they are drawn in
+        // *within a group*: a group's published rows come first and the ones
+        // off the list follow, so the numbers a reader is counting down do not
+        // step over a gap.
+        //
+        // **On a Set nobody has narrowed this loop adds nothing**, because
+        // `Set::published` answers with `declared_interface` itself there —
+        // which is why every deck opens looking exactly as it did before this
+        // control existed.
+        let mut unplaced = 0;
+        for control in declared {
+            if published
+                .iter()
+                .any(|shown| shown.at == control.at && shown.key == control.key)
+            {
+                continue;
+            }
+            unplaced += 1;
+            let node = node_of(set, &control);
+            rows.push((
+                node,
+                view::Param {
+                    // **No position, because a control off the interface has
+                    // none** — and a position is what a MIDI knob counts.
+                    ord: None,
+                    name: control.name.clone(),
+                    value: set
+                        .value_at(control.at, &control.key)
+                        .unwrap_or(control.range[0]),
+                    // **The declared range and not a narrowed one**: this is
+                    // what publishing it back would be over, and the row is
+                    // drawn from `declared_interface`, which never narrows.
+                    range: control.range,
+                    param: karakuri_operation::ParamAt {
+                        node: control.at.map(|(layer, index)| karakuri_operation::NodeAt {
+                            layer: asked_layer(layer),
+                            index,
+                        }),
+                        key: control.key.clone(),
+                    },
+                    // **Nothing can be holding it**, because a binding names a
+                    // published control or a param and the row draws neither a
+                    // value nor a sensitivity row. Read anyway rather than
+                    // assumed `None`: what a Set holds is the engine's answer
+                    // and this file does not have a second one.
                     bound: node
                         .and_then(|(layer, index)| source_of(set, layer, index, &control.key)),
                 },
@@ -11083,6 +11497,10 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
                 name: name.clone(),
                 authority,
                 renderers: Vec::new(),
+                uses: match aims.get(slot) {
+                    Some(aiming) => uses_of(set, &aiming.at.edges, name),
+                    None => Vec::new(),
+                },
                 params: params(layer, index),
             });
         }
@@ -11097,18 +11515,31 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
                         .map(|(_, param)| param.clone()),
                 );
             }
+            // **Published first and in interface order, then the ones off the
+            // list.** `Option`'s ordering puts `None` last, which is the order
+            // the rows are drawn in within a group and is the reason the sort
+            // is on the whole field rather than on a position: a number a
+            // reader is counting down should not step over a gap.
             params.sort_by_key(|param| param.ord);
             nodes.push(view::Node {
                 addr: layer_word(Layer::L4).to_owned(),
                 name: RENDERERS_NODE.to_owned(),
                 authority: renderer_authority,
                 renderers,
+                // **The folded renderer head takes none**, and it is the same
+                // reason its authority chip is dropped where it stands over
+                // more than one node: a `uses` line names *one* node's
+                // declaration, and this head is not a node. A renderer that
+                // declares an input is reachable from the file and from a
+                // model, and the panel says so rather than drawing one of
+                // several answers as the answer (ADR-0216's shape).
+                uses: Vec::new(),
                 params,
             });
         }
 
         let placed: usize = nodes.iter().map(|node| node.params.len()).sum();
-        if placed < published.len() {
+        if placed < published.len() + unplaced {
             // **Said rather than swallowed**, for the reason every other
             // omission in this file is said: a pane short of a row looks
             // exactly like a Set that published fewer. See `node_of` — a
@@ -11145,9 +11576,106 @@ fn inspector(deck: &Deck, names: &[String], out: &mut Vec<view::Pane>) {
             anchor_bpm: transport.anchor_bpm(),
             scrub_beats: transport.scrub_beats(),
             composite,
+            aimed,
             nodes,
         });
     }
+}
+
+/// **The `uses` lines one node draws**: every input its procedure declares,
+/// with the node filling each.
+///
+/// # The edges *are* the declarations, and that is forced rather than chosen
+///
+/// Nothing on a built `Set` says which inputs a node declares — the `uses`
+/// declaration is read at `Set::validate` and dropped — and nothing has to,
+/// because **an unbound declared input is refused where the Set is built**
+/// (ADR-0152: *"`If there is exactly one, use it` is the implicit rule the whole
+/// item exists to remove, and the refusal names the slot"*). So a slot that is
+/// *running* has an edge for every input it declares, and the run's edge list
+/// filtered to the nodes this Set holds is that list exactly. A reader on the
+/// engine would be a second answer to a question the refusal already settles.
+///
+/// # The candidates are the nodes on the layer the input already reaches
+///
+/// A `uses` slot has a type — `Geometry`, `Field`, `Camera`, `Source` — and the
+/// build refused anything else, so **the node currently wired is of the right
+/// kind by construction** and its layer is the kind. The candidates are the
+/// other nodes on that layer, in node order, which is a list every entry of
+/// which the build accepts.
+///
+/// **It is inference and it is honest about being it.** What this cannot do is
+/// offer a kind the input takes and the deck currently reaches by no edge — a
+/// `Field` input on a deck holding one field has an empty list, and the card
+/// does not open. That is a control offering less than the language allows
+/// rather than more, which is the side of P-0090 to be wrong on: a name this
+/// misses is still reachable from a model and from `--edge`.
+///
+/// **The declaring node is not in its own list.** A node wired to itself is a
+/// cycle the build refuses, and offering it would be offering a refusal.
+fn uses_of(
+    set: &karakuri_engine::set::Set,
+    edges: &[karakuri_engine::set::Edge],
+    node: &str,
+) -> Vec<view::Uses> {
+    edges
+        .iter()
+        .filter(|edge| edge.node == node)
+        .filter_map(|edge| {
+            let (kind, _) = set.node_named(&edge.to)?;
+            let candidates = set
+                .node_names()
+                .iter()
+                .filter(|name| name.as_str() != node && name.as_str() != edge.to)
+                .filter(|name| set.node_named(name).is_some_and(|(at, _)| at == kind))
+                .cloned()
+                .collect();
+            Some(view::Uses {
+                slot: edge.slot.clone(),
+                to: edge.to.clone(),
+                candidates,
+            })
+        })
+        .collect()
+}
+
+/// **What a slot's capacity chip steps through**: the powers of two every one
+/// of this deck's geometries would accept, ascending.
+///
+/// # The intersection, because a re-aim sends one number
+///
+/// `watch::Aim::capacity` is one `Option<u32>` for the whole slot —
+/// `--capacity`'s own field, which *"overrides every source"* — so a Set
+/// holding two geometries builds both at whatever this asks for, and a number
+/// only one of them declares is a build the other refuses. The fold is
+/// `lo.max(min)`, `hi.min(max)`, which is `declared`'s arithmetic one bay over
+/// where two nodes publish one key: the range is the part every declarer
+/// accepts and never any one of them on its own.
+///
+/// **An empty intersection is an empty list**, and that is a real state rather
+/// than an unreachable one: two geometries whose declared ranges do not overlap
+/// have no capacity a single re-aim could send. The chip is then drawn and
+/// claims nothing, which is what `view::Aimed::capacities` says at the field.
+///
+/// **Powers of two, and nothing here says why they are the right rungs** — that
+/// is the console's affordance and its record
+/// (`docs/adr/0328-…`); what this owes is that every rung it offers is one the
+/// engine will build, which is `Set::declared_capacities` being the same
+/// declaration `karakuri_engine::set::capacity_in_range` refuses against
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+fn capacity_ladder(declared: &[[u32; 3]]) -> Vec<u32> {
+    let Some(lo) = declared.iter().map(|at| at[0]).max() else {
+        return Vec::new();
+    };
+    let Some(hi) = declared.iter().map(|at| at[1]).min() else {
+        return Vec::new();
+    };
+    // `0..32` and not `0..=32`: `1u32 << 32` is undefined, and 2^31 is the
+    // largest power of two a `u32` capacity can be.
+    (0..32)
+        .map(|k| 1u32 << k)
+        .filter(|rung| (lo..=hi).contains(rung))
+        .collect()
 }
 
 /// **What the mock calls the group its renderer chips sit under.** Not a node
@@ -11204,39 +11732,29 @@ fn blend_mode(blend: Blend) -> BlendMode {
     }
 }
 
-/// **The next blend mode round the cycle**, wrapping from the last back to the
-/// first — what one press of `m` asks a deck's blend to become.
-///
-/// **The key names where it arrives and never a step**, which is
-/// [`Operation::SetBlendMode`]'s own shape: there is no step in the vocabulary
-/// to name, so the cycle is this surface's arithmetic and the operation
-/// carries the destination
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-/// That is `karakuri_console::view::Mixer::blend`'s affordance at a key instead
-/// of at a chip — one control emitting three operations — and it is the same
-/// three round the same way
-/// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)).
-///
-/// **A match rather than an index into [`BlendMode::ALL`]**, which is the
-/// console's reason at its own cycle: a fourth mode does not compile until
-/// somebody says what follows it. The price is that the order is written twice
-/// — here and in `ALL` — and
-/// [`tests::m_cycles_the_three_modes_in_the_order_the_chip_cycles_them`] walks
-/// `ALL` through this and asserts they are one order.
-fn after_blend(blend: BlendMode) -> BlendMode {
-    match blend {
-        BlendMode::Add => BlendMode::Over,
-        BlendMode::Over => BlendMode::Max,
-        BlendMode::Max => BlendMode::Add,
-    }
-}
+// **The blend cycle is `karakuri_console::view::after` and is not here.**
+//
+// `after_blend` stood here until 2026-09-10 and said the same three modes in
+// the same order as the console's own cycle, with a test each. The key that
+// asked it was `m`; under the grammar `space` on an addressed blend chip asks
+// the console, and the console has always had the cycle because the *chip*
+// needs it (ADR-0187, P-0090 — a toggle is an affordance built over operations
+// by whoever draws the control). **So there is one cycle where there were
+// two**, and `karakuri-console/tests/blend.rs` is what holds it: it walks
+// `BlendMode::ALL` through the chip and asserts the wrap, which is exactly
+// what the test deleted beside this function asserted from the other side
+// (ADR-0333).
+//
+// `blend_mode` stays, and is what `holding` reads the deck through: the
+// engine's three and the vocabulary's three are two crates' words for the same
+// states, and a `match` is where they are made to agree.
 
 /// **One press of a gain key.** Linear and additive, because a fader is: the
 /// same press means the same amount wherever the trim is standing, rather than
 /// a proportion of wherever it happens to be.
 ///
 /// **A tenth, because that is what the other keyboard steps by.**
-/// `docs/manual/operations.html` names `[ ] \` and says nothing about how far
+/// `docs/manual/operations.html` names the keys and says nothing about how far
 /// a press goes, so the size comes from `karakuri-cli`'s own `GAIN_STEP` —
 /// which `docs/manual.md` documents as *"focused slot gain down / up"* — and
 /// it is copied rather than shared because neither binary may depend on the
@@ -11248,20 +11766,164 @@ const GAIN_STEP: f32 = 0.1;
 /// console's page is silent about this one too.
 const OPACITY_STEP: f32 = 0.1;
 
-/// **Where a gain key takes the trim it is standing on**, or `None` for a key
-/// that is not one of the three.
+/// **Which of the grammar's four keys a press is**, or `None` for a key that is
+/// not one of them.
 ///
-/// [`offset_step`]'s shape one bay along: the arm reads the step out of the
-/// letter rather than carrying a literal per arm, so which way each key goes
-/// is a value this file can be asked about without a window.
+/// # Why the digits are a guard and not ten arms
+///
+/// `key_column::bound` reads this file's `Key::Character("…")` literals to
+/// answer *which keys does this program bind*, and that answer was complete
+/// while every key was a letter. It is not complete for a digit: `1` in the
+/// Mixer is deck A's strip and `1` in the Library is its first row, so ten arms
+/// naming ten literals would say the digits are bound and say nothing about
+/// what they reach. **The dispatch table is what says that** —
+/// `karakuri_console::focus::BUILT` — and `key_column` reads it beside the
+/// text scan rather than instead of it (ADR-0333).
+///
+/// The named keys below are still literals and are still found by that scan, so
+/// only the digit is contributed by the table. That is the seam, and it is one
+/// key wide.
+fn grammar(key: &Key<&str>) -> Option<focus::Press> {
+    match key {
+        Key::Named(NamedKey::Space) => Some(focus::Press::Space),
+        Key::Named(NamedKey::Enter) => Some(focus::Press::Enter),
+        Key::Named(NamedKey::ArrowUp) => Some(focus::Press::Arrow(focus::Arrow::Up)),
+        Key::Named(NamedKey::ArrowDown) => Some(focus::Press::Arrow(focus::Arrow::Down)),
+        Key::Named(NamedKey::ArrowLeft) => Some(focus::Press::Arrow(focus::Arrow::Left)),
+        Key::Named(NamedKey::ArrowRight) => Some(focus::Press::Arrow(focus::Arrow::Right)),
+        Key::Character(text) => digit(text).map(focus::Press::Digit),
+        _ => None,
+    }
+}
+
+/// **One digit, `0` to `9`**, or `None` for anything else a `Key::Character`
+/// can be.
+///
+/// A `Key::Character` is *text* and may be more than one character — a dead key
+/// resolving, an IME committing a run — which is why the length is checked
+/// rather than the first character taken. `char::to_digit` at radix ten accepts
+/// the ASCII ten and nothing else, so a digit from another script is not one
+/// here: the digits count what a bay drew and the number row is what a
+/// performer finds without looking.
+fn digit(text: &str) -> Option<usize> {
+    let mut chars = text.chars();
+    let one = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    one.to_digit(10).map(|digit| digit as usize)
+}
+
+/// **What the deck is holding on `at`**, for the three chips whose next state
+/// the console names — or `None` where this deck has no slot there.
+///
+/// [`held`] is the guard, for its own reason: `Deck::blend` indexes its slots
+/// and a panic reachable from an event handler aborts this process rather than
+/// unwinding.
+///
+/// **Read at the press and never off `view::Strip`**, which is what the three
+/// mix keys this replaces already said: a strip is this same reading copied
+/// once a frame, and a scheduled fade landing between the frame and the press
+/// would leave the cycle counting from a state the deck has left behind.
+fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {
+    let slot = held(deck, at)?;
+    Some(focus::Held {
+        // **The residency the deck was last *asked* for**, which is what the
+        // tally cycles from — `view::Mixer::tally`'s decision, and the one
+        // that makes a parked slot's press a withdrawal rather than a
+        // re-request.
+        requested: tally(deck.requested_residency(slot)),
+        blend: blend_mode(deck.blend(slot)),
+        mask: masked(deck.mask(slot).kind()),
+        // The angle the slot is already wearing, carried through unchanged
+        // (ADR-0203).
+        mask_angle: deck.mask(slot).angle(),
+    })
+}
+
+/// **The engine's mask shape as the console's**, and the mirror image of
+/// `karakuri_console::view::wipe_kind` on the way back out.
+///
+/// One function and two callers — [`mixer`] builds a strip from it every frame
+/// and [`holding`] reads it at a press — because two copies of a three-arm
+/// translation is exactly the shape that goes wrong the day a fourth shape
+/// lands: a `match` with no wildcard stops the build in one place instead of
+/// two.
+fn masked(kind: MaskKind) -> view::Mask {
+    match kind {
+        MaskKind::None => view::Mask::None,
+        MaskKind::Linear => view::Mask::Linear,
+        MaskKind::Radial => view::Mask::Radial,
+    }
+}
+
+/// **What the window loop does about what a press asked for**, for every answer
+/// but the two that reach the store.
+///
+/// `Asked::Scope` and `Asked::Load` are the caller's, because both end in a
+/// directory read or a file write and this function has neither the store nor
+/// the folder; everything else is one operation or one sentence.
+///
+/// **A refusal is said out loud**, which is the whole of what `Asked::Nothing`
+/// carries: a key that declines and a key that is not bound are the same
+/// experience, so the console's own sentence is printed rather than swallowed
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+fn answered(
+    gfx: &mut Gfx,
+    started: Instant,
+    readout: &mut Readout,
+    recorder: Option<&mut session::Recorder>,
+    asked: &focus::Asked,
+) -> Repaint {
+    let acted = match asked {
+        focus::Asked::Nothing(why) => {
+            println!("  key: {why}");
+            Acted::Nothing
+        }
+        // **The address moved and nothing was asked of anything**, which is
+        // `Change::Pointed`'s own case: focus is a pointer this console owns,
+        // so nothing in the arrangement moved and no `Outcome` says so.
+        focus::Asked::Moved => return Change::Pointed(true).repaint(),
+        focus::Asked::Emitted(operation) => Acted::Emitted(Some(operation.clone())),
+        // **The level, named here because the step is this file's arithmetic**
+        // — [`gain_key`] and [`opacity_key`], whose tenth is `karakuri-cli`'s
+        // and whose clamp decides what the record says.
+        focus::Asked::Stepped { deck, level, step } => match held(&gfx.engine.deck, *deck) {
+            Some(slot) => match level {
+                focus::Level::Trim => Acted::Emitted(Some(Operation::SetGain {
+                    deck: *deck,
+                    gain: gain_key(*step, gfx.engine.deck.gain(slot)),
+                })),
+                focus::Level::Fader => Acted::Emitted(Some(Operation::SetOpacity {
+                    deck: *deck,
+                    opacity: opacity_key(*step, gfx.engine.deck.opacity(slot)),
+                })),
+            },
+            None => Acted::Nothing,
+        },
+        // The caller answers these two, and it returns before it gets here.
+        focus::Asked::Scope | focus::Asked::Load => {
+            unreachable!("the scope and the load are answered where the store is")
+        }
+    };
+    App::performed(gfx, started, readout, recorder, &acted, Repaint::Never)
+}
+
+/// **Where a press takes the trim it is standing on.**
+///
+/// [`offset_step`]'s shape one bay along, with the grammar's own word for a
+/// direction in place of a letter: which way each press goes is a value this
+/// file can be asked about without a window.
 ///
 /// # What the page does not say, and where each answer comes from
 ///
-/// The row names the three letters and stops. So `[` down, `]` up and `\` back
-/// to unity are `karakuri-cli`'s `'['`, `']'` and `'\\'` — *"focused slot gain
-/// down / up / back to 1.0"* in `docs/manual.md` — taken whole rather than
-/// invented here, because two keyboards that disagree about which bracket goes
-/// down is the one mistake an operator makes in the dark and cannot see.
+/// The row names the keys and stops. So the size of a step and the destination
+/// [`Step::Default`] names are `karakuri-cli`'s `'['`, `']'` and `'\\'` —
+/// *"focused slot gain down / up / back to 1.0"* in `docs/manual.md` — taken
+/// whole rather than invented here, because two keyboards that disagree about
+/// how far one press goes is the one mistake an operator makes in the dark and
+/// cannot see. **The letters were this keyboard's too until 2026-09-10**, and
+/// what survived them is the arithmetic rather than the spelling.
 ///
 /// # Floored and not ceilinged, and the clamp is the surface's
 ///
@@ -11274,38 +11936,50 @@ const OPACITY_STEP: f32 = 0.1;
 /// so a session replays the value that took effect rather than one the engine
 /// quietly corrected.
 ///
-/// **So `\` is a destination and the other two are steps**, and all three
-/// leave as the same absolute [`Operation::SetGain`] — an absolute value can
-/// express every step and a step cannot express a setting.
-fn gain_key(key: &str, from: f32) -> Option<f32> {
-    let asked = match key {
-        "[" => from - GAIN_STEP,
-        "]" => from + GAIN_STEP,
-        "\\" => 1.0,
-        _ => return None,
+/// **So [`Step::Default`] is a destination and the other two are steps**, and
+/// all three leave as the same absolute [`Operation::SetGain`] — an absolute
+/// value can express every step and a step cannot express a setting.
+///
+/// **It took the letter and takes the step since 2026-09-10.** `[`, `]` and
+/// `\` are unbound: the trim is reached by addressing it — `space` on the
+/// Mixer's strip — and the arrows step it (ADR-0259, ADR-0333). The pair of
+/// directions and the tenth between them are unchanged and are still
+/// `karakuri-cli`'s, which is what the paragraphs above are about; what went is
+/// the letter that named each one.
+fn gain_key(step: Step, from: f32) -> f32 {
+    let asked = match step {
+        Step::Down => from - GAIN_STEP,
+        Step::Up => from + GAIN_STEP,
+        Step::Default => 1.0,
     };
-    Some(asked.max(0.0))
+    asked.max(0.0)
 }
 
-/// **Where an opacity key takes the fader it is standing on**, or `None` for a
-/// key that is not one of the two — [`gain_key`]'s function on the other
-/// control.
+/// **Where a press takes the fader it is standing on** — [`gain_key`]'s
+/// function on the other control.
 ///
-/// `;` down and `'` up are `karakuri-cli`'s, for the reason written there: the
-/// page names the pair and not the direction.
+/// The pair and the tenth between them are `karakuri-cli`'s, for the reason
+/// written at [`gain_key`]: the page names the pair and not the direction, and
+/// `;` down and `'` up were the letters until 2026-09-10.
+///
+/// **The fader gains a default here and did not have one.** The trim's `\`
+/// had no partner on this control, so `space` on an addressed fader is the
+/// first way back to unity it has ever had — ADR-0259's *"on a level, the one
+/// state worth naming is the value it was declared at"*, which is the clause
+/// that record buys with an argument rather than finds.
 ///
 /// **Held inside `[0, 1]` where the gain is only floored**, which is the
 /// difference the vocabulary already draws between the two: opacity is a
 /// proportion of a blend and there is no such thing as 1.4 of one, where gain
 /// is a level into an HDR mix. The clamp is this surface's for [`gain_key`]'s
 /// reason — it decides what the record says.
-fn opacity_key(key: &str, from: f32) -> Option<f32> {
-    let asked = match key {
-        ";" => from - OPACITY_STEP,
-        "'" => from + OPACITY_STEP,
-        _ => return None,
+fn opacity_key(step: Step, from: f32) -> f32 {
+    let asked = match step {
+        Step::Down => from - OPACITY_STEP,
+        Step::Up => from + OPACITY_STEP,
+        Step::Default => 1.0,
     };
-    Some(asked.clamp(0.0, 1.0))
+    asked.clamp(0.0, 1.0)
 }
 
 /// **The slot a press or a record names, as an index this deck has**, or
@@ -12028,6 +12702,280 @@ fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
             "  composite: deck {letter} will {word} its renderers from the next build on, but \
              this slot's build worker has ended, so nothing will rebuild and what is on that \
              deck is still running"
+        )),
+    }
+}
+
+/// **A deck's element count moved, performed** — the Inspector deck head's
+/// capacity chip pressed, and `None` for every operation that is not one.
+///
+/// # It is [`composited`]'s shape with a different field of the aim
+///
+/// A capacity is one field of the description a slot's watcher is pointed at,
+/// so this restates the other thirteen and sends it and the worker recompiles
+/// the slot off the render thread — the route ADR-0228 opened and ADR-0314
+/// walked, and the reason a *setter* on `Set` was never what this waited on.
+/// `written` answers `Silent(NoRecord)` for `SetProperty` exactly as it does
+/// for `SetCompositing` and `LoadSet`, so there is nothing for [`apply`] to do:
+/// `Record::Capacity` is a **Set file's** statement about a Set and carries no
+/// slot. A session replayed therefore does not come back at a capacity a hand
+/// stepped to — the load's cost, unchanged in size; **a deck kept does**, since
+/// a keep writes one `capacity` record per geometry off what the Set is running
+/// at (`docs/adr/0328-…`).
+///
+/// # It is the whole slot, and that is the aim's shape rather than a shortcut
+///
+/// `watch::Aim::capacity` is one `Option<u32>` and is `--capacity`'s own field:
+/// *"`--capacity` overrides every source"*. So a Set holding two geometries
+/// runs both at this number. That is ADR-0228's recorded limit met from the
+/// asking side rather than worked around, and it is why
+/// `karakuri_operation::Property::Capacity` names no node.
+///
+/// **A press asking for the capacity the slot is already aimed at is refused
+/// with a sentence** and nothing is sent, on the fold's terms: it would buy a
+/// recompile of the whole slot and land on the same picture. The chip cannot
+/// produce one — its step is strictly above what the slot is running — and a
+/// **model can**, since `set_property` names the number outright and arrives
+/// here as an `Acted::Emitted` like any press. That is why the guard is here
+/// and not in the console: what may be asked for is not a surface's to decide,
+/// so every way in meets the same wall in the same sentence
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+///
+/// **A free function over the aims**, for [`composited`]'s reason: the field,
+/// the refusal and the sentence are the whole of what it decides.
+fn resized(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
+    let Operation::SetProperty {
+        deck,
+        property: karakuri_operation::Property::Capacity { elements },
+    } = operation
+    else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let count = aims.len();
+    let Some(aim) = aims.get_mut(slot) else {
+        return Some(format!(
+            "  capacity: {}, and nothing was re-aimed",
+            karakuri_environment::no_such_slot(slot, count)
+        ));
+    };
+    if aim.at.capacity == Some(*elements) {
+        return Some(format!(
+            "  capacity: deck {letter} is already aimed at {elements} elements a geometry — \
+             nothing was sent, because a re-aim rebuilds the whole slot and this one would land \
+             on the same picture"
+        ));
+    }
+    match aim.changed(|at| at.capacity = Some(*elements)) {
+        Ok(()) => Some(format!(
+            "  capacity: deck {letter} re-aimed to {elements} elements a geometry — the slot is \
+             recompiling on the worker, and the staging lane says whether the build landed, was \
+             overloaded or did not compile. A number outside what a geometry declares is refused \
+             there, by name and with the range"
+        )),
+        Err(()) => Some(format!(
+            "  capacity: deck {letter} will run at {elements} elements a geometry from the next \
+             build on, but this slot's build worker has ended, so nothing will rebuild and what \
+             is on that deck is still running"
+        )),
+    }
+}
+
+/// **An input rewired, performed** — a pick out of a `uses` line's card, and
+/// `None` for every operation that is not one.
+///
+/// # It is the route a model's `wire_input` already takes, reached from a press
+///
+/// [`rewired`] is the whole of what a rewiring decides — the run's wiring, the
+/// re-aim and the sentence — and it was written for the MCP surface, one
+/// request per frame, with a slot number it does not trust. A press is one
+/// request of exactly that shape, so this hands it one and prints what comes
+/// back: the panel and a model rewire through one function, and a defect in
+/// either is a defect in both rather than in whichever was tried
+/// ([P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)).
+///
+/// **Nothing is validated here.** The card offers nodes the pane could see and
+/// a name the Set cannot use is refused where the Set is *built*, by name and
+/// with what the Set does hold — which is the wall every way in meets, in one
+/// sentence
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+///
+/// **`written` answers `Silent(NoRecord)`** for `WireInput` and still does:
+/// `Record::Edge` is a **Set file's** statement about a Set and carries no
+/// slot, so a session replayed does not come back rewired where a hand asked
+/// for it — and **a keep does**, since a keep writes the run's edges into the
+/// file it saves. That is `SetProperty`'s division and `LoadSet`'s hole, not a
+/// new one (`docs/adr/0329-…`).
+fn wired_input(
+    edges: &mut Vec<karakuri_engine::set::Edge>,
+    aims: &mut [Aiming],
+    slot_count: usize,
+    operation: &Operation,
+) -> Option<String> {
+    let Operation::WireInput {
+        deck,
+        node,
+        slot,
+        to,
+    } = operation
+    else {
+        return None;
+    };
+    let asked = [(
+        usize::from(*deck),
+        karakuri_engine::set::Edge {
+            node: node.clone(),
+            slot: slot.clone(),
+            to: to.clone(),
+        },
+    )];
+    // **One request, so one answer** — `rewired` answers per request and this
+    // hands it exactly one, which is why the `into_iter().next()` below cannot
+    // be an empty list.
+    let said = rewired(&asked, edges, aims, slot_count)
+        .into_iter()
+        .next()?;
+    Some(match said {
+        Ok(line) => format!("  wire: {line}"),
+        Err(line) => format!("  wire: {line}"),
+    })
+}
+
+/// **A deck's published interface narrowed or widened, performed** — a
+/// parameter row's publish mark pressed, and `None` for every operation that is
+/// not one.
+///
+/// # It is a field of the aim, which is what makes the choice survive
+///
+/// `watch::Aim::published` is the interface a slot's watcher states at every
+/// build, and it has been empty in every run this program has ever had — an
+/// empty list *is* **publish everything**, so nothing had to fill it until
+/// something narrowed. This fills it, and the reason it is the aim rather than
+/// a writer into the live `Set` is the one thing that decides between them: a
+/// live write is wiped by the next rebuild, and the next rebuild is the
+/// operator's own next save of any `.kir` in the deck. A control that undoes
+/// itself on an unrelated act is the defect ADR-0280 §6 named for parameters
+/// and ADR-0282 closed; there is no `Set::carry_moved_from` for an interface,
+/// so the aim is where it has to live (`docs/adr/0329-…`).
+///
+/// **The cost is a recompile for a choice about a display**, and it is named
+/// rather than hidden: the build is the same files at the same capacity, so it
+/// is a build that has already landed once, and the Staging lane carries the
+/// verdict like every other.
+///
+/// **`written` answers `Silent(NoRecord)`**, and here that is a **gap in the
+/// format** rather than a record with no slot: nothing in this vocabulary says
+/// what a Set publishes, in a Set file or in a session. So a replay does not
+/// come back narrowed and **neither does a keep** — which is what makes this
+/// the weakest of the four re-aims on that row, and both manual pages say so.
+///
+/// **An empty list is not nothing.** `Publish { controls: [] }` asks for *every
+/// declared control published*, which is what an unnarrowed deck is, and it is
+/// what a press that takes the last control off the interface would mean if
+/// anything could produce one — nothing can, because taking a row off leaves
+/// the rest on it.
+fn attended(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
+    let Operation::Publish { deck, controls } = operation else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let count = aims.len();
+    let Some(aim) = aims.get_mut(slot) else {
+        return Some(format!(
+            "  publish: {}, and nothing was re-aimed",
+            karakuri_environment::no_such_slot(slot, count)
+        ));
+    };
+    let published: Vec<karakuri_engine::set::Published> = controls
+        .iter()
+        .map(|control| karakuri_engine::set::Published {
+            name: control.name.clone(),
+            at: control.node.map(|node| (ir_layer(node.layer), node.index)),
+            key: control.key.clone(),
+            range: control.range,
+        })
+        .collect();
+    let shown = published.len();
+    match aim.changed(|at| at.published = published) {
+        Ok(()) => Some(format!(
+            "  publish: deck {letter} re-aimed to publish {shown} control{} — the slot is              recompiling on the worker, and the staging lane says whether the build landed, was              overloaded or did not compile. What is off the interface is still written by              `--param`, by a `param` record and by a model naming its address",
+            match shown {
+                1 => "",
+                _ => "s",
+            }
+        )),
+        Err(()) => Some(format!(
+            "  publish: deck {letter} will publish {shown} control{} from the next build on, but              this slot's build worker has ended, so nothing will rebuild and what is on that              deck is still running",
+            match shown {
+                1 => "",
+                _ => "s",
+            }
+        )),
+    }
+}
+
+/// **A deck re-seeded, performed** — the Inspector deck head's `re-salt`
+/// capsule pressed, and `None` for every operation that is not one.
+///
+/// # The salts are cleared and the seed is stated, which is one derivation
+///
+/// `watch::Aim` carries both a `seed_salt` for the slot and a `salts` list per
+/// geometry, and the list wins where it is filled: `Set::build` reads a
+/// recorded salt and falls back to `derived_salt(seed_salt, ordinal)`. So a
+/// re-salt that wrote only the seed would move nothing on a slot filled from a
+/// Set file, which records one `seed` line per geometry. It **clears the list**
+/// instead of rewriting it, which is the same numbers with the arithmetic left
+/// where it belongs: the engine derives each geometry's salt from the slot's,
+/// and this program does not keep a second copy of that function
+/// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
+///
+/// # Nothing here invents the number
+///
+/// The salt arrives in the operation, because the console was handed it: the
+/// pane reads `Set::source_salts`, which is what the slot is actually running,
+/// and the next value of the sequence comes off
+/// `karakuri_engine::set::derived_salt` — so a press names a destination like
+/// every other control on this row, the same press from the same place lands on
+/// the same picture twice, and nothing on this panel produces a frame a later
+/// run cannot produce again
+/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+///
+/// **Nothing is refused.** The sequence goes forward, so a press cannot ask for
+/// the salt the slot is already on, and a re-seed always changes the picture —
+/// which is what the fold's *already in that state* guard exists for and this
+/// one does not need.
+fn re_salted(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
+    let Operation::SetProperty {
+        deck,
+        property: karakuri_operation::Property::Seed { salt },
+    } = operation
+    else {
+        return None;
+    };
+    let slot = usize::from(*deck);
+    let letter = deck_letter(*deck);
+    let count = aims.len();
+    let Some(aim) = aims.get_mut(slot) else {
+        return Some(format!(
+            "  re-salt: {}, and nothing was re-aimed",
+            karakuri_environment::no_such_slot(slot, count)
+        ));
+    };
+    match aim.changed(|at| {
+        at.seed_salt = *salt;
+        at.salts.clear();
+    }) {
+        Ok(()) => Some(format!(
+            "  re-salt: deck {letter} re-aimed to seed {salt} — the slot is recompiling on the \
+             worker, and its randomness moves while its structure does not. The staging lane says \
+             whether the build landed, was overloaded or did not compile"
+        )),
+        Err(()) => Some(format!(
+            "  re-salt: deck {letter} will be seeded from {salt} from the next build on, but this \
+             slot's build worker has ended, so nothing will rebuild and what is on that deck is \
+             still running"
         )),
     }
 }
@@ -13336,6 +14284,19 @@ struct Gfx {
     /// leads by is this display's frame queue. A window remade is a display
     /// remade, and the input is re-opened with it.
     audio: Option<audio::Audio>,
+    /// **The control surface this window opened**, or `None` for a run with
+    /// nothing plugged in — see [`surfaced`], where the three cases are
+    /// argued, and [`App::mapped`], which is the drain.
+    ///
+    /// **Beside `audio` and for its reason.** Both are doors this window opens
+    /// at startup and neither is a flag; a window remade re-opens both, which
+    /// is right for the microphone and harmless for the port.
+    midi: Option<midi::Surface>,
+    /// Scratch for [`midi::Surface::take`], owned so the drain allocates
+    /// nothing on a frame — `karakuri-cli` keeps the same buffer for the same
+    /// reason. Sized once at construction; a frame's worth of a surface's
+    /// fastest gesture is single figures.
+    performed_by_hand: Vec<Operation>,
     /// **What a frame has to fit in on this window**, read from the display
     /// once when the window opened — see [`budget_ms`].
     budget_ms: Option<f32>,
@@ -13346,7 +14307,7 @@ struct Gfx {
     /// **One per slot rather than one for the deck**, and the difference only
     /// began to matter when a load did. Both slots open on the pair this
     /// program was launched with, so one name was every slot's name and could
-    /// not become wrong; `l` moves one slot's material and leaves the other
+    /// not become wrong; a load moves one slot's material and leaves the other
     /// where it was, and a single name would then have both strips reading the
     /// launch pair with the picture showing something else. That is a readout
     /// that is wrong and silent, which is the one thing P-0094 refuses.
@@ -13415,7 +14376,41 @@ struct App {
     folder: Option<std::path::PathBuf>,
     /// A validation fault is said once rather than sixty times a second.
     faulted: bool,
+    /// **Whether shift is held**, which is the whole of what this loop keeps
+    /// of the modifier state and is here for exactly one key.
+    ///
+    /// `winit`'s `KeyEvent` carries no modifiers, so a key handler that wants
+    /// to tell `Tab` from `shift-Tab` has to have been listening to
+    /// `WindowEvent::ModifiersChanged` — which is why this is a field rather
+    /// than a question asked at the press.
+    ///
+    /// **It is not a mode and it gives no key a second meaning**, which is the
+    /// distinction
+    /// [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+    /// draws when it rejects modifier chords: *"a modifier is a mode with no
+    /// readout"*, and rule 04 is *nothing is hidden quietly*. `shift-Tab`
+    /// survives that rejection because it reverses a traversal that is drawn
+    /// either way — the ring is on a bay whichever direction you arrived from
+    /// — so there is no hidden state to read out.
+    ///
+    /// **`egui`'s own copy is not readable in time.** `egui_winit::State`
+    /// keeps modifiers privately and stamps them onto the events it queues;
+    /// `Context::input` answers from the last pass, so a `shift` pressed since
+    /// the previous frame would be invisible there. One reader, one writer, one
+    /// event.
+    shift: bool,
     readout: Readout,
+    /// **The console's hover layer**, which is `karakuri-console`'s and is
+    /// held here for the reason every other piece of console state is: this
+    /// file owns the window, the pointer and the clock, and that crate owns
+    /// none of the three.
+    ///
+    /// **It is not part of [`Readout`]** because nothing routes into it: a
+    /// tooltip is not an operation, no key reaches it, and MIDI and MCP have
+    /// nothing to say to it. What it takes is a pointer move, the claim
+    /// `input::claim` already answered for that move, and a time — and what it
+    /// gives back is a repaint decision and a box painted after the panel.
+    hover: karakuri_console::hover::Hover,
     costs: Costs,
     /// Logical size, so the numbers printed are the arrangement's own units
     /// rather than the display's.
@@ -13457,6 +14452,30 @@ struct App {
     /// second answer to it: [`App::about_to_wait`] takes the soonest of what is
     /// owed, and this is one of the things owed.
     served: Option<Instant>,
+    /// **How a thread that is not this one gets this loop to run again**, and
+    /// it exists for exactly one of them: the MIDI callback.
+    ///
+    /// Every other thing this window answers arrives as a `winit` event or on
+    /// a deadline [`App::about_to_wait`] already sets. A control surface is
+    /// neither — a hand on a knob is an event nothing in `winit` can see — and
+    /// this loop sleeps in `Wait` between frames (ADR-0164), so without a wake
+    /// a fader would be applied at whatever the operator's next mouse move
+    /// happened to be.
+    ///
+    /// **A poll was the alternative and it is the one this rejects.** A third
+    /// deadline beside `egui_due` and `served` would have to run at a hand's
+    /// rate to feel like a fader — a hundred and twenty-five wakes a second,
+    /// for the whole of a run, whether or not anything is plugged in — which
+    /// is `ControlFlow::Poll` with extra steps and is the exact cost the
+    /// still-panel clause is about. [`SERVED`]'s tenth of a second is the
+    /// other end of that trade and is a fader at 10 Hz.
+    ///
+    /// **It carries nothing.** The proxy's event type is `()`: the wake says
+    /// *ask again*, [`App::user_event`] asks for a frame, and the drain
+    /// happens where every other drain happens. Handed to
+    /// [`midi::Surface::first`] as a closure, so no crate below this one
+    /// learns that a window exists.
+    waker: EventLoopProxy<()>,
     /// The sending half of [`watch::Watch::storing_to`]'s channel, handed to
     /// every watcher [`Engine::new`] makes. Kept because a window remade makes
     /// them again.
@@ -13549,18 +14568,6 @@ struct Keeping {
     /// be a sentence on a terminal rather than a panic inside a `winit`
     /// callback, where it aborts with no message at all.
     mcp: Option<mcp::Reporter>,
-    /// **The run's wiring** — every edge a `wire_input` has written, for the
-    /// whole run and not per slot.
-    ///
-    /// One list because `--edge` is one list: an edge names the node that
-    /// declares the input and what its procedure calls it, and a Set that has
-    /// not got that node passes it over where it is built. See [`rewired`].
-    ///
-    /// **What a rebuild carries and what a save records**, which is why it lives
-    /// here rather than inside a watcher: [`Aiming::re_aim`] restates it to the
-    /// worker and [`playing_values`] writes it into the file, and those are one
-    /// list or they are two answers to what the run is wired with.
-    edges: Vec<karakuri_engine::set::Edge>,
     /// **What each deck is playing**, seeded before the first frame and moved by
     /// every build that lands — see [`Playing`].
     playing: Playing,
@@ -13670,7 +14677,7 @@ impl Keeping {
         }
         let said = rewired(
             &wires,
-            &mut self.edges,
+            &mut engine.edges,
             &mut engine.aimed,
             engine.deck.slot_count(),
         );
@@ -13766,7 +14773,7 @@ impl Keeping {
         }
         let id =
             karakuri_environment::accepted_save(slot, asked, id, &sources, root, reply.as_ref());
-        let values = playing_values(engine.deck.slot(slot).set(), &self.edges);
+        let values = playing_values(engine.deck.slot(slot).set(), &engine.edges);
         let save = Save {
             slot,
             asked,
@@ -13842,7 +14849,7 @@ impl Keeping {
             id: format!("{session}-material"),
             root: root.to_path_buf(),
             sources,
-            values: playing_values(engine.deck.slot(HEAD_SLOT).set(), &self.edges),
+            values: playing_values(engine.deck.slot(HEAD_SLOT).set(), &engine.edges),
         })
     }
 
@@ -13925,14 +14932,14 @@ impl Keeping {
             // **Two sentences, and the `written` beside them is two answers
             // too.** `all` lists the operator's library, so a sandbox save
             // adds no row and re-reading the listing would be a repaint that
-            // changes nothing — and telling a model that `l` loads its file
+            // changes nothing — and telling a model that a keyboard load takes its file
             // back would send it after a row the bay does not draw
             // (P-0096, ADR-0261).
             Ok(()) => match asked {
                 Asked::Operator => {
                     let said = format!(
                         "  keep: deck {}: saved as set `{id}` — the Library bay's `all` \
-                         lists it, and `l` loads it back",
+                         lists it, and a load off that row puts it back",
                         deck_letter(slot as u8)
                     );
                     println!("{said}");
@@ -13943,7 +14950,7 @@ impl Keeping {
                         "  keep: deck {}: saved as set `{id}` in the sandbox — \
                          `<store>/{}/{id}{}`. A save asked for over MCP is kept there \
                          rather than in the operator's library, so `all` does not list \
-                         it and `l` does not load it; the operator's own `k` writes the \
+                         it and no load off that row reaches it; the operator's own `k` writes \
                          library",
                         deck_letter(slot as u8),
                         karakuri_store::store::Store::SANDBOX,
@@ -14108,6 +15115,16 @@ impl App {
     /// makes one of its own — it is constructed from a size and nothing else —
     /// and this replaces it before the window opens, which is before anything
     /// can read either.
+    // **Eight, where clippy's line is seven, and it went past it when the
+    // window took a control surface.** Every one of them is a thing settled
+    // *before* there is a device — the command line, the copies each deck runs
+    // from, the store, the versions, the server, what is open, where each slot
+    // points, and the wake a MIDI callback gets this loop to run again with —
+    // and a struct to carry them would be [`App`] itself, constructed with
+    // every field that needs a window left out. That is `Watch::new`'s
+    // sentence in `karakuri-environment`, which is fourteen for the same
+    // reason.
+    #[allow(clippy::too_many_arguments)]
     fn new(
         launch: Launch,
         running: Vec<Sources>,
@@ -14116,6 +15133,10 @@ impl App {
         mcp: Option<mcp::Reporter>,
         opening: Opening,
         pointing: mcp::Slots,
+        // **Made in [`main`] from the loop this is about to be run on**, for
+        // [`App::waker`]'s reason: the surface is opened in `resumed`, which
+        // is handed an `ActiveEventLoop` and cannot make one of these.
+        waker: EventLoopProxy<()>,
     ) -> App {
         let mut readout = Readout::new(WINDOW.0 as f32, WINDOW.1 as f32);
         // **The one handle, and it lives on the readout because that is where
@@ -14138,7 +15159,14 @@ impl App {
             // before it opens (ADR-0275).
             folder: None,
             faulted: false,
+            // **Nothing held**, which is a window nobody has pressed a key on
+            // and is also what `winit` reports the moment focus leaves it.
+            shift: false,
             readout,
+            // **The manual is read here, before the window opens**, which is
+            // where a 340 KB parse belongs: it is one walk of the page
+            // compiled into this binary and it is on no frame path (P-0091).
+            hover: karakuri_console::hover::Hover::new(),
             costs: Costs::new(),
             scale: 1.0,
             egui_due: None,
@@ -14147,13 +15175,13 @@ impl App {
             // after it.
             served: mcp.is_some().then(Instant::now),
             started: Instant::now(),
+            waker,
             built_tx,
             held,
             snapshots,
             pointing,
             keeping: Keeping {
                 mcp,
-                edges: Vec::new(),
                 // **Empty until there is a deck**, because the launch nodes are
                 // what the engine's compile produced and there is no engine
                 // before `resumed`. It is seeded there, off [`Engine::placed`],
@@ -14357,6 +15385,47 @@ impl App {
                     if let Some(line) = composited(&mut gfx.engine.aimed, operation) {
                         println!("{line}");
                     }
+                    // **The two chips beside that fold, performed where it
+                    // is**, and each is the same act with a different field of
+                    // the aim changed: the element count its geometries run at
+                    // and the salt its randomness comes from. `written` answers
+                    // `Silent(NoRecord)` for `SetProperty` as it does for the
+                    // fold and the load, so the surface that names it performs
+                    // it and nothing here touches the deck. See [`resized`] and
+                    // [`re_salted`], and `docs/adr/0328-…`.
+                    if let Some(line) = resized(&mut gfx.engine.aimed, operation) {
+                        println!("{line}");
+                    }
+                    if let Some(line) = re_salted(&mut gfx.engine.aimed, operation) {
+                        println!("{line}");
+                    }
+                    // **The publish mark, performed with them**, and it is the
+                    // fourth field of one aim: the layering, the capacity, the
+                    // salt and now the interface. `written` answers
+                    // `Silent(NoRecord)` for `Publish` as it does for the other
+                    // three, so the surface that names it performs it. See
+                    // [`attended`], where the reason it is the aim rather than a
+                    // writer into the live Set is argued.
+                    if let Some(line) = attended(&mut gfx.engine.aimed, operation) {
+                        println!("{line}");
+                    }
+                    // **A `uses` line's pick, performed beside them**, and it
+                    // is the same re-aim with the wiring changed. It needs the
+                    // run's edge list as well as the aims, which is why that
+                    // list is a field of `Engine`: a press arrives here and the
+                    // console's readout holds no engine. See [`wired_input`],
+                    // which is [`rewired`] with one request — the function a
+                    // model's `wire_input` goes through, so the panel and the
+                    // tool rewire by one route.
+                    let slots = gfx.engine.deck.slot_count();
+                    let Engine {
+                        edges: run_edges,
+                        aimed,
+                        ..
+                    } = &mut gfx.engine;
+                    if let Some(line) = wired_input(run_edges, aimed, slots, operation) {
+                        println!("{line}");
+                    }
                     // **A version put back, performed where the load beside it
                     // is.** `written` answers `Silent(OnLanding)` for it — the
                     // `Record::Procedure` is written at the swap, by the same
@@ -14507,13 +15576,271 @@ impl App {
                                     | Record::Authority { .. }
                             )
                         }) {
-                            inspector(&gfx.engine.deck, &gfx.material, &mut readout.view.inspector);
+                            inspector(
+                                &gfx.engine.deck,
+                                &gfx.material,
+                                &gfx.engine.aimed,
+                                &mut readout.view.inspector,
+                            );
                         }
                     }
                 }
                 Change::Emitted(operation.as_ref()).repaint()
             }
         }
+    }
+
+    /// **Every operation a model has asked for since the last frame, performed
+    /// where a press of the same operation is performed.**
+    ///
+    /// **It is [`Keeping::requests`]'s neighbour and not part of it**, because
+    /// what a save and an edge need is the engine and what an operation needs is
+    /// everything a press needs: the window, the readout, the session being
+    /// recorded. So the drain is here, beside [`App::performed`], and the two
+    /// are called one after the other at the two places this loop takes what a
+    /// model asked for.
+    ///
+    /// **Nothing decides anything here.** The operation arrived already audited
+    /// — `karakuri_operation::gate` ran on the server's own thread, which is the
+    /// one call ADR-0235 puts the whole mechanism on — and it is handed to
+    /// [`App::performed`] as an `Acted::Emitted`, which is the value a fader
+    /// hands it. A model's `SetGain` and a hand on the strip are the same press
+    /// from here on
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// which is the whole of what routing into one vocabulary was for.
+    ///
+    /// **Collected out of the borrow before any of it is acted on**, exactly as
+    /// [`Keeping::requests`] collects, and for the same reason: the loop below
+    /// takes `&mut` of things the reporter is reached through. An empty
+    /// `collect` allocates nothing, which is every frame of a run nobody is
+    /// driving.
+    ///
+    /// **Answered once, at the frame it was performed on.** What a *rebuild*
+    /// the operation started makes of it lands thirty judged frames later and is
+    /// `swap_outcome`'s answer, and what a *scheduled* move comes to is the
+    /// deck's own reading — so the sentence says where each of those is rather
+    /// than holding a connection open across a transition. That is
+    /// `mcp::WireRequest`'s third point, one route along.
+    fn operated(
+        gfx: &mut Gfx,
+        started: Instant,
+        readout: &mut Readout,
+        recording: &mut Sessions,
+        keeping: &Keeping,
+        egui_due: &mut Option<Instant>,
+        costs: &mut Costs,
+    ) {
+        let Some(mcp) = keeping.mcp.as_ref() else {
+            return;
+        };
+        let asked: Vec<mcp::OperateRequest> = mcp.operations().collect();
+        for mcp::OperateRequest { operation, reply } in asked {
+            let title = operation.title();
+            let repaint = App::performed(
+                gfx,
+                started,
+                readout,
+                recording.recorder(),
+                &Acted::Emitted(Some(operation)),
+                Repaint::Never,
+            );
+            App::wants(gfx, egui_due, costs, repaint);
+            reply.settled(Ok(format!(
+                "`{title}` was performed on the frame it arrived on, where the same \
+                 operation from the panel, a key or a mapped control is performed. What the \
+                 deck made of it is on this run's terminal. Anything it started rather than \
+                 finished is reported where it lands: ask `swap_outcome` for a rebuild, and \
+                 a scheduled move arrives on the grid."
+            )));
+        }
+    }
+
+    /// **Every operation a hand on a control surface asked for since the last
+    /// frame, performed where a press of the same operation is performed.**
+    ///
+    /// **It is [`App::operated`]'s neighbour**, and the two are one shape: a
+    /// door outside this window hands in an [`Operation`], and it is given to
+    /// [`App::performed`] as an `Acted::Emitted` — the value a fader hands it.
+    /// A knob's `SetGain`, a model's and a hand on the strip are the same
+    /// press from here on
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// which is what routing every surface into one vocabulary was for, and it
+    /// is why **a session recorded from this surface replays with neither the
+    /// surface nor the map attached**
+    /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)):
+    /// what reaches the stream is the record, and no record names a knob.
+    ///
+    /// **Nothing decides anything here**, which is the same sentence
+    /// [`App::operated`] carries and is true for a different reason. A model's
+    /// request was audited on the server's thread; a hand needs no audit at
+    /// all — `karakuri_operation::gate` is a model's boundary and not an
+    /// operator's, and
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// says a hand cancels whatever automatic thing was writing the control,
+    /// on every route in. A gate over the operator's own surface would be the
+    /// instrument refusing its player.
+    ///
+    /// **The slot check is the router's and is said once per slot per run.**
+    /// `Surface::take` drops a message naming a slot this deck does not hold,
+    /// because `Deck::gain` and its neighbours index directly — see
+    /// `karakuri_environment::midi`, where that whole argument lives.
+    ///
+    /// **The buffer is [`Gfx::performed_by_hand`] and is cleared by the
+    /// drain**, so nothing here allocates on a frame nobody touched the
+    /// surface — which is every frame of a run with no surface at all, and
+    /// costs one branch.
+    ///
+    /// **Drained inside the frame rather than on the wake**, which is the
+    /// difference between this and a key press: a key arrives as a `winit`
+    /// event and is performed on it, and a MIDI message arrives on the MIDI
+    /// thread. [`App::user_event`] asks for a frame and this is what that
+    /// frame does about it, so a sweep spanning two wakes is one operation on
+    /// one frame rather than two half-applied ones.
+    // **Eight, where clippy's line is seven, and every one is a thing a press
+    // needs**: the window, the clock, the readout, the stream being recorded,
+    // the layer that knows what the pointer is on, where a learned map is
+    // written, and the two halves of a repaint decision. A struct would be
+    // `App` itself with the fields that need no window left out, which is
+    // `App::new`'s sentence one function along.
+    #[allow(clippy::too_many_arguments)]
+    fn mapped(
+        gfx: &mut Gfx,
+        started: Instant,
+        readout: &mut Readout,
+        recording: &mut Sessions,
+        hover: &karakuri_console::hover::Hover,
+        maps: &std::path::Path,
+        egui_due: &mut Option<Instant>,
+        costs: &mut Costs,
+    ) {
+        if gfx.midi.is_none() {
+            return;
+        }
+        // **Armed, and then this frame is a learn rather than a play.**
+        //
+        // Nothing is performed while the pill is lit, and that is the
+        // decision rather than a consequence: a knob already mapped to deck
+        // B's gain, turned while the pointer is on deck A's, would otherwise
+        // move B on the way to being bound to A. **It is not hidden**, which
+        // is what makes it safe — rule 04 — the pill is lit for as long as it
+        // is true and the operator lit it.
+        if readout.view.learn {
+            App::learned(gfx, readout, hover, maps, egui_due, costs);
+            return;
+        }
+        let Some(surface) = gfx.midi.as_mut() else {
+            return;
+        };
+        // Split rather than borrowed together: the drain writes the surface
+        // and the buffer, and both are fields of `gfx`, which `performed`
+        // then takes whole. `std::mem::take` would hand the allocation back
+        // only if nothing panicked in between, so the buffer is swapped out
+        // and swapped back.
+        let mut asked = std::mem::take(&mut gfx.performed_by_hand);
+        // **And the deck, for the one target the map cannot finish on its
+        // own.** `cc -> param N M` names a *position* in a deck's published
+        // interface, and a position becomes a key only against the Set that is
+        // in the deck right now — which is the whole point of binding to one
+        // (ADR-0268). `midi::Decks` is that reading, and `karakuri-cli` makes
+        // the same one: a map file means one thing in both programs or it
+        // means nothing.
+        surface.take(
+            gfx.engine.deck.slot_count(),
+            &midi::Decks(&gfx.engine.deck),
+            &mut asked,
+        );
+        for operation in asked.drain(..) {
+            let repaint = App::performed(
+                gfx,
+                started,
+                readout,
+                recording.recorder(),
+                &Acted::Emitted(Some(operation)),
+                Repaint::Never,
+            );
+            App::wants(gfx, egui_due, costs, repaint);
+        }
+        gfx.performed_by_hand = asked;
+    }
+
+    /// **A knob turned while `learn` is lit binds the control under the
+    /// pointer to it**, and says what happened.
+    ///
+    /// # The gesture is three things and the panel already knew two
+    ///
+    /// *Arm, point, turn.* The pill is the arming; [`Hover::resting`] is what
+    /// the pointer is on, which the tooltip layer works out anyway; and
+    /// [`asked_at`] turns that into the operation a press there would ask for,
+    /// which [`target_of`] spells as the right-hand side of a map line. What
+    /// is left is the left-hand side, and that is the message that just
+    /// arrived.
+    ///
+    /// # It stays armed until it is pressed again
+    ///
+    /// Mapping a surface is *turn every knob once*, a dozen bindings in a row,
+    /// and re-arming between each would be a click per knob. Nothing is hidden
+    /// by that — the pill is lit for exactly as long as this is true.
+    ///
+    /// # Every refusal is out loud
+    ///
+    /// A knob turned with the pointer on nothing, on a control no map line can
+    /// name, or against a map file that will not open — each says so and
+    /// leaves the arming alone. **A learn that quietly did nothing is the one
+    /// outcome
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// rules out**, and it is the likely one: the operator is looking at the
+    /// controller rather than the screen.
+    ///
+    /// # And the frame is owed
+    ///
+    /// The tip under the pointer has just changed — its last line is read off
+    /// the live map — so the layer is asked for a frame. That is the whole of
+    /// what *the assignment shows at once* takes.
+    fn learned(
+        gfx: &mut Gfx,
+        readout: &mut Readout,
+        hover: &karakuri_console::hover::Hover,
+        maps: &std::path::Path,
+        egui_due: &mut Option<Instant>,
+        costs: &mut Costs,
+    ) {
+        let ctx = gfx.egui.egui_ctx().clone();
+        let Gfx { midi, engine, .. } = gfx;
+        let Some(surface) = midi.as_mut() else {
+            return;
+        };
+        let Some(message) = surface.learning() else {
+            return;
+        };
+        let Some((p, _)) = hover.resting() else {
+            println!(
+                "learn: something moved, and the pointer is not on a control. point at the                  control you want on that knob and move it again — the pill stays lit until                  you press it."
+            );
+            return;
+        };
+        let target = asked_at(&readout.panel, &ctx, &readout.view, p)
+            .ok_or_else(|| {
+                String::from(
+                    "learn: the pointer is on nothing this panel can name. it has to be on a                      control, not beside one.",
+                )
+            })
+            .and_then(|operation| target_of(&operation, &engine.deck));
+        let target = match target {
+            Ok(target) => target,
+            Err(why) => {
+                println!("{why}");
+                return;
+            }
+        };
+        match surface.learn(message, &target, maps) {
+            Ok(line) => println!(
+                "learn: `{line}` — written to {}. the control's tooltip says so now, and the                  map is loaded from there on the next start.",
+                maps.display()
+            ),
+            Err(why) => println!("learn: {why} — nothing was bound and nothing was written"),
+        }
+        // The tip under the pointer has a different last line now.
+        App::wants(gfx, egui_due, costs, Repaint::Now);
     }
 
     /// **Act on a repaint decision, and the only place a frame is asked for
@@ -14790,7 +16117,12 @@ impl ApplicationHandler for App {
         // is the first of those readings rather than the only one, and the
         // frame handler takes the rest. See `inspector`, which is also where
         // the controls it could not place are reported.
-        inspector(&engine.deck, &material, &mut self.readout.view.inspector);
+        inspector(
+            &engine.deck,
+            &material,
+            &engine.aimed,
+            &mut self.readout.view.inspector,
+        );
         // **And the Master bay's level, for the strips' reason.** The legend
         // reports what each bay draws by asking the view, so a bay whose level
         // has not been written yet reports itself as having no engine behind
@@ -14824,6 +16156,31 @@ impl ApplicationHandler for App {
             audio.as_ref(),
             engine.deck.signals().oscillator().bpm(),
         ));
+        // **And the surface, beside the room and for its reason**: it is a
+        // door this window opens at startup rather than a flag, and which one
+        // it got is a sentence rather than a description of a search. The map
+        // is resolved here because both tiers are this program's own
+        // directories — the store it was given and the preset library it
+        // found — and `karakuri-environment` is handed the answer rather than
+        // the question (`places`' own rule: each binary keeps its parser).
+        let map = midi::map_for(
+            &self.store,
+            self.presets.as_ref().map(|presets| presets.dir.as_path()),
+        );
+        // `controller` rather than `surface`, which in this function is the
+        // swapchain's.
+        let (controller, plugged) = surfaced(map.as_deref(), self.waker.clone());
+        println!("{plugged}");
+        // **The `map` pill is told, and only where there is a surface** —
+        // `View::map`'s own rule, which is `audio-in`'s one pill along:
+        // `Some(MapPill::NONE)` is a program that opened a port and found no
+        // map, and draws `map · none`; `None` is a program with no surface at
+        // all, which draws neither this pill nor `learn`. A console told
+        // nothing would be this program answering a question about a device on
+        // the console's authority.
+        self.readout.view.map = controller.as_ref().map(|open| view::MapPill {
+            name: open.map_name().map(str::to_owned),
+        });
         // **The port the server bound, asked of the server.** `--mcp 0` takes
         // an ephemeral port, so the flag's argument and the address a client
         // dials are two different numbers on that run; `Reporter::port` is the
@@ -14843,6 +16200,13 @@ impl ApplicationHandler for App {
         window.request_redraw();
         self.gfx = Some(Gfx {
             audio,
+            midi: controller,
+            // **A frame's worth of a surface's fastest gesture is single
+            // figures**, and this is the buffer the drain fills — sized once
+            // so the frame path never `realloc`s, which is
+            // `karakuri_environment::midi`'s `INBOX` on this side of the
+            // channel and the same rule.
+            performed_by_hand: Vec::with_capacity(MAPPED),
             budget_ms: budget,
             material,
             store: self.store.clone(),
@@ -14911,6 +16275,19 @@ impl ApplicationHandler for App {
             self.served = Some(now + SERVED);
             if let Some(gfx) = self.gfx.as_mut() {
                 self.keeping.requests(&mut gfx.engine, &self.store);
+                // **And every operation a model named, on the same wake and
+                // beside the same drain** — see [`App::operated`], which is
+                // where the reason it is a second call rather than a third arm
+                // of `requests` is written.
+                App::operated(
+                    gfx,
+                    self.started,
+                    &mut self.readout,
+                    &mut self.recording,
+                    &self.keeping,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                );
                 if self.keeping.finished_saves() {
                     let running = aimed_set(gfx, &self.readout.view);
                     println!(
@@ -14949,6 +16326,28 @@ impl ApplicationHandler for App {
     /// **The third one is the only one that can be owed forever**, and that is
     /// what a served run is: something outside this process is driving the
     /// instrument, so the window is being touched even though nobody is at it.
+    /// **A thread that is not this one said there is something to drain**, and
+    /// there is exactly one of them: the MIDI callback — see [`App::waker`].
+    ///
+    /// **It asks for a frame and does nothing else.** The drain itself is
+    /// [`App::mapped`], at the top of `RedrawRequested` beside the other two,
+    /// which is what makes a sweep spanning several wakes one operation on one
+    /// frame instead of a partial apply per message. The wake carries no
+    /// payload for the same reason: what arrived is the port's to say and this
+    /// loop's only job is to run again.
+    ///
+    /// **`request_redraw` and not a repaint decision**, because there is
+    /// nothing yet to decide about — whether the frame changes anything is
+    /// what `performed` answers on the frame this asks for, and `costs.owes`
+    /// is what says the frame was owed to an event rather than to a still
+    /// panel.
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _wake: ()) {
+        if let Some(gfx) = self.gfx.as_ref() {
+            self.costs.owes();
+            gfx.window.request_redraw();
+        }
+    }
+
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let next = [self.egui_due, self.costs.due(), self.served]
             .into_iter()
@@ -15109,7 +16508,37 @@ impl ApplicationHandler for App {
                     &acted,
                     Change::Pointer(claim).repaint(),
                 );
+                // **And the hover layer is told where the pointer went**, with
+                // the claim `input::claim` has just answered: `Claim::Egui` is
+                // the panel saying the pointer is on none of its controls, so
+                // the common move costs one comparison there. What comes back
+                // is a frame owed **now** only where a tip is on screen that
+                // must not be — the dwell itself is a deadline and is asked
+                // for on the frame, beside `View::animating`.
+                let tip = self.hover.moved(
+                    claim,
+                    &self.readout.panel,
+                    &ctx,
+                    &self.readout.view,
+                    p,
+                    self.started.elapsed(),
+                );
+                let repaint = repaint.soonest(Change::Tip(tip).repaint());
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+            }
+            // **The pointer left the window**, which is not a move to
+            // anywhere: a tip that is up goes, and no dwell is running. Only
+            // the hover layer cares — `egui` is told either way, because this
+            // event is not one `input::claim` has a rule about.
+            WindowEvent::CursorLeft { .. } => {
+                App::to_egui(gfx, &mut self.costs, &event);
+                let tip = self.hover.left();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Tip(tip).repaint(),
+                );
             }
             WindowEvent::MouseInput {
                 state,
@@ -15277,7 +16706,7 @@ impl ApplicationHandler for App {
                     println!("{}", read_reading(&mut self.readout.view, &self.store));
                 }
                 // **A Set dropped out of `presets` is taken in before it is
-                // loaded**, which is `l`'s two-moment press arriving at the
+                // loaded**, which is the load's two-moment press arriving at the
                 // pointer: a preset row names a file and a load names an id,
                 // and taking it in is what gives the Set the id the load needs
                 // (ADR-0229). Two routes to one row have to reach the same
@@ -15324,7 +16753,7 @@ impl ApplicationHandler for App {
                                 Acted::Emitted(Some(load))
                             }
                             // Which of the two acts failed is the whole of what
-                            // this adds — `l`'s own sentence, one surface over.
+                            // this adds — the load's own sentence, one surface over.
                             Err(e) => {
                                 println!(
                                     "  take in: `{row}` was not taken into the store: {e}\n  \
@@ -15344,7 +16773,7 @@ impl ApplicationHandler for App {
                 // thing that moved every region in the Program bay, and it is
                 // the outcome that says so.
                 // **One frame asked for, however many operations the press
-                // emitted** — `l`'s rule at the pointer, and `Repaint::soonest`
+                // emitted** — the load's rule at the pointer, and `Repaint::soonest`
                 // is what combines them.
                 let repaint = App::performed(
                     gfx,
@@ -15445,6 +16874,20 @@ impl ApplicationHandler for App {
                 );
             }
 
+            // **The one modifier this loop keeps, and it keeps it for one
+            // key.** `shift-Tab` is the tab ring walked backwards (ADR-0259)
+            // and `winit`'s `KeyEvent` carries no modifier state, so the
+            // answer has to have been listened for — see [`App::shift`].
+            //
+            // **`egui` is still told**, which is what this arm has to add back:
+            // every event this `match` does not name reaches `to_egui` through
+            // the wildcard at the bottom, and a modifier taken here and not
+            // passed on would leave the toolkit's own copy stale.
+            WindowEvent::ModifiersChanged(state) => {
+                App::to_egui(gfx, &mut self.costs, &event);
+                self.shift = state.state().shift_key();
+            }
+
             WindowEvent::KeyboardInput { .. } => {
                 // **`egui` sees every key, and is never asked for
                 // permission.** `App::to_egui` reads `EventResponse::repaint`
@@ -15458,10 +16901,11 @@ impl ApplicationHandler for App {
                 // focuses the first focusable element, hence Tab always
                 // consumes"* — so `consumed` is `true` for every `Tab`
                 // whatever the focus state is, and honouring it would swallow
-                // the first press rather than being harmless. ADR-0259 makes
-                // `Tab` the key that moves focus between bays, where that is
-                // the failure that looks like nothing at all; the invariant
-                // that record names is `event_response`'s test.
+                // the first press rather than being harmless. **`Tab` is the
+                // key that moves focus between bays here since 2026-09-09**
+                // (ADR-0259, ADR-0332), which is where that is the failure
+                // that looks like nothing at all; the invariant that record
+                // names is `event_response`'s test.
                 App::to_egui(gfx, &mut self.costs, &event);
                 let WindowEvent::KeyboardInput { event: key, .. } = &event else {
                     unreachable!("the arm this is in")
@@ -15575,15 +17019,410 @@ impl ApplicationHandler for App {
                     return;
                 }
                 let op = match key.logical_key.as_ref() {
-                    Key::Named(NamedKey::Escape) => {
-                        // **The one place a save is waited for**, and it is
-                        // bounded — see [`Keeping::awaited_saves`]. A save asked
-                        // for in the last second reaches the disk under an id
-                        // nobody was ever told, and a client waiting on it has
-                        // nowhere else to learn what happened.
-                        self.keeping.awaited_saves();
-                        event_loop.exit();
+                    // **`Tab` moves focus to the next bay, and `shift-Tab` to
+                    // the one before** — ADR-0259's first key, and the whole of
+                    // what makes the six that follow it addressable.
+                    //
+                    // **The walk is the console's and the key is this
+                    // file's**, which is the seam every control on this panel
+                    // already crosses (ADR-0156): the ring is derived from the
+                    // arrangement by `karakuri_console::focus::ring`, and what
+                    // this arm knows is which direction was asked for.
+                    //
+                    // **It names no operation and asks for no record**, which
+                    // is the two library cursor keys' arrangement one bay out:
+                    // focus is a pointer this console owns, nothing downstream
+                    // can be the model of record for it, and `Change::Pointed`
+                    // is the answer for *a key moved a pointer*. The page says
+                    // the same thing by leaving this row's key column alone —
+                    // there is no *move focus* row, because moving focus is
+                    // not an operation.
+                    //
+                    // **`egui` never gets a say.** `egui-winit` 0.36.1 reports
+                    // `consumed` for every `Tab` whatever has focus, and
+                    // `App::to_egui` reads `repaint` and nothing else — the
+                    // invariant `event_response`'s test holds, and the reason
+                    // this arm is reachable at all.
+                    Key::Named(NamedKey::Tab) => {
+                        let step = match self.shift {
+                            true => -1,
+                            false => 1,
+                        };
+                        let moved = self.readout.view.tab(&self.readout.panel, step);
+                        App::wants(
+                            gfx,
+                            &mut self.egui_due,
+                            &mut self.costs,
+                            Change::Pointed(moved).repaint(),
+                        );
                         return;
+                    }
+                    // **`esc` goes up one level of the focused bay's address,
+                    // and it does not quit** (ADR-0259). Quitting follows the
+                    // platform's own accelerator — `⌘Q`, `Alt-F4` — which
+                    // arrives as `WindowEvent::CloseRequested` and is answered
+                    // at the top of this `match`, saves waited for and
+                    // recording flushed. **A quit ladder is a sequence that
+                    // ends in something irreversible, in front of an audience,
+                    // reached by repeating one key**
+                    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+                    //
+                    // **At bay level it acts on nothing and says so**, because
+                    // there is no unfocused state to fall out into and a key
+                    // that declines silently is indistinguishable from one that
+                    // is not bound — the sentence this file already writes at
+                    // `tapped` and at `scaled`, one key along.
+                    //
+                    // **While a name is being typed it abandons the name**, and
+                    // that is not an exception: both letter-taking flows return
+                    // above this line, and ADR-0259 reads them as a *field*,
+                    // which is one of the seven kinds — *"`esc` … from a field
+                    // it abandons the name"*.
+                    Key::Named(NamedKey::Escape) => {
+                        let moved = self.readout.view.focus_up(&self.readout.panel);
+                        if !moved {
+                            println!(
+                                "  esc: the address is already at the {} bay and there is no \
+                                 level above it — press tab to move focus to another bay, or \
+                                 close the window to quit",
+                                self.readout
+                                    .view
+                                    .focused(&self.readout.panel)
+                                    .map_or("focused", |bay| bay.name)
+                            );
+                        }
+                        App::wants(
+                            gfx,
+                            &mut self.egui_due,
+                            &mut self.costs,
+                            Change::Pointed(moved).repaint(),
+                        );
+                        return;
+                    }
+                    // **The four keys of the grammar, dispatched to the bay
+                    // that has focus** — a digit names the nth thing one level
+                    // below the address and `0` the bay's head, the arrows take
+                    // the neighbour or the next value, `space` is the addressed
+                    // thing's next state and `enter` is the act it is for
+                    // (ADR-0259).
+                    //
+                    // **One arm rather than four**, and that is what makes the
+                    // re-read below one statement: a digit and an arrow both
+                    // move the Library's cursor, and the rule that a reading
+                    // follows it (ADR-0265) is paid once here instead of at
+                    // each key that could move it.
+                    //
+                    // **The console resolves the address and this names the
+                    // operation** ([ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md)):
+                    // `karakuri_console::focus::press` knows which control a
+                    // press landed on and owns the cycle a state goes round
+                    // (P-0090); what it cannot know is the value the deck is
+                    // holding, the tenth a level steps by, or what a load costs
+                    // — so those stay here, where they were.
+                    //
+                    // **Every write still goes through the method that already
+                    // refused it.** A digit that names a strip is
+                    // `View::select` and one that names a row is
+                    // `View::point_at`, so a deck the mixer draws no strip for
+                    // and a row past the listing are turned down exactly where
+                    // they were before. The grammar adds a route and no
+                    // exception.
+                    //
+                    // **Twelve letters went with it**, and none of them was
+                    // unbound before the grammar reached the same row:
+                    // `0`–`3` are the Mixer's `1`–`4`, `[ ] \\` and `; '` are
+                    // the arrows and `space` on the addressed trim and fader,
+                    // `m` is `space` on the blend chip, `e` is `space` on the
+                    // Library's head and `l` is `enter` on one of its rows.
+                    named if grammar(&named).is_some() => {
+                        let press = grammar(&named).expect("the arm this is in");
+                        // **What the cursor was on before the press**, so the
+                        // re-read below is a *move* and not a press — the
+                        // console's own answer would say which of six things
+                        // happened and this asks the one question the rule is
+                        // about.
+                        let was = self.readout.view.cursor_row();
+                        // **The deck read here and handed in**, which is the
+                        // three mix keys' own rule arriving at the grammar:
+                        // `view::Strip` is that same reading copied once a
+                        // frame, and a scheduled fade landing between the frame
+                        // and the press would cycle from a state the deck has
+                        // already left behind. The closure is asked only for
+                        // the strip the address is on, and only where a press
+                        // needs a state to cycle from.
+                        let asked = focus::press(
+                            &mut self.readout.view,
+                            &self.readout.panel,
+                            press,
+                            |deck| holding(&gfx.engine.deck, deck),
+                        );
+                        let moved = self.readout.view.cursor_row() != was;
+                        if moved && self.readout.view.reading_open() {
+                            println!("{}", read_reading(&mut self.readout.view, &self.store));
+                        }
+                        match asked {
+                            // **The Library head's scope**, and it is this
+                            // file's because a scope *is* a listing on this
+                            // side and a directory read is not a thing to do on
+                            // a frame (P-0091). What was `e` until 2026-09-10.
+                            focus::Asked::Scope => {
+                                if self.readout.view.step_scope() {
+                                    // Whose history, for the press branch's reason:
+                                    // the scope key steps onto the `history` chip
+                                    // as readily as the pointer names it.
+                                    let running = aimed_set(gfx, &self.readout.view);
+                                    println!(
+                                        "{}",
+                                        listing(
+                                            &mut self.readout.view,
+                                            &self.store,
+                                            self.presets.as_ref(),
+                                            self.folder.as_deref(),
+                                            running.as_deref(),
+                                        )
+                                    );
+                                }
+                                // **Emitted whether or not the mark moved**, which is
+                                // the deck keys' rule: what a press asked for is what
+                                // is emitted, and `unwritten` is what says the press
+                                // wrote no record and that it is settled.
+                                //
+                                // **And nothing performs it in `performed`**, where
+                                // `SelectDeck` has `pointed` — because this payload
+                                // cannot say which scope was chosen and a performer
+                                // reading `Undecided` would have to guess. The step
+                                // above *is* the performance, and it is the surface's
+                                // own pointer either way.
+                                let acted = Acted::Emitted(Some(Operation::SelectScope {
+                                    scope: Undecided,
+                                }));
+                                let repaint = App::performed(
+                                    gfx,
+                                    self.started,
+                                    &mut self.readout,
+                                    self.recording.recorder(),
+                                    &acted,
+                                    Repaint::Never,
+                                );
+                                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                                return;
+                            }
+                            // **The load, and the two operands are already on screen.**
+                            // The cursor says which Set and the selection says which
+                            // deck, which is `console.html`'s *"a cursor and a key
+                            // with no pointer anywhere in it"*. What the press does is
+                            // re-point the slot's source — [`loading`] — so the worker
+                            // builds it and the watchdog judges it exactly as it does
+                            // an edit, and nothing here reaches `Deck::install`.
+                            // **The scope, and the key steps where the operation
+                            // names.** `Operation::SelectScope`'s payload is
+                            // `Undecided` — *"what identifies one member of a growable
+                            // list is spelled nowhere"* — and its own doc says where
+                            // the stepping goes: *"The key steps and this does not …
+                            // that is the translator's arithmetic rather than this
+                            // operation's payload"* (P-0090). So the surface moves its
+                            // own pointer, exactly as the four deck keys do, and the
+                            // operation is emitted through the same route so that the
+                            // press is recorded as `Silent(Surface)` rather than as
+                            // nothing at all.
+                            //
+                            // **The listing is re-read here**, on the press that
+                            // changed the scope: a scope *is* a listing on this side
+                            // (`listing`), and a directory read is not a thing to do
+                            // on a frame (P-0091).
+                            focus::Asked::Load => {
+                                let deck = self.readout.view.selection();
+                                let at = self.readout.view.cursor_row();
+                                // **The Sets, which is empty under `history`**: a row
+                                // of that scope is a version and this key loads a Set,
+                                // so the arm below names it rather than this line
+                                // handing a word no store holds to a load
+                                // (`view::View::sets`).
+                                let row = self.readout.view.sets().get(at).cloned();
+                                // Whose history, for `why_nothing`'s `history` arm —
+                                // which this key cannot reach, because the arm below
+                                // answers that scope first, and which is passed anyway
+                                // because a sentence chosen by a caller is a sentence
+                                // that can be chosen wrongly.
+                                let running = aimed_set(gfx, &self.readout.view).is_some();
+                                // **What the take-in half of this press asked for**,
+                                // where a press that took nothing in leaves it
+                                // `Repaint::Never` — see the preset arm below for why
+                                // one press emits two operations and why they cannot
+                                // be one `Acted`.
+                                let mut took = Repaint::Never;
+                                let acted = match (self.readout.view.scope(), row) {
+                                    // **A preset or a folder row is taken in and then
+                                    // loaded**, which is one press because taking it in
+                                    // is what gives the Set the id the load needs —
+                                    // ADR-0229's *one operation, two moments*,
+                                    // performed at the second of them. What lands in
+                                    // the store is a Set of the operator's, so `all`
+                                    // gains a row they did not make: `console.html`
+                                    // says that out loud so that nobody meets it as a
+                                    // surprise. It gains no row under `my sets`, which
+                                    // is ADR-0299 — a Set the operator did not choose
+                                    // is in the library and is not one of their
+                                    // favourites.
+                                    //
+                                    // **The two scopes are one arm**, and the folder
+                                    // half is what landed on 2026-09-08: a folder row
+                                    // was refused here because the scope had no
+                                    // directory to list, and ADR-0275 gave it one. See
+                                    // [`Taking`], which is the whole of the difference
+                                    // between them.
+                                    (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
+                                        let from = match scope {
+                                            Scope::Folder => Taking::Folder(self.folder.as_deref()),
+                                            _ => Taking::Presets(self.presets.as_ref()),
+                                        };
+                                        match taking_in(&self.store, from, &row) {
+                                            Ok(taken) => {
+                                                println!("  take in: {}", taken.said);
+                                                // **The take-in is named as well as
+                                                // performed, and that is `e`'s rule
+                                                // one key along**: the scope step
+                                                // emits `SelectScope` *"so that the
+                                                // press is recorded as `Silent` rather
+                                                // than as nothing at all"*, and this
+                                                // press has just performed a whole row
+                                                // of the vocabulary —
+                                                // `docs/manual/operations.html`'s
+                                                // *Send a Set to somebody, and take
+                                                // one in*, *"opening a preset is this
+                                                // row"*. Emitting only the load would
+                                                // be a press that does two of the
+                                                // page's rows and names one.
+                                                //
+                                                // **Two emissions rather than one**,
+                                                // because they are two rows: taking in
+                                                // is what gives the Set the id, and
+                                                // the load names that id. `Acted`
+                                                // carries one operation — a fader
+                                                // drag, a chip, a key each emit
+                                                // exactly one — so the pair is two
+                                                // trips through `App::performed`
+                                                // rather than a shape invented here
+                                                // for the one press that has two.
+                                                //
+                                                // **In the order they happened.**
+                                                // `written` answers
+                                                // `Silent(NoRecord)` for the transfer,
+                                                // so nothing in `performed` performs
+                                                // it and the emission is the naming;
+                                                // the load after it is what re-points
+                                                // the slot.
+                                                let [take, load] = taken_in_press(deck, taken);
+                                                took = App::performed(
+                                                    gfx,
+                                                    self.started,
+                                                    &mut self.readout,
+                                                    self.recording.recorder(),
+                                                    &Acted::Emitted(Some(take)),
+                                                    Repaint::Never,
+                                                );
+                                                Acted::Emitted(Some(load))
+                                            }
+                                            // **Which of the two acts failed is the
+                                            // whole of what this sentence adds.**
+                                            // Nothing was taken in, so nothing was
+                                            // loaded — where a load that fails says so
+                                            // in `played`'s own words, with the deck
+                                            // it did not reach. The refusal itself is
+                                            // `setfile::unbundle`'s, including the one
+                                            // for an id this store already holds.
+                                            Err(e) => {
+                                                println!(
+                                                "  take in: `{row}` was not taken into the store: \
+                                                 {e}\n  take in: so nothing was loaded, and what is \
+                                                 on deck {} is still running — a Set already here is \
+                                                 listed under `all`, which is where it is loaded \
+                                                 from",
+                                                deck_letter(deck)
+                                            );
+                                                Acted::Nothing
+                                            }
+                                        }
+                                    }
+                                    // **A row of `history` is a version and not a
+                                    // Set**, so this key has nothing to load and says
+                                    // so rather than falling through to the sentence
+                                    // below, which would report a listing as empty
+                                    // while it is drawing rows. What lands a version is
+                                    // a press on the row itself —
+                                    // `Operation::RestoreProcedure`, on the deck the
+                                    // load pulldown names rather than on the selection.
+                                    (Some(Scope::History), _) => {
+                                        println!(
+                                        "  load: `history` lists the versions of a Set rather than \
+                                         Sets, so there is nothing here for enter to load — press a \
+                                         row to put that version back on its node, or mark `all` \
+                                         and load a Set"
+                                    );
+                                        Acted::Nothing
+                                    }
+                                    // A row of `all` or of `my sets`, which is a Set
+                                    // this store already holds and is the route
+                                    // ADR-0228 built.
+                                    (_, Some(set)) => {
+                                        Acted::Emitted(Some(Operation::LoadSet { deck, set }))
+                                    }
+                                    // Not a refusal of the load: there is no Set under
+                                    // the cursor because this scope lists nothing. The
+                                    // bay says so by drawing no rows; this says so in
+                                    // words, and it says **which** nothing it is —
+                                    // `favourites`, a folder nobody has pointed
+                                    // anywhere and a folder holding nothing are three
+                                    // different reasons, and a key that did nothing and
+                                    // a key that is not bound are the same experience.
+                                    (scope, None) => {
+                                        println!(
+                                        "  load: `{}` lists nothing, so there is no Set under the \
+                                         cursor — {}",
+                                        match scope {
+                                            Some(scope) => scope.name(),
+                                            None => "the library",
+                                        },
+                                        match scope {
+                                            Some(scope) =>
+                                                why_nothing(scope, self.folder.is_some(), running),
+                                            None => "this console was handed no scopes at all",
+                                        }
+                                    );
+                                        Acted::Nothing
+                                    }
+                                };
+                                // **One frame asked for, however many operations the
+                                // press emitted.** `App::wants` counts a frame against
+                                // the run's costs and asks the window for a redraw, so
+                                // calling it twice for one press would ask for two
+                                // frames where one is drawn. `Repaint::soonest` is
+                                // what combines them, and its own rule is why it is
+                                // safe: it can only bring a frame forward.
+                                let repaint = App::performed(
+                                    gfx,
+                                    self.started,
+                                    &mut self.readout,
+                                    self.recording.recorder(),
+                                    &acted,
+                                    Repaint::Never,
+                                )
+                                .soonest(took);
+                                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                                return;
+                            }
+                            asked => {
+                                let repaint = answered(
+                                    gfx,
+                                    self.started,
+                                    &mut self.readout,
+                                    self.recording.recorder(),
+                                    &asked,
+                                );
+                                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                                return;
+                            }
+                        }
                     }
                     // **The pointer is resolved here and not inside the
                     // operation.** `f` means fold and this is the surface
@@ -15605,169 +17444,6 @@ impl ApplicationHandler for App {
                     },
                     Key::Character("u") => Op::Unsolo,
                     Key::Character("r") => Op::Reset,
-                    // **The deck selection, which is the command line's own
-                    // four keys.** They are the one place the two keyboards
-                    // agree on a letter's meaning besides `esc`, and they
-                    // agree because a deck is a slot number: nothing had to be
-                    // translated for the panel to mean what the shell already
-                    // meant. `SelectDeck` writes no record, so the surface
-                    // performs it — [`pointed`], reached through the same
-                    // `performed` every control's operation goes through, so
-                    // there is one path and not a second one for the pointer.
-                    Key::Character("0")
-                    | Key::Character("1")
-                    | Key::Character("2")
-                    | Key::Character("3") => {
-                        let Key::Character(digit) = key.logical_key.as_ref() else {
-                            unreachable!("the arm this is in")
-                        };
-                        let deck = digit.as_bytes()[0] - b'0';
-                        let acted = Acted::Emitted(Some(Operation::SelectDeck { deck }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The library cursor**, and it is the one key here that
-                    // names no operation at all. `docs/manual/console.html`
-                    // argues that where the deck selection has a row: the
-                    // selection is what every deck-addressed operation's
-                    // keyboard translator fills its `deck` in from, and this
-                    // is read by one operation that carries the Set id in its
-                    // own payload — so three of the four surfaces would have
-                    // nothing to reach and a row would be the first rule
-                    // written down as a permanent gap.
-                    //
-                    // **Held inside the rows the bay drew**, which is why the
-                    // listing is asked rather than the store: this bay has no
-                    // scroll position, so the reachable Sets are the listed
-                    // ones and the foot already says how many are not. The
-                    // solve is a flag test on a layout nothing dirtied
-                    // (ADR-0183) and is here because a key may arrive between
-                    // a resize and the frame that answers it.
-                    Key::Named(NamedKey::ArrowUp) | Key::Named(NamedKey::ArrowDown) => {
-                        let step = match key.logical_key.as_ref() {
-                            Key::Named(NamedKey::ArrowUp) => -1,
-                            _ => 1,
-                        };
-                        self.readout.panel.solve();
-                        // **Which rows the bay is drawing**, and it is a
-                        // range rather than a count now: the bay scrolls, so
-                        // the rows on screen are a window into the listing
-                        // rather than its first `n` (ADR-0312). The cursor is
-                        // held inside that window — `View::walk` — and the
-                        // wheel is what moves the window.
-                        let drawn = karakuri_console::view::library(
-                            self.readout.panel.layout(),
-                            &self.readout.view.scopes,
-                            &self.readout.view.library,
-                            self.readout.view.opened(),
-                            self.readout.view.pointed(),
-                            self.readout.view.library_scroll(),
-                        )
-                        .map_or(0..0, |bay| bay.drawn());
-                        let moved = self.readout.view.walk(step, drawn);
-                        // **The reading follows the cursor**, which is
-                        // `console.html`'s own rule: *"the arrow keys move the
-                        // cursor and the reading moves with it"*, and *"one
-                        // row is open at a time"*. So the block under the
-                        // cursor is re-read off the disk here, on the move —
-                        // a file read on a press, which is where this program
-                        // already does them
-                        // ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)),
-                        // and only where the cursor actually moved.
-                        //
-                        // **And this key still names no operation**, which is
-                        // `key_column`'s `("up", &[])` and is the page's to
-                        // change rather than this file's (ADR-0198, ADR-0220):
-                        // the asking was the press on the `params` chip and what
-                        // this moves is that question's *operand*. The
-                        // operations page names no key for that row —
-                        // `console.html` calls it *"a gap and not a
-                        // decision"* — and a key that emitted `ReadSet` would
-                        // be an operator reaching the row from the keyboard
-                        // while the page says nobody can.
-                        if moved && self.readout.view.reading_open() {
-                            println!("{}", read_reading(&mut self.readout.view, &self.store));
-                        }
-                        App::wants(
-                            gfx,
-                            &mut self.egui_due,
-                            &mut self.costs,
-                            Change::Pointed(moved).repaint(),
-                        );
-                        return;
-                    }
-                    // **The load, and the two operands are already on screen.**
-                    // The cursor says which Set and the selection says which
-                    // deck, which is `console.html`'s *"a cursor and a key
-                    // with no pointer anywhere in it"*. What the press does is
-                    // re-point the slot's source — [`loading`] — so the worker
-                    // builds it and the watchdog judges it exactly as it does
-                    // an edit, and nothing here reaches `Deck::install`.
-                    // **The scope, and the key steps where the operation
-                    // names.** `Operation::SelectScope`'s payload is
-                    // `Undecided` — *"what identifies one member of a growable
-                    // list is spelled nowhere"* — and its own doc says where
-                    // the stepping goes: *"The key steps and this does not …
-                    // that is the translator's arithmetic rather than this
-                    // operation's payload"* (P-0090). So the surface moves its
-                    // own pointer, exactly as the four deck keys do, and the
-                    // operation is emitted through the same route so that the
-                    // press is recorded as `Silent(Surface)` rather than as
-                    // nothing at all.
-                    //
-                    // **The listing is re-read here**, on the press that
-                    // changed the scope: a scope *is* a listing on this side
-                    // (`listing`), and a directory read is not a thing to do
-                    // on a frame (P-0091).
-                    Key::Character("e") => {
-                        if self.readout.view.step_scope() {
-                            // Whose history, for the press branch's reason:
-                            // `e` is the key that steps onto the `history`
-                            // chip as readily as the pointer names it.
-                            let running = aimed_set(gfx, &self.readout.view);
-                            println!(
-                                "{}",
-                                listing(
-                                    &mut self.readout.view,
-                                    &self.store,
-                                    self.presets.as_ref(),
-                                    self.folder.as_deref(),
-                                    running.as_deref(),
-                                )
-                            );
-                        }
-                        // **Emitted whether or not the mark moved**, which is
-                        // the deck keys' rule: what a press asked for is what
-                        // is emitted, and `unwritten` is what says the press
-                        // wrote no record and that it is settled.
-                        //
-                        // **And nothing performs it in `performed`**, where
-                        // `SelectDeck` has `pointed` — because this payload
-                        // cannot say which scope was chosen and a performer
-                        // reading `Undecided` would have to guess. The step
-                        // above *is* the performance, and it is the surface's
-                        // own pointer either way.
-                        let acted =
-                            Acted::Emitted(Some(Operation::SelectScope { scope: Undecided }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
                     // **Keep what the selected deck is playing**, filed under a
                     // stamp because a bare key press cannot type a name — see
                     // `karakuri_environment::accepted_save`, whose convention
@@ -15777,7 +17453,7 @@ impl ApplicationHandler for App {
                     // **The selected deck and not a slot in the key**, which is
                     // the split every deck-addressed control on this panel
                     // makes: the deck an operator means is the one they have
-                    // already selected with `0`–`3`, and a model has no
+                    // already addressed in the Mixer, and a model has no
                     // selection and names the slot in the call.
                     //
                     // **Named through `performed` and performed beside it**,
@@ -15817,301 +17493,6 @@ impl ApplicationHandler for App {
                             usize::from(deck),
                             None,
                             None,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    Key::Character("l") => {
-                        let deck = self.readout.view.selection();
-                        let at = self.readout.view.cursor_row();
-                        // **The Sets, which is empty under `history`**: a row
-                        // of that scope is a version and this key loads a Set,
-                        // so the arm below names it rather than this line
-                        // handing a word no store holds to a load
-                        // (`view::View::sets`).
-                        let row = self.readout.view.sets().get(at).cloned();
-                        // Whose history, for `why_nothing`'s `history` arm —
-                        // which this key cannot reach, because the arm below
-                        // answers that scope first, and which is passed anyway
-                        // because a sentence chosen by a caller is a sentence
-                        // that can be chosen wrongly.
-                        let running = aimed_set(gfx, &self.readout.view).is_some();
-                        // **What the take-in half of this press asked for**,
-                        // where a press that took nothing in leaves it
-                        // `Repaint::Never` — see the preset arm below for why
-                        // one press emits two operations and why they cannot
-                        // be one `Acted`.
-                        let mut took = Repaint::Never;
-                        let acted = match (self.readout.view.scope(), row) {
-                            // **A preset or a folder row is taken in and then
-                            // loaded**, which is one press because taking it in
-                            // is what gives the Set the id the load needs —
-                            // ADR-0229's *one operation, two moments*,
-                            // performed at the second of them. What lands in
-                            // the store is a Set of the operator's, so `all`
-                            // gains a row they did not make: `console.html`
-                            // says that out loud so that nobody meets it as a
-                            // surprise. It gains no row under `my sets`, which
-                            // is ADR-0299 — a Set the operator did not choose
-                            // is in the library and is not one of their
-                            // favourites.
-                            //
-                            // **The two scopes are one arm**, and the folder
-                            // half is what landed on 2026-09-08: a folder row
-                            // was refused here because the scope had no
-                            // directory to list, and ADR-0275 gave it one. See
-                            // [`Taking`], which is the whole of the difference
-                            // between them.
-                            (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
-                                let from = match scope {
-                                    Scope::Folder => Taking::Folder(self.folder.as_deref()),
-                                    _ => Taking::Presets(self.presets.as_ref()),
-                                };
-                                match taking_in(&self.store, from, &row) {
-                                    Ok(taken) => {
-                                        println!("  take in: {}", taken.said);
-                                        // **The take-in is named as well as
-                                        // performed, and that is `e`'s rule
-                                        // one key along**: the scope step
-                                        // emits `SelectScope` *"so that the
-                                        // press is recorded as `Silent` rather
-                                        // than as nothing at all"*, and this
-                                        // press has just performed a whole row
-                                        // of the vocabulary —
-                                        // `docs/manual/operations.html`'s
-                                        // *Send a Set to somebody, and take
-                                        // one in*, *"opening a preset is this
-                                        // row"*. Emitting only the load would
-                                        // be a press that does two of the
-                                        // page's rows and names one.
-                                        //
-                                        // **Two emissions rather than one**,
-                                        // because they are two rows: taking in
-                                        // is what gives the Set the id, and
-                                        // the load names that id. `Acted`
-                                        // carries one operation — a fader
-                                        // drag, a chip, a key each emit
-                                        // exactly one — so the pair is two
-                                        // trips through `App::performed`
-                                        // rather than a shape invented here
-                                        // for the one press that has two.
-                                        //
-                                        // **In the order they happened.**
-                                        // `written` answers
-                                        // `Silent(NoRecord)` for the transfer,
-                                        // so nothing in `performed` performs
-                                        // it and the emission is the naming;
-                                        // the load after it is what re-points
-                                        // the slot.
-                                        let [take, load] = taken_in_press(deck, taken);
-                                        took = App::performed(
-                                            gfx,
-                                            self.started,
-                                            &mut self.readout,
-                                            self.recording.recorder(),
-                                            &Acted::Emitted(Some(take)),
-                                            Repaint::Never,
-                                        );
-                                        Acted::Emitted(Some(load))
-                                    }
-                                    // **Which of the two acts failed is the
-                                    // whole of what this sentence adds.**
-                                    // Nothing was taken in, so nothing was
-                                    // loaded — where a load that fails says so
-                                    // in `played`'s own words, with the deck
-                                    // it did not reach. The refusal itself is
-                                    // `setfile::unbundle`'s, including the one
-                                    // for an id this store already holds.
-                                    Err(e) => {
-                                        println!(
-                                            "  take in: `{row}` was not taken into the store: \
-                                             {e}\n  take in: so nothing was loaded, and what is \
-                                             on deck {} is still running — a Set already here is \
-                                             listed under `all`, which is where it is loaded \
-                                             from",
-                                            deck_letter(deck)
-                                        );
-                                        Acted::Nothing
-                                    }
-                                }
-                            }
-                            // **A row of `history` is a version and not a
-                            // Set**, so this key has nothing to load and says
-                            // so rather than falling through to the sentence
-                            // below, which would report a listing as empty
-                            // while it is drawing rows. What lands a version is
-                            // a press on the row itself —
-                            // `Operation::RestoreProcedure`, on the deck the
-                            // load pulldown names rather than on the selection.
-                            (Some(Scope::History), _) => {
-                                println!(
-                                    "  load: `history` lists the versions of a Set rather than \
-                                     Sets, so there is nothing here for `l` to load — press a \
-                                     row to put that version back on its node, or mark `all` \
-                                     and load a Set"
-                                );
-                                Acted::Nothing
-                            }
-                            // A row of `all` or of `my sets`, which is a Set
-                            // this store already holds and is the route
-                            // ADR-0228 built.
-                            (_, Some(set)) => {
-                                Acted::Emitted(Some(Operation::LoadSet { deck, set }))
-                            }
-                            // Not a refusal of the load: there is no Set under
-                            // the cursor because this scope lists nothing. The
-                            // bay says so by drawing no rows; this says so in
-                            // words, and it says **which** nothing it is —
-                            // `favourites`, a folder nobody has pointed
-                            // anywhere and a folder holding nothing are three
-                            // different reasons, and a key that did nothing and
-                            // a key that is not bound are the same experience.
-                            (scope, None) => {
-                                println!(
-                                    "  load: `{}` lists nothing, so there is no Set under the \
-                                     cursor — {}",
-                                    match scope {
-                                        Some(scope) => scope.name(),
-                                        None => "the library",
-                                    },
-                                    match scope {
-                                        Some(scope) =>
-                                            why_nothing(scope, self.folder.is_some(), running),
-                                        None => "this console was handed no scopes at all",
-                                    }
-                                );
-                                Acted::Nothing
-                            }
-                        };
-                        // **One frame asked for, however many operations the
-                        // press emitted.** `App::wants` counts a frame against
-                        // the run's costs and asks the window for a redraw, so
-                        // calling it twice for one press would ask for two
-                        // frames where one is drawn. `Repaint::soonest` is
-                        // what combines them, and its own rule is why it is
-                        // safe: it can only bring a frame forward.
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        )
-                        .soonest(took);
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The trim, and the three keys the page specifies for
-                    // it.** `Operation::SetGain` is absolute and the key
-                    // steps, which is `SetLatencyOffset`'s arrangement on a
-                    // different value and the same sentence: an absolute value
-                    // can express every step and a step cannot express a
-                    // setting, and the strip's trim has to be able to reach
-                    // it. So the press reads the level it is standing on and
-                    // names where it is going — [`gain_key`], which is also
-                    // where the three letters' directions come from, because
-                    // `docs/manual/operations.html` names them and stops.
-                    //
-                    // **Read off the deck and not off the strip**, which is
-                    // the source [`mixer`] reads: `view::Strip::gain` is that
-                    // same reading copied once a frame, and a scheduled fade
-                    // landing between the frame and the press would leave a
-                    // step counted from a number the deck has already left
-                    // behind. The strips follow afterwards because they are
-                    // read back off the deck, which is what
-                    // `a_drag_moves_the_deck_and_the_strip_follows_the_deck`
-                    // asserts about the fader beside this key.
-                    //
-                    // **The selected deck and not a slot in the key**, which
-                    // is the split every deck-addressed control on this panel
-                    // makes and `k`'s own sentence: the deck an operator means
-                    // is the one they have already selected with `0`–`3`, and
-                    // a model has no selection and names the slot in the call.
-                    Key::Character("[") | Key::Character("]") | Key::Character("\\") => {
-                        let Key::Character(name) = key.logical_key.as_ref() else {
-                            unreachable!("the arm this is in")
-                        };
-                        let deck = self.readout.view.selection();
-                        // **The guard rather than the message**, which is
-                        // [`held`]'s own sentence: the selection is inside the
-                        // deck's slots by construction, and this is what keeps
-                        // a read that would index out of them from being a
-                        // panic in an event handler.
-                        let Some(slot) = held(&gfx.engine.deck, deck) else {
-                            return;
-                        };
-                        let gain =
-                            gain_key(name, gfx.engine.deck.gain(slot)).expect("the arm this is in");
-                        let acted = Acted::Emitted(Some(Operation::SetGain { deck, gain }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The fader, and it is the other control rather than the
-                    // same one twice** — *"opacity at zero silences under
-                    // every blend mode, gain at zero does not silence
-                    // `over`"*, which is why the page draws two rows and this
-                    // file binds two pairs. Everything in the arm above is
-                    // this arm's as well: absolute operation, stepping key,
-                    // the reading taken off the deck, the selected deck. What
-                    // differs is the clamp, and it is [`opacity_key`]'s.
-                    Key::Character(";") | Key::Character("'") => {
-                        let Key::Character(name) = key.logical_key.as_ref() else {
-                            unreachable!("the arm this is in")
-                        };
-                        let deck = self.readout.view.selection();
-                        let Some(slot) = held(&gfx.engine.deck, deck) else {
-                            return;
-                        };
-                        let opacity = opacity_key(name, gfx.engine.deck.opacity(slot))
-                            .expect("the arm this is in");
-                        let acted = Acted::Emitted(Some(Operation::SetOpacity { deck, opacity }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The blend, and this one names rather than steps.**
-                    // `Operation::SetBlendMode` carries a mode and there is no
-                    // step in the vocabulary to name, so the cycle is this
-                    // surface's arithmetic — [`after_blend`], which is
-                    // `karakuri_console::view::Mixer::blend`'s affordance at a
-                    // key instead of at a chip, and the same three round the
-                    // same way (ADR-0187).
-                    //
-                    // **The mode the deck is on, through [`blend_mode`]**,
-                    // which is the one place the engine's list and the
-                    // vocabulary's are made to agree — so a fourth engine mode
-                    // stops this compiling rather than sending the cycle past
-                    // a state no operation can name.
-                    Key::Character("m") => {
-                        let deck = self.readout.view.selection();
-                        let Some(slot) = held(&gfx.engine.deck, deck) else {
-                            return;
-                        };
-                        let blend = after_blend(blend_mode(gfx.engine.deck.blend(slot)));
-                        let acted = Acted::Emitted(Some(Operation::SetBlendMode { deck, blend }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
                         );
                         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                         return;
@@ -16265,6 +17646,35 @@ impl ApplicationHandler for App {
                 // `Live::run_requests` and `Live::finished_saves`, at the top of
                 // the frame for the reason written there.
                 self.keeping.requests(&mut gfx.engine, &self.store);
+                // **And every operation a model named**, above everything that
+                // touches the window for the reason the line above it is:
+                // nothing this reaches needs a swapchain, and a window that has
+                // faulted returns below this line still owing a waiting client
+                // its answer. See [`App::operated`].
+                App::operated(
+                    gfx,
+                    self.started,
+                    &mut self.readout,
+                    &mut self.recording,
+                    &self.keeping,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                );
+                // **And every operation a hand on a control surface named**,
+                // beside the drain above and for its reason: this is a door
+                // outside the window handing in an operation, and nothing it
+                // reaches needs a swapchain. See [`App::mapped`], which is
+                // also where the wake that got this frame asked for is.
+                App::mapped(
+                    gfx,
+                    self.started,
+                    &mut self.readout,
+                    &mut self.recording,
+                    &self.hover,
+                    &learned_map(&self.store),
+                    &mut self.egui_due,
+                    &mut self.costs,
+                );
                 if self.keeping.finished_saves() {
                     let running = aimed_set(gfx, &self.readout.view);
                     // **The one thing in this program that adds a Set**, so the
@@ -16619,6 +18029,7 @@ impl ApplicationHandler for App {
                     inspector(
                         &gfx.engine.deck,
                         &gfx.material,
+                        &gfx.engine.aimed,
                         &mut self.readout.view.inspector,
                     );
                 }
@@ -16646,6 +18057,19 @@ impl ApplicationHandler for App {
                     &mut self.egui_due,
                     &mut self.costs,
                     Change::Animating(self.readout.view.animating(self.readout.panel.layout()))
+                        .repaint(),
+                );
+                // **And what the hover layer is owed**, asked on the frame for
+                // `View::animating`'s reason: a dwell is a deadline the layer
+                // keeps and nothing an operator does raises it — the pointer
+                // has already stopped moving by then, so there is no event
+                // left to carry it. It answers nothing at all once the tip is
+                // up, because the box does not move while it is shown.
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Tip(self.hover.owed(gfx.egui.egui_ctx(), self.started.elapsed()))
                         .repaint(),
                 );
 
@@ -16684,13 +18108,44 @@ impl ApplicationHandler for App {
                     }
                 }
 
+                // **What the tip under the pointer says about MIDI, read off
+                // the live map.** The page's own `⊕ MIDI:` line is the
+                // *mock's* assignment and no operator's, so it is derived
+                // here and handed across — the console cannot read a map,
+                // because `karakuri-midi` pulls `midir` and ADR-0156 is that
+                // it takes no device (ADR-0335, ADR-0336).
+                //
+                // **Once a frame and only while a pointer is resting on
+                // something**, which is a branch on every other frame: a tip
+                // that is up asks for no frames at all, so this runs on the
+                // frame one appears and on the frame a learn changes one.
+                let hovering = gfx.egui.egui_ctx().clone();
+                let assignment = self.hover.resting().and_then(|(p, _)| {
+                    let surface = gfx.midi.as_ref()?;
+                    let operation =
+                        asked_at(&self.readout.panel, &hovering, &self.readout.view, p)?;
+                    let target = target_of(&operation, &gfx.engine.deck).ok()?;
+                    surface.bound(&target)
+                });
+                self.hover.assign(assignment);
+
                 // -- the egui pass -------------------------------------
                 let started = Instant::now();
                 let (allocs, bytes) = counted();
                 let input = gfx.egui.take_egui_input(&gfx.window);
                 let panel = &mut self.readout.panel;
                 let view = &mut self.readout.view;
-                let mut output = gfx.egui.egui_ctx().run_ui(input, |ui| view.draw(ui, panel));
+                // **The hover layer paints last, inside the same pass.** It is
+                // one closure and not two, because a tip has to go over every
+                // card and every bay — which is the mock's `z-index: 30`, and
+                // is the order `View::draw` already paints its own four cards
+                // in. It draws nothing at all until a dwell has run.
+                let hover = &mut self.hover;
+                let now = self.started.elapsed();
+                let mut output = gfx.egui.egui_ctx().run_ui(input, |ui| {
+                    view.draw(ui, panel);
+                    hover.paint(ui, panel, view, now);
+                });
                 let primitives = gfx
                     .egui
                     .egui_ctx()
@@ -17159,6 +18614,305 @@ fn unopened(selector: &str, why: &audio::AudioError) -> String {
              open; pick another on the `audio-in` pill."
         ),
     }
+}
+
+// ---------------------------------------------------------------------------
+// The control surface this instrument is playing from
+// ---------------------------------------------------------------------------
+
+/// **Open the surface this program plays from, and say what happened.**
+///
+/// Returns the surface and one line for the legend — never a refusal that
+/// stops the run, which is [`listening`]'s decision one door along and it is
+/// the same decision for the same reason. Three cases, and the three are not
+/// the microphone's three:
+///
+/// 1. **Nothing plugged in**, which is most machines and is a state rather
+///    than a fault. Nobody named a port: this program takes whatever is there
+///    because that is what an instrument does, and a run with no surface is a
+///    run played with the pointer and the keyboard, which is every run this
+///    program has had until now. Said out loud, once.
+/// 2. **A port that is there and will not open** — taken by another program,
+///    usually. Said in the port's own words, and the run continues: a window
+///    with a set on it must not fail to start because something else has the
+///    controller.
+/// 3. **A port that goes away mid-set.** Nothing here notices, deliberately.
+///    `midir` holds the connection and a device unplugged stops sending; every
+///    control on this panel is still under the pointer and under a key, and
+///    nothing on the deck moves on its own. What an operator does about it is
+///    plug it back in and restart, which is what the legend says — **there is
+///    no pill to re-open one**, because the transport row's `map` is one of
+///    the two controls the mock draws and this console does not.
+///
+/// **Which port is the first one there is**, and it is not a flag.
+/// `karakuri-cli` is told with `--midi-in` and refuses the run without the one
+/// it was told; [`USAGE`] declines that flag by name for
+/// [ADR-0220](../../../docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)'s
+/// reason read one column along — this program is the instrument, and a
+/// launch-time answer is one an operator standing in front of the panel cannot
+/// change. So it opens what is there and says which, exactly as `audio-in`
+/// does.
+///
+/// **Which map is [`midi::map_for`]** — the operator's own under the store,
+/// then the one that ships — and the path is printed rather than described,
+/// for the reason every line of [`Readout::print_legend`] is derived.
+///
+/// A free function rather than a step of `resumed`, for [`listening`]'s
+/// reason: `resumed` cannot be called from a test, and the sentences are the
+/// half of this that has no device in it. See [`surface_line`] and
+/// [`unsurfaced`], which are that half.
+fn surfaced(
+    map: Option<&std::path::Path>,
+    waker: EventLoopProxy<()>,
+) -> (Option<midi::Surface>, String) {
+    // **The wake, and it is the whole of what this closure is.** `send_event`
+    // is called on the MIDI thread once per message; `()` says *ask again* and
+    // [`App::user_event`] is what asks. The error is dropped because it means
+    // the loop has gone, which means the run is ending.
+    match midi::Surface::first(map, move || {
+        let _ = waker.send_event(());
+    }) {
+        Ok((surface, notes)) => {
+            let line = surface_line(
+                surface.port_name(),
+                surface.map_name(),
+                map,
+                surface.mappings(),
+                &notes,
+            );
+            (Some(surface), line)
+        }
+        Err(why) => (None, unsurfaced(&why)),
+    }
+}
+
+/// **What the legend says about an open surface**, and it is a function of
+/// four facts and nothing else — so it is checkable on a machine with no MIDI
+/// on it at all, which is every machine a test runs on here.
+///
+/// The map's **path** is printed beside its name because the name alone cannot
+/// say which of the two tiers answered: `default` under the store and
+/// `surface` in the preset library are two different files and an operator
+/// who has just learned one wants to know which of them is loaded.
+fn surface_line(
+    port: &str,
+    map_name: Option<&str>,
+    map_path: Option<&std::path::Path>,
+    mappings: usize,
+    notes: &[String],
+) -> String {
+    let mut line = format!("midi in: `{port}`");
+    match (map_name, map_path) {
+        (Some(name), Some(path)) => line.push_str(&format!(
+            ", map `{name}` from {} — {mappings} mapping{}",
+            path.display(),
+            if mappings == 1 { "" } else { "s" }
+        )),
+        // **No map is a state and the sentence is the one the operator needs
+        // next**, which is `karakuri-environment`'s own words for it: a
+        // surface with no map still reports what it sends.
+        _ => line.push_str(
+            ", no map — turn a knob and this will print the line that would map it, once per              control",
+        ),
+    }
+    line.push_str(
+        ". every mapped message becomes the operation the map names and is performed on the          frame it arrives on, where a press on the mixer's fader is performed — so a knob and          a hand write one record and a session recorded from this surface replays with          neither the surface nor the map attached. nothing on this panel names the map: the          transport row's `map` pill is one of the two controls the mock draws and this          console does not.",
+    );
+    for note in notes {
+        line.push_str(&format!("\n  midi map: {note}"));
+    }
+    line
+}
+
+/// **Where a learned map is written** — `<store>/maps/default.map`, the first
+/// of `karakuri_environment::midi::map_for`'s two tiers.
+///
+/// It is **always** this file, whatever map the run loaded: a run playing the
+/// shipped `examples/surface.map` and learning a control writes into the
+/// store, which is
+/// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
+/// held rather than argued. `default` is the name a program with no way to ask
+/// uses; naming another is the `map` pill, which is a readout.
+fn learned_map(store: &std::path::Path) -> std::path::PathBuf {
+    store
+        .join(midi::MAPS)
+        .join(format!("{}.{}", midi::DEFAULT_MAP, midi::MAP_SUFFIX))
+}
+
+/// **What a press on the control under the pointer would ask for**, or `None`
+/// where the pointer is on no control at all.
+///
+/// **This is learn's half of the pointer question**, and it is deliberately
+/// the *press* derivation rather than a new one: a control's identity is what
+/// a press on it asks the deck for, so a knob learned against it moves exactly
+/// what a click moves. The hover layer answers *which* control
+/// ([`karakuri_console::hover::Hover::resting`]) and this answers *what it
+/// is*, and the two walk the same `view::` derivations — a second geometry
+/// here would be a second answer that could disagree with the tip the operator
+/// is reading while they learn.
+///
+/// **The value is a placeholder and is thrown away.** What learn wants is the
+/// *address*, which is an operation with its value elided — `LaneTarget`'s own
+/// sentence one route along (ADR-0321). `Knob::operation` is the only way to
+/// get one out of the console, so this asks it at zero and [`target_of`] reads
+/// past the value.
+///
+/// **The order is the hover layer's**, which is the press order: the controls
+/// inside a container before the container. It matters in the Mixer, where a
+/// strip's chips sit inside the strip.
+fn asked_at(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option<Operation> {
+    if let Some(row) = look_row(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        view.tracker,
+        view.map.as_ref(),
+        &view.arrangement,
+        view.look,
+    ) {
+        if let Some(operation) = row.exposure(p) {
+            return Some(operation);
+        }
+    }
+    if let Some(group) = tracker_group(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        view.tracker,
+    ) {
+        if let Some(operation) = group.tapped(p) {
+            return Some(operation);
+        }
+    }
+    if let Some(bay) = mixer_bay(ctx, panel.layout(), &view.mixer) {
+        if let Some(grab) = bay.grab(p) {
+            return Some(grab.knob().operation(0.0));
+        }
+        if let Some(operation) = bay
+            .blend(p)
+            .or_else(|| bay.tally(p))
+            .or_else(|| bay.mask(p))
+        {
+            return Some(operation);
+        }
+    }
+    for (index, pane) in view.inspector.iter().enumerate() {
+        if let Some(at) = inspector_pane(panel.layout(), index, pane, view.scroll_in(index)) {
+            if let Some(grab) = at.grab(pane, p) {
+                return Some(grab.knob().operation(0.0));
+            }
+        }
+    }
+    None
+}
+
+/// **The right-hand side of the map line that reaches this control**, or the
+/// sentence saying why there is none.
+///
+/// # It is `karakuri_midi`'s own list, read the other way
+///
+/// The eight arms are exactly `Target::spelled`'s eight, which is what makes
+/// this safe: every string it returns is a string that crate's parser accepts,
+/// and `a_learned_target_is_one_the_grammar_accepts` is what holds that. A
+/// ninth spelling invented here would be a line an operator's file could not
+/// hold.
+///
+/// # The parameter arm is the whole reason this function exists
+///
+/// Every other operation carries its own address — a slot number, a word from
+/// a closed list. `WriteParam` carries a **name**, and a map line holds a
+/// **position** (ADR-0268): *knob 3 is knob 3 whatever Set is loaded*, and
+/// binding to the name would make the mapping a cost paid again on every swap.
+/// So this is where the name goes back to being a position, against the Set
+/// that is in the deck — `Set::published()` in order, counting from one, which
+/// is the number the Inspector draws beside the row and the same reading
+/// `karakuri_environment::midi::Decks` makes in the other direction.
+///
+/// # A refusal is a sentence and not a silence
+///
+/// A control a map line cannot name is most of this panel, and the operator
+/// pointing at one is owed the reason —
+/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
+/// The reasons are the console page's, one control at a time, and this points
+/// at the tooltip rather than repeating forty of them.
+fn target_of(operation: &Operation, deck: &Deck) -> Result<String, String> {
+    let named = |what: &str| {
+        Err(format!(
+            "learn: `{}` is not something a map line can name — {what}. the control's own \
+             tooltip says why, on the `⊕ MIDI:` line",
+            operation.title()
+        ))
+    };
+    match operation {
+        Operation::SetGain { deck, .. } => Ok(format!("gain {deck}")),
+        Operation::SetOpacity { deck, .. } => Ok(format!("opacity {deck}")),
+        Operation::SetExposure { .. } => Ok("exposure".to_owned()),
+        Operation::SetMaskPosition { deck, .. } => Ok(format!("mask-position {deck}")),
+        Operation::SetResidency { deck, residency } => {
+            Ok(format!("residency {deck} {}", residency.name()))
+        }
+        Operation::SetBlendMode { deck, blend } => Ok(format!("blend {deck} {}", blend.name())),
+        Operation::TapBeat => Ok("tap".to_owned()),
+        Operation::WriteParam {
+            deck: slot, param, ..
+        } => {
+            let index = usize::from(*slot);
+            if index >= deck.slot_count() {
+                return Err(karakuri_environment::no_such_slot(index, deck.slot_count()));
+            }
+            let set = deck.slot(index).set();
+            let at = set.published().iter().position(|control| {
+                control.key == param.key
+                    && control.at.map(|(kind, index)| karakuri_operation::NodeAt {
+                        layer: asked_layer(kind),
+                        index,
+                    }) == param.node
+            });
+            match at {
+                Some(at) => Ok(format!("param {slot} {}", at + 1)),
+                // **A control off the published interface**, which the pane
+                // draws with its number and its fader gone (`view::Param::ord`
+                // is `None` for one). A position is exactly what a knob
+                // counts, so there is nothing to bind — and the answer is to
+                // publish it, which is a press in the same pane.
+                None => named(
+                    "that deck's Set does not publish it, so it has no position to count \
+                     to — put it on the interface and learn it again",
+                ),
+            }
+        }
+        // **A mask's shape is the sharp one and it is not an oversight.** A
+        // map line can say a slot, a word from a closed list or a range, and
+        // this operation carries an angle as well as a kind — so a pad naming
+        // the kind would have to invent the angle beside it (ADR-0202,
+        // ADR-0209).
+        Operation::SetMaskShape { .. } => {
+            named("a map line has no way to write an angle, so the shape has no spelling")
+        }
+        _ => named("no map target names it"),
+    }
+}
+
+/// **What to say about a surface that did not open**, and which of the two
+/// kinds of nothing it was — [`unopened`]'s shape one door along, and split
+/// out for its reason.
+///
+/// **The empty case is not apologetic.** A machine with nothing plugged in is
+/// the ordinary state of this program and always has been; saying it as a
+/// failure would read as one. A machine that *has* inputs and would not open
+/// the first is somebody's other program holding the port, and the message
+/// `karakuri-midi` came back with is the only thing that knows which.
+fn unsurfaced(why: &str) -> String {
+    if why.contains("there are no MIDI inputs") {
+        return String::from(
+            "midi in: none — nothing is plugged in, which is a state and not a fault: every              control on this panel is reached by the pointer and by the keyboard, and that is              every run this program has had. plug a surface in and start again.",
+        );
+    }
+    format!(
+        "midi in: none — {why}. the panel runs; every control is still under the pointer and          under a key. this port is opened once, at startup, so a surface freed later is          reached by starting again."
+    )
 }
 
 /// **What the `audio-in` pill reads**, out of the session this program opened.
@@ -17765,6 +19519,11 @@ fn main() {
         None => None,
     };
     let event_loop = EventLoop::new().expect("event loop");
+    // **Before `run_app`, because that is the last moment the loop is a value
+    // rather than a callback.** It is what the MIDI callback wakes this window
+    // with — see [`App::waker`], which carries the whole argument for why a
+    // control surface is a wake and not a poll.
+    let waker = event_loop.create_proxy();
     // **The loop sleeps.** A frame is drawn when something changed it or when
     // `egui` asked for one after a delay it named, and on no other occasion —
     // `App::about_to_wait` sets this again after every iteration and is where
@@ -17773,7 +19532,7 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
         .run_app(&mut App::new(
-            launch, running, held, snapshots, mcp, opening, pointing,
+            launch, running, held, snapshots, mcp, opening, pointing, waker,
         ))
         .expect("run");
 }
@@ -17845,6 +19604,86 @@ mod tests {
                 "a cut did not survive the round trip through a record's word"
             );
         }
+    }
+
+    /// **What the legend says about a control surface, and none of it needs
+    /// one plugged in.**
+    ///
+    /// The same house rule as the room's test below: the half that has no
+    /// device in it is [`surface_line`] and [`unsurfaced`], and both are pure
+    /// functions of what was found. **What is deliberately not here is that a
+    /// real port opens** — nothing in this file can stand in for a controller
+    /// on a desk, and `karakuri_environment::midi`'s tests are what hold the
+    /// route from a message to a record.
+    ///
+    /// 1. **The port is named**, because *which surface answered* is the one
+    ///    thing an operator cannot see from the panel: this program takes the
+    ///    first input there is (ADR-0220's reason one column along — the
+    ///    instrument has no `--midi-in`), and a run that took the wrong one of
+    ///    two would look exactly like a run whose controller is asleep.
+    /// 2. **The map is named, and by its path as well as its name.**
+    ///    `default` under the store and `surface` in the preset library are
+    ///    two files, and an operator who has just learned one wants to know
+    ///    which is loaded.
+    /// 3. **No map is a state**, with the sentence that tells them what to do
+    ///    next, and nothing plugged in is not a fault.
+    #[test]
+    fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
+        let line = surface_line(
+            "nanoKONTROL2 SLIDER/KNOB",
+            Some("default"),
+            Some(std::path::Path::new("/sets/.karakuri/maps/default.map")),
+            40,
+            &[],
+        );
+        assert!(
+            line.contains("nanoKONTROL2 SLIDER/KNOB"),
+            "the legend did not say which surface answered: {line}"
+        );
+        assert!(
+            line.contains("`default`") && line.contains("/sets/.karakuri/maps/default.map"),
+            "the legend named neither the map nor which of the two tiers it came from: {line}"
+        );
+        assert!(line.contains("40 mappings"), "{line}");
+        let one = surface_line("x", Some("m"), Some(std::path::Path::new("m.map")), 1, &[]);
+        assert!(
+            one.contains(" 1 mapping.") && !one.contains("mappings"),
+            "one mapping was pluralised: {one}"
+        );
+
+        // **A map's complaints are carried rather than swallowed**, which is
+        // `Map::parse`'s own requirement of its callers: a caller that dropped
+        // them would leave an operator pressing a pad that never loaded.
+        let noted = surface_line(
+            "x",
+            Some("m"),
+            Some(std::path::Path::new("m.map")),
+            2,
+            &["line 4: `on-air 0` is a step; write `residency 0 live`".to_owned()],
+        );
+        assert!(noted.contains("line 4"), "{noted}");
+
+        // **No map is a state and the sentence is what to do about it.**
+        let bare = surface_line("x", None, None, 0, &[]);
+        assert!(
+            bare.contains("no map") && bare.contains("turn a knob"),
+            "a surface with no map was not told how to get one: {bare}"
+        );
+
+        // **Nothing plugged in is the ordinary state of this program**, and it
+        // is what every machine a test runs on is in.
+        let none = unsurfaced("no MIDI input matching `` — there are no MIDI inputs");
+        assert!(
+            none.contains("not a fault") && none.contains("pointer"),
+            "a machine with nothing plugged in was told it had a problem: {none}"
+        );
+        // A port that is there and would not open is the other kind of
+        // nothing, and it is said in the port's own words.
+        let taken = unsurfaced("could not open `nanoKONTROL2`: device is in use");
+        assert!(
+            taken.contains("device is in use") && !taken.contains("not a fault"),
+            "a port held by something else was reported as a state: {taken}"
+        );
     }
 
     /// **The three things this program has decided about a room, and none of
@@ -18296,16 +20135,16 @@ mod tests {
         (got - want).abs() <= 1e-6
     }
 
-    /// **"A key steps it"** — `docs/manual/operations.html`'s Gain row, which
-    /// names `[ ] \` and stops. Which bracket goes down, how far a press goes
-    /// and what the third one does are decided somewhere else, so all three
+    /// **"A key steps it"** — `docs/manual/operations.html`'s Gain row, whose
+    /// badge reads `&uarr;&darr; space &middot; in the Mixer`. How far a press
+    /// goes and what `space` does are decided here rather than there, so both
     /// are worth measuring rather than reading.
     ///
-    /// **The directions are `karakuri-cli`'s, taken whole** — [`gain_key`]'s
-    /// own sentence, and the reason they are worth an assertion at all: two
-    /// keyboards that disagree about which bracket goes down is the one
+    /// **The pair and the tenth are `karakuri-cli`'s, taken whole** —
+    /// [`gain_key`]'s own sentence, and the reason they are worth an assertion
+    /// at all: two keyboards that disagree about how far one press goes is the
     /// mistake an operator makes in the dark and cannot see. The size is
-    /// [`GAIN_STEP`], and the legend [`KEYS`] prints beside `[` calls it *a
+    /// [`GAIN_STEP`], and the legend [`KEYS`] prints for `up` calls it *a
     /// tenth*, so the constant is checked against something this program says
     /// out loud rather than against a literal written twice.
     ///
@@ -18319,44 +20158,47 @@ mod tests {
     /// from another's, which is a blend mode rather than a level — and there
     /// is no ceiling, because the pipeline is HDR
     /// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)),
-    /// which the legend for `]` says in as many words: *"not held at 1.0,
-    /// because the mix is HDR"*. A trim clamped at unity here would look like
-    /// tidiness and would quietly cap the mix.
+    /// which the legend for `up` says in as many words: *"the trim is not held
+    /// at 1.0, because the mix is HDR"*. A trim clamped at unity here would
+    /// look like tidiness and would quietly cap the mix.
     ///
     /// **Held at the floor it says nothing**, which is where this differs from
     /// the offset three tests up: `offset_said` has a sentence for a press
     /// that asked past the bound and this route has none — what an operator
-    /// gets is the absolute value the operation carries, printed twice. That
-    /// is asserted as it is rather than as it might be.
+    /// gets is the absolute value the operation carries, printed twice.
+    ///
+    /// **It took letters and takes a step since 2026-09-10** (ADR-0333). What
+    /// the arrows and `space` reach is the *addressed* trim, which is the
+    /// console's answer and `karakuri-console/tests/grammar.rs`'s; this is the
+    /// arithmetic at the end of it and is unchanged.
     #[test]
-    fn the_gain_keys_step_the_trim_a_tenth_each_way_and_the_backslash_names_unity() {
+    fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
         // Every level that says something different: under the default, at it,
         // and above it — above 1.0 is an ordinary place for an HDR trim to be
         // standing, and it is the level a proportional step gets wrong.
         for from in [0.35_f32, 0.5, 1.0, 1.4, 3.0] {
-            let down = gain_key("[", from).expect("`[` is one of the three keys the page names");
-            let up = gain_key("]", from).expect("`]` is one of the three keys the page names");
+            let down = gain_key(Step::Down, from);
+            let up = gain_key(Step::Up, from);
             assert!(
                 same(down, from - GAIN_STEP),
-                "`[` took a trim standing at {from} to {down}, which is not one step of \
-                 {GAIN_STEP} down — the bracket that goes down is the one `karakuri-cli` goes \
-                 down with, and two keyboards that disagree about it is the mistake nobody \
-                 can see"
+                "a down press took a trim standing at {from} to {down}, which is not one step of \
+                 {GAIN_STEP} down — the size is `karakuri-cli`'s, and two keyboards that disagree \
+                 about it is the mistake nobody can see"
             );
             assert!(
                 same(up, from + GAIN_STEP),
-                "`]` took a trim standing at {from} to {up}, which is not one step of \
+                "an up press took a trim standing at {from} to {up}, which is not one step of \
                  {GAIN_STEP} up"
             );
             assert!(
                 down < from && from < up,
-                "at {from} the two brackets did not go opposite ways: `[` gave {down} and `]` \
+                "at {from} the two directions did not go opposite ways: down gave {down} and up \
                  gave {up}"
             );
             assert_eq!(
-                gain_key("\\", from),
-                Some(1.0),
-                "`\\` is a destination and not a step, so from {from} it names 1.0 and nothing \
+                gain_key(Step::Default, from),
+                1.0,
+                "`space` is a destination and not a step, so from {from} it names 1.0 and nothing \
                  else"
             );
         }
@@ -18367,15 +20209,15 @@ mod tests {
         assert_eq!(
             GAIN_STEP,
             0.1,
-            "the window prints `{}` for `[` and the arm steps by {GAIN_STEP} — an operator \
+            "the window prints `{}` for `up` and the arm steps by {GAIN_STEP} — an operator \
              reading the legend is told a tenth and gets something else",
-            legend("[")
+            legend("up")
         );
         assert!(
-            legend("[").contains("a tenth"),
-            "the legend for `[` no longer calls the step a tenth, so the assertion above is \
+            legend("up").contains("a tenth"),
+            "the legend for `up` no longer calls the step a tenth, so the assertion above is \
              comparing the constant against nothing: {}",
-            legend("[")
+            legend("up")
         );
 
         // **Floored, and it holds there in silence.** A press at the bottom of
@@ -18384,280 +20226,140 @@ mod tests {
         // it decides what the *record* says, so a session replays the value
         // that took effect.
         assert_eq!(
-            gain_key("[", 0.05),
-            Some(0.0),
+            gain_key(Step::Down, 0.05),
+            0.0,
             "a press that asked below zero came out negative, and a negative gain subtracts \
              one slot's light from another's — a blend mode rather than a level"
         );
         assert_eq!(
-            gain_key("[", 0.0),
-            Some(0.0),
+            gain_key(Step::Down, 0.0),
+            0.0,
             "a press at the floor did not hold at the floor"
         );
 
         // **And not ceilinged**, which is the half a clamp would have got
-        // wrong quietly: `]` at unity is an ordinary press into the HDR mix.
-        let over = gain_key("]", 1.0).expect("`]` is one of the three keys the page names");
+        // wrong quietly: an up press at unity is an ordinary press into the
+        // HDR mix.
+        let over = gain_key(Step::Up, 1.0);
         assert!(
             over > 1.0 && same(over, 1.0 + GAIN_STEP),
-            "`]` at 1.0 came out at {over} — the trim was capped at unity, and the mix is HDR"
+            "an up press at 1.0 came out at {over} — the trim was capped at unity, and the mix \
+             is HDR"
         );
         assert!(
-            legend("]").contains("not held at 1.0"),
-            "the legend for `]` no longer says the trim is uncapped, so the assertion above \
+            legend("up").contains("not held at 1.0"),
+            "the legend for `up` no longer says the trim is uncapped, so the assertion above \
              and the window disagree about which of them is the specification: {}",
-            legend("]")
+            legend("up")
         );
         assert!(
-            same(
-                gain_key("]", 4.0).expect("`]` is one of the three keys the page names"),
-                4.0 + GAIN_STEP
-            ),
+            same(gain_key(Step::Up, 4.0), 4.0 + GAIN_STEP),
             "a trim already well above unity stopped stepping up"
         );
-        // And `\` comes back down from up there, which is what makes it the
+        // And `space` comes back down from up there, which is what makes it the
         // way out of a mix somebody has pushed: a destination, not a step.
-        assert_eq!(gain_key("\\", 4.0), Some(1.0));
+        assert_eq!(gain_key(Step::Default, 4.0), 1.0);
     }
 
     /// **"A key steps it"** one control along, and the difference between the
     /// two is the whole of this test.
     ///
-    /// `docs/manual/operations.html`'s Opacity row names `; '` and is silent
-    /// about the direction for [`gain_key`]'s reason, so `;` down and `'` up
-    /// are `karakuri-cli`'s. The step is [`OPACITY_STEP`], and the legend
-    /// [`KEYS`] prints calls it *a tenth* exactly as the trim's does.
+    /// `docs/manual/operations.html`'s Opacity row carries the same badge as
+    /// the Gain row — `&uarr;&darr; space &middot; in the Mixer` — and is
+    /// silent about the size for [`gain_key`]'s reason, so the step is
+    /// [`OPACITY_STEP`] and it is `karakuri-cli`'s.
     ///
     /// **The clamp is this surface's and it is the reason for the test.**
     /// Opacity is a proportion of a blend and there is no such thing as 1.4 of
     /// one, where gain is a level into an HDR mix — the legend says as much at
-    /// the key: *"held inside 0 and 1, which a proportion of a blend is"*. It
-    /// is clamped here rather than left to `Deck::set_opacity`, because this
-    /// decides what the **record** says: a session replays the value that took
-    /// effect rather than one the engine quietly corrected.
+    /// the key: *"the fader is held inside 0 and 1"*. It is clamped here rather
+    /// than left to `Deck::set_opacity`, because this decides what the
+    /// **record** says: a session replays the value that took effect rather
+    /// than one the engine quietly corrected.
     ///
     /// So the two ends are asserted **against the trim's**, which is the shape
     /// a clamp copied from one control to the other would break: at 1.0 the
     /// fader holds and the trim does not.
+    ///
+    /// **The default is new and the two steps are not** (ADR-0333). `\` had no
+    /// partner on this control, so `space` on an addressed fader is the first
+    /// way back to unity it has ever had.
     #[test]
-    fn the_opacity_keys_step_the_fader_a_tenth_each_way_and_are_held_inside_zero_and_one() {
+    fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() {
         for from in [0.15_f32, 0.3, 0.5, 0.85] {
-            let down = opacity_key(";", from).expect("`;` is one of the two keys the page names");
-            let up = opacity_key("'", from).expect("`'` is one of the two keys the page names");
+            let down = opacity_key(Step::Down, from);
+            let up = opacity_key(Step::Up, from);
             assert!(
                 same(down, from - OPACITY_STEP),
-                "`;` took a fader standing at {from} to {down}, which is not one step of \
-                 {OPACITY_STEP} down"
+                "a down press took a fader standing at {from} to {down}, which is not one step \
+                 of {OPACITY_STEP} down"
             );
             assert!(
                 same(up, from + OPACITY_STEP),
-                "`'` took a fader standing at {from} to {up}, which is not one step of \
+                "an up press took a fader standing at {from} to {up}, which is not one step of \
                  {OPACITY_STEP} up"
             );
             assert!(
                 down < from && from < up,
-                "at {from} the pair did not go opposite ways: `;` gave {down} and `'` gave {up}"
+                "at {from} the pair did not go opposite ways: down gave {down} and up gave {up}"
             );
         }
 
         assert_eq!(
             OPACITY_STEP,
             0.1,
-            "the window prints `{}` for `;` and the arm steps by {OPACITY_STEP}",
-            legend(";")
-        );
-        assert!(
-            legend(";").contains("a tenth"),
-            "the legend for `;` no longer calls the step a tenth, so the assertion above is \
-             comparing the constant against nothing: {}",
-            legend(";")
+            "the window prints `{}` for `up` and the fader steps by {OPACITY_STEP}",
+            legend("up")
         );
 
         // **Both ends, and both of them hold.** A press at either end of the
         // travel asks past it and gets the end.
         assert_eq!(
-            opacity_key(";", 0.05),
-            Some(0.0),
+            opacity_key(Step::Down, 0.05),
+            0.0,
             "a press that asked below zero came out negative — there is no less than none of \
              a layer"
         );
         assert_eq!(
-            opacity_key(";", 0.0),
-            Some(0.0),
+            opacity_key(Step::Down, 0.0),
+            0.0,
             "a press at the bottom of the travel did not hold there"
         );
         assert_eq!(
-            opacity_key("'", 0.95),
-            Some(1.0),
+            opacity_key(Step::Up, 0.95),
+            1.0,
             "a press that asked past one came out above it — there is no 1.05 of a blend"
         );
         assert_eq!(
-            opacity_key("'", 1.0),
-            Some(1.0),
+            opacity_key(Step::Up, 1.0),
+            1.0,
             "a press at the top of the travel did not hold there"
         );
         assert!(
-            legend("'").contains("held inside 0 and 1"),
-            "the legend for `'` no longer says the fader is held inside its two ends: {}",
-            legend("'")
+            legend("up").contains("held inside 0 and 1"),
+            "the legend for `up` no longer says the fader is held inside its two ends: {}",
+            legend("up")
+        );
+
+        // **The fader's default is unity too**, which is the one thing this
+        // control gained rather than inherited.
+        assert_eq!(
+            opacity_key(Step::Default, 0.3),
+            1.0,
+            "`space` on an addressed fader did not name the value it was declared at"
         );
 
         // **The two controls part company at 1.0, and that is the assertion a
         // clamp copied across would fail.** The same press, at the same level,
-        // on the two keys the page draws two rows for: the fader holds and the
-        // trim goes on up.
-        assert_eq!(
-            opacity_key("'", 1.0),
-            Some(1.0),
-            "the fader is no longer held at one"
-        );
+        // on the two controls the page draws two rows for: the fader holds and
+        // the trim goes on up.
         assert_ne!(
-            gain_key("]", 1.0),
-            Some(1.0),
+            gain_key(Step::Up, 1.0),
+            1.0,
             "the trim is now held at one as well, so the two controls have been made the same \
              control — and the page draws two rows because they are not: *opacity at zero \
              silences under every blend mode, gain at zero does not silence `over`*"
         );
-    }
-
-    /// **Each pair answers for its own letters and for nothing else** — which
-    /// is what [`gain_key`] and [`opacity_key`] both state in their first
-    /// line: *"or `None` for a key that is not one of the three"*, and *"not
-    /// one of the two"*.
-    ///
-    /// It matters because of the arms that call them. `window_event` matches
-    /// the letters first and then `expect`s the answer — *"the arm this is
-    /// in"* — so a helper that answered for a letter its arm does not match is
-    /// a helper nobody would notice, and one that stopped answering for a
-    /// letter its arm *does* match is a panic in an event handler, which
-    /// aborts this process rather than unwinding.
-    ///
-    /// **The two are crossed on purpose.** The mix keys sit next to each other
-    /// on one keyboard and are two controls the page draws two rows for, so
-    /// `;` is asked of [`gain_key`] and `\` of [`opacity_key`]: a pair widened
-    /// by one letter would move the wrong value and read correct.
-    #[test]
-    fn neither_pair_of_mix_keys_answers_for_a_letter_that_is_not_its_own() {
-        // The guard first: both helpers answer for their own, or the loops
-        // below are satisfied by a function that answers for nothing at all.
-        for key in ["[", "]", "\\"] {
-            assert!(
-                gain_key(key, 0.5).is_some(),
-                "`{key}` is a key the trim's arm matches and `gain_key` answered nothing for \
-                 it — the arm `expect`s that answer, and a panic in an event handler aborts \
-                 this process"
-            );
-        }
-        for key in [";", "'"] {
-            assert!(
-                opacity_key(key, 0.5).is_some(),
-                "`{key}` is a key the fader's arm matches and `opacity_key` answered nothing \
-                 for it"
-            );
-        }
-
-        // The other pair's letters first, then the rest of the mix row, then
-        // keys from elsewhere on this keyboard.
-        for key in [";", "'", "m", "e", "o", "p", "b", ",", ".", "0", "3", "\n"] {
-            assert_eq!(
-                gain_key(key, 0.5),
-                None,
-                "`{key}` is not one of the three the trim's arm matches and `gain_key` claimed \
-                 it was"
-            );
-        }
-        for key in [
-            "[", "]", "\\", "m", "e", "o", "p", "b", ",", ".", "0", "3", "\n",
-        ] {
-            assert_eq!(
-                opacity_key(key, 0.5),
-                None,
-                "`{key}` is not one of the two the fader's arm matches and `opacity_key` \
-                 claimed it was"
-            );
-        }
-    }
-
-    /// **One press of `m` is one step round the cycle, and the last mode wraps
-    /// to the first** — `docs/manual/operations.html`'s Blend mode row: *"The
-    /// key cycles the three; a map names the one it wants."*
-    ///
-    /// [`after_blend`] is a match rather than an index into [`BlendMode::ALL`],
-    /// so a fourth mode does not compile until somebody says what follows it,
-    /// and the price of a match is that the order is written twice — here and
-    /// in `ALL`. This is the measurement that keeps the two copies from
-    /// drifting rather than a comment promising they will not, and
-    /// [`after_blend`]'s own documentation names this test as the thing that
-    /// does it.
-    ///
-    /// **The same three round the same way as the chip** (ADR-0187), which is
-    /// what makes a key and a pointer one control rather than two.
-    /// `karakuri_console::view::after` is private to that crate and cannot be
-    /// called from here, so the two are held together by the array they are
-    /// both walked against: `karakuri-console/tests/blend.rs` walks `ALL`
-    /// through the chip exactly as this walks `ALL` through [`after_blend`],
-    /// and a cycle that drifted would fail on one side or the other.
-    ///
-    /// **And `ALL` is the engine's own order**, taken through [`blend_mode`]
-    /// rather than assumed: the cycle a key walks and the list a deck holds
-    /// are the same three in the same order, or one press would step to a mode
-    /// the deck reads as a different one.
-    ///
-    /// **The wrap is not a special case in the assertion.** The loop's last
-    /// step is `max` and the answer it expects is `ALL[0]`, reached by the
-    /// same modulo every other step uses, so a cycle that ran off the end
-    /// fails here rather than in a test of its own that could be forgotten.
-    #[test]
-    fn m_cycles_the_three_modes_in_the_order_the_chip_cycles_them() {
-        for (step, from) in BlendMode::ALL.into_iter().enumerate() {
-            let want = BlendMode::ALL[(step + 1) % BlendMode::ALL.len()];
-            assert_eq!(
-                after_blend(from),
-                want,
-                "one press of `m` on a deck reading `{}` arrived somewhere other than `{}`",
-                from.name(),
-                want.name()
-            );
-        }
-
-        // The guard on the loop above: it has to have walked every mode there
-        // is, or a cycle with a hole in it passes by never being asked about
-        // the mode in the hole.
-        assert_eq!(
-            BlendMode::ALL.len(),
-            3,
-            "`BlendMode::ALL` is no longer the three this walks, and the wrap it asserts is a \
-             different wrap"
-        );
-
-        // **The engine's list and the vocabulary's are one order**, which is
-        // the half `ALL` alone cannot say. The key reads the deck through
-        // [`blend_mode`] before it steps, so if the two lists disagreed the
-        // cycle would be walking a different three from the one the deck is
-        // standing in.
-        assert_eq!(
-            Blend::ALL.map(blend_mode),
-            BlendMode::ALL,
-            "the engine's modes and the vocabulary's are no longer one order, so the cycle a \
-             press walks is not the cycle a deck holds"
-        );
-
-        // **And the legend names the same three in the same order**, which is
-        // the copy an operator actually reads: *"the blend mode: the next of
-        // add, over and max, and it wraps"*. A cycle that changed order would
-        // leave the window telling them a different one.
-        let line = legend("m");
-        let mut at = 0;
-        for mode in BlendMode::ALL {
-            let found = line[at..].find(mode.name()).unwrap_or_else(|| {
-                panic!(
-                    "the legend for `m` does not name `{}` after the modes before it — it \
-                     lists a different cycle from the one a press walks: {line}",
-                    mode.name()
-                )
-            });
-            at += found + mode.name().len();
-        }
     }
 
     /// **Every verdict the engine can report says what it does to the lane,
@@ -19767,7 +21469,7 @@ mod tests {
     /// `karakuri-operation-record` answers `Silent(NoRecord)` for a transfer:
     /// nothing in the session vocabulary carries a Set arriving from
     /// somewhere else. So [`App::performed`] performs nothing for it, exactly
-    /// as it performs nothing for the scope step `e` emits, and
+    /// as it performs nothing for the scope step `space` emits, and
     /// [`unwritten`] is what an operator reads. **If that ever became
     /// `Owed`**, the press would be emitting a gap rather than a settled
     /// silence and this file would be the place to say so.
@@ -21475,13 +23177,17 @@ mod tests {
             anchor_bpm: 128.0,
             scrub_beats: 0.0,
             composite: false,
+            // Not this test's row: the deck head's two build chips are
+            // drawn from this and nothing here is about them.
+            aimed: None,
             nodes: vec![view::Node {
                 addr: "L2:0".to_owned(),
                 name: "warp".to_owned(),
                 authority: None,
+                uses: Vec::new(),
                 renderers: Vec::new(),
                 params: vec![view::Param {
-                    ord: 1,
+                    ord: Some(1),
                     name: "twist".to_owned(),
                     value: 1.0,
                     // **Not `[0, 1]`**, so a range that was read and a pair
@@ -22060,6 +23766,9 @@ mod tests {
             anchor_bpm: 128.0,
             scrub_beats: 0.0,
             composite: false,
+            // Not this test's row: the deck head's two build chips are
+            // drawn from this and nothing here is about them.
+            aimed: None,
             nodes: (0..4)
                 .map(|node| view::Node {
                     addr: format!("L1:{node}"),
@@ -22071,10 +23780,11 @@ mod tests {
                         },
                         level: karakuri_operation::Authority::Manual,
                     }),
+                    uses: Vec::new(),
                     renderers: Vec::new(),
                     params: (0..6)
                         .map(|at| view::Param {
-                            ord: at + 1,
+                            ord: Some(at + 1),
                             name: format!("n{node}p{at}"),
                             value: 0.5,
                             range: [0.0, 1.0],
@@ -22966,7 +24676,7 @@ mod tests {
     /// load it.
     ///
     /// **And the chip that is already marked is pressed too**, because that is
-    /// the case a step cannot reach: `e` would go somewhere else, and a
+    /// the case a step cannot reach: a step would go somewhere else, and a
     /// pointer names — so the press is answered rather than refused, and the
     /// mark stays where it is.
     #[test]
@@ -25315,13 +27025,17 @@ mod key_column {
     //! `key f g` did not say whose.
     //! (Nine when ADR-0220 was written; the library's load route added seven —
     //! the four that select a deck, the two that walk the library cursor, and
-    //! `l`. The four are also one of the places beyond `esc` where the two
-    //! keyboards **agree**, because a deck is a slot number and there was
-    //! nothing to translate. Eight when the audio session landed and `b`,
+    //! `l`. The four are also the one place where the two keyboards
+    //! **agree**, because a deck is a slot number and there was nothing to
+    //! translate — `esc` was the other until 2026-09-09. Eight when the audio session landed and `b`,
     //! `,` and `.` joined them, and seven since `p` stopped being the panel's
     //! report and became the latency offset the page specifies — the one
     //! letter this column has ever taken *back* from the panel, and the pair
-    //! `o` and `p` agree on both keyboards now.)
+    //! `o` and `p` agree on both keyboards now. **Eight since 2026-09-09**,
+    //! when `esc` stopped quitting here and became ADR-0259's *up one level*:
+    //! it is the one key the two keyboards agreed on that they no longer do,
+    //! and the command line's is still its own — `karakuri-cli` is test tooling
+    //! and the instrument's principles do not bind it (ADR-0242).)
     //!
     //! The page now says whose, in its legend: **the key column is the
     //! instrument's keyboard**, which is this file's `match` on
@@ -25474,181 +27188,258 @@ mod key_column {
     /// and when it is bound is [`super::KEYS`]' business.
     const NAMED_KEYS: &[(&str, &str)] = &[
         ("Escape", "esc"),
-        ("Enter", "return"),
+        // **`enter` and not `return`**, since 2026-09-10. It was `return`
+        // while the key was live only inside the arrangement pill's name;
+        // ADR-0259 spells the act of the grammar `enter`, the page's badges
+        // say `enter`, and one key with two spellings is a badge nobody can
+        // resolve. `winit` calls it `Enter` too.
+        ("Enter", "enter"),
         ("Backspace", "backspace"),
         ("Space", "space"),
         ("ArrowUp", "up"),
         ("ArrowDown", "down"),
+        ("ArrowLeft", "left"),
+        ("ArrowRight", "right"),
+        // **`shift-Tab` is not a second entry here**, and that is `winit`
+        // rather than a decision: a shifted `Tab` arrives as
+        // `NamedKey::Tab` with the modifier on a different event, so the
+        // `match` binds one key and [`super::App::shift`] is what tells the
+        // two presses apart. The legend says both in one line for the same
+        // reason.
+        ("Tab", "tab"),
     ];
 
-    /// **Every key this program binds, and the rows of [`PAGE`] it reaches.**
+    /// **The one key of the grammar this file's text cannot see.**
     ///
-    /// One entry per key in [`super::KEYS`], which is the table the window
-    /// loop's legend prints and the one
-    /// [`the_keys_this_file_lists_are_the_keys_the_window_loop_binds`] holds
-    /// the `match` to. **The keys are not written twice**: that they are the
-    /// same keys is
-    /// [`every_key_the_legend_prints_has_its_rows_written_down`], both ways
-    /// round, so a key added to the legend with no rows recorded — or a row
-    /// mapping left behind by a key that went — fails here rather than at the
-    /// page. What is written down is only the *rows*, and it stays in this
-    /// module because a page heading is what a check reads and is not
-    /// something the program says to anybody.
+    /// [`bound`] answers *which keys does this program bind* by reading
+    /// `Key::Character("…")` and `Key::Named(NamedKey::…)` out of this file,
+    /// and `super::grammar` binds the digits with a guard rather than with ten
+    /// literals — deliberately, because ten literals would say the digits are
+    /// bound and say nothing about what they reach. So it is contributed by
+    /// `karakuri_console::focus::BUILT` instead, which is the half that *can*
+    /// say: a digit reaches a different row in every bay, and the dispatch
+    /// table is what knows which (ADR-0259, ADR-0333).
+    const DIGIT: &str = "digit";
+
+    /// **How the page spells each key of the grammar**, and what a badge
+    /// naming one resolves to.
     ///
-    /// The rows are the page's headings byte for byte. Where an arm resolves
-    /// through
-    /// `karakuri_console::panel::Op`, the rows are that variant's — the mapping
-    /// `karakuri-console/tests/vocabulary.rs` pins in `rows_of`, which is why
-    /// `f` and `g` each name two rows: a fold is a bay or a pane depending on
-    /// the region under the pointer, and the page describes those as two
-    /// consequences.
+    /// The digits are all one key and both arrow pairs are the arrows, which
+    /// is [`ROWS`]' own shape: a row is reached by *the arrows in the Mixer*,
+    /// and which pair depends on whether the thing addressed is an item laid
+    /// out in a row or a level standing on its own. **That is the one thing
+    /// this table gives up**, and it is written down rather than left to be
+    /// found: a badge naming `&larr;&rarr;` on a row the arrows reach only by
+    /// stepping a level passes here. What the axis is, is
+    /// `karakuri_console::focus::Built::across`, and nothing holds the page
+    /// against it.
+    const SPELLED: &[(&str, &str)] = &[
+        ("&uarr;&darr;", "arrows"),
+        ("&larr;&rarr;", "arrows"),
+        ("up", "arrows"),
+        ("down", "arrows"),
+        ("left", "arrows"),
+        ("right", "arrows"),
+        ("space", "space"),
+        ("enter", "enter"),
+    ];
+
+    /// **How a badge names the bay a press is addressed in**, and the whole of
+    /// the grammar this column's designed half is written in: a key, a
+    /// separator and a bay. `space &middot; in the Mixer`.
+    const IN_THE: &str = " &middot; in ";
+
+    /// **The bay a badge's bay-name resolves to**, in the arrangement's own
+    /// names — which is what `karakuri_console::focus::BUILT` is keyed by.
     ///
-    /// An empty list is a key that reaches no row, and [`NO_ROW`] is where the
-    /// reason goes.
-    const ROWS: &[(&str, &[&str])] = &[
+    /// The page writes them the way a person says them, with the article the
+    /// bay's own sentence uses: *in the Mixer*, *in Staging*. Two spellings for
+    /// nine bays, and the article is the page's rather than something to
+    /// normalise away.
+    const BAYS: &[(&str, &str)] = &[
+        ("the Transport", "transport"),
+        ("the Library", "library"),
+        ("Staging", "staging"),
+        ("the Program", "program"),
+        ("the Inspector", "inspector"),
+        ("the Mixer", "mixer"),
+        ("the Master", "master"),
+        ("the Sequencer", "sequencer"),
+        ("the Outputs", "outputs"),
+    ];
+
+    /// **Every route this program binds, and the rows of [`PAGE`] it reaches.**
+    ///
+    /// `None` for a bay is a **global** key — one whose meaning does not depend
+    /// on where the address is, which is the operand rule ADR-0259 closes the
+    /// global list by. `Some(bay)` is a key of the grammar, addressed to that
+    /// bay, and the key is spelled as the grammar spells it rather than as a
+    /// letter.
+    ///
+    /// # Why the key alone no longer determines a row
+    ///
+    /// `space` in the Mixer is a residency, a blend mode, a mask shape or a
+    /// level's default; `space` in the Library is a scope. One key, two bays,
+    /// six rows — so a mapping keyed on the key alone would either name all six
+    /// for both bays or name none. **That is the whole of why this table grew a
+    /// column**, and it is ADR-0259's own consequence: *"`ROWS` becomes keyed
+    /// by a (bay, key) pair with the globals under no bay."*
+    ///
+    /// # What is written down and what is derived
+    ///
+    /// The **rows** are written down and cannot be derived: `Op::Fold` folds a
+    /// bay or a pane depending on what the pointer is over, and only the page
+    /// separates those two. The **pairs** are derived —
+    /// `karakuri_console::focus::reaches` flattens the dispatch table — and
+    /// [`the_grammar_the_page_names_is_the_grammar_the_console_declares`] holds
+    /// the two against each other in both directions, so a bay whose grammar is
+    /// built and has no rows here fails, and a pair here the console does not
+    /// declare fails.
+    ///
+    /// The rows are the page's headings byte for byte.
+    const ROWS: &[(Option<&str>, &str, &[&str])] = &[
+        // ------------------------------------------------------------------
+        // The globals: a letter whose operation has no operand for focus to
+        // supply, or whose only operand is the choice the key itself spells.
+        // ------------------------------------------------------------------
         // `Op::Fold` of the region under the pointer.
-        ("f", &["Fold a bay away", "Fold a pane away"]),
+        (None, "f", &["Fold a bay away", "Fold a pane away"]),
         // `Op::FoldEnclosing` over a region, `Op::Fold` of the split over a
         // gap — one step up the tree either way, so the same two rows.
-        ("g", &["Fold a bay away", "Fold a pane away"]),
+        (None, "g", &["Fold a bay away", "Fold a pane away"]),
         // The room's colours. Nothing in the arrangement moves and no
         // `Outcome` says so, which is why it is not an operation.
-        ("n", &[]),
-        ("r", &["Reset the arrangement"]),
-        ("s", &["Solo a region"]),
+        (None, "n", &[]),
+        (None, "r", &["Reset the arrangement"]),
+        (None, "s", &["Solo a region"]),
         // `Op::UnfoldAll` — the page carries the region and the everything
         // under one heading, as `vocabulary.rs` does.
-        ("u", &["Solo a region"]),
-        ("z", &["Bring back what is folded"]),
-        ("esc", &["Quit"]),
-        // **The deck selection**, and the four that agree with the command
-        // line: `0`–`3` mean `SelectDeck` on both keyboards, because a deck is
-        // a slot number and there was nothing to translate.
-        ("0", &["Select a deck"]),
-        ("1", &["Select a deck"]),
-        ("2", &["Select a deck"]),
-        ("3", &["Select a deck"]),
-        // **The mix, on whichever deck that selection is on**, which is why
-        // these six sit under it: nothing in the letter says a slot, so the
-        // deck a press moves is the ring on the strips and the row above is
-        // how it got there.
-        //
-        // **Three rows and six keys, because two of the three are a pair of
-        // steps and one is three.** The page's row is the operation and not
-        // the press — *Gain* is one row whichever of `[`, `]` and `\` asked
-        // for it — so every key of a pair names the same row, exactly as `o`
-        // and `p` both name *Nudge the latency offset* and `,` and `.` both
-        // name *Halve or double the grid*.
-        //
-        // **`\` is spelled with two characters here for `super::KEYS`'
-        // reason**, which is [`bound`]'s: the key is read out of this file's
-        // text and a Rust escape is not undone on the way. The page's badge
-        // says `\\` and this says the same, so the two agree on the thing they
-        // are compared on.
-        //
-        // **The panel column of all three rows was already `has`**, and stays
-        // so: the strips draw a trim, a fader and a blend chip, and these keys
-        // are a second way to the same three operations rather than a claim
-        // about a control. This is the key column and nothing else.
-        ("[", &["Gain"]),
-        ("]", &["Gain"]),
-        ("\\\\", &["Gain"]),
-        (";", &["Opacity"]),
-        ("'", &["Opacity"]),
-        ("m", &["Blend mode"]),
-        // The load, whose two operands are the library cursor and the
-        // selection above. Free on both keyboards when it was chosen.
-        //
-        // **One key, and a preset row reaches a second row through it.**
-        // Taking a Set in is not a row of its own — ADR-0229's *one
-        // operation, two moments* — so a press on a `presets` row performs
-        // *Send a Set to somebody, and take one in* at the moment of the
-        // press and then this. That row's key badge names no key: what an
-        // operator reaches from the keyboard is a **load**, and the taking-in
-        // is what the load does on the way, which is exactly the distinction
-        // ADR-0213 draws between reaching an operation and something
-        // happening.
-        //
-        // **The press does now emit that second row**, and it stays out of
-        // this entry all the same: `super::preset_press` builds
-        // `Operation::TransferSet` beside the load so that a press names both
-        // rows it performs, and *constructing* an operation is neither
-        // reaching it nor a badge —
-        // `karakuri-console/tests/panel_column.rs`'s own sentence,
-        // *"construction is not reachability, and reachability is the
-        // definition."* A key badge here would claim an operator can ask for a
-        // transfer from the keyboard, and they cannot: the only way to that
-        // emission is a load off a row of `presets`.
-        ("l", &["Load material into a deck"]),
-        // **The save, whose operand is the selection the load's is.** The
-        // command line reaches this row with the same letter and from its own
-        // focus; the two agree because a deck is a slot number, which is the
-        // deck keys' argument one row along.
+        (None, "u", &["Solo a region"]),
+        (None, "z", &["Bring back what is folded"]),
+        // **The three that need a room**, and they are the keys here that
+        // reach neither the arrangement nor the deck. `b` is a tap and `,`
+        // and `.` are the octave; each performs against the audio session
+        // this program opened, and each says so when there is none rather
+        // than doing nothing (`super::tapped`, `super::scaled`).
+        (None, "b", &["Tap the beat"]),
+        (None, ",", &["Halve or double the grid"]),
+        (None, ".", &["Halve or double the grid"]),
+        (None, "o", &["Nudge the latency offset"]),
+        (None, "p", &["Nudge the latency offset"]),
+        // **The save, whose operand is the deck selection.**
         //
         // **It is the key column and not the panel column that this makes
         // `has`.** The Library bay draws no *keep* control, so the row's panel
         // badge stays `plan` — a key is not a control, and a badge that named
-        // one would be a claim about something that is not drawn.
-        ("k", &["Keep what a deck is playing"]),
-        // **The scope, and it is the one key here whose row the page marks
-        // `plan` in every other column.** The chips are drawn by
-        // `karakuri-console` and pressed by nobody: `SelectScope` is emitted
-        // from this file's `match` and never from a control, so the panel
-        // column stays `plan` and this key is what makes the key column
-        // `has`.
-        ("e", &["Choose which scope the library shows"]),
-        // **The three that need a room**, and they are the first keys here
-        // that reach neither the arrangement nor the deck. `b` is a tap and
-        // `,` and `.` are the octave; each performs against the audio session
-        // this program opened, and each says so when there is none rather
-        // than doing nothing (`super::tapped`, `super::scaled`).
-        //
-        // **And the third row moved with them, which took a letter back.**
-        // *Nudge the latency offset* is specified as `o` and `p`; `p` was
-        // `Op::Report` here and a badge naming two keys with one of them
-        // bound would be a badge that lies, so the decision the page was
-        // waiting on was made on 2026-08-31 and it was the first of the three
-        // it named: the instrument takes the letters and the panel diagnostic
-        // keeps no key. All five of these mean the same thing on both
-        // keyboards.
-        ("b", &["Tap the beat"]),
-        (",", &["Halve or double the grid"]),
-        (".", &["Halve or double the grid"]),
-        ("o", &["Nudge the latency offset"]),
-        ("p", &["Nudge the latency offset"]),
-        // **The library cursor, and it reaches no row on purpose.** Nothing in
-        // the vocabulary moves it: `docs/manual/console.html` decides that
-        // where the deck selection has a row of its own, and the argument is
-        // that three of the four surfaces would have nothing to reach — a map
-        // cannot name a Set, a model names one outright in `LoadSet`, and the
-        // panel's route is the drag. A row would be the first rule written
-        // down as a permanent gap.
-        ("up", &[]),
-        ("down", &[]),
-        // **The three keys that are only live while the arrangement pill is
-        // asking for a name, and they reach no row on purpose.**
+        // one would be a claim about something that is not drawn. **Which is
+        // also why it is still a letter**: ADR-0259 makes this *"an act on a
+        // control the Library bay does not draw yet"*, and a grammar key
+        // cannot be addressed to a control nobody draws.
+        (None, "k", &["Keep what a deck is playing"]),
+        // **The two that move the address**, and neither names a row: focus is
+        // a pointer this console owns and moving one is not an operation
+        // (ADR-0332).
+        (None, "esc", &[]),
+        (None, "tab", &[]),
+        // **The three that are live only while a name is being typed.**
+        // `enter` and `space` are grammar keys the rest of the time and appear
+        // under their bays below; this is the rub-out, which is nothing else.
         //
         // ADR-0221 records that **no key is bound to saving or restoring an
-        // arrangement**, and that is still true: these three do not *name* the
+        // arrangement**, and that is still true: it does not *name* the
         // operation and cannot be pressed to reach it. A save is reached by
         // opening the pill's menu and picking *save*, which is a pointer, and
         // the *Save the arrangement* row's key badge says `&mdash;` because
         // there is no way to that operation from the keyboard alone — which is
         // what the key column means (ADR-0213).
+        (None, "backspace", &[]),
+        // ------------------------------------------------------------------
+        // The Mixer's grammar
+        // ------------------------------------------------------------------
+        // **A digit names the nth strip, and naming a strip is the deck
+        // selection** — which is why that row keeps a key badge rather than
+        // losing one. `Operation::SelectDeck` writes no record, so the surface
+        // performs it (`super::pointed`), reached through the same `performed`
+        // every control's operation goes through.
         //
-        // What they are is the letters of a name and the two ends of typing
-        // one. A row for `return` would claim an operator can save by pressing
-        // it, and the honest test of that claim is to press it on a console
-        // nobody has opened the menu on: nothing happens at all.
-        ("return", &[]),
-        ("backspace", &[]),
-        ("space", &[]),
+        // A digit below a strip names one of its five controls and asks for
+        // nothing: the address descends and the press is a move.
+        (Some("mixer"), DIGIT, &["Select a deck"]),
+        // **The arrows walk the strips and step the two levels**, which is the
+        // one entry where the same key reaches a row two ways: `&larr;&rarr;`
+        // on the row of strips is the selection, and `&uarr;&darr;` on an
+        // addressed trim or fader is a tenth. See [`SPELLED`] for what that
+        // costs the check.
+        (
+            Some("mixer"),
+            "arrows",
+            &["Select a deck", "Gain", "Opacity"],
+        ),
+        // **`space` is the whole of this bay's five controls.** Three of them
+        // are states and the cycle is the console's own affordance
+        // (P-0090) — the same three round the same way the chips cycle them —
+        // and two are levels, where the one state worth naming is the value
+        // the control was declared at.
+        (
+            Some("mixer"),
+            "space",
+            &[
+                "Put a deck on air, prime it, or take it off",
+                "Gain",
+                "Opacity",
+                "Blend mode",
+                "Set a deck's mask shape",
+            ],
+        ),
+        // ------------------------------------------------------------------
+        // The Library's grammar
+        // ------------------------------------------------------------------
+        // **A digit names the nth row and `0` the head**, and neither asks for
+        // an operation: the cursor is a pointer nothing in the vocabulary
+        // moves, which is `console.html`'s *How a Set reaches a deck* and the
+        // reason the two arrow keys reached no row before this grammar
+        // existed either.
+        (Some("library"), DIGIT, &[]),
+        // The rows, walked — today's `up` and `down`, and the same nothing.
+        (Some("library"), "arrows", &[]),
+        // **`space` on the head's scope chips.** The chips are drawn by
+        // `karakuri-console` and pressed by nobody: `SelectScope` is emitted
+        // from this file and never from a control, so the panel column stays
+        // `plan` and this key is what makes the key column `has`.
+        (
+            Some("library"),
+            "space",
+            &["Choose which scope the library shows"],
+        ),
+        // **`enter` on a row is the load**, with both operands on screen
+        // before the press — the deck selection says which deck and the
+        // address says which Set, which is what that argument was always
+        // about.
+        //
+        // **One key, and a preset row reaches a second row through it.**
+        // Taking a Set in is not a row of its own — ADR-0229's *one operation,
+        // two moments* — so a press on a `presets` row performs *Send a Set to
+        // somebody, and take one in* at the moment of the press and then this.
+        // That row's key badge names no key: what an operator reaches from the
+        // keyboard is a **load**.
+        (Some("library"), "enter", &["Load material into a deck"]),
     ];
 
-    /// The keys that reach no row, so that one which starts reaching one stops
-    /// being an exception, and a new exception is written down rather than
-    /// discovered. The reasons are at the entries in [`ROWS`].
-    const NO_ROW: &[&str] = &["n", "up", "down", "return", "backspace", "space"];
+    /// The routes that reach no row, so that one which starts reaching one
+    /// stops being an exception, and a new exception is written down rather
+    /// than discovered. The reasons are at the entries in [`ROWS`].
+    ///
+    /// A pair rather than a key, for [`ROWS`]' reason: `space` reaches five
+    /// rows in the Mixer and one in the Library, and a list of *keys* that
+    /// reach nothing could not say that.
+    const NO_ROW: &[(Option<&str>, &str)] = &[
+        (None, "n"),
+        (None, "esc"),
+        (None, "tab"),
+        (None, "backspace"),
+        (Some("library"), DIGIT),
+        (Some("library"), "arrows"),
+    ];
 
     /// `pub(super)` for [`super::press_handler`]. Byte for byte what
     /// `karakuri-console/tests/panel_column.rs` does, and both resolve [`SRC`]
@@ -25717,6 +27508,14 @@ mod key_column {
                 found.insert(spelled.to_owned());
             }
         }
+        // **And the one key the text cannot see**, contributed by the console's
+        // dispatch table rather than by this file's arms — see [`DIGIT`].
+        // `super::grammar` binds the digits with a guard, so a scan of
+        // `Key::Character("…")` finds nothing for them and would report a
+        // program that does not bind the digits at all.
+        if !karakuri_console::focus::BUILT.is_empty() {
+            found.insert(DIGIT.to_owned());
+        }
         found
     }
 
@@ -25766,10 +27565,57 @@ mod key_column {
         found
     }
 
-    /// The rows [`ROWS`] says a key reaches, or `None` if this program does not
-    /// bind it at all.
-    fn rows_of(key: &str) -> Option<&'static [&'static str]> {
-        ROWS.iter().find(|(k, _)| *k == key).map(|(_, rows)| *rows)
+    /// The rows [`ROWS`] says a route reaches, or `None` if this program does
+    /// not bind it at all.
+    ///
+    /// A route is a key **and** the bay it is addressed in, `None` for a
+    /// global — which is the whole of what changed here: `space` alone names
+    /// no route, and `("mixer", "space")` names five rows.
+    fn rows_of(bay: Option<&str>, key: &str) -> Option<&'static [&'static str]> {
+        ROWS.iter()
+            .find(|(b, k, _)| *b == bay && *k == key)
+            .map(|(_, _, rows)| *rows)
+    }
+
+    /// **What a key badge says, parsed** — the keys it names and the bay it
+    /// names them in, or `None` for a badge that is not one of the two
+    /// spellings this column carries.
+    ///
+    /// The two spellings are ADR-0331's: a **built** badge names bare letters,
+    /// and a **designed** one names a key of the grammar and the bay it is
+    /// addressed in. Since 2026-09-10 a built badge may be either, because the
+    /// grammar is bound in two bays — which is the clause that record left for
+    /// *"the code that binds `Tab`"* and this is it.
+    ///
+    /// A badge naming a bay resolves every key in it to that bay; a badge
+    /// naming none resolves every key to a global. **A badge cannot mix them**,
+    /// and that is not a limitation to work around: a press goes to the bay
+    /// that has focus or it does not, and a row reached both ways would need
+    /// two badges rather than one with two halves.
+    fn parsed(badge: &str) -> Option<(Vec<String>, Option<&'static str>)> {
+        let (keys, bay) = match badge.split_once(IN_THE) {
+            Some((keys, bay)) => {
+                let bay = BAYS
+                    .iter()
+                    .find(|(page, _)| *page == bay.trim())
+                    .map(|(_, name)| *name)?;
+                (keys, Some(bay))
+            }
+            None => (badge, None),
+        };
+        let keys = keys
+            .split_whitespace()
+            .map(|key| match key.chars().all(|c| c.is_ascii_digit()) {
+                // Every digit is the one key of the grammar, which is what
+                // makes `1 2 3 4` a badge naming one route and not four.
+                true => DIGIT.to_owned(),
+                false => SPELLED
+                    .iter()
+                    .find(|(page, _)| *page == key)
+                    .map_or_else(|| key.to_owned(), |(_, name)| (*name).to_owned()),
+            })
+            .collect();
+        Some((keys, bay))
     }
 
     /// The floor under both directions: a scan that matched nothing would
@@ -25856,7 +27702,10 @@ mod key_column {
     /// shapes [`bound`] counts arms by — and it is `Key::Character("` with the
     /// quote rather than without, so the `let Key::Character(name) = …` inside
     /// two of these arms is not mistaken for the arm after them.
-    fn arm(code: &str, head: &str) -> String {
+    ///
+    /// **`pub(super)` for [`super::focus_keys`]**, which cuts two more arms out
+    /// of the same flattened text and would otherwise write this again.
+    pub(super) fn arm(code: &str, head: &str) -> String {
         let at = code.find(head).unwrap_or_else(|| {
             panic!("{SRC} has no arm beginning `{head}` — the `match` has been rewritten")
         });
@@ -25870,128 +27719,128 @@ mod key_column {
         rest[..end].to_owned()
     }
 
-    /// **The three mix arms act on the deck the operator selected, and read
+    /// **The grammar's mix answers act on the deck the address is on, and read
     /// the value they step from off that deck.**
     ///
     /// This is the half `gpu::a_mix_key_moves_the_deck_the_operator_selected…`
-    /// cannot reach, and the reason is written there: the arms are inline in
-    /// `App::window_event`, behind a `Window` and an `ActiveEventLoop` that no
-    /// test binary can build, so that test asserts the chain and this one
-    /// asserts the arms are wired to it. **Neither alone is the claim.**
+    /// cannot reach, and the reason is written there: the chain from an
+    /// operation to a slot needs a `Deck` and this needs none. **Neither alone
+    /// is the claim.**
     ///
-    /// It is in this module because the machinery is: [`bound`] already
-    /// answers *which keys does this program bind* by reading this file as
-    /// text, for the reason written at [`SRC`] — the `match` is a `match`, not
-    /// a table. What is new is *what the arm does with the key*, and it is
-    /// three claims:
+    /// It is in this module because the machinery is: [`code`] already answers
+    /// *what does this file say* by reading it as text, for the reason written
+    /// at [`SRC`]. What is new is *what the answer functions do with what the
+    /// console handed them*, and it is three claims:
     ///
-    /// - **The deck is the selection.** Every deck-addressed control on this
-    ///   panel splits the same way — the deck an operator means is the one
-    ///   they selected with `0`–`3` — and an arm carrying a literal would move
-    ///   deck A from every press, correctly and on the wrong strip.
+    /// - **The deck is the one the address named.** `karakuri_console::focus`
+    ///   resolves which strip a press landed on and hands the slot back in the
+    ///   answer, so the operation carries `*deck` and never a literal — an
+    ///   answer carrying one would move deck A from every press, correctly and
+    ///   on the wrong strip.
     /// - **The reading is the deck's, not a strip's.** `view::Strip` is that
     ///   same reading copied once a frame, so a step counted from it is a step
-    ///   counted from a number the deck may already have left behind.
-    /// - **[`super::held`] guards the read.** `Deck::gain` indexes its slots
-    ///   and a panic reachable from an event handler takes this process with
-    ///   it rather than unwinding, so the guard is the whole of what stands
-    ///   between the two.
+    ///   counted from a number the deck may already have left behind. That is
+    ///   true of the two levels [`answered`] steps and of the three states
+    ///   [`holding`] hands the console to cycle from.
+    /// - **[`held`] guards every read.** `Deck::gain` indexes its slots and a
+    ///   panic reachable from an event handler takes this process with it
+    ///   rather than unwinding.
+    ///
+    /// **It reads two functions where it read three arms.** The three mix keys
+    /// were `\`, `'` and `m` until 2026-09-10, each an arm of the window loop's
+    /// `match`; the grammar reaches all five of a strip's controls through one
+    /// arm, and the two functions below are where the deck is met (ADR-0333).
     ///
     /// A CPU test, deliberately: it reads a file, and a machine with no
-    /// adapter still has an answer about what these arms say.
+    /// adapter still has an answer about what these two functions say.
     #[test]
-    fn the_three_mix_arms_act_on_the_selected_deck_and_read_it_off_the_deck() {
+    fn the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck() {
         let code = code();
-        let arms = [
-            (
-                r#"Key::Character("\\") => {"#,
-                "gfx.engine.deck.gain(slot)",
-                "Operation::SetGain { deck, gain }",
-                "the trim",
-            ),
-            (
-                r#"Key::Character("'") => {"#,
-                "gfx.engine.deck.opacity(slot)",
-                "Operation::SetOpacity { deck, opacity }",
-                "the fader",
-            ),
-            (
-                r#"Key::Character("m") => {"#,
-                "gfx.engine.deck.blend(slot)",
-                "Operation::SetBlendMode { deck, blend }",
-                "the blend",
-            ),
-        ];
-        for (head, reading, operation, what) in arms {
-            let body = arm(&code, head);
+
+        // **The floor**, and it is what keeps the rest honest: a `code()` that
+        // had stopped matching this file would satisfy every `contains` below
+        // by being empty, and every one of them is a `contains`.
+        for whole in [
+            "fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {",
+            "fn answered(",
+        ] {
             assert!(
-                !body.is_empty(),
-                "{what}'s arm came back empty, so everything below it is asserting nothing"
-            );
-            assert!(
-                body.contains("let deck = self.readout.view.selection();"),
-                "{what}'s arm does not take its deck from the selection, so a press moves \
-                 whichever deck the arm decided on rather than the one the operator picked \
-                 with `0`-`3`: {body}"
-            );
-            assert!(
-                body.contains("held(&gfx.engine.deck, deck)"),
-                "{what}'s arm reads a slot without asking `held` for it first — `Deck::gain` \
-                 indexes its slots and a panic in an event handler aborts this process rather \
-                 than unwinding: {body}"
-            );
-            assert!(
-                body.contains(reading),
-                "{what}'s arm does not step from `{reading}`, so the level it counts from is \
-                 not the one the deck is holding: {body}"
-            );
-            assert!(
-                body.contains(operation),
-                "{what}'s arm does not build `{operation}` — the deck it names is not the \
-                 `deck` it selected: {body}"
-            );
-            assert!(
-                !body.to_lowercase().contains("strip"),
-                "{what}'s arm reaches for a strip, which is the deck's reading copied once a \
-                 frame: {body}"
+                code.contains(whole),
+                "{SRC} no longer says `{whole}` — the two functions that meet the deck at a \
+                 grammar press are somewhere else now, and every assertion below is looking for \
+                 statements in a file that does not have them"
             );
         }
 
-        // **The floor under all three**, and it is the assertion that keeps
-        // the rest honest: a `code()` that had stopped matching this file
-        // would hand `arm` a haystack with no arms in it, and `arm` panics
-        // there rather than returning nothing — but a *head* that matched
-        // something else entirely would not, so the bodies are checked for
-        // being one arm each rather than the rest of the file.
-        for (head, _, _, what) in arms {
-            let body = arm(&code, head);
+        // **The two levels**: the deck the address named, the value read off
+        // that deck, and the guard between them.
+        for (reading, what) in [
+            ("gain_key(*step, gfx.engine.deck.gain(slot))", "the trim"),
+            (
+                "opacity_key(*step, gfx.engine.deck.opacity(slot))",
+                "the fader",
+            ),
+        ] {
             assert!(
-                body.len() < 1200,
-                "{what}'s arm came back {} characters long, which is not one arm — the shape \
-                 `arm` cuts at has changed and every assertion above is being made against \
-                 whatever followed",
-                body.len()
+                code.contains(reading),
+                "{what} is not stepped from `{reading}` — the level it counts from is not the one \
+                 the deck is holding, and `view::Strip` is that reading copied once a frame"
             );
-            // **The tail, in two pieces rather than as one quoted call.** It
-            // was the whole `App::performed(…)` argument list until
-            // `App::performed` grew a `started` and `rustfmt` broke the call
-            // over six lines — at which point the flattened text reads
-            // `App::performed( gfx, self.started, …` and a quotation of the
-            // call is a bet on how wide the arguments happen to be. What has
-            // to hold is that the arm reaches that function and then asks for
-            // the frame, and both of those are checkable without knowing
-            // where the line was wrapped.
-            for tail in [
-                "App::performed(",
-                "App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);",
-            ] {
-                assert!(
-                    body.contains(tail),
-                    "{what}'s arm does not end at the tail every press goes through — it never \
-                     reaches `{tail}`, so `arm` is not returning the arm: {body}"
-                );
-            }
         }
+        assert!(
+            code.contains("match held(&gfx.engine.deck, *deck)"),
+            "`answered` reads a slot without asking `held` for it first, or reads a deck the \
+             address did not name: `Deck::gain` indexes its slots and a panic in an event handler \
+             aborts this process rather than unwinding"
+        );
+        for named in [
+            "Operation::SetGain { deck: *deck",
+            "Operation::SetOpacity { deck: *deck",
+        ] {
+            assert!(
+                code.contains(named),
+                "`answered` does not build `{named}…` — the deck it names is not the one the \
+                 address is on"
+            );
+        }
+
+        // **The three states**, which the console cycles and this file reads.
+        assert!(
+            code.contains("let slot = held(deck, at)?;"),
+            "`holding` reads a slot without asking `held` for it first"
+        );
+        for (reading, what) in [
+            ("tally(deck.requested_residency(slot))", "the residency"),
+            ("blend_mode(deck.blend(slot))", "the blend"),
+            ("masked(deck.mask(slot).kind())", "the mask shape"),
+        ] {
+            assert!(
+                code.contains(reading),
+                "`holding` does not read {what} as `{reading}` — the state the console cycles \
+                 from is not the one the deck is holding"
+            );
+        }
+
+        // **And neither of them reaches for a strip**, which is the claim the
+        // three arms carried before them. `view::Strip` is named all over this
+        // file — `mixer` builds one per frame — so the scan is the two
+        // functions' own text rather than the whole of it.
+        //
+        // **Cut at the next function by name**, which is a boundary that fails
+        // loudly: a blank line between two functions flattens to *two* spaces,
+        // so a cut at `"} fn "` matched nothing and this test panicked on its
+        // own extraction the first time it ran.
+        let holding = code
+            .split("fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {")
+            .nth(1)
+            .and_then(|rest| rest.split_once("fn masked("))
+            .map(|(body, _)| body.to_owned())
+            .expect("`holding` has a body and `masked` follows it");
+        assert!(
+            !holding.to_lowercase().contains("strip"),
+            "`holding` reaches for a strip, which is the deck's reading copied once a frame: \
+             {holding}"
+        );
     }
 
     /// **And every key the legend prints has its rows written down**, both
@@ -25999,8 +27848,21 @@ mod key_column {
     /// keys rather than a mapping off the first.
     #[test]
     fn every_key_the_legend_prints_has_its_rows_written_down() {
-        let printed: BTreeSet<&str> = KEYS.iter().map(|(k, _)| *k).collect();
-        let mapped: BTreeSet<&str> = ROWS.iter().map(|(k, _)| *k).collect();
+        let printed: BTreeSet<&str> = KEYS
+            .iter()
+            .map(|(k, _)| *k)
+            // **The four arrow keys are one route**, which is the one place
+            // the legend and the routes count differently and it is the
+            // grammar's own shape: `up`, `down`, `left` and `right` are four
+            // keys an operator presses and *the arrows* is one rule about
+            // kinds of thing. The legend prints four sentences; [`ROWS`] holds
+            // one entry per bay.
+            .map(|key| match SPELLED.iter().find(|(page, _)| *page == key) {
+                Some((_, name)) => *name,
+                None => key,
+            })
+            .collect();
+        let mapped: BTreeSet<&str> = ROWS.iter().map(|(_, k, _)| *k).collect();
         assert_eq!(
             printed, mapped,
             "a key the legend prints has no entry in `ROWS`, or `ROWS` maps a key the legend \
@@ -26013,10 +27875,10 @@ mod key_column {
     /// And the keys that reach no row are exactly [`NO_ROW`], both ways round.
     #[test]
     fn the_keys_that_reach_no_row_are_the_ones_written_down() {
-        let silent: Vec<&str> = ROWS
+        let silent: Vec<(Option<&str>, &str)> = ROWS
             .iter()
-            .filter(|(_, rows)| rows.is_empty())
-            .map(|(k, _)| *k)
+            .filter(|(_, _, rows)| rows.is_empty())
+            .map(|(bay, key, _)| (*bay, *key))
             .collect();
         assert_eq!(
             silent, NO_ROW,
@@ -26025,16 +27887,21 @@ mod key_column {
         );
     }
 
-    /// **A key reaching past the page.**
+    /// **A route reaching past the page.**
     ///
-    /// A key this program binds whose row is not marked built in the key column
-    /// — ADR-0213's failure mode from the side where the code moved first,
-    /// which is how this whole column came to be wrong: the panel binary was
-    /// given six arrangement keys and six rows went on reading `gap`.
+    /// A route this program binds whose row is not marked built in the key
+    /// column — ADR-0213's failure mode from the side where the code moved
+    /// first, which is how this whole column came to be wrong: the panel binary
+    /// was given six arrangement keys and six rows went on reading `gap`.
+    ///
+    /// **The badge is parsed rather than word-matched** since 2026-09-10, which
+    /// is the rewrite ADR-0259 scheduled: a key alone no longer determines a
+    /// row, so the badge has to be read as *these keys, in that bay* and
+    /// resolved against the pair.
     #[test]
     fn every_key_the_instrument_binds_reaches_a_route_marked_built() {
         let badges = key_badges();
-        for (key, rows) in ROWS {
+        for (bay, key, rows) in ROWS {
             for row in *rows {
                 let found = badges
                     .iter()
@@ -26046,25 +27913,46 @@ mod key_column {
                         )
                     });
                 assert_eq!(
-                    found.1, "has",
-                    "`{key}` performs `{row}` at the panel, which {PAGE} marks `{}` in the key \
+                    found.1,
+                    "has",
+                    "`{key}`{} performs `{row}` at the panel, which {PAGE} marks `{}` in the key \
                      column — an operation an operator reaches from the keyboard and a page \
                      that says the instrument does not. Flip the badge, or say here why the key \
                      does not reach it",
+                    said(*bay),
                     found.1
                 );
+                let (keys, named) = parsed(&found.2).unwrap_or_else(|| {
+                    panic!(
+                        "{PAGE} marks `{row}` built in the key column and its badge `{}` names a \
+                         bay this file has no name for — a badge is a key, or a key and the bay \
+                         it is addressed in",
+                        found.2
+                    )
+                });
+                assert_eq!(
+                    named,
+                    *bay,
+                    "`{key}`{} performs `{row}` and {PAGE}'s badge for it reads `{}`{} — a press \
+                     goes to the bay that has focus, so a badge naming the wrong bay tells an \
+                     operator to address the keys somewhere the press does nothing",
+                    said(*bay),
+                    found.2,
+                    said(named)
+                );
                 assert!(
-                    found.2.split_whitespace().any(|k| k == *key),
-                    "`{key}` performs `{row}` and {PAGE} marks that row built in the key column \
+                    keys.iter().any(|k| k == key),
+                    "`{key}`{} performs `{row}` and {PAGE} marks that row built in the key column \
                      naming `{}` — a badge that says an operator reaches it by pressing \
                      something else",
+                    said(*bay),
                     found.2
                 );
             }
         }
     }
 
-    /// **The page claiming a key nothing binds.**
+    /// **The page claiming a route nothing binds.**
     ///
     /// It fails apart from the test above because it is the other failure: that
     /// one says the program reached past the specification, this one says the
@@ -26085,30 +27973,339 @@ mod key_column {
              holds, which would pass this test by finding nothing",
             claimed.len()
         );
-        for (title, _, keys) in claimed {
+        for (title, _, badge) in claimed {
             assert_ne!(
-                keys, NOWHERE,
+                badge, NOWHERE,
                 "{PAGE} marks `{title}` built in the key column and names no key for it — a \
                  `has` badge says an operator reaches the operation, so it has to say what to \
                  press"
             );
-            for key in keys.split_whitespace() {
-                let rows = rows_of(key).unwrap_or_else(|| {
+            let (keys, bay) = parsed(badge).unwrap_or_else(|| {
+                panic!(
+                    "{PAGE} marks `{title}` built in the key column and its badge `{badge}` names \
+                     a bay this file has no name for — the nine are in `BAYS`, spelled the way \
+                     the page says them"
+                )
+            });
+            for key in keys {
+                let rows = rows_of(bay, &key).unwrap_or_else(|| {
                     panic!(
-                        "{PAGE} marks `{title}` built in the key column and names `{key}`, which \
-                         this program does not bind — the page tells a player to press a key the \
-                         instrument does not read. Either the key went and the badge is `plan` \
-                         again, or it is another program's: the key column is the instrument's \
-                         keyboard, and `karakuri-cli`'s keys are its own"
+                        "{PAGE} marks `{title}` built in the key column and names `{key}`{}, \
+                         which this program does not bind — the page tells a player to press a \
+                         key the instrument does not read. Either the key went and the badge is \
+                         `plan` again, or it is another program's: the key column is the \
+                         instrument's keyboard, and `karakuri-cli`'s keys are its own",
+                        said(bay)
                     )
                 });
                 assert!(
                     rows.contains(&title.as_str()),
-                    "{PAGE} marks `{title}` built in the key column and names `{key}`, which \
-                     this program binds to {rows:?} instead — one letter, two operations"
+                    "{PAGE} marks `{title}` built in the key column and names `{key}`{}, which \
+                     this program binds to {rows:?} instead — one press, two operations",
+                    said(bay)
                 );
             }
         }
+    }
+
+    /// How a message names the bay a route is addressed in, or says it is
+    /// global.
+    fn said(bay: Option<&str>) -> String {
+        match bay {
+            Some(bay) => format!(" in the {bay}"),
+            None => String::from(" globally"),
+        }
+    }
+
+    /// **The grammar the page is checked against is the grammar the console
+    /// declares**, both ways round.
+    ///
+    /// This is the half ADR-0259 asked for and ADR-0331 could not have:
+    /// *"`key_column`'s machinery changes shape … the check reads this file's
+    /// own `match` arms as text, so a keyboard that becomes a per-bay dispatch
+    /// table is invisible to it — which is the thing to solve rather than to
+    /// discover."*
+    ///
+    /// [`ROWS`] holds the rows because a page heading is what a check reads and
+    /// is not something this program says to anybody.
+    /// `karakuri_console::focus::reaches` holds the **pairs**, because which
+    /// keys act in which bay is a property of the dispatch and not of this
+    /// file's text. Neither is derivable from the other, and this is what keeps
+    /// them from being two answers:
+    ///
+    /// - **A bay whose grammar is built and has no rows written down** is a
+    ///   press an operator can make that no badge on the page describes.
+    /// - **A pair written down that the console does not declare** is a badge
+    ///   telling an operator to press a key in a bay where nothing dispatches
+    ///   it, which is exactly the failure a built badge naming a bay was
+    ///   forbidden to make until now.
+    #[test]
+    fn the_grammar_the_page_names_is_the_grammar_the_console_declares() {
+        let declared: BTreeSet<(&str, &str)> = karakuri_console::focus::reaches()
+            .into_iter()
+            .map(|(bay, key)| {
+                (
+                    bay,
+                    match key {
+                        karakuri_console::focus::Grammar::Digit => DIGIT,
+                        karakuri_console::focus::Grammar::Arrows => "arrows",
+                        karakuri_console::focus::Grammar::Space => "space",
+                        karakuri_console::focus::Grammar::Enter => "enter",
+                    },
+                )
+            })
+            .collect();
+        let written: BTreeSet<(&str, &str)> = ROWS
+            .iter()
+            .filter_map(|(bay, key, _)| bay.map(|bay| (bay, *key)))
+            .collect();
+        assert_eq!(
+            written, declared,
+            "the routes this file writes down and the ones `karakuri_console::focus::BUILT` \
+             declares are not the same routes. A pair the console declares and this file does \
+             not is a press an operator can make that no badge describes; a pair here the \
+             console does not declare is a badge naming a key that reaches nothing in that bay"
+        );
+        assert!(
+            declared.len() >= 6,
+            "only {} routes are declared by the dispatch table — the mixer has three and the \
+             library has four, so a scan finding fewer has stopped reading it",
+            declared.len()
+        );
+    }
+
+    /// **Every bay a badge names is a bay the arrangement has**, which is the
+    /// floor under [`parsed`]: a spelling nobody can resolve reads as a global
+    /// key, and a global key that reached a bay's row would pass both badge
+    /// checks by naming the wrong thing consistently.
+    #[test]
+    fn the_bay_names_the_page_uses_are_the_arrangements_own() {
+        for (page, name) in BAYS {
+            assert!(
+                karakuri_console::view::region(name).is_some(),
+                "{PAGE} names a bay `{page}` and this file resolves it to `{name}`, which is not \
+                 a region the console draws"
+            );
+        }
+        assert_eq!(
+            BAYS.len(),
+            9,
+            "the manual's *What each region is standing on* lists nine bays and this file has {}",
+            BAYS.len()
+        );
+    }
+}
+
+#[cfg(test)]
+mod focus_keys {
+    //! **`Tab` moves focus, `esc` goes up a level, and this loop leaves the
+    //! event loop from the window's close and from nowhere else.**
+    //!
+    //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+    //! retires quitting to the platform's own accelerator — *"a quit ladder is
+    //! a sequence that ends in something irreversible, in front of an audience,
+    //! reached by repeating one key"*
+    //! ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md))
+    //! — and [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)
+    //! is where that lands. What the ring does is
+    //! `karakuri-console/tests/focus.rs`'s; what this file says is that the two
+    //! keys reach it and that one of them stopped doing something else.
+    //!
+    //! # Why the exit count is the assertion
+    //!
+    //! **`esc` quitting was one statement, and the way it comes back is one
+    //! statement.** A regression here does not look like a wrong answer: it
+    //! looks like an instrument that shuts down in front of an audience because
+    //! somebody pressed the key that means *up one level*, which is the failure
+    //! the record refuses by name. Counting `event_loop.exit()` over the whole
+    //! of this file above its tests is the shape that catches it wherever it is
+    //! written — a new key arm, a helper, a second `CloseRequested` — where an
+    //! assertion about the `esc` arm alone would only catch it coming back
+    //! where it was.
+    //!
+    //! # How it is read
+    //!
+    //! [`super::key_column`]'s machinery, one question along: this file read as
+    //! text, cut at the first `#[cfg(test)]`, comments dropped and the lines
+    //! joined — [`code`] — and [`arm`], which cuts one arm of the window loop's
+    //! `match` out of it. Two call sites for each, and one answer to *what does
+    //! this file say before its tests begin*.
+    //!
+    //! # What it cannot see, and which way each one fails
+    //!
+    //! - **A press.** That the arm is reached, that `egui` did not swallow the
+    //!   key, and that the ring moves on a running panel are three claims this
+    //!   makes none of; the first is `event_response`'s, the second is the
+    //!   invariant that test holds, and the third is `mod gpu`'s and is not
+    //!   asked. A *false negative*, and it is the boundary
+    //!   [`super::key_column`]'s own documentation stops at.
+    //! - **A quit reached by another route** — `std::process::exit`, a panic in
+    //!   an event handler, a drop that takes the loop with it. The count below
+    //!   names one spelling. A *false negative*.
+    //! - **`/* … */`, and a `//` inside a string literal**, unchanged from the
+    //!   two modules above:
+    //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
+    //!   is what fails the day one is written.
+
+    use super::key_column::{arm, code, SRC};
+
+    /// The one way out of the run, spelled once so the count below can name it.
+    const EXIT: &str = "event_loop.exit()";
+
+    /// The two arms this module is about, as the `match` writes their patterns.
+    const TAB: &str = "Key::Named(NamedKey::Tab) => {";
+    const ESC: &str = "Key::Named(NamedKey::Escape) => {";
+
+    /// **The arm that follows `esc`, and the reason [`one`] exists.**
+    ///
+    /// The four keys of the grammar are dispatched from a single guarded arm
+    /// that names no `Key::Character("…")` and no `Key::Named(NamedKey::…)` of
+    /// its own — the digits are a guard and the named keys are matched inside
+    /// `super::grammar` — so [`arm`](super::key_column::arm), which cuts at
+    /// those two shapes, runs straight through it and hands back the `esc` arm
+    /// with the whole grammar arm stuck to the end of it.
+    ///
+    /// Cutting at this instead is exact rather than a guess: the head is one
+    /// statement, and a rewrite that moved or renamed it fails the floor in
+    /// [`tab_moves_the_focus_and_esc_goes_up_a_level`] rather than silently
+    /// asserting against a body that is two arms.
+    const GRAMMAR: &str = "named if grammar(&named).is_some() => {";
+
+    /// One arm of the window loop's own `match`, ending where the grammar arm
+    /// begins.
+    fn one(code: &str, head: &str) -> String {
+        let body = arm(keys(code), head);
+        match body.find(GRAMMAR) {
+            Some(at) => body[..at].to_owned(),
+            None => body,
+        }
+    }
+
+    /// **The window loop's own `match`, and not the two above it.**
+    ///
+    /// The key handler runs three `match`es in a row: one while the arrangement
+    /// pill is asking for a name, one while the Inspector's keep is, and then
+    /// the panel's. **All three have an `Escape` arm** — a field is one of
+    /// ADR-0259's seven kinds and `esc` abandons the name — and
+    /// [`arm`](super::key_column::arm) finds the *first* of whatever it is
+    /// asked for, so a scan over the whole file would have read the
+    /// arrangement pill's arm and said the panel's `esc` was missing. It did,
+    /// on the first run of this test.
+    ///
+    /// Cutting at [`TAB`] is what fixes it and is checkable rather than a bet:
+    /// only the third `match` binds `Tab`, and [`arm`](super::key_column::arm)
+    /// panics if the head it is given is not there — so a rewrite that moved
+    /// the arm out of that `match` fails here rather than silently reading
+    /// another one.
+    fn keys(code: &str) -> &str {
+        let at = code.find(TAB).unwrap_or_else(|| {
+            panic!(
+                "{SRC} has no arm beginning `{TAB}` — the window loop's `match` no longer binds \
+                 the key that moves focus between bays, and the two arms below are being read \
+                 out of whichever `match` came first"
+            )
+        });
+        &code[at..]
+    }
+
+    /// **The run ends at the window's close and nowhere else.**
+    ///
+    /// A CPU test, deliberately, and for [`super::key_column`]'s reason: it
+    /// reads a file, so a machine with no adapter still has an answer about
+    /// what this file does with `esc`.
+    #[test]
+    fn the_only_way_out_of_the_run_is_the_windows_own_close() {
+        let code = code();
+        let found = code.matches(EXIT).count();
+        assert_eq!(
+            found, 1,
+            "`{EXIT}` is written {found} times in {SRC} above its tests, and there is exactly one \
+             way out of a run: `WindowEvent::CloseRequested`, which is the platform's own \
+             accelerator arriving. ADR-0259 retires the quit ladder — a sequence that ends in \
+             something irreversible, in front of an audience, reached by repeating one key \
+             (P-0094) — so a second exit here is `esc` quitting again under another name"
+        );
+        // **The floor**: a `code()` that had stopped matching this file would
+        // count zero and read as one exit too few rather than as a scan that
+        // has stopped scanning.
+        assert!(
+            code.contains("WindowEvent::CloseRequested =>"),
+            "{SRC} no longer handles `WindowEvent::CloseRequested`, so the one exit counted above \
+             is not the window's close and this test is asserting nothing"
+        );
+    }
+
+    /// **`Tab` moves focus and `esc` goes up a level**, and each reaches the
+    /// console rather than deciding anything itself.
+    ///
+    /// Three claims per arm, and the third is the one that fails loudest: the
+    /// arm asks `karakuri-console` for the move — the ring is derived from the
+    /// arrangement there and a walk written here would be a second answer
+    /// (ADR-0156) — it asks for the frame through `Change::Pointed`, which is
+    /// *a key moved a pointer*, and it does not reach the event loop.
+    #[test]
+    fn tab_moves_the_focus_and_esc_goes_up_a_level() {
+        let code = code();
+        let arms = [
+            (
+                TAB,
+                "self.readout.view.tab(",
+                "`Tab`",
+                "the tab ring is `karakuri_console::focus::ring`'s, derived from the \
+                 arrangement's own tree",
+            ),
+            (
+                ESC,
+                "self.readout.view.focus_up(",
+                "`esc`",
+                "going up a level is the console's address and not this file's",
+            ),
+        ];
+        for (head, call, what, why) in arms {
+            let body = one(&code, head);
+            assert!(
+                !body.is_empty(),
+                "{what}'s arm came back empty, so everything below it is asserting nothing"
+            );
+            assert!(
+                body.len() < 1500,
+                "{what}'s arm came back {} characters long, which is not one arm — the shape \
+                 `arm` cuts at has changed",
+                body.len()
+            );
+            assert!(
+                body.contains(call),
+                "{what}'s arm does not call `{call}` — {why}: {body}"
+            );
+            assert!(
+                body.contains("Change::Pointed(moved)"),
+                "{what}'s arm does not ask for its frame through `Change::Pointed`, which is the \
+                 answer for *a key moved a pointer* — focus is a pointer this console owns, so \
+                 nothing in the arrangement moved and no `Outcome` says so: {body}"
+            );
+            assert!(
+                !body.contains("event_loop"),
+                "{what}'s arm reaches the event loop. Neither of these two keys ends the run — \
+                 the window's own close does, and it is the one place it is reached from: {body}"
+            );
+        }
+
+        // **`shift-Tab` is the same key with the modifier read off this
+        // loop's own copy**, because `winit`'s `KeyEvent` carries none. A `Tab`
+        // arm that had stopped reading it would walk one way only, and the
+        // failure looks like a key that works — see `App::shift`.
+        let tab = one(&code, TAB);
+        assert!(
+            tab.contains("self.shift"),
+            "the `Tab` arm does not read `App::shift`, so `shift-Tab` walks the ring forward. \
+             `winit`'s `KeyEvent` carries no modifier state, so the answer has to have been \
+             listened for on `WindowEvent::ModifiersChanged`: {tab}"
+        );
+        assert!(
+            code.contains("WindowEvent::ModifiersChanged(state) => {"),
+            "{SRC} does not listen for `WindowEvent::ModifiersChanged`, so `App::shift` is never \
+             written and the arm above reads a `bool` that is `false` forever"
+        );
     }
 }
 
@@ -26419,6 +28616,29 @@ mod press_handler {
             "tracker_group(",
             &["group.tapped(", "group.octave(", "group.nudge("],
         ),
+        // **The `learn` pill**, and its one call is `hit` rather than an
+        // `ask`: what a press names is a `bool` and not an operation, because
+        // a learn edits the *map* rather than being a member of the vocabulary
+        // the map addresses (ADR-0236, ADR-0336). `pill.next(` is the state it
+        // names and is read at the press.
+        (
+            "the transport row's learn pill",
+            "view::learn_pill(",
+            &["pill.hit(", "pill.next("],
+        ),
+        // **The `map` pill is a readout, and it is derived all the same.**
+        // `input::claim` already keeps a press on it off `egui`, so the press
+        // handler could have let it fall through — and then this table would
+        // have carried an entry with no derivation and no ask, which passes
+        // vacuously. So the press is recognised at the control and swallowed
+        // there, which is a fact a reader can check. There is no ask because
+        // there is nothing to ask: reaching a different map while running is
+        // not built, and the pill says which file is loaded.
+        (
+            "the transport row's map pill",
+            "view::map_pill(",
+            &["row.pill.contains("],
+        ),
         ("the arrangement pill", "arrangement_pill(", &["pill.ask("]),
         // **The two look controls, derived once for both** — the exposure
         // track's place is measured from the tone map capsule's, so they are
@@ -26507,22 +28727,24 @@ mod press_handler {
             "keep_pill(",
             &["pill.keep("],
         ),
-        // **The deck head's five, one Inspector pane at a time.** The pane is
+        // **The deck head's seven, one Inspector pane at a time.** The pane is
         // derived per index and the head from the pane, so the derivation
         // named here is the inner one: `inspector_pane` answers a rectangle
-        // and `deck_head_row` answers the control. **Five controls and four
-        // calls**: the scrub's two arrows are two of the five and `scrub`
-        // answers for both of them. The fold is the fifth and `compositing` is
-        // its call — a press on it re-aims the slot rather than moving the
-        // mix, which is why the arm that acts on it is beside the library
-        // load's and not beside the sync chip's (ADR-0314).
+        // and `deck_head_row` answers the control. **Seven controls and six
+        // calls**: the scrub's two arrows are two of the seven and `scrub`
+        // answers for both of them. The last three are the row's build chips
+        // and each re-aims the slot rather than moving the mix, which is why
+        // the arms that act on them are beside the library load's and not
+        // beside the sync chip's (ADR-0314, ADR-0328).
         (
-            "a deck head's five",
+            "a deck head's seven",
             "deck_head_row(",
             &[
                 "head.sync(",
                 "head.reanchor(",
                 "head.scrub(",
+                "head.resized(",
+                "head.re_salted(",
                 "head.compositing(",
             ],
         ),
@@ -26543,6 +28765,25 @@ mod press_handler {
             "a parameter row's fader",
             "inspector_pane(",
             &["at_pane.grab("],
+        ),
+        // **A parameter row's publish mark**, which is the leftmost cell of the
+        // row the fader is on and is derived from the same laid-out pane: one
+        // press arm, one call, and what it asks for is the whole interface
+        // rather than this entry (ADR-0329).
+        (
+            "a parameter row's publish mark",
+            "inspector_pane(",
+            &["at_pane.publishing("],
+        ),
+        // **A node group's `uses` capsule and its card**, and the two are one
+        // row for the Library bay's load button and deck pulldown's reason:
+        // they are one derivation and one ask. The capsule emits nothing — it
+        // puts the card down — and the card's rows emit `WireInput`, which is
+        // why `Readout::wiring_at` is the name here rather than either half.
+        (
+            "a node group's `uses` capsule and its card",
+            "inspector_pane(",
+            &["laid.uses_chip(", "laid.wired("],
         ),
         // **A node head's three `man / sug / auto` chips**, and the pane is
         // the whole derivation for the renderer chips' reason two rows up:
@@ -26908,7 +29149,10 @@ mod event_response {
     //!
     //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
     //! makes `Tab` the key that moves focus between bays, and names this
-    //! invariant as the thing to watch. An `if response.consumed` added here
+    //! invariant as the thing to watch. **The key is bound since 2026-09-09**
+    //! ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
+    //! so this is no longer a watch on something that has not arrived: it is
+    //! what keeps a key an operator presses reaching the arm that answers it. An `if response.consumed` added here
     //! reads as an ordinary courtesy to the toolkit; what it does is swallow
     //! `Tab` on the first press, which in that scheme is **the failure that
     //! looks like nothing at all** — no panic, no diagnostic, a key that stops
@@ -27162,7 +29406,6 @@ mod gpu {
         let (send_tx, sends) = std::sync::mpsc::channel();
         Keeping {
             mcp: None,
-            edges: Vec::new(),
             playing: Playing {
                 playing: Vec::new(),
             },
@@ -27620,7 +29863,12 @@ mod gpu {
         // opens on the same pair, and a load is what makes them differ.
         let material = vec![sources.material(); engine.deck.slot_count()];
         let mut panes = Vec::new();
-        inspector(&engine.deck, &material, &mut panes);
+        // **The run's own aims**, so the `uses` lines are read off what each
+        // slot is actually pointed at rather than off an empty list. The pair
+        // this panel opens on declares no input, so every group's line count is
+        // zero — which is what the assertion below says rather than assumes
+        // (ADR-0329).
+        inspector(&engine.deck, &material, &engine.aimed, &mut panes);
 
         // One pane per slot, up to the panes the arrangement has.
         assert_eq!(panes.len(), view::PANES);
@@ -27632,6 +29880,96 @@ mod gpu {
         assert!(
             !pane.composite,
             "the pair builds with no L5, so there is nothing to fold"
+        );
+
+        // **The deck head's two build chips, read off the Set rather than off
+        // any number this file chose.** Every assertion below is against what
+        // the engine answers, because the numbers belong to
+        // `examples/drift_shell.kir` — a file the MCP surface exists to rewrite
+        // — and a fixture the product can rewrite is not a fixture
+        // (`docs/contributing.md` §3). What is being checked is that the offer
+        // is the *material's* declaration: a ladder built from the wrong range
+        // is a chip that asks for builds the engine refuses (ADR-0328).
+        let set = engine.deck.slot(0).set();
+        let aimed = pane
+            .aimed
+            .as_ref()
+            .expect("a slot with a geometry has a capacity and a salt");
+        assert_eq!(
+            aimed.capacity,
+            set.source_capacities()[0],
+            "the chip reads a capacity the first geometry is not running at"
+        );
+        let declared = set.declared_capacities();
+        assert_eq!(
+            aimed.stated,
+            aimed.capacity != declared[0][2],
+            "lit and unlit disagree with whether the slot is on its material's own default"
+        );
+        assert!(
+            !aimed.capacities.is_empty(),
+            "one geometry declaring a range gave a chip with nothing to step to"
+        );
+        assert!(
+            aimed.capacities.windows(2).all(|two| two[0] < two[1]),
+            "the ladder is not ascending, so the step is not a step: {:?}",
+            aimed.capacities
+        );
+        for rung in &aimed.capacities {
+            assert!(
+                rung.is_power_of_two(),
+                "{rung} is on the ladder and is not a power of two"
+            );
+            for at in declared {
+                assert!(
+                    (at[0]..=at[1]).contains(rung),
+                    "the chip offers {rung} and a geometry declares [{}, {}], so the build this \
+                     press asks for is one the engine refuses by name",
+                    at[0],
+                    at[1]
+                );
+            }
+        }
+        // **The running value is inside the declared range and is not
+        // necessarily on the ladder**, and the pair this panel opens on is the
+        // demonstration rather than a corner: it runs at 10240, which
+        // `examples/coil_vortex.kir` declares as its default and which is not a
+        // power of two. So the *shipped* state of this program is the one
+        // `view::stepped_capacity` steps **up** from — the case a `position`
+        // lookup would have answered by dropping the slot to the bottom of its
+        // own range.
+        assert!(
+            (declared[0][0]..=declared[0][1]).contains(&aimed.capacity),
+            "the pair runs at {} and its geometry declares [{}, {}]",
+            aimed.capacity,
+            declared[0][0],
+            declared[0][1]
+        );
+        let above = aimed
+            .capacities
+            .iter()
+            .find(|rung| **rung > aimed.capacity)
+            .or_else(|| aimed.capacities.first());
+        assert!(
+            above.is_some(),
+            "a slot running at {} has nowhere to step inside {:?}",
+            aimed.capacity,
+            aimed.capacities
+        );
+        // **The next salt in the slot's own sequence, from the salt the slot is
+        // running** — the console cannot compute this and must not, so what is
+        // checked here is that the number handed over is the engine's own
+        // derivation and not the value it was derived from (P-0092).
+        let running = set.source_salts()[0];
+        assert_eq!(
+            aimed.salt,
+            karakuri_engine::set::derived_salt(running, 1),
+            "the salt offered is not the next in this slot's sequence"
+        );
+        assert_ne!(
+            aimed.salt, running,
+            "a press would ask for the salt the slot is already on, which is a rebuild that \
+             changes no pixel"
         );
 
         // The L1 is its own group and the renderers fold into one, which is
@@ -27679,11 +30017,32 @@ mod gpu {
         // control is learned against.
         let published = engine.deck.slot(0).set().published().len();
         assert!(published > 0, "the pair publishes what it declares");
+        // **No node of this pair declares an input**, so no group draws a
+        // `uses` line — read off the aims rather than assumed, because an empty
+        // list here and an empty *reading* are two different facts and only one
+        // of them is about the material.
+        assert!(
+            pane.nodes.iter().all(|node| node.uses.is_empty()),
+            "a node of the launch pair drew a `uses` line, and the pair declares no input"
+        );
+
+        // **The rows off the interface are not among them**, and on this pair
+        // there are none: nobody has narrowed anything, so `Set::published`
+        // answers with `declared_interface` itself and every row has a number
+        // (ADR-0329).
         let mut ords: Vec<usize> = pane
             .nodes
             .iter()
-            .flat_map(|node| node.params.iter().map(|param| param.ord))
+            .flat_map(|node| node.params.iter().filter_map(|param| param.ord))
             .collect();
+        assert_eq!(
+            ords.len(),
+            pane.nodes
+                .iter()
+                .map(|node| node.params.len())
+                .sum::<usize>(),
+            "a row of this pane carries no interface position, and nothing has narrowed this deck"
+        );
         ords.sort_unstable();
         assert_eq!(
             ords,
@@ -28985,10 +31344,11 @@ mod gpu {
     /// deck, which is why this is here rather than beside the helpers' own
     /// tests.
     ///
-    /// `tests::the_gain_keys_step_the_trim_…` and the two beside it assert
-    /// [`gain_key`], [`opacity_key`] and [`after_blend`] with no deck
-    /// anywhere, which is the point of those three. This is the other end of
-    /// the same chain, and it needs a device because a `Deck` does: four slots
+    /// `tests::stepping_the_trim_…` and the one beside it assert [`gain_key`]
+    /// and [`opacity_key`] with no deck anywhere, which is the point of those
+    /// two, and `karakuri-console/tests/grammar.rs` asserts which control a
+    /// press lands on with no deck either. This is the other end of the same
+    /// chain, and it needs a device because a `Deck` does: four slots
     /// exist, the selection is one of them, the level the press steps from is
     /// read off that slot, the operation becomes a `Record` and the record
     /// moves one slot.
@@ -29110,7 +31470,7 @@ mod gpu {
         let was = snapshot(&engine.deck);
         let deck = readout.view.selection();
         let slot = held(&engine.deck, deck).expect("the selection is a slot this deck has");
-        let gain = gain_key("]", engine.deck.gain(slot)).expect("`]` is one of the trim's keys");
+        let gain = gain_key(Step::Up, engine.deck.gain(slot));
         let record = super::tests::only_record(&Operation::SetGain { deck, gain });
         assert!(apply(
             &record,
@@ -29122,7 +31482,7 @@ mod gpu {
         let now = snapshot(&engine.deck);
         assert!(
             (now[here].0 - (was[here].0 + GAIN_STEP)).abs() <= CLOSE,
-            "`]` with deck C selected took its trim from {} to {} rather than one step of \
+            "an up press on deck C's addressed trim took it from {} to {} rather than one \
              {GAIN_STEP} up",
             was[here].0,
             now[here].0
@@ -29138,8 +31498,7 @@ mod gpu {
         // -- the fader ------------------------------------------------------
 
         let was = snapshot(&engine.deck);
-        let opacity =
-            opacity_key("'", engine.deck.opacity(slot)).expect("`'` is one of the fader's keys");
+        let opacity = opacity_key(Step::Up, engine.deck.opacity(slot));
         let record = super::tests::only_record(&Operation::SetOpacity { deck, opacity });
         assert!(apply(
             &record,
@@ -29151,7 +31510,7 @@ mod gpu {
         let now = snapshot(&engine.deck);
         assert!(
             (now[here].1 - (was[here].1 + OPACITY_STEP)).abs() <= CLOSE,
-            "`'` with deck C selected took its fader from {} to {} rather than one step of \
+            "an up press on deck C's addressed fader took it from {} to {} rather than one \
              {OPACITY_STEP} up",
             was[here].1,
             now[here].1
@@ -29159,14 +31518,14 @@ mod gpu {
         for other in (0..now.len()).filter(|slot| *slot != here) {
             assert_eq!(
                 now[other], was[other],
-                "a press of `'` with deck C selected moved deck {other} as well"
+                "a press on deck C's fader moved deck {other} as well"
             );
         }
 
         // -- the blend ------------------------------------------------------
 
         let was = snapshot(&engine.deck);
-        let blend = after_blend(blend_mode(engine.deck.blend(slot)));
+        let blend = karakuri_console::view::after(blend_mode(engine.deck.blend(slot)));
         assert_ne!(
             blend,
             blend_mode(was[here].2),
@@ -29185,12 +31544,13 @@ mod gpu {
         assert_eq!(
             blend_mode(now[here].2),
             blend,
-            "`m` with deck C selected did not arrive at the mode the cycle names"
+            "`space` on deck C's addressed blend chip did not arrive at the mode the cycle \
+             names"
         );
         for other in (0..now.len()).filter(|slot| *slot != here) {
             assert_eq!(
                 now[other], was[other],
-                "a press of `m` with deck C selected moved deck {other} as well"
+                "a press on deck C's blend chip moved deck {other} as well"
             );
         }
 
@@ -29249,8 +31609,8 @@ mod gpu {
             "the deck moved and the copy the console is holding moved with it, so there is no \
              stale reading here to tell the two sources apart"
         );
-        let off_the_deck = gain_key("]", engine.deck.gain(here)).expect("`]` is a trim key");
-        let off_the_strip = gain_key("]", strips[here].gain).expect("`]` is a trim key");
+        let off_the_deck = gain_key(Step::Up, engine.deck.gain(here));
+        let off_the_strip = gain_key(Step::Up, strips[here].gain);
         assert_ne!(
             off_the_deck, off_the_strip,
             "a step counted from the deck and a step counted from the strip came out at the \
@@ -30287,6 +32647,7 @@ mod gpu {
             view.transport,
             view.audio.as_ref(),
             view.tracker,
+            None,
             &view.arrangement,
             view.look,
         )
@@ -30361,6 +32722,7 @@ mod gpu {
             view.transport,
             view.audio.as_ref(),
             view.tracker,
+            None,
             &view.arrangement,
             Some(look(&engine.look)),
         )

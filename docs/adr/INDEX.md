@@ -353,7 +353,18 @@ number; new records continue from the end.
 | [ADR-0325](0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md) | The frame follows the largest enabled output, and a resize costs 0.145 ms | 2026-09-09 | accepted |
 | [ADR-0326](0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md) | A staging row is a changed node, and the row is the keep | 2026-09-09 | accepted |
 | [ADR-0327](0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md) | The lane chooser lists one deck's keys, the bank pills are the four banks, and the levels stay out of the payload | 2026-09-09 | accepted |
+| [ADR-0328](0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md) | The Inspector's deck head steps a slot's capacity and re-salts it, and the payload loses its node | 2026-09-09 | accepted |
+| [ADR-0329](0329-an-input-is-wired-on-the-node-that-declares-it-and-the-number-is-the-publish-mark.md) | An input is wired on the node that declares it, and the number is the publish mark | 2026-09-09 | accepted |
+| [ADR-0330](0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md) | The console paints its own hover layer, and the tips are the manual's own words | 2026-09-09 | accepted |
 | [ADR-0331](0331-the-key-column-is-spelled-two-ways-and-a-built-badge-keeps-its-bare-letter.md) | The key column is spelled two ways, and a built badge keeps its bare letter | 2026-09-09 | accepted |
+| [ADR-0332](0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md) | Focus is a pointer the console owns, and the three pointers are instances of it | 2026-09-09 | accepted |
+| [ADR-0333](0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md) | The console resolves the address and the window loop names the operation | 2026-09-10 | accepted |
+| [ADR-0334](0334-mcp-names-an-operation-by-the-vocabularys-own-name-and-the-frame-performs-it.md) | MCP names an operation by the vocabulary's own name, and the frame performs it | 2026-09-09 | accepted |
+| [ADR-0335](0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md) | The panel opens the first surface there is, and the map is two tiers under the store | 2026-09-10 | accepted |
+| [ADR-0336](0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md) | A learn is a map edit, binds a position, and the tip's MIDI line is the live map | 2026-09-10 | accepted |
+| [ADR-0338](0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md) | A procedure is a row of the library, and one loaded over a layer makes a Set with no name | 2026-09-10 | accepted |
+| [ADR-0339](0339-a-rebuild-inherits-the-attachments-somebody-made.md) | A rebuild inherits the attachments somebody made | 2026-09-10 | accepted |
+| [ADR-0340](0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) | `kind L5` is written, and the master chain is an ordered list of them | 2026-09-10 | accepted |
 
 ## Retired numbers
 

@@ -47,7 +47,8 @@ cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PN
 `karakuri` is the panel and `karakuri-cli` is still what you play a whole set with: the
 console has the picture, the deck previews, the transport, the mixer, the Library bay and
 the Inspector; it serves MCP when `--mcp` names a port and records a session from the
-transport's `rec` pill, and it has no MIDI and no replay yet — the four `mcp` pills that open a
+transport's `rec` pill, opens the first MIDI input there is and follows the map under the store
+(ADR-0335), and it has no replay yet — the four `mcp` pills that open a
 class of operations to a model are drawn and pressable, and what they govern is the server this
 process is running. **It listens to the room**: it opens the
 default audio input at startup, the transport row's `audio-in` pill says which one and
@@ -89,7 +90,7 @@ not about design, and it had no home until the manual had one.
   example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
   `karakuri-cli`, which has no library target, so there was nothing for a binary to sit on. There
   is now — [`karakuri-environment`](crates/karakuri-environment). `karakuri-cli` is still what you
-  play a whole set with: the console has no MIDI and no replay yet. It does
+  play a whole set with: the console has no replay yet. It does
   open an audio input — so the signal bus carries a measurement rather than an invention, and the grid follows
   the room — it serves MCP when `--mcp` names a port, which is the server the four `mcp` pills govern,
   and it records a session from the transport's `rec` pill

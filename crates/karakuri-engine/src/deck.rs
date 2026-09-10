@@ -1372,13 +1372,15 @@ impl Deck {
     /// *parameter* send whoever reads the message to different halves of what
     /// they asked for.
     ///
-    /// **What a rebuild does with it is not settled here**, on
-    /// [`Deck::write_param`]'s terms and with the same shape:
-    /// `swap::Request::bindings` is restated from `Watch::bindings`, which
-    /// only a re-point writes, so an attachment made live is walked back on
-    /// the next save of any `.kir` in that slot. `Set::carry_moved_from` is
-    /// where the answer would go — see
-    /// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+    /// **A rebuild inherits it**, on [`Deck::write_param`]'s terms and with
+    /// the same shape. `swap::Request::bindings` is restated from
+    /// `Watch::bindings`, which only a re-point writes, so an attachment made
+    /// here is in no request — and it used to be walked back by the next save
+    /// of any `.kir` in that slot, silently. [`crate::set::Set::carry_bound_from`]
+    /// is where the answer went, beside the values a ride carries across the
+    /// same swap: see
+    /// `docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md`,
+    /// and ADR-0319 for the record this writes.
     pub fn bind(&mut self, slot: usize, binding: crate::binding::Binding) -> crate::set::Bound {
         self.slots[slot].swap.live_mut().bind(binding)
     }

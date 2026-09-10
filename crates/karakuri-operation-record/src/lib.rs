@@ -1434,6 +1434,35 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // nothing from a star: a session played back in somebody else's room
         // would otherwise arrive carrying this room's attention.
         | Operation::SetFavourite { .. }
+        // **A library write, and it is here for the arrangement's reason
+        // rather than for a new one.** `Operation::KeepProcedure` puts one
+        // node's source under `<store>/procedures/` — an operator's own act,
+        // which is what makes that tier exist
+        // ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md))
+        // — and nothing in the session vocabulary is a library write. The arm
+        // above already covers *a file under the store*, because
+        // `SaveArrangement` put it here, and its sentence transfers word for
+        // word: *"a save writes a file, and a file is not a record whose timing
+        // `OnLanding` could be about, nor a gap `NoRecord` could be about."*
+        //
+        // **Not `Silent::OnLanding`, where `Operation::SaveSet` beside it is.**
+        // A Set save *has* a record — `Record::Save` — and that arm answers
+        // only *when* it is written. There is no record here whose timing could
+        // be at issue and none ever arrives.
+        //
+        // **Not `Silent::NoRecord`**: that arm is where the record vocabulary
+        // has no row for what an operation does **and that is a gap**. This is
+        // the opposite — a replay reconstructs nothing from a library, and a
+        // session played back in somebody else's room would otherwise arrive
+        // writing into it
+        // (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+        | Operation::KeepProcedure { .. }
+        // **A pane's target is a pointer this console owns**, beside its scroll
+        // position, the deck selection and the library cursor — none of which
+        // the stream carries, for `Operation::SelectDeck`'s reason four lines
+        // up. A replay that reconstructed it would be putting somebody else's
+        // attention on the screen.
+        | Operation::PointPane { .. }
         | Operation::SizeWindow { .. }
         // **The sequencer's five, and they are the second family of the kind
         // the arrangement made this arm hold.** They answered
@@ -1482,7 +1511,15 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::SelectPattern { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------
+        //
+        // **`FilterLibrary` is `ListSets`' answer and not a fourth kind of
+        // silence.** The six toggles decide which populations the bay's listing
+        // is drawn from — the store's Sets, the store's procedures, the
+        // presets' — so the press is a narrowed *ask* of the library and the
+        // answer goes back to the surface that asked, exactly as `holds` and
+        // `layer` do on the row beside it. Nothing on any deck moves.
         Operation::ListSets { .. }
+        | Operation::FilterLibrary { .. }
         | Operation::ReadSet { .. }
         | Operation::ReadProcedure { .. }
         | Operation::SwapOutcome => Written::Silent(Silent::Question),
@@ -1541,6 +1578,38 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // `Record::Ride` and `Record::Source` carry it, and what is still here
         // is what nobody has written the session's twin of yet.
         //
+        // **`WireInput` and `Publish` have panel controls now**, and the two
+        // are not the same kind of silence — which is worth holding apart here
+        // because both read as *nothing is written* from the outside
+        // (`docs/adr/0329-…`).
+        //
+        // **`WireInput` is `SetProperty`'s shape**: `Record::Edge` exists, is a
+        // **Set file's** statement about a Set and carries no slot, so a
+        // session cannot say *the Set in slot 3 wires `far` to `sphere_shell`*
+        // — and a **keep** writes the run's edges into the file it saves, so
+        // what a hand asked for is recorded the moment the deck is kept.
+        //
+        // **`Publish` is the other shape and is the weaker one**: nothing in
+        // this format says what a Set publishes, in a Set file or in a session.
+        // So a narrowing is reproduced by no replay **and by no keep**, and it
+        // lives in the run that made it. That is the first group's first
+        // sentence — *a row the record format has never had* — met by a control
+        // rather than by a tool, and it is a gap named on both manual pages
+        // rather than a decision that the act is unworthy of a record.
+        //
+        // **`SetProperty` has two panel controls now and still writes
+        // nothing**, on `SetCompositing`'s argument below and in its company:
+        // the deck head's capacity chip and its `re-salt` capsule each move one
+        // field of the aim and let the worker rebuild the slot, which is a
+        // re-point rather than anything the session vocabulary can say
+        // (`docs/adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md`).
+        // What it costs is the same sentence: a session replayed does not come
+        // back at the capacity a hand stepped to or the salt a hand pressed
+        // for. **A keep does**, which is the half worth knowing — `capacity`
+        // and `seed` are Set-file records, so what a hand asked for is written
+        // down the moment the deck is kept, and the gap is the session stream's
+        // alone.
+        //
         // **`SetCompositing` has a panel control now and still writes
         // nothing**, and it is worth saying why the first did not move the
         // second. The console's deck head folds a slot's renderers by
@@ -1554,9 +1623,27 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // costs is real and is written in that record — a session replayed
         // does not come back compositing where a hand asked for it — and it is
         // the load's cost rather than a new one.
+        //
+        // **`LoadProcedure` is `LoadSet`'s answer and its cost unchanged in
+        // size.** It re-points the same slot through the same watcher, with one
+        // file replaced instead of every file, so it is a re-point and a
+        // re-point is not something the session vocabulary can say. What it
+        // costs is the load's cost reached from one more control: a session
+        // replayed does not come back with the layer a hand swapped, and it
+        // never came back with the Set a hand loaded either.
+        //
+        // **What it does *not* lose is the version.** The rebuild compiles, and
+        // compiling is the gate, so every version written after the swap is
+        // kept — filed under the Set the slot started from, because the
+        // procedure load leaves `watch::Aim`'s `set` where it is
+        // (`docs/adr/0304-the-set-a-version-is-filed-under-rides-the-aim-that-re-points-the-slot.md`).
+        // That is the half of the maintainer's answer this arm is the other
+        // side of: the derived Set has no name and its history is not lost with
+        // it.
         Operation::SetLatencyOffset { .. }
         | Operation::AttachBeatSource { .. }
         | Operation::LoadSet { .. }
+        | Operation::LoadProcedure { .. }
         | Operation::SetCompositing { .. }
         | Operation::WireInput { .. }
         | Operation::Publish { .. }

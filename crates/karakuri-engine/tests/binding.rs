@@ -1207,4 +1207,162 @@ mod gpu {
             "the measured frame changed nothing: {invented} then {measured}"
         );
     }
+
+    /// **An attachment made on a live slot is still driving after the rebuild
+    /// that follows it** — the whole of *the panel's picture answers to the
+    /// room*, asserted across the one moment it used to stop.
+    ///
+    /// # Why a rebuild is the moment, and why this is a picture assertion
+    ///
+    /// A binding that arrives *with* a Set — a Set file's `bind`, a `--bind`,
+    /// a rebuild's `Request` — is restated by every later request, so it
+    /// cannot be lost. One made **on a live slot** through [`Deck::bind`] is
+    /// not in any request: `swap::Request::bindings` is restated from a
+    /// watcher, which only a re-point writes. So until this test existed, an
+    /// operator attaching `energy` to a parameter got a picture that answered
+    /// to the room until the next save of any `.kir` in that slot, and then
+    /// one that silently did not — see
+    /// `docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md`.
+    ///
+    /// **The two frames are stepped from the swap and not from the run's
+    /// start**, because a swapped-in Set arrives cold: the build lands on
+    /// whatever frame the worker finished on, so the only instant both runs
+    /// share is `t = 0` on the incoming Set. Four steps from there is the same
+    /// four steps in both.
+    ///
+    /// **Asserted at the texel as well as at the value**, on
+    /// `a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes`'s
+    /// terms: a binding table that is right and a slot writing what it was
+    /// rebuilt with are indistinguishable anywhere else.
+    #[test]
+    fn an_attachment_made_live_is_still_driving_after_the_next_rebuild() {
+        use karakuri_engine::swap::{Event, Request, RequestNames};
+
+        /// Frames stepped from the instant the rebuild landed. The incoming
+        /// Set is cold, so this is the same simulation in both runs.
+        const AFTER: usize = 4;
+        /// Nothing here is a budget test, and a slot stopped for cost draws no
+        /// frame at all (ADR-0316) — which would be this test failing for a
+        /// reason it is not about.
+        const NO_BUDGET: f32 = 10_000.0;
+
+        let gpu = Gpu::headless().expect("no GPU");
+
+        // **The same material the slot is already running**, which is what a
+        // save of an untouched `.kir` produces: nothing about the picture
+        // changes across this rebuild except what the attachment does or does
+        // not go on driving.
+        let rebuild = || Request {
+            id: 1,
+            l1s: vec![(compile(L1), CAPACITY)],
+            l2s: Vec::new(),
+            l3s: Vec::new(),
+            fields: Vec::new(),
+            l4s: vec![compile(L4)],
+            names: RequestNames::default(),
+            edges: Vec::new(),
+            layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
+            seed_salt: SEED,
+            salts: Vec::new(),
+            camera: karakuri_engine::camera::Orbit::default(),
+            params: Vec::new(),
+            published: Vec::new(),
+            // **The point of the test.** A watcher over a pair states no
+            // binding, because a pair carries none — so this is what every
+            // rebuild of the panel's own slots hands the engine.
+            bindings: Vec::new(),
+            authorities: Vec::new(),
+            label: String::from("a save of the same .kir"),
+        };
+
+        let measured = |energy: f32| AudioFrame {
+            energy,
+            onset: 0.0,
+            bands: [0.0; 8],
+            band_count: 8,
+            confidence: 1.0,
+        };
+
+        // One run: attach `energy` to `radius` on the live slot, let a rebuild
+        // land, and step `AFTER` frames of the room at `energy`.
+        let rendered = |energy: f32| -> (f32, Vec<u16>) {
+            let present =
+                Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, WIDTH, HEIGHT);
+            let (tx, rx) = std::sync::mpsc::channel::<Request>();
+            let swap = HotSwap::new(
+                &gpu.device,
+                &gpu.queue,
+                build(&gpu),
+                NO_BUDGET,
+                Box::new(rx),
+            );
+            let mut deck = Deck::new(&gpu.device, vec![swap], WIDTH, HEIGHT);
+            deck.set_signals(Signals::new(BPM, u64::from(SEED)));
+
+            // **The road a press takes**, and the one this test is about.
+            assert!(
+                deck.bind(
+                    0,
+                    Binding::new(Kind::L1, "radius", "energy", Curve::Lin, [0.5, 8.0],)
+                )
+                .attached(),
+                "`radius` is a declared L1 param"
+            );
+            let mut signals = *deck.signals();
+            signals.set_audio(Some(measured(energy)));
+            deck.set_signals(signals);
+            frame(&gpu, &mut deck, &present, 1);
+            assert_eq!(
+                value_of(&deck, 0, "radius"),
+                0.5 + 7.5 * energy,
+                "the attachment is not driving before any rebuild, so this test would \
+                 pass over the question it is about"
+            );
+
+            tx.send(rebuild()).expect("the build worker is listening");
+            let mut landed = false;
+            for _ in 0..600 {
+                frame(&gpu, &mut deck, &present, 1);
+                if deck.events(0).any(|e| matches!(e, Event::Swapped { .. })) {
+                    landed = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            assert!(landed, "no rebuild landed, so nothing was asserted");
+            assert_eq!(
+                deck.slot(0).set().bindings().len(),
+                1,
+                "the rebuild left the slot with no attachment at all: what an operator \
+                 attached to `radius` was walked back by a save that states no binding"
+            );
+
+            for _ in 0..AFTER {
+                let mut signals = *deck.signals();
+                signals.set_audio(Some(measured(energy)));
+                deck.set_signals(signals);
+                frame(&gpu, &mut deck, &present, 1);
+            }
+            (
+                value_of(&deck, 0, "radius"),
+                readback(&gpu, present.hdr_texture()),
+            )
+        };
+
+        let (quiet, quiet_frame) = rendered(0.0);
+        let (loud, loud_frame) = rendered(1.0);
+
+        assert_eq!(
+            (quiet, loud),
+            (0.5, 8.0),
+            "the attachment did not survive the rebuild: `radius` is at its own value \
+             rather than at what the room is driving it to"
+        );
+        assert_ne!(
+            quiet_frame, loud_frame,
+            "a silent room and a loud one drew the same picture after a rebuild, so the \
+             attachment stopped reaching the shader"
+        );
+    }
 }

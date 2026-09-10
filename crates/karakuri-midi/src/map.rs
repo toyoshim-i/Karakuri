@@ -19,6 +19,9 @@
 //!   note 44 -> blend 0 over
 //!   note 48 -> residency 2 allocated
 //!   note 56 -> tap
+//!
+//!   # a control of the Set on a deck, by its place in the interface
+//!   cc 30   -> param 0 3
 //! ```
 //!
 //! ## A line names a state, never a step
@@ -41,6 +44,34 @@
 //! what the output shows*, so `preview` is not a control at all any more and
 //! is refused by the arm every unknown word is — the line is reported with its
 //! number and the rest of the map loads.
+//!
+//! ## A parameter is reached by position, and this crate cannot finish the line
+//!
+//! `cc -> param <deck> <position>` is a control of the Set on that deck, by its
+//! place in the published interface, counting from one — the number the
+//! Inspector draws beside the row. **A position and never a name**
+//! ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)):
+//! *knob 3 is knob 3 whatever Set is loaded*, where a name would be a mapping
+//! paid for again on every swap — and the same Set in two decks is two
+//! addresses, because the deck is in the address.
+//!
+//! **It is the one target [`Map::operation`] answers `None` to**, and
+//! [`Map::parameter`] answers it instead. A position becomes a `ParamAt` only
+//! against the Set that is in the deck right now, which is a readback and this
+//! module has none by charter; whoever holds the deck finishes it
+//! (`karakuri_environment::midi::Interface`). The two accessors are disjoint by
+//! target and a test holds that they are, so a target added to the grammar and
+//! to neither is a compile-time list short rather than a knob that goes quiet.
+//!
+//! **The range on that line is optional and nowhere else is.** Every other
+//! continuous target moves a control of the console's own, whose range this
+//! crate can state; a published control's range is the *Set's*, so `None`
+//! means *the range the Set published it over*, and a range on the line
+//! overrides it as it does on a gain.
+//!
+//! **It is also what a learn writes** — [`Map::learn`], the one thing here
+//! that changes a map
+//! (`docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`).
 //!
 //! ## Half the mask, because half of it can be said here
 //!
@@ -115,13 +146,59 @@ enum Shape {
 /// state it names and `Target::Blend` holds the mode. Nothing here is a step.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Target {
-    Gain { slot: u8, range: [f32; 2] },
-    Opacity { slot: u8, range: [f32; 2] },
-    Exposure { range: [f32; 2] },
-    MaskPosition { slot: u8, range: [f32; 2] },
-    Residency { slot: u8, residency: Residency },
-    Blend { slot: u8, blend: BlendMode },
+    Gain {
+        slot: u8,
+        range: [f32; 2],
+    },
+    Opacity {
+        slot: u8,
+        range: [f32; 2],
+    },
+    Exposure {
+        range: [f32; 2],
+    },
+    MaskPosition {
+        slot: u8,
+        range: [f32; 2],
+    },
+    Residency {
+        slot: u8,
+        residency: Residency,
+    },
+    Blend {
+        slot: u8,
+        blend: BlendMode,
+    },
     Tap,
+    /// **A control of the Set on a deck, by its place in the published
+    /// interface** — `cc 30 -> param 0 3`.
+    ///
+    /// **A position and never a name**, which is
+    /// [ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)'s
+    /// rule and the whole reason learn is worth having: *knob 3 is knob 3
+    /// whatever Set is loaded*. Binding to a Set's parameter by name would
+    /// make the mapping a cost paid again on every swap, and it also settles
+    /// the crossing — the same Set in two decks is two addresses, because the
+    /// deck is in the address.
+    ///
+    /// **Counting from one**, which is the number the Inspector draws beside
+    /// the row (`karakuri_console::view::Param::ord`). It is the only place a
+    /// position is visible at all, so a line an operator cannot check against
+    /// the pane is a line they cannot fix by hand.
+    ///
+    /// **The range is optional here and nowhere else**, and that is not an
+    /// inconsistency: every other continuous target has a range this crate can
+    /// state, because what it moves is the console's own control. A published
+    /// control's range is the *Set's* — `Published::range`, which narrows the
+    /// procedure's declaration — and this crate reads nothing back. So `None`
+    /// means *the range the Set published it over*, filled in by whoever holds
+    /// the deck, and a range written on the line overrides it the way it does
+    /// on a gain.
+    Param {
+        slot: u8,
+        position: u16,
+        range: Option<[f32; 2]>,
+    },
 }
 
 impl Target {
@@ -129,6 +206,35 @@ impl Target {
         match self {
             Target::Exposure { .. } => Shape::Ratio,
             _ => Shape::Linear,
+        }
+    }
+
+    /// **The right-hand side of the line that reaches this target**, spelled
+    /// the way [`parse_target`] reads it.
+    ///
+    /// **It is the control's identity in a map file**, and that is what it is
+    /// for: [`Map::bound`] reads the table backwards by this string, so a
+    /// tooltip can say which knob a control is on, and a learn writes
+    /// `<key> -> <this>`. **One spelling, produced by the grammar's own enum**,
+    /// rather than a formatter beside the parser that could come to disagree
+    /// with it — a line this returns is a line [`Map::parse`] accepts, which
+    /// `a_spelled_target_parses_back_to_itself` is what holds.
+    ///
+    /// **The range is left out.** Two lines differing only by a range are the
+    /// same control reached over two spans, so a reverse lookup keyed on the
+    /// range would answer *unassigned* for a knob that is plainly assigned.
+    pub fn spelled(self) -> String {
+        match self {
+            Target::Gain { slot, .. } => format!("gain {slot}"),
+            Target::Opacity { slot, .. } => format!("opacity {slot}"),
+            Target::Exposure { .. } => "exposure".to_string(),
+            Target::MaskPosition { slot, .. } => format!("mask-position {slot}"),
+            Target::Residency { slot, residency } => {
+                format!("residency {slot} {}", residency.name())
+            }
+            Target::Blend { slot, blend } => format!("blend {slot} {}", blend.name()),
+            Target::Tap => "tap".to_string(),
+            Target::Param { slot, position, .. } => format!("param {slot} {position}"),
         }
     }
 
@@ -142,6 +248,7 @@ impl Target {
                 | Target::Opacity { .. }
                 | Target::Exposure { .. }
                 | Target::MaskPosition { .. }
+                | Target::Param { .. }
         )
     }
 }
@@ -195,6 +302,65 @@ enum Key {
     },
 }
 
+impl Key {
+    /// **The left-hand side of the line this is**, spelled the way
+    /// [`parse_key`] reads it — [`Target::spelled`]'s other half, and the
+    /// answer [`Map::bound`] gives and a learn writes.
+    ///
+    /// The channel is the front panel's 1-16, because that is what is printed
+    /// on the device an operator reads it off; the wire's 0-15 is
+    /// [`crate::Message`]'s and the translation happens in `parse_key`, once
+    /// each way.
+    fn spelled(self) -> String {
+        let (kind, number, channel) = match self {
+            Key::Cc {
+                channel,
+                controller,
+            } => ("cc", controller, channel),
+            Key::Note { channel, note } => ("note", note, channel),
+        };
+        match channel {
+            Some(channel) => format!("{kind} {number} ch {}", channel + 1),
+            None => format!("{kind} {number}"),
+        }
+    }
+}
+
+/// **What a message asks of a deck's published interface**, which is the one
+/// thing a map cannot finish on its own — see [`Map::parameter`].
+///
+/// A position rather than a key, because that is what a map line holds
+/// (ADR-0268), and a position becomes a `ParamAt` only against the Set that is
+/// in the deck right now.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Parameter {
+    /// The deck slot, as every other line spells it: counting from zero.
+    pub deck: u8,
+    /// **The place in that deck's published interface, counting from one** —
+    /// the number the Inspector draws beside the row.
+    pub position: u16,
+    /// Where the control change sits on its span, `[0, 1]`. The span itself is
+    /// [`Parameter::value`]'s argument.
+    pub at: f32,
+    /// The range written on the line, or `None` for *the range the Set
+    /// published this control over*.
+    pub range: Option<[f32; 2]>,
+}
+
+impl Parameter {
+    /// **The value asked for**, over the line's own range where it has one and
+    /// over `declared` where it has not.
+    ///
+    /// Linear, and there is no ratio case: a published control's range is the
+    /// procedure's declaration narrowed by the Set, and nothing in a `.kir`
+    /// says a parameter is logarithmic. Exposure is the one ratio control this
+    /// grammar has and it is not a published parameter.
+    pub fn value(self, declared: [f32; 2]) -> f32 {
+        let [lo, hi] = self.range.unwrap_or(declared);
+        lo + self.at * (hi - lo)
+    }
+}
+
 /// One operator's table.
 #[derive(Debug, Default, Clone)]
 pub struct Map {
@@ -230,6 +396,53 @@ impl Map {
             }
         }
         (map, notes)
+    }
+
+    /// **Bind `message` to `target`, and give back the line that says so.**
+    ///
+    /// This is learn, and it is the only thing in this crate that *changes* a
+    /// map. What it takes is a message that just arrived and the right-hand
+    /// side of a line — [`Target::spelled`]'s output, which is what the caller
+    /// asking *what is the pointer on* has — and what it gives back is the
+    /// whole line, for the caller to put in the file.
+    ///
+    /// **It parses what it is about to insert**, rather than inserting a
+    /// target it was handed. So every refusal the grammar has applies to a
+    /// learn on the same terms as to a hand-written line — a `note` on a
+    /// fader's target is refused here exactly as it is on load, and a target
+    /// this crate does not know is refused with the list. **A learn cannot put
+    /// a line in a map that the map could not have been loaded with**, which
+    /// is what keeps the file an operator can still edit by hand.
+    ///
+    /// **The line names no channel**, which is the map's own default and the
+    /// forgiving one: a surface is usually the only thing plugged in, and a
+    /// learned binding that stopped working because the controller was moved
+    /// to another channel would be a mapping an operator has no way to see.
+    /// Writing `ch N` by hand still narrows it, and still wins over this.
+    ///
+    /// **In the table, the later learn simply replaces the earlier one.** What
+    /// a caller does to the *file* is the caller's, and
+    /// `karakuri_environment::midi`'s `appended` says why it replaces a line
+    /// in place rather than adding one: [`Map::parse`]'s *the later line wins*
+    /// keeps the map right either way, but it also **reports** the shadowed
+    /// line, so a knob learned five times would print four complaints on every
+    /// start.
+    pub fn learn(&mut self, message: crate::Message, target: &str) -> Result<String, String> {
+        use crate::Message;
+        let key = match message {
+            Message::ControlChange { controller, .. } => Key::Cc {
+                channel: None,
+                controller,
+            },
+            Message::NoteOn { note, .. } | Message::NoteOff { note, .. } => Key::Note {
+                channel: None,
+                note,
+            },
+        };
+        let line = format!("{} -> {target}", key.spelled());
+        let (key, target) = parse_line(&line)?;
+        self.entries.insert(key, target);
+        Ok(line)
     }
 
     /// What this message asks for, or `None` if nothing is mapped to it.
@@ -287,8 +500,111 @@ impl Map {
                 Some(Operation::SetBlendMode { deck: slot, blend })
             }
             (Target::Tap, None) => Some(Operation::TapBeat),
+            // **The one target this cannot finish**, and it is answered by
+            // [`Map::parameter`] instead. A published control is addressed by
+            // its *position*, and a position becomes a `ParamAt` only against
+            // the Set that is in the deck — which is a readback, and this
+            // function has none by charter. Whoever holds the deck completes
+            // it; see `karakuri_environment::midi::Router`.
+            (Target::Param { .. }, _) => None,
             _ => None,
         }
+    }
+
+    /// **What this message asks of a deck's published interface**, or `None`
+    /// where it is not on a `param` line.
+    ///
+    /// # Why this is a second accessor and not a second spelling
+    ///
+    /// [`Map::operation`] answers *the operation this message names*, and it
+    /// is a pure function of one message because every target it can complete
+    /// addresses something the vocabulary spells outright — a slot number, a
+    /// word from a closed list, a level. **`param` addresses something only
+    /// the deck can resolve**: position 3 of a Set's published interface is a
+    /// different node and a different key after a load, which is the whole
+    /// point of binding to a position (ADR-0268).
+    ///
+    /// So the two are one question in two shapes, and they are **disjoint by
+    /// target**: a message on a `param` line answers `None` to `operation` and
+    /// `Some` here, and every other mapped message the other way round.
+    /// `every_mapped_message_answers_exactly_one_of_the_two` is what holds
+    /// that, so a target added to the grammar and to neither accessor is a
+    /// knob that goes quiet rather than a compile error.
+    ///
+    /// **It reads nothing back either.** What comes out is the address and
+    /// where the knob is on its span; turning that into a value takes the
+    /// declared range, which is [`Parameter::value`]'s argument.
+    pub fn parameter(&self, message: crate::Message) -> Option<Parameter> {
+        use crate::Message;
+        let Target::Param {
+            slot,
+            position,
+            range,
+        } = self.target(message)?
+        else {
+            return None;
+        };
+        let Message::ControlChange { value, .. } = message else {
+            // Unreachable through `parse_line`, which refuses a `note` on a
+            // continuous target. Said as a `None` rather than trusted, which is
+            // `Map::operation`'s own arm one target along.
+            return None;
+        };
+        Some(Parameter {
+            deck: slot,
+            position,
+            at: f32::from(value.min(127)) / 127.0,
+            range,
+        })
+    }
+
+    /// **Every mapping, as the lines that would load it** — the map written
+    /// back out.
+    ///
+    /// **For one caller and one moment**: seeding an operator's map file that
+    /// does not exist yet, on the first learn of a run. It is not a save — the
+    /// comments in the file this came from are the file's and not the table's,
+    /// so anything written from here is bare lines, and whoever calls it says
+    /// as much in the file it writes.
+    ///
+    /// Unordered, because a `HashMap` is; the caller sorts, and one that did
+    /// not would write a file that shuffled on every run.
+    pub fn lines(&self) -> impl Iterator<Item = String> + '_ {
+        self.entries
+            .iter()
+            .map(|(key, target)| format!("{} -> {}", key.spelled(), target.spelled()))
+    }
+
+    /// **Which message reaches `target`**, as an operator would write the
+    /// left-hand side — `cc 5`, `note 32 ch 2` — or `None` for a control
+    /// nothing is mapped to.
+    ///
+    /// **The map read backwards, and it is what a tooltip says.** A control's
+    /// assignment is a fact this table holds, so the console's `⊕ MIDI:` line
+    /// is derived from it rather than transcribed from the manual — the
+    /// manual's text is the *mock's* assignments and no operator's
+    /// (ADR-0335, ADR-0336).
+    ///
+    /// **Keyed by [`Target::spelled`]**, which is the control's identity in a
+    /// map file: the caller spells the right-hand side of the line it is
+    /// asking about, and gets back the left-hand side or nothing. That is the
+    /// one key both directions can agree on without this crate learning what a
+    /// console control is.
+    ///
+    /// **A linear scan**, which is what the shape costs and it is the right
+    /// cost here: this is asked once per pointer *rest*, not per frame, and a
+    /// map is single-figure to a few dozen entries. A second `HashMap` keyed
+    /// the other way would be a second table to keep in step with this one.
+    ///
+    /// **The first in an arbitrary order wins where two lines reach one
+    /// control**, and that is a real ambiguity rather than a defect to hide: a
+    /// map may put two knobs on one gain, and a tooltip naming one of them is
+    /// the honest half of that. What it must not do is answer *unassigned*.
+    pub fn bound(&self, target: &str) -> Option<String> {
+        self.entries
+            .iter()
+            .find(|(_, held)| held.spelled() == target)
+            .map(|(key, _)| key.spelled())
     }
 
     /// **Whether this message moves a control that carries a position**, and
@@ -514,6 +830,31 @@ fn parse_target(to: &str) -> Result<Target, String> {
             }
         }
         "tap" => Target::Tap,
+        // **A deck and a place in its published interface**, which is the one
+        // target whose second number is not a slot: positions count from one
+        // because that is the number the Inspector draws beside the row, and a
+        // learned line an operator cannot check against the pane is a line
+        // they cannot fix by hand.
+        "param" => {
+            let slot = slot(&mut words)?;
+            let n = words
+                .next()
+                .ok_or_else(|| format!("`param {slot}` needs a position in the interface"))?;
+            let position: u16 = n
+                .parse()
+                .map_err(|_| format!("`param {slot} {n}`: expected a position"))?;
+            if position == 0 {
+                return Err(format!(
+                    "`param {slot} 0`: positions count from one, which is the number the \
+                     Inspector draws beside the row"
+                ));
+            }
+            Target::Param {
+                slot,
+                position,
+                range,
+            }
+        }
         // **The two words that were affordances, refused by name.** A file
         // holding one is a file written against the old grammar, where
         // `on-air 0` meant *flip slot 0*; loading it and reading it as *put
@@ -536,7 +877,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
         other => {
             return Err(format!(
                 "`{other}` is not a control — expected gain, opacity, exposure, \
-                 mask-position, residency, blend or tap"
+                 mask-position, param, residency, blend or tap"
             ))
         }
     };
@@ -652,6 +993,136 @@ mod tests {
             note,
             velocity: 100,
         }
+    }
+
+    /// **A `param` line names a deck and a place in its interface**, and it
+    /// answers [`Map::parameter`] rather than [`Map::operation`] — the one
+    /// target this crate cannot finish, because a position becomes a key only
+    /// against the Set that is in the deck (ADR-0268).
+    #[test]
+    fn a_param_line_names_a_deck_and_a_position_and_is_not_an_operation_here() {
+        let m = map("cc 30 -> param 0 3");
+        assert_eq!(
+            m.operation(cc(30, 127)),
+            None,
+            "a position was completed without a deck to resolve it against"
+        );
+        let asked = m.parameter(cc(30, 127)).expect("a param line answers here");
+        assert_eq!(asked.deck, 0);
+        assert_eq!(asked.position, 3);
+        assert_eq!(asked.range, None, "no range on the line is the Set's own");
+        // **The declared range is the caller's**, and both ends are exact on
+        // it for the reason every other fader's are.
+        assert_eq!(asked.value([0.0, 8.0]), 8.0);
+        assert_eq!(
+            m.parameter(cc(30, 0)).expect("bottom").value([0.0, 8.0]),
+            0.0
+        );
+        // A range on the line overrides the Set's, as it does on a gain.
+        let m = map("cc 30 -> param 1 5 [1, 3]");
+        let asked = m.parameter(cc(30, 127)).expect("a param line with a range");
+        assert_eq!(asked.range, Some([1.0, 3.0]));
+        assert_eq!(
+            asked.value([0.0, 8.0]),
+            3.0,
+            "the line's range has to win over the Set's"
+        );
+        // It is continuous, so a note on it is refused at parse time.
+        let (_, notes) = Map::parse("note 30 -> param 0 3");
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("map a `cc`"), "{notes:?}");
+    }
+
+    /// **Positions count from one**, because that is the number the Inspector
+    /// draws beside the row and the only place a position is visible at all. A
+    /// zero is somebody counting from the other end, and it is refused with
+    /// the reason rather than read as the first control.
+    #[test]
+    fn a_position_of_zero_is_refused_with_where_the_number_comes_from() {
+        let (map, notes) = Map::parse("cc 30 -> param 0 0");
+        assert!(map.is_empty(), "a position of zero loaded");
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("count from one"), "{notes:?}");
+        assert!(notes[0].contains("Inspector"), "{notes:?}");
+        // And the position has to be a number at all.
+        let (_, notes) = Map::parse("cc 30 -> param 0 first");
+        assert!(notes[0].contains("expected a position"), "{notes:?}");
+        // A deck with no position after it is a line half written.
+        let (_, notes) = Map::parse("cc 30 -> param 0");
+        assert!(notes[0].contains("needs a position"), "{notes:?}");
+    }
+
+    /// **Every target spells itself back into a line this parser accepts**,
+    /// which is what makes [`Map::bound`] safe to key on and a learn safe to
+    /// write with: the string a control is identified by is a string the file
+    /// can hold.
+    ///
+    /// **The generator is the parser's own output**, so a target added to the
+    /// grammar arrives here without anything being transcribed — and a
+    /// `spelled` that drifted from `parse_target` fails on the line it drifted
+    /// on rather than somewhere downstream.
+    #[test]
+    fn a_spelled_target_parses_back_to_itself() {
+        let lines = [
+            "cc 1 -> gain 0",
+            "cc 5 -> opacity 3",
+            "cc 20 -> exposure",
+            "cc 9 -> mask-position 2",
+            "cc 30 -> param 1 7",
+            "note 32 -> residency 0 live",
+            "note 36 -> residency 1 priming",
+            "note 40 -> residency 2 allocated",
+            "note 44 -> blend 0 add",
+            "note 48 -> blend 1 over",
+            "note 52 -> blend 2 max",
+            "note 61 -> tap",
+        ];
+        for line in lines {
+            let (from, to) = line.split_once(" -> ").expect("a test line");
+            let (_, target) = parse_line(line).unwrap_or_else(|e| panic!("`{line}`: {e}"));
+            assert_eq!(target.spelled(), to, "`{line}` did not spell itself back");
+            // And the whole line round-trips through the table, which is what
+            // `Map::bound` is asked for.
+            let m = map(line);
+            assert_eq!(m.bound(to).as_deref(), Some(from), "`{line}`");
+            assert_eq!(m.bound("gain 9"), None, "an unmapped control was claimed");
+        }
+        // A channel survives the round trip, in the front panel's 1-16.
+        let m = map("cc 5 ch 2 -> gain 0");
+        assert_eq!(m.bound("gain 0").as_deref(), Some("cc 5 ch 2"));
+    }
+
+    /// **Every mapped message answers exactly one of the two accessors.**
+    ///
+    /// The two are disjoint by target and there is no third: a target added to
+    /// the grammar and to neither is a knob that goes quiet, which is the one
+    /// failure neither accessor's own tests can see.
+    #[test]
+    fn every_mapped_message_answers_exactly_one_of_the_two() {
+        let text = "cc 1 -> gain 0\ncc 5 -> opacity 0\ncc 20 -> exposure\n\
+                    cc 9 -> mask-position 0\ncc 30 -> param 0 3\n\
+                    note 32 -> residency 0 live\nnote 44 -> blend 0 add\nnote 61 -> tap";
+        let m = map(text);
+        let messages = [
+            cc(1, 64),
+            cc(5, 64),
+            cc(20, 64),
+            cc(9, 64),
+            cc(30, 64),
+            note(32),
+            note(44),
+            note(61),
+        ];
+        for message in messages {
+            let operation = m.operation(message).is_some();
+            let parameter = m.parameter(message).is_some();
+            assert!(
+                operation ^ parameter,
+                "{message:?} answered {operation} and {parameter}, which is not exactly one"
+            );
+        }
+        // And an unmapped message answers neither.
+        assert!(m.operation(cc(99, 0)).is_none() && m.parameter(cc(99, 0)).is_none());
     }
 
     /// **Both ends of a fader are exact.** A gain that cannot be put at

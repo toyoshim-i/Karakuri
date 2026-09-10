@@ -97,6 +97,8 @@
 //! bearing rather than a default nobody got round to changing.
 
 pub mod budget;
+pub mod focus;
+pub mod hover;
 pub mod input;
 pub mod panel;
 pub mod repaint;

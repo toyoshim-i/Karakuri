@@ -283,6 +283,11 @@ console would be the thing that has to be edited for it to be reachable.
   here, on ADR-0280 §6's terms: it is a change to what a rebuild **is**. **A replay is exact
   regardless**, because a replay builds afresh from the stream and meets these records at the frames
   they were made at.
+  **The attachment half was closed the next day** — a rebuild inherits it, by
+  `Set::carry_bound_from` beside the values' own carry, after the maintainer found the panel's
+  picture had stopped answering to the room
+  ([ADR-0339](0339-a-rebuild-inherits-the-attachments-somebody-made.md)). The grant half stands as
+  written here, and that record says why.
 - **The sequencer's `seq 1` and the mock's `midi 21` are still states this program cannot enter.**
   A `.sens` row is drawn only where `Set::bindings` holds one, so the mock's two non-binding sources
   and the `step` curve beside one of them stay undrawn — ADR-0191, unchanged.

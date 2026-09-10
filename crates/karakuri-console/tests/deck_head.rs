@@ -1,10 +1,12 @@
-//! **The deck head's four chips and the five controls in them, and the first
+//! **The deck head's six chips and the seven controls in them, and the first
 //! controls on this console that are not in a row of their own.**
 //!
-//! Nine things, and the first two are why this is its own file rather than a
-//! few more assertions in `view.rs`'s module tests:
+//! Thirteen things, and the first two are why this is its own file rather than
+//! a few more assertions in `view.rs`'s module tests:
 //!
-//! 1. Where the four sit, as `.deck-head`'s flex row lays them out.
+//! 1. Where they sit, as `.deck-head`'s flex row lays them out — the three on
+//!    the left measured from the left and the three after the `.sep` measured
+//!    leftwards from the fold.
 //! 2. **That the controls clear every boundary's grab**, which is
 //!    `tests/look.rs`'s arithmetic over a row that is not a row of the
 //!    arrangement: a pane's deck head is measured against the **pane
@@ -21,8 +23,19 @@
 //! 8. **That the fold names the layering the deck is not in**, which is the
 //!    chip that was drawn and claimed nothing until 2026-09-09 — see
 //!    `docs/adr/0314-…`.
-//! 9. **The route a window loop actually takes** — `claim`, then the
-//!    derivation that drew the control, then the operation.
+//! 9. **That the capacity chip steps every rung of its ladder once and wraps**,
+//!    and that a slot running off the ladder steps *up* rather than back to the
+//!    bottom — `docs/adr/0328-…`.
+//! 10. **That a capacity with nowhere to step is drawn and claims nothing**,
+//!     which is the inert scrub's arrangement one control along.
+//! 11. **That `re-salt` asks for the salt it was handed**, which is the whole
+//!     of what keeps a re-seed reproducible.
+//! 12. **That a pane too narrow for the two build chips keeps the five that
+//!     were here before them**, which is the one place this row drops part of
+//!     itself rather than all of it — and the reason is a measurement, at the
+//!     test.
+//! 13. **The route a window loop actually takes** — `claim`, then the
+//!     derivation that drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a chip is as wide as the word in it — see `common::drawn_once` —
@@ -35,8 +48,8 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    deck_head, inspector, DeckHead, InspectorPane, Pane, View, PANES, PANE_NAMES, SCRUB_BEATS,
-    SYNCS,
+    deck_head, inspector, Aimed, DeckHead, InspectorPane, Pane, View, PANES, PANE_NAMES,
+    SCRUB_BEATS, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Sync};
@@ -55,9 +68,40 @@ fn mock() -> Pane {
         anchor_bpm: 128.0,
         scrub_beats: 0.25,
         composite: false,
+        aimed: Some(aimed()),
         nodes: Vec::new(),
     }
 }
+
+/// **The mock deck B's build chips**, and every number in it is the mock's own:
+/// `lattice_veil`'s geometry is `examples/lattice_shell.kir`, which declares
+/// `capacity [4096, 262144] = 32768`, and the mock draws that default unlit
+/// because nobody has asked this deck for another number.
+///
+/// **The ladder is the powers of two inside the declared range**, ascending,
+/// which is the list a host reads off the material rather than a list this
+/// console owns — so it is written out here as data rather than generated,
+/// exactly as the mock writes it.
+///
+/// **The salt is any number and the test is that it is *this* one**: what a
+/// press asks for is a value the host handed over, so a console that computed
+/// one would be reproducible only by accident. `NEXT_SALT` is what
+/// `karakuri_engine::set::derived_salt(0, 1)` is, which makes it a plausible
+/// one to be handed.
+fn aimed() -> Aimed {
+    Aimed {
+        capacity: 32768,
+        stated: false,
+        capacities: LADDER.to_vec(),
+        salt: NEXT_SALT,
+    }
+}
+
+/// The powers of two inside `lattice_shell`'s declared `[4096, 262144]`.
+const LADDER: [u32; 7] = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
+
+/// The salt the mock's host hands the `re-salt` capsule.
+const NEXT_SALT: u32 = 0x9E37_79B9;
 
 /// That pane in some other mode, which is the only thing most of these tests
 /// vary.
@@ -161,6 +205,106 @@ fn the_deck_head_is_the_rows_own_geometry() {
         "the arrows end at {} and the fold begins at {}",
         head.forward.max.x,
         head.composite.min.x
+    );
+    assert_eq!(
+        head.aim,
+        None,
+        "a pane at the smallest window this arrangement claims drew the two build chips, and \
+         there is not room for them: the row is {} wide and the five that were here already end \
+         {} from the fold",
+        row.width(),
+        head.composite.min.x - head.forward.max.x
+    );
+}
+
+/// **The two build chips are measured leftwards from the fold**, which is what
+/// `.sep`'s `flex: 1` does to everything after it: the fold against the
+/// right-hand padding, `re-salt` one gap before it, and the capacity one gap
+/// before that.
+///
+/// At a plausible window rather than the smallest one, because
+/// `the_deck_head_is_the_rows_own_geometry` above is what says they are not
+/// there at the smallest — the two facts are the same measurement read at two
+/// widths.
+#[test]
+fn the_build_chips_are_measured_leftwards_from_the_fold() {
+    let pane = mock();
+    let (panel, ctx) = console(PLAUSIBLE);
+    let (pane_at, head) = chips(&panel, &ctx, 0, &pane);
+    let row = pane_at.deck_head;
+    let aim = head.aim.expect("a wide pane draws the two build chips");
+
+    assert!(near(
+        aim.salt.max.x,
+        head.composite.min.x - size::DECK_HEAD_GAP
+    ));
+    assert!(near(aim.size.max.x, aim.salt.min.x - size::DECK_HEAD_GAP));
+    for chip in [aim.size, aim.salt] {
+        assert!(near(chip.height(), size::MINI_H));
+        assert!(near(chip.center().y, row.center().y));
+        assert!(row.contains_rect(chip));
+    }
+    assert!(
+        head.forward.max.x + size::DECK_HEAD_GAP <= aim.size.min.x,
+        "the arrows end at {} and the leftmost of the three on the right begins at {}",
+        head.forward.max.x,
+        aim.size.min.x
+    );
+}
+
+/// **A pane too narrow for the two build chips keeps the five that were here
+/// before them**, which is the one place this row answers *a control that does
+/// not fit is no control at all* by dropping part of the row rather than all of
+/// it.
+///
+/// **The measurement is the argument.** An Inspector pane at the console's
+/// declared minimum window is 237.5 pixels wide and the row needs about 296 for
+/// all seven, so a row that took all of them or none would draw **nothing** at
+/// the width this arrangement claims to work at — trading two controls that
+/// were never there for four that were. The threshold is a window of about 1360
+/// with two panes open, and the console page says so.
+#[test]
+fn a_pane_too_narrow_for_the_build_chips_keeps_the_rest_of_the_row() {
+    let pane = mock();
+    let (panel, ctx) = console(PLAUSIBLE);
+    let (pane_at, head) = chips(&panel, &ctx, 0, &pane);
+    let full = pane_at.deck_head;
+    let aim = head.aim.expect("a wide pane draws the two build chips");
+    // **Everything after the `.sep` moves left with the row's right edge**, so
+    // narrowing by the slack between the arrows and the capacity chip is
+    // exactly the width at which the seven stop fitting.
+    let slack = aim.size.min.x - (head.forward.max.x + size::DECK_HEAD_GAP);
+    let narrowed = |w: f32| InspectorPane {
+        deck_head: egui::Rect::from_min_size(full.min, egui::vec2(w, full.height())),
+        ..pane_at
+    };
+    let fits = narrowed(full.width() - slack);
+    assert!(
+        deck_head(&ctx, &fits, &pane)
+            .expect("a row exactly wide enough for the seven")
+            .aim
+            .is_some(),
+        "a row exactly wide enough for the seven dropped two of them, so this test cannot tell \
+         a fit from a drop"
+    );
+    let tight = narrowed(full.width() - slack - 1.0);
+    let head = deck_head(&ctx, &tight, &pane).expect("the five that fit are still drawn");
+    assert_eq!(
+        head.aim, None,
+        "a row with no room for the two build chips drew them anyway, and `inspector_into`'s \
+         clip is what would cut them in half"
+    );
+    assert!(
+        near(
+            head.composite.max.x,
+            tight.deck_head.max.x - size::DECK_HEAD_PAD_X
+        ),
+        "the fold did not stay against the right-hand padding when the chips beside it were \
+         dropped"
+    );
+    assert!(
+        head.forward.max.x + size::DECK_HEAD_GAP <= head.composite.min.x,
+        "the five that were kept no longer fit each other"
     );
 }
 
@@ -356,20 +500,24 @@ fn the_band_the_chips_clear_is_still_a_boundarys() {
 /// is the whole of what ADR-0314 changed about this row: it was drawn and
 /// claimed nothing, on the argument that layering is a build decision the
 /// engine has no setter for. It has none, and a press re-aims the slot
-/// instead.
+/// instead. **The two build chips joined it the same day** (ADR-0328), and
+/// they are the same shape one field of the aim along.
 #[test]
-fn nothing_beside_the_four_controls_is_claimed() {
+fn nothing_beside_the_six_controls_is_claimed() {
     let pane = mock();
     let (mut panel, ctx) = console(PLAUSIBLE);
     let view = view(&pane);
     let (_, head) = chips(&panel, &ctx, 0, &pane);
     let anchor = head.anchor.expect("a beat-synced deck reads an anchor");
+    let aim = head.aim.expect("a wide pane draws the two build chips");
 
     for (probe, what) in [
         (head.mode.center(), "the sync chip"),
         (anchor.center(), "the anchor"),
         (head.back.center(), "the back arrow"),
         (head.forward.center(), "the forward arrow"),
+        (aim.size.center(), "the capacity chip"),
+        (aim.salt.center(), "the `re-salt` capsule"),
         (head.composite.center(), "the fold"),
     ] {
         assert_eq!(
@@ -392,6 +540,13 @@ fn nothing_beside_the_four_controls_is_claimed() {
                 head.back.center().y,
             ),
             "the gap between the two arrows",
+        ),
+        (
+            egui::pos2(
+                aim.salt.max.x + size::DECK_HEAD_GAP * 0.5,
+                aim.salt.center().y,
+            ),
+            "the gap between the `re-salt` capsule and the fold",
         ),
     ] {
         assert_eq!(
@@ -655,7 +810,7 @@ fn the_arrows_ask_for_a_quarter_beat_each_way() {
     );
 }
 
-/// **A press is one of the four or none**, so no point on the row asks two
+/// **A press is one of the six or none**, so no point on the row asks two
 /// questions.
 #[test]
 fn a_press_is_one_control_or_none() {
@@ -663,11 +818,14 @@ fn a_press_is_one_control_or_none() {
     let (panel, ctx) = console(PLAUSIBLE);
     let (pane_at, head) = chips(&panel, &ctx, 0, &pane);
     let anchor = head.anchor.expect("an anchor");
+    let aim = head.aim.expect("a wide pane draws the two build chips");
     for probe in [
         head.mode.center(),
         anchor.center(),
         head.back.center(),
         head.forward.center(),
+        aim.size.center(),
+        aim.salt.center(),
         head.composite.center(),
         pane_at.deck_head.left_center(),
         pane_at.deck_head.right_center(),
@@ -676,12 +834,14 @@ fn a_press_is_one_control_or_none() {
             head.sync(at(probe)),
             head.reanchor(at(probe)),
             head.scrub(at(probe)),
+            head.resized(at(probe)),
+            head.re_salted(at(probe)),
             head.compositing(at(probe)),
         ];
         let answered = asked.iter().filter(|a| a.is_some()).count();
         assert!(
             answered <= 1,
-            "a press at {probe:?} asked {answered} of the four controls for something"
+            "a press at {probe:?} asked {answered} of the six controls for something"
         );
         assert_eq!(
             head.owns(at(probe)),
@@ -741,6 +901,140 @@ fn the_fold_asks_for_the_layering_the_deck_is_not_in() {
         assert_eq!(head.reanchor(at(probe)), None);
         assert_eq!(head.scrub(at(probe)), None);
     }
+}
+
+/// **The capacity chip steps the powers of two inside the declared range, once
+/// each, and wraps through the bottom** — and what leaves is the number it
+/// arrived at rather than a step, which is what a second surface would need to
+/// agree with it (P-0090).
+///
+/// **The whole ladder is walked** rather than one press asserted, because a
+/// cycle that had lost a rung, repeated one or stopped at the top would all
+/// pass a single-press test.
+#[test]
+fn the_capacity_chip_steps_every_rung_once_and_wraps() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let mut at_capacity = LADDER[0];
+    let mut visited = Vec::new();
+    for _ in 0..LADDER.len() {
+        let pane = Pane {
+            aimed: Some(Aimed {
+                capacity: at_capacity,
+                ..aimed()
+            }),
+            ..mock()
+        };
+        let (_, head) = chips(&panel, &ctx, 0, &pane);
+        let aim = head.aim.expect("a wide pane draws the two build chips");
+        let asked = head.resized(at(aim.size.center()));
+        let Some(Operation::SetProperty {
+            deck,
+            property: karakuri_operation::Property::Capacity { elements },
+        }) = asked
+        else {
+            panic!("a press on the capacity chip at {at_capacity} asked for {asked:?}");
+        };
+        assert_eq!(deck, pane.deck as u8);
+        visited.push(elements);
+        at_capacity = elements;
+    }
+    let mut once = visited.clone();
+    once.sort_unstable();
+    once.dedup();
+    assert_eq!(
+        once,
+        LADDER.to_vec(),
+        "walking the ladder from its bottom visited {visited:?}, which is not every rung once"
+    );
+    assert_eq!(
+        at_capacity, LADDER[0],
+        "a full walk did not come back to the bottom, so the wrap goes somewhere else"
+    );
+}
+
+/// **A slot running at a number that is not on the ladder steps *up*, not back
+/// to the bottom.** `examples/beat_strands.kir` declares `capacity [4096,
+/// 1048576] = 81920`, and a Set file may record anything the range allows, so
+/// this is an ordinary state rather than a corner: a press that read as *one
+/// step* and dropped the slot from 81920 to 4096 would be a control that
+/// reallocated every element buffer in the wrong direction.
+#[test]
+fn a_capacity_off_the_ladder_steps_up() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let pane = Pane {
+        aimed: Some(Aimed {
+            capacity: 81_920,
+            stated: true,
+            capacities: LADDER.to_vec(),
+            salt: NEXT_SALT,
+        }),
+        ..mock()
+    };
+    let (_, head) = chips(&panel, &ctx, 0, &pane);
+    let aim = head.aim.expect("a wide pane draws the two build chips");
+    assert_eq!(
+        head.resized(at(aim.size.center())),
+        Some(Operation::SetProperty {
+            deck: pane.deck as u8,
+            property: karakuri_operation::Property::Capacity { elements: 131_072 },
+        })
+    );
+}
+
+/// **A chip with nowhere to step is drawn and claims nothing**, which is the
+/// inert scrub's arrangement one control along: two geometries whose declared
+/// ranges do not overlap have no capacity one re-aim could send, and the number
+/// the slot is running at is still worth reading.
+#[test]
+fn a_capacity_with_no_shared_range_is_drawn_and_claims_nothing() {
+    let (mut panel, ctx) = console(PLAUSIBLE);
+    let pane = Pane {
+        aimed: Some(Aimed {
+            capacities: Vec::new(),
+            ..aimed()
+        }),
+        ..mock()
+    };
+    let view = view(&pane);
+    let (_, head) = chips(&panel, &ctx, 0, &pane);
+    let aim = head.aim.expect("the number is still drawn");
+    assert!(
+        aim.size.width() > 0.0,
+        "a chip with nothing to step to lost its shape as well as its press"
+    );
+    assert_eq!(aim.resize, None);
+    assert_eq!(head.resized(at(aim.size.center())), None);
+    assert!(!head.owns(at(aim.size.center())));
+    assert_eq!(
+        claim(&mut panel, &ctx, &view, at(aim.size.center())),
+        Claim::Egui,
+        "a chip that asks for nothing is being claimed as a control the panel acts on"
+    );
+}
+
+/// **The `re-salt` capsule asks for the salt it was handed**, and that is the
+/// whole assertion: a console that derived one would be producing a picture a
+/// later run could reproduce only by accident
+/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+/// The number here is arbitrary on purpose — nothing in this crate can compute
+/// it, so nothing in this crate can agree with a computation by luck.
+#[test]
+fn the_re_salt_capsule_asks_for_the_salt_it_was_handed() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let pane = mock();
+    let (_, head) = chips(&panel, &ctx, 0, &pane);
+    let aim = head.aim.expect("a wide pane draws the two build chips");
+    assert_eq!(
+        head.re_salted(at(aim.salt.center())),
+        Some(Operation::SetProperty {
+            deck: pane.deck as u8,
+            property: karakuri_operation::Property::Seed { salt: NEXT_SALT },
+        })
+    );
+    // The other five answer nothing for it, which is the same fact
+    // `a_press_is_one_control_or_none` states over the whole row.
+    assert_eq!(head.resized(at(aim.salt.center())), None);
+    assert_eq!(head.compositing(at(aim.salt.center())), None);
 }
 
 /// **The whole route, as the window loop drives it**: `claim` first, then the

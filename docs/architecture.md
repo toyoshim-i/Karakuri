@@ -196,8 +196,18 @@ frame effects means adding `L5` to `Kind::ALL` — whose one stated reason for e
 code to lower, lapses the moment an L5 is authored. Fan-in is already solved by `uses` plus
 `edge`; a per-deck effect and a master effect become one node at different points; and the
 deck count stops being a system constant, since how many inputs an L5 folds becomes a property
-of the procedure rather than of one built-in shader. **Feedback is the exception**: reading the
-previous frame is a cycle, and which cut it reads is undecided — see [roadmap.md](roadmap.md).
+of the procedure rather than of one built-in shader. **Feedback was the exception and is not one
+any more**: reading the previous frame is a cycle, and which cut it reads was decided on
+2026-09-09 — either of them, chosen where the pass is instantiated, with only the chosen one
+retained
+([ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
+**And the writable form was decided on 2026-09-10 and is built by nobody**: `kind L5` joins the
+language and the master chain becomes an ordered list of L5 slots
+([ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)),
+specified at [ir-spec.md](ir-spec.md)'s *L5, written* and scheduled as
+[roadmap.md](roadmap.md)'s M5.16. **The first sentence above is the present tense until that
+lands** — `Kind::ALL` is five, no `.kir` may declare an L5, and the row in the table above is a
+model position with no `kind` file exactly as it says.
 
 Two things sit orthogonal to the positions: the **control plane** — agents, director, mix
 agent, generation worker — and the **library** — search, genealogy, embeddings, thumbnails —

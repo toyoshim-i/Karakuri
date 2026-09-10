@@ -165,6 +165,7 @@ fn the_group_is_laid_out_the_way_the_mock_lays_it_out() {
         Some(mock()),
         Some(&heard()),
         Some(mock_tracker()),
+        None,
         &Arrangement::NONE,
     )
     .expect("the arrangement pill");
@@ -429,6 +430,7 @@ fn a_console_told_nothing_about_the_tracker_draws_none_of_it() {
         panel.layout(),
         Some(mock()),
         Some(&heard()),
+        None,
         None,
         &Arrangement::NONE,
     )

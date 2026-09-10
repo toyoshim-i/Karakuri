@@ -31,6 +31,26 @@
 //! is "none of them" — the last value of a fader is the fader's position, and a
 //! dropped one leaves it somewhere the operator is not holding it.
 //!
+//! ## A frame loop that sleeps has to be woken
+//!
+//! [`Port::drain`] never waits, which is right for a caller that renders every
+//! frame anyway — `karakuri-cli` is one, and it asks on every pass. **A caller
+//! that sleeps until something happens is the other case**, and for it a
+//! message arriving is an event exactly as a key press is: nothing else is
+//! going to wake it, so a knob turned on a still panel would be applied
+//! whenever the operator next moved the mouse.
+//!
+//! So [`Port::waking`] takes a closure and calls it once per message, on the
+//! MIDI thread, immediately after the send. **It says *something arrived* and
+//! carries nothing**, which is what keeps this crate free of whoever is
+//! listening: the panel hands in an `EventLoopProxy`'s wake and this crate
+//! never learns that a window exists.
+//!
+//! **It is one more thing the callback does**, and the paragraph above is the
+//! standard it is held to rather than an exemption from it: a wake is a write
+//! to whatever the caller's loop blocks on, which is the same order of cost as
+//! the `send` beside it and is bounded by the same rate — a hand moving.
+//!
 //! ## Latency is not compensated here
 //!
 //! A knob move is an operator's hand, so it is *already* where they want it by
@@ -49,9 +69,24 @@ use crate::Message;
 /// Holds the connection alive: dropping this closes the port, which is why it
 /// is returned rather than leaked, even though nothing reads its fields.
 pub struct Port {
-    _connection: MidiInputConnection<Sender<Message>>,
+    _connection: MidiInputConnection<Callback>,
     messages: Receiver<Message>,
     name: String,
+}
+
+/// **What the MIDI thread is handed**: where to put a message, and who to tell.
+///
+/// A struct rather than the bare `Sender` this used to be, because there are
+/// now two things to do per message and `midir` carries exactly one value into
+/// the callback. See *A frame loop that sleeps has to be woken* above for why
+/// the second is not a second channel.
+struct Callback {
+    messages: Sender<Message>,
+    /// **Called once per message, on the MIDI thread**, or `None` for a caller
+    /// that is going to ask anyway. Boxed because this crate must not know
+    /// what a wake *is*: the panel's is an event-loop proxy and
+    /// `karakuri-cli`'s is nothing at all.
+    wake: Option<Box<dyn Fn() + Send>>,
 }
 
 impl Port {
@@ -65,7 +100,33 @@ impl Port {
     /// find out what to type.
     ///
     /// The error names every port there was, for the same reason.
+    ///
+    /// **Nothing is woken.** This is the constructor for a caller that drains
+    /// every frame regardless — see [`Port::waking`] for the other one.
     pub fn open(wanted: &str) -> Result<Port, String> {
+        Port::opened(wanted, None)
+    }
+
+    /// [`Port::open`], and `wake` is called once per message on the MIDI
+    /// thread, right after it is queued.
+    ///
+    /// **For a caller whose loop sleeps.** A message arriving is the only
+    /// thing that can tell such a loop there is anything to drain, and a knob
+    /// turned on a panel nobody is touching would otherwise be applied at
+    /// whatever the next mouse move was — which is a control that silently
+    /// does nothing, and is what
+    /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
+    /// rules out.
+    ///
+    /// **The wake carries nothing and answers nothing**, which is what keeps
+    /// this crate ignorant of who is listening: it says *ask again*, and what
+    /// the caller does about it is the caller's. A failure to wake is dropped
+    /// for the send's reason — a loop that has gone is a run that is ending.
+    pub fn waking(wanted: &str, wake: impl Fn() + Send + 'static) -> Result<Port, String> {
+        Port::opened(wanted, Some(Box::new(wake)))
+    }
+
+    fn opened(wanted: &str, wake: Option<Box<dyn Fn() + Send>>) -> Result<Port, String> {
         let input = MidiInput::new("karakuri").map_err(|e| format!("no MIDI at all: {e}"))?;
         let ports = input.ports();
         let named: Vec<(usize, String)> = ports
@@ -100,7 +161,7 @@ impl Port {
             .connect(
                 &ports[index],
                 "karakuri-in",
-                |_stamp, bytes, tx: &mut Sender<Message>| {
+                |_stamp, bytes, back: &mut Callback| {
                     // Parsed here rather than in the frame, so what crosses the
                     // channel is a message rather than a buffer — no allocation
                     // on the frame side, and nothing to reassemble.
@@ -109,10 +170,16 @@ impl Port {
                     // gone, which means the run is ending, and a MIDI callback
                     // is the last place to report that.
                     if let Some(message) = Message::parse(bytes) {
-                        let _ = tx.send(message);
+                        let _ = back.messages.send(message);
+                        // **After the send and never before it**, so the loop
+                        // this wakes finds the message already queued rather
+                        // than draining nothing and going back to sleep.
+                        if let Some(wake) = back.wake.as_ref() {
+                            wake();
+                        }
                     }
                 },
-                tx,
+                Callback { messages: tx, wake },
             )
             .map_err(|e| format!("could not open `{name}`: {e}"))?;
 

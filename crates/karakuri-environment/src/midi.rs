@@ -38,12 +38,39 @@
 //! not inside [`Surface`]. `Surface` is a `Router` with a port in front of it
 //! and has nothing in it to be wrong about.
 //!
-//! ## Unmapped messages are printed, and that is the learn mode
+//! ## Two tiers, and two ways to open a port
 //!
-//! There is no UI to assign a knob in, and none is built. Until there is, the
-//! way to find out what a controller sends is to turn it and read: an
-//! unmapped message prints the line that would map it, so discovering a surface
-//! is turning every knob once and pasting the output into a file.
+//! **Which map** is [`map_for`]: the operator's own under
+//! `<store>/maps/default.map`, then the `examples/surface.map` that ships, and
+//! `None` for a machine with neither. That is ADR-0227's two tiers, and it is
+//! the one place that record found the shape ragged — a map had a preset tier
+//! and no operator tier at all, being *"whatever path they hand to
+//! `--midi-map FILE`"*.
+//!
+//! **Which port** is the difference between the two constructors, and it is
+//! the difference between the two programs rather than a convenience.
+//! [`Surface::open`] takes a selector and is the command line's: a flag is a
+//! contract made before the run, so asking for a port and getting another is a
+//! run that is not the run that was asked for. [`Surface::first`] takes
+//! whatever is plugged in and is the panel's, for the reason `crate::audio`'s
+//! default input is the panel's: an instrument with somebody standing in front
+//! of it opens something rather than nothing, and what it opened is a sentence
+//! it says out loud.
+//!
+//! [`Surface::first`] also takes a **wake**, because the panel's loop sleeps —
+//! see [`karakuri_midi::Port::waking`], which carries that argument whole.
+//!
+//! ## Unmapped messages are printed, and that is `karakuri-cli`'s learn mode
+//!
+//! An unmapped message prints the line that would map it, so discovering a
+//! surface from the command line is turning every knob once and pasting the
+//! output into a file. **The panel has a real one now** — arm `learn`, point
+//! at a control, move a knob, and [`Surface::learn`] writes the line into the
+//! operator's own map
+//! (`docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`).
+//! The printed line stays, because `karakuri-cli` has no pointer to point with
+//! and because it is what tells an operator what their controller sends at
+//! all.
 //!
 //! ## A continuous control says one thing per frame, and a pad says everything
 //!
@@ -72,8 +99,90 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use karakuri_midi::{Map, Message, Port};
-use karakuri_operation::Operation;
+use karakuri_midi::{Map, Port};
+
+/// **The wire, parsed** — `karakuri_midi::Message`, re-exported because a
+/// learn is a gesture the *program* drives and a program has to be able to say
+/// what arrived.
+///
+/// It is the one type of that crate this door hands on. Naming
+/// `karakuri-midi` in `crates/karakuri`'s manifest would put `midir` in the
+/// instrument's own dependency list for a two-line match, and the charter is
+/// that everything outside the process is reached through here (ADR-0215).
+pub use karakuri_midi::Message;
+use karakuri_operation::{Operation, ParamAt, ParamValue};
+
+/// **A deck's published interface, asked what is at a position** — the only
+/// readback on this route, and the reason it is here rather than in
+/// `karakuri-midi`.
+///
+/// A `param` line holds a **position** and never a key (ADR-0268): *knob 3 is
+/// knob 3 whatever Set is loaded*. Turning position 3 into a `ParamAt` is a
+/// question about the Set that is in the deck right now, so `karakuri-midi`
+/// answers [`karakuri_midi::Map::parameter`] and stops, and this is what
+/// finishes it.
+///
+/// **A trait rather than the deck itself**, and that is what keeps
+/// [`Router`]'s tests free of a device: `karakuri_engine::deck::Deck` cannot be
+/// built without one, and every decision on this route is about what arrived
+/// rather than about what is running. [`Decks`] is the real implementation and
+/// is four lines.
+pub trait Interface {
+    /// The control at `position` — counting from one, the number the Inspector
+    /// draws — of the deck in `slot`, and **the range the Set published it
+    /// over**.
+    ///
+    /// `None` where that deck has no such control, which is the ordinary state
+    /// after a load: a map learned against a Set with nine controls, played
+    /// against one with four, has five lines that reach nothing. Reported once
+    /// per position rather than dropped in silence.
+    fn control_at(&self, slot: u8, position: u16) -> Option<(ParamAt, [f32; 2])>;
+}
+
+/// **[`Interface`] over a real deck**, which is the implementation both
+/// programs use and the only one that is not a test's.
+///
+/// It reads exactly what the Inspector reads and numbers it exactly as the
+/// Inspector numbers it — `Set::published()` in order, counting from one — so
+/// the position a learn writes is the position the pane draws. That is one
+/// derivation asked twice rather than two, and the alternative is a map line
+/// that means a different control from the one the number is beside.
+pub struct Decks<'a>(pub &'a karakuri_engine::deck::Deck);
+
+impl Interface for Decks<'_> {
+    fn control_at(&self, slot: u8, position: u16) -> Option<(ParamAt, [f32; 2])> {
+        let set = self.0.slot(usize::from(slot)).set();
+        // **Counting from one**, and `checked_sub` rather than `- 1`: a zero
+        // is refused at parse time, so reaching here with one is a caller that
+        // built a `Parameter` by hand.
+        let at = usize::from(position).checked_sub(1)?;
+        let control = set.published().into_iter().nth(at)?;
+        Some((
+            ParamAt {
+                node: control.at.map(|(kind, index)| karakuri_operation::NodeAt {
+                    layer: layer_of(kind),
+                    index,
+                }),
+                key: control.key,
+            },
+            control.range,
+        ))
+    }
+}
+
+/// The compiler's layer as the vocabulary spells it — [`crate::mcp`]'s
+/// `kind_of` backwards, and written here because that one is private to the
+/// module that serves a model.
+fn layer_of(kind: karakuri_ir::Kind) -> karakuri_operation::Layer {
+    use karakuri_ir::Kind;
+    match kind {
+        Kind::L1 => karakuri_operation::Layer::L1,
+        Kind::L2 => karakuri_operation::Layer::L2,
+        Kind::L3 => karakuri_operation::Layer::L3,
+        Kind::L4 => karakuri_operation::Layer::L4,
+        Kind::Field => karakuri_operation::Layer::Field,
+    }
+}
 
 /// The map, the slot check, and what has already been said. No port.
 pub struct Router {
@@ -91,6 +200,13 @@ pub struct Router {
     /// twice.
     seen_unmapped: HashSet<(u8, u8, bool)>,
     seen_no_slot: HashSet<usize>,
+    /// **A `param` line reaching past the end of a deck's interface**, said
+    /// once per `(deck, position)`. A third set for the two above's reason:
+    /// a slot 9 and a position 9 are not the same thing said twice, and this
+    /// is the ordinary state after a load rather than a typo — a map learned
+    /// against a Set with nine controls has five dead lines against one with
+    /// four, and it is worth exactly one sentence each.
+    seen_no_control: HashSet<(u8, u16)>,
     /// Where in `out` each continuous control this frame already spoke put its
     /// operation, so a later message from the same control overwrites it
     /// instead of adding one. Cleared at the top of every [`Router::route`];
@@ -120,7 +236,18 @@ pub struct Router {
 /// same "which one is it" the compiler already knows. `deck_of` is beside it
 /// because `gain 0` and `gain 1` are two faders, and it is the function this
 /// module already had for the question.
-type Continuous = (std::mem::Discriminant<Operation>, Option<usize>);
+/// **And the position, where the operation is a write into a Set.** A deck's
+/// discriminant and slot are enough for every other continuous control,
+/// because a deck has one gain and one exposure; it has as many parameters as
+/// its Set published, and two knobs on two of them would coalesce into one
+/// under a key that could not tell them apart. This is the map's own address
+/// for the control rather than a second one — the position on the line — and
+/// it is `None` for the six targets that are not a parameter.
+type Continuous = (
+    std::mem::Discriminant<Operation>,
+    Option<usize>,
+    Option<u16>,
+);
 
 impl Router {
     pub fn new(map: Map) -> Router {
@@ -130,6 +257,7 @@ impl Router {
             notices: Vec::new(),
             seen_unmapped: HashSet::new(),
             seen_no_slot: HashSet::new(),
+            seen_no_control: HashSet::new(),
             coalescing: Vec::with_capacity(controls),
         }
     }
@@ -154,25 +282,89 @@ impl Router {
     /// [`Router::emit`]: the last value a fader sent within a frame is the one
     /// that becomes an operation and the ones before it are dropped. A pad is
     /// untouched — two presses in one frame are two operations.
-    pub fn route(&mut self, messages: &[Message], slot_count: usize, out: &mut Vec<Operation>) {
+    pub fn route(
+        &mut self,
+        messages: &[Message],
+        slot_count: usize,
+        interface: &dyn Interface,
+        out: &mut Vec<Operation>,
+    ) {
         out.clear();
         self.notices.clear();
         self.coalescing.clear();
         for message in messages {
-            let Some(operation) = self.map.operation(*message) else {
-                // A release is unmapped by construction — every pad acts on
-                // the press — so reporting one would call the other half of
-                // every hit a discovery.
-                if !matches!(message, Message::NoteOff { .. }) {
-                    self.report_unmapped(*message);
-                }
+            // **Two accessors and they are disjoint by target**, which
+            // `karakuri_midi::Map::parameter` carries the argument for: every
+            // target but one addresses something the vocabulary spells
+            // outright, and `param` addresses a *position* in a deck's
+            // published interface, which only the deck can resolve.
+            let (operation, position) = match self.map.operation(*message) {
+                Some(operation) => (Some(operation), None),
+                None => match self.map.parameter(*message) {
+                    Some(asked) => (
+                        self.resolved(asked, slot_count, interface),
+                        Some(asked.position),
+                    ),
+                    None => {
+                        // A release is unmapped by construction — every pad
+                        // acts on the press — so reporting one would call the
+                        // other half of every hit a discovery.
+                        if !matches!(message, Message::NoteOff { .. }) {
+                            self.report_unmapped(*message);
+                        }
+                        continue;
+                    }
+                },
+            };
+            // Resolution failed and said so; nothing more to do with it.
+            let Some(operation) = operation else {
                 continue;
             };
             match deck_of(&operation) {
                 Some(slot) if slot >= slot_count => self.report_no_slot(slot, slot_count),
-                _ => self.emit(*message, operation, out),
+                _ => self.emit(*message, operation, position, out),
             }
         }
+    }
+
+    /// **A position in a deck's published interface, resolved to the control
+    /// it is**, or `None` with the reason said once.
+    ///
+    /// Two refusals and they are different facts, which is why each has its
+    /// own sentence and its own set. **A deck this deck does not have** is the
+    /// same mistake `cc 1 -> gain 4` is and gets the keys' own words. **A
+    /// position the Set in that deck has no control at** is not a mistake at
+    /// all in the same way: it is what every map does after a load that
+    /// shortened the interface, and a knob that goes quiet with nothing said
+    /// is the one outcome
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// rules out.
+    ///
+    /// **The value is scaled here and the range comes from the Set** —
+    /// `Published::range`, which narrows the procedure's declaration — unless
+    /// the line wrote one, which wins. The arithmetic is
+    /// `karakuri_midi::Parameter::value`'s rather than repeated here, so a
+    /// fader's ends are exact on this target for the reason they are on every
+    /// other one.
+    fn resolved(
+        &mut self,
+        asked: karakuri_midi::Parameter,
+        slot_count: usize,
+        interface: &dyn Interface,
+    ) -> Option<Operation> {
+        if usize::from(asked.deck) >= slot_count {
+            self.report_no_slot(usize::from(asked.deck), slot_count);
+            return None;
+        }
+        let Some((param, declared)) = interface.control_at(asked.deck, asked.position) else {
+            self.report_no_control(asked.deck, asked.position);
+            return None;
+        };
+        Some(Operation::WriteParam {
+            deck: asked.deck,
+            param,
+            value: ParamValue::Scalar(asked.value(declared)),
+        })
     }
 
     /// **One operation per continuous control per frame, carrying the last
@@ -211,12 +403,22 @@ impl Router {
     /// figures, and the overwrite drops a scalar — every operation a map line
     /// can name carries scalars only, which `karakuri_midi::map` says of
     /// itself.
-    fn emit(&mut self, message: Message, operation: Operation, out: &mut Vec<Operation>) {
+    fn emit(
+        &mut self,
+        message: Message,
+        operation: Operation,
+        position: Option<u16>,
+        out: &mut Vec<Operation>,
+    ) {
         if !self.map.is_continuous(message) {
             out.push(operation);
             return;
         }
-        let control = (std::mem::discriminant(&operation), deck_of(&operation));
+        let control = (
+            std::mem::discriminant(&operation),
+            deck_of(&operation),
+            position,
+        );
         if let Some((_, at)) = self.coalescing.iter().find(|(seen, _)| *seen == control) {
             // **In place, so the control keeps the position it first spoke
             // in.** The alternative — dropping the earlier one and pushing the
@@ -267,14 +469,27 @@ impl Router {
         }
         self.notices.push(crate::no_such_slot(slot, slot_count));
     }
+
+    /// **A `param` line pointing past the end of a deck's interface**, said
+    /// once per position per run — see [`Router::resolved`], where the two
+    /// refusals are told apart.
+    fn report_no_control(&mut self, deck: u8, position: u16) {
+        if !self.seen_no_control.insert((deck, position)) {
+            return;
+        }
+        self.notices.push(format!(
+            "`param {deck} {position}` reaches nothing — the Set in that deck published fewer \
+             controls than that. the number is the one the Inspector draws beside the row"
+        ));
+    }
 }
 
 /// The deck an operation names, if it names one.
 ///
-/// **The six arms are every operation a map line can produce**, and
-/// `karakuri_midi::map`'s `parse_target` is that list — `cc -> exposure` and
-/// `note -> tap` name no deck, and the other forty-two operations have no
-/// spelling in the grammar at all. The wildcard is what the vocabulary being
+/// **The seven arms are every operation a map line can produce that names a
+/// deck**, and `karakuri_midi::map`'s `parse_target` is that list — `cc ->
+/// exposure` and `note -> tap` name no deck, and the other forty-one
+/// operations have no spelling in the grammar at all. The wildcard is what the vocabulary being
 /// fifty wide costs here, and it is safe rather than merely convenient:
 /// **the record path is the backstop.** A slot this deck does not hold is
 /// refused by `mix::change` with [`crate::no_such_slot`] — this very sentence —
@@ -284,6 +499,13 @@ impl Router {
 /// So what this buys is not safety but silence: the refusal is said **once per
 /// slot per run** rather than once per message, and `cc 1 -> gain 4` on a deck
 /// of four is the likeliest typo a map has.
+///
+/// **`WriteParam` is the seventh and it arrives already checked.**
+/// [`Router::resolved`] refuses a deck this deck does not have before it asks
+/// the interface for anything, so this arm never catches one — it is here for
+/// the *coalescing* key, which is what `deck_of` is asked for a second time:
+/// two knobs on two decks' parameters must not collapse into one operation,
+/// and a `None` here would collapse them.
 ///
 /// **`SetMaskPosition` is here because for it the backstop is not silent.**
 /// The other five reach `mix::change` and are refused once; a mask operation is
@@ -298,15 +520,146 @@ fn deck_of(operation: &Operation) -> Option<usize> {
         | Operation::SetOpacity { deck, .. }
         | Operation::SetResidency { deck, .. }
         | Operation::SetBlendMode { deck, .. }
-        | Operation::SetMaskPosition { deck, .. } => Some(usize::from(*deck)),
+        | Operation::SetMaskPosition { deck, .. }
+        | Operation::WriteParam { deck, .. } => Some(usize::from(*deck)),
         _ => None,
     }
+}
+
+/// **The directory an operator's own maps are filed in**, under the store
+/// root, and the second tier `docs/adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md`
+/// found ragged: *"an operator's own map is whatever path they hand to
+/// `--midi-map FILE`. It ships as a preset and it is saved nowhere in
+/// particular."* This is that place, on
+/// `docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md`'s
+/// shape — a name the operator typed, one path component, a place of its own
+/// under the store root, and bytes nothing here parses on the way past.
+pub const MAPS: &str = "maps";
+
+/// The extension a map file takes, so the three paths built from it cannot
+/// drift apart. `.map` and not `.midi-map`: the file is a map of a control
+/// surface and `examples/surface.map` has spelled it this way since the
+/// grammar existed.
+pub const MAP_SUFFIX: &str = "map";
+
+/// **What a map is called when nobody has named one.** The panel takes no
+/// `--midi-map`, so this is the name it looks for in the store — and it is
+/// also the name a learned map is written back under, which is the day this
+/// constant starts earning its keep.
+pub const DEFAULT_MAP: &str = "default";
+
+/// **The map that ships**, in the app-preset tier beside the material.
+/// `examples/surface.map` — the file `karakuri_midi::map`'s own test calls
+/// *"what an operator copies before they have one"*, and P-0096's first tier,
+/// which nothing in this program writes.
+pub const SHIPPED_MAP: &str = "surface.map";
+
+/// **Which map a program with no flag for one opens**, in the two tiers
+/// ADR-0227 puts library data in: the operator's own first, what ships second,
+/// and `None` for a machine with neither.
+///
+/// **The operator's wins**, which is the order every other pair of tiers in
+/// this program is read in and is the only order that lets a learned map
+/// matter: a map saved under the store is a map somebody made here, and a
+/// preset that shadowed it would make learning a gesture with no effect the
+/// next time the program started.
+///
+/// **Existence and not readability.** A file that is there and will not parse
+/// is `karakuri_midi::Map::parse`'s to complain about, line by line, with the
+/// rest of the map loading — refusing it here would turn one bad line into no
+/// surface at all. A file that is not there is not a fault at either tier:
+/// `presets` is `None` on a machine with no library at all
+/// (`crate::places::presets`), and a store that has never been learned into
+/// has no `maps/`.
+pub fn map_for(store: &Path, presets: Option<&Path>) -> Option<std::path::PathBuf> {
+    let own = store.join(MAPS).join(format!("{DEFAULT_MAP}.{MAP_SUFFIX}"));
+    if own.is_file() {
+        return Some(own);
+    }
+    let shipped = presets?.join(SHIPPED_MAP);
+    shipped.is_file().then_some(shipped)
+}
+
+/// **What a learned map file holds afterwards** — the half of
+/// [`Surface::learn`] that has no device and no disk in it.
+///
+/// `held` is what the operator's map file already says, or `None` where there
+/// is none yet; `seed` is the map in force, written out, for that case.
+///
+/// # It replaces the knob's own line and appends everything else
+///
+/// **This was an append and nothing else, and the test said why not.** A
+/// re-learn of one knob left both lines in the file; `Map::parse`'s *the later
+/// line wins* means the map is still right, but it also **reports** the
+/// shadowed line — so a knob learned five times printed four complaints on
+/// every start, about a file the operator never wrote by hand. The complaint
+/// is correct and the file is what was wrong.
+///
+/// So a line whose left-hand side is this same message is **replaced where it
+/// sits**, and a knob nothing is mapped to is appended. What that buys beyond
+/// silence is that the file does not grow on a gesture an operator will make
+/// dozens of times in a session, and that a learned line stays where they last
+/// saw it.
+///
+/// **Everything else in the file is bytes.** Comments, blank lines, the order
+/// of the rest, a line for another knob — none of it is parsed, re-emitted or
+/// moved. The shipped map an operator starts from is two-thirds prose
+/// explaining what a line means, and rewriting the file from the table would
+/// turn the one document that teaches the format into forty bare lines on the
+/// first press.
+///
+/// **Split out to be tested**, which is the only way this can be: a
+/// [`Surface`] cannot be built without a port, and *what a learn does to a
+/// file* is the half worth checking on every machine.
+fn appended(held: Option<String>, seed: &str, key: &str, line: &str) -> String {
+    let mut text = held.unwrap_or_else(|| seed.to_owned());
+    let wanted = squashed(key);
+    let mut replaced = false;
+    let lines: Vec<String> = text
+        .lines()
+        .map(|raw| {
+            // The comment half is the operator's and is never read: a line
+            // they commented out is a line they took out.
+            let live = raw.split('#').next().unwrap_or("");
+            match live.split_once("->") {
+                Some((from, _)) if !replaced && squashed(from) == wanted => {
+                    replaced = true;
+                    line.to_owned()
+                }
+                _ => raw.to_owned(),
+            }
+        })
+        .collect();
+    if replaced {
+        let mut out = lines.join("\n");
+        out.push('\n');
+        return out;
+    }
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(line);
+    text.push('\n');
+    text
+}
+
+/// A message's spelling with its spacing taken out, so `cc  30` and `cc 30`
+/// are one knob. Not a parse: two spellings of one key that this cannot tell
+/// apart leave a duplicate, which `Map::parse` then reports — the outcome this
+/// is an improvement on rather than a guarantee against.
+fn squashed(spelling: &str) -> String {
+    spelling.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// An open surface: a [`Router`] with a port in front of it.
 pub struct Surface {
     port: Port,
     router: Router,
+    /// **What the map is called**, or `None` for a surface running without
+    /// one. The file's stem rather than its path: it is what a readout names —
+    /// the transport row's `map · <name>` pill — and a path is not a name
+    /// (P-0087).
+    map_name: Option<String>,
     /// Scratch for [`Port::drain`]. Owned, and given a capacity at
     /// construction rather than grown into one, because this is read on the
     /// frame path — see [`INBOX`].
@@ -330,7 +683,58 @@ impl Surface {
     /// it sends, which is exactly the state an operator is in before they have
     /// written one.
     pub fn open(port: &str, map_path: Option<&Path>) -> Result<Surface, String> {
-        let port = Port::open(port)?;
+        let (surface, notes) = Surface::assembled(Port::open(port)?, map_path)?;
+        for note in &notes {
+            eprintln!("  midi map: {note}");
+        }
+        eprintln!(
+            "midi in: `{}`, {} mapping{}{}",
+            surface.port_name(),
+            surface.mappings(),
+            if surface.mappings() == 1 { "" } else { "s" },
+            if surface.mappings() == 0 {
+                " — turn a knob and this will print the line that would map it"
+            } else {
+                ""
+            }
+        );
+        Ok(surface)
+    }
+
+    /// **Open the first input there is, and say nothing out loud.**
+    ///
+    /// [`Surface::open`] is for a program told which port to take before the
+    /// run, and it prints its own line because a command line has already gone
+    /// past. This is for one with somebody standing in front of it: it takes
+    /// whatever is plugged in — [`karakuri_midi::Port::open`]'s empty selector
+    /// — and hands the caller back the map's parse notes to put in its own
+    /// legend. It is `crate::audio`'s `default` one door along, and the
+    /// argument is the same: a surface an operator plugged in and a program
+    /// that waited to be told about it are not the same instrument.
+    ///
+    /// **`wake` is called once per message on the MIDI thread.** A caller
+    /// whose loop sleeps has nothing else to tell it a knob moved; see
+    /// [`karakuri_midi::Port::waking`], which is where that whole argument is.
+    ///
+    /// Returns the surface and the map's complaints, in order. Both are meant
+    /// to be used — a caller that dropped the second would leave an operator
+    /// pressing a pad that never loaded, with nothing said.
+    pub fn first(
+        map_path: Option<&Path>,
+        wake: impl Fn() + Send + 'static,
+    ) -> Result<(Surface, Vec<String>), String> {
+        Surface::assembled(Port::waking("", wake)?, map_path)
+    }
+
+    /// The half that has no device in it: a port, a map file, and the router
+    /// over the two. Said once so that the two constructors above cannot come
+    /// to disagree about what loading a map means.
+    ///
+    /// **A missing map is not an error**: a surface with no map still reports
+    /// what it sends, which is exactly the state an operator is in before they
+    /// have written one. A map file that is *named* and will not open is,
+    /// because somebody said that one.
+    fn assembled(port: Port, map_path: Option<&Path>) -> Result<(Surface, Vec<String>), String> {
         let (map, notes) = match map_path {
             Some(path) => {
                 let text = std::fs::read_to_string(path)
@@ -339,40 +743,146 @@ impl Surface {
             }
             None => (Map::default(), Vec::new()),
         };
-        for note in &notes {
-            eprintln!("  midi map: {note}");
-        }
-        let router = Router::new(map);
-        eprintln!(
-            "midi in: `{}`, {} mapping{}{}",
-            port.name(),
-            router.mappings(),
-            if router.mappings() == 1 { "" } else { "s" },
-            if router.mappings() == 0 {
-                " — turn a knob and this will print the line that would map it"
-            } else {
-                ""
-            }
-        );
-        Ok(Surface {
-            port,
-            router,
-            inbox: Vec::with_capacity(INBOX),
-        })
+        Ok((
+            Surface {
+                port,
+                router: Router::new(map),
+                map_name: map_path
+                    .and_then(Path::file_stem)
+                    .map(|stem| stem.to_string_lossy().into_owned()),
+                inbox: Vec::with_capacity(INBOX),
+            },
+            notes,
+        ))
+    }
+
+    /// The port that was opened, as the device named it.
+    pub fn port_name(&self) -> &str {
+        self.port.name()
+    }
+
+    /// **What the map in use is called**, or `None` for a surface running
+    /// without one — see [`Surface::map_name`](Surface::map_name)'s field.
+    pub fn map_name(&self) -> Option<&str> {
+        self.map_name.as_deref()
+    }
+
+    /// How many mappings loaded — [`Router::mappings`], through the surface
+    /// that holds it rather than a second count.
+    pub fn mappings(&self) -> usize {
+        self.router.mappings()
     }
 
     /// Everything that arrived since the last frame, as operations this deck
     /// can answer.
-    pub fn take(&mut self, slot_count: usize, out: &mut Vec<Operation>) {
+    pub fn take(&mut self, slot_count: usize, interface: &dyn Interface, out: &mut Vec<Operation>) {
         self.port.drain(&mut self.inbox);
         // Split rather than borrowed together: `route` writes to the router and
         // reads the inbox, and both are fields of `self`. `mem::take` would
         // hand the allocation back only if nothing panicked in between.
         let Surface { router, inbox, .. } = self;
-        router.route(inbox, slot_count, out);
+        router.route(inbox, slot_count, interface, out);
         for notice in router.notices() {
             eprintln!("  midi: {notice}");
         }
+    }
+
+    /// **The first hand on a control this frame**, for a caller that is
+    /// learning rather than playing — or `None` where nothing arrived.
+    ///
+    /// Learn needs the message and not what it is worth: nothing is mapped to
+    /// the knob yet, so [`Surface::take`] would report it as a discovery and
+    /// hand back no operation. This is the same drain, one step earlier and
+    /// narrowed to the one message a learn is about.
+    ///
+    /// **A release is not a hand on a control**, which is this crate's rule
+    /// everywhere: every pad acts on the press, so learning from a `NoteOff`
+    /// would bind the knob on the way back up.
+    ///
+    /// **The first and not the last**, which is the opposite of what a *fader*
+    /// wants and is right here: a sweep is one gesture, and the value is
+    /// thrown away anyway — what a learn takes from the message is which knob
+    /// it was. Taking the last would make a learn depend on where the hand
+    /// stopped.
+    ///
+    /// **It drains**, so a frame spent learning is a frame nothing is played
+    /// from — see `App::mapped`, where that is the point rather than a
+    /// side effect.
+    pub fn learning(&mut self) -> Option<Message> {
+        self.port.drain(&mut self.inbox);
+        self.inbox
+            .iter()
+            .copied()
+            .find(|message| !matches!(message, Message::NoteOff { .. }))
+    }
+
+    /// **Bind `message` to `target` and put the line in the operator's own
+    /// map**, giving back what to say about it.
+    ///
+    /// `to` is where the operator's map lives — `<store>/maps/default.map`,
+    /// [`map_for`]'s first tier — and it is **always** that file whatever map
+    /// this run loaded. A run playing the shipped `examples/surface.map` and
+    /// learning a control writes the line into the store, which is
+    /// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
+    /// held rather than argued: nothing in this program writes the preset
+    /// tier, and the first learn is what promotes a map into the operator's.
+    ///
+    /// # What it does to the file is [`appended`], and that is the decision
+    ///
+    /// A line for this same knob is **replaced where it sits**; a knob nothing
+    /// is mapped to is appended; everything else in the file is bytes. The
+    /// alternative — rewriting the file from the table, which is what a map
+    /// editor would do — loses every comment in it, and the shipped map an
+    /// operator starts from is two-thirds prose explaining what a line means.
+    ///
+    /// The file is **created with what is loaded** where it does not exist
+    /// yet, so a learn against the shipped map does not leave the store
+    /// holding one line and the rest silently lost on the next start.
+    pub fn learn(&mut self, message: Message, target: &str, to: &Path) -> Result<String, String> {
+        let line = self.router.map.learn(message, target)?;
+        if let Some(dir) = to.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("making `{}`: {e}", dir.display()))?;
+        }
+        // **Seeded from what is loaded, once.** Reaching here with no file is
+        // either the first learn of the run or a store somebody has just
+        // emptied; either way the lines in force are the ones this surface is
+        // playing, and a file holding only the newest of them would be a map
+        // that shrank on a press.
+        let held = std::fs::read_to_string(to).ok();
+        let key = line.split_once("->").map(|(from, _)| from).unwrap_or("");
+        let text = appended(held, &self.seed(), key, &line);
+        std::fs::write(to, text).map_err(|e| format!("writing `{}`: {e}", to.display()))?;
+        self.map_name = to
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned());
+        Ok(line)
+    }
+
+    /// **The map in force, as lines**, for seeding an operator's map file that
+    /// does not exist yet.
+    ///
+    /// Sorted, because a `HashMap`'s order is not an order and a file that
+    /// came out shuffled on every run is a file nobody can diff.
+    fn seed(&self) -> String {
+        let mut lines: Vec<String> = self.router.map.lines().collect();
+        lines.sort();
+        let mut text = String::from(
+            "# Written by `karakuri` on the first learn of a run, from the map it was \
+             playing.\n# Every line below is one this program loaded; edit it by hand as \
+             freely as any other.\n\n",
+        );
+        for line in lines {
+            text.push_str(&line);
+            text.push('\n');
+        }
+        text
+    }
+
+    /// **Which message reaches `target`**, or `None` for a control nothing is
+    /// mapped to — `karakuri_midi::Map::bound` through the surface that holds
+    /// the map, so a caller drawing a tooltip needs no second handle on it.
+    pub fn bound(&self, target: &str) -> Option<String> {
+        self.router.map.bound(target)
     }
 }
 
@@ -402,9 +912,52 @@ mod tests {
         }
     }
 
+    /// **A deck's published interface, without a deck.** Positions count from
+    /// one, and each answers with the key the Inspector would draw beside it
+    /// and the range the Set published it over — which is what [`Decks`] reads
+    /// off a real one. A `Deck` takes a device and every decision on this
+    /// route is about what arrived, so the trait is what keeps these tests
+    /// CPU-only.
+    struct Fake(Vec<Vec<(&'static str, [f32; 2])>>);
+
+    impl Interface for Fake {
+        fn control_at(&self, slot: u8, position: u16) -> Option<(ParamAt, [f32; 2])> {
+            let deck = self.0.get(usize::from(slot))?;
+            let (key, range) = deck.get(usize::from(position).checked_sub(1)?)?;
+            Some((
+                ParamAt {
+                    node: None,
+                    key: (*key).to_owned(),
+                },
+                *range,
+            ))
+        }
+    }
+
+    /// A deck with nothing published, which is what every test that is not
+    /// about parameters wants: it answers `None` to everything.
+    struct Nothing;
+
+    impl Interface for Nothing {
+        fn control_at(&self, _slot: u8, _position: u16) -> Option<(ParamAt, [f32; 2])> {
+            None
+        }
+    }
+
     fn routed(r: &mut Router, messages: &[Message], slots: usize) -> Vec<Operation> {
         let mut out = Vec::new();
-        r.route(messages, slots, &mut out);
+        r.route(messages, slots, &Nothing, &mut out);
+        out
+    }
+
+    fn over(
+        r: &mut Router,
+        messages: &[Message],
+        slots: usize,
+        interface: &dyn Interface,
+    ) -> Vec<Operation> {
+        let mut out = Vec::new();
+        r.route(messages, slots, interface, &mut out);
         out
     }
 
@@ -446,9 +999,9 @@ mod tests {
     fn a_frame_with_no_messages_produces_no_operations() {
         let mut r = router("note 36 -> residency 0 live");
         let mut out = Vec::new();
-        r.route(&[note(36)], 4, &mut out);
+        r.route(&[note(36)], 4, &Nothing, &mut out);
         assert_eq!(out.len(), 1);
-        r.route(&[], 4, &mut out);
+        r.route(&[], 4, &Nothing, &mut out);
         assert!(out.is_empty(), "{out:?}");
     }
 
@@ -646,6 +1199,330 @@ mod tests {
                 },
             ]
         );
+    }
+
+    /// **The two tiers, in order, and neither of them being there.** The
+    /// operator's own map wins, which is the only order that lets a learned
+    /// map matter — a preset that shadowed it would make learning a gesture
+    /// with no effect the next time the program started.
+    #[test]
+    fn the_operators_own_map_wins_over_the_one_that_ships_and_neither_is_a_fault() {
+        let store = tempfile::tempdir().expect("store");
+        let presets = tempfile::tempdir().expect("presets");
+        // A machine with a store that has never been learned into and no
+        // preset library at all: a state, not a failure.
+        assert_eq!(map_for(store.path(), None), None);
+        // A preset library with no map in it is the same nothing.
+        assert_eq!(map_for(store.path(), Some(presets.path())), None);
+
+        let shipped = presets.path().join(SHIPPED_MAP);
+        std::fs::write(&shipped, "cc 1 -> gain 0\n").expect("write");
+        assert_eq!(map_for(store.path(), Some(presets.path())), Some(shipped));
+
+        let own = store.path().join(MAPS);
+        std::fs::create_dir_all(&own).expect("mkdir");
+        let learned = own.join(format!("{DEFAULT_MAP}.{MAP_SUFFIX}"));
+        std::fs::write(&learned, "cc 2 -> gain 1\n").expect("write");
+        assert_eq!(
+            map_for(store.path(), Some(presets.path())),
+            Some(learned.clone()),
+            "the operator's own map has to win, or a learned map is overwritten \
+             by the preset on every start"
+        );
+        // And with no preset library at all it is still found.
+        assert_eq!(map_for(store.path(), None), Some(learned));
+    }
+
+    /// **A mapped knob lands as the record a press lands**, which is the whole
+    /// claim this crate's header makes and the one nothing here checked: the
+    /// tests above stop at an [`Operation`], and *a session recorded from a
+    /// controller replays with neither controller nor map attached*
+    /// (P-0092, P-0090) is about what reaches the stream.
+    ///
+    /// So this goes one crate further on — through
+    /// [`karakuri_operation_record::written`], the one exhaustive match every
+    /// surface's operation goes through — and asserts the record itself. A
+    /// route that produced its own record beside this one would be two
+    /// spellings of a `gain`, and a replay would then depend on which surface
+    /// wrote it.
+    #[test]
+    fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
+        use karakuri_operation_record::{written, Current, Written};
+        use karakuri_store::Record;
+
+        let mut r = router("cc 1 -> gain 0");
+        let out = routed(&mut r, &[cc(1, 127)], 4);
+        assert_eq!(out.len(), 1, "{out:?}");
+
+        // The same operation a fader on the panel and the `]` key emit, so
+        // the record is the same record by construction rather than by
+        // resemblance.
+        let by_hand = Operation::SetGain { deck: 0, gain: 1.0 };
+        assert_eq!(out[0], by_hand);
+
+        let Written::Records(records) = written(&out[0], &Current::default()) else {
+            panic!(
+                "a gain writes a record: {:?}",
+                written(&out[0], &Current::default())
+            );
+        };
+        assert_eq!(
+            records,
+            vec![Record::Gain {
+                slot: 0,
+                value: 1.0
+            }]
+        );
+    }
+
+    /// **A `param` line is resolved against the deck's published interface**,
+    /// and it is the one target the map cannot finish on its own — so this is
+    /// the seam that makes *Write a parameter* reachable from a knob at all.
+    ///
+    /// The value is scaled over **the range the Set published**, not over a
+    /// default this crate chose: a control declared `0 – 8` reaches 8 at the
+    /// top of the fader, and a knob that stopped at 1.0 would be a fader that
+    /// cannot reach what the procedure says is in range.
+    #[test]
+    fn a_param_line_resolves_to_the_control_at_that_position_over_the_sets_own_range() {
+        let deck = Fake(vec![
+            vec![("radius", [0.0, 8.0]), ("twist", [-1.0, 1.0])],
+            vec![("glow.x", [0.0, 4.0])],
+        ]);
+        let mut r = router("cc 30 -> param 0 1\ncc 31 -> param 0 2\ncc 32 -> param 1 1");
+        let out = over(&mut r, &[cc(30, 127), cc(31, 0), cc(32, 127)], 4, &deck);
+        assert_eq!(
+            out,
+            vec![
+                Operation::WriteParam {
+                    deck: 0,
+                    param: ParamAt {
+                        node: None,
+                        key: "radius".to_owned()
+                    },
+                    value: ParamValue::Scalar(8.0),
+                },
+                Operation::WriteParam {
+                    deck: 0,
+                    param: ParamAt {
+                        node: None,
+                        key: "twist".to_owned()
+                    },
+                    value: ParamValue::Scalar(-1.0),
+                },
+                Operation::WriteParam {
+                    deck: 1,
+                    param: ParamAt {
+                        node: None,
+                        key: "glow.x".to_owned()
+                    },
+                    value: ParamValue::Scalar(4.0),
+                },
+            ]
+        );
+        assert!(r.notices().is_empty(), "{:?}", r.notices());
+    }
+
+    /// **Two knobs on two parameters of one deck are two operations.**
+    ///
+    /// The coalescing key is the discriminant and the deck for every other
+    /// continuous control, because a deck has one gain and one exposure. It
+    /// has as many parameters as its Set published, so the position is in the
+    /// key too — without it a hand on one knob would swallow the other, and
+    /// the Set's *third* control would be written with the *fifth*'s value.
+    #[test]
+    fn two_knobs_on_two_parameters_of_one_deck_do_not_coalesce_into_one() {
+        let deck = Fake(vec![vec![
+            ("radius", [0.0, 1.0]),
+            ("twist", [0.0, 1.0]),
+            ("glow.x", [0.0, 1.0]),
+        ]]);
+        let mut r = router("cc 30 -> param 0 1\ncc 31 -> param 0 3");
+        // Both swept in one frame, interleaved, as two hands would.
+        let messages: Vec<Message> = (0..64).flat_map(|v| [cc(30, v), cc(31, 127 - v)]).collect();
+        let out = over(&mut r, &messages, 4, &deck);
+        assert_eq!(out.len(), 2, "{out:?}");
+        assert_eq!(
+            out[0],
+            Operation::WriteParam {
+                deck: 0,
+                param: ParamAt {
+                    node: None,
+                    key: "radius".to_owned()
+                },
+                value: ParamValue::Scalar(63.0 / 127.0),
+            }
+        );
+        assert_eq!(
+            out[1],
+            Operation::WriteParam {
+                deck: 0,
+                param: ParamAt {
+                    node: None,
+                    key: "glow.x".to_owned()
+                },
+                value: ParamValue::Scalar(64.0 / 127.0),
+            }
+        );
+        // And a sweep of one is still one operation carrying its last value,
+        // which is what coalescing is for.
+        let mut r = router("cc 30 -> param 0 1");
+        let sweep: Vec<Message> = (0..128).map(|v| cc(30, v)).collect();
+        assert_eq!(over(&mut r, &sweep, 4, &deck).len(), 1);
+    }
+
+    /// **A position the Set has no control at is said once, and it is not the
+    /// same sentence a missing slot gets.**
+    ///
+    /// This is the ordinary state after a load rather than a typo: a map
+    /// learned against a Set with nine controls has five dead lines against
+    /// one with four. A knob that goes quiet with nothing said is what P-0094
+    /// rules out, and a sentence per message is the blocking write this router
+    /// exists to keep off the frame path.
+    #[test]
+    fn a_position_past_the_end_of_an_interface_is_said_once_and_not_as_a_missing_slot() {
+        let deck = Fake(vec![vec![("radius", [0.0, 1.0])]]);
+        let mut r = router("cc 30 -> param 0 9\ncc 31 -> param 0 1");
+        let sweep: Vec<Message> = (0..128).map(|v| cc(30, v)).collect();
+        let out = over(&mut r, &sweep, 4, &deck);
+        assert!(out.is_empty(), "{out:?}");
+        assert_eq!(r.notices().len(), 1, "{:?}", r.notices());
+        assert!(r.notices()[0].contains("param 0 9"), "{:?}", r.notices());
+        assert!(r.notices()[0].contains("Inspector"), "{:?}", r.notices());
+        // Nothing more to say on the next frame, and the good line still works.
+        let out = over(&mut r, &[cc(30, 64), cc(31, 127)], 4, &deck);
+        assert!(r.notices().is_empty(), "{:?}", r.notices());
+        assert_eq!(out.len(), 1, "{out:?}");
+
+        // **And a deck the deck does not have gets the keys' own words**, not
+        // this one: two different facts, two sentences, two sets.
+        let mut r = router("cc 30 -> param 9 1");
+        over(&mut r, &[cc(30, 64)], 4, &deck);
+        assert_eq!(
+            r.notices(),
+            [crate::no_such_slot(9, 4)],
+            "a missing deck was reported as a missing control"
+        );
+    }
+
+    /// **A learn writes the operator's own map and never the one that ships**,
+    /// and it appends rather than rewriting — so the file an operator started
+    /// from keeps its comments, and the later line wins on the next load.
+    #[test]
+    fn a_learn_appends_to_the_operators_map_and_seeds_it_from_what_is_playing() {
+        // No port here, so this is the half of a learn that has no device in
+        // it: the map, and the file.
+        let (map, notes) = Map::parse("cc 1 -> gain 0\nnote 61 -> tap");
+        assert!(notes.is_empty(), "{notes:?}");
+        let mut map = map;
+
+        // The line a learn makes is a line the grammar accepts, and it is the
+        // whole of what is written.
+        let line = map
+            .learn(cc(30, 64), "param 0 3")
+            .expect("a param target is one this grammar knows");
+        assert_eq!(line, "cc 30 -> param 0 3");
+        assert_eq!(map.bound("param 0 3").as_deref(), Some("cc 30"));
+
+        // **A learn cannot put a line in a map the map could not be loaded
+        // with**, which is what keeps the file editable by hand.
+        assert!(
+            map.learn(note(36), "param 0 3").is_err(),
+            "a note was learned onto a control that takes a position"
+        );
+        assert!(map.learn(cc(30, 0), "wobble 2").is_err());
+
+        // Re-learning one knob onto another control replaces it here, and
+        // appending replaces it on the next load.
+        map.learn(cc(30, 0), "gain 2").expect("a second learn");
+        assert_eq!(map.bound("gain 2").as_deref(), Some("cc 30"));
+        assert_eq!(map.bound("param 0 3"), None);
+    }
+
+    /// **What a learn leaves in the file**, which is the half of it that has
+    /// no device in it.
+    ///
+    /// **It appends and never rewrites.** The shipped map an operator starts
+    /// from is two-thirds prose explaining what a line means, and a learn that
+    /// rewrote the file from the table would turn the one document that
+    /// teaches the format into forty bare lines on the first press.
+    ///
+    /// **And a file that is not there yet is seeded with what is playing**,
+    /// rather than created holding one line: the lines in force are the ones
+    /// the run loaded, and a map that shrank to a single control on a press
+    /// would be the map going quiet.
+    #[test]
+    fn a_learn_appends_and_seeds_a_file_that_is_not_there_with_what_is_playing() {
+        let seed = "# seeded\ncc 1 -> gain 0\n";
+        // No file yet: the seed, then the line.
+        assert_eq!(
+            appended(None, seed, "cc 30 ", "cc 30 -> param 0 3"),
+            "# seeded\ncc 1 -> gain 0\ncc 30 -> param 0 3\n"
+        );
+        // A file the operator has: their bytes, untouched, then the line.
+        let theirs = "# my own map, hands off\ncc 7 -> opacity 1\n";
+        assert_eq!(
+            appended(
+                Some(theirs.to_owned()),
+                seed,
+                "cc 30 ",
+                "cc 30 -> param 0 3"
+            ),
+            "# my own map, hands off\ncc 7 -> opacity 1\ncc 30 -> param 0 3\n"
+        );
+        // A file somebody left without a trailing newline does not get two
+        // lines run together, which is the one way an append can lose a line.
+        assert_eq!(
+            appended(
+                Some("cc 7 -> opacity 1".to_owned()),
+                seed,
+                "cc 30 ",
+                "cc 30 -> tap"
+            ),
+            "cc 7 -> opacity 1\ncc 30 -> tap\n"
+        );
+        // An empty file is not given a blank first line.
+        assert_eq!(
+            appended(Some(String::new()), seed, "cc 30 ", "cc 30 -> tap"),
+            "cc 30 -> tap\n"
+        );
+
+        // **A re-learn replaces the knob's own line where it sits**, and
+        // leaves the comments, the blank lines and every other knob alone.
+        // Without this the file grows on a gesture made dozens of times a
+        // session, and `Map::parse` reports the shadowed line on every start.
+        let theirs = "# the strip\ncc 1  ->  gain 0\n\n# the pads\nnote 61 -> tap\n";
+        assert_eq!(
+            appended(Some(theirs.to_owned()), seed, "cc 1", "cc 1 -> gain 2"),
+            "# the strip\ncc 1 -> gain 2\n\n# the pads\nnote 61 -> tap\n",
+            "a re-learn did not replace the line it was about"
+        );
+
+        // **And what comes out loads with nothing to complain about**, which
+        // is the property the replacement buys.
+        let text = appended(Some(theirs.to_owned()), seed, "cc 1", "cc 1 -> gain 2");
+        let (map, notes) = Map::parse(&text);
+        assert!(
+            notes.is_empty(),
+            "a learned file reported something: {notes:?}"
+        );
+        assert_eq!(map.bound("gain 2").as_deref(), Some("cc 1"));
+        assert_eq!(map.bound("gain 0"), None, "the old line survived");
+        assert_eq!(
+            map.bound("tap").as_deref(),
+            Some("note 61"),
+            "another knob moved"
+        );
+
+        // A line the operator commented out is a line they took out, so a
+        // learn on that knob appends rather than reviving it.
+        let out = appended(
+            Some("# cc 1 -> gain 0\n".to_owned()),
+            seed,
+            "cc 1",
+            "cc 1 -> tap",
+        );
+        assert_eq!(out, "# cc 1 -> gain 0\ncc 1 -> tap\n");
     }
 
     /// A release is not a discovery. Every pad acts on the press, so reporting

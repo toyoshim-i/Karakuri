@@ -64,6 +64,14 @@
       procedure can never be quietly altered under a name that already meant
       something else.
     </p>
+    <p>
+      <strong>A procedure is also something the library holds</strong> &mdash;
+      one you kept, or one that shipped &mdash; and a row of it says which kind
+      it is. Loading one writes that <em>one</em> layer over what a deck is
+      playing and leaves the rest of the material where it is, which is how you
+      change the camera without rebuilding the picture. What that leaves the
+      deck running is a Set with no name until you keep it.
+    </p>
   </section>
 
   <section>
@@ -72,8 +80,10 @@
       One picture's worth of material: a few procedures wired together, with
       the values their knobs are turned to, the element counts they run at, and
       the random seeds that decide what they look like. <strong>A Set is what
-      you keep and what you load</strong> &mdash; the unit the library is made
-      of.
+      you keep</strong> &mdash; the unit a deck is played from, and most of what
+      the library holds. It is not the only thing you load: a procedure is a row
+      of that library too, and loading one replaces a single layer of what is
+      already running rather than all of them.
     </p>
     <p>
       Sets hold more than one of most kinds. Two geometries with a morph between
@@ -241,13 +251,21 @@
       control is, while the six inside a bay are the grammar and are not.
     </p>
     <p>
-      <strong>Focus is decided and not yet built.</strong> The deck selection
-      and its solid ring are on the panel today; the console takes no keyboard
-      focus at all, nothing is bound to <code>Tab</code>, the keyboard is still
-      one letter per operation, and <code>esc</code> still quits rather than
-      going up a level &mdash; decided 2026&#8209;09&#8209;05, and
-      the two rings are specified on <a href="console.html">the console
-      page</a>, under <em>Two focuses, and they do not look alike</em>.
+      <strong>Focus is on the panel and the six keys are not.</strong> Both
+      rings are drawn: the deck selection's solid one round a strip, and the
+      dashed one on the bay <code>Tab</code> has landed on. <code>esc</code>
+      goes up a level and no longer quits &mdash; the way out is the window's
+      own close. <strong>The six keys act in two of the nine bays</strong>, the
+      mixer and the library: there a digit descends, the arrows take the
+      neighbour or the next value, <code>space</code> is the next state and
+      <code>enter</code> the act, and twelve letters have gone because the
+      grammar reaches the rows they reached. In the other seven the four
+      decline and say where they are, and the letters that still work there are
+      the ones waiting to be replaced. Decided 2026&#8209;09&#8209;05, focus
+      built 2026&#8209;09&#8209;09 and the first two bays
+      2026&#8209;09&#8209;10, and the two rings are specified on
+      <a href="console.html">the console page</a>, under <em>Two focuses, and
+      they do not look alike</em>.
     </p>
   </section>
 
@@ -255,8 +273,9 @@
     <h2>The shape, in one paragraph</h2>
     <p>
       <strong>Procedures</strong> are code that draws. A few of them wired
-      together with their settings is a <strong>Set</strong>, which is what the
-      <strong>library</strong> holds. A Set loaded into a <strong>deck</strong>
+      together with their settings is a <strong>Set</strong>, which is most of
+      what the <strong>library</strong> holds &mdash; the procedures themselves
+      are the rest. A Set loaded into a <strong>deck</strong>
       is running material with its own time and its own residency. Four decks
       are folded together by the <strong>mix</strong>, and everything that
       changes is scheduled against the <strong>beat grid</strong> and written

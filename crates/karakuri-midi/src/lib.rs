@@ -58,5 +58,5 @@ mod map;
 mod message;
 
 pub use device::Port;
-pub use map::Map;
+pub use map::{Map, Parameter};
 pub use message::Message;

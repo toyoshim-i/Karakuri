@@ -639,6 +639,56 @@ fn sample(variant: &str) -> Operation {
             output: karakuri_operation::Output::Projector(0),
             on: true,
         },
+        // **The two chips before the fold on an Inspector pane's deck head**,
+        // and one operation is one row however many chips name it — the
+        // arrangement `SetSync` is already in with its anchor. Each is a field
+        // of the aim the slot's watcher is pointed at, so the press is a
+        // rebuild off the render thread exactly as the fold beside them is
+        // (ADR-0328).
+        //
+        // **The capacity arm and not the seed one**, and the choice is
+        // arbitrary in the way this file's values are: what the badge claims is
+        // that an operator reaches the *row*, and the row is one heading over
+        // two operations. Neither carries a node — an aim holds one capacity
+        // and one seed for the whole slot, which is what the deck this payload
+        // names already says.
+        // **A pick out of a `uses` line's card in an Inspector pane**, and the
+        // one emission in this list addressed **by name at both ends**: an edge
+        // survives a reorder and a position does not, which is `Record::Edge`'s
+        // own decision. The capsule that opens the card emits nothing and owes
+        // this page no row, which is the Library bay's deck pulldown's rule
+        // (ADR-0305, ADR-0329). The value is any wiring, because what the badge
+        // claims is that an operator reaches the row.
+        "WireInput" => Operation::WireInput {
+            deck: 0,
+            node: "swirl_warp".to_owned(),
+            slot: "far".to_owned(),
+            to: "sphere_shell".to_owned(),
+        },
+        // **The mark at the left of a parameter row**, which is the control's
+        // position in the deck's published interface and, by being there or
+        // not, whether it is published at all.
+        //
+        // **The whole ordered list and never one entry**, which is the
+        // vocabulary's own sentence at the variant: a knob is learned against a
+        // position, so an operation that added or removed one at a time would
+        // renumber every binding after it. The value is any interface, because
+        // what the badge claims is that an operator reaches the row — and it is
+        // deliberately **not** empty, since an empty list means *publish
+        // everything* and would read as a payload nobody filled in.
+        "Publish" => Operation::Publish {
+            deck: 0,
+            controls: vec![karakuri_operation::Control {
+                name: "exposure".to_owned(),
+                node: None,
+                key: "exposure".to_owned(),
+                range: [0.5, 2.0],
+            }],
+        },
+        "SetProperty" => Operation::SetProperty {
+            deck: 0,
+            property: karakuri_operation::Property::Capacity { elements: 65_536 },
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

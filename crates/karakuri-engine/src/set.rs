@@ -812,6 +812,23 @@ pub struct Set {
     /// *geometry*. Held so that a writer can record what the Set is running at
     /// instead of deriving it a second time — see [`Set::source_salts`].
     source_salts: Vec<u32>,
+    /// **What each geometry's `capacity` declaration says** — `[min, max,
+    /// default]`, in L1-procedure order —
+    /// the same order [`Set::source_salts`] and [`Set::source_capacities`] are
+    /// in, and for the same reason.
+    ///
+    /// **Kept because it is the one thing a surface offering a capacity has to
+    /// know and cannot derive.** [`capacity_in_range`] is where a number
+    /// outside it is refused, and until 2026-09-09 that was the only reader:
+    /// the declaration was consulted at build and dropped, so nothing that held
+    /// a built `Set` could say what the material would accept. A control that
+    /// offered a capacity the build would refuse is a control that mostly
+    /// prints refusals, and *what may be asked for* is not a surface's to work
+    /// out ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)) —
+    /// which is `Deck::sync_allowed`'s arrangement one crate over, where a
+    /// reading the engine takes is what the sync chip's cycle skips on.
+    /// See [`Set::declared_capacities`].
+    declared_capacities: Vec<[u32; 3]>,
     /// **What each node is called**, in node order — the same order [`Set::params`]
     /// and `ranges` are in, and for the same reason: one walk decides it.
     ///
@@ -2875,11 +2892,27 @@ impl Set {
         // [`declared_defaults`] — and that is the sentence an empty set per node
         // is. See [`Set::moved`].
         let moved = vec![HashSet::new(); names.len()];
+        // **Each geometry's declared range, in the order the procedures were
+        // given** — [`Set::declared_capacities`]' own order, which is `l1s`' and is
+        // what `source_capacities` places by. The fallback is unreachable and
+        // is written as the value rather than as a guess: a `Checked` with no
+        // `capacity` is `SetError::NoCapacity` at [`capacity_in_range`] above,
+        // so nothing that reaches this line has one — and a range of exactly
+        // what the geometry is running at is the honest degenerate answer,
+        // since it is the one capacity that is known to be acceptable.
+        let declared_capacities = l1s
+            .iter()
+            .map(|(l1, at)| {
+                l1.capacity
+                    .map_or([*at, *at, *at], |decl| [decl.min, decl.max, decl.default])
+            })
+            .collect();
         let set = Set {
             names,
             authorities,
             seed_salt,
             source_salts,
+            declared_capacities,
             steps_taken: 0,
             dt: DT,
             last_beats: 0.0,
@@ -3384,6 +3417,34 @@ impl Set {
         out
     }
 
+    /// **What each geometry declares** — `capacity [min, max] = default` as
+    /// `[min, max, default]`, one entry per geometry, in exactly the order
+    /// [`Set::source_capacities`] and [`Set::source_salts`] are in.
+    ///
+    /// **The default is here and not only the range**, because a surface
+    /// drawing a capacity has two questions and they are not the same one:
+    /// *what may this be turned to*, which is the range, and *did anybody turn
+    /// it*, which is the running value against this default. The second cannot
+    /// be answered from a range, and answering it from whether an aim happens
+    /// to carry a number would be a reading of what was **asked** where every
+    /// other readout on that row is of what **landed**.
+    ///
+    /// **The reading a surface offering a capacity asks for**, and the reason
+    /// it is kept rather than derived is at the field. This is what
+    /// [`capacity_in_range`] refuses against, so a control that steps inside
+    /// what this answers cannot ask for a build that will be refused for its
+    /// capacity — the division `Deck::sync_allowed` is on the other side of
+    /// (P-0090).
+    ///
+    /// **Not the intersection.** A caller sending *one* capacity for a whole
+    /// slot — which is what `--capacity` and `watch::Aim::capacity` are — wants
+    /// the part every geometry accepts and has to fold these itself, because
+    /// the fold is that caller's question and the fold of an empty intersection
+    /// is a state this reader would have to invent an answer for.
+    pub fn declared_capacities(&self) -> &[[u32; 3]] {
+        &self.declared_capacities
+    }
+
     /// The node a name addresses, as the `(layer, index)` every other surface
     /// in this system uses.
     ///
@@ -3882,9 +3943,11 @@ impl Set {
     /// many landed.** The declared ones are left where this build put them,
     /// which is what the files just said they are.
     ///
-    /// This is the whole of what a rebuild inherits, and it is one rule: *a
+    /// This is what a rebuild inherits about *values*, and it is one rule: *a
     /// value the code declared comes from the code, and a value anything else
-    /// stated carries*. An author who edits `param radius = 2.0` to `5.0` and
+    /// stated carries*. The attachments are the other half and read the same
+    /// way — [`Set::carry_bound_from`], called beside this at the same install.
+    /// An author who edits `param radius = 2.0` to `5.0` and
     /// saves sees `5.0`, because nothing had stated `radius`; an operator riding
     /// `exposure` keeps their hand on it, because the ride stated it. Those are
     /// the same sentence read from the two ends, and before `Set::moved`
@@ -3947,6 +4010,63 @@ impl Set {
                 continue;
             }
             if self.set_param_at(layer, index, key, value) {
+                carried += 1;
+            }
+        }
+        carried
+    }
+
+    /// **Take the attachments somebody made off the Set going out, and answer
+    /// how many landed.** The ones this build states are left where
+    /// [`crate::swap::Request::bindings`] put them, which is what the request
+    /// just said this Set is driven by.
+    ///
+    /// [`Set::carry_moved_from`]'s rule, one writer along and read the same way
+    /// from both ends: *a binding the request stated comes from the request,
+    /// and one anything else attached carries*. An operator who attaches
+    /// `energy` to a parameter keeps their attachment across a save of the
+    /// `.kir`, for the reason a ride on `exposure` keeps their hand on it —
+    /// [ADR-0282](../../../docs/adr/0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md),
+    /// and
+    /// [ADR-0339](../../../docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md)
+    /// is the record for this half.
+    ///
+    /// **The `.kir` declares nothing here, and that is why there is no `moved`
+    /// set to keep.** A procedure cannot bind — the signal bus is not readable
+    /// from IR (ADR-0251) — so every binding a freshly built Set holds arrived
+    /// on the request, and every binding the outgoing Set holds at an address
+    /// the request did not name is one somebody attached live. The two are
+    /// told apart by the address rather than by a second memory, which is the
+    /// difference between this and the params beside it.
+    ///
+    /// **Addressed by `(layer, index, key)`**, which is exactly the triple
+    /// [`Set::bind`] keys *at most one binding per address* on: a wildcard
+    /// attachment and an addressed one are two attachments, and a request
+    /// stating one of them carries the other.
+    ///
+    /// **A take-back does not carry, and it is the same asymmetry the params
+    /// have.** [`Set::unbind`] on a key the request states puts the request's
+    /// binding back at the next rebuild, because what the request states is
+    /// this build's answer for that address — the same clause that stops a
+    /// loaded preset from coming up wearing a ride.
+    ///
+    /// **On the render thread and allocation-bounded**, on
+    /// [`Set::carry_moved_from`]'s terms: it clones the attachments the
+    /// outgoing Set holds — a handful of `String`s once per swap, on the frame
+    /// that is already reallocating render targets — and never allocates per
+    /// frame. [`Set::bind`] refuses a key this build no longer declares, so a
+    /// rebuild that dropped the parameter passes the attachment over in
+    /// silence, exactly as a carried value that lands nowhere is passed over.
+    pub fn carry_bound_from(&mut self, outgoing: &Set) -> usize {
+        let mut carried = 0;
+        for binding in &outgoing.bindings {
+            let stated = self.bindings.iter().any(|b| {
+                b.layer == binding.layer && b.index == binding.index && b.key == binding.key
+            });
+            if stated {
+                continue;
+            }
+            if self.bind(binding.clone()) == Bound::Yes {
                 carried += 1;
             }
         }
@@ -4058,6 +4178,32 @@ impl Set {
         if !self.interface.is_empty() {
             return self.interface.clone();
         }
+        self.declared_interface()
+    }
+
+    /// **Every control this Set declares, as the interface it would publish if
+    /// nobody had narrowed it** — the same list [`Set::published`] answers with
+    /// on a Set whose interface is empty, and the same list whether one is
+    /// authored or not.
+    ///
+    /// # Why a surface needs it, and why `published` is not enough
+    ///
+    /// **Narrowing is a choice of attention**
+    /// (`docs/adr/0100-a-published-interface-is-a-choice-of-attention.md`), and
+    /// a choice is made *from* something. A console that can only see
+    /// [`Set::published`] can take a control off the interface and can never
+    /// offer it back, because the control it removed is no longer in anything
+    /// it can read — the name, the address and above all the **declared range**
+    /// it would have to be republished over are gone with it. So this is what a
+    /// surface offering that choice reads, and [`Set::published`] stays what it
+    /// draws.
+    ///
+    /// **It is the declaration and never the state.** Nothing here reads
+    /// `interface`, so the answer does not move when somebody narrows; what
+    /// moves it is a rebuild, which is what changes what the material declares.
+    ///
+    /// Allocates, on [`Set::published`]'s terms and for its reason.
+    pub fn declared_interface(&self) -> Vec<Published> {
         // **The default interface, computed rather than stored.** Storing it
         // would make "publishes everything" a list that a rebuild has to
         // regenerate and a Set file has to carry — and the first `publish` call

@@ -108,3 +108,23 @@ note 55 -> blend 3 max
 
 cc 20 -> exposure
 note 61 -> tap
+
+# -- inside a Set -----------------------------------------------------------
+#
+# `param <deck> <position>` is a control of the Set on that deck, by its place
+# in the published interface — the number the Inspector draws beside the row,
+# counting from one. **A position and never a name**: knob 3 is knob 3 whatever
+# Set is loaded, where a name would be a mapping you paid for again on every
+# swap. The same Set in two decks is two addresses, because the deck is in the
+# address.
+#
+# The range is the Set's own — what it published the control over — unless the
+# line writes one, which wins as it does on a gain. A control the Set does not
+# publish has no position and the line reports itself once and does nothing.
+#
+# These are the lines `learn` writes: arm it on the transport row, point at a
+# control, move a knob. What it writes goes into `<store>/maps/default.map`
+# rather than here — nothing in the program writes this file.
+
+# cc 30 -> param 0 1
+# cc 31 -> param 0 2 [0, 2]

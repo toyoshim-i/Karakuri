@@ -82,6 +82,19 @@ the condition is unchanged too — somebody writing the compositing down — and
 `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`
 records a writable L5 as **deferred rather than refused**, with what would revive it.
 
+**And on 2026-09-10 the deferral was taken up, which does not move the condition an inch
+today.** Asked whether a procedure that is a Library row could be dragged from the library
+onto the master chain, the maintainer answered *進める（M5.15 の後）* — proceed, after M5.15 —
+so `kind L5` is decided: the language gains the kind, the master chain becomes an **ordered
+list of L5 slots**, and the three fixed passes ship as procedures under `examples/`. That is
+the *somebody writing the compositing down* this paragraph names, so **the condition above
+lapses when M5.16 builds and not before**. Everything written above is still what the
+compiler does — `Kind::ALL` is five, `parse.rs` is untouched, `kind L5` is refused where it
+is written — and what changes the day it lands is written once, at
+[L5, written](#l5-written--not-built), with
+[ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
+the record and [roadmap.md](roadmap.md)'s M5.16 the work.
+
 **A note on the word, because it is used in two senses here.** A bare **layer** in this
 specification is a **kind** — the `layer` field on a record names one, and so does every
 bare use in the prose below. The other sense is *what one deck slot contributes to the
@@ -2290,7 +2303,7 @@ without either appearing in the file.
   — `{"t":"bind","key":"glow.y",…}` — is ordinary.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`,
-  `look`, `master_out`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
+  `look`, `master_out`, `master_chain`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
   rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
   Set renders at whatever size it is handed, so a Set file that carried one would resize
   every *other* Set in the deck by being loaded.
@@ -2646,11 +2659,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `canvas`, `procedure`, `authority`, `ride`, `source` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `residency`, `look`, `master_out`, `master_chain`, `canvas`, `procedure`, `authority`, `ride`, `source` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Fifteen records carry what an operator moves — thirteen states and two events:
+or off air. Sixteen records carry what an operator moves — fourteen states and two events:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -2829,7 +2842,57 @@ for `look`'s reason: it is applied to the fold rather than to anything folded. F
 zero and **open above 1.0**, because the pipeline is linear HDR and this level is applied to
 values no tone mapper has seen yet.
 
-`level`, `mode` and `op` are strings for the same reason `curve` and `noise.kind` are: an
+**`master_chain` is what the three fixed passes of the master chain are set to**, whole:
+
+```ndjson
+{"t":"master_chain","feedback":0.5,"cut":"exit","bloom":0.8,"rgb_shift":0.2}
+```
+
+The passes are feedback, then bloom, then rgb shift, between `master_out`'s level at the chain's
+entry and `look`'s exposure at the tone mapper's input. **Nothing here names which effects are in
+the chain or in what order**: they are fixed built-in presets, so a record carrying the order would
+be recording a constant
+([ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
+`feedback` is `[0, 0.95]`, and the ceiling is short of 1.0 on purpose — under the `exit` cut the
+pass is an accumulator, so an amount of 1.0 has no decay in it and a still frame runs away with
+nothing in the picture to warn anybody first. `bloom` and `rgb_shift` are `[0, 1]`, and the second
+is a fraction of 2% of the frame's **height** rather than a count of texels, so a session replayed
+at another resolution shifts the same distance. `cut` is which frame feedback reads: `mix`, the
+frame as the mixer wrote it before this chain touched it — one echo and not a trail — or `exit`,
+this chain's own output, which compounds. What a bloom blooms *from* is not on the line: the knee is
+1.0 and the radius is fixed, and neither is a control.
+
+**Written whole, which is `look`'s argument at one more row.** The same 0.5 is a one-frame echo
+under `mix` and a compounding trail under `exit`, so an amount without its cut is not a picture
+anybody can reconstruct, and a stream that moved the bloom without saying where the feedback stood
+would describe a chain a replay could not put back. Three records, one per pass, was refused on
+exactly that; the place that turns a press into this one already knows the chain that is running and
+fills the rest in, the way a `look` record is completed with the operator a control change cannot
+say.
+
+Session-wide and never per slot, for `master_out`'s reason: the chain reads what the fold produced,
+after every deck's edge has been applied. **And a record of its own rather than a fifth field on
+`master_out`**, which is that record's own argument against being folded into `look`: the out is a
+**level**, ridden continuously by a fader, and this is a set of **settings** moved by a press —
+folded, a fader ride would rewrite four settings sixty times a second and a settings change would
+rewrite the level a hand was holding.
+
+Every amount is floored at zero and capped where the record is **applied** and at no surface, and a
+cut word this build has not got is refused rather than defaulted: a default there would not report a
+wrong level, it would silently play one echo where the session had a trail. A replay decodes the
+line in `karakuri-cli`'s `mix::change` and puts it back through `Present::set_chain`, the same
+setter a live press reaches, so no path sets a chain behind the record's back. `--replay` starts
+from every amount at zero, which records no pass at all, because no flag names a pass of this chain
+and a flag writes into a record rather than inventing one
+([ADR-0046](adr/0046-a-flag-writes-into-the-record-it-does-not-invent-one.md)). **What has no writer
+yet is the press**: no key on the CLI's surface names a pass, so a stream `--record-session` writes
+carries none of these today.
+
+**The four fields are the shape M5.16 replaces.** [*L5, written*](#l5-written--not-built), under
+*Beyond v0.2*, specifies the chain as an ordered list of L5 slots and this record as a `slots`
+array, and says the four-field form is refused rather than read once that lands.
+
+`level`, `mode`, `op` and `cut` are strings for the same reason `curve` and `noise.kind` are: an
 unrecognised value is the engine's to diagnose against what it actually supports, not the
 decoder's to reject before anything can say what the alternatives were.
 
@@ -3577,6 +3640,351 @@ everything else follows: a Set may hold several pipelines, may branch (one L1 re
 L4s) and may merge (several L4s into an L5, several geometries into one node); a deck slot
 takes one texture, so a Set has one output; and "grouping" is not a hierarchy level but a
 name drawn around some nodes.
+
+### L5, written — not built
+
+**Decided on 2026-09-10 and built by nobody.** [kind](#kind) states `L5`'s absence as a
+**condition rather than a principle** — a `kind` says what a procedure lowers to, the
+compositing is fixed, so the one L5 that exists has no code to lower — and names what would end
+it: *somebody writing the compositing down*. This is that, written down and not yet built. No
+parser accepts a line of what follows, no checker enforces it, no generator emits it, and
+`kind L5` is still refused where it is written. The record is
+[ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) and
+the work is [roadmap.md](roadmap.md)'s M5.16.
+
+#### The kind
+
+```
+kind L5        // a frame effect
+```
+
+**`L5 : [Texture] -> Texture`**, which is the signature
+`crates/karakuri-engine/src/node/merge.rs` already writes and [L5 — built](#l5--built) already
+reads: a frame effect is that signature with **one** input, the mixer is the same with several,
+and it is **one kind rather than two**
+([ADR-0098](adr/0098-l5-is-one-node-kind-with-two-roles.md)). So the
+[layer algebra](#kind) gains a line rather than an exception, and `crate::node::Merge` keeps its
+place beside the written kind exactly where the built-in orbit camera keeps its place beside
+`kind L3` — a node with no procedure has no `kind`, gets no `slot` record, and is described by a
+record of its own.
+
+Its required block joins the table at [kind](#kind):
+
+| Kind | Must declare | Must have |
+|---|---|---|
+| L5 | — | `frame` |
+
+**A `frame` block is a fullscreen fragment body**, evaluated once per texel of the frame it is
+handed and never more: this is the [fullscreen](#fullscreen) L4's shape with the camera taken
+out, and most of the rules below are that sentence read out loud.
+
+```
+proc rgb_shift {
+  kind L5
+
+  param amount : float [0.0, 1.0] = 0.0
+
+  frame {
+    let d = frame_step(0.02 * amount);
+    let centre = texel(src);
+    let r = tap(src, point_coord + vec2(d.x, 0.0));
+    let b = tap(src, point_coord - vec2(d.x, 0.0));
+    color = vec4(r.x, centre.y, b.z, centre.w);
+  }
+}
+```
+
+#### What an L5 reads
+
+- **`src` — the incoming texture**, and it is implicit rather than declared: what a chain slot is
+  handed is decided by its position in the chain, and what a nested L5 is handed is decided by
+  the `edge`s into it, so a procedure that named its own supplier would be coupled to one
+  arrangement ([P-0086](principles/0086-a-procedure-knows-only-what-it-declares.md)). It is
+  reserved in this layer the way `color` is reserved in an L4, and it is readable in no other
+  block.
+- **`color` is the one output and is required**, `vec4`, linear and unclamped. Same name and same
+  type as an L4's, because it is the same value at the next node down.
+- **`point_coord`**, 0..1 across the frame, x to the right and y down — the same sentence it
+  already means everywhere else, and the coordinate `tap` takes.
+- **`t`, `beats` and `dt`.** A frame effect that moves with the room is the ordinary case, and
+  all three come from a record rather than a clock
+  ([P-0092](principles/0092-the-same-inputs-produce-the-same-frame.md)), so reading them costs
+  a replay nothing. `beats` is the signal rule's one exception here as everywhere
+  ([Ambient values and the signal rule](#ambient-values-and-the-signal-rule)).
+- **Its own `param`s**, on every rule [param](#param) already states — the range mandatory, a
+  vector driven one component at a time, intensity-like values free to exceed 1.0.
+- **`held`, and only under [`retains`](#retains-and-which-cut-is-the-chains-answer)** — a
+  retained cut of the previous frame, read with the same two builtins `src` is.
+
+**The other eight ambients are refused, each by name and each with its own sentence.** `seed`,
+`copy` and `source` are per-element identity and a frame pass has no element, which is
+[fullscreen](#fullscreen)'s rule rather than a second one; `point` is the [`field`
+block](#the-field-block)'s and nothing else's; `capacity` is a geometry's; and `camera`, `eye`
+and `ray` are refused on what an L5 is standing on — the frame it is handed may hold several
+decks' material seen from several cameras, so there is no one viewpoint for them to name and a
+procedure that read one would be describing a picture that is not in front of it.
+
+#### What an L5 may not declare
+
+- **No geometry declaration**: `capacity`, `topology`, `amplify`, `emit`, `consumes` and `blend`
+  are all refused at the header, on the terms every misplaced declaration is refused. An L5
+  counts nothing, spawns nothing, kills nothing and stores nothing.
+- **No `vertex` block.** A `frame` block is the whole of it, and the absence of a vertex stage is
+  not a declaration here as it is on an L4 — an L5 has no per-element form for it to be a
+  declaration *against*.
+- **No `uses … : Geometry`, `: Camera` or `: Source`.** All three are element-level, and an L5 is
+  handed a picture rather than the material that made it.
+- **No `uses … : Field`**, which is the one refusal that has to be argued rather than followed.
+  The four kinds that may evaluate a field are the four that have a position in space to evaluate
+  it at; an L5 has a frame coordinate, `eye` and `ray` are refused above, and a field marched
+  from a viewpoint an L5 cannot name would be a shape drawn against nothing.
+- **`uses … : Texture` is legal on an L5 and nowhere else**, any number of them, bound by an
+  [`edge`](#set-file-format) like every other slot. This is the nested role's fan-in and it is
+  the fan-in [architecture.md](architecture.md) says is already solved: `uses` plus `edge`, with
+  no new mechanism.
+
+  **A chain slot's L5 declares none.** The master chain is an ordered list and its only fan-in is
+  that order; there is no Set for an `edge` to be written in, so a procedure with a `Texture` slot
+  is refused *from a chain slot* rather than from the language. That refusal is where the chain is
+  built, beside the one that refuses an unbound slot.
+
+#### `retains`, and which cut is the chain's answer
+
+```
+kind L5
+retains
+```
+
+**A bare declaration and no operand.** It says *this procedure reads a retained frame*, and it
+makes `held` readable in the `frame` block. Which cut is retained is not the procedure's to
+know — P-0086 again, and the same division `uses` and `edge` already draw: the file declares, the
+place that instantiates it answers.
+
+**A chain slot answers it with a cut, `mix` or `exit`**, which are
+[ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)'s
+two words unchanged, so no second spelling enters for a value the record already carries:
+
+- **`mix`** — the frame as the mixer wrote it, before the chain touched it. One echo and not a
+  trail.
+- **`exit`** — the chain's own output, after the last slot and before the tone map. A trail,
+  because what is read back already contains it.
+
+**The engine allocates a retention only where a slot's answer names one**, which is ADR-0317's
+own rule and the reason the declaration exists at all: a cut that is read has to be held, and
+holding one nothing reads is the cost nobody would pay
+([P-0091](principles/0091-cost-is-known-before-it-is-paid.md)). At most two are ever allocated —
+one per cut — however many slots declare `retains`, because two slots reading `exit` read one
+frame. A `cut` on a slot whose procedure does not declare `retains` is refused rather than
+ignored, and a slot whose procedure declares `retains` and whose record carries no `cut` is
+refused the way an unbound slot is.
+
+**The retained frame is sanitised where it is written and not where it is read.** A non-finite
+texel is dropped at the copy, so a `.kir` neither needs the guard nor can leave it out — which is
+`crates/karakuri-engine/src/shaders/master.wgsl`'s `keepable` moved one step earlier, for the
+reason that comment already gives: the value belongs to the pass's own history, nothing renders
+it, no fader is under it, and a NaN read back into the frame it came from outlives its cause.
+
+#### The two roles
+
+[ADR-0098](adr/0098-l5-is-one-node-kind-with-two-roles.md)'s split survives the kind intact, and
+what differs between the two roles is still **only whether a surface is attached**:
+
+- **A master chain slot.** What an operator rides. One input, no `edge`, its params on the Master
+  bay's rows.
+- **Nested in a Set.** Several `uses … : Texture` slots bound by `edge`s, folding renderers into
+  the one `Texture` a Set outputs, with no surface at all.
+
+`gain`, `opacity`, `blend` and `mask` remain properties of **an edge into an L5** and travel with
+it; residency, priming, hot swap, budget governance, transport and metering remain properties of
+**a Set being played**. A written L5 changes neither list.
+
+#### Three builtins, and why each is a builtin rather than a spelling
+
+| | |
+|---|---|
+| `texel(Texture) -> vec4` | The texture's value **at this fragment**, unfiltered and unresampled. No coordinate argument, deliberately: a coordinate is an invitation to resample, and the centre tap of a feedback or a shift has to be the texel itself or a pass at an amount just above zero differs from one that did not run by what a filter did rather than by what the effect is |
+| `tap(Texture, vec2) -> vec4` | A filtered sample at a frame coordinate. The offset taps of a blur and a shift |
+| `frame_step(float) -> vec2` | A distance given **as a fraction of the frame's height**, converted into the coordinates `tap` takes — `.x` across, `.y` down, isotropic in texels at any aspect ratio |
+
+**`frame_step` is the one that is load-bearing rather than convenient.** A displacement across a
+frame is the one thing a frame effect cannot express without knowing the render size, and no
+ambient carries it: `Ambient::ALL` has no `viewport` on purpose, because the render size is not
+part of the picture (P-0086) and one frame is rendered at the largest enabled output's size and
+scaled into the rest ([ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)).
+So the conversion is a builtin that performs it without handing the number over, and a `.kir`
+that wants a radius in texels has no way to write one. This is `master.wgsl`'s `step_uv` with the
+same arithmetic and one fewer thing exposed.
+
+**Nothing else is added.** Loops are what they already are — bounds are signed integer literals,
+no `while`, no recursion, nested loops multiplying into the estimate
+([ADR-0252](adr/0252-the-language-is-bounded-so-a-price-can-be-computed-before-anything-is-built.md)) —
+and that is what prices a tap count before anything is built.
+
+#### The master chain is an ordered list of L5 slots
+
+**A slot holds one L5 procedure, its params, and its `cut` where the procedure declares
+`retains`.** The chain is the ordered list of them, `src` of the first slot is what the mix
+wrote, `src` of every other slot is what the slot before it wrote, and what the last slot writes
+is what the tone map reads.
+
+**It is a master setting and not a Set's**, which is
+[ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md)'s
+reading unchanged: the chain sits one level out from every Set on the panel, so a Set that
+carried it would reconfigure the master the moment it was loaded into any deck. It is not a deck
+slot's either — it reads what the fold produced, after every deck's edge has been applied. There
+is one chain.
+
+**The default chain is empty**, and that is what keeps the default look free: with no slots the
+mix writes straight into the target the present pass reads and the frame is bit for bit the frame
+this program drew before any of this existed.
+
+**An amount of zero is not a skip.** The three fixed passes were always loaded, so
+ADR-0317's rule — an amount of zero records no pass at all — was the only way to stop paying for
+one nobody was using. A list has a better spelling for *no pass*: no slot. So a slot that is in
+the chain runs, at zero as at one, and what a chain costs is the slots it holds rather than a
+function of the values in them. That is the shape P-0091 prefers on its own terms — a constant
+cost rather than one that appears and disappears under a hand riding a fader through zero — and
+it is what lets the estimate below be a number rather than a bound.
+
+#### The three fixed passes become three shipped procedures
+
+`examples/feedback.kir`, `examples/bloom.kir` and `examples/rgb_shift.kir`, in the presets tier
+that already holds `surface.map` and the `.kir`s, and which nothing in this program writes
+([P-0096](principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)).
+
+**Two of the three are the hand-written bodies term for term.** `fs_feedback` is `texel(src)` plus
+an amount of `texel(held)`; `fs_rgb_shift` is the example at the top of this section. Both are
+inside the language as it stands once the three builtins exist.
+
+**Bloom is not, and the gap is worth stating rather than designing around.** The hand-written
+bloom is **two** passes with an intermediate target between them — bright-and-blur-x, then
+blur-y-and-add — and a written L5 is one pass with one input and no target it can name. Expressed
+as one pass the separable 9-tap blur becomes a 9×9 kernel: **81 fetches per texel where the pair
+costs 19**, at the same radius and the same picture. So the shipped `bloom.kir` is one pass of 81
+taps, written as two literal-bounded loops so the estimate multiplies them out, and **M5.16 owes a
+fresh measurement** — ADR-0317's 0.80 ms for bloom was taken on the two-pass form and does not
+describe this one. What would close the gap is a procedure that can name a second output, which
+is not taken here and is not owed by anything.
+
+**What the language buys back on the same page**: bloom's knee and radius stop being constants in
+a shader nobody can see and become **literals in a file anybody can read**. They are still not
+controls, and ADR-0317's argument for that is untouched — the tap count is what a radius costs —
+but a different radius is now a different procedure, priced when it is compiled instead of
+refused as a knob. That is the ordinary shape of this language rather than a concession.
+
+#### Cost
+
+**An L5 is priced on `ops_per_fragment` and is zero on the other two axes.** It has no element
+and no spawn, so there is nothing for `ops_per_element` or `ops_per_spawn` to be a rate against —
+which is the [`Field`](#the-field-block)'s shape rather than a new one, a kind whose figure lives
+on one axis and whose other figures are zero. The three axes are still never summed
+([ADR-0013](adr/0013-cost-has-three-axes-that-must-not-be-added.md)).
+
+**The ceiling is the fullscreen one**, and for the fullscreen renderer's reason verbatim: the
+per-element ceiling of 512 stands in for `capacity` sprites times their area times whatever they
+overlap, and an L5 covers the frame exactly once with nothing overdrawing, so the stand-in has
+nothing to stand in for. `MAX_OPS_PER_FULLSCREEN_FRAGMENT` is what it is held to, per slot.
+
+**A chain's cost is the sum over its slots, and that is not the addition ADR-0013 forbids.** The
+rule there is that three *different* quantities must not be added; these are rates against **one**
+quantity — the frame's texels, covered once by every slot — so the sum is what the chain costs per
+texel and means exactly what one slot's figure means. It is stated here because it looks like the
+forbidden thing.
+
+**In milliseconds, at the output's size.** A frame is rendered once at the largest enabled
+output's size and scaled into the rest (ADR-0247,
+[ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)),
+so the chain's price is its ops per texel against **that** area, and it moves when an output is
+enabled. A measurement of it names which resolution it is about
+([ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md)).
+That is the number the governor spends where the estimate answers
+([ADR-0296](adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)),
+and the chain is charged against the frame beside the decks rather than against any one of them.
+
+**Where each ceiling is checked is the [validation pipeline](#validation-pipeline)'s own
+division**, extended and not amended: stages 1–5 are per artifact, so stage 4 rejects one L5 above
+the per-fragment ceiling and knows nothing about a chain; stages 6–8 are per Set and per frame,
+which is where a chain of slots has a total at all, in the same place `capacity` and the frame
+budget become known.
+
+**Memory is a chain property too.** Two frame-sized `Rgba16Float` targets to ping-pong between
+where the chain has any slot, plus one per retained cut some slot asks for — allocated at build
+and at resize and never when a parameter moves, which is P-0091 and is what ADR-0317 already does
+for four fixed targets.
+
+#### Records
+
+**The session record is `master_chain`, one record written whole, and it grows a list where it
+had four scalars.**
+
+```ndjson
+{"t":"master_chain","slots":[
+  {"proc":"sha256:a3f2c1…","cut":"exit","params":{"amount":0.5}},
+  {"proc":"sha256:77b9e0…","params":{"amount":0.8}},
+  {"proc":"sha256:1d4a8f…","params":{"amount":0.2}}]}
+```
+
+- **Whole, and ADR-0317's argument for that is unchanged**: a stream that moved one slot without
+  saying where the others stood would describe a chain a replay could not put back. The place that
+  turns an operation into this already knows the chain that is running and fills the rest in,
+  exactly as `karakuri-cli`'s `set_exposure` fills in the operator
+  ([ADR-0192](adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+- **`proc` is a content address**, the `slot` record's own spelling. So the *procedures* become
+  part of the state a replay reproduces: a stream naming a procedure the store does not hold is
+  refused with the address in the message rather than played with a different chain.
+- **`cut` is present exactly where the procedure declares `retains`**, carrying `mix` or `exit` as
+  a word for `Record::Blend`'s reason — a word an older build does not know is the engine's to
+  diagnose against what it supports rather than a parse failure that takes the line with it.
+- **The four-field form is not read.** `{"t":"master_chain","feedback":…,"cut":…,"bloom":…,"rgb_shift":…}`
+  is what streams recorded between 2026-09-09 and M5.16 carry, and a build that read both would be
+  carrying two shapes of one record for the length of the project. Before v1 a compatibility cost
+  is a bill rather than an argument
+  ([P-0085](principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)); the bill here
+  is those sessions, and what is owed for it is a refusal that says which shape it found rather
+  than a silent default.
+- **The retained frame stays part of closed state**, which is ADR-0317's determinism paragraph
+  word for word: a copy of a target this chain wrote, from a parameter a record carries, into a
+  target that reads as zero until it is written (P-0092).
+
+**A Set file gains nothing for the chain and one line for a nested L5.** The chain is not Set
+state and `Store::write_set` refuses it, on ADR-0227's argument. A **written** nested L5 is a node
+with a procedure, so it gets a `slot` record like every other node —
+`{"t":"slot","layer":"L5","proc":"sha256:…"}` — and the built-in mix keeps the `merge` record,
+which is [Several cameras](#several-cameras)' arrangement exactly: a written camera has a `slot`
+and the built-in orbit has a `camera` record.
+
+**The library tier is the same list under a name.** ADR-0227 put a chain setting in two tiers and
+left the file to *the record that has something to serialise*; this is that. What is saved is the
+`slots` array above and nothing else, on
+[ADR-0221](adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)'s
+shape — a name the operator typed, one path component, a place of its own under the store root,
+bytes the store hands over whole. The directory's name and the shipped tier's contents are
+[roadmap.md](roadmap.md)'s *Mx — TODO* entry, which is where that half already sits.
+
+#### What is forced and what is chosen
+
+**Forced.**
+
+- The chain runs in linear HDR, unclamped, upstream of the one tone map and the one sRGB encode,
+  so an L5 runs **before** the tone map
+  ([P-0064](principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
+- Every length is a fraction of the frame's height and never a count of texels, which is why
+  `frame_step` exists and why no ambient carries the render size (P-0086, ADR-0247).
+- A procedure knows only what it declares: `src` is implicit, the cut is answered where the slot
+  is, and a `.kir` names no node (P-0086).
+- The retained frame is part of what a replay reproduces (P-0092).
+- Targets are allocated at build and at resize, never when a parameter moves (P-0091).
+- The cost is computable before anything is built, which is what the literal loop bound is for
+  (ADR-0252), and the three axes are not summed (ADR-0013).
+- One kind with two roles, one implementation (ADR-0098).
+- One record, written whole (ADR-0317).
+
+**Chosen, and a wrong one here is a one-clause revision.** The block's name (`frame`) and the two
+reserved names in it (`src`, `held`). The three builtins' names and shapes. `retains` as a bare
+declaration with the cut answered by the slot, rather than `retains mix` in the file. No zero-skip.
+A chain slot's L5 declaring no `uses`. `uses … : Field` refused on an L5. One chain, at the master,
+rather than one per deck. The shipped `bloom.kir` as a single 81-tap pass. And that the four-field
+`master_chain` record is refused rather than read.
 
 ### Metadata file format — partly built
 

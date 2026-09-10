@@ -45,6 +45,7 @@ use karakuri_operation::{Authority, Layer, NodeAt, Operation, Sync};
 /// three nodes is not one of them.
 fn renderers() -> Node {
     Node {
+        uses: Vec::new(),
         addr: "L4".to_owned(),
         name: "renderers".to_owned(),
         authority: None,
@@ -75,6 +76,7 @@ fn shell() -> Node {
             },
             level: Authority::Manual,
         }),
+        uses: Vec::new(),
         renderers: Vec::new(),
         params: Vec::new(),
     }
@@ -91,6 +93,9 @@ fn mock() -> Pane {
         anchor_bpm: 128.0,
         scrub_beats: 0.0,
         composite: true,
+        // Not this test's row: the deck head's two build chips are
+        // drawn from this and nothing here is about them.
+        aimed: None,
         nodes: vec![renderers(), shell()],
     }
 }
@@ -361,6 +366,9 @@ fn a_press_names_the_panes_own_deck() {
 fn an_overdrawn_deck_draws_its_chips_and_claims_none() {
     let pane = Pane {
         composite: false,
+        // Not this test's row: the deck head's two build chips are
+        // drawn from this and nothing here is about them.
+        aimed: None,
         ..mock()
     };
     let (panel, ctx) = console(PLAUSIBLE);

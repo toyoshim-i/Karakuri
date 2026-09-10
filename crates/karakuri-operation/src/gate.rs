@@ -356,7 +356,8 @@ pub fn audit<'a>(
 /// **[`Operation::LoadSet`] names its deck**, because its class turns on the
 /// deck being live: two identical calls are answered differently a minute
 /// apart, and a refusal that only said *closed* would be unfixable by the model
-/// that got it.
+/// that got it. **[`Operation::LoadProcedure`] is the same class and names its
+/// deck for the same reason.**
 pub fn refusal(operation: &Operation, standing: Standing) -> Option<String> {
     let title = operation.title();
     Some(match standing {
@@ -381,10 +382,13 @@ pub fn refusal(operation: &Operation, standing: Standing) -> Option<String> {
 }
 
 /// The clause a refusal owes where the class turned on more than the
-/// operation's name. Empty for every row but one — see [`refusal`].
+/// operation's name. Empty for every row but the two loads — see [`refusal`].
 fn because(operation: &Operation, class: Class) -> String {
     match (operation, class) {
-        (Operation::LoadSet { deck, .. }, Class::LiveDeck) => format!(" (deck {deck} is live)"),
+        (Operation::LoadSet { deck, .. }, Class::LiveDeck)
+        | (Operation::LoadProcedure { deck, .. }, Class::LiveDeck) => {
+            format!(" (deck {deck} is live)")
+        }
         _ => String::new(),
     }
 }
@@ -441,6 +445,17 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         // into a slot that is not live touches nothing on air; loading into one
         // that is replaces the picture.
         Operation::LoadSet { deck, .. } => match running.live {
+            None => Standing::Unread(Reading::Live),
+            Some(live) if live.contains(deck) => Standing::Closed(Class::LiveDeck),
+            Some(_) => Standing::Open,
+        },
+        // **`LoadProcedure` is `LoadSet`'s class exactly**, and it is the same
+        // predicate rather than a second one: it re-points the same slot
+        // through the same watcher, differing only in how many of the aim's
+        // files it replaces. Loading a layer into a slot that is not live
+        // touches nothing on air; loading one into a slot that is live
+        // replaces the picture.
+        Operation::LoadProcedure { deck, .. } => match running.live {
             None => Standing::Unread(Reading::Live),
             Some(live) if live.contains(deck) => Standing::Closed(Class::LiveDeck),
             Some(_) => Standing::Open,
@@ -518,7 +533,25 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SetTransition { .. } => Standing::Open,
         Operation::WireInput { .. } => Standing::Open,
         Operation::SaveSet { .. } => Standing::Open,
+        // **A library write beside `SaveSet` and for `SaveSet`'s reason.** It
+        // puts one node's source in a file beside the library and moves no
+        // deck, no fader and no pixel; at its worst, on the frame it goes
+        // wrong, what it has done is written a `.kir` under the store.
+        Operation::KeepProcedure { .. } => Standing::Open,
         Operation::ListSets { .. } => Standing::Open,
+        // **A narrowing of what one bay is drawing.** P-0094's question comes
+        // back empty on every count: it changes which rows an operator is
+        // looking at and nothing about what any deck is doing, which is
+        // `SelectScope`'s answer arrived at from the other side.
+        Operation::FilterLibrary { .. } => Standing::Open,
+        // **Open where `SelectDeck` is closed, and the difference is what a
+        // wrong one costs.** The deck selection is
+        // `ClosedUnclassed(Unclassed::Selection)` because it decides where
+        // every later keyed operation lands, so a wrong one puts the next
+        // press on the wrong deck. A pane's target addresses nothing — every
+        // operation the Inspector emits names its deck outright — so a wrong
+        // one redraws a pane.
+        Operation::PointPane { .. } => Standing::Open,
         Operation::SelectScope { .. } => Standing::Open,
         // **A star changes nothing that is on air.** P-0094's question asked
         // of it comes back empty on every count: at its worst, on the frame it
@@ -721,20 +754,29 @@ mod tests {
             },
             Operation::SetProperty {
                 deck: 0,
-                property: Property::Seed {
-                    node: node(),
-                    salt: 1,
-                },
+                property: Property::Seed { salt: 1 },
             },
             Operation::SetAuthority {
                 deck: 0,
                 node: node(),
                 authority: Authority::Manual,
             },
+            Operation::KeepProcedure {
+                deck: 0,
+                node: node(),
+                id: None,
+            },
+            Operation::PointPane {
+                pane: "inspector-1".into(),
+                deck: 0,
+            },
             Operation::SaveSet { deck: 0, id: None },
             Operation::ListSets {
                 holds: None,
                 layer: None,
+            },
+            Operation::FilterLibrary {
+                kinds: crate::LibraryKinds::EVERYTHING,
             },
             Operation::SelectScope { scope: Undecided },
             Operation::SetFavourite {
@@ -746,6 +788,10 @@ mod tests {
                 transfer: SetTransfer::Send { id: "a".into() },
             },
             Operation::WalkHistory { step: Undecided },
+            Operation::LoadProcedure {
+                deck: 0,
+                procedure: "orbit_wide".into(),
+            },
             Operation::ReadProcedure {
                 deck: 0,
                 node: node(),
@@ -853,21 +899,25 @@ mod tests {
         }
     }
 
-    /// **40 closed, 24 open, 64 total** — ADR-0235's count less the one row
-    /// ADR-0240 retired and plus the one ADR-0299 added. It is still the one
-    /// number that says the classification was applied to the whole vocabulary
-    /// rather than to the rows somebody remembered: the record read 41, 23, 64,
-    /// *Choose what the output shows* leaving the vocabulary took one off the
-    /// closed side and off the total, and *Star a Set, or take the star off*
-    /// puts one back on the open side and on the total.
+    /// **41 closed, 27 open, 68 total** — ADR-0235's count less the one row
+    /// ADR-0240 retired, plus the one ADR-0299 added, plus ADR-0338's four. It
+    /// is still the one number that says the classification was applied to the
+    /// whole vocabulary rather than to the rows somebody remembered: the record
+    /// read 41, 23, 64, *Choose what the output shows* leaving the vocabulary
+    /// took one off the closed side and off the total, *Star a Set, or take the
+    /// star off* put one back on the open side and on the total, and ADR-0338
+    /// adds *Load a procedure over a layer* to the closed side and
+    /// *Filter the library by kind*, *Keep a node's procedure* and
+    /// *Point an Inspector pane at a deck* to the open one.
     ///
-    /// **Counted with the deck `LoadSet` names live**, because that is how the
-    /// record counts it: the row is listed under *what a live deck is drawing*
-    /// and the 40 includes it. It is the one row whose standing is not a
-    /// function of the operation alone, so the split is a split *given a
-    /// reading* — and the reading that makes it 40 is the one the class was
-    /// drawn for. With nothing live it is 39 and 25, which is the same
-    /// classification and not a second one.
+    /// **Counted with the deck the two loads name live**, because that is how
+    /// the record counts it: `LoadSet`'s row is listed under *what a live deck
+    /// is drawing* and the closed count includes it, and `LoadProcedure` is the
+    /// same predicate over the same slot. Those two are the only rows whose
+    /// standing is not a function of the operation alone, so the split is a
+    /// split *given a reading* — and the reading that makes it 41 is the one
+    /// the class was drawn for. With nothing live it is 39 and 29, which is the
+    /// same classification and not a second one.
     #[test]
     fn the_classification_is_the_split_adr_0235_states() {
         let running = Running::live(DECK_0_IS_LIVE);
@@ -881,7 +931,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!((closed, open, closed + open), (40, 24, 64));
+        assert_eq!((closed, open, closed + open), (41, 27, 68));
     }
 
     fn members(class: Class) -> Vec<&'static str> {
@@ -895,7 +945,9 @@ mod tests {
     }
 
     /// **What a deck that is live is drawing is closed until the Program bay
-    /// opens it**, and `LoadSet` is in it only while the deck it names is live.
+    /// opens it**, and the two loads are in it only while the deck they name is
+    /// live. *Load a procedure over a layer* is last because it is in *The
+    /// library* section of the page and this list is in the page's order.
     #[test]
     fn what_a_live_deck_is_drawing_is_closed_until_the_program_bay_opens_it() {
         assert_eq!(
@@ -910,6 +962,7 @@ mod tests {
                 "Take a parameter back",
                 "Narrow the published interface",
                 "Element capacity, seeds, the camera",
+                "Load a procedure over a layer",
             ]
         );
         assert_eq!(Class::LiveDeck.bay(), "Program");

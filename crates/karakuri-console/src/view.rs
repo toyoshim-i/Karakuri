@@ -289,6 +289,7 @@ use karakuri_operation::{
 };
 
 use crate::budget::{Declared, PANEL_PASS};
+use crate::focus::{self, Focus};
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
 
@@ -2856,21 +2857,27 @@ impl Transport {
 ///
 /// # What is in the mock's row and is deliberately not here
 ///
-/// **Two of the mock's items in this row are still not drawn**, and each is a
-/// control over machinery that is in neither this crate nor the program.
-/// Drawing one is the scaffolding this module's documentation refuses — a pill
-/// that looks like a control and does nothing does not get replaced:
+/// **The list is empty as of 2026-09-10, and that is a state rather than a
+/// deletion.** It held `learn` and `map · nanoKONTROL2 ▾` — *"each a control
+/// over machinery that is in neither this crate nor the program"* — and both
+/// are drawn now:
 ///
-/// - `learn` is MIDI learn, and its own tooltip says what it would do —
-///   *"Click, then point at any control and move a knob on your surface, and
-///   the two are mapped."* There is no map and no learn mode.
-/// - `map · nanoKONTROL2 ▾` is the map in use, *and it is a file*. None is
-///   loaded, saved or recalled anywhere here, and a menu naming a device
-///   nobody has plugged in is worse than no menu. **It is the one item in this
-///   list that has a twin that is drawn**: [`arrangement`] is this pill's
-///   shape over a file that does exist, which is the manual's own argument for
-///   putting the arrangement family in this row — and [`audio_in`] is the same
-///   shape a third time, over a device.
+/// - `learn` is [`learn_pill`], and the machinery arrived with
+///   `docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`:
+///   the panel opens a port at start-up, and a press on this arms the gesture
+///   the mock's tooltip describes.
+/// - `map · <name>` is [`map_pill`], **and it is a readout**. What was written
+///   against it was that *"a menu naming a device nobody has plugged in is
+///   worse than no menu"*, and that half is unchanged — reaching a map while
+///   running is not built, so the pill has no chevron and no menu and says
+///   which file is loaded. A capsule that looked like a menu and opened none
+///   would still be the scaffolding this module refuses; one that states a
+///   true thing is not.
+///
+/// **The rule that emptied it is the one that kept them out**: a control is
+/// drawn when there is something behind it. [`arrangement`] was the first item
+/// in this row to pass that test and [`audio_in`] the second; these are the
+/// third and fourth.
 ///
 /// **`● rec` left this list on 2026-09-08**, and what was written against it
 /// was that *"there is no session recorder behind this panel and no record
@@ -4994,6 +5001,197 @@ fn tracker_into(ui: &Ui, pal: &Palette, group: &TrackerGroup) {
 }
 
 // ---------------------------------------------------------------------------
+// learn, and the map it writes into
+// ---------------------------------------------------------------------------
+
+/// **What the `map` pill reads** — the name of the map file in use, or `None`
+/// for a surface running without one.
+///
+/// [`AudioIn`]'s shape one pill along, and it is the same seam: a map is a
+/// file, `src/` reads none (ADR-0156), so whoever loaded one writes its name
+/// here and this crate draws it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MapPill {
+    /// What the map is called — the file's stem, which is the name an operator
+    /// gave it and not its path (P-0087).
+    pub name: Option<String>,
+}
+
+impl MapPill {
+    /// **A surface with no map**, which draws `map · none`. It is a state and
+    /// not an absence: a run that opened a port and found no file to load is
+    /// one an operator can still learn into.
+    pub const NONE: MapPill = MapPill { name: None };
+
+    /// What the pill says after `map ·`.
+    pub fn word(&self) -> &str {
+        self.name.as_deref().unwrap_or(NO_MAP)
+    }
+}
+
+/// **What the pill says where no map is loaded**, and it is deliberately not a
+/// name: `none` is a word for a state, where a name would be a reading this
+/// console invented. [`NO_ARRANGEMENT`]'s argument one pill along, and the
+/// same shape [`audio_text`] uses for an input nobody opened.
+const NO_MAP: &str = "none";
+
+/// The `learn` pill's word, which is the whole of its label.
+const LEARN_LABEL: &str = "learn";
+
+/// The `map` pill's first word, the mock's own abbreviation — `map · <name>`.
+const MAP_LABEL: &str = "map";
+
+/// **The `learn` pill**: the capsule, and whether it is lit.
+///
+/// **A pill and not a capsule with two ends**, which the `rec` control is: a
+/// press means *the other state* and the word never changes, because *learn*
+/// is what the control is rather than what a press will do. It is `.pill.lav`
+/// in the mock, lit while armed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LearnPill {
+    /// **The control**: the capsule a press has to land in.
+    pub pill: Rect,
+    /// Whether learn is armed, read off [`View::learn`] and kept nowhere here.
+    pub armed: bool,
+}
+
+impl LearnPill {
+    /// Whether `p` is on the control.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.pill.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **What a press asks for**, which is a state and never a direction
+    /// (P-0090): the arming, the other way round.
+    ///
+    /// It is a `bool` and not an [`Operation`] because **a learn is not an
+    /// operation** — it is a setting of the map layer every surface reaches
+    /// the vocabulary through, which is `Vocabulary::Setting`'s own shape
+    /// ([ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md),
+    /// and [ADR-0336](../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)
+    /// for the argument against the other reading). The four `mcp` pills are
+    /// the same kind of control and carry no operation either.
+    pub fn next(&self) -> bool {
+        !self.armed
+    }
+}
+
+/// **The `map` pill**: where the readout goes.
+///
+/// **No press and no menu**, which is what makes this a readout rather than
+/// the control the mock draws. The mock's tip says *"Click to save, load, or
+/// start a new one"*, and reaching a map while running is not built — the pill
+/// says which file is loaded and nothing else. A capsule that looked like a
+/// menu and opened none is the scaffolding [`transport`] refuses; a capsule
+/// that says a true thing is not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MapRow {
+    /// The capsule, painted.
+    pub pill: Rect,
+}
+
+/// **Where the `learn` pill goes**, or `None` where there is no room or
+/// nothing to say.
+///
+/// `None` where the console has not been told about a map — `View::map` — for
+/// [`audio_in`]'s reason exactly: a program with no surface has nothing to
+/// learn onto, and a lit-able pill drawn for it would be this crate answering
+/// a question about a device on its own authority.
+///
+/// `layout` must be solved.
+pub fn learn_pill(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    values: Option<Transport>,
+    audio: Option<&AudioIn>,
+    tracker: Option<Tracker>,
+    map: Option<&MapPill>,
+    armed: bool,
+) -> Option<LearnPill> {
+    map?;
+    let row = transport(ctx, layout, values)?;
+    let strip = to_egui(layout.rect(layout.find("transport")?));
+    let text_w = width_of(ctx, LEARN_LABEL);
+    let pill_w = size::PILL_PAD_X * 2.0 + text_w;
+    let mid = strip.center().y;
+    // **Where the group before this one ended** — the tracker group's last
+    // chip, the audio-in pill, or the bar. The same one answer [`arrangement`]
+    // takes, asked two items further back; the gap is the row's own.
+    let after = match (
+        tracker_group(ctx, layout, values, audio, tracker),
+        audio_in(ctx, layout, values, audio),
+    ) {
+        (Some(group), _) => group.double.max.x,
+        (None, Some(before)) => before.pill.max.x,
+        (None, None) => row.bar.max.x,
+    };
+    let pill = Rect::from_min_size(
+        Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
+        egui::vec2(pill_w, size::PILL_H),
+    );
+    // [`outputs_row`]'s rule: a capsule that does not fit in its row is no
+    // control at all rather than half of one over the frame readout.
+    if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
+        return None;
+    }
+    Some(LearnPill { pill, armed })
+}
+
+/// **Where the `map` pill goes**, or `None` where there is no room or nothing
+/// to say.
+///
+/// It follows [`learn_pill`], which is the mock's order — `learn`, then
+/// `map · nanoKONTROL2` — and falls back through the same chain where the
+/// `learn` pill did not fit, so one control dropping for want of room does not
+/// take the next with it.
+pub fn map_pill(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    values: Option<Transport>,
+    audio: Option<&AudioIn>,
+    tracker: Option<Tracker>,
+    map: Option<&MapPill>,
+) -> Option<MapRow> {
+    let map = map?;
+    let row = transport(ctx, layout, values)?;
+    let strip = to_egui(layout.rect(layout.find("transport")?));
+    let words = format!("{MAP_LABEL} · {}", map.word());
+    let pill_w = size::PILL_PAD_X * 2.0 + width_of(ctx, &words);
+    let mid = strip.center().y;
+    let after = match (
+        learn_pill(ctx, layout, values, audio, tracker, Some(map), false),
+        tracker_group(ctx, layout, values, audio, tracker),
+        audio_in(ctx, layout, values, audio),
+    ) {
+        (Some(learn), _, _) => learn.pill.max.x,
+        (None, Some(group), _) => group.double.max.x,
+        (None, None, Some(before)) => before.pill.max.x,
+        (None, None, None) => row.bar.max.x,
+    };
+    let pill = Rect::from_min_size(
+        Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
+        egui::vec2(pill_w, size::PILL_H),
+    );
+    if !strip.contains_rect(pill) || pill.max.x + size::TRANSPORT_GAP > row.frame.min.x {
+        return None;
+    }
+    Some(MapRow { pill })
+}
+
+/// One text measurement, the way every pill in this row takes one.
+fn width_of(ctx: &egui::Context, text: &str) -> f32 {
+    ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            text.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    })
+}
+
+// ---------------------------------------------------------------------------
 // The arrangement pill
 // ---------------------------------------------------------------------------
 
@@ -5469,6 +5667,12 @@ pub fn arrangement(
     values: Option<Transport>,
     audio: Option<&AudioIn>,
     tracker: Option<Tracker>,
+    // **The map, only so this pill knows where the group before it ended.**
+    // `learn` and `map` sit between the tracker group and this one in the
+    // mock, and a console that has not been told about a surface draws
+    // neither — so this is `None` on every run without one and the pill lands
+    // exactly where it did before they existed.
+    map: Option<&MapPill>,
     arr: &Arrangement,
 ) -> Option<ArrangementPill> {
     // The row, asked once and for everything: whether there is one at all,
@@ -5503,12 +5707,16 @@ pub fn arrangement(
     // own either way: what ends before this pill is a whole group, and
     // `.tracker`'s tighter 5 is the gap *inside* that group.
     let after = match (
+        map_pill(ctx, layout, values, audio, tracker, map),
+        learn_pill(ctx, layout, values, audio, tracker, map, false),
         tracker_group(ctx, layout, values, audio, tracker),
         audio_in(ctx, layout, values, audio),
     ) {
-        (Some(group), _) => group.double.max.x,
-        (None, Some(before)) => before.pill.max.x,
-        (None, None) => row.bar.max.x,
+        (Some(map), _, _, _) => map.pill.max.x,
+        (None, Some(learn), _, _) => learn.pill.max.x,
+        (None, None, Some(group), _) => group.double.max.x,
+        (None, None, None, Some(before)) => before.pill.max.x,
+        (None, None, None, None) => row.bar.max.x,
     };
     let pill = Rect::from_min_size(
         Pos2::new(after + size::TRANSPORT_GAP, mid - size::PILL_H * 0.5),
@@ -5676,6 +5884,77 @@ const CARET: char = '▏';
 /// draws, at the same `.lib-row` box and inside the same `.lib-list` padding
 /// (P-0085). It sits on a card with the panel's own shadow under it, which is
 /// what says it is above the bays rather than inside one.
+/// **The `learn` pill, painted** — lavender while armed, the row's own outline
+/// while it is not.
+///
+/// `.pill.lav` is the mock's class on this control and the palette's `lav` is
+/// that colour, so *armed* is drawn in the ink the page already gave it rather
+/// than in one this file chose. The word never changes: *learn* is what the
+/// control **is**, and what a press will do is said by the lamp — which is the
+/// distinction the `rec` capsule draws the other way, being one control with
+/// two ends.
+fn learn_into(ui: &Ui, pal: &Palette, pill: &LearnPill) {
+    let painter = ui.painter();
+    let radius = CornerRadius::same((size::PILL_H * 0.5) as u8);
+    let ink = match pill.armed {
+        true => pal.lav,
+        false => pal.dim,
+    };
+    if pill.armed {
+        painter.rect_filled(pill.pill, radius, pal.tint);
+    }
+    painter.rect_stroke(
+        pill.pill,
+        radius,
+        Stroke::new(size::HAIRLINE, ink),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_no_wrap(
+        LEARN_LABEL.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        ink,
+    );
+    painter.galley(
+        Pos2::new(
+            pill.pill.min.x + size::PILL_PAD_X,
+            pill.pill.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
+}
+
+/// **The `map` pill, painted** — `map · default`, and no chevron.
+///
+/// **The chevron is the one thing left off the mock's own drawing**, and it is
+/// left off on purpose: `▾` on this console means *there is a menu under
+/// this*, which the arrangement pill and the `audio-in` pill both keep, and
+/// there is no menu here. Drawing one over a readout would be the scaffolding
+/// [`transport`] refuses — a control that looks like a control and does
+/// nothing.
+fn map_into(ui: &Ui, pal: &Palette, pill: &MapRow, map: &MapPill) {
+    let painter = ui.painter();
+    painter.rect_stroke(
+        pill.pill,
+        CornerRadius::same((size::PILL_H * 0.5) as u8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_no_wrap(
+        format!("{MAP_LABEL} · {}", map.word()),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.dim,
+    );
+    painter.galley(
+        Pos2::new(
+            pill.pill.min.x + size::PILL_PAD_X,
+            pill.pill.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.dim,
+    );
+}
+
 fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, arr: &Arrangement) {
     let painter = ui.painter();
     painter.rect_stroke(
@@ -6218,12 +6497,23 @@ pub fn unit_of(exposure: f32) -> f32 {
 ///
 /// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
 /// one.
+// **Eight, where clippy's line is seven**, and it went past it when the row
+// gained `learn` and `map`. Every one is a thing the *row before this one* is
+// laid out from — the tempo, the input, the tracker, the map, the arrangement
+// — and this group is the last item in a flex row, so it is laid out from all
+// of them. A struct carrying them would be `View` itself with the fields no
+// pill in this row reads left out, which is `App::new`'s sentence one crate
+// along.
+#[allow(clippy::too_many_arguments)]
 pub fn look(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
     values: Option<Transport>,
     audio: Option<&AudioIn>,
     tracker: Option<Tracker>,
+    // Handed straight to [`arrangement`], which is the item before this one
+    // and the only reason this needs it — see that function's own note.
+    map: Option<&MapPill>,
     arr: &Arrangement,
     look: Option<Look>,
 ) -> Option<LookRow> {
@@ -6232,7 +6522,7 @@ pub fn look(
     // exists at all, and where the group before this one ended. `transport`
     // answers the first for the whole module and `arrangement` is laid out
     // from it, so this is that one answer read one item further along.
-    let pill = arrangement(ctx, layout, values, audio, tracker, arr)?;
+    let pill = arrangement(ctx, layout, values, audio, tracker, map, arr)?;
     let row = transport(ctx, layout, values)?;
     let strip = to_egui(layout.rect(layout.find("transport")?));
     let width = |text: &str| {
@@ -9284,7 +9574,20 @@ fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
 /// and in `ALL` — so `tests/blend.rs` walks `ALL` through this and asserts
 /// they are the same cycle, which is the measurement that keeps the two from
 /// drifting rather than a comment promising they will not.
-fn after(blend: BlendMode) -> BlendMode {
+///
+/// # It is the workspace's only blend cycle, and it is `pub` for that
+///
+/// `crates/karakuri/src/main.rs` had one of its own — `after_blend`, what one
+/// press of `m` asked for — saying the same three modes in the same order,
+/// with a test each. Under the grammar `space` on an addressed blend chip asks
+/// [`crate::focus::press`], which asks this, so the key and the chip are one
+/// cycle and the copy is gone
+/// ([ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md)).
+/// What is left in that file is a device test asserting where the cycle
+/// arrives on a real deck, and it asks this rather than restating it — which
+/// is the whole of why this is `pub` where [`next`] and [`next_shape`] beside
+/// it are `pub(crate)`.
+pub fn after(blend: BlendMode) -> BlendMode {
     match blend {
         BlendMode::Add => BlendMode::Over,
         BlendMode::Over => BlendMode::Max,
@@ -9309,7 +9612,7 @@ fn after(blend: BlendMode) -> BlendMode {
 ///
 /// **What it is asked about is [`Strip::requested`]**, and why is
 /// [`Mixer::tally`].
-fn next(tally: Tally) -> Tally {
+pub(crate) fn next(tally: Tally) -> Tally {
     match tally {
         Tally::Live => Tally::Priming,
         Tally::Priming => Tally::Allocated,
@@ -9331,7 +9634,7 @@ fn next(tally: Tally) -> Tally {
 /// *engine's* `Residency` into a [`Tally`] on the way in. Three names for
 /// three states is the cost `karakuri-operation` pays for depending on nothing
 /// (P-0090), and this is one of the two places it is paid.
-fn residency(tally: Tally) -> Residency {
+pub(crate) fn residency(tally: Tally) -> Residency {
     match tally {
         Tally::Live => Residency::Live,
         Tally::Priming => Residency::Priming,
@@ -9358,7 +9661,7 @@ fn residency(tally: Tally) -> Residency {
 /// a cycle should start where a slot starts."* A cycle that began at `Linear`
 /// would be a control whose first press on a fresh slot moves it somewhere it
 /// has never been.
-fn next_shape(mask: Mask) -> Mask {
+pub(crate) fn next_shape(mask: Mask) -> Mask {
     match mask {
         Mask::None => Mask::Linear,
         Mask::Linear => Mask::Radial,
@@ -9379,7 +9682,7 @@ fn next_shape(mask: Mask) -> Mask {
 /// The mirror image of it is `crates/karakuri/src/main.rs`'s reading of
 /// `Deck::mask(slot).kind()`, which turns the *engine's* `MaskKind` into a
 /// [`Mask`] on the way in.
-fn wipe_kind(mask: Mask) -> WipeKind {
+pub(crate) fn wipe_kind(mask: Mask) -> WipeKind {
     match mask {
         Mask::None => WipeKind::None,
         Mask::Linear => WipeKind::Linear,
@@ -9514,6 +9817,40 @@ fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
         Stroke::new(size::DROP_RING, pal.text),
         StrokeKind::Outside,
     );
+}
+
+/// **The dashed ring on the bay a key press is addressed to**, the mock's
+/// `.wfocus` — `outline: 2px dashed var(--c-sun)` at `outline-offset: 2px`.
+///
+/// **Dashed rather than a second solid ring**, and the reason is
+/// `console.html`'s in its own words: *"the selection is a solid ring and focus
+/// is a dashed one, because drawing them the same way would erase which of the
+/// two you are looking at."* [`drop_ring`] above is the third mark on this
+/// panel and is solid in the text ink; the three are told apart by line and
+/// colour, which is why none of them is drawn at another's weight.
+///
+/// **`egui` has no dashed stroke on a rectangle**, so the four edges are laid
+/// out as one closed path and dashed along it. The corner radius the mock sets
+/// is not honoured for that reason and is not a loss: a 4px corner on a dash
+/// pattern of [`size::WFOCUS_DASH`] is a rounding of one dash.
+fn wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
+    let ring = at.expand(size::WFOCUS_OFFSET);
+    let path = [
+        ring.left_top(),
+        ring.right_top(),
+        ring.right_bottom(),
+        ring.left_bottom(),
+        ring.left_top(),
+    ];
+    let mut dashes = Vec::new();
+    egui::Shape::dashed_line_many(
+        &path,
+        Stroke::new(size::WFOCUS_RING, pal.sun),
+        size::WFOCUS_DASH,
+        size::WFOCUS_GAP,
+        &mut dashes,
+    );
+    ui.painter().extend(dashes);
 }
 
 /// **The Mixer bay's transition row, painted**, term for term from
@@ -12907,6 +13244,39 @@ pub enum Aim {
     NoSet,
 }
 
+/// **What a press on a node group's `uses` line asks for**, and it is a
+/// control in two parts: a capsule and the card it puts down.
+///
+/// [`Aim`]'s shape one bay along and the same division: every arm is either a
+/// move of this console's own state or one named operation, and never a
+/// rewiring performed here
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// The capsule asks for nothing at all — opening a list is this console's own
+/// pointer moving — which is why it has an arm of its own rather than an
+/// `Operation`, and why the row it belongs to owes the operations page nothing
+/// extra (ADR-0305).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Wiring {
+    /// **A capsule pressed**, named by the pane, the node and which of that
+    /// node's inputs it is. The host opens that card; a press on the capsule of
+    /// a card that is already down never reaches this arm, because a press
+    /// outside the card is the dismissal and the capsule is outside it.
+    Chip {
+        pane: usize,
+        node: usize,
+        input: usize,
+    },
+    /// Take the card away — a press anywhere but inside it while it is down.
+    /// **The press is spent on the dismissal**, which is
+    /// [`crate::input::claim`]'s rule 2 said in the control.
+    Shut,
+    /// **The rewiring, named** —
+    /// `Operation::WireInput { deck, node, slot, to }`, with the node and the
+    /// input off the line the card came out of and `to` off the row that was
+    /// picked.
+    Pick(Operation),
+}
+
 /// **The foot's load control, laid out**: the `load` button, the `→` label,
 /// the pulldown and the list under it.
 ///
@@ -14523,6 +14893,50 @@ fn deck_list_into(ui: &Ui, pal: &Palette, load: &Load, at: Target, card: Rect) {
     }
 }
 
+/// **A `uses` line's card, painted** — one row per node the input may be wired
+/// to, with the one it is wired to now drawn in the panel's own text colour.
+///
+/// Where everything goes is [`UsesLine`]'s, so this paints and derives nothing,
+/// which is [`deck_list_into`]'s own sentence one bay along. Drawn from
+/// [`View::draw`] **after the bays** for that card's reason: it hangs out of a
+/// line inside a pane and over the groups under it.
+///
+/// **The node already wired is not in the list**, so the *marked* row here is
+/// never one of them — the ink says nothing about the current wiring and every
+/// row is a change. That is why this is one colour where the deck pulldown's
+/// list is two: a pulldown names where the *next* press lands and this one
+/// names where the input goes.
+fn uses_card_into(ui: &Ui, pal: &Palette, line: &UsesLine, uses: &Uses, card: Rect, room: Rect) {
+    let painter = ui.painter();
+    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
+    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
+    painter.rect_stroke(
+        card,
+        CornerRadius::same(8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    let painter = painter.with_clip_rect(card);
+    for (index, name) in uses.candidates.iter().enumerate().take(line.rows) {
+        let Some(row) = line.row_at(room, index) else {
+            continue;
+        };
+        let galley = painter.layout_no_wrap(
+            name.clone(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.dim,
+        );
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::LIB_ROW_PAD_X,
+                row.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            pal.dim,
+        );
+    }
+}
+
 /// **A row's menu, painted** — the card, a row per deck the mixer is drawing a
 /// strip for, the separator, and the send under it.
 ///
@@ -15926,9 +16340,64 @@ pub struct Pane {
     /// which is `Mixer::residency`'s division: the build may still be rolled
     /// back, and the Staging lane is what says so.
     pub composite: bool,
+    /// **The two fields of this slot's aim the deck head can move**, or `None`
+    /// on a deck with no geometry to size and no randomness to seed — see
+    /// [`Aimed`], which is where the argument is.
+    pub aimed: Option<Aimed>,
     /// **The node groups**, in node order, which is the order a Set addresses
     /// its own nodes in.
     pub nodes: Vec<Node>,
+}
+
+/// **What a slot is built at, in the two fields the deck head offers**: how
+/// many elements each of its geometries runs at, and the salt its randomness
+/// comes from.
+///
+/// # It is a reading somebody else took, which is why the candidates are here
+///
+/// Neither number can be worked out on this side. The ladder is the powers of
+/// two inside the range the *material* declares — `capacity [min, max] =
+/// default`, which is a `.kir`'s statement and reaches this crate through
+/// whoever read the Set — and the salt is the next in the slot's own
+/// deterministic sequence, which is the engine's arithmetic over the salt the
+/// slot is actually running. So both cross the seam as answers rather than as
+/// the facts they are computed from, exactly as [`Pane::allows`] does and for
+/// the same reason: a control is not the authority on what it may ask for
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+/// and this crate holds no engine and no store (ADR-0156).
+///
+/// **The salt is handed over rather than invented**, which is the half worth
+/// stating twice. A console that reached for a random number would produce a
+/// picture no later run could produce again
+/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md));
+/// a console handed the next value of a sequence names a destination the way
+/// every other control here does.
+/// `docs/adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Aimed {
+    /// **What the slot is running at**, which is the number the chip reads.
+    ///
+    /// One number for the slot, because that is what a re-aim carries: a Set
+    /// holding two geometries runs both at a stated capacity, and where none
+    /// is stated this is the first geometry's own declared default — the same
+    /// reading ADR-0228 records the aim taking.
+    pub capacity: u32,
+    /// **Whether [`Aimed::capacity`] was asked for**, rather than being what
+    /// the material declares for itself. It is the chip's lit state and
+    /// nothing else: the number is drawn either way, and this says who chose
+    /// it.
+    pub stated: bool,
+    /// **The numbers a press steps through**, ascending — the powers of two
+    /// inside the range every one of this deck's geometries accepts.
+    ///
+    /// **Empty is a chip that is drawn and claims nothing**, which is the
+    /// arrangement an inert scrub is already in: a deck whose geometries
+    /// declare no range in common has no capacity a re-aim could send that all
+    /// of them would build at, and there is nothing here to offer.
+    pub capacities: Vec<u32>,
+    /// **The salt `re-salt` asks for**: the next in this slot's own sequence,
+    /// derived from the salt it is running.
+    pub salt: u32,
 }
 
 /// **One node group**: the head that names a node and says who may move it,
@@ -15962,8 +16431,46 @@ pub struct Node {
     /// The mock's `.rend-row`: every renderer this Set has, and which of them
     /// is live. Empty on every group that is not the renderers'.
     pub renderers: Vec<Renderer>,
+    /// **The inputs this node's procedure declares**, and what fills each —
+    /// empty on every node that declares none, which is most of them.
+    pub uses: Vec<Uses>,
     /// The published controls that belong to this node.
     pub params: Vec<Param>,
+}
+
+/// **One input a node's procedure declares, and the node filling it** — the
+/// mock's `.uses` line, under the node head and above that node's rows.
+///
+/// # The slot is the procedure's word and the node is the Set's
+///
+/// `uses far : Geometry` names `far` and stops, because a part that names the
+/// parts around it is bound to one Set and stops being a library part
+/// ([P-0086](../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md),
+/// [ADR-0152](../../../docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md)).
+/// So `slot` is the declaration's own word and `to` is a node's name, which is
+/// exactly `karakuri_engine::set::Edge`'s two halves and exactly what
+/// [`Operation::WireInput`](karakuri_operation::Operation::WireInput) carries.
+///
+/// # The candidates are a reading somebody else took
+///
+/// [`Uses::candidates`] is the list the card offers, handed across the seam
+/// like [`Pane::allows`] and [`View::holds`] before it: which nodes are of the
+/// kind this input takes is a question about the Set, and this crate holds no
+/// engine (ADR-0156). **What is offered is not what may be reached** — a name
+/// the Set cannot use is refused where the Set is built, in the sentence a
+/// model's `wire_input` meets
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Uses {
+    /// **What the procedure calls this input** — `far` in `--edge morph.far=…`.
+    pub slot: String,
+    /// **The node filling it**, by name. There is no unfilled state: a Set with
+    /// an empty input does not build, so this control replaces and never
+    /// clears.
+    pub to: String,
+    /// **The nodes a pick may name**, in node order — this deck's nodes of the
+    /// kind the input takes, with the declaring node left out of its own list.
+    pub candidates: Vec<String>,
 }
 
 /// **Which node a group's head is, and who may move it.**
@@ -16000,7 +16507,22 @@ pub struct Param {
     /// **The position in the deck's published interface**, counting from one
     /// and spanning nodes — the mock's `.ord`, and the number a MIDI control
     /// is learned against: *"knob 3 is knob 3 whatever Set is loaded"*.
-    pub ord: usize,
+    ///
+    /// **`None` is a control the interface does not carry**, and it is the one
+    /// state of this field rather than a missing value: a control off the
+    /// interface has no position, and a position is exactly what a knob counts.
+    /// Such a row keeps its place in its group and loses its number, its fader
+    /// and its figure — drawn so the mark can be pressed again, because this
+    /// bay is where publishing is chosen and a choice nobody can see is one
+    /// nobody can unmake
+    /// ([ADR-0100](../../../docs/adr/0100-a-published-interface-is-a-choice-of-attention.md),
+    /// `docs/adr/0329-…`).
+    ///
+    /// **It is not *hidden* and it is not *locked***: `--param`, a `param`
+    /// record and a model naming the address all still reach the value, which
+    /// is ADR-0100's whole sentence — publishing is a choice of attention and
+    /// never one of authority.
+    pub ord: Option<usize>,
     /// What the Set published it as, which may be an alias for the key inside
     /// the node.
     pub name: String,
@@ -16147,8 +16669,29 @@ impl Param {
     /// knob a signal is holding is Take a parameter back's question"* — and
     /// `docs/manual/console.html`'s *Who is holding a control* is where the
     /// page says it.
+    /// **This row as an entry of a published interface** — the shape
+    /// [`Operation::Publish`](karakuri_operation::Operation::Publish) carries,
+    /// which is `karakuri_engine::set::Published`'s.
+    ///
+    /// **The address and the range are the ones the row was drawn from**, not
+    /// ones re-derived here: a wildcard stays a wildcard and a narrowed range
+    /// stays narrowed, which is [`ParamGrip`]'s own rule about writing the
+    /// control the row draws rather than the group it was placed in
+    /// (ADR-0286).
+    fn control(&self) -> karakuri_operation::Control {
+        karakuri_operation::Control {
+            name: self.name.clone(),
+            node: self.param.node,
+            key: self.param.key.clone(),
+            range: self.range,
+        }
+    }
+
     fn movable(&self) -> bool {
-        self.bound.is_none() && self.range[1] > self.range[0]
+        // **A control off the interface draws no fader**, which is what
+        // publishing decides: the row is a name and a mark, and there is
+        // nothing on it to take hold of.
+        self.ord.is_some() && self.bound.is_none() && self.range[1] > self.range[0]
     }
 }
 
@@ -16429,7 +16972,7 @@ impl InspectorPane {
             if !a_choice(pane, node) {
                 return None;
             }
-            let row = rend_row_in(self.group(&pane.nodes, index));
+            let row = rend_row_in(self.group(&pane.nodes, index), node);
             if !row.contains(at) {
                 return None;
             }
@@ -16610,6 +17153,193 @@ impl InspectorPane {
         self.grip(pane, p).is_some()
     }
 
+    /// **What a press at `p` on a parameter row's leftmost cell asks for**:
+    /// [`Operation::Publish`](karakuri_operation::Operation::Publish) carrying
+    /// the interface this deck would have with that one control's membership
+    /// changed — or `None` off every mark.
+    ///
+    /// # The whole list, because that is what the operation is about
+    ///
+    /// The vocabulary says it at the variant: *"the whole ordered list, not one
+    /// entry. A MIDI control is bound to a position in the published interface,
+    /// so adding one entry at a time would renumber every binding after it; and
+    /// an interface that publishes nothing publishes everything, which is a
+    /// statement about the list and not about an entry."* So this builds the
+    /// list the press is asking for — every published row **in interface
+    /// order**, less the one pressed, or with it appended where it was not on
+    /// the list — and names it. Nothing here says *drop this one*, which is
+    /// what keeps two hands on one deck from disagreeing about what is
+    /// published
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    ///
+    /// **Sorted by [`Param::ord`] and not by where the rows are drawn.** A
+    /// wildcard control is *placed* in whichever group it resolves to and is
+    /// *numbered* by its position in the interface, and the two orders are not
+    /// the same walk — so building the list off the pane's own order would
+    /// renumber every knob on a deck with a wildcard in it, on a press that
+    /// was about a different row entirely.
+    ///
+    /// **A row that goes back on lands at the end**, which is a decision and
+    /// not an accident: nothing in the pane says where it *was*, the position
+    /// it left is now somebody else's, and inventing a place for it would move
+    /// knobs nobody pressed anything about. The page says so.
+    pub fn publishing(&self, pane: &Pane, p: karakuri_layout::Point) -> Option<Operation> {
+        let at = Pos2::new(p.x, p.y);
+        if !self.body.contains(at) {
+            return None;
+        }
+        let pressed = self.drawn(&pane.nodes).find_map(|index| {
+            let node = pane.nodes.get(index)?;
+            let group = self.group(&pane.nodes, index);
+            node.params.iter().enumerate().find_map(|(row, param)| {
+                ord_cell(param_rect(group, node, row), param)
+                    .contains(at)
+                    .then_some(param)
+            })
+        })?;
+        let mut kept: Vec<(usize, &Param)> = pane
+            .nodes
+            .iter()
+            .flat_map(|node| node.params.iter())
+            .filter(|param| !std::ptr::eq(*param, pressed))
+            .filter_map(|param| Some((param.ord?, param)))
+            .collect();
+        kept.sort_by_key(|(ord, _)| *ord);
+        let mut controls: Vec<karakuri_operation::Control> =
+            kept.into_iter().map(|(_, param)| param.control()).collect();
+        if pressed.ord.is_none() {
+            controls.push(pressed.control());
+        }
+        Some(Operation::Publish {
+            deck: pane.deck as u8,
+            controls,
+        })
+    }
+
+    /// **Where one row's publish mark is** — the leftmost cell of the
+    /// `row`th parameter row of the `node`th group, or `None` where the pane is
+    /// not drawing that group or that row.
+    ///
+    /// The same rectangle [`InspectorPane::publishing`] resolves a press
+    /// against and [`param_into`] paints into, which is this bay's rule
+    /// everywhere: the derivation that draws a control is the one that
+    /// hit-tests it.
+    pub fn publish_mark(&self, pane: &Pane, node: usize, row: usize) -> Option<Rect> {
+        if !self.drawn(&pane.nodes).any(|drawn| drawn == node) {
+            return None;
+        }
+        let at = pane.nodes.get(node)?;
+        let param = at.params.get(row)?;
+        Some(ord_cell(
+            param_rect(self.group(&pane.nodes, node), at, row),
+            param,
+        ))
+    }
+
+    /// **Where one node's `index`th `uses` line's control is**, or `None`
+    /// where the pane is not drawing that group, that group has no such input,
+    /// or the line falls outside the body.
+    ///
+    /// `open` is whether *this* line's card is down, which is the console's own
+    /// state and not the pane's — [`View::wiring_open`], the arrangement
+    /// [`Load`] is already in with [`View::target_open`].
+    ///
+    /// **The capsule is as wide as the name in it**, which is why this asks
+    /// `egui` for a galley: a node's name is data and a capsule sized to a
+    /// constant would clip one Set's names and not another's.
+    pub fn uses_line(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        node: usize,
+        index: usize,
+        open: bool,
+    ) -> Option<UsesLine> {
+        if ctx.cumulative_pass_nr() == 0 {
+            return None;
+        }
+        let at = pane.nodes.get(node)?;
+        let uses = at.uses.get(index)?;
+        if !self.drawn(&pane.nodes).any(|drawn| drawn == node) {
+            return None;
+        }
+        let row = uses_rect(self.group(&pane.nodes, node), index);
+        if !self.body.contains_rect(row) {
+            return None;
+        }
+        Some(UsesLine {
+            chip: uses_chip_in(ctx, row, uses),
+            row,
+            rows: match open {
+                true => uses.candidates.len(),
+                false => 0,
+            },
+        })
+    }
+
+    /// **Which `uses` capsule `p` is on**, as `(node, input)` — or `None` off
+    /// every one of them.
+    ///
+    /// A press here opens a card and emits nothing, which is [`Load`]'s
+    /// pulldown exactly: what a pick asks for is the operation, and *open the
+    /// list* is not something a map or a model could ever want to say
+    /// (ADR-0305).
+    pub fn uses_chip(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        p: karakuri_layout::Point,
+    ) -> Option<(usize, usize)> {
+        self.drawn(&pane.nodes).find_map(|node| {
+            let at = pane.nodes.get(node)?;
+            (0..at.uses.len())
+                .find(|index| {
+                    self.uses_line(ctx, pane, node, *index, false)
+                        .is_some_and(|line| line.hit_chip(p))
+                })
+                .map(|index| (node, index))
+        })
+    }
+
+    /// **What a press at `p` on an open card asks for**:
+    /// [`Operation::WireInput`](karakuri_operation::Operation::WireInput)
+    /// naming the node the pick landed on — or `None` off every row.
+    ///
+    /// # It names the node, and the refusal is not here
+    ///
+    /// The card lists [`Uses::candidates`], which is a reading of the Set
+    /// somebody else took, and what leaves this crate is the name that was
+    /// picked. **Nothing is validated on this side**: a name the Set cannot use
+    /// is refused where the Set is *built*, by name and with what the Set does
+    /// hold — the same wall a model's `wire_input` meets, which sends its edge
+    /// to the same place with no check of its own
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    ///
+    /// **A pick replaces**, and that is the language's shape rather than this
+    /// control's: an input takes one node, `SetError::SlotBoundTwice` refuses
+    /// two edges on one input, and a Set with an unbound input does not build
+    /// at all (ADR-0152). So there is no *unwire*, and nothing here offers one.
+    pub fn wired(
+        &self,
+        ctx: &egui::Context,
+        pane: &Pane,
+        viewport: Rect,
+        open: (usize, usize),
+        p: karakuri_layout::Point,
+    ) -> Option<Operation> {
+        let (node, index) = open;
+        let at = pane.nodes.get(node)?;
+        let uses = at.uses.get(index)?;
+        let line = self.uses_line(ctx, pane, node, index, true)?;
+        let to = uses.candidates.get(line.picked(viewport, p)?)?;
+        Some(Operation::WireInput {
+            deck: pane.deck as u8,
+            node: at.name.clone(),
+            slot: uses.slot.clone(),
+            to: to.clone(),
+        })
+    }
+
     /// **What a press at `p` takes hold of**, as the model holds every other
     /// fader — [`grabbed`], so a parameter fader keeps whatever it grabbed at
     /// and the value does not jump under the hand.
@@ -16713,11 +17443,145 @@ fn content_h(nodes: &[Node]) -> f32 {
 /// of a gap one axis along, and [`content_h`] is where that sum is taken.
 fn group_h(node: &Node) -> f32 {
     size::NODE_HEAD_H
+        + uses_h(node)
         + match node.renderers.is_empty() {
             true => 0.0,
             false => size::REND_ROW_H,
         }
         + node.params.iter().map(rows_h).sum::<f32>()
+}
+
+/// **How tall a node's declared inputs come to**: one [`size::USES_H`] line
+/// each, and nothing at all on the nodes that declare none — which is most of
+/// them, and is why this is an addend rather than a row every group carries.
+///
+/// One function because [`group_h`] sums it and [`param_rect`] and
+/// [`uses_rect`] walk past it, which is [`rows_h`]'s own reason one row down.
+fn uses_h(node: &Node) -> f32 {
+    node.uses.len() as f32 * size::USES_H
+}
+
+/// **Where a node group's `index`th `uses` line goes**: under `.node-head`,
+/// the full width of the group and [`size::USES_H`] tall.
+fn uses_rect(group: Rect, index: usize) -> Rect {
+    let top = group.min.y + size::NODE_HEAD_H + index as f32 * size::USES_H;
+    Rect::from_min_max(
+        Pos2::new(group.min.x, top),
+        Pos2::new(group.max.x, top + size::USES_H),
+    )
+}
+
+/// **Where a `uses` line's capsule is**, inside the line — the one derivation
+/// [`InspectorPane::uses_line`] hit-tests and [`uses_into`] paints, which is
+/// [`rend_chips`]' arrangement one row down and its reason: the same arithmetic
+/// written twice is a capsule drawn where a hand cannot reach it.
+///
+/// **The name, the gap and the `▾`** — which is drawn rather than typed, so it
+/// is a width here and a mark at the paint, exactly as the Outputs row's pill
+/// and the Library bay's pulldown already spell it. `.uses`'s `.sep` puts it
+/// against the right of the line, which is the node head's arrangement one row
+/// up and the deck head's fold two bays over.
+fn uses_chip_in(ctx: &egui::Context, row: Rect, uses: &Uses) -> Rect {
+    let text_w = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            uses.to.clone(),
+            FontId::new(size::USES_SIZE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    let width = size::PILL_PAD_X * 2.0 + text_w + size::SINK_GAP + CHEVRON_W;
+    Rect::from_min_size(
+        Pos2::new(
+            row.max.x - size::PARAM_PAD_R - width,
+            row.center().y - size::USES_CHIP_H * 0.5,
+        ),
+        egui::vec2(width, size::USES_CHIP_H),
+    )
+}
+
+/// **One `uses` line's control, laid out**: the capsule naming the node that
+/// fills the input, and the card of candidates under it.
+///
+/// # One derivation, and the card hangs *down*
+///
+/// [`View::draw`] paints these rectangles and [`crate::input::claim`]
+/// hit-tests them, which is [`DeckHead`]'s rule and [`Load`]'s. The card hangs
+/// **down** from the capsule where the Library bay's hangs up, and the
+/// difference is where each control sits: that one is in the *foot* of a bay
+/// and this one is inside a pane's body, with the rest of the pane under it.
+/// It is held inside the viewport for [`Load::list`]'s reason, so a line near
+/// the bottom of a short console draws its card over what is above it rather
+/// than off the edge.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UsesLine {
+    /// **The whole line**, the full width of the group — what
+    /// [`uses_into`] paints into and what a press has to be inside before any
+    /// of it is asked.
+    pub row: Rect,
+    /// **The capsule naming the node filling this input**, at the right of the
+    /// line. A press on it opens the card; a press on it while the card is
+    /// down is the host's to read as *shut it*, which is [`Load`]'s
+    /// arrangement.
+    pub chip: Rect,
+    /// **How many candidates the card offers**, which is [`Uses::candidates`]'
+    /// length while the card is down and **zero** while it is shut —
+    /// [`Load::rows`]' shape and its reason: [`UsesLine::row_at`] cannot hand
+    /// out a rectangle for a card nobody opened.
+    pub rows: usize,
+}
+
+impl UsesLine {
+    /// Whether `p` is on the capsule.
+    pub fn hit_chip(&self, p: karakuri_layout::Point) -> bool {
+        self.chip.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **The card under the capsule, or `None` while it is shut** — and `None`
+    /// for a line with no candidate to offer, which is a deck holding one node
+    /// of the kind this input takes: the node already wired is left out of its
+    /// own list, so there is nothing to pick and no card to open.
+    pub fn list(&self, viewport: Rect) -> Option<Rect> {
+        if self.rows == 0 {
+            return None;
+        }
+        let height = size::LIB_LIST_PAD * 2.0 + size::LIB_ROW_H * self.rows as f32;
+        let width = self
+            .chip
+            .width()
+            .max(size::LIB_ROW_H + (size::LIB_ROW_PAD_X + size::LIB_LIST_PAD) * 2.0);
+        Some(held_inside(
+            &viewport,
+            self.chip.min.x,
+            self.chip.max.y + size::PILL_GAP,
+            width,
+            height,
+        ))
+    }
+
+    /// **Where the `index`th candidate's row is**, or `None` off the end and
+    /// `None` while the card is shut.
+    pub fn row_at(&self, viewport: Rect, index: usize) -> Option<Rect> {
+        if index >= self.rows {
+            return None;
+        }
+        let list = self.list(viewport)?;
+        let top = list.min.y + size::LIB_LIST_PAD + size::LIB_ROW_H * index as f32;
+        Some(Rect::from_min_max(
+            Pos2::new(list.min.x + size::LIB_LIST_PAD, top),
+            Pos2::new(list.max.x - size::LIB_LIST_PAD, top + size::LIB_ROW_H),
+        ))
+    }
+
+    /// **Which candidate `p` is on**, or `None` off every row.
+    pub fn picked(&self, viewport: Rect, p: karakuri_layout::Point) -> Option<usize> {
+        let at = Pos2::new(p.x, p.y);
+        (0..self.rows).find(|index| {
+            self.row_at(viewport, *index)
+                .is_some_and(|row| row.contains(at))
+        })
+    }
 }
 
 /// **How tall one parameter row and whatever is under it comes to**: a
@@ -16749,8 +17613,8 @@ fn rows_h(param: &Param) -> f32 {
 /// Asked only where [`Node::renderers`] is not empty. On a group that has none
 /// the rectangle it answers is where the first parameter row goes, which is
 /// [`group_h`]'s own arithmetic read the other way.
-fn rend_row_in(group: Rect) -> Rect {
-    let top = group.min.y + size::NODE_HEAD_H;
+fn rend_row_in(group: Rect, node: &Node) -> Rect {
+    let top = group.min.y + size::NODE_HEAD_H + uses_h(node);
     Rect::from_min_max(
         Pos2::new(group.min.x, top),
         Pos2::new(group.max.x, top + size::REND_ROW_H),
@@ -17132,9 +17996,40 @@ fn anchor_text(pane: &Pane) -> Option<String> {
 /// manual's *"the one control here meant to go backwards"*.
 pub const SCRUB_BEATS: f64 = 0.25;
 
+/// **What the `re-salt` capsule reads.**
+pub const RE_SALT_LABEL: &str = "re-salt";
+
+/// **Where a press on the capacity chip arrives**: the next number up the
+/// ladder, and off the top back to the bottom — or `None` where the ladder is
+/// empty and there is nothing to ask for.
+///
+/// # The next one *above* what is running, rather than the next one along
+///
+/// `candidates` is [`Aimed::capacities`], ascending, and the running value is
+/// not necessarily one of them: a procedure may declare `capacity [4096,
+/// 1048576] = 81920`, and a Set loaded from a file may be running at whatever
+/// that file recorded. Asking for the first candidate *greater than* where the
+/// slot is answers both cases in one line — the next power of two from a value
+/// that is on the ladder, and the next power of two up from one that is not —
+/// where a `position` lookup would have fallen back to the bottom of the range
+/// and taken a slot from 81920 to 4096 on a press that reads as *one step*.
+///
+/// **The wrap goes through the bottom and not through unset**, which is where
+/// this differs from the Library's two filter fields (ADR-0262): a filter has a
+/// state that is *not narrowed* and a capacity has no such state — every
+/// geometry is running at some number — so the end of the ladder is the
+/// beginning of it.
+fn stepped_capacity(candidates: &[u32], at: u32) -> Option<u32> {
+    candidates
+        .iter()
+        .find(|candidate| **candidate > at)
+        .or_else(|| candidates.first())
+        .copied()
+}
+
 /// **The deck head's controls, laid out**: the chip that names the mode, the
-/// anchor that re-asks for it, the two arrows that scrub, and the fold at the
-/// right.
+/// anchor that re-asks for it, the two arrows that scrub, the two chips that
+/// ask for a different build, and the fold at the right.
 ///
 /// # One derivation, for [`Outputs`]' reason
 ///
@@ -17142,14 +18037,20 @@ pub const SCRUB_BEATS: f64 = 0.25;
 /// hit-tests exactly these rectangles. Two copies of a flex row's running sum
 /// is an arrow that lights under a pointer that cannot move the deck.
 ///
-/// # Four rectangles and one type, because they are one row
+/// # Six rectangles and one type, because they are one row
 ///
 /// [`LookRow`]'s reason one bay over: each one's place is measured from the
-/// last, which is what a flex row is, and splitting them into four functions
+/// last, which is what a flex row is, and splitting them into six functions
 /// would mean measuring the chip before each of them again to find out where
 /// it starts. The fold is in here for the same reason, and it is a control
 /// too — see [`DeckHead::composite`], which was the one rectangle here that
 /// claimed nothing until 2026-09-09.
+///
+/// **The two before the fold are measured from the right**, because that is
+/// what `.sep`'s `flex: 1` does to everything after it: the fold sits against
+/// the row's right-hand padding, the `re-salt` capsule one gap before it and
+/// the capacity chip one gap before that, and what says the row fits is that
+/// the arrows end before the leftmost of the three begins.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeckHead {
     /// **The sync chip**, which is what a press has to land in to move the
@@ -17187,6 +18088,13 @@ pub struct DeckHead {
     /// `flex: 1` pushing it against the right-hand padding, and what says the
     /// controls on the left fit is that they end before it.
     pub composite: Rect,
+    /// **The capacity chip and the `re-salt` capsule**, or `None` on a deck
+    /// with nothing to size and nothing to seed — see [`AimChips`].
+    ///
+    /// One field for two chips because they are one reading: both are drawn
+    /// exactly when [`Pane::aimed`] is, and a state where one of them was there
+    /// and the other was not is not a state this row has.
+    pub aim: Option<AimChips>,
     /// Which deck this head belongs to, as [`Operation::SetSync`],
     /// [`Operation::ScrubDeck`] and [`Operation::SetCompositing`] each name
     /// one — [`Pane::deck`], carried so that a press answers with the deck it
@@ -17207,6 +18115,51 @@ pub struct DeckHead {
     pub allows: [bool; SYNCS.len()],
 }
 
+/// **The deck head's two build chips, laid out and with what a press on each
+/// one asks for** — the capacity the slot's geometries run at, and the salt
+/// its randomness comes from.
+///
+/// # The destinations are carried, for [`DeckHead::composited`]'s reason
+///
+/// Whoever measured this row and whoever acts on a press in it are one
+/// statement. The step is arithmetic over [`Aimed::capacities`] and the salt is
+/// a number the host handed in, and both are worked out **once**, on the frame
+/// that laid the chips out — so a chip a hand pressed and the operation that
+/// leaves this crate cannot be about two different readings of the slot.
+///
+/// # Neither says *step* and neither says *again*
+///
+/// What crosses into the vocabulary is
+/// [`Operation::SetProperty`](karakuri_operation::Operation::SetProperty)
+/// naming a number: `Property::Capacity` carries the element count the step
+/// arrived at and `Property::Seed` carries the salt. The affordance —
+/// *press it and it moves on* — is the surface's, which is
+/// [`DeckHead::sync`]'s division and [`Mixer::blend`]'s
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AimChips {
+    /// **The capacity chip**, reading [`Aimed::capacity`]. `.mini`'s box round
+    /// the number, one gap left of [`AimChips::salt`].
+    pub size: Rect,
+    /// **Where a press on [`AimChips::size`] arrives**, or `None` where there
+    /// is nothing to step to — see [`stepped_capacity`] and
+    /// [`Aimed::capacities`].
+    ///
+    /// **`None` is drawn and not claimed**, which is `input`'s *a control
+    /// claims what it acts on and no more* and the arrangement an inert scrub
+    /// is already in: the number is still worth reading on a deck whose
+    /// geometries share no range, and a press on it has nothing to ask for.
+    pub resize: Option<u32>,
+    /// **The `re-salt` capsule**, one gap left of [`DeckHead::composite`].
+    pub salt: Rect,
+    /// **The salt a press on it asks for** — [`Aimed::salt`], carried.
+    ///
+    /// There is no state in which this chip is drawn and inert: a slot with a
+    /// geometry has randomness to re-seed, and a slot without one draws neither
+    /// of these two.
+    pub re_salt: u32,
+}
+
 impl DeckHead {
     /// Whether `p` is on the sync chip.
     pub fn hit_mode(&self, p: karakuri_layout::Point) -> bool {
@@ -17222,6 +18175,22 @@ impl DeckHead {
     /// Whether `p` is on the fold at the right of the row.
     pub fn hit_composite(&self, p: karakuri_layout::Point) -> bool {
         self.composite.contains(Pos2::new(p.x, p.y))
+    }
+
+    /// **Whether `p` is on the capacity chip *and* the chip has somewhere to
+    /// step**, which is [`DeckHead::arrow`]'s arrangement written for a chip:
+    /// a deck whose geometries share no declared range draws the number and
+    /// claims nothing.
+    pub fn hit_size(&self, p: karakuri_layout::Point) -> bool {
+        self.aim
+            .is_some_and(|aim| aim.resize.is_some() && aim.size.contains(Pos2::new(p.x, p.y)))
+    }
+
+    /// **Whether `p` is on the `re-salt` capsule**, which is claimed wherever
+    /// it is drawn.
+    pub fn hit_salt(&self, p: karakuri_layout::Point) -> bool {
+        self.aim
+            .is_some_and(|aim| aim.salt.contains(Pos2::new(p.x, p.y)))
     }
 
     /// **Which arrow `p` is on, as the amount it asks for** — or `None` off
@@ -17247,14 +18216,20 @@ impl DeckHead {
         }
     }
 
-    /// **Whether `p` is on any of the four**, which is what
+    /// **Whether `p` is on any of the six**, which is what
     /// [`crate::input::claim`] asks. The fold is one of them since 2026-09-09,
-    /// and it is the only one of the four that is claimed on every deck: a
-    /// sync chip is always live, an anchor is not drawn on a free deck and an
-    /// arrow is not claimed off beat sync, where a layering is a state every
+    /// and it is the only one of the six that is claimed on every deck: a
+    /// sync chip is always live, an anchor is not drawn on a free deck, an
+    /// arrow is not claimed off beat sync, and the two build chips are drawn
+    /// only where the deck has a geometry — where a layering is a state every
     /// slot is in.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
-        self.hit_mode(p) || self.hit_anchor(p) || self.arrow(p).is_some() || self.hit_composite(p)
+        self.hit_mode(p)
+            || self.hit_anchor(p)
+            || self.arrow(p).is_some()
+            || self.hit_size(p)
+            || self.hit_salt(p)
+            || self.hit_composite(p)
     }
 
     /// **What a press at `p` asks this deck's clock to become**, or `None`
@@ -17411,6 +18386,80 @@ impl DeckHead {
             compositing: !self.composited,
         })
     }
+
+    /// **What a press on the capacity chip asks for**:
+    /// [`Operation::SetProperty`] naming the element count the step arrived at
+    /// — or `None` off the chip, and `None` on a chip with nowhere to step.
+    ///
+    /// # A number a hand should not drag, so the control steps
+    ///
+    /// A capacity is a number in a declared range, which everywhere else on
+    /// this console is [`Param`]'s track — and the mock's own reading of a
+    /// Set says so, *"capacity included, because a procedure declares one the
+    /// same way it declares a knob"*. It is refused here by what a drag **is**:
+    /// [`ParamGrip`] turns a pointer into a value every frame it moves, which
+    /// for a parameter is a uniform write and for a capacity is a full rebuild
+    /// of the slot with every element buffer in it reallocated — dozens of them
+    /// across one gesture, which is
+    /// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
+    /// at its widest. So the affordance is the Library filters' one bay over
+    /// ([ADR-0262](../../../docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md)):
+    /// the field steps a closed list and the operation names where it arrived.
+    ///
+    /// **What it steps is not this console's list.** The powers of two inside a
+    /// declared range belong to the material in the slot, so they arrive as
+    /// [`Aimed::capacities`] the way `holds` arrives as [`View::holds`], and
+    /// what is offered is a reading somebody else took (P-0090).
+    ///
+    /// # The press is a rebuild, and it is the fold's mechanism exactly
+    ///
+    /// The capacity is one field of the description this slot's watcher is
+    /// pointed at, so the window restates the rest and sends it and the worker
+    /// recompiles the slot off the render thread, judged at a frame boundary
+    /// against what one frame of that Set was measured to cost — see
+    /// [`DeckHead::compositing`], where the argument is written out, and
+    /// `docs/adr/0328-…`. **Nothing here knows any of that** and this crate
+    /// could not: it names a number and a deck.
+    pub fn resized(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let aim = self.aim?;
+        let elements = aim.resize?;
+        aim.size
+            .contains(Pos2::new(p.x, p.y))
+            .then_some(Operation::SetProperty {
+                deck: self.deck as u8,
+                property: karakuri_operation::Property::Capacity { elements },
+            })
+    }
+
+    /// **What a press on the `re-salt` capsule asks for**:
+    /// [`Operation::SetProperty`] naming the salt this slot's randomness is to
+    /// come from — or `None` off the capsule.
+    ///
+    /// # The number is handed in, and that is the whole of the decision
+    ///
+    /// A salt is the one payload on this row that could plausibly be *made up*,
+    /// and a console that made one up would be a surface producing a picture no
+    /// later run could produce again
+    /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+    /// [`Aimed::salt`] is the next value of the slot's own deterministic
+    /// sequence, derived by whoever read the Set from the salt the slot is
+    /// actually running — so this names a destination like every other control
+    /// here, the same press twice from the same place lands on the same two
+    /// pictures, and a Set kept afterwards records the salts it was running at.
+    ///
+    /// **Nothing is refused here.** Asking for the salt a slot is already on is
+    /// not a state this capsule can produce — the sequence goes forward — and a
+    /// re-seed changes the picture, so unlike the fold beside it there is no
+    /// press that buys a recompile and moves nothing.
+    pub fn re_salted(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let aim = self.aim?;
+        aim.salt
+            .contains(Pos2::new(p.x, p.y))
+            .then_some(Operation::SetProperty {
+                deck: self.deck as u8,
+                property: karakuri_operation::Property::Seed { salt: aim.re_salt },
+            })
+    }
 }
 
 /// **The deck head's controls, derived** — the chips in
@@ -17427,10 +18476,11 @@ impl DeckHead {
 ///
 /// # What it costs to ask
 ///
-/// **Three galley lookups per pane**: the mode's word, the anchor's two
-/// numbers and the fold's word. The two arrows cost none — they are marks
-/// rather than words, which is [`Mixer::mask`]'s own saving one bay over — and
-/// nothing here asks after the node groups below.
+/// **Five galley lookups per pane**: the mode's word, the anchor's two
+/// numbers, the capacity's digits, the `re-salt` capsule's word and the fold's.
+/// The two arrows cost none — they are marks rather than words, which is
+/// [`Mixer::mask`]'s own saving one bay over — and nothing here asks after the
+/// node groups below.
 ///
 /// **It is asked twice on a frame**, once here and once for the galleys
 /// [`deck_head_into`] paints, which is [`look`]'s honest cost written down one
@@ -17508,12 +18558,48 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
     let back = arrow(arrows);
     let forward = arrow(back.max.x + size::SCRUB_GAP);
 
-    // `.sep`'s `flex: 1` puts the fold hard against the right of the row.
+    // `.sep`'s `flex: 1` puts the fold hard against the right of the row, and
+    // the two build chips are measured leftwards from it — a flex row's running
+    // sum taken from the other end, which is what everything after the `.sep`
+    // is.
     let fold = mini(COMPOSITE_LABEL, row.min.x);
     let composite = mini(
         COMPOSITE_LABEL,
         row.max.x - size::DECK_HEAD_PAD_X - fold.width(),
     );
+    // **Both or neither**, which is [`DeckHead::aim`]'s own sentence: they come
+    // from one reading, so a pane with no [`Pane::aimed`] draws the row it drew
+    // before this control existed.
+    //
+    // **And neither where the row cannot hold them**, which is the one place
+    // this row's *a control that does not fit is no control at all* is answered
+    // by dropping part of the row rather than all of it. The reason is a
+    // measurement: an Inspector pane at the console's declared minimum window
+    // is 237 pixels wide and the five chips that were here already come to
+    // within a couple of dozen of that, so a row that took all seven or none
+    // would answer *none* at the width this arrangement claims to work at —
+    // trading two controls that were never there for four that were. So the two
+    // build chips are dropped first and the row goes on drawing what it drew
+    // before them, and the page says so rather than leaving an operator to
+    // discover it by dragging
+    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    let aim = pane.aimed.as_ref().and_then(|aimed| {
+        let word = aimed.capacity.to_string();
+        let width_of = |text: &str| mini(text, row.min.x).width();
+        let salt = mini(
+            RE_SALT_LABEL,
+            composite.min.x - size::DECK_HEAD_GAP - width_of(RE_SALT_LABEL),
+        );
+        let size_at = mini(&word, salt.min.x - size::DECK_HEAD_GAP - width_of(&word));
+        let fits =
+            row.contains_rect(size_at) && forward.max.x + size::DECK_HEAD_GAP <= size_at.min.x;
+        fits.then_some(AimChips {
+            size: size_at,
+            resize: stepped_capacity(&aimed.capacities, aimed.capacity),
+            salt,
+            re_salt: aimed.salt,
+        })
+    });
 
     if !row.contains_rect(mode)
         || !row.contains_rect(composite)
@@ -17528,6 +18614,7 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
         back,
         forward,
         composite,
+        aim,
         deck: pane.deck,
         composited: pane.composite,
         locked: pane.sync,
@@ -18098,6 +19185,17 @@ impl View {
 /// that grows a second one needs the control already where it was."*
 const COMPOSITE_LABEL: &str = "composite";
 
+/// **What a parameter row's leftmost cell reads where the control is not on
+/// the interface** — the mock's `&middot;`, in `.param.unpub .ord`'s hairline
+/// colour.
+///
+/// A dot where a number would be, because a control off the interface has no
+/// **position** and a position is exactly what a MIDI knob counts. It is the
+/// same cell either way: the number and the mark are one control's two states
+/// rather than a mark drawn beside a number
+/// (`docs/adr/0329-…`).
+const UNPUBLISHED: &str = "·";
+
 /// **One pane of the Inspector, painted.**
 ///
 /// Where everything goes is [`inspector`]'s, so this paints and derives
@@ -18360,6 +19458,17 @@ fn deck_head_into(ui: &Ui, pal: &Palette, at: &DeckHead, pane: &Pane) {
         arrow_mark(&painter, rect.center(), size::SCRUB_SIZE, ink, back);
     }
 
+    if let (Some(chips), Some(aimed)) = (at.aim, pane.aimed.as_ref()) {
+        // **Lit says somebody asked for this number**, and unlit says it is
+        // what the material declares for itself — which is what `.mini.sel`
+        // already means on this row for the fold beside it: the chip's two
+        // states answer *who chose this* rather than restating the number.
+        word(chips.size, &aimed.capacity.to_string(), aimed.stated);
+        // **Never lit**, because a capsule that performs has no state to be in
+        // — the `keep` pill's arrangement two rows up.
+        word(chips.salt, RE_SALT_LABEL, false);
+    }
+
     word(at.composite, COMPOSITE_LABEL, pane.composite);
 }
 
@@ -18428,11 +19537,19 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
         auth_into(painter, pal, head, authority.level);
     }
 
+    // **The inputs this node declares, under its head and above its rows**,
+    // for the same reason and asked the same way: [`uses_rect`] and
+    // [`uses_chip_in`] are where that arithmetic is written, and this paints
+    // what they answer.
+    for (index, uses) in node.uses.iter().enumerate() {
+        uses_into(painter, pal, uses_rect(rect, index), uses);
+    }
+
     // **Where the renderer row is, asked rather than measured here**: a press
     // has to resolve to the same rectangle the chips were drawn in, and
     // [`rend_row_in`] is the one place that arithmetic is written.
     if !node.renderers.is_empty() {
-        rend_row_into(painter, pal, rend_row_in(rect), &node.renderers);
+        rend_row_into(painter, pal, rend_row_in(rect, node), &node.renderers);
     }
     // **Where a row is, asked rather than accumulated.** The running sum this
     // loop used to keep was a second answer to the same question the moment a
@@ -18606,6 +19723,64 @@ fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &
     }
 }
 
+/// **One `uses` line**: what the procedure calls the input at the left, and the
+/// capsule naming the node filling it at the right.
+///
+/// **The chevron is drawn rather than typed**, which is [`CHEVRON_W`]'s reason
+/// wherever this console draws a pulldown — the Outputs row's pill, the
+/// arrangement pill and the Library bay's deck capsule all carry the same mark.
+fn uses_into(painter: &egui::Painter, pal: &Palette, row: Rect, uses: &Uses) {
+    let painter = painter.with_clip_rect(row);
+    let word = painter.layout_job(span_at(
+        &format!("uses {}", uses.slot),
+        size::USES_SIZE,
+        pal.dim,
+    ));
+    painter.galley(
+        Pos2::new(
+            row.min.x + size::PARAM_PAD_L,
+            row.center().y - word.size().y * 0.5,
+        ),
+        word,
+        pal.dim,
+    );
+    let chip = uses_chip_in(painter.ctx(), row, uses);
+    painter.rect_stroke(
+        chip,
+        CornerRadius::same((chip.height() * 0.5) as u8),
+        Stroke::new(size::HAIRLINE, pal.line),
+        StrokeKind::Inside,
+    );
+    let name = painter.layout_job(span_at(&uses.to, size::USES_SIZE, pal.dim));
+    painter.galley(
+        Pos2::new(
+            chip.min.x + size::PILL_PAD_X,
+            chip.center().y - name.size().y * 0.5,
+        ),
+        name,
+        pal.dim,
+    );
+    // The `▾`, drawn as the same triangle every pulldown on this console draws:
+    // `CHEVRON_W` across and `CHEVRON_H` deep, centred in the padding at the
+    // capsule's right.
+    let chevron = Rect::from_center_size(
+        Pos2::new(
+            chip.max.x - size::PILL_PAD_X - CHEVRON_W * 0.5,
+            chip.center().y,
+        ),
+        egui::vec2(CHEVRON_W, CHEVRON_H),
+    );
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            chevron.left_top(),
+            chevron.right_top(),
+            Pos2::new(chevron.center().x, chevron.max.y),
+        ],
+        pal.dim,
+        Stroke::NONE,
+    ));
+}
+
 /// **One parameter row**, in the mock's own four tracks: the ordinal at
 /// [`size::PARAM_ORD_W`] right-aligned, the name at [`size::PARAM_NAME_W`],
 /// the fader taking what is left, and the value at [`size::PARAM_VAL_W`]
@@ -18618,25 +19793,39 @@ fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &
 fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, param: &Param) {
     let left = row.min.x + size::PARAM_PAD_L;
     let right = row.max.x - size::PARAM_PAD_R;
-    let ord = painter.layout_job(span_at(
-        &param.ord.to_string(),
-        size::PARAM_ORD_SIZE,
-        pal.faint,
-    ));
+    // **The mark is the number**, and a control the interface does not carry
+    // has none: `.param.unpub .ord` is the mock's dot in the hairline colour,
+    // where a published row's is its position in `--c-faint`. One cell, two
+    // states, and the state *is* whether it is published — a second mark beside
+    // the number would be two spellings of one fact
+    // (`docs/adr/0329-…`).
+    let (word, ink) = match param.ord {
+        Some(ord) => (ord.to_string(), pal.faint),
+        None => (UNPUBLISHED.to_owned(), pal.hair),
+    };
+    let ord = painter.layout_job(span_at(&word, size::PARAM_ORD_SIZE, ink));
     painter.galley(
         Pos2::new(
             left + size::PARAM_ORD_W - ord.size().x,
             row.center().y - ord.size().y * 0.5,
         ),
         ord,
-        pal.faint,
+        ink,
     );
     let name_x = left + size::PARAM_ORD_W + size::PARAM_GAP;
     // `.param .pname`'s `overflow: hidden; text-overflow: ellipsis` — one row,
     // broken anywhere, with an ellipsis for what did not fit. The mock says so
     // for this column and not for the library's, which is why one elides and
     // the other clips.
-    let mut job = span_at(&param.name, size::BASE, pal.dim);
+    // `.param.unpub .pname` is a shade further back than `.param`'s, which is
+    // the whole of what an unpublished row looks like beside a published one:
+    // the name is still legible — the row is drawn so it can be pressed again —
+    // and nothing about it invites a hand.
+    let name_ink = match param.ord {
+        Some(_) => pal.dim,
+        None => pal.faint,
+    };
+    let mut job = span_at(&param.name, size::BASE, name_ink);
     job.wrap = egui::epaint::text::TextWrapping {
         max_width: size::PARAM_NAME_W,
         max_rows: 1,
@@ -18647,8 +19836,16 @@ fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, param: &Param) 
     painter.galley(
         Pos2::new(name_x, row.center().y - name.size().y * 0.5),
         name,
-        pal.dim,
+        name_ink,
     );
+    // **A control the interface does not carry stops here.** The fader and the
+    // figure are what publishing decides the panel shows, so a row that is off
+    // the list is a mark and a name and nothing else — and a value drawn beside
+    // a control this pane says it is not showing would be the page's own
+    // sentence contradicted in the same row.
+    if param.ord.is_none() {
+        return;
+    }
     // **A bound row shows its source instead of a number** — `.param.bound`'s
     // `.pval.src`, and the readout the manual calls *where disagreeing with
     // the system begins*. The mock draws it in the same right-aligned track
@@ -18805,6 +20002,7 @@ fn param_fader(row: Rect, param: &Param) -> Option<Fader> {
 fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
     let top = group.min.y
         + size::NODE_HEAD_H
+        + uses_h(node)
         + match node.renderers.is_empty() {
             true => 0.0,
             false => size::REND_ROW_H,
@@ -18817,6 +20015,28 @@ fn param_rect(group: Rect, node: &Node, index: usize) -> Rect {
     Rect::from_min_max(
         Pos2::new(group.min.x, top),
         Pos2::new(group.max.x, top + size::PARAM_H),
+    )
+}
+
+/// **The leftmost cell of a parameter row**, which is the mark that publishes
+/// it: [`size::PARAM_ORD_W`] wide at the row's left padding, the full height of
+/// the row.
+///
+/// **The whole cell and not the ink in it.** A published row's number is one or
+/// two glyphs and an unpublished row's is a dot, so a target the size of what is
+/// drawn would be a control that shrank as the interface grew past nine — which
+/// is the *drawn and not claimed* mistake made in the other direction. The cell
+/// is a fixed track of the mock's own grid, so the target is the same size on
+/// every row.
+///
+/// `param` is taken so that this cannot be asked of a row that has none to give;
+/// there is no such row today, and the argument for the cell being one control's
+/// two states is at [`UNPUBLISHED`].
+fn ord_cell(row: Rect, _param: &Param) -> Rect {
+    let left = row.min.x + size::PARAM_PAD_L;
+    Rect::from_min_max(
+        Pos2::new(left, row.min.y),
+        Pos2::new(left + size::PARAM_ORD_W, row.max.y),
     )
 }
 
@@ -18992,6 +20212,35 @@ pub struct View {
     /// said, and a pill drawn for it would be this crate answering a question
     /// about a device on its own authority. See [`audio_in`].
     pub audio: Option<AudioIn>,
+    /// **Whether MIDI learn is armed** — the transport row's `learn` pill, lit
+    /// while this is true.
+    ///
+    /// **This crate's own state, and the only console state on this row that
+    /// is** ([`AudioIn`]'s card is the other). Arming is a mode and it is the
+    /// one thing rule 04 lets be a mode, because the pill *is* the readout: it
+    /// is lit for exactly as long as the mode is on, and nothing else on the
+    /// panel changes meaning while it is
+    /// ([ADR-0336](../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)).
+    ///
+    /// **A `bool` and not an `Option`, where [`View::map`] beside it is an
+    /// `Option`**, and the difference is the same one `audio` draws: whether a
+    /// mode is armed is a fact this crate owns outright, and *which map is
+    /// loaded* is a fact about a file this crate cannot see.
+    ///
+    /// **What it does not do is bind anything.** The gesture is the host's —
+    /// what the pointer is on, what arrived on the wire, and what goes in the
+    /// file are all outside this crate (ADR-0156). This is the arming and the
+    /// lamp.
+    pub learn: bool,
+    /// **Which map is loaded**, for the transport row's `map` pill, or `None`
+    /// for a console nobody has told — which is every test in this crate and
+    /// every run with no surface.
+    ///
+    /// It is [`View::audio`]'s shape one pill along and for its reason: a map
+    /// is a *file*, `src/` reads none (ADR-0156), so whoever loaded one writes
+    /// its name here. `Some(MapPill::NONE)` is a program with a surface and no
+    /// map, which draws `map · none`; `None` draws no pill at all.
+    pub map: Option<MapPill>,
     /// **What the other three controls in the tracker group read this
     /// frame** — the latency offset the open session is holding, and which way
     /// the grid can still be moved an octave — or `None` for a console nobody
@@ -19293,32 +20542,39 @@ pub struct View {
     /// which is every test in this crate and is a console with no clock behind
     /// it — a panel drawn at the origin of every animation on it.
     pub phase: Phase,
-    /// **Which deck the keys are addressed to**, and the first thing in this
-    /// struct that is neither a reading handed in nor a rectangle derived from
-    /// one: it is a **pointer the console owns**.
+    /// **Which bay the keyboard is talking to, and what each bay remembers** —
+    /// the pointer this console owns, and the one three of its fields used to
+    /// be ([`crate::focus`]).
     ///
-    /// [`Operation::SelectDeck`] *"writes no record, and is the reason every
-    /// other variant names its deck instead of meaning the selected one"* —
-    /// so nothing downstream can be the model of record for it, and a host
-    /// that kept a copy would be keeping the console's state on its behalf.
-    /// [ADR-0219](../../../docs/adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)
-    /// recorded it as living *"in the specification and not in
-    /// `karakuri-console`'s code"*; this is where that stops being true.
+    /// **The deck selection, the library cursor and the marked scope are three
+    /// readings of this**, on two bays: the Mixer's remembered item is the
+    /// deck the keys are addressed to, the Library's is the row under the
+    /// cursor, and the control last named under the Library's head is the
+    /// scope. Each of the three was a private field with the same paragraph
+    /// written at it — *"nothing downstream can be the model of record for it,
+    /// and a host that kept a copy would be keeping the console's state on its
+    /// behalf"* — and that paragraph is written once now
+    /// ([ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md),
+    /// [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
+    /// **Nothing about what any of the three means changes**, which is the
+    /// record's own clause: what each of them refuses is still refused where it
+    /// was refused, by [`View::select`], [`View::walk`] and
+    /// [`View::select_scope`].
     ///
-    /// **Private, with [`View::select`] the only way in**, which is
-    /// [`View::arrangement`]'s rule: what a *pointer* is at is not something
-    /// the program can be told, because the console is what refuses a deck
-    /// there is no strip for. Zero until somebody says otherwise — deck A,
-    /// which is the strip the mock rings.
+    /// **Private, with [`View::select`], [`View::walk`], [`View::point_at`],
+    /// [`View::select_scope`], [`View::step_scope`], [`View::tab`] and
+    /// [`View::focus_up`] the only ways in**, which is [`View::arrangement`]'s
+    /// rule: what a *pointer* is at is not something the program can be told,
+    /// because the console is what refuses a deck there is no strip for.
     ///
-    /// **Read by [`mixer_into`] for the ring and by nothing else on the
-    /// panel.** The Library bay's foot read it for its letter until
-    /// 2026-09-08 and reads [`View::target`] now (ADR-0305), which is what
-    /// lets a load be aimed at a deck the keys are not addressed to;
-    /// `console.html`'s crossfader read it as well, and there is no
-    /// crossfader. What still fills its `deck` in from here is every
-    /// deck-addressed *key*, `l` included.
-    selection: u8,
+    /// **Read by [`mixer_into`] for the solid ring, by [`View::focus_mark`]
+    /// for the dashed one, and by nothing else on the panel.** The Library
+    /// bay's foot read the selection for its letter until 2026-09-08 and reads
+    /// [`View::target`] now (ADR-0305), which is what lets a load be aimed at a
+    /// deck the keys are not addressed to; `console.html`'s crossfader read it
+    /// as well, and there is no crossfader. What still fills its `deck` in from
+    /// there is every deck-addressed *key*, `l` included.
+    focus: Focus,
     /// **Which deck the Library bay's load is aimed at**, and the third
     /// pointer this console owns.
     ///
@@ -19359,6 +20615,23 @@ pub struct View {
     /// and nothing to leave by, and `input::claim`'s rule 2 would give it
     /// every press on the console until a second one shut it.
     target_open: bool,
+    /// **Which `uses` line's card is down**, as `(pane, node, input)` — or
+    /// `None` with none of them open, which is where every run begins.
+    ///
+    /// **The console's own state, exactly as [`target_open`] beside it is.** A
+    /// card being down changes what the *next press* reaches and nothing about
+    /// any deck, so no operation names it: opening a list is not something a
+    /// map or a model could ever want to say, which is ADR-0305's argument for
+    /// the pulldown one bay along and is this one's unchanged.
+    ///
+    /// **One at a time, and one for the whole console.** Two cards down at once
+    /// would put two rectangles over the same pane with `input::claim`'s rule 2
+    /// giving each of them every press; and a card belongs to a pane, a node and
+    /// an input together, which is why the three travel as one value rather than
+    /// as three fields that can disagree.
+    ///
+    /// [`target_open`]: Self::target_open
+    wiring_open: Option<(usize, usize, usize)>,
     /// **Whether the `+ lane` chooser's card is down**, and it is the field
     /// above one bay along — the console's own state rather than a reading, on
     /// [`Arrangement::menu`]'s argument: what a *control* is doing is not
@@ -19412,27 +20685,6 @@ pub struct View {
     /// **Private, with [`View::library_scroll`] and
     /// [`View::scroll_library_by`] the only ways in.**
     library_scroll: f32,
-    /// **Which Set in the Library bay a load would take**, the mock's
-    /// `.lib-row.cursor`, and the second of this console's two pointers.
-    ///
-    /// **It has no operation at all**, where the selection above has a row of
-    /// its own, and `console.html`'s *How a Set reaches a deck* is where that
-    /// asymmetry is argued: the selection is what every deck-addressed
-    /// operation's keyboard translator fills its `deck` in from, and this is
-    /// read by exactly one operation — which carries the Set id in its own
-    /// payload. A map cannot name a Set, a model names one outright, and the
-    /// panel's route is the drag, so three of the four surfaces would have
-    /// nothing to reach.
-    ///
-    /// **An index into [`View::library`] and not a name**, because a name this
-    /// console kept would be a second copy of a listing it is handed per
-    /// frame — and a copy that goes on naming a Set the store no longer holds.
-    /// [`View::walk`] and [`View::point_at`] are what keep it inside the
-    /// listing — a key steps and a press names, which is this console's
-    /// division everywhere a pointer meets a key — and both are asked at the
-    /// move rather than at the draw: a cursor clamped while painting would
-    /// move on a frame nobody pressed anything on.
-    cursor_row: usize,
     /// **What the Set under the cursor declares, opened** — or `None` for a
     /// bay with nothing open, which is where every run starts.
     ///
@@ -19454,29 +20706,6 @@ pub struct View {
     /// **Private, with [`View::read`] and [`View::shut_reading`] the only ways
     /// in**, which is [`View::selection`]'s rule one pointer up.
     reading: Option<Reading>,
-    /// **Which scope the bay is listing**, as a position in [`View::scopes`],
-    /// and the third of this console's pointers.
-    ///
-    /// **A pointer and not a reading**, which is [`View::selection`]'s
-    /// argument arriving at a second control:
-    /// [`Operation::SelectScope`] is `Silent(Surface)` — *"it changes which
-    /// library the bay is reading and nothing about what any deck is
-    /// playing"* — so nothing downstream can be the model of record for it,
-    /// and a host that kept a copy would be keeping the console's state on its
-    /// behalf. The host reads it to know which listing to answer with.
-    ///
-    /// **A position and not a [`Scope`]**, for [`View::cursor_row`]'s reason
-    /// one row up: what is drawn is the row of chips this console was handed,
-    /// so what a pointer into it can be is a place in that row — and a scope
-    /// held here that the host stopped offering would be a mark drawn on no
-    /// chip at all.
-    ///
-    /// Zero until somebody says otherwise, which is the first chip of whatever
-    /// row arrives. That is `all` in the row this console draws, and it is
-    /// what a run opens on — a bay that opened on the starred subset would be
-    /// empty on a store nobody has starred in. See [`View::select_scope`],
-    /// which is how a host that wants another chip says so.
-    scope: usize,
     /// **Which of [`View::holds`] the `holds` field is set to**, or `None` for
     /// a field nobody has set — the fifth of this console's pointers.
     ///
@@ -19615,6 +20844,12 @@ impl View {
             // this crate: no pill at all, rather than one reading `none` on
             // this crate's own authority. See the field.
             audio: None,
+            // **Never armed at start-up**, which is the state every mode on
+            // this panel opens in for P-0094's reason: a console that came up
+            // in a mode nobody chose would rebind the first knob touched.
+            learn: false,
+            // Nobody has said, which draws no pill — [`View::map`].
+            map: None,
             // And nothing said about the beat tracker, which is the same
             // console from the other side: no offset, no tap and no octave.
             tracker: None,
@@ -19682,11 +20917,16 @@ impl View {
             // also a console nobody has handed an opening to.
             opening: Open::CLOSED,
             phase: Phase::ZERO,
-            // Deck A and the first row, which is where the mock draws both
-            // marks. Neither is a reading of anything, so neither has a
-            // *nothing* to be: a console with no deck draws no strips and so
-            // no ring, and one with no store draws no rows and so no cursor.
-            selection: 0,
+            // **Nothing addressed and no bay named**, which is the honest
+            // start rather than a table of zeroes: `Focus::bay` answers *the
+            // first bay the traversal reaches* off the arrangement, and every
+            // bay's remembered address is the first thing it drew until
+            // somebody moves it. So deck A and the first library row are still
+            // where the marks are — the mock's own two — and neither is a
+            // reading of anything, so neither has a *nothing* to be: a console
+            // with no deck draws no strips and so no ring, and one with no
+            // store draws no rows and so no cursor.
+            focus: Focus::default(),
             // **Deck A, and it is a third mark rather than a copy of the
             // first.** Both start on A because that is where the mock draws
             // both, and nothing keeps them together after that: `select` moves
@@ -19695,6 +20935,7 @@ impl View {
             // **Shut**, which is not a fourth mark: a list is down or it is
             // not there, and the pulldown draws the same either way.
             target_open: false,
+            wiring_open: None,
             // **Shut**, for the reason the pulldown's list is: the `+ lane`
             // pill draws the same whether its card is down or not.
             lane_open: false,
@@ -19704,14 +20945,10 @@ impl View {
             // **The top of the listing**, which is where every bay starts and
             // the one position a console with no store behind it can be at.
             library_scroll: 0.0,
-            cursor_row: 0,
             // **Nothing open**, which is not a fourth mark: a reading is a
             // block of rows or it is not there, and the chip that opens one
             // draws the same either way — `PARAMS_PILL`.
             reading: None,
-            // The first chip of a row that has none in it yet. Not a reading
-            // of anything either, for the two above's reason.
-            scope: 0,
             // No shape, the next bar and four beats — where a run begins, and
             // `karakuri-cli`'s own opening state. Not a reading of anything
             // either, for the three above's reason.
@@ -19726,10 +20963,30 @@ impl View {
         }
     }
 
-    /// **Which deck the keys are addressed to** — see [`View::selection`] the
-    /// field, which is where the argument is.
+    /// **Which deck the keys are addressed to** — the Mixer bay's remembered
+    /// address, read as a deck.
+    ///
+    /// [`Operation::SelectDeck`] *"writes no record, and is the reason every
+    /// other variant names its deck instead of meaning the selected one"* — so
+    /// nothing downstream can be the model of record for it, and a host that
+    /// kept a copy would be keeping the console's state on its behalf.
+    /// [ADR-0219](../../../docs/adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)
+    /// recorded it as living *"in the specification and not in
+    /// `karakuri-console`'s code"*; [`View::focus`] the field is where that
+    /// stopped being true, and ADR-0259 is why it is the same field the library
+    /// cursor and the marked scope are in.
+    ///
+    /// **Deck A for a bay nobody has addressed**, which is the strip the mock
+    /// rings. The digit that names the first strip is `1` — digits count what
+    /// the bay drew — and this is the one place the step down to a deck index
+    /// is written.
+    ///
+    /// [`View::focus`]: Self::focus
     pub fn selection(&self) -> u8 {
-        self.selection
+        self.focus
+            .address(focus::MIXER)
+            .and_then(|address| address.remembered(&[]))
+            .map_or(0, |nth| nth.saturating_sub(1) as u8)
     }
 
     /// **Address the keys to `deck`**, and answer whether that moved anything.
@@ -19756,9 +21013,94 @@ impl View {
         if usize::from(deck) >= self.mixer.len() {
             return false;
         }
-        let moved = self.selection != deck;
-        self.selection = deck;
+        let moved = self.selection() != deck;
+        // **The Mixer bay's remembered item, one-based**, which is the digit
+        // that names the strip: `1` is deck A. See [`crate::focus::Address`].
+        self.focus
+            .address_mut(focus::MIXER)
+            .remember(&[], usize::from(deck) + 1);
         moved
+    }
+
+    /// **Where focus is and what every bay remembers, to read** —
+    /// [`View::focus`] the field, which is where the argument is.
+    ///
+    /// **A reading and not a door.** It is `&`, so the three pointers still
+    /// have exactly the writers they had: `select`, `walk`, `point_at`,
+    /// `select_scope` and `step_scope` are what refuse a deck the mixer draws
+    /// no strip for, a row past the listing and a scope with no chip, and a
+    /// `&mut` here would be a way past all five. What it is for is asking one
+    /// question — *are these the same field* — which `tests/focus.rs` asks and
+    /// nothing else can.
+    ///
+    /// [`View::focus`]: Self::focus
+    pub fn focus(&self) -> &Focus {
+        &self.focus
+    }
+
+    /// **Where focus is and what every bay remembers, to write** — and it is
+    /// `pub(crate)` where [`View::focus`] above is `pub`.
+    ///
+    /// **What it is for is the address path and not the memory.**
+    /// [`crate::focus::press`] moves `Address::at` as a digit descends and
+    /// `esc` climbs, and every write to the *remembered* item still goes
+    /// through [`View::select`], [`View::walk`], [`View::point_at`],
+    /// [`View::select_scope`] and [`View::step_scope`] — the five methods that
+    /// refuse a deck the mixer draws no strip for, a row past the listing and a
+    /// scope with no chip. **The grammar adds a route and no exception**, which
+    /// is the whole of why this door is the crate's and not the world's.
+    pub(crate) fn focus_mut(&mut self) -> &mut Focus {
+        &mut self.focus
+    }
+
+    /// **Which bay a key press is addressed to**, resolved against the
+    /// arrangement — [`Focus::bay`], which is where the argument is.
+    ///
+    /// `None` only for an arrangement with no bay in it, which no arrangement
+    /// this crate builds is.
+    pub fn focused(&self, panel: &Panel) -> Option<&'static Region> {
+        self.focus.bay(panel.layout())
+    }
+
+    /// **`Tab`, and `shift-Tab` at `step` of `-1`** — [`Focus::tab`], and the
+    /// `bool` is [`View::select`]'s: a caller repaints on a move.
+    ///
+    /// **The bay it leaves keeps where it was.** `Tab` never descends and never
+    /// pops, so the address the Mixer had reached is the address it has when
+    /// focus comes back to it — which is the deck selection persisting *"while
+    /// your hands are in the library"*, seen as the general rule rather than as
+    /// a habit of one bay.
+    pub fn tab(&mut self, panel: &Panel, step: i32) -> bool {
+        self.focus.tab(panel.layout(), step)
+    }
+
+    /// **`esc`: up one level of the focused bay's address**, and `false` where
+    /// there was no level to leave — [`Focus::up`].
+    ///
+    /// **At bay level it acts on nothing and the caller says so**, which is
+    /// ADR-0259's own clause and
+    /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+    /// there is no unfocused state to fall out into, and a key that declines
+    /// silently is indistinguishable from one that is not bound. **It does not
+    /// quit** — the window's own close is what does
+    /// ([ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)).
+    pub fn focus_up(&mut self, panel: &Panel) -> bool {
+        self.focus.up(panel.layout())
+    }
+
+    /// **Where the dashed focus ring goes**, or `None` where the arrangement
+    /// gives the focused bay no rectangle to put one on — [`focus::mark`], with
+    /// the bay this console has focus on.
+    ///
+    /// **A derivation rather than a paint**, which is this crate's arrangement
+    /// everywhere a mark is drawn: [`View::draw`] paints from this and
+    /// `tests/focus.rs` asks it the same question, so the ring an operator sees
+    /// and the ring a test reads cannot come apart.
+    ///
+    /// `panel` must be solved: [`Layout::rect`] refuses to answer from a dirty
+    /// one.
+    pub fn focus_mark(&self, panel: &Panel) -> Option<Rect> {
+        focus::mark(panel.layout(), self.focus.bay(panel.layout())?)
     }
 
     /// **What the Library bay's load control is aimed at**, as the one value
@@ -19816,6 +21158,35 @@ impl View {
         self.target = deck;
         self.target_open = false;
         moved
+    }
+
+    /// **Which `uses` line's card is down**, or `None` — see
+    /// [`View::wiring_open`] the field.
+    pub fn wiring_open(&self) -> Option<(usize, usize, usize)> {
+        self.wiring_open
+    }
+
+    /// **Put one `uses` line's card down**, and answer whether anything moved.
+    ///
+    /// **Refused for a console with no pane**, which is [`View::open_target`]'s
+    /// own guard and its reason: a card with no line under it offers nothing to
+    /// pick and nothing to leave by, and `input::claim`'s rule 2 would hand it
+    /// every press until a second one shut it.
+    pub fn open_wiring(&mut self, pane: usize, node: usize, input: usize) -> bool {
+        if self.inspector.get(pane).is_none() {
+            return false;
+        }
+        let at = Some((pane, node, input));
+        let moved = self.wiring_open != at;
+        self.wiring_open = at;
+        moved
+    }
+
+    /// **Put it away**, and answer whether one was down.
+    pub fn shut_wiring(&mut self) -> bool {
+        let was = self.wiring_open.is_some();
+        self.wiring_open = None;
+        was
     }
 
     /// **Whether the pulldown's list is down** — see [`View::target_open`] the
@@ -20029,15 +21400,61 @@ impl View {
         moved
     }
 
-    /// **Which row of the Library bay the cursor is on** — see
-    /// [`View::cursor_row`] the field.
+    /// **Which Set in the Library bay a load would take** — the mock's
+    /// `.lib-row.cursor`, and that bay's remembered address read as a row.
+    ///
+    /// **It has no operation at all**, where the deck selection has a row of
+    /// its own, and `console.html`'s *How a Set reaches a deck* is where that
+    /// asymmetry is argued: the selection is what every deck-addressed
+    /// operation's keyboard translator fills its `deck` in from, and this is
+    /// read by exactly one operation — which carries the Set id in its own
+    /// payload. A map cannot name a Set, a model names one outright, and the
+    /// panel's route is the drag, so three of the four surfaces would have
+    /// nothing to reach.
+    ///
+    /// **An index into [`View::library`] and not a name**, because a name this
+    /// console kept would be a second copy of a listing it is handed per
+    /// frame — and a copy that goes on naming a Set the store no longer holds.
+    /// [`View::walk`] and [`View::point_at`] are what keep it inside the
+    /// listing — a key steps and a press names, which is this console's
+    /// division everywhere a pointer meets a key — and both are asked at the
+    /// move rather than at the draw: a cursor clamped while painting would
+    /// move on a frame nobody pressed anything on.
     ///
     /// Answered against the listing rather than read back bare: a store that
     /// shrank between two frames leaves an index past its end, and the row a
     /// load would take is then the last one there is. Zero on an empty
     /// listing, which is a bay with no row to draw at all.
     pub fn cursor_row(&self) -> usize {
-        self.cursor_row.min(self.library.len().saturating_sub(1))
+        self.stored_row().min(self.library.len().saturating_sub(1))
+    }
+
+    /// **The row as it is stored** — the number [`View::cursor_row`] clamps and
+    /// never the one it clamped, which is [`View::library_scroll`]'s rule one
+    /// pointer along.
+    ///
+    /// The first row for a bay nobody has addressed. The digit that names it is
+    /// `1`, so this is where the step down to a position is written — the
+    /// Library's half of the arithmetic [`View::selection`] does for the Mixer.
+    fn stored_row(&self) -> usize {
+        self.focus
+            .address(focus::LIBRARY)
+            .and_then(|address| address.remembered(&[]))
+            .map_or(0, |nth| nth.saturating_sub(1))
+    }
+
+    /// **Put the library cursor on `row`**, with nothing refused and nothing
+    /// clamped — the one write [`View::walk`], [`View::point_at`] and the two
+    /// scope methods all end at.
+    ///
+    /// It is private because every rule about *which rows there are* belongs to
+    /// its caller: `walk` holds the cursor inside the rows the bay drew,
+    /// `point_at` refuses a row past the listing, and a scope press puts it back
+    /// at the top. This is the storage.
+    fn put_row(&mut self, row: usize) {
+        self.focus
+            .address_mut(focus::LIBRARY)
+            .remember(&[], row + 1);
     }
 
     /// **Move the library cursor by `step` rows**, and answer whether it
@@ -20080,10 +21497,10 @@ impl View {
         if drawn.start >= last {
             return false;
         }
-        let to = (self.cursor_row as i64 + step as i64).clamp(drawn.start as i64, (last - 1) as i64)
-            as usize;
-        let moved = to != self.cursor_row;
-        self.cursor_row = to;
+        let to = (self.stored_row() as i64 + step as i64)
+            .clamp(drawn.start as i64, (last - 1) as i64) as usize;
+        let moved = to != self.stored_row();
+        self.put_row(to);
         moved
     }
 
@@ -20115,8 +21532,8 @@ impl View {
         if row >= self.library.len() {
             return false;
         }
-        let moved = row != self.cursor_row;
-        self.cursor_row = row;
+        let moved = row != self.stored_row();
+        self.put_row(row);
         moved
     }
 
@@ -20275,7 +21692,53 @@ impl View {
     /// and zero for a row with nothing in it. The paint's half of
     /// [`View::scope`].
     fn marked(&self) -> usize {
-        self.scope.min(self.scopes.len().saturating_sub(1))
+        self.stored_scope().min(self.scopes.len().saturating_sub(1))
+    }
+
+    /// **Which scope the bay is listing, as it is stored** — the Library bay's
+    /// remembered address one level in, at the control the head names.
+    ///
+    /// **A pointer and not a reading**, which is [`View::selection`]'s argument
+    /// arriving at a second control: [`Operation::SelectScope`] is
+    /// `Silent(Surface)` — *"it changes which library the bay is reading and
+    /// nothing about what any deck is playing"* — so nothing downstream can be
+    /// the model of record for it, and a host that kept a copy would be keeping
+    /// the console's state on its behalf. The host reads it, through
+    /// [`View::scope`], to know which listing to answer with.
+    ///
+    /// **A position and not a [`Scope`]**, for [`View::cursor_row`]'s reason:
+    /// what is drawn is the row of chips this console was handed, so what a
+    /// pointer into it can be is a place in that row — and a scope held here
+    /// that the host stopped offering would be a mark drawn on no chip at all.
+    ///
+    /// **Under [`focus::HEAD`] rather than beside the cursor**, which is the
+    /// whole of why one bay has two of these and they do not collide: the
+    /// scope chips are the bay's *head* — the controls that are about the bay
+    /// rather than about anything in it — and the cursor is which *item* the
+    /// bay is on. ADR-0259 walks the Library exactly that way: *"`0` is the
+    /// head and its controls are the scope chips … Items are the listed
+    /// Sets."*
+    ///
+    /// The first chip for a bay nobody has addressed, which is `all` in the row
+    /// this console draws and is what a run opens on — a bay that opened on the
+    /// starred subset would be empty on a store nobody has starred in. See
+    /// [`View::select_scope`], which is how a host that wants another chip says
+    /// so.
+    fn stored_scope(&self) -> usize {
+        self.focus
+            .address(focus::LIBRARY)
+            .and_then(|address| address.remembered(&[focus::HEAD]))
+            .map_or(0, |nth| nth.saturating_sub(1))
+    }
+
+    /// **Mark the chip at `at`**, with nothing refused and nothing clamped —
+    /// [`View::put_row`]'s half one level in, and private for its reason: which
+    /// chips there are belongs to [`View::select_scope`] and
+    /// [`View::step_scope`].
+    fn put_scope(&mut self, at: usize) {
+        self.focus
+            .address_mut(focus::LIBRARY)
+            .remember(&[focus::HEAD], at + 1);
     }
 
     /// **Mark `scope`, and answer whether that moved anything.**
@@ -20299,7 +21762,7 @@ impl View {
             return false;
         };
         let moved = self.marked() != at;
-        self.scope = at;
+        self.put_scope(at);
         if moved {
             // **The cursor goes back to the top of a listing it has never
             // seen.** It is a position in [`View::library`] and that field is
@@ -20308,7 +21771,7 @@ impl View {
             // list of three — which [`View::cursor_row`] would then clamp to
             // *the last row*, a Set nobody chose sitting under a pill that
             // says a press will load it.
-            self.cursor_row = 0;
+            self.put_row(0);
             // **And so does the scroll, for the same reason and not for a
             // second one.** A position is a distance into [`View::library`],
             // that field is about to be rewritten, and a listing of three read
@@ -20357,10 +21820,10 @@ impl View {
             return false;
         }
         let to = (self.marked() + 1) % self.scopes.len();
-        self.scope = to;
+        self.put_scope(to);
         // The listing is about to be a different listing — see
         // [`View::select_scope`], where this is argued.
-        self.cursor_row = 0;
+        self.put_row(0);
         true
     }
 
@@ -20447,7 +21910,7 @@ impl View {
             // [`View::library`] is about to be rewritten by whoever answers the
             // narrowing, and a cursor left where it was would point at the
             // fifteenth row of a list of three.
-            self.cursor_row = 0;
+            self.put_row(0);
         }
         moved
     }
@@ -20897,6 +22360,12 @@ impl View {
         // pill is laid out from where the octave's second half ends, so a frame
         // that asked twice could lay the row out from two answers.
         let tracking = self.tracker;
+        // **And the map, read once beside the two above and for their reason**:
+        // `learn`, `map` and the arrangement pill are laid out one from the
+        // next, so a frame that asked twice could lay three controls out from
+        // three answers.
+        let map = self.map.as_ref();
+        let armed = self.learn;
         let look_at = self.look;
         let out = self.master_out;
         let chain = self.master_chain;
@@ -20924,8 +22393,13 @@ impl View {
         // they are drawn against — `draw` takes `&mut self` and the arms below
         // borrow these slices, so a pointer read inside an arm would be a
         // second borrow of the thing it points into.
-        let selection = self.selection;
+        let selection = self.selection();
         let cursor_row = self.cursor_row();
+        // **Where the dashed ring goes, asked once for the frame** beside the
+        // three pointers it is now the same field as — [`View::focus_mark`],
+        // which is the derivation this paints from rather than a second
+        // reading of where focus is.
+        let focused = self.focus_mark(panel);
         // **The third of them**, and it is read the same way and for the same
         // reason: which chip is marked is a position in the row this frame is
         // drawing, and a scope past its end is the last chip there is.
@@ -20944,6 +22418,9 @@ impl View {
         // **And the row menu's reading, off the same borrow and for the same
         // reason** — it counts the strips too, and the arm below borrows the
         // slices it would be read off.
+        // **Which `uses` line has its card down**, read once for the frame like
+        // every other pointer this console keeps — see [`View::wiring_open`].
+        let wiring = self.wiring_open;
         let menued = self.menued();
         // **And how far the Library bay is scrolled**, read once for the frame
         // beside the two pointers above it: `library` clamps it and hands the
@@ -21030,6 +22507,7 @@ impl View {
                             values,
                             audio,
                             tracking,
+                            None,
                             arr,
                             look_at,
                         ) {
@@ -21312,9 +22790,54 @@ impl View {
                     audio_in_into(ui, &pal, &pill, audio);
                 }
             }
-            if let Some(pill) = arrangement(ui.ctx(), panel.layout(), values, audio, tracking, arr)
+            // **`learn` and `map`, in the mock's order and before the
+            // arrangement pill**, which is where they sit in `.transport`:
+            // `learn`, `map · nanoKONTROL2 ▾`, `arr · night ▾`. Neither has a
+            // card to hang out of the row, so either could have been painted
+            // from the `Kind::Transport` arm; they are here so that the three
+            // controls that are laid out one from the next are painted in one
+            // place, in the order they are laid out.
+            if let Some(pill) = learn_pill(
+                ui.ctx(),
+                panel.layout(),
+                values,
+                audio,
+                tracking,
+                map,
+                armed,
+            ) {
+                learn_into(ui, &pal, &pill);
+            }
+            if let Some((pill, map)) =
+                map_pill(ui.ctx(), panel.layout(), values, audio, tracking, map).zip(map)
+            {
+                map_into(ui, &pal, &pill, map);
+            }
+            if let Some(pill) =
+                arrangement(ui.ctx(), panel.layout(), values, audio, tracking, map, arr)
             {
                 arrangement_into(ui, &pal, &pill, arr);
+            }
+            // **A `uses` line's card, over everything for the same reason** —
+            // it hangs out of a line inside a pane and down over the groups
+            // under it, so a card painted from inside the pane loop would go on
+            // before them. It can never be down while any of the others is,
+            // because `input`'s rule 2 sends the press that would open a second
+            // one to whichever is already open.
+            if let Some((pane_at, node, input)) = wiring {
+                if let Some(pane) = panes.get(pane_at) {
+                    if let Some(at) = inspector(panel.layout(), pane_at, pane, scrolled[pane_at]) {
+                        if let Some(line) = at.uses_line(ui.ctx(), pane, node, input, true) {
+                            let room = to_egui(panel.layout().viewport());
+                            if let (Some(card), Some(uses)) = (
+                                line.list(room),
+                                pane.nodes.get(node).and_then(|at| at.uses.get(input)),
+                            ) {
+                                uses_card_into(ui, &pal, &line, uses, card, room);
+                            }
+                        }
+                    }
+                }
             }
             // **The Library bay's deck list, over everything for the two
             // cards' reason** — it hangs out of that bay's foot and up over
@@ -21359,6 +22882,17 @@ impl View {
                         lane_card_into(ui, &pal, &card, &choices);
                     }
                 }
+            }
+            // **The dashed focus ring, painted last** — after every card and
+            // every menu, for the five cards above it's reason read the other
+            // way: this mark is *proud* of the head it rings
+            // ([`size::WFOCUS_OFFSET`]), so it lands on the ground between two
+            // bays, and anything drawn after it would go over it. **One ring
+            // on one bay**, because focus is in one place — see
+            // [`View::focus_mark`], which is the derivation and where the
+            // folded case is argued.
+            if let Some(mark) = focused {
+                wfocus_into(ui, &pal, mark);
             }
         });
     }
@@ -22063,7 +23597,7 @@ fn head_into(ui: &Ui, pal: &Palette, rect: Rect, region: &Region, open: Open) {
 /// [`head_pills`] lays the head's controls out in it. The mid-line a pill is
 /// centred on is this box's, so a head clipped short takes its pills up with
 /// it and the two cannot disagree about where the row is.
-fn head_box(rect: Rect) -> Rect {
+pub(crate) fn head_box(rect: Rect) -> Rect {
     Rect::from_min_max(
         rect.min,
         Pos2::new(rect.max.x, (rect.min.y + size::HEAD_H).min(rect.max.y)),
@@ -22384,6 +23918,9 @@ mod tests {
             anchor_bpm: 128.0,
             scrub_beats: 0.0,
             composite: false,
+            // Not this module's row: the deck head's two build chips are drawn
+            // from this, and everything here is about the rows under it.
+            aimed: None,
             nodes: vec![Node {
                 addr: "L1:0".to_owned(),
                 name: "drift_shell".to_owned(),
@@ -22394,10 +23931,11 @@ mod tests {
                     },
                     level: Authority::Manual,
                 }),
+                uses: Vec::new(),
                 renderers: Vec::new(),
                 params: (0..params)
                     .map(|n| Param {
-                        ord: n + 1,
+                        ord: Some(n + 1),
                         name: format!("p{n}"),
                         value: 0.5,
                         range: [0.0, 1.0],

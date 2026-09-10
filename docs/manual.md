@@ -159,7 +159,8 @@ Point a chat client at `http://127.0.0.1:8737/` and it can **read a slot's proce
 it, and be told what happened**. "The one that's showing now, a bit more vivid" is a small
 edit to a declarative file, and hot-swapping that file is what `--watch` already does.
 
-Seven tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
+Eight tools: seven that do something only this server can, and `operate`, which asks for an
+operation of this instrument by its own name. `read_procedure` gives you the source; `write_procedure` checks it and, if it
 compiles, writes it — **and if it does not compile, what comes back is the checker's
 diagnostics, against the source**, which is what lets a model fix its own mistake;
 `swap_outcome` says whether the result landed, was `overloaded` — it is in the slot and the slot
@@ -237,14 +238,52 @@ is what `read_set` calls it, because one function decides it: the name the set g
 the name its procedure gives itself where the set gave none, and the short hash of its source
 where there is neither. `--list-sets` prints the same thing at a terminal, one line per set.
 
-Two resources come with it: the IR specification, and a vocabulary page — every built-in,
-every topology, and every stage output — **generated from the checker's own tables** rather
-than written down beside them. Prose goes stale; those lists cannot, because the same tables
-are what reject a procedure.
+`operate` is the eighth, and it is the other seven read the other way round. Each of those
+does something the vocabulary alone does not name — a file, the store, a listing — so each
+gets a tool with its own arguments. Everything *else* this instrument can do already has a
+name: the headings of [the operations page](manual/operations.html) are the one vocabulary
+the panel, the keyboard, a MIDI map and this server all route into, so `operate` takes a
+name and a payload and nothing more. **A model asks for `Gain` or `Tone map` or `Put a
+node's previous version back`, and it is performed on the frame a hand on the panel would
+have performed it on** — the same function, the same thread, the same instant, which is what
+makes a model a fourth pair of hands rather than a second way to write a fader. There is no
+tool per operation and no tool per class: forty tools would have been forty second spellings
+of names that already exist.
+
+**Most of what it names is refused, and that is the mechanism rather than a shortfall.**
+Anything that could stop a performance is closed by default — what a live deck is drawing,
+the mix faders, the master effects, the inputs and outputs — and the operator opens a class
+at a pill in the head of the bay it belongs to. A call into a shut class comes back with one
+sentence naming the class and the pill that opens it, which is a sentence a model can hand
+to the person sitting beside it. The clock, quitting, the sequencer's lanes, which deck a
+key press lands on, and rule 06's authority are closed with no pill at all, because which
+bay they belong to is not settled. **The list never shortens**: what a model reads at the
+start of a session is still true at the end of one, and a shut class changes the answer
+rather than the list.
+
+**What it does not take, it says so about.** A name the vocabulary does not carry comes back
+with the nearest heading. A row that has one of the seven tools comes back naming that tool.
+The console's own state — folds, the arrangement, the window, which deck is selected, the
+sequencer's cells — is refused because a model has no window to arrange. Three rows whose
+payload the vocabulary has not settled are refused for that. And six rows are refused
+because nothing on the frame this lands on performs them yet — the star, the transfer, the
+outputs, the recording, a published interface and a mask position — since a call answered `ok`
+for work that did not happen is worse than one refused.
+
+Three resources come with it: the IR specification, a vocabulary page — every built-in,
+every topology, and every stage output — and `karakuri://operations`, every name `operate`
+takes with the shape of its payload and one call that names it. All three are **generated
+from the tables that do the work** rather than written down beside them. Prose goes stale;
+those lists cannot, because the same tables are what reject a procedure and refuse a call.
 
 It is the third control surface after the keyboard and MIDI, on the same terms: **nothing here
-may do anything a key cannot, and that is the goal rather than a report.** One thing does today
-— **binding a declared input is `wire_input` and `--edge`, and no key press asks for it**,
+may do anything a key cannot, and that is the goal rather than a report.** Since `operate`
+landed, where the two columns differ is a thing to read off the page rather than to count in
+this paragraph — `grep -o 'rt [a-z]*">key' docs/manual/operations.html | sort | uniq -c`
+beside the same command for MCP is the whole of the instrumentation, and every row where one
+reads `has` and the other does not is a debt somebody owes. One of them is named here because
+it was named before there was a column to read it off — **binding a declared input is
+`wire_input` and `--edge`, and no key press asks for it**,
 because a `uses` is written in the same breath as the procedure that declares it and the
 keyboard has never had a way to say a node's name. That is a debt against rule 01 and not an
 exception carved out of it; what it is waiting on is a way for a press to say a node's name,
@@ -888,6 +927,46 @@ MIDI **in** works and a surface can do nothing a key cannot. MIDI **out** is not
 controller's LEDs and motorised faders do not follow the deck — and two things can move a
 fader now, since a transition is one of them. Control changes are read at 7 bits, so a fader
 is 128 positions, about 0.8% of its range per step.
+
+**Both programs take a surface, and they take it differently.** `karakuri-cli` is told which
+port with `--midi-in` and which map with `--midi-map`, and refuses the run without the port it
+was named. The panel takes neither flag: it opens **the first MIDI input there is** when it
+starts, says which in its legend, and loads the map beside it — the same choice it makes about
+a microphone, and for the same reason, which is that there is somebody standing in front of
+it. Nothing plugged in is a state rather than a fault, and the run goes on with the pointer
+and the keyboard.
+
+**The map is a file in two tiers**, like every other library data:
+
+| | where | who writes it |
+|---|---|---|
+| **The map that ships** | `examples/surface.map` | nobody. Copy it before you have one |
+| **Your own** | `<store>/maps/<name>.map` | you |
+
+The panel looks for `<store>/maps/default.map` first and falls back to the shipped one, and
+prints the path it loaded. `default` is the name a program with no way to ask uses; the port is
+fixed for the run, and the transport row's `map` pill says which file is loaded — it is a
+readout, so naming another map is still a restart.
+
+**Learn: arm, point, turn.** Press `learn` on the transport row, put the pointer on a control,
+and move a knob or hit a pad — the two are bound, the line goes into
+`<store>/maps/default.map`, and the control's tooltip says so at once. The pill stays lit until
+you press it again, so a whole surface is one arming and a knob each; nothing is played from
+the surface while it is lit. A control no map line can name says why rather than doing nothing.
+The map that ships is never written to: the first learn copies what is loaded into your own
+file, and after that a re-learned knob has its line replaced where it sits, comments and all.
+
+**A parameter is bound by position, not by name.** `cc 30 -> param 0 3` is the third control of
+deck A's published interface — the number the Inspector draws beside the row — so knob 3 is
+knob 3 whatever Set is loaded. Binding to a parameter's name would be a mapping you paid for
+again on every swap. A control the Set does not publish has no position and cannot be learned
+against; publishing it is a press in the same pane. The range is the Set's own unless the line
+writes one:
+
+```
+cc 30 -> param 0 3          # deck A, third published control, over its declared range
+cc 31 -> param 1 5 [0, 2]   # deck B, fifth, over a range of your own
+```
 
 ### A session cannot say what a deck held
 

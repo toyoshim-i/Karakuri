@@ -346,6 +346,24 @@ pub enum Change<'a> {
     /// simply a console with nothing pending
     /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
     Animating(Option<Duration>),
+    /// **What the hover layer is owed** ([`crate::hover`]).
+    ///
+    /// **Its own variant beside [`Change::Animating`] and not one of its
+    /// deadlines**, because the layer is not a region of the arrangement: a
+    /// tip is drawn over the whole console and belongs to no node, so it is
+    /// not something `crate::view::View::declares` can name and not a term
+    /// `tests/schedulable.rs` can sum ([`crate::budget::Declared::region`]).
+    /// What it does carry is the same third number — *when is this layer's
+    /// picture next different from the one on screen* — and here that is the
+    /// remainder of a dwell, which is a time the layer knows because it is the
+    /// one keeping it
+    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+    ///
+    /// **Nothing at rest.** [`crate::hover::Tip::Still`] is a pointer on no
+    /// tipped control *and* a tip already up: the box does not move while it
+    /// is shown, so a frame drawn for it would draw it where it already is,
+    /// which is exactly the repaint ADR-0283 was written to stop.
+    Tip(crate::hover::Tip),
     /// The window resized, or the display's scale factor changed: the
     /// arrangement is re-solved into a different viewport, so every rectangle
     /// on the panel is a new one.
@@ -490,6 +508,17 @@ impl Change<'_> {
             Change::Animating(moves_in) => match moves_in {
                 Some(moves_in) => Repaint::After(*moves_in),
                 None => Repaint::Never,
+            },
+
+            // See the variant. A dwell is a deadline the layer keeps; a tip
+            // that has to come down is owed a frame now, because nothing else
+            // is going to draw one — the pointer that left the control was
+            // over the console's ground and `Change::Pointer(Claim::Egui)`
+            // above answers `Never` for it.
+            Change::Tip(tip) => match tip {
+                crate::hover::Tip::Dwelling(left) => Repaint::After(*left),
+                crate::hover::Tip::Gone => Repaint::Now,
+                crate::hover::Tip::Still => Repaint::Never,
             },
 
             Change::Room | Change::Viewport => Repaint::Now,
