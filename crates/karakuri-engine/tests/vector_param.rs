@@ -234,6 +234,12 @@ proc mixed {
     /// learned against the deck and the position in its published interface"*,
     /// and `crates/karakuri/src/main.rs` turns that position into the row's
     /// ordinal. So this asserts the whole list in order rather than membership.
+    ///
+    /// **The built-in camera's three publish first.** Every `Set` carries one
+    /// whether or not `MIXED` declares an L3 procedure of its own
+    /// ([ADR-0318](../../../docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md)),
+    /// and `Kind::ALL` walks L3 before L4, so `radius`, `speed` and `height`
+    /// sit ahead of `MIXED`'s own components rather than beside them.
     #[test]
     fn the_published_interface_is_the_components_in_order() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -241,15 +247,22 @@ proc mixed {
         let names: Vec<String> = set.published().into_iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec!["wash.x", "wash.y", "depth", "glow.x", "glow.y", "glow.z"],
+            vec![
+                "radius", "speed", "height", "wash.x", "wash.y", "depth", "glow.x", "glow.y",
+                "glow.z"
+            ],
             "the published order is what a knob is learned against"
         );
         // And each component carries the declaration's own range, which is what
-        // a fader's ends are.
+        // a fader's ends are — the camera's three from `Orbit::PLACEMENT`,
+        // `MIXED`'s own from its declarations above.
         for control in set.published() {
-            let want = match control.name.starts_with("glow") {
-                true => [0.0, 4.0],
-                false => [0.0, 1.0],
+            let want = match control.name.as_str() {
+                "radius" => [1.0, 40.0],
+                "speed" => [0.0, 2.0],
+                "height" => [-40.0, 40.0],
+                name if name.starts_with("glow") => [0.0, 4.0],
+                _ => [0.0, 1.0],
             };
             assert_eq!(control.range, want, "{} has the wrong range", control.name);
         }
