@@ -1,10 +1,10 @@
 ---
 id: 0049
 title: `Slot` means two things, and the clash is recorded rather than resolved
-status: accepted
+status: superseded
 date: 2026-07-31
 supersedes: []
-superseded_by: []
+superseded_by: [0344]
 principles: []
 tags: [docs]
 ---

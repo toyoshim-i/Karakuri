@@ -76,7 +76,7 @@ number; new records continue from the end.
 | [ADR-0046](0046-a-flag-writes-into-the-record-it-does-not-invent-one.md) | A flag writes into the record; it does not invent one | 2026-07-31 | accepted |
 | [ADR-0047](0047-a-binding-blends-on-confidence.md) | A binding blends on confidence | 2026-07-31 | accepted |
 | [ADR-0048](0048-four-curves-because-a-fifth-is-a-re-parameterisation.md) | Four curves, because a fifth is a re-parameterisation | 2026-07-31 | accepted |
-| [ADR-0049](0049-slot-means-two-things-and-the-clash-is-recorded.md) | `Slot` means two things, and the clash is recorded rather than resolved | 2026-07-31 | accepted |
+| [ADR-0049](0049-slot-means-two-things-and-the-clash-is-recorded.md) | `Slot` means two things, and the clash is recorded rather than resolved | 2026-07-31 | **superseded by ADR-0344** |
 | [ADR-0050](0050-a-declared-generator-is-certain.md) | A declared generator is certain, and a sample is not always in [0,1] | 2026-08-01 | accepted |
 | [ADR-0051](0051-a-name-means-one-thing-so-the-buss-noise-entry-is-deleted.md) | A name means one thing, so the bus's `noise` entry is deleted | 2026-08-01 | accepted |
 | [ADR-0052](0052-a-parameter-is-keyed-by-its-layer-and-a-collision-is-refused.md) | A parameter is keyed by its layer, and a collision is refused meanwhile | 2026-08-01 | accepted |
@@ -369,6 +369,7 @@ number; new records continue from the end.
 | [ADR-0341](0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md) | A route that answers is built, and a send that ends in a dialog is `gap` | 2026-09-10 | accepted |
 | [ADR-0342](0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md) | A walk names the Set it is of, and the two rows beside it are `gap` | 2026-09-10 | accepted |
 | [ADR-0343](0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md) | The grammar reaches all nine bays, and `space` on a bay is the fold | 2026-09-10 | accepted |
+| [ADR-0344](0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md) | `slot` is disambiguated into three types, and ADR-0049's wait is over | 2026-09-11 | accepted |
 
 ## Retired numbers
 
