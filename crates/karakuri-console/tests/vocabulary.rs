@@ -1004,6 +1004,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
         view.transport,
         None,
         None,
+        None,
         &view.arrangement,
     )
     .unwrap_or_else(|| {
@@ -1041,6 +1042,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
         &ctx,
         p.layout(),
         view.transport,
+        None,
         None,
         None,
         &view.arrangement,

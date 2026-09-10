@@ -5554,7 +5554,18 @@ impl Live {
         // The slot check is the router's — it is where the "say it once"
         // machinery already is, and once per *message* would be a blocking
         // write per message on this thread. See `crate::midi`.
-        surface.take(self.deck.slot_count(), &mut operations);
+        //
+        // **And the deck, for the one target the map cannot finish on its
+        // own**: `cc -> param N M` names a *position* in a deck's published
+        // interface, which becomes a key only against the Set that is in the
+        // deck (ADR-0268, ADR-0336). `midi::Decks` is that reading, and it is
+        // the same one the panel makes — a map file means one thing in both
+        // programs or it means nothing.
+        surface.take(
+            self.deck.slot_count(),
+            &karakuri_environment::midi::Decks(&self.deck),
+            &mut operations,
+        );
         for operation in &operations {
             match operation {
                 Operation::TapBeat => self.tap(),
@@ -5598,10 +5609,52 @@ impl Live {
         // cannot delay a rewiring, and taking them in one pass is what keeps
         // that true on this side too.
         let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
+        // **And the operations, on the third channel and for the same two
+        // reasons.** This run serves the same `mcp::serve` the panel does, so
+        // its `operate` tool reaches this loop and not another one — a channel
+        // this program did not drain would answer every call *the render loop
+        // had not taken this operation*, which is true and is not what this
+        // program is.
+        let operations: Vec<mcp::OperateRequest> = mcp.operations().collect();
         for request in asked {
             self.save_set(Asked::Model, request.slot, request.id, Some(request.reply));
         }
         self.rewire(wires);
+        self.run_operations(operations);
+    }
+
+    /// **Every operation a model named since the last frame, performed where a
+    /// mapped control's operation is performed.**
+    ///
+    /// [`Live::run_surface`]'s own two lines, and they are two lines rather than
+    /// a call into it because a map has a surface to poll and this has a channel
+    /// to drain. What is shared is what matters: [`Live::operate`] is where a
+    /// key press and a MIDI message end, and it is where this ends, so a model's
+    /// `SetGain` on this program is the same write as a knob's
+    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    ///
+    /// **Already audited.** `karakuri_operation::gate` ran on the server's own
+    /// thread — the one call ADR-0235 puts the mechanism on — so nothing is
+    /// judged again here.
+    ///
+    /// **Answered once, at the frame it was performed on**, which is
+    /// [`mcp::WireRequest`]'s third point one route along: what a rebuild or a
+    /// scheduled move started here comes to is reported where it lands, and a
+    /// tool that waited for it would hold a connection open across a transition.
+    fn run_operations(&mut self, asked: Vec<mcp::OperateRequest>) {
+        for mcp::OperateRequest { operation, reply } in asked {
+            let title = operation.title();
+            match &operation {
+                Operation::TapBeat => self.tap(),
+                other => self.operate(other),
+            }
+            reply.settled(Ok(format!(
+                "`{title}` was performed on the frame it arrived on, where the same \
+                 operation from a key or a mapped control is performed. Anything it started \
+                 rather than finished is reported where it lands: ask `swap_outcome` for a \
+                 rebuild, and a scheduled move arrives on the grid."
+            )));
+        }
     }
 
     /// **Every edge asked for since the last frame, written and answered here,

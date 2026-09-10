@@ -85,6 +85,7 @@ fn group(panel: &Panel, ctx: &egui::Context, at: Look) -> LookRow {
         Some(mock()),
         None,
         None,
+        None,
         &Arrangement::NONE,
         Some(at),
     )
@@ -125,6 +126,7 @@ fn the_look_group_is_the_rows_own_geometry() {
         &ctx,
         panel.layout(),
         Some(mock()),
+        None,
         None,
         None,
         &Arrangement::NONE,
@@ -412,6 +414,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
             Some(mock()),
             None,
             None,
+            None,
             &Arrangement::NONE,
             Some(mock_look())
         ),
@@ -426,6 +429,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
             None,
             None,
             None,
+            None,
             &Arrangement::NONE,
             Some(mock_look())
         ),
@@ -437,6 +441,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
             &ctx,
             panel.layout(),
             Some(mock()),
+            None,
             None,
             None,
             &Arrangement::NONE,
@@ -683,6 +688,7 @@ fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
             &ctx,
             panel.layout(),
             view.transport,
+            None,
             None,
             None,
             &view.arrangement,

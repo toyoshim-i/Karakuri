@@ -633,10 +633,14 @@ fn choosing() -> View {
         anchor_bpm: 128.0,
         scrub_beats: 0.0,
         composite: false,
+        // Not this test's row: the deck head's two build chips are
+        // drawn from this and nothing here is about them.
+        aimed: None,
         nodes: vec![karakuri_console::view::Node {
             addr: "L2:0".to_owned(),
             name: "warp".to_owned(),
             authority: None,
+            uses: Vec::new(),
             renderers: Vec::new(),
             params: vec![param("twist", 0), param("bend", 1)],
         }],
@@ -666,7 +670,7 @@ fn strip() -> karakuri_console::view::Strip {
 /// levels can be told from a fader's.
 fn param(name: &str, at: usize) -> karakuri_console::view::Param {
     karakuri_console::view::Param {
-        ord: at + 1,
+        ord: Some(at + 1),
         name: name.to_owned(),
         value: 0.0,
         range: [0.25, 4.0],

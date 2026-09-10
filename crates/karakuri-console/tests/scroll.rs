@@ -44,7 +44,7 @@ use karakuri_operation::{Authority, Layer, NodeAt, ParamAt, Sync};
 /// about two values.
 fn row(ord: usize, name: &str) -> Param {
     Param {
-        ord,
+        ord: Some(ord),
         name: name.to_owned(),
         value: 0.5,
         range: [0.0, 1.0],
@@ -71,6 +71,7 @@ fn node(index: usize, params: usize) -> Node {
             },
             level: Authority::Manual,
         }),
+        uses: Vec::new(),
         renderers: Vec::new(),
         params: (0..params)
             .map(|at| row(at + 1, &format!("n{index}p{at}")))
@@ -88,6 +89,9 @@ fn pane_of(groups: usize, params: usize) -> Pane {
         anchor_bpm: 128.0,
         scrub_beats: 0.0,
         composite: false,
+        // Not this test's row: the deck head's two build chips are
+        // drawn from this and nothing here is about them.
+        aimed: None,
         nodes: (0..groups).map(|index| node(index, params)).collect(),
     }
 }

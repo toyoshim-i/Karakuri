@@ -285,6 +285,9 @@ fn a_full_console_stages_nothing() {
             anchor_bpm: 128.0,
             scrub_beats: 0.0,
             composite: false,
+            // Not this test's row: the deck head's two build chips are
+            // drawn from this and nothing here is about them.
+            aimed: None,
             nodes: Vec::new(),
         };
         PANES

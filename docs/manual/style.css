@@ -381,6 +381,41 @@
   .path.incoming { color: var(--c-text); }
   .lib-filters { display: flex; gap: 5px; padding: 6px 9px; border-bottom: 1px solid var(--c-hair); }
   .field { border: 1px solid var(--c-line); border-radius: 999px; padding: 0 9px; color: var(--c-faint); flex: 1; min-width: 0; }
+  /* ── Which kinds of row the listing shows ────────────────────────────────
+     Six toggles under the filter fields rather than beside them: a field
+     with `flex: 1` and six chips on one row in a bay this narrow leaves the
+     chips a few pixels each, and a chip nobody can hit is not a control. The
+     row carries its own rule along the bottom the way every other band of
+     this bay does, so the list still starts under a line.
+
+     `.kind.on` is mint, which is what this console draws a control that is
+     on — the same ink the `params` pill in the foot is lit in, and not
+     lavender, which on this panel is the deck the keys are addressed to.
+     The OR is what the row shows rather than what a chip does: any number of
+     them are on at once, and none on is everything. */
+  .lib-kinds { display: flex; gap: 4px; padding: 5px 9px; border-bottom: 1px solid var(--c-hair); }
+  .kind { font-size: 9px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--c-line); color: var(--c-faint); }
+  .kind.on { border-color: transparent; color: var(--c-mint); background: color-mix(in srgb, var(--c-mint) 15%, transparent); }
+  /* ── What a row implements ───────────────────────────────────────────────
+     At the right of the name and before the time, which puts it where the
+     eye is already going: a row is read name-first, and the badge is what
+     you check the name against.
+
+     **One treatment and no colour per layer.** Five hues would be five new
+     inks on a console that spends its accents on exactly two facts — the
+     deck the keys are on, and a control that is on — and the badge already
+     says which layer in words. `.badge.kind` is the one modifier, and it
+     carries a real distinction rather than decorating one: on a procedure
+     row the single badge is what the row *is*, so it is drawn in the dim
+     ink a name is drawn in, where a Set's badges are a list of what it
+     contains and stay faint.
+
+     What tells a procedure row from a Set row is not the badge count: it is
+     the star. A star is a control over a Set this store holds and is refused
+     on anything else, so a procedure row has no column for one. */
+  .badges { display: flex; gap: 3px; }
+  .badge { font-size: 8px; padding: 0 4px; border-radius: 3px; border: 1px solid var(--c-hair); color: var(--c-faint); letter-spacing: 0.04em; }
+  .badge.kind { color: var(--c-dim); border-color: var(--c-line); }
   .lib-list { display: flex; flex-direction: column; padding: 3px; }
   .lib-row { display: flex; gap: 7px; padding: 3px 7px; color: var(--c-dim); align-items: center; border-radius: 7px; }
   /* The row a menu is open on, which is what makes the card below hang off
@@ -409,6 +444,12 @@
      is a control with two states and the off one is the state most rows are
      in — added beside the rule above rather than changing it. */
   .lib-row .star.off { color: var(--c-faint); }
+  /* A row that has no star to draw, which is every procedure row: a star is a
+     control over a Set this store holds and is refused on anything else, so
+     what a procedure row owes is the column and not the mark. The glyph is
+     kept and hidden rather than replaced by a measured gap, so the column is
+     exactly the star's width by construction and cannot drift from it. */
+  .lib-row .star.none { visibility: hidden; }
   .lib-row .dim { color: var(--c-faint); margin-left: auto; font-size: 10px; }
   .lib-foot { padding: 5px 10px; color: var(--c-faint); font-size: 10px; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--c-hair); }
 
@@ -495,6 +536,19 @@
   .param .pname { color: var(--c-dim); overflow: hidden; text-overflow: ellipsis; }
   .param.bound .pname { color: var(--c-mint); }
   .param .pval { text-align: right; color: var(--c-text); font-weight: 500; }
+  /* A control the interface does not carry. It keeps its row and loses its
+     number, its fader and its value: the number is a position and a control
+     off the list has none, and the fader and the figure are what publishing
+     decides the panel shows. The row stays so the mark can be pressed again —
+     a choice of attention you cannot see is one you cannot unmake. */
+  .param.unpub .ord { color: var(--c-hair); }
+  .param.unpub .pname { color: var(--c-faint); }
+  /* One input a node's procedure declares, and the node filling it. It sits
+     under the node head and above that node's rows, because it is a fact about
+     the node rather than about any one of its controls. */
+  .uses { display: flex; align-items: center; gap: 6px; padding: 2px 10px 4px 12px;
+          color: var(--c-faint); font-size: 10px; }
+  .uses .slot { color: var(--c-dim); }
   .fader { height: 5px; background: var(--c-well); border-radius: 999px; position: relative; box-shadow: inset 0 0 0 1px var(--c-hair); }
   .fader b { position: absolute; top: 0; left: 0; height: 5px; border-radius: 999px; background: linear-gradient(90deg, var(--c-mint), var(--c-lav)); display: block; }
   .fader s { position: absolute; top: -3px; width: 9px; height: 11px; border-radius: 999px; background: var(--c-panel); box-shadow: 0 0 0 1px var(--c-line), 0 1px 4px rgba(0,0,0,0.18); display: block; }
@@ -538,7 +592,8 @@
   /* The deck head: a strip of chips above a deck's node groups, the way a bay
      head is one above a bay. It heads the *deck* and not the pane — the
      `.half-head` over it says which deck is showing, and this is that deck's
-     own clock and its fold. Its box is `.node-head`'s without the tint, and the
+     own clock, its size, its seed and its fold. Its box is `.node-head`'s
+     without the tint, and the
      tallest thing in it is a `.mini` at 15.5, so the row is 5 + 15.5 + 5. */
   .deck-head { display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: var(--c-faint); }
   .anchor { font-size: 9px; color: var(--c-faint); }

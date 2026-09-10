@@ -84,9 +84,9 @@
               <span class="pill" data-tip="Tap the beat. Three taps or more set the tempo; any tap sets the phase, so one tap on the downbeat pulls the grid onto the beat without changing what it is running at. It is as authoritative as the octave beside it &mdash; a person meant it, so the run of evidence behind the estimate the tracker was on is discarded and the ones still arriving from it cannot pull the grid back. Refused without an audio input attached, and the refusal says where to open one rather than doing nothing, because a control that declines and one that is not bound are the same experience. &#8853; MIDI: note &rarr; tap, which is the one control in this group a map already names: a tap is an instant and a note is one.">tap</span>
               <span class="octave"><i data-tip="Halve the grid, to 64.0 BPM, and the tracker's octave window goes with it &mdash; which is the whole of why this is a hand's control rather than a measurement. The tracker folds every candidate into the window the grid is already in, so a grid an octave low stays an octave low however long it listens, and nothing here finds an octave for you. The phase does not move: halving takes every other beat and the one you can see stays where it is. Authoritative like a tap &mdash; the run of evidence behind the old octave is discarded, so the estimates still arriving from it cannot pull the grid back. Refused if the result would leave the trackable range, 60 to 200 BPM &mdash; and the panel is holding the tempo already, so it says which press will be refused before you make it, which a tap can only report afterwards. That range is under two octaves wide, so at most one of the two faces is ever live: above 120 this one, below 100 the &times;2 beside it, and between the two neither of them. Live here, at 128.0. Needs an audio input, like everything else in this group. &#8853; MIDI: unassigned &mdash; a note could reach it, and no map target names one yet.">&frac12;</i><i class="idle" data-tip="Double the grid: refused at this tempo, and inert rather than gone. 128.0 doubled is 256 and the tracker searches 60 to 200 BPM &mdash; outside that there is nothing to lock to, so the next estimate that disagreed would drag the grid back, and a control that undoes itself two seconds later is worse than one that says no. The panel knows the tempo, so it says this before the press rather than after it. The range is under two octaves wide, which is why this half and the one beside it are never both live. Where it is live it doubles the grid and takes the tracker&#39;s octave window with it, so tracking carries on in the new octave instead of folding straight back to the old one; the phase stays where it is, because doubling subdivides the beats already there. Authoritative like a tap &mdash; the run of evidence behind the old octave is discarded, so the estimates still arriving from it cannot pull the grid back. Needs an audio input, like everything else in this group. &#8853; MIDI: unassigned &mdash; a note could reach it, and no map target names one yet.">&times;2</i></span>
             </span>
-            <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident.">learn</span>
-            <span class="pill" data-tip="The map in use, and it is a file. Which knob is which belongs to the hardware in the room, so a map is saved and recalled per controller and never travels in a session. Click to save, load, or start a new one.">map &middot; nanoKONTROL2 &#9662;</span>
-            <span class="pill" data-tip="The arrangement in use, and it is a file. Every fold, every boundary you have dragged, the solo and both sets of remembered sizes, filed under a name you pick &mdash; kept beside your Sets under arrangements/ rather than beside the program, so it travels with the library it was arranged around. Click to save, load, or start a new one. Starting a new one is the reset, and it is the one arrangement here with no file behind it: the one that came with the program, which nothing you save can shadow. The window is not part of it &mdash; a console arranged on a laptop comes back at the size you are looking at now. r starts a new one from the keyboard. Load is a list of the names already filed and a hand picks one without typing anything; save is the one item on this panel that asks for letters, because a name is the whole of the handle &mdash; a stamp chosen for you files arrangements nobody can ask for again, and a numbered slot moves the day you delete the slot above it. Saving under a name already in use is what saving it again is. The field has the keyboard while it is up, so every key is a letter of the name including the ones that are panel keys the rest of the time: return finishes it, and esc backs out with nothing saved, which is the one place on this panel where esc does not quit. A name is letters, digits, `-` and `_`, because it is one path component under arrangements/ &mdash; anything else is refused when you finish typing it, naming the character that stopped it, rather than being dropped at the key. Two more refusals and both are refusals rather than guesses: a name nothing is filed under is said back to you and the console does not move, and an arrangement that disagrees with itself is refused whole rather than repaired into something you did not save. &#8853; MIDI: unassigned &mdash; a map line carries no name, so neither saving one nor putting one back can be reached from a surface; the reset alone could be, since it addresses nothing, and no map target names it yet.">arr &middot; night &#9662;</span>
+            <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident. &#8853; It stays armed until you press it again, because mapping a surface is turning every knob once and re&#8209;arming between each would be a click per knob; nothing is hidden by that, since the pill is lit for exactly as long as it is true. Nothing is played from the surface while it is lit &mdash; a knob already on deck B's gain, turned with the pointer on deck A's, would otherwise move B on the way to being bound to A. &#8853; A parameter row is bound to the deck and the <em>position</em> in its published interface, never to the Set's name for it: `cc 30 &rarr; param 0 3` is the third control of deck A, which is the number drawn beside the row, so knob 3 is knob 3 whatever Set is loaded. &#8853; The line goes in your own map file under `&lt;store&gt;/maps/default.map`, whichever map this run loaded &mdash; the one that ships is never written to. Re&#8209;learning a knob replaces its line where it sits and leaves your comments alone. &#8853; A control no map line can name says so out loud rather than doing nothing: you are looking at the controller, not the screen. &#8853; MIDI: unassigned &mdash; this is a setting of the map every surface reaches the vocabulary through rather than an operation, so there is no target for a map line to name; the &#8853; in every other tooltip on this page is that same layer reached one control at a time.">learn</span>
+            <span class="pill" data-tip="The map in use, and it is a file. Which knob is which belongs to the hardware in the room, so a map is saved and recalled per controller and never travels in a session. Click to save, load, or start a new one. &#8853; It is kept in two tiers like every other library data: your own under `&lt;store&gt;/maps/&lt;name&gt;.map`, and the `surface.map` that ships in the preset library, which is what an operator copies before they have one. The panel opens the first of those it finds when it starts &mdash; yours, then the shipped one &mdash; and names the file it loaded in its legend. &#8853; A map with no name is the one a program that cannot ask opens: `default`. Naming another is this pill's menu, and that is the half that is not built &mdash; the panel draws the pill as a <em>readout</em>, with no chevron and no menu, because a capsule that looks like a menu and opens none is worse than one that only says which file is loaded. &#8853; MIDI: unassigned &mdash; this is a setting of the map every surface reaches the vocabulary through rather than an operation, so there is no target for a map line to name; the &#8853; in every other tooltip on this page is that same layer reached one control at a time.">map &middot; nanoKONTROL2 &#9662;</span>
+            <span class="pill" data-tip="The arrangement in use, and it is a file. Every fold, every boundary you have dragged, the solo and both sets of remembered sizes, filed under a name you pick &mdash; kept beside your Sets under arrangements/ rather than beside the program, so it travels with the library it was arranged around. Click to save, load, or start a new one. Starting a new one is the reset, and it is the one arrangement here with no file behind it: the one that came with the program, which nothing you save can shadow. The window is not part of it &mdash; a console arranged on a laptop comes back at the size you are looking at now. r starts a new one from the keyboard. Load is a list of the names already filed and a hand picks one without typing anything; save is the one item on this panel that asks for letters, because a name is the whole of the handle &mdash; a stamp chosen for you files arrangements nobody can ask for again, and a numbered slot moves the day you delete the slot above it. Saving under a name already in use is what saving it again is. The field has the keyboard while it is up, so every key is a letter of the name including the ones that are panel keys the rest of the time: return finishes it, and esc backs out with nothing saved &mdash; which is what esc means everywhere on this panel: one step out of whatever has the keyboard, and never a quit. A name is letters, digits, `-` and `_`, because it is one path component under arrangements/ &mdash; anything else is refused when you finish typing it, naming the character that stopped it, rather than being dropped at the key. Two more refusals and both are refusals rather than guesses: a name nothing is filed under is said back to you and the console does not move, and an arrangement that disagrees with itself is refused whole rather than repaired into something you did not save. &#8853; MIDI: unassigned &mdash; a map line carries no name, so neither saving one nor putting one back can be reached from a surface; the reset alone could be, since it addresses nothing, and no map target names it yet.">arr &middot; night &#9662;</span>
             <span class="pill" data-tip="The tone map: the transfer from unbounded linear HDR to something a display can show, and it is one of four &mdash; clamp, reinhard, aces, agx. Click and it moves to the next of them, wrapping. What the press asks for is the operator it arrived at and never a step, so a map or a model can ask for the one it wants without having to know which one is running. The capsule is drawn to the widest of the four whatever word is in it, so it does not move under the name it carries and the exposure beside it does not move either. It is the one transfer the whole pipeline ends in, applied immediately before the single encode at the output, which is why it and the exposure sit last in this half: the row reads in the order a frame does, and this is where the frame leaves. The two of them are two asks and one record &mdash; a record carries the operator, the level and the white point together, since a level with no operator names a look nobody can reconstruct, while an ask that turns one of them has no way to offer the rest, so whoever writes the record fills in what you did not say from the look that is running. &#8853; MIDI: unassigned &mdash; a note could name one of the four, and no map target names one yet.">tone &middot; aces</span>
             <span style="display:flex;align-items:center;gap:5px" data-tip="Exposure: the level going into that transfer, at the far end of the master chain, and not the Master bay's out. Twelve stops of track, a sixty-fourth to sixty-four, with 1.00 at the middle &mdash; logarithmic, because a stop is a ratio and equal distances along this track are equal ratios. Click anywhere on it to set it outright: the track is 48 pixels for 48 quarter-stops, so one pixel is one press of an exposure key and pointing at it reaches exactly what stepping it reaches. The figure is what carries a change too small for 48 pixels to draw. The track never moves under the value it sets &mdash; the number is after it, where only the spacer takes up the width. A press sets it outright rather than taking it in hand, which is the one thing here that reads oddly beside the mixer, where a press off a knob deliberately does nothing: a fader has a handle and a value that must not jump under it mid&#8209;gesture, and this has neither. No knob is drawn for the same reason &mdash; a handle nothing can drag is a lie about what the control does. &#8853; MIDI: cc &rarr; exposure, which is the same absolute value from a fader.">
               <span style="color:var(--c-faint)">exp</span>
@@ -117,9 +117,10 @@
                 <span class="scope" data-tip="Add a scope, and this is what the control would be for rather than an account of a press: nothing in the vocabulary adds one, and the only scope that arrives while the program is running is a folder, which is asked for by dropping a directory on this window &mdash; a drop marks the `folder` chip two along, and a second drop re-points the bay rather than adding a sixth. What it is drawn for is that a library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use, and this list is the one thing about the library that is not closed. &#8853; MIDI: unassigned &mdash; a map line names a word from a closed list, and this list grows when a directory is added.">+</span>
               </div>
               <div class="path" data-tip="Where this library is pointed, and it names a directory rather than a Set. It is the `folder` scope's own row and it is drawn whichever scope is marked, because it is two things at once: the walk inside a folder &mdash; the words either side of the `&#8250;` are one path, so the row says both where you were pointed and where you have got to &mdash; and the place a save dialog opens on, so a Set sent from a row of this listing starts where the listing is. It is not itself the destination: `save as a kbset` in a row&#39;s menu names the file in the system&#39;s own dialog, and where that lands is the operator&#39;s answer rather than this row&#39;s. It said otherwise until 2026&#8209;09&#8209;09. What sets it is a folder dragged off the desktop and let go over this window; nothing here takes a path in letters, and no dialog is opened to point the bay. Until one has been dropped the row is not drawn at all and this bay is a line shorter, which is the same answer the staging lane gives to an empty lane: a row saying there is no folder would be a sentence about an absence. While a folder is over the window it reads the path a release would set, in the panel's text ink rather than its faint &mdash; and that is the whole of the mark, because a folder coming in from outside carries no pointer position and no rectangle can be ringed for it. It is a readout and not a control: nothing in it takes a press, and re-pointing the bay is another drop. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a directory is none of the three.">~/sets/tour&#8209;2026/night&#8209;b &nbsp;&#8250;&nbsp; opening</div>
-              <div class="lib-filters"><span class="field" data-tip="What the Sets in this library are made of, as a filter: the rows under it are narrowed to the Sets holding a node whose name contains this word. Unset here &mdash; `holds&hellip;` is the placeholder, and a field that is set reads the word instead. Click to step to the next name, and off the end back to unset, so every state it can be in is one a press can leave. It steps rather than takes letters, and the reason for that has changed rather than gone: this console has two letter&#8209;taking flows now &mdash; an arrangement&#39;s name, and a Set&#39;s id typed into an Inspector pane head &mdash; and each is bounded to one path component, which is not what a filter is. A filter is an unbounded fragment, so neither flow reaches this field and the second does not imply a third. What that leaves is an open question rather than an unasked one, and it is this bay&#39;s to answer: this is a first cut rather than the finished control, and the finished one is not necessarily a field that takes letters. What it steps through is the node names this store's Sets actually carry, so a name nothing holds is one this field cannot ask for. It narrows `all`, which is what `List what the store holds` lists, and `my sets` with it, since that scope is the starred part of the same listing; press it while `presets` or `folder` is marked and the panel says the narrowing is not this bay's library rather than appearing to do nothing. &#8853; MIDI: unassigned &mdash; the operations page leaves that column empty rather than waiting: a listing is an answer, and an answer goes back to the surface that asked for it, which a map line is not.">holds&hellip;</span><span class="field" data-tip="Which layer a Set has to use, as a filter: the rows under it are narrowed to the Sets with a node on that layer. Unset here &mdash; `layer&hellip;` is the placeholder, and a field that is set reads the layer instead. Click to step through `L1`, `L2`, `L3`, `L4` and `FIELD`, and off the end back to unset. It steps rather than takes letters, and unlike the field beside it that is settled rather than open: five is a closed list, and stepping a closed list is the right control whatever is decided next door. Its five are the five the `list_sets` tool takes and the inspector writes, so a filter set by pressing and one set by name are the same word. Set both fields and the question is which of the Sets holding that name also have something on this layer &mdash; each half asked of the whole Set rather than of one node. It narrows `all`, which is what `List what the store holds` lists, and `my sets` with it, since that scope is the starred part of the same listing; press it while `presets` or `folder` is marked and the panel says the narrowing is not this bay's library rather than appearing to do nothing. &#8853; MIDI: unassigned &mdash; the operations page leaves that column empty rather than waiting: a listing is an answer, and an answer goes back to the surface that asked for it, which a map line is not.">layer&hellip;</span></div>
+              <div class="lib-filters"><span class="field" data-tip="What the Sets in this library are made of, as a filter: the rows under it are narrowed to the Sets holding a node whose name contains this word. Unset here &mdash; `holds&hellip;` is the placeholder, and a field that is set reads the word instead. Click to step to the next name, and off the end back to unset, so every state it can be in is one a press can leave. It steps rather than takes letters, and the reason for that has changed rather than gone: this console has two letter&#8209;taking flows now &mdash; an arrangement&#39;s name, and a Set&#39;s id typed into an Inspector pane head &mdash; and each is bounded to one path component, which is not what a filter is. A filter is an unbounded fragment, so neither flow reaches this field and the second does not imply a third. What that leaves is an open question rather than an unasked one, and it is this bay&#39;s to answer: this is a first cut rather than the finished control, and the finished one is not necessarily a field that takes letters. What it steps through is the node names this store's Sets actually carry, so a name nothing holds is one this field cannot ask for. It narrows `all`, which is what `List what the store holds` lists, and `my sets` with it, since that scope is the starred part of the same listing; press it while `presets` or `folder` is marked and the panel says the narrowing is not this bay's library rather than appearing to do nothing. &#8853; MIDI: unassigned &mdash; the operations page leaves that column empty rather than waiting: a listing is an answer, and an answer goes back to the surface that asked for it, which a map line is not.">holds&hellip;</span><span class="field" data-tip="Which layer a Set has to use, as a filter: the rows under it are narrowed to the Sets with a node on that layer. Unset here &mdash; `layer&hellip;` is the placeholder, and a field that is set reads the layer instead. Click to step through `L1`, `L2`, `L3`, `L4` and `FIELD`, and off the end back to unset. &#8853; <strong>This field is superseded by the row of chips under it and goes when that row lands.</strong> The two look alike and ask different questions: this one asks which <em>Sets</em> hold a node on a layer, and a chip below asks whether a <em>procedure</em> is of that kind. Two facts rather than two spellings, so one field could not have carried both &mdash; and a filter over a closed list of six is a set of toggles rather than a position, because every subset of six is a question somebody has and a field that steps can name six of the sixty&#8209;four states the row has. It is drawn here because the panel still draws it. &#8853; What goes with it is the one question the chips cannot ask: which Sets use an L2. That is not lost &mdash; `List what the store holds` keeps the field this one filled, so `list_sets` and `--list-sets` still ask it, and the panel&#39;s way to it is `holds&hellip;` beside this box, which asks by node name. &#8853; MIDI: unassigned &mdash; the operations page leaves that column empty rather than waiting: a listing is an answer, and an answer goes back to the surface that asked for it, which a map line is not.">layer&hellip;</span></div>
+              <div class="lib-kinds"><span class="kind" data-tip="Show the procedures that are geometries. It is one of six toggles over what kinds of row this listing holds &mdash; L1, L2, L3, L4, FIELD and SET &mdash; and pressing it names a state rather than flipping one, so a hand, a key, a map line and a model can all say show me the geometries and mean it. &#8853; The filter is an OR across the ones that are on, and none on is everything, which is where a run opens and the state a press can always get back to. Two on is both: press L3 and FIELD and the list holds the cameras and the fields. &#8853; A chip that is on is lit in mint, which is what this console draws a control that is on; all six are plain here, so the list under them is everything the scope holds. &#8853; One press sends all six. That is the same rule the number at the left of a parameter row is under: a press that says this one changed is a statement two hands can disagree about, and one that says these are the kinds showing is a destination. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and this is six states said at once.">L1</span><span class="kind">L2</span><span class="kind" data-tip="Show the procedures that are cameras, which is the chip this whole row was asked for. A camera is a `kind L3` file of one node, so pressing this leaves the list holding nothing but viewpoints &mdash; and loading one over what a deck is playing swaps the viewpoint and moves nothing else. A Set that declares no camera holds the built&#8209;in orbit, which is why the badge on most Set rows has no L3 in it and why one of these rows is worth having. &#8853; MIDI: unassigned, for the reason the first chip gives.">L3</span><span class="kind">L4</span><span class="kind" data-tip="Show the procedures that are fields &mdash; a signed distance at a point, which is the one kind that draws nothing at all and is asked questions by the four that do. It is a kind like the four beside it here, so it is a row of this library and a badge on a row exactly as they are.">FIELD</span><span class="kind" data-tip="Show Sets. It is the sixth of six because the six are a partition of the rows rather than a filter over one kind of them: a procedure declares one kind and a Set fills several, so what a layer chip asks of a procedure &mdash; is this its kind &mdash; is not a question a Set answers. Press this alone and the listing is the Sets it always was; press it with L3 and it is the Sets and the cameras. &#8853; It is not the `layer` field above, and the two are two facts. That field asks which Sets hold a node on this layer, over Sets alone; these ask what one artifact is. &#8853; MIDI: unassigned, for the reason the first chip gives.">SET</span></div>
               <div class="lib-list">
-                <div class="lib-row cursor"><span class="star" data-tip="A favourite, so this Set is one of the rows `my sets` lists. Kept beside the Sets in the store rather than inside the Set file, so it survives a copy of this library and does not survive a copy of one Set: hand somebody a bundle and it arrives unstarred. Click to unstar &mdash; and the press names the state rather than flipping one, so a hand, a model and a map line can all say `take this star off` and mean it. Taking a star off is never refused, which is how a mark left behind by a Set somebody deleted outside this program is cleared: the row it named stopped being drawn, and this is still where the mark goes. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a Set id is none of the three, which is the same sentence the `read` and `load` pills in this bay&#39;s foot already carry.">&#9733;</span><span>drift_night</span><span class="dim">16:09</span></div>
+                <div class="lib-row cursor"><span class="star" data-tip="A favourite, so this Set is one of the rows `my sets` lists. Kept beside the Sets in the store rather than inside the Set file, so it survives a copy of this library and does not survive a copy of one Set: hand somebody a bundle and it arrives unstarred. Click to unstar &mdash; and the press names the state rather than flipping one, so a hand, a model and a map line can all say `take this star off` and mean it. Taking a star off is never refused, which is how a mark left behind by a Set somebody deleted outside this program is cleared: the row it named stopped being drawn, and this is still where the mark goes. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a Set id is none of the three, which is the same sentence the `read` and `load` pills in this bay&#39;s foot already carry.">&#9733;</span><span>drift_night</span><span class="badges" data-tip="What layers this row implements, which is the whole of what a badge says. On a Set it is the layers its own files fill &mdash; drift_night is a pair of geometries, a deformer between them and three renderers over the result &mdash; and there is no L3 on it because its files declare no camera: a Set that declares none holds the built&#8209;in orbit at L3:0, which is a node of every Set and a badge on none. On a procedure it is the one kind that file declares. &#8853; It is read off the card the store keeps beside each artifact and off the `kind` line of a file, so a listing costs a directory read and never a compile &mdash; the same rule the reading a `params` press opens is under. &#8853; It is a readout and there is nothing here to press: what narrows the list by kind is the row of six chips above. &#8853; MIDI: unassigned &mdash; a readout is not an operation."><span class="badge">L1</span><span class="badge">L2</span><span class="badge">L4</span></span><span class="dim">16:09</span></div>
                 <!-- The block is one box rather than nine loose rows: it belongs to
                      the row above it, and a reading drawn flat into this list would
                      read as Sets nested under a Set. Existing tokens only &mdash;
@@ -140,12 +141,13 @@
                 <div class="lib-row" style="padding-left:18px" data-tip="What the geometry emits, which is what a renderer drawn over it can consume. It is on the artifact's own card like everything else here, so a Set whose renderers want an attribute nothing in it emits can be seen not to fit before it is loaded rather than after."><span>emits</span><span class="dim">position, size, life</span></div>
                 <div class="lib-row" style="padding-left:18px" data-tip="Where the reading came from, and it is the whole of what it cost. Every line above is read off the metadata card the store keeps beside each artifact, so no source was fetched and nothing was compiled. A node whose artifact has no card declares nothing this can read &mdash; an ordinary state of a working store rather than a damaged one, because a card is derived rather than kept &mdash; and it is counted here rather than drawn as a blank row, since a knob missing from the list without a word is the one thing that would make this lie. Five nodes, and the built-in camera is not one of them: it has no artifact and so no card, and its six numbers are the engine's statement rather than any procedure's declaration. That is a fact about what this listing can read and not about what the camera is &mdash; the inspector draws three rows under orbit, over ranges the engine states where a card would have carried them."><span>5 nodes</span><span class="dim">all described</span></div>
                 </div>
-                <div class="lib-row"><span class="star">&#9733;</span><span>lattice_veil</span><span class="dim">15:52</span></div>
-                <div class="lib-row"><span class="star off" data-tip="Not a favourite, so this Set is in the library and is not one of the rows `my sets` lists. Click to star it &mdash; which writes beside the Sets and never into this one, so the file keeps its bytes and its time and the row does not jump to the top of a listing ordered by when it was written. The press names the state rather than flipping one, for the reason the starred one beside it gives. Starring a row of `presets` or of a `folder` is refused with the id back, because a star is a control over a Set this store holds and those two are files it does not: take the Set in first &mdash; which is what a load off either of them does &mdash; and the row it leaves under `all` is the one to star. &#8853; MIDI: unassigned, for the starred star&#39;s reason.">&#9734;</span><span>glass_shell</span><span class="dim">15:31</span></div>
-                <div class="lib-row menued"><span class="star off">&#9734;</span><span>night01</span><span class="dim">14:58</span><div class="rowmenu"><div class="item" data-tip="Load night01 &mdash; the row this menu was opened on, and not the cursor&#39;s row &mdash; onto deck A. It is the same operation the `load` button asks for and the same one `l` asks for, arriving by a third route: the item names the deck outright, so this is the one way in that reads neither of the two marks. Picking it moves nothing else &mdash; not the selection, not the pulldown&#39;s letter, not the cursor &mdash; which is why a Set can be sent to a deck without first aiming anything at it. Nothing is refused: a deck that is on air takes this exactly as it takes the button. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">Load to Slot A</div><div class="item" data-tip="The same, onto deck B. Four items and not one, because the deck is what the item says: a menu that named a deck by stepping would be the pulldown again, one bay down and with nothing on screen to read it off.">Load to Slot B</div><div class="item" data-tip="The same, onto deck C.">Load to Slot C</div><div class="item" data-tip="The same, onto deck D &mdash; and this item is only here because the mixer is drawing four strips. A deck the mixer draws no strip for is not offered, which is the count `0`&ndash;`3` are refused on and the count the pulldown&#39;s list is cut to: on a three&#8209;slot deck this menu has three loads in it and not four.">Load to Slot D</div><div class="rule"></div><div class="item" data-tip="Write night01 out as a file to hand somebody, and it is the sending half of `send a Set to somebody, and take one in`. What is written is that Set with every source it names inlined after it &mdash; a `.kbset`, the form this store holds and the form that travels, so it loads on a machine whose library has never held the material. One source missing refuses the whole thing and names the node, because a bundle short of a procedure looks self&#8209;contained and is not, and the machine you sent it to is the worst place to find that out. &#8853; Picking it opens the system&#39;s own save dialog, which is where the file is named: the file does not exist yet, and a file that does not exist is the one thing no listing on this panel can point at. It opens in the folder this bay is pointed at where one has been dropped, and in whatever place the platform opens on where none has. A file already there is the dialog&#39;s own question and never this program&#39;s &mdash; asking again on this side would be two programs asking one question. Escape puts it away and nothing is written, and the panel says that rather than going quiet. &#8853; The frame loop does not stop while it is up: the dialog is asked for asynchronously and the panel goes on drawing behind it, so the beat still travels and the picture is still live. What it does take, for as long as it is open, is presses aimed at this window &mdash; which is the price, and it is bounded by the operator having opened it, one key closing it, and nothing about any deck being touched either way. &#8853; MIDI: unassigned &mdash; a read&#39;s answer has nowhere to land on a controller, and a map line names a slot, a range or a word from a closed list, which a Set id and a path are none of.">Save as a kbset</div></div></div>
-                <div class="lib-row"><span class="star off">&#9734;</span><span>strand_bloom</span><span class="dim">14:12</span></div>
+                <div class="lib-row"><span class="star">&#9733;</span><span>lattice_veil</span><span class="badges"><span class="badge">L1</span><span class="badge">L4</span></span><span class="dim">15:52</span></div>
+                <div class="lib-row" data-tip="A procedure, and it is a row of this list rather than a list of its own. It is one node&#39;s source &mdash; here a camera, which is what the badge says &mdash; kept in your own library at &lt;store&gt;/procedures/ by a `keep` on that node&#39;s head in the Inspector, or shipped with the program under the presets root. Those are the two tiers every other kind of library data is in. &#8853; The sources every build leaves in the store are not these. Those are the edit history&#39;s, one per compile and named by a hash, and the `history` chip is the walk over them; a row here is something a person kept and can name. &#8853; Press it and the layer it implements is written over what the deck is playing and nothing else moves: a Set of a geometry and a renderer declares no camera, so `orbit_wide` takes the built&#8209;in orbit&#39;s place at L3:0 and the picture changes viewpoint with its material where it was. What the deck runs afterwards is a Set with no name &mdash; the note below says what that costs and what it does not. &#8853; There is no star on this row, and that is the rule rather than a column somebody forgot: a star is a control over a Set this store holds, and starring anything else is refused with the id back. &#8853; A `params` press reads this row the same way it reads a Set&#39;s, off the same card: the knobs it declares with their ranges and defaults, and what it emits. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and a procedure&#39;s name is none of the three."><span class="star none" aria-hidden="true">&#9734;</span><span>orbit_wide</span><span class="badges"><span class="badge kind">L3</span></span><span class="dim">15:44</span></div>
+                <div class="lib-row"><span class="star off" data-tip="Not a favourite, so this Set is in the library and is not one of the rows `my sets` lists. Click to star it &mdash; which writes beside the Sets and never into this one, so the file keeps its bytes and its time and the row does not jump to the top of a listing ordered by when it was written. The press names the state rather than flipping one, for the reason the starred one beside it gives. Starring a row of `presets` or of a `folder` is refused with the id back, because a star is a control over a Set this store holds and those two are files it does not: take the Set in first &mdash; which is what a load off either of them does &mdash; and the row it leaves under `all` is the one to star. &#8853; MIDI: unassigned, for the starred star&#39;s reason.">&#9734;</span><span>glass_shell</span><span class="badges"><span class="badge">L1</span><span class="badge">L4</span></span><span class="dim">15:31</span></div>
+                <div class="lib-row menued"><span class="star off">&#9734;</span><span>night01</span><span class="badges"><span class="badge">L1</span><span class="badge">L2</span><span class="badge">L4</span></span><span class="dim">14:58</span><div class="rowmenu"><div class="item" data-tip="Load night01 &mdash; the row this menu was opened on, and not the cursor&#39;s row &mdash; onto deck A. It is the same operation the `load` button asks for and the same one `l` asks for, arriving by a third route: the item names the deck outright, so this is the one way in that reads neither of the two marks. Picking it moves nothing else &mdash; not the selection, not the pulldown&#39;s letter, not the cursor &mdash; which is why a Set can be sent to a deck without first aiming anything at it. Nothing is refused: a deck that is on air takes this exactly as it takes the button. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">Load to Slot A</div><div class="item" data-tip="The same, onto deck B. Four items and not one, because the deck is what the item says: a menu that named a deck by stepping would be the pulldown again, one bay down and with nothing on screen to read it off.">Load to Slot B</div><div class="item" data-tip="The same, onto deck C.">Load to Slot C</div><div class="item" data-tip="The same, onto deck D &mdash; and this item is only here because the mixer is drawing four strips. A deck the mixer draws no strip for is not offered, which is the count `0`&ndash;`3` are refused on and the count the pulldown&#39;s list is cut to: on a three&#8209;slot deck this menu has three loads in it and not four.">Load to Slot D</div><div class="rule"></div><div class="item" data-tip="Write night01 out as a file to hand somebody, and it is the sending half of `send a Set to somebody, and take one in`. What is written is that Set with every source it names inlined after it &mdash; a `.kbset`, the form this store holds and the form that travels, so it loads on a machine whose library has never held the material. One source missing refuses the whole thing and names the node, because a bundle short of a procedure looks self&#8209;contained and is not, and the machine you sent it to is the worst place to find that out. &#8853; Picking it opens the system&#39;s own save dialog, which is where the file is named: the file does not exist yet, and a file that does not exist is the one thing no listing on this panel can point at. It opens in the folder this bay is pointed at where one has been dropped, and in whatever place the platform opens on where none has. A file already there is the dialog&#39;s own question and never this program&#39;s &mdash; asking again on this side would be two programs asking one question. Escape puts it away and nothing is written, and the panel says that rather than going quiet. &#8853; The frame loop does not stop while it is up: the dialog is asked for asynchronously and the panel goes on drawing behind it, so the beat still travels and the picture is still live. What it does take, for as long as it is open, is presses aimed at this window &mdash; which is the price, and it is bounded by the operator having opened it, one key closing it, and nothing about any deck being touched either way. &#8853; MIDI: unassigned &mdash; a read&#39;s answer has nowhere to land on a controller, and a map line names a slot, a range or a word from a closed list, which a Set id and a path are none of.">Save as a kbset</div></div></div>
+                <div class="lib-row"><span class="star off">&#9734;</span><span>strand_bloom</span><span class="badges"><span class="badge">L1</span><span class="badge">L4</span></span><span class="dim">14:12</span></div>
               </div>
-              <div class="lib-foot"><span data-tip="How many Sets this bay is showing whole, out of how many the scope holds. Five of twenty&#8209;seven here, so twenty&#8209;two are out of sight and the wheel over the bay is what reaches them: three rows a notch, and the first number falls as a row leaves the top or the bottom. It counts what is <em>whole</em> &mdash; a row cut by the list&#39;s edge is drawn as far as the list goes and is not counted &mdash; so this number and what you can see agree, and `27 of 27` can never be read off a bay with a row hanging over an edge. The reading a `params` press opens is part of what scrolls: it sits between two rows rather than over them, so it moves with them and the rows it pushes down are reachable rather than lost. There is no bar down the side and this is the mark instead, for the reason the inspector&#39;s count is. The position is this bay&#39;s own, like the cursor in the list above: no operation names it, it is not part of the arrangement, and dragging the bay shorter and back leaves it exactly where it was. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">5 of 27</span><span class="sep"></span><span class="pill armed" data-tip="What the Set under the cursor declares, opened under its row &mdash; every knob with its range and default, the element count, and what it emits. It is a toggle and it is drawn as one: lit while the block is open, plain while it is shut, so the pill says which of the two the next press will be before you make it. Open here, on drift_night. Move the cursor and the reading moves with it, so one row is open at a time and never a second list. It fetches no source and compiles nothing, which is why it is a press rather than a load: the answer is already beside the Sets, in the cards the store keeps. &#8853; It is called `params` because that is what the block under it is &mdash; a list of the knobs this Set publishes. `read` said what the press does to the file and left an operator to find out what appears; `expand` says what the block does and would be the only control on this panel named for a motion rather than for what it shows. &#8853; The light is mint and not lavender: lavender here is the deck the keys are addressed to and this bay spends it on `load`, which is the press this bay exists for. Mint is what this console draws a control that is on, which is what this one is. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">params</span><span class="pill lav" data-tip="Load the Set under the cursor into the deck named two capsules along &mdash; deck A here, which is what the pulldown says and not what the selection says. The press lands there and moves nothing else: the solid ring stays on whichever strip it was on, and `l` goes on loading onto the deck the keys are addressed to, so the two routes can be aimed at two different decks and each of them says which. Nothing refuses it: what may be asked for is the instrument&#39;s to decide, and what this control owes instead is to say where it lands before you press it, which is the letter beside it. With no row under the cursor there is nothing to load, and the press says so rather than asking for one. Dragging a row onto a strip is the same command a third way, with the deck named by the strip you drop on rather than by either mark, and the four deck preview cells in the Program bay take the drop too. What the press does to the slot is re&#8209;point its source rather than hand the Set in: the Set&#39;s procedures are written out into that deck&#39;s own copy under `&lt;store&gt;/scratch/`, where its watcher is already looking, and the worker reads them and compiles them off the render thread. So a load is the path an edit already took &mdash; it lands at a frame boundary and is judged there on what one frame of that Set was measured to cost, like every other build, and a Set that cannot hold the frame stays in the slot with the slot stopped: it holds the frame it last drew, and the caption under that deck's cell reads overloaded. The Staging lane under this bay says which of those happened and on which deck, because a load is a build. Nothing is ever written where the presets are. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load</span><span>&rarr;</span><span class="pill" data-tip="Which deck a press on `load` lands on, and it is this bay&#39;s own mark rather than the deck selection. Click for the decks the mixer is drawing strips for and pick one; a pick names the deck and loads nothing, so a load you are aiming somewhere else is two presses and a load onto the deck you are already on is one. A deck the mixer is drawing no strip for is not in the list, which is the count `0`&ndash;`3` are refused on and the same one that keeps a preview cell whose letter names no slot out of the drop. It opens on A and stays where you put it: changing the scope, narrowing the listing or walking the cursor leaves it alone, because what it names is a deck and none of those is about a deck. It is not drawn in lavender and that is the point &mdash; lavender on this panel is the deck the keys are addressed to, and this is the one letter on the console that is allowed to name a different one. &#8853; MIDI: unassigned, and not for the reason the capsule beside it gives: a map line names a deck perfectly well &mdash; `note &rarr; residency N live|priming|allocated` is one &mdash; so a Set id being unnameable is not what is in the way here. This is a pointer inside one console, like the selection and like the cursor in the list above, and a map addresses the instrument rather than the marks a console keeps for its own hands. Select a deck carries the same empty column on the operations page for the same reason.">A &#9662;</span></div>
+              <div class="lib-foot"><span data-tip="How many Sets this bay is showing whole, out of how many the scope holds. Five of twenty&#8209;seven here, so twenty&#8209;two are out of sight and the wheel over the bay is what reaches them: three rows a notch, and the first number falls as a row leaves the top or the bottom. It counts what is <em>whole</em> &mdash; a row cut by the list&#39;s edge is drawn as far as the list goes and is not counted &mdash; so this number and what you can see agree, and `27 of 27` can never be read off a bay with a row hanging over an edge. The reading a `params` press opens is part of what scrolls: it sits between two rows rather than over them, so it moves with them and the rows it pushes down are reachable rather than lost. There is no bar down the side and this is the mark instead, for the reason the inspector&#39;s count is. The position is this bay&#39;s own, like the cursor in the list above: no operation names it, it is not part of the arrangement, and dragging the bay shorter and back leaves it exactly where it was. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">5 of 27</span><span class="sep"></span><span class="pill armed" data-tip="What the Set under the cursor declares, opened under its row &mdash; every knob with its range and default, the element count, and what it emits. It is a toggle and it is drawn as one: lit while the block is open, plain while it is shut, so the pill says which of the two the next press will be before you make it. Open here, on drift_night. Move the cursor and the reading moves with it, so one row is open at a time and never a second list. It fetches no source and compiles nothing, which is why it is a press rather than a load: the answer is already beside the Sets, in the cards the store keeps. &#8853; It is called `params` because that is what the block under it is &mdash; a list of the knobs this Set publishes. `read` said what the press does to the file and left an operator to find out what appears; `expand` says what the block does and would be the only control on this panel named for a motion rather than for what it shows. &#8853; The light is mint and not lavender: lavender here is the deck the keys are addressed to and this bay spends it on `load`, which is the press this bay exists for. Mint is what this console draws a control that is on, which is what this one is. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">params</span><span class="pill lav" data-tip="Load the Set under the cursor into the deck named two capsules along &mdash; deck A here, which is what the pulldown says and not what the selection says. The press lands there and moves nothing else: the solid ring stays on whichever strip it was on, and `enter` on a row goes on loading onto the deck the keys are addressed to, so the two routes can be aimed at two different decks and each of them says which. Nothing refuses it: what may be asked for is the instrument&#39;s to decide, and what this control owes instead is to say where it lands before you press it, which is the letter beside it. With no row under the cursor there is nothing to load, and the press says so rather than asking for one. Dragging a row onto a strip is the same command a third way, with the deck named by the strip you drop on rather than by either mark, and the four deck preview cells in the Program bay take the drop too. What the press does to the slot is re&#8209;point its source rather than hand the Set in: the Set&#39;s procedures are written out into that deck&#39;s own copy under `&lt;store&gt;/scratch/`, where its watcher is already looking, and the worker reads them and compiles them off the render thread. So a load is the path an edit already took &mdash; it lands at a frame boundary and is judged there on what one frame of that Set was measured to cost, like every other build, and a Set that cannot hold the frame stays in the slot with the slot stopped: it holds the frame it last drew, and the caption under that deck's cell reads overloaded. The Staging lane under this bay says which of those happened and on which deck, because a load is a build. Nothing is ever written where the presets are. &#8853; MIDI: unassigned &mdash; every target a map can name carries a slot, a range or a word from a closed list, and a Set id is none of the three.">load</span><span>&rarr;</span><span class="pill" data-tip="Which deck a press on `load` lands on, and it is this bay&#39;s own mark rather than the deck selection. Click for the decks the mixer is drawing strips for and pick one; a pick names the deck and loads nothing, so a load you are aiming somewhere else is two presses and a load onto the deck you are already on is one. A deck the mixer is drawing no strip for is not in the list, which is the count a digit in the mixer is refused on and the same one that keeps a preview cell whose letter names no slot out of the drop. It opens on A and stays where you put it: changing the scope, narrowing the listing or walking the cursor leaves it alone, because what it names is a deck and none of those is about a deck. It is not drawn in lavender and that is the point &mdash; lavender on this panel is the deck the keys are addressed to, and this is the one letter on the console that is allowed to name a different one. &#8853; MIDI: unassigned, and not for the reason the capsule beside it gives: a map line names a deck perfectly well &mdash; `note &rarr; residency N live|priming|allocated` is one &mdash; so a Set id being unnameable is not what is in the way here. This is a pointer inside one console, like the selection and like the cursor in the list above, and a map addresses the instrument rather than the marks a console keeps for its own hands. Select a deck carries the same empty column on the operations page for the same reason.">A &#9662;</span></div>
             </div>
 
             <div class="bay">
@@ -206,9 +208,9 @@
               <div class="insp-split">
 
                 <div class="insp-half">
-                  <div class="half-head"><span>showing</span><span class="what">deck A &middot; drift_night</span><span>&#9662;</span>
+                  <div class="half-head"><span>showing</span><span class="what">deck A &middot; drift_night</span><span data-tip="Which deck this pane is showing. Click for the decks the mixer is drawing strips for and pick one; a pick points this pane and moves nothing else &mdash; not the deck the keys are addressed to, not the pane next door, not the Library bay&#39;s load target. It is what lets two panes show any two of four decks: slots C and D had no way onto this bay while a pane followed something else. &#8853; A deck the mixer draws no strip for is not in the list, which is the count the load pulldown and the row menu are drawn from rather than a third rule. &#8853; A pulldown and not a left/right flip, and the difference is that a flip is a step. A surface that can only step has no way to arrive: two panes stepping cannot both be aimed without knowing where they started, two surfaces stepping one pair disagree about where they are, and a key, a map line or a model would have to count presses to say deck C. This names the deck. &#8853; It is not the deck selection. That mark is where the keys are addressed and is the solid ring round a mixer strip; this one exists so a pane can show a deck the keys are not on, which is the load pulldown&#39;s argument one bay along. The letter is not drawn in lavender for the same reason it is not there. &#8853; The position each pane is scrolled to is the pane&#39;s own and so is this: two panes are two answers, and neither is the console&#39;s. &#8853; MIDI: unassigned &mdash; this is a pointer inside one console, and a map addresses the instrument rather than the marks a console keeps for its own hands.">&#9662;</span>
                     <span class="sep"></span>
-                    <span class="shown" data-tip="How many of this deck&#39;s node groups this pane is showing whole, out of how many the deck has &mdash; the Library foot&#39;s `5 of 27` counted on the groups a pane stacks rather than on the rows a listing holds, because a group is what this bay&#39;s items are. Five of five here, so nothing is out of sight and the pane is not scrolled. Turn the wheel over the pane and its body scrolls under the two heads, which stay where they are: three parameter rows a notch, and the first number falls as a group leaves the top or the bottom. The group at the cut is drawn as far as the pane goes rather than dropped, so this number and what you can see agree &mdash; it counts what is whole, and a group half on screen is one it does not count. There is no bar down the side and this is the mark instead: every scrollbar is either a control, which would owe a row on the operations page and a key and a map line beside it, or a shape that looks like one and refuses the hand. The position is this pane&#39;s own, like the cursor in the library list: two panes pointed at one deck keep two of them, no operation names it, and it is not part of the arrangement, so saving one does not carry it and restoring one does not move it. Drag the pane taller or shorter and it is not rewritten &mdash; the pane draws as much of it as it can hold, and what it could not is still there when the pane comes back. The keyboard&#39;s way in is the arrows walking this bay&#39;s items, which the operations page has not named a key for, so it is the wheel until it does. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">5 of 5</span>
+                    <span class="shown" data-tip="How many of this deck&#39;s node groups this pane is showing whole, out of how many the deck has &mdash; the Library foot&#39;s `5 of 27` counted on the groups a pane stacks rather than on the rows a listing holds, because a group is what this bay&#39;s items are. Six of six here, so nothing is out of sight and the pane is not scrolled. Turn the wheel over the pane and its body scrolls under the two heads, which stay where they are: three parameter rows a notch, and the first number falls as a group leaves the top or the bottom. The group at the cut is drawn as far as the pane goes rather than dropped, so this number and what you can see agree &mdash; it counts what is whole, and a group half on screen is one it does not count. There is no bar down the side and this is the mark instead: every scrollbar is either a control, which would owe a row on the operations page and a key and a map line beside it, or a shape that looks like one and refuses the hand. The position is this pane&#39;s own, like the cursor in the library list: two panes pointed at one deck keep two of them, no operation names it, and it is not part of the arrangement, so saving one does not carry it and restoring one does not move it. Drag the pane taller or shorter and it is not rewritten &mdash; the pane draws as much of it as it can hold, and what it could not is still there when the pane comes back. The keyboard&#39;s way in is the arrows walking this bay&#39;s items, which the operations page has not named a key for, so it is the wheel until it does. A readout, and there is nothing here to press. &#8853; MIDI: unassigned &mdash; a readout is not an operation, so there is no target for a map line to name.">6 of 6</span>
                     <span class="pill on" data-tip="Keep deck A as a Set, exactly as it is on screen &mdash; the versions running, with their parameters, capacities, salts, layering and fold. It goes into the library under the moment you kept it, to the millisecond: this capsule is the press that types nothing, so what it files under is a stamp. The name is the pane head&#39;s own, three items along the same row &mdash; press `deck A &middot; drift_night` and the head takes letters and files the deck under what was typed. One operation and two presses, differing in whether an id is named: an operator&#39;s own act gets the name it asked for, and a press that cannot type one goes looking for a live save by when they made it, which is what the stamp is for. &#8853; It keeps the deck this pane is <em>showing</em> rather than the deck the selection is on, and that is the one thing it does that <code>k</code> cannot: a key press cannot say which pane. &#8853; The wash says the deck this pane is showing is <em>on air</em>, in the same pink a tally on air is drawn in &mdash; not that this keep is the chosen one of the two. It is the one moment a keep is worth a mark: what you are about to file is what the room is watching. Point this pane at a deck that is not live and the wash goes; the press does not change. The selection is drawn in lavender everywhere else on this panel and is not what this is.">keep</span>
                   </div>
 
@@ -217,6 +219,8 @@
                     <span class="anchor" data-tip="The anchor: 128 BPM, the tempo this deck was engaged at and what its rate is measured against. Click it to re-anchor &mdash; to call whatever the room is doing now the reference tempo, without the deck's mode changing under you. That is this deck's mode asked for again, which is the one thing the chip on the left cannot say: a cycle starts at the mode after the one you are on, so the state you are in is the state it can never arrive at. &#8853; MIDI: unassigned &mdash; a pad naming a mode re-anchors the day one exists, because naming the mode a deck is already in is all re-anchoring ever was.">T<b>128</b></span>
                     <span class="scrub idle" data-tip="Scrub, a quarter beat a press. Inert on this deck, and it keeps its shape and says why rather than going grey: a scrub is an offset added to the room's position under beat sync, and this deck is on tempo because its material accumulates. Nothing here re-runs a deck's history to place it. &#8853; MIDI: unassigned &mdash; it is the one operation that moves by an amount, and a control change can only set."><i>&#9666;</i><i>&#9656;</i></span>
                     <span class="sep"></span>
+                    <span class="mini sel" data-tip="Elements per geometry, and this deck is running at 524288 &mdash; turned up from the 262144 `drift_shell` declares, which is why the chip is lit: unlit is the declaration&#39;s own default and lit is a number somebody asked for. Click to step to the next power of two inside the range this deck&#39;s geometries declare &mdash; 4096 to 1048576 here &mdash; and off the top back to the bottom, so every number this chip can reach is one a press can leave. &#8853; It steps rather than takes a drag, and that is the whole reason it is a chip. A capacity is a number in a declared range, which everywhere else on this panel is a fader&#39;s track; but a parameter track dragged is a uniform write a frame, and a capacity track dragged would be a rebuild a frame, each one reallocating every element buffer in the slot. Nothing on this console is discovered to be expensive while it is on air. &#8853; A press re&#8209;aims this slot, exactly as the fold two chips along does: the capacity is one field of what this slot&#39;s watcher is pointed at, so the press restates the rest of that description and hands it over, and the worker recompiles the slot off the render thread. The build lands at a frame boundary and is judged there against the frame budget, and a version that cannot hold the frame stays in the slot with the slot stopped. Nothing is installed, nothing allocates on the render thread, and the values your hands have moved cross the rebuild. The staging lane says which of the three happened. &#8853; It is the slot&#39;s and not one node&#39;s. A Set holding two geometries runs both at this number, which is what `--capacity` has always meant; a capacity for one geometry of a pair is not something the aim can carry today, so it is not something this chip can ask for. A deck whose geometries declare no range they share has nothing to step through, and the chip keeps its shape and claims nothing. &#8853; MIDI: unassigned, and this is not a target a map line could learn: the numbers it steps through are the Set in this slot&#39;s rather than this console&#39;s, and they move the moment the deck loads different material.">524288</span>
+                    <span class="mini" data-tip="Re-seed this deck&#39;s randomness, and nothing structural with it. Every hash builtin in a slot is salted, so `hash1(seed)` moves and `seed % 512u` does not: the colours, the jitter and the scatter change, and the lattice, the ordering and the count stay exactly where they were. It is the one control here that changes the picture without changing anything you could name in it. &#8853; The salt is not made up on this side. Each press takes the next one in this slot&#39;s own sequence, derived from the salt it is running, so the same slot re-salted from the same place twice lands on the same two pictures &mdash; and a deck kept afterwards writes the salts it was running at into the Set file, which is what makes a kept Set come back looking like what you kept. &#8853; There is no way back by pressing: the sequence goes forward, and what recovers a look you have stepped past is the Set you kept of it. &#8853; A press re&#8209;aims the slot and the worker rebuilds it, exactly as the capacity beside it and the fold beyond it do, and the staging lane carries the verdict. &#8853; MIDI: unassigned &mdash; a map line names a slot number, a word from a closed list or a range, and a salt is none of the three.">re-salt</span>
                     <span class="mini sel" data-tip="Composite: on. The deck's three renderers are folded into one result rather than overdrawn, which is what makes the chips below a choice of one rather than a list of all of them. Click to overdraw them instead, and click again to fold them back &mdash; the press names the state it is asking for rather than flipping one, so two hands on one deck cannot disagree about where it is. &#8853; A press re&#8209;aims this slot, and that is the whole mechanism: how a deck lays its renderers up is one field of what the slot's watcher is pointed at, so the press restates the rest of that aim and sends it, and the worker rebuilds the slot off the render thread. The build lands at a frame boundary and is judged there and then, on what one frame of that Set was measured to cost, exactly as an edited file and a library load are &mdash; and a version that cannot hold the frame stays in the slot with the slot stopped, holding the frame it last drew. Compositing costs a frame-sized target per renderer, so that judgement is not a formality: this is the one control on the panel where the picture is what asks for the memory. Nothing is installed into the slot and nothing allocates on the render thread, and the parameters your hands have moved cross the rebuild. &#8853; The Staging lane under the library is where the verdict is, on the deck it happened to, because a composite press is a build like every other build. Which renderer was live is restated with the layering, so a deck taken to overdraw and folded back comes back on the same one. &#8853; MIDI: unassigned.">composite</span>
                   </div>
 
@@ -237,6 +241,7 @@
                       <span class="auth" data-tip="Authority on this node. Manual: only you move it. Suggest: an agent proposes and you accept. Auto: it acts. Set per node, never globally.">
                         <span class="sel">man</span><span>sug</span><span>auto</span>
                       </span>
+                      <span class="mini" data-tip="Keep `drift_shell`&#39;s source in your own library, at &lt;store&gt;/procedures/, so it can be loaded over a layer of something else later. It is one node and never the deck: the capsule on the pane head above keeps all of deck A as a Set, and this keeps the one file this group is drawn from. &#8853; It is the act that makes your library of procedures exist at all &mdash; nothing else in this program writes there, and the procedures that ship are never written by anything. The sources every build leaves in the store are not that library: those are the edit history&#39;s, one per compile and named by a hash, and the `history` chip is the walk over them. &#8853; What it is filed as follows which press carried it, exactly as the deck&#39;s own `keep` does: this capsule types nothing and takes a stamp, and a name typed into the pane head above is what a keep from there files under. &#8853; A model asking for this over MCP writes &lt;store&gt;/sandbox/ instead &mdash; stamped, overwriting nothing, readable by nothing that reads the library. A model is not refused here, where its star is, because what it saves is a file and so has a sandbox form to land in. &#8853; Two heads on this pane carry no capsule and both are the rule rather than an omission: the camera&#39;s, because the built&#8209;in orbit is a node with no procedure behind it and there is nothing to keep, and the renderers&#39;, because that head stands over three nodes and one capsule on it would be one of three answers drawn as the answer &mdash; open the fold and each renderer has its own. &#8853; MIDI: unassigned &mdash; a map line names a slot, a range or a word from a closed list, and it cannot say a node address.">keep</span>
                     </div>
                     <div class="param">
                       <span class="ord">1</span>
@@ -261,11 +266,27 @@
                   </div>
 
                   <div class="node-group">
-                    <div class="node-head"><span class="addr">L2:0</span><b>swirl_warp</b><span class="sep"></span>
+                    <div class="node-head" data-tip="The geometry `swirl_warp`&#39;s `far` input is wired to. It is a node of this deck like any other &mdash; it has an address, an authority and its own declared knobs &mdash; and none of its knobs is on the interface, which is why its rows are drawn faint and carry no number. That is a Set whose interface was narrowed rather than a node that declares nothing: press a mark and it comes back."><span class="addr">L1:1</span><b>sphere_shell</b><span class="sep"></span>
                       <span class="auth"><span class="sel">man</span><span>sug</span><span>auto</span></span>
                     </div>
+                    <div class="param unpub">
+                      <span class="ord" data-tip="Not published, and this is the mark that says so &mdash; a dot where a number would be, because a control off the interface has no position and a position is what a knob counts. The row is still drawn: this bay is where you choose what the deck shows, and a choice you cannot see is one you cannot unmake. Click to publish it, and it lands at the end of the list with the next number. &#8853; It is not hidden and it is not locked. `--param`, a `param` record in the Set file and a model naming `L1:1:radius` all reach this value exactly as they did before it left the interface; what left is the fader and the number, which are what this panel shows and what a knob counts.">&middot;</span>
+                      <span class="pname">radius</span>
+                    </div>
+                    <div class="param unpub">
+                      <span class="ord">&middot;</span>
+                      <span class="pname">detail</span>
+                    </div>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L2:0</span><b>swirl_warp</b><span class="sep"></span>
+                      <span class="auth"><span class="sel">man</span><span>sug</span><span>auto</span></span>
+                      <span class="mini" data-tip="Keep `swirl_warp`&#39;s source in your own library. The same capsule one group up, on the node it is drawn on: this writes the deformer where that one writes the geometry, and either can then be loaded over that layer of something else. &#8853; MIDI: unassigned.">keep</span>
+                    </div>
+                    <div class="uses"><span class="slot">uses far</span><span class="sep"></span><span class="pill" data-tip="An input this node&#39;s procedure declares, and the node filling it. `swirl_warp` says `uses far : Geometry` and reads `far.position`; the file names the input and never the node, because a procedure that named its neighbours would be bound to one Set and would stop being a library part. What fills it is the Set&#39;s to say, and this line is where you say it. &#8853; Click the capsule and a card comes down listing this deck&#39;s other geometries; pick one and the input is wired to it. The list is the nodes of the kind the input takes &mdash; a Geometry input offers geometries and nothing else &mdash; and the node that declares the input is not in its own list. &#8853; A pick replaces whatever was there rather than adding to it: an input takes one node, and a Set built with two edges on one input is refused where it is built. &#8853; It re&#8209;aims the slot, exactly as the deck head&#39;s three chips do: the wiring is one field of what this slot&#39;s watcher is pointed at, so the pick restates the rest and the worker recompiles the slot off the render thread, and the staging lane says whether the build landed, was overloaded or did not compile. Nothing here is refused on this side &mdash; a name the Set cannot use is refused where the Set is built, by name and with what the Set does hold, which is the same wall the `wire_input` tool meets. &#8853; There is no way to leave an input unwired: a Set with an empty input does not build, so this control replaces and never clears. &#8853; MIDI: unassigned &mdash; a map line names a slot number, a word from a closed list or a range, and a node name is none of the three.">sphere_shell &#9662;</span></div>
                     <div class="param">
-                      <span class="ord">3</span>
+                      <span class="ord" data-tip="Where this control sits in the deck&#39;s published interface, and the mark that says it is published at all. Three here, so a knob learned against the third control of this deck moves `amount`. &#8853; Click it to take the control off the interface: the number goes, the fader goes with it, and the row stays where it is with its name faint &mdash; drawn so you can put it back, which is the one thing a row that vanished could not offer. Click it again and it is published, at the end of the list. &#8853; What that changes is what this panel shows and what a knob can count, and nothing about what the value can be: a control nobody published is still written by `--param`, by a `param` record and by a model naming its address, because publishing is a choice of attention and never a choice of authority. A Set&#39;s author cannot lock you out of your own machine. &#8853; The numbers after it move, and that is the cost worth knowing before you press: a MIDI knob is learned against a position, so taking a control out from under one renumbers everything below it and the knobs follow the numbers rather than the names. &#8853; A press restates the whole list rather than saying `drop this one`, which is why two hands on one deck cannot end up disagreeing about what is published. &#8853; MIDI: unassigned &mdash; a map line cannot name a control by anything but its position, and this is the control that moves positions.">3</span>
                       <span class="pname">amount</span>
                       <span class="fader"><b style="width:71%"></b><s style="left:68%"></s></span>
                       <span class="pval">0.71</span>
@@ -325,7 +346,7 @@
                 <div class="divider-v">&#8942;</div>
 
                 <div class="insp-half">
-                  <div class="half-head"><span>showing</span><span class="what">deck B &middot; lattice_veil</span><span>&#9662;</span>
+                  <div class="half-head"><span>showing</span><span class="what">deck B &middot; lattice_veil</span><span data-tip="Deck B here, and it is this pane&#39;s own answer rather than the one next door&#39;s &mdash; the same pulldown, pointed somewhere else. Two panes open and four decks to choose from is why it is a pulldown at all. &#8853; MIDI: unassigned.">&#9662;</span>
                     <span class="sep"></span><span class="shown" data-tip="Three of three, and this pane is not scrolled either. It is deck B&#39;s count and deck A&#39;s next door is its own: the position each pane is scrolled to belongs to the pane and not to the deck it is showing, so pointing both panes at one deck gives you two of them. The capsule beside it is described in the other pane&#39;s head. A readout, and there is nothing here to press. &#8853; MIDI: unassigned.">3 of 3</span><span class="pill">keep</span>
                   </div>
 
@@ -334,6 +355,8 @@
                     <span class="anchor" data-tip="The anchor and the scrub, which is what beat sync has to show: engaged at 128 BPM, with the deck sitting a quarter beat ahead of the room. That offset is in beats and is this deck's; the offset in the transport is in milliseconds and is the whole instrument's. Signed and unbounded, because a scrub is the one control here meant to go backwards. Click to re-anchor at the room's tempo now, which also puts the offset back to zero &mdash; a deck brought back onto the grid should be on the grid and not where it was scrubbed to a song ago.">B<b>128</b><em>+0.25</em></span>
                     <span class="scrub" data-tip="Scrub: a quarter beat back or forward a press, into the offset beside it. Live here because the deck is beat-synced, which is the only mode that reads it. &#8853; MIDI: unassigned &mdash; it is the one operation that moves by an amount, and a control change can only set."><i>&#9666;</i><i>&#9656;</i></span>
                     <span class="sep"></span>
+                    <span class="mini" data-tip="Elements per geometry: 32768, which is what `lattice_shell` declares as its default &mdash; the chip is unlit because nobody has asked this deck for another number, which is where every run opens. Here the count is visual as well as a price: this file lays a cube out whose side is the cube root of it, so 32768 is 32 across, and a step in either direction changes what the lattice looks like and not only what it costs. Click to step through the powers of two inside 4096 to 262144, which is what this file says it can be turned to, wrapping at each end. &#8853; MIDI: unassigned.">32768</span>
+                    <span class="mini" data-tip="Re-seed this deck. On lattice_veil that is the colour and the jitter and nothing else &mdash; the lattice is `seed % 512u` and does not move &mdash; which is the plainest case of what a salt is and is not for. The salt itself is the next one in this slot&#39;s own sequence rather than a number this console invented, so the press is repeatable and a keep records where it got to. &#8853; MIDI: unassigned.">re-salt</span>
                     <span class="mini" data-tip="Composite: off, and on this deck it changes nothing either way &mdash; lattice_veil publishes one renderer, so there is nothing to fold together and nothing to overdraw. Drawn rather than hidden, because a deck that grows a second renderer needs the control already where it was. &#8853; MIDI: unassigned.">composite</span>
                   </div>
 
@@ -393,6 +416,7 @@
                       <span class="auth" data-tip="One renderer under this head, so the head stands over one node and the chip is the control it always was. There is no fold mark beside it, because a group of one has nothing to open.">
                         <span class="sel">man</span><span>sug</span><span>auto</span>
                       </span>
+                      <span class="mini" data-tip="Keep this renderer&#39;s source in your own library. The head stands over one node here, so it carries the capsule the way an ordinary node head does &mdash; deck A&#39;s renderers head folds three and carries none, because one control on it would be one of three answers drawn as the answer. &#8853; MIDI: unassigned.">keep</span>
                     </div>
                     <div class="rend-row"><span class="rend sel">dots</span></div>
                     <div class="param">
@@ -717,9 +741,13 @@
           group <strong>by where they land</strong>, which for most of them is
           one node, addressed the way a Set is addressed everywhere else
           (<code>L2:0:amount</code>) so an effect layer's controls need no
-          second idea of where things live. Only what a Set
-          <em>publishes</em> &mdash; the reason this is six rows rather than
-          twenty-five.
+          second idea of where things live. Which rows carry a <em>fader</em> is
+          what a Set <em>publishes</em> &mdash; the reason a deck of
+          twenty-five declared knobs can be six controls on the desk. A
+          control the interface does not carry keeps its row and loses its
+          number and its fader, because <strong>this is the bay where that
+          choice is made</strong> and a choice you cannot see is one you cannot
+          unmake.
         </p>
         <p>
           <strong>A control that lands in more than one node is not one of
@@ -887,7 +915,8 @@
         <h3>The deck head, and why it is in the inspector</h3>
         <p>
           A head is a strip of chips above the thing it heads, and this is the
-          first one that heads a <em>deck</em>: its clock and its fold, over the
+          first one that heads a <em>deck</em>: its clock, its size, its seed
+          and its fold, over the
           node groups that are its shape. It is in the inspector because
           <strong>the inspector is where everything about what a deck
           <em>is</em> lives</strong>, and a deck is running material with a time
@@ -895,8 +924,9 @@
           decides how much of each deck reaches the screen, and a strip is 53
           pixels wide with nothing spare in it. It sits under the pane's head
           rather than in it, because the pane's head says <em>which</em> deck is
-          showing and this says what that deck is doing &mdash; and because five
-          chips and a deck's name do not fit on one row of a 237-pixel pane.
+          showing and this says what that deck is doing &mdash; and because
+          seven chips and a deck's name do not fit on one row of a 237-pixel
+          pane.
         </p>
         <p>
           <strong>Sync is one chip that cycles, and the cycle skips.</strong>
@@ -991,22 +1021,163 @@
           the renderer you left it on.
         </p>
         <p>
-          <strong>The capacity and the salts sit in that same description and
-          have no control here.</strong> A geometry's element count and the salt
-          that decides which randomness it got are fields of the aim beside the
-          layering, so the mechanism that would move them is the one this chip
-          just used, and no writer into a live Set is wanted or would be
-          allowed. What is missing is the control, and it is missing on purpose
-          until two questions are answered. A capacity is a number in a declared
-          range, which on this panel is a parameter row's track &mdash; but a
-          parameter track dragged is a uniform write a frame and a capacity
-          track dragged would be a <em>rebuild</em> a frame, which is the one
-          thing this instrument refuses to pay. And an aim carries one capacity
-          for the whole slot where the operation addresses a node, so a row
-          drawn under one geometry of a Set holding two would be saying
-          something the slot cannot carry. Until both have answers there is
-          nothing drawn here, which is a gap this page names rather than a
-          control it is quietly missing.
+          <strong>The capacity and the salts sit in that same description, and
+          they are the two chips before the fold.</strong> A geometry's element
+          count and the salt that decides which randomness it got are fields of
+          the aim beside the layering, so the mechanism that moves them is the
+          one the fold uses and no writer into a live Set is wanted or would be
+          allowed. What was missing was never the mechanism &mdash; it was the
+          control, and what held the control up was that the obvious one is
+          refused. A capacity is a number in a declared range, which everywhere
+          else on this panel is a parameter row's track; but a parameter track
+          dragged is a uniform write a frame and a capacity track dragged would
+          be a <em>rebuild</em> a frame, dozens of them across one gesture, each
+          reallocating every element buffer in the slot. So the capacity
+          <strong>steps</strong> instead, through the powers of two inside the
+          range this deck's geometries declare, wrapping at each end &mdash; the
+          affordance the library's two filter fields already use, for the same
+          reason and one bay along.
+        </p>
+        <p>
+          <strong>The chip reads what the slot is running at, and it is lit
+          exactly when somebody asked for that number.</strong> Unlit is the
+          geometry's own declared default, which is where every run opens, so
+          the two states answer <em>who chose this</em> rather than repeating the
+          number in a second place. The step is the console's arithmetic and
+          what leaves it is the number arrived at, never a step: two hands
+          stepping one control would otherwise disagree about where it is.
+          <strong>The chip is the slot's and not one node's.</strong> A Set
+          holding two geometries runs both at this number, which is what
+          <code>--capacity</code> has always meant; a capacity for one geometry
+          of a pair is not something the aim can carry, so it is not something
+          this chip offers, and a deck whose geometries declare no range they
+          share has nothing to step through and keeps its shape without claiming
+          the press.
+        </p>
+        <p>
+          <strong><code>re-salt</code> re-seeds the slot and touches nothing
+          structural.</strong> Every hash builtin is salted, so
+          <code>hash1(seed)</code> moves and <code>seed % 512u</code> does not
+          &mdash; the colours, the jitter and the scatter change, and the
+          lattice, the ordering and the count stay where they were. <strong>The
+          salt is not invented here.</strong> Each press takes the next in this
+          slot's own sequence, derived from the salt it is running, so the same
+          slot re-salted from the same place twice lands on the same two
+          pictures and a deck kept afterwards writes the salts it was running at
+          into the Set file. That is the difference between a re-seed and a
+          shuffle: nothing in this instrument produces a number a later run
+          cannot produce again. There is no way back by pressing &mdash; the
+          sequence goes forward &mdash; so what recovers a look you stepped past
+          is the Set you kept of it.
+        </p>
+        <p>
+          <strong>A pane too narrow for the two keeps the five that were here
+          before them</strong>, and this is the one row on the console that
+          drops part of itself rather than all of it. The reason is a
+          measurement: a pane at the smallest window this arrangement claims is
+          237.5&nbsp;pixels wide and the row needs about 296 for all seven, so
+          a row that took all of them or none would draw <em>nothing</em> at the
+          width the console says it works at &mdash; trading two controls that
+          were never there for four that were. With two panes open the two
+          appear at a window of about 1360 and are there at every ordinary size
+          above it; a third pane takes them away again. That is a limit named
+          here rather than one an operator finds by dragging, and the honest
+          reading of it is that the deck head is now the row this console has
+          the least room left in.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>An input is wired on the node that declares it</h3>
+        <p>
+          A procedure declares the inputs it takes and never the nodes that
+          fill them &mdash; <code>uses far : Geometry</code>, and the file says
+          <code>far</code> and stops. That is not a formality: a part that names
+          the parts around it is bound to one Set and stops being a library
+          part, and a corpus of procedures that cannot be recombined is not a
+          corpus. <strong>So the node names the input and the Set names the
+          node</strong>, and this line is where the Set says it.
+        </p>
+        <p>
+          <strong>It is a capsule with a card under it</strong>, the Library
+          bay's deck pulldown one bay along. A press brings down the nodes of
+          the kind the input takes &mdash; a <code>Geometry</code> input lists
+          this deck's geometries, a <code>Field</code> input its fields &mdash;
+          and the node that declares the input is not in its own list. A pick
+          <strong>replaces</strong>: an input takes one node, a Set built with
+          two edges on one input is refused where it is built, and there is no
+          way to leave an input empty because a Set with an empty input does not
+          build at all. So this control has no <em>off</em>, and that is the
+          language's shape rather than a control that forgot one.
+        </p>
+        <p>
+          <strong>A pick re-aims the slot</strong>, which is the deck head's
+          three chips one row up and the same mechanism: the wiring is one field
+          of what this slot's watcher is pointed at, so the pick restates the
+          rest and the worker recompiles the slot off the render thread. The
+          staging lane carries the verdict. <strong>Nothing is refused on this
+          side</strong>: the console offers the nodes it can see and a name the
+          Set cannot use is refused where the Set is built, by name and with
+          what the Set does hold &mdash; the same wall a model's
+          <code>wire_input</code> meets, in the same sentence.
+        </p>
+        <p>
+          <strong>The line is drawn only where there is an input to draw</strong>,
+          which on most decks is nowhere: a geometry and a renderer declare no
+          inputs, so most node groups have no line here at all. What decides it
+          is the procedure, not the panel.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>The number is the mark, and publishing is a choice of attention</h3>
+        <p>
+          The figure at the left of a parameter row is <strong>where that
+          control sits in this deck's published interface</strong>, which is
+          what a MIDI knob counts. It is also the control that decides whether
+          the row is on the interface at all: press it and the control comes
+          off, press it again and it goes back on at the end of the list. A row
+          that is off keeps its place in its group and loses its number, its
+          fader and its figure.
+        </p>
+        <p>
+          <strong>What that changes is what is shown, never what can be
+          reached.</strong> A control nobody published is still written by
+          <code>--param</code>, by a <code>param</code> record in a Set file and
+          by a model naming its address. If publishing gated reach, a Set's
+          author could lock an operator out of their own machine, and this
+          instrument's position everywhere else is the opposite: show every
+          measurement, hide nothing, needing a hand is craft rather than defect.
+        </p>
+        <p>
+          <strong>The numbers below it move, and that is worth knowing before
+          you press.</strong> A knob is learned against a <em>position</em>, so
+          taking a control out from under one renumbers everything after it and
+          the knobs follow the numbers rather than the names. That is also why a
+          press restates <em>the whole list</em> rather than saying <em>drop
+          this one</em>: adding or removing one entry at a time is a statement
+          about an entry, and what this is about is the list.
+        </p>
+        <p>
+          <strong>An interface that publishes nothing publishes
+          everything</strong>, which is where every deck opens: nobody has
+          narrowed anything, so every declared control has a number and a fader
+          and no row is faint. The first mark you press is what turns the list
+          into an interface. Deck A above has been narrowed &mdash;
+          <code>sphere_shell</code>'s two knobs are off it &mdash; and deck B
+          beside it has not.
+        </p>
+        <p>
+          <strong>A press re-aims the slot</strong>, like the wiring above it
+          and the deck head's three chips: the interface is one field of what
+          the slot's watcher is pointed at, so a narrowing survives every later
+          rebuild rather than being wiped by the next save of any file in the
+          deck. What it costs is a recompile for a choice about a display, and
+          what it buys is that the choice is still there afterwards. <strong>A
+          replay does not reproduce it and neither does a keep</strong>: no
+          record in this format says what a Set publishes, so a narrowing lives
+          in the run that made it. That is a gap this page names rather than one
+          you find later.
         </p>
       </div>
 
@@ -1076,6 +1247,20 @@
           across every rebuild for the sake of one press. What you give up is
           handing it straight back; what you keep is that the session carries
           the source, the shape and the range on the line that attached it.
+        </p>
+        <p>
+          <strong>An attachment you made survives a rebuild</strong> &mdash; a
+          save of any <code>.kir</code> in that deck, a capacity step, a
+          re&#8209;salt, a fold. It walked back silently until
+          2026&#8209;09&#8209;10, which is what made the panel&#39;s picture
+          stop answering to the room while the same material on the command
+          line went on answering. What beats it is a <em>load</em>: a Set file
+          states its own <code>bind</code> lines, so loading one over a deck
+          you had attached a signal on gives you the file&#39;s attachment at
+          that parameter rather than yours &mdash; the same rule that stops a
+          loaded preset from coming up wearing a ride. Taking one back is not
+          carried, for the same reason: the next rebuild states what the file
+          says again.
         </p>
       </div>
 
@@ -1171,8 +1356,10 @@
         </p>
         <p>
           <strong>Two ways into the selection and neither of them is a
-          control</strong>: <code>0</code> to <code>3</code>, and a press
-          anywhere on a strip that no knob under the pointer claimed. The second
+          control</strong>: a digit with the keys addressed to this bay
+          &mdash; <code>1</code> to <code>4</code>, counting the strips it
+          drew &mdash; and a press anywhere on a strip that no knob under the
+          pointer claimed. The second
           is why the strip is the one thing in this bay with no capsule and no
           track of its own to press &mdash; it is the whole column, and what it
           means is <em>address the keys here</em>. A deck the mixer is not
@@ -1201,6 +1388,27 @@
           folded bay a digit, <code>enter</code> and the arrows decline and say
           why, because there is nothing drawn for them to land on, so a mark
           standing in for those would be offering a press that is refused.
+        </p>
+        <p>
+          <strong>Which half of this the panel draws, as of
+          2026&#8209;09&#8209;09.</strong> Focus is on the panel and
+          <code>tab</code> moves it: the ring is the arrangement's own walk,
+          down a column and then across, a folded bay keeps its place in it, and
+          the dashed ring lands on the focused bay's head &mdash; on the row
+          itself for the transport and the outputs row, which draw no head.
+          <code>esc</code> goes up one level and no longer quits; the way out is
+          the window's own close. <strong>The four keys that act inside a bay
+          are bound in two of the nine</strong> &mdash; this bay and the
+          library &mdash; so a digit descends, the arrows walk the strips and
+          step the trim and the fader, and <code>space</code> cycles the tally,
+          the blend chip and the mask mini. <code>2 3</code> here is deck B's
+          fader, which is the ring the panel above is drawing. In the other
+          seven the four decline and say where they are. <strong>The folded
+          head drawn here is the panel's one gap</strong>: a folded region has
+          no rectangle, so nothing on the panel is ringed while focus is on
+          one, and this drawing is the whole of the mark until that is built.
+          <code>space</code> on a bay is the fold and is not bound either, for
+          the same reason the mark is owed: it is a rule about all nine.
         </p>
       </div>
 
@@ -1543,11 +1751,10 @@
           <em>is</em>. <strong>The field has the keyboard while it is up</strong>
           &mdash; every key is a letter of the name, including the ones that are
           panel keys the rest of the time. Return finishes it and esc backs out
-          with nothing saved, which is the one place on this panel where esc
-          does not quit &mdash; and quitting is what esc is going to stop doing
-          everywhere else, leaving the window&#39;s own close as the way out. What
-          esc means here is what it will mean throughout: one step out of
-          whatever has the keyboard.
+          with nothing saved &mdash; which is what esc means everywhere on this
+          panel now: one step out of whatever has the keyboard. It quit until
+          2026&#8209;09&#8209;09 and stopped; the window&#39;s own close is the
+          way out.
         </p>
         <p>
           <strong>A name is letters, digits, <code>-</code> and <code>_</code></strong>,
@@ -3012,6 +3219,143 @@
       </div>
 
       <div class="note">
+        <h3>A procedure is a row too, and a badge says which layer</h3>
+        <p>
+          <strong>The list holds procedures beside Sets, and the row of six
+          chips under the filters says which kinds of it show.</strong> Not a
+          scope of its own: a scope is a <em>different library</em>, and
+          choosing one puts the Sets away, where what this is for is swapping
+          one layer of what is playing <em>while looking at the material it is
+          going into</em>. One list, and a filter row that answers <em>show me
+          the cameras and the Sets</em> &mdash; which a chip list can say and a
+          scope cannot.
+        </p>
+        <p>
+          <strong>Two tiers, which is where every other kind of library data
+          lives.</strong> What ships is the <code>.kir</code> files under the
+          presets root, beside the Set files already there and never written by
+          anything in this program. Yours are at
+          <code>&lt;store&gt;/procedures/</code>, written only by your own act
+          &mdash; a <code>keep</code> on a node group&#39;s head in the
+          Inspector, which is the note below and the whole of how that
+          directory fills.
+        </p>
+        <p>
+          <strong>The content-addressed sources in the store are not this
+          library, and the difference is worth stating because they look like
+          candidates for it.</strong> Every build puts its sources there under
+          a hash and there is a listing of them; that population is the
+          <em>edit history&#39;s</em> &mdash; every version that compiled,
+          which is what the <code>history</code> chip walks. A library row is
+          something a person kept and can name, so a listing of hashes here
+          would be a row per compile under a name nobody chose. It is the same
+          mistake <code>my sets</code> refuses from the other side.
+        </p>
+        <p>
+          <strong>The badge is what a row implements, read off a card.</strong>
+          A procedure&#39;s is its one <code>kind</code>; a Set&#39;s is the
+          layers its own files fill. Both are already written down &mdash; the
+          store keeps a card beside each artifact with the layer on it, and a
+          Set file names a layer per slot &mdash; so a listing costs a
+          directory read and never a compile, which is the rule the reading a
+          <code>params</code> press opens is under. <strong>There is no L3 on
+          most Set rows</strong>, and that is the badge telling the truth: a
+          Set whose files declare no camera holds the built-in orbit at
+          <code>L3:0</code>, which is a node of every Set and a badge on none.
+          It is also exactly why a row of cameras is worth having.
+        </p>
+        <p>
+          <strong>One treatment and no colour per layer.</strong> Five hues
+          would be five new inks on a console that spends its accents on two
+          facts &mdash; the deck the keys are on, and a control that is on
+          &mdash; and the badge says which layer in words already. What tells a
+          procedure row from a Set row is not the badge count either: it is the
+          star. A star is a control over a Set this store holds and is refused
+          on anything else with the id back, so a procedure row has the
+          column and nothing in it.
+        </p>
+        <p>
+          <strong>Two scopes list a procedure and two do not.</strong>
+          <code>all</code> gains your own, <code>presets</code> gains the
+          shipped ones. <code>my sets</code> does not, because it is the
+          starred subset of the Sets and there is nothing to star here.
+          <code>folder</code> does not, and the note above is why: a folder row
+          is a <em>take</em>, and there is no take-in for a bare
+          <code>.kir</code> &mdash; taking a Set in checks every source against
+          the address its slot record names, and a loose file names nothing. So
+          <em>a directory of <code>.kir</code> files is a directory of
+          parts</em> is still true of somebody else&#39;s directory; what has
+          changed is that this program now keeps two directories of parts of
+          its own, with names in them.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Loading one layer makes a Set with no name</h3>
+        <p>
+          <strong>A press on a procedure row takes what the deck is playing,
+          writes that one layer over it, and leaves everything else where it
+          is.</strong> The layering, the fold, the element counts, the salts,
+          the camera and the wiring are all restated, so nothing comes back as
+          a default; the slot is re-pointed and the worker rebuilds it off the
+          render thread, which is the path a Set load and an edit already take.
+          It lands at a frame boundary, it is judged there on what one frame of
+          it costs, and the Staging lane says which of the three happened.
+          Nothing is installed, and nothing is ever written where the presets
+          are.
+        </p>
+        <p>
+          <strong>It lands on the first node of that kind, and that is a limit
+          written down rather than a rule.</strong> <code>L4:0</code> is the
+          renderer a <code>kind L4</code> row replaces, so the second renderer
+          of a three-renderer Set is not reachable from this list: a library
+          row cannot say an index, and a payload only one surface could ever
+          fill would be a field for a control nobody has drawn. The day a node
+          head grows a <em>replace this node</em> control is the day it gains
+          one. Where the deck has no node of that kind the procedure is added
+          as node 0 of it &mdash; which is the case this is for, since a Set
+          declaring no camera holds the built-in at <code>L3:0</code> and a
+          <code>kind L3</code> row takes that place. A node whose declared
+          input nothing binds is refused where the Set is built, naming what
+          the Set does hold: the wall that was already there.
+        </p>
+        <p>
+          <strong>What the deck plays afterwards is a derived Set with no
+          name.</strong> The strip reads <code>base + kir</code>, so what is on
+          air says what it is made of rather than claiming to be a Set the
+          library holds, and <code>keep</code> is what gives it a name.
+          <strong>Nothing is saved on the press</strong>, and that is a
+          decision rather than an omission: a control meant to be pressed
+          repeatedly while you are looking for a picture would leave a row in
+          the library per press, which is the thing <code>my sets</code> exists
+          to keep out of your own shelf, and a disk write hung off a frame
+          boundary is the one cost this instrument refuses.
+        </p>
+        <p>
+          <strong>The edit history goes on filing under the Set the slot
+          started from</strong>, which is what keeps the swap cheap to make. A
+          Set load moves what versions are filed under; this one does not. So
+          the <code>history</code> chip keeps listing that deck&#39;s versions,
+          and the snapshot every compile takes stays alive over material that
+          has no name of its own. Filing them under nothing would be the
+          literal reading of <em>no name</em> and would empty the walk on the
+          deck you are most actively editing &mdash; a version of nothing
+          matches no Set, which is the state a typed pair is already in.
+        </p>
+        <p>
+          <strong>A Set row is unchanged and loads every layer, and a layer it
+          has not got goes empty.</strong> <em>Empty</em> means the slot holds
+          no node of that kind, which is the ordinary state of L2 and Field
+          &mdash; the pair a bare run opens on is a geometry and a renderer and
+          nothing else. <strong>L3 is never empty</strong>, because
+          <code>L3:0</code> addresses something in every Set: a Set declaring
+          no camera holds the built-in orbit, so <em>empty</em> there means the
+          built-in comes back. <strong>L1 and L4 cannot be empty</strong> at
+          all &mdash; a Set with no geometry or no renderer is not a Set.
+        </p>
+      </div>
+
+      <div class="note">
         <h3>The library scrolls, and the foot says how much it is not showing</h3>
         <p>
           A store holds more Sets than a bay holds rows &mdash; twenty-seven
@@ -3346,8 +3690,8 @@
           no slot is the exception</strong>, and the only one: the row is four
           cells whatever the deck holds, so on a deck of fewer slots the last
           cells have no deck to load into &mdash; a release there loads
-          nothing and nothing is ringed, which is the refusal the keyboard's
-          own <code>0</code>&ndash;<code>3</code> meet on the same count.
+          nothing and nothing is ringed, which is the refusal a digit in the
+          mixer meets on the same count.
           Nothing else about a cell is read for it: what it is showing never
           decides. <em>How a Set reaches a deck</em> is where that mark is
           specified.
@@ -3368,6 +3712,23 @@
           building &mdash; a tool a model cannot see is not a tool it was
           refused, it is a tool the first rule says exists and this surface
           says does not.
+        </p>
+        <p>
+          <strong>What a model calls is one tool, <code>operate</code>, and it
+          names the operation by the same heading the operations page gives
+          it.</strong> There is not a tool per class or a tool per row: the
+          vocabulary is the interface, so forty tools would have been forty
+          second spellings of names that already exist. The seven tools beside
+          it stay as they are, because each of them does something the
+          vocabulary alone does not name &mdash; reading a file, writing one,
+          reading the store, reporting what a swap did. <strong>Every other
+          operation this instrument can perform is asked for by name</strong>,
+          audited against these four pills, and then performed on the frame a
+          hand on the panel would have performed it on &mdash; the same
+          function, the same thread, the same instant. That is what makes a
+          model a fourth pair of hands rather than a second way to do
+          anything, and it is why a shut class is refused rather than being
+          quietly done somewhere else.
         </p>
         <p>
           <strong>Shut, the pill is the ordinary capsule and reads

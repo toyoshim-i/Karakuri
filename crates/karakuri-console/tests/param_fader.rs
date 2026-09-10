@@ -56,7 +56,7 @@ use karakuri_operation::{Authority, Layer, NodeAt, ParamAt, Sync};
 /// A row addressed at one node, over a published range, at a value.
 fn row(ord: usize, name: &str, at: Option<(Layer, u32)>, range: [f32; 2], value: f32) -> Param {
     Param {
-        ord,
+        ord: Some(ord),
         name: name.to_owned(),
         value,
         range,
@@ -88,6 +88,9 @@ fn mock() -> Pane {
         anchor_bpm: 128.0,
         scrub_beats: 0.25,
         composite: true,
+        // Not this test's row: the deck head's two build chips are
+        // drawn from this and nothing here is about them.
+        aimed: None,
         nodes: vec![
             Node {
                 addr: "L1:0".to_owned(),
@@ -99,6 +102,7 @@ fn mock() -> Pane {
                     },
                     level: Authority::Manual,
                 }),
+                uses: Vec::new(),
                 renderers: Vec::new(),
                 params: vec![
                     row(1, "radius", Some((Layer::L1, 0)), [0.0, 4.0], 2.4),
@@ -109,6 +113,7 @@ fn mock() -> Pane {
                 ],
             },
             Node {
+                uses: Vec::new(),
                 addr: "L4".to_owned(),
                 name: "renderers".to_owned(),
                 authority: None,

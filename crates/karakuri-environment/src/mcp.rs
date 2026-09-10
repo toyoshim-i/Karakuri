@@ -263,6 +263,11 @@ pub struct Reporter {
     /// disk must not be able to fill the queue an edit is rewired through, and
     /// [`ASKED`] is a bound on each kind rather than on both together.
     wires: mpsc::Receiver<WireRequest>,
+    /// And the operations they have asked it to perform, on a third channel for
+    /// the second one's reason: a save to a slow disk must not be able to fill
+    /// the queue a fader moves through, and [`ASKED`] is a bound on each kind
+    /// rather than on all three together.
+    operations: mpsc::Receiver<OperateRequest>,
     /// Reports the queue had no room for. **Counted rather than lost quietly**:
     /// a client that is told what happened must be told when it is not the
     /// whole story.
@@ -312,6 +317,25 @@ impl Reporter {
     /// nobody did.
     pub fn wires(&self) -> impl Iterator<Item = WireRequest> + '_ {
         self.wires.try_iter()
+    }
+
+    /// **Every operation a client has asked to be performed since this was last
+    /// called.**
+    ///
+    /// Drained beside [`Reporter::saves`] and [`Reporter::wires`] and on the
+    /// same terms, and what the loop owes each one is written at
+    /// [`OperateRequest`]. **Already audited**: `karakuri_operation::gate` ran
+    /// on the connection thread, so a loop draining this performs what it is
+    /// handed and does not judge it again — the audit is the one call the
+    /// server makes and not a check every drain repeats.
+    ///
+    /// **A loop that never calls this is not silently obeyed**, which is
+    /// [`Reporter::wires`]'s clause and its reason: every request carries a
+    /// [`Reply`] the client waits [`OPERATE_REPLY`] for, so a run whose loop
+    /// does not drain this answers *the render loop had not taken this
+    /// operation*.
+    pub fn operations(&self) -> impl Iterator<Item = OperateRequest> + '_ {
+        self.operations.try_iter()
     }
 
     /// The port actually bound, which is not the one asked for when that was 0.
@@ -839,6 +863,8 @@ pub fn serve(
     let (asked, requests) = mpsc::sync_channel(ASKED);
     // The edges, on a channel of their own — see [`Reporter::wires`].
     let (wiring, wires) = mpsc::sync_channel(ASKED);
+    // And the operations, on a third — see [`Reporter::operations`].
+    let (operating, operations) = mpsc::sync_channel(ASKED);
 
     let state = std::sync::Arc::new(std::sync::Mutex::new(State {
         slots,
@@ -848,6 +874,7 @@ pub fn serve(
         events: rx,
         asked,
         wiring,
+        operating,
         recent: Vec::new(),
         dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }));
@@ -883,6 +910,7 @@ pub fn serve(
         sender: tx,
         requests,
         wires,
+        operations,
         dropped,
         port: bound.port(),
     })
@@ -919,6 +947,12 @@ struct State {
     /// And where an edge a client asks for goes, on the same terms and for the
     /// same reasons — see [`WireRequest`] and [`Reporter::wires`].
     wiring: mpsc::SyncSender<WireRequest>,
+    /// And where an operation a client asks for goes, on the same terms again —
+    /// see [`OperateRequest`] and [`Reporter::operations`]. **The audit has
+    /// already run** when something is put here: [`audited`] is between
+    /// [`asked`] and [`perform`], and nothing else constructs an
+    /// [`OperateRequest`].
+    operating: mpsc::SyncSender<OperateRequest>,
     /// What the swap machinery has said, newest last, bounded.
     recent: Vec<String>,
     dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -1204,6 +1238,17 @@ enum Pending {
     /// **A variant of its own rather than a second `Saving`**, because the two
     /// wait different lengths for differently shaped news — see [`WIRE_REPLY`]
     /// against [`SAVE_REPLY`], and [`applied`] against [`awaited`].
+    /// An operation the render loop has been asked to perform.
+    ///
+    /// **[`Pending::Wiring`]'s shape with no note**, and it waits with
+    /// [`applied`] for that variant's reason: the loop performs it at the frame
+    /// it takes it and answers there, and everything slow that an operation
+    /// starts — a rebuild, a transition, a save — happens after the answer and
+    /// is reported where it lands.
+    Operating {
+        id: Value,
+        news: mpsc::Receiver<News>,
+    },
     Wiring {
         id: Value,
         news: mpsc::Receiver<News>,
@@ -1228,6 +1273,11 @@ impl Pending {
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": tool_result(awaited(&news, SAVE_REPLY)),
+            })),
+            Pending::Operating { id, news } => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": tool_result(applied(&news, OPERATE_REPLY)),
             })),
             // **The note is appended to what the loop said and only where the
             // loop said it worked.** A refusal is the loop's whole sentence;
@@ -1276,6 +1326,7 @@ fn dispatch(request: &Value, state: &mut State) -> Pending {
             // decision, so it is the one line here worth reading twice.
             Ok(Called::Saving(news)) => return Pending::Saving { id, news },
             Ok(Called::Wiring { news, note }) => return Pending::Wiring { id, news, note },
+            Ok(Called::Operating(news)) => return Pending::Operating { id, news },
             Ok(Called::Answered(outcome)) => Ok(tool_result(outcome)),
             Err(e) => Err(Refused::BadParams(e)),
         },
@@ -1600,6 +1651,12 @@ fn tools() -> Value {
                 },
             },
         },
+        // **The eighth, and it is generated** — see [`operate_tool`] and
+        // [`SPELLED`]. The seven above are written out because each of them
+        // performs something only this server can; this one is the vocabulary,
+        // and a hand-written copy of it beside the vocabulary is the drift
+        // `karakuri-operation` exists to end.
+        operate_tool(),
     ])
 }
 
@@ -1614,6 +1671,11 @@ enum Called {
         news: mpsc::Receiver<News>,
         note: String,
     },
+    /// An operation the loop has been asked to perform — see
+    /// [`OperateRequest`]. No note beside it: what this server knows about the
+    /// run that the loop will not say is the class the audit refused on, and a
+    /// refusal never reaches here.
+    Operating(mpsc::Receiver<News>),
 }
 
 /// **What one tool call names, in the vocabulary** — or the refusal its
@@ -1670,6 +1732,17 @@ fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, String> {
             Err(refusal) => Asked::Refused(refusal),
         },
         "save_set" => match kept(args, slots) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        // **The eighth tool, and the one that names rather than does.** The
+        // seven above each turn a tool's own arguments into the operation the
+        // manual specifies; this one is handed the operation's own name and
+        // looks it up — see [`operated`] and [`SPELLED`]. It is here at the end
+        // rather than first so that a tool with a name of its own is still
+        // matched by that name, which is what keeps `operate` from becoming a
+        // second spelling of any of them.
+        "operate" => match operated(args, slots) {
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
         },
@@ -1907,6 +1980,2153 @@ fn listing(args: &Value) -> Result<Operation, String> {
     Ok(Operation::ListSets { holds, layer })
 }
 
+// -- `operate`: one operation of the vocabulary, named on the wire ----------
+
+/// **How long an `operate` call waits for the render loop to perform it.**
+///
+/// [`WIRE_REPLY`] and not [`SAVE_REPLY`], for that constant's reason and the
+/// same one: this waits for the loop to reach the top of a frame and act, which
+/// is one frame at any frame rate anybody plays at, and no disk is involved.
+/// What a *rebuild* made of an operation that starts one lands thirty judged
+/// frames later and is `swap_outcome`'s answer.
+const OPERATE_REPLY: std::time::Duration = WIRE_REPLY;
+
+/// **What this surface can say of one operation, and why it cannot where it
+/// cannot.**
+///
+/// The `operate` tool takes an operation of `karakuri-operation` by its own
+/// name — the heading `docs/manual/operations.html` specifies it under — and
+/// hands it to the frame the panel performs every other surface's presses on.
+/// It does not take all sixty-four, and the four reasons it does not are here
+/// rather than in four scattered refusals
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+///
+/// **No wildcard arm.** [`sayable`] is a `match` over every variant, which is
+/// `karakuri_operation::gate::standing`'s discipline and its reason: a
+/// sixty-fifth operation does not compile until somebody has said whether this
+/// surface can name it, and the page's MCP column cannot quietly go stale
+/// beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Sayable {
+    /// `operate` takes it. The audit still answers.
+    Operable,
+    /// **This server publishes a tool of its own for it**, which does something
+    /// only the server can — a file, a store, a listing. A second spelling of a
+    /// tool is a second spelling
+    /// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)),
+    /// so `operate` refuses it and names the tool.
+    Tool(&'static str),
+    /// **A model has no window.** The row's MCP badge is `gap` and the sentence
+    /// is
+    /// [ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)'s,
+    /// worded once here as it is worded once on the page.
+    Window,
+    /// **The payload is `karakuri_operation::Undecided`.** A surface can say
+    /// only what the vocabulary has settled, and these three are not settled.
+    Undecided,
+    /// **Nothing on the frame this tool lands on performs it**, and the clause
+    /// says which part of the program does instead. A call answered `ok` for
+    /// work that did not happen is the plausible wrong answer
+    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// is written against, so this is refused rather than accepted.
+    Unperformed(&'static str),
+}
+
+/// **Whether `operate` names this operation, and what it says where it does
+/// not.** Exhaustive, with no wildcard arm — see [`Sayable`].
+fn sayable(operation: &Operation) -> Sayable {
+    match operation {
+        // ----- the thirty `operate` takes ----------------------------------
+        //
+        // Twenty-eight of them are refused by the audit until an operator opens
+        // their class, which is a built route and not a missing one
+        // (ADR-0235: *"a closed class is reached and answered with a refusal"*).
+        // `Operation::RestoreProcedure` is the one the audit lets through and
+        // the panel then performs, and `Operation::LoadSet` is the one whose
+        // class is a predicate over its target.
+        Operation::TapBeat
+        | Operation::ScaleGrid { .. }
+        | Operation::SetLatencyOffset { .. }
+        | Operation::SetSync { .. }
+        | Operation::ScrubDeck { .. }
+        | Operation::SetFreeRunTempo { .. }
+        | Operation::AttachBeatSource { .. }
+        | Operation::SetResidency { .. }
+        | Operation::LoadSet { .. }
+        | Operation::SetCompositing { .. }
+        | Operation::SetGain { .. }
+        | Operation::SetOpacity { .. }
+        | Operation::SetBlendMode { .. }
+        | Operation::FadeDeck { .. }
+        | Operation::Crossfade { .. }
+        | Operation::Wipe { .. }
+        | Operation::SetMaskShape { .. }
+        | Operation::SelectRenderer { .. }
+        | Operation::SetMasterOut { .. }
+        | Operation::SetFeedback { .. }
+        | Operation::SetBloom { .. }
+        | Operation::SetRgbShift { .. }
+        | Operation::SetTonemap { .. }
+        | Operation::SetExposure { .. }
+        | Operation::WriteParam { .. }
+        | Operation::AttachSignal { .. }
+        | Operation::TakeParamBack { .. }
+        | Operation::SetProperty { .. }
+        | Operation::SetAuthority { .. }
+        | Operation::RestoreProcedure { .. }
+        | Operation::Quit => Sayable::Operable,
+
+        // ----- the seven that have a tool of their own ---------------------
+        Operation::ReadProcedure { .. } => Sayable::Tool("read_procedure"),
+        Operation::WriteProcedure { .. } => Sayable::Tool("write_procedure"),
+        Operation::WireInput { .. } => Sayable::Tool("wire_input"),
+        Operation::SwapOutcome => Sayable::Tool("swap_outcome"),
+        Operation::SaveSet { .. } => Sayable::Tool("save_set"),
+        Operation::ReadSet { .. } => Sayable::Tool("read_set"),
+        Operation::ListSets { .. } => Sayable::Tool("list_sets"),
+
+        // ----- the seventeen a model has no window for ---------------------
+        //
+        // ADR-0315's twelve and the sequencer's five, which carry that record's
+        // sentence on the page for the same reason: a route into a surface's
+        // own state is a route into a window the model is not looking at.
+        Operation::SelectDeck { .. }
+        | Operation::SelectScope { .. }
+        | Operation::SetTransition { .. }
+        | Operation::KeepCandidate { .. }
+        | Operation::FoldBay { .. }
+        | Operation::FoldPane { .. }
+        | Operation::Unfold { .. }
+        | Operation::Solo { .. }
+        | Operation::ResetArrangement
+        | Operation::SaveArrangement { .. }
+        | Operation::RestoreArrangement { .. }
+        | Operation::SizeWindow { .. }
+        | Operation::SetStep { .. }
+        | Operation::SetLaneMute { .. }
+        | Operation::PointLane { .. }
+        | Operation::SetPatternGrid { .. }
+        | Operation::SelectPattern { .. }
+        // **A bay's own narrowing of what it is drawing**, which is
+        // `Operation::SelectScope`'s answer arrived at from the other side:
+        // which kinds of row the Library bay shows is a fact about a window,
+        // and a model is not looking at one. What a model actually wants here
+        // is a listing that holds procedures at all, and that is
+        // `Operation::ListSets`' to grow rather than this row's
+        // (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
+        | Operation::FilterLibrary { .. }
+        // **A pane's target is a pointer inside one console**, like the deck
+        // selection two groups up and for its sentence.
+        | Operation::PointPane { .. } => Sayable::Window,
+
+        // ----- the three the vocabulary has not settled --------------------
+        //
+        // `Operation::SelectScope` carries `Undecided` too and is not here: its
+        // row is `gap` for the window's reason, which is the answer that was
+        // taken first and is the one a reader of the page meets.
+        Operation::WalkHistory { .. }
+        | Operation::WatchFiles { .. }
+        | Operation::MoveBoundary { .. } => Sayable::Undecided,
+
+        // ----- the seven nothing on this frame performs --------------------
+        Operation::SetMaskPosition { .. } => Sayable::Unperformed(
+            "the panel reads no mask where a position is asked for, so the record comes back \
+             unwritten and nothing would move",
+        ),
+        // **`SetProperty` was here until the Inspector's deck head grew the two
+        // chips that perform it** (ADR-0328). It left this group by having a
+        // performer rather than by this rule changing, which is the shape every
+        // row here leaves in.
+        Operation::Publish { .. } => Sayable::Unperformed(
+            "nothing on the frame this tool lands on performs it, so opening its class would \
+             buy an answer of `ok` for work that did not happen",
+        ),
+        Operation::SetFavourite { .. } => Sayable::Unperformed(
+            "the star's performer is in the window's own press arm rather than on the frame \
+             this tool lands on, and what it answers a model is already written there",
+        ),
+        Operation::TransferSet { .. } => Sayable::Unperformed(
+            "both halves of it end in the system's own dialog, which is the window's and not \
+             the frame's",
+        ),
+        Operation::RouteFrame { .. } => Sayable::Unperformed(
+            "the performer that opens a projector window needs the event loop, which the frame \
+             this tool lands on does not hold",
+        ),
+        Operation::RecordSession { .. } => Sayable::Unperformed(
+            "its performer is in the window's own press arm rather than on the frame this tool \
+             lands on",
+        ),
+        // **ADR-0338's two acts, and both are waiting on a performer rather
+        // than on a decision.** The payloads are settled and a surface can say
+        // either of them; what neither has yet is an arm on the frame this
+        // drain lands on, and an answer of `ok` for work that did not happen is
+        // the plausible wrong answer P-0094 is written against.
+        Operation::LoadProcedure { .. } => Sayable::Unperformed(
+            "nothing on the frame this tool lands on re-aims a slot with one layer replaced \
+             yet, so opening its class would buy an answer of `ok` for work that did not \
+             happen",
+        ),
+        Operation::KeepProcedure { .. } => Sayable::Unperformed(
+            "nothing writes a node's source into the store's procedures yet, and a model's \
+             would land in the sandbox when something does",
+        ),
+    }
+}
+
+/// **One operation of the vocabulary as this surface spells it.**
+///
+/// **The title is not written here.** It comes back from `Operation::title`
+/// through [`Spelled::sample`], so the name a client types and the heading
+/// `docs/manual/operations.html` specifies the row under are one string and
+/// cannot drift — which is what `karakuri-operation` exists for and what a
+/// hand-written table of names beside it would give up
+/// (`docs/contributing.md` §4, *Generated*).
+/// **One payload, read as the operation it names** — or the refusal its
+/// arguments earned, in the words the seven tools refuse the same mistakes in.
+///
+/// A name of its own because it is one shape written thirty-one times, and
+/// because [`Spelled::make`] reads better for having it.
+type Make = fn(&Value, &Slots) -> Result<Operation, String>;
+
+struct Spelled {
+    /// One instance of this operation, and the smallest `operate` call that
+    /// names it where this surface takes one — `Value::Null` where it does not.
+    ///
+    /// **The pair is here rather than in a test** because the schema is built
+    /// from it and the round trip is checked against it: `make` applied to the
+    /// call has to come back equal to the operation, for every row, which is
+    /// what makes this one statement rather than two.
+    sample: fn() -> (Operation, Value),
+    /// The call's `with` object as the operation it names, or `None` where
+    /// [`sayable`] says this surface cannot name it.
+    make: Option<Make>,
+    /// The JSON Schema of that `with` object, for the curriculum a client is
+    /// handed before it calls ([ADR-0092](../../../docs/adr/0092-a-resource-listing-is-a-curriculum.md)).
+    shape: Option<fn() -> Value>,
+}
+
+impl Spelled {
+    /// The heading this row is specified under, from the vocabulary.
+    fn title(&self) -> &'static str {
+        (self.sample)().0.title()
+    }
+}
+
+/// The closed lists this surface spells on the wire, and the word for each
+/// value is the vocabulary's own `name`.
+///
+/// **Where the vocabulary publishes an `ALL`, that is what is used**; where it
+/// does not, the values are written out here and the words still are not. That
+/// is [`layer_named`]'s arrangement one type along, and it carries
+/// [`layer_named`]'s cost: a fourth `Sync` would have to be added here as well.
+/// `the_wire_spells_every_value_of_every_closed_list` is what says so.
+const SYNCS: [karakuri_operation::Sync; 3] = [
+    karakuri_operation::Sync::Free,
+    karakuri_operation::Sync::Tempo,
+    karakuri_operation::Sync::Beat,
+];
+const GRIDS: [karakuri_operation::GridScale; 2] = [
+    karakuri_operation::GridScale::Halve,
+    karakuri_operation::GridScale::Double,
+];
+const WIPE_KINDS: [karakuri_operation::WipeKind; 3] = [
+    karakuri_operation::WipeKind::None,
+    karakuri_operation::WipeKind::Linear,
+    karakuri_operation::WipeKind::Radial,
+];
+const TONEMAPS: [karakuri_operation::Tonemap; 4] = [
+    karakuri_operation::Tonemap::Clamp,
+    karakuri_operation::Tonemap::Reinhard,
+    karakuri_operation::Tonemap::Aces,
+    karakuri_operation::Tonemap::AgX,
+];
+const AUTHORITIES: [karakuri_operation::Authority; 3] = [
+    karakuri_operation::Authority::Manual,
+    karakuri_operation::Authority::Suggesting,
+    karakuri_operation::Authority::Automatic,
+];
+
+/// **The word for a grid scale**, which is the one value list in this file
+/// whose vocabulary type publishes no `name` of its own. Halving and doubling
+/// are the two directions and the words are the manual's heading read aloud.
+fn grid_word(scale: karakuri_operation::GridScale) -> &'static str {
+    match scale {
+        karakuri_operation::GridScale::Halve => "halve",
+        karakuri_operation::GridScale::Double => "double",
+    }
+}
+
+/// Every word of a closed list, in the order the list is written.
+fn words<T: Copy>(values: &[T], name: fn(T) -> &'static str) -> Vec<&'static str> {
+    values.iter().copied().map(name).collect()
+}
+
+/// The `with` object of one call, which is absent where the operation takes no
+/// payload.
+fn payload(args: &Value) -> Value {
+    args.get("with").cloned().unwrap_or_else(|| json!({}))
+}
+
+fn number_of(with: &Value, key: &str) -> Result<f64, String> {
+    with.get(key)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| format!("`with.{key}` is required and is a number"))
+}
+
+fn f32_of(with: &Value, key: &str) -> Result<f32, String> {
+    Ok(number_of(with, key)? as f32)
+}
+
+fn u32_of(with: &Value, key: &str) -> Result<u32, String> {
+    let n = with
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("`with.{key}` is required and is a whole number, zero or more"))?;
+    u32::try_from(n).map_err(|_| format!("`with.{key}` is {n}, which is past what this addresses"))
+}
+
+fn bool_of(with: &Value, key: &str) -> Result<bool, String> {
+    with.get(key)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| format!("`with.{key}` is required and is true or false"))
+}
+
+fn text_of<'a>(with: &'a Value, key: &str) -> Result<&'a str, String> {
+    with.get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("`with.{key}` is required and is a string"))
+}
+
+/// **A name and never a path.** Paths never cross this protocol — see
+/// [`Slots`] — and every free string a payload of this table carries is a
+/// *name* something in this run produced: a signal on the bus, a parameter a
+/// procedure declares, a control an operator published. So a separator is
+/// refused here rather than resolved anywhere, in one sentence for all of them
+/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+///
+/// [`checked_id`] is the same rule for a *Set id*, and it is narrower because a
+/// Set id becomes a file name. A parameter key can be `glow.x` and a signal can
+/// be `control:macro`, so this refuses the two separators and the parent
+/// segment and nothing else.
+fn named_of(with: &Value, key: &str, what: &str) -> Result<String, String> {
+    let said = text_of(with, key)?;
+    if said.is_empty() {
+        return Err(format!("`with.{key}` is empty, and {what} has a name"));
+    }
+    if said.contains('/') || said.contains('\\') || said.contains("..") {
+        return Err(format!(
+            "`with.{key}` is `{said}`, and {what} is a name rather than a path — this server \
+             takes no paths at all, because a client may be on another machine where one \
+             means nothing"
+        ));
+    }
+    Ok(said.to_string())
+}
+
+/// One value of a closed list, by the word the vocabulary spells it with, and
+/// the refusal lists every word there is.
+fn word_of<T: Copy>(
+    with: &Value,
+    key: &str,
+    values: &[T],
+    name: fn(T) -> &'static str,
+    what: &str,
+) -> Result<T, String> {
+    let said = text_of(with, key)?;
+    values
+        .iter()
+        .copied()
+        .find(|value| name(*value) == said)
+        .ok_or_else(|| {
+            format!(
+                "`with.{key}` is `{said}`, and {what} is one of: {}",
+                words(values, name).join(", ")
+            )
+        })
+}
+
+/// **The deck a payload names**, checked against what this run holds before it
+/// is sent anywhere, in the sentence every other tool refuses an absent slot in
+/// ([`deck_named`]).
+fn deck_of(with: &Value, key: &str, slots: &Slots) -> Result<u8, String> {
+    let slot = with
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("`with.{key}` is required and is a deck slot number"))?
+        as usize;
+    deck_named(slot, slots)
+}
+
+/// A node of a deck's Set, as `read_procedure` addresses one: a layer, and an
+/// index into that layer that defaults to 0 for that tool's reason.
+fn node_of(with: &Value, key: &str) -> Result<NodeAt, String> {
+    let at = with
+        .get(key)
+        .ok_or_else(|| format!("`with.{key}` is required and is a node: `layer`, and `index`"))?;
+    let named = at
+        .get("layer")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("`with.{key}.layer` is required — {}", layer_list()))?;
+    let layer =
+        layer_named(named).ok_or_else(|| format!("no layer `{named}` — {}", layer_list()))?;
+    let index = match at.get("index") {
+        None | Some(Value::Null) => 0,
+        Some(_) => u32_of(at, "index")?,
+    };
+    Ok(NodeAt {
+        layer: layer_of(layer),
+        index,
+    })
+}
+
+/// **Which parameter a value lands on**, on `Record::Param`'s terms: a key, and
+/// a node it is addressed to or every node of the Set that declares it.
+fn param_of(with: &Value, key: &str) -> Result<karakuri_operation::ParamAt, String> {
+    let at = with
+        .get(key)
+        .ok_or_else(|| format!("`with.{key}` is required and is a parameter: `key`, and `node`"))?;
+    Ok(karakuri_operation::ParamAt {
+        node: match at.get("node") {
+            None | Some(Value::Null) => None,
+            Some(_) => Some(node_of(at, "node")?),
+        },
+        key: named_of(at, "key", "a parameter")?,
+    })
+}
+
+/// **Which parameter an attachment lands on**, which is not [`param_of`]'s
+/// address and the difference is a fact about a binding: a binding is resolved
+/// through the nodes of one layer, so the layer is always said and the index is
+/// what may be left out.
+fn bind_of(with: &Value, key: &str) -> Result<karakuri_operation::BindAt, String> {
+    let at = with.get(key).ok_or_else(|| {
+        format!("`with.{key}` is required and is a binding address: `layer`, `key`, and `index`")
+    })?;
+    let named = at
+        .get("layer")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("`with.{key}.layer` is required — {}", layer_list()))?;
+    let layer =
+        layer_named(named).ok_or_else(|| format!("no layer `{named}` — {}", layer_list()))?;
+    Ok(karakuri_operation::BindAt {
+        layer: layer_of(layer),
+        index: match at.get("index") {
+            None | Some(Value::Null) => None,
+            Some(_) => Some(u32_of(at, "index")?),
+        },
+        key: named_of(at, "key", "a parameter")?,
+    })
+}
+
+/// A parameter's value at one of the three widths a `.kir` can declare — a
+/// number, or two or three of them. Never a range: a range is the procedure's
+/// declaration and not an operator's to write.
+fn value_of(with: &Value, key: &str) -> Result<karakuri_operation::ParamValue, String> {
+    let at = with.get(key).ok_or_else(|| {
+        format!("`with.{key}` is required and is a number, or two or three of them")
+    })?;
+    if let Some(number) = at.as_f64() {
+        return Ok(karakuri_operation::ParamValue::Scalar(number as f32));
+    }
+    let list = at
+        .as_array()
+        .ok_or_else(|| format!("`with.{key}` is a number, or an array of two or three of them"))?;
+    let mut numbers = Vec::with_capacity(list.len());
+    for (at, one) in list.iter().enumerate() {
+        numbers.push(one.as_f64().ok_or_else(|| {
+            format!("`with.{key}[{at}]` is not a number, and every component of a value is")
+        })? as f32);
+    }
+    match numbers[..] {
+        [x] => Ok(karakuri_operation::ParamValue::Scalar(x)),
+        [x, y] => Ok(karakuri_operation::ParamValue::Vec2([x, y])),
+        [x, y, z] => Ok(karakuri_operation::ParamValue::Vec3([x, y, z])),
+        _ => Err(format!(
+            "`with.{key}` has {} components, and a declared parameter is one, two or three \
+             wide",
+            numbers.len()
+        )),
+    }
+}
+
+/// The `[low, high]` an attachment maps a signal into.
+fn range_of(with: &Value, key: &str) -> Result<[f32; 2], String> {
+    let list = with
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("`with.{key}` is required and is `[low, high]`"))?;
+    let ends: Vec<f64> = list.iter().filter_map(Value::as_f64).collect();
+    match ends[..] {
+        [low, high] if ends.len() == list.len() => Ok([low as f32, high as f32]),
+        _ => Err(format!(
+            "`with.{key}` is `[low, high]` — two numbers, and the attachment maps the signal \
+             between them"
+        )),
+    }
+}
+
+/// **Which version a put-back puts back**, and the two arms are the two things
+/// a surface can say rather than two features
+/// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+///
+/// **Neither arm is a path.** `previous` names a node, and `picked` names a
+/// version by the name the store filed it under — which is what
+/// `write_procedure` already hands back about the version it replaced, so a
+/// model spells one it was given rather than one it built.
+fn revision_of(with: &Value, key: &str) -> Result<karakuri_operation::Revision, String> {
+    let at = with.get(key).ok_or_else(|| {
+        format!(
+            "`with.{key}` is required and is either `{{\"previous\": {{\"layer\": …}}}}` — the \
+             version this node's present source replaced — or `{{\"picked\": \"…\"}}`, a \
+             version by the name the store filed it under"
+        )
+    })?;
+    match (at.get("previous"), at.get("picked")) {
+        (Some(Value::Null) | None, Some(Value::Null) | None) => Err(format!(
+            "`with.{key}` says neither `previous` nor `picked`, and a put-back is one or the \
+             other"
+        )),
+        (Some(_), Some(_)) => Err(format!(
+            "`with.{key}` says both `previous` and `picked`, which are two answers to which \
+             version — say one"
+        )),
+        (Some(_), _) => Ok(karakuri_operation::Revision::Previous(node_of(
+            at, "previous",
+        )?)),
+        (_, Some(_)) => Ok(karakuri_operation::Revision::Picked(checked_id(text_of(
+            at, "picked",
+        )?)?)),
+    }
+}
+
+/// **A beat source, and one of its two arms does not cross this protocol.**
+///
+/// `AudioInput` names a device the host is offering and is a name like any
+/// other. `Process` is a command line for this machine to run, which is a path
+/// with arguments after it and is the sharpest thing on this page a client
+/// could be handed — so it is refused here, saying what it is and where a
+/// process is still started from.
+fn source_of(with: &Value, key: &str) -> Result<karakuri_operation::BeatSource, String> {
+    let at = with.get(key).ok_or_else(|| {
+        format!("`with.{key}` is required and is `{{\"audio_input\": \"DEVICE\"}}`")
+    })?;
+    if at.get("process").is_some() {
+        return Err(format!(
+            "`with.{key}` names a process, and this server takes none: a process source is a \
+             command line for the render machine to run, which is a path with arguments after \
+             it. It is still a flag before the run — `--tempo-source` — and nothing during one \
+             starts it"
+        ));
+    }
+    Ok(karakuri_operation::BeatSource::AudioInput(named_of(
+        at,
+        "audio_input",
+        "an audio input",
+    )?))
+}
+
+/// One payload's schema. **Closed**: a key this table does not name is a
+/// mistake a caller had no way to see, and saying so is cheaper than performing
+/// half of what was asked.
+fn shaped(properties: Value, required: &[&str]) -> Value {
+    json!({
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": false,
+    })
+}
+
+fn p_number(about: &str) -> Value {
+    json!({ "type": "number", "description": about })
+}
+
+fn p_int(about: &str) -> Value {
+    json!({ "type": "integer", "minimum": 0, "description": about })
+}
+
+fn p_bool(about: &str) -> Value {
+    json!({ "type": "boolean", "description": about })
+}
+
+fn p_string(about: &str) -> Value {
+    json!({ "type": "string", "description": about })
+}
+
+fn p_word(list: Vec<&'static str>, about: &str) -> Value {
+    json!({ "type": "string", "enum": list, "description": about })
+}
+
+/// The deck slot, in `read_procedure`'s own words and with its own bound: how
+/// many slots this run holds is not knowable when a schema is answered.
+fn p_deck() -> Value {
+    json!({
+        "type": "integer",
+        "minimum": 0,
+        "description": "which deck slot, numbered as `read_procedure`'s `slot` is",
+    })
+}
+
+fn p_node(about: &str) -> Value {
+    json!({
+        "type": "object",
+        "description": about,
+        "properties": {
+            "layer": { "type": "string", "enum": layer_words(), "description": "which layer" },
+            "index": p_int("which node of that layer, in the order the deck's files were named; 0 where it is left out"),
+        },
+        "required": ["layer"],
+        "additionalProperties": false,
+    })
+}
+
+/// **Every operation of the vocabulary, and how this surface spells the ones it
+/// takes.**
+///
+/// Sixty-four rows, one per `<h3>` of `docs/manual/operations.html`, in that
+/// page's order. `every_operation_of_the_vocabulary_is_spelled_here` walks
+/// `Operation::TITLES` against this, so a row cannot be missing and a
+/// sixty-fifth operation arrives here as a failing test as well as a failing
+/// build ([`sayable`]).
+const SPELLED: &[Spelled] = &[
+    // ----- Transport and tempo ---------------------------------------------
+    Spelled {
+        sample: || (Operation::TapBeat, json!({})),
+        make: Some(|_, _| Ok(Operation::TapBeat)),
+        shape: Some(|| shaped(json!({}), &[])),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::ScaleGrid {
+                    by: karakuri_operation::GridScale::Halve,
+                },
+                json!({ "by": "halve" }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::ScaleGrid {
+                by: word_of(with, "by", &GRIDS, grid_word, "a direction")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "by": p_word(words(&GRIDS, grid_word), "which way the grid moves") }),
+                &["by"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetLatencyOffset { ms: 5.0 },
+                json!({ "ms": 5.0 }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetLatencyOffset {
+                ms: f32_of(with, "ms")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "ms": p_number("the delay between what a room hears and what it sees, signed and in milliseconds") }),
+                &["ms"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetSync {
+                    deck: 0,
+                    sync: karakuri_operation::Sync::Beat,
+                },
+                json!({ "deck": 0, "sync": "beat" }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetSync {
+                deck: deck_of(with, "deck", slots)?,
+                sync: word_of(
+                    with,
+                    "sync",
+                    &SYNCS,
+                    karakuri_operation::Sync::name,
+                    "a sync mode",
+                )?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "sync": p_word(words(&SYNCS, karakuri_operation::Sync::name), "what this deck's clock is locked to"),
+                }),
+                &["deck", "sync"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::ScrubDeck {
+                    deck: 0,
+                    beats: 0.25,
+                },
+                json!({ "deck": 0, "beats": 0.25 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::ScrubDeck {
+                deck: deck_of(with, "deck", slots)?,
+                beats: number_of(with, "beats")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "beats": p_number("how far to move, in beats, and relative — the record carries where it lands"),
+                }),
+                &["deck", "beats"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetFreeRunTempo { bpm: 120.0 },
+                json!({ "bpm": 120.0 }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetFreeRunTempo {
+                bpm: f32_of(with, "bpm")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "bpm": p_number("what the grid runs at with nothing driving it") }),
+                &["bpm"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::AttachBeatSource {
+                    source: karakuri_operation::BeatSource::AudioInput("an input".into()),
+                },
+                json!({ "source": { "audio_input": "an input" } }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::AttachBeatSource {
+                source: source_of(with, "source")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "source": {
+                        "type": "object",
+                        "description": "an audio input to track, by the name the host offers it under. A process source is a command line and this server takes none",
+                        "properties": { "audio_input": p_string("the device's name") },
+                        "required": ["audio_input"],
+                        "additionalProperties": false,
+                    },
+                }),
+                &["source"],
+            )
+        }),
+    },
+    // ----- Decks -----------------------------------------------------------
+    Spelled {
+        sample: || (Operation::SelectDeck { deck: 0 }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetResidency {
+                    deck: 0,
+                    residency: karakuri_operation::Residency::Live,
+                },
+                json!({ "deck": 0, "residency": "live" }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetResidency {
+                deck: deck_of(with, "deck", slots)?,
+                residency: word_of(
+                    with,
+                    "residency",
+                    &karakuri_operation::Residency::ALL,
+                    karakuri_operation::Residency::name,
+                    "a residency",
+                )?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "residency": p_word(
+                        words(&karakuri_operation::Residency::ALL, karakuri_operation::Residency::name),
+                        "on air, primed, or holding its allocation and drawing nothing",
+                    ),
+                }),
+                &["deck", "residency"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::LoadSet {
+                    deck: 0,
+                    set: "a_set".into(),
+                },
+                json!({ "deck": 0, "set": "a_set" }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::LoadSet {
+                deck: deck_of(with, "deck", slots)?,
+                set: checked_id(text_of(with, "set")?)?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "set": json!({
+                        "type": "string",
+                        "pattern": ID_PATTERN,
+                        "description": "a Set id this store holds, as `list_sets` names them",
+                    }),
+                }),
+                &["deck", "set"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetCompositing {
+                    deck: 0,
+                    compositing: true,
+                },
+                json!({ "deck": 0, "compositing": true }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetCompositing {
+                deck: deck_of(with, "deck", slots)?,
+                compositing: bool_of(with, "compositing")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "compositing": p_bool("whether this deck's renderers are composited into one picture rather than overdrawn"),
+                }),
+                &["deck", "compositing"],
+            )
+        }),
+    },
+    // ----- Mixing ----------------------------------------------------------
+    Spelled {
+        sample: || {
+            (
+                Operation::SetGain { deck: 0, gain: 1.0 },
+                json!({ "deck": 0, "gain": 1.0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetGain {
+                deck: deck_of(with, "deck", slots)?,
+                gain: f32_of(with, "gain")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "deck": p_deck(), "gain": p_number("the trim: the level material arrives at, colour only") }),
+                &["deck", "gain"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetOpacity {
+                    deck: 0,
+                    opacity: 1.0,
+                },
+                json!({ "deck": 0, "opacity": 1.0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetOpacity {
+                deck: deck_of(with, "deck", slots)?,
+                opacity: f32_of(with, "opacity")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "deck": p_deck(), "opacity": p_number("the fader across the blend") }),
+                &["deck", "opacity"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetBlendMode {
+                    deck: 0,
+                    blend: karakuri_operation::BlendMode::Over,
+                },
+                json!({ "deck": 0, "blend": "over" }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetBlendMode {
+                deck: deck_of(with, "deck", slots)?,
+                blend: word_of(
+                    with,
+                    "blend",
+                    &karakuri_operation::BlendMode::ALL,
+                    karakuri_operation::BlendMode::name,
+                    "a blend mode",
+                )?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "blend": p_word(
+                        words(&karakuri_operation::BlendMode::ALL, karakuri_operation::BlendMode::name),
+                        "how this deck meets the ones under it in the fold",
+                    ),
+                }),
+                &["deck", "blend"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::FadeDeck { deck: 0, to: 0.0 },
+                json!({ "deck": 0, "to": 0.0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::FadeDeck {
+                deck: deck_of(with, "deck", slots)?,
+                to: f32_of(with, "to")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "to": p_number("the opacity to arrive at; the start and the length are the operator's transition settings"),
+                }),
+                &["deck", "to"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::Crossfade { from: 0, to: 0 },
+                json!({ "from": 0, "to": 0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::Crossfade {
+                from: deck_of(with, "from", slots)?,
+                to: deck_of(with, "to", slots)?,
+            })
+        }),
+        shape: Some(|| shaped(json!({ "from": p_deck(), "to": p_deck() }), &["from", "to"])),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::Wipe { from: 0, to: 0 },
+                json!({ "from": 0, "to": 0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::Wipe {
+                from: deck_of(with, "from", slots)?,
+                to: deck_of(with, "to", slots)?,
+            })
+        }),
+        shape: Some(|| shaped(json!({ "from": p_deck(), "to": p_deck() }), &["from", "to"])),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetMaskShape {
+                    deck: 0,
+                    kind: karakuri_operation::WipeKind::Linear,
+                    angle: 0.0,
+                },
+                json!({ "deck": 0, "kind": "linear", "angle": 0.0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetMaskShape {
+                deck: deck_of(with, "deck", slots)?,
+                kind: word_of(
+                    with,
+                    "kind",
+                    &WIPE_KINDS,
+                    karakuri_operation::WipeKind::name,
+                    "a mask shape",
+                )?,
+                angle: f32_of(with, "angle")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "kind": p_word(words(&WIPE_KINDS, karakuri_operation::WipeKind::name), "what shape of the frame this deck's layer reaches"),
+                    "angle": p_number("which way a linear front travels, in turns"),
+                }),
+                &["deck", "kind", "angle"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetMaskPosition {
+                    deck: 0,
+                    position: 0.0,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetTransition {
+                    setting: karakuri_operation::TransitionSetting::Quantum { beats: 1.0 },
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SelectRenderer {
+                    deck: 0,
+                    renderer: 0,
+                },
+                json!({ "deck": 0, "renderer": 0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SelectRenderer {
+                deck: deck_of(with, "deck", slots)?,
+                renderer: u32_of(with, "renderer")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "renderer": p_int("which renderer of this deck is live, by its position in the deck's files"),
+                }),
+                &["deck", "renderer"],
+            )
+        }),
+    },
+    // ----- The master chain ------------------------------------------------
+    Spelled {
+        sample: || (Operation::SetMasterOut { out: 1.0 }, json!({ "out": 1.0 })),
+        make: Some(|with, _| {
+            Ok(Operation::SetMasterOut {
+                out: f32_of(with, "out")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "out": p_number("one level at the entry to the master chain, floored at zero and unbounded above 1.0") }),
+                &["out"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetFeedback {
+                    params: karakuri_operation::Feedback {
+                        amount: 0.5,
+                        cut: karakuri_operation::Cut::Mix,
+                    },
+                },
+                json!({ "amount": 0.5, "cut": "mix" }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetFeedback {
+                params: karakuri_operation::Feedback {
+                    amount: f32_of(with, "amount")?,
+                    cut: word_of(
+                        with,
+                        "cut",
+                        &karakuri_operation::Cut::ALL,
+                        karakuri_operation::Cut::name,
+                        "a cut of the previous frame",
+                    )?,
+                },
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "amount": p_number("how much of the retained frame comes back, up to 0.95"),
+                    "cut": p_word(
+                        words(&karakuri_operation::Cut::ALL, karakuri_operation::Cut::name),
+                        "which frame the amount is of — the two are one operation because the same amount means two different pictures",
+                    ),
+                }),
+                &["amount", "cut"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetBloom {
+                    params: karakuri_operation::Bloom { amount: 0.25 },
+                },
+                json!({ "amount": 0.25 }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetBloom {
+                params: karakuri_operation::Bloom {
+                    amount: f32_of(with, "amount")?,
+                },
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "amount": p_number("how much of the blurred bright part is added back, `[0, 1]`") }),
+                &["amount"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetRgbShift {
+                    params: karakuri_operation::RgbShift { amount: 0.25 },
+                },
+                json!({ "amount": 0.25 }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetRgbShift {
+                params: karakuri_operation::RgbShift {
+                    amount: f32_of(with, "amount")?,
+                },
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "amount": p_number("how far the three channels are pulled apart, `[0, 1]` of the pass's own maximum") }),
+                &["amount"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetTonemap {
+                    tonemap: karakuri_operation::Tonemap::Aces,
+                },
+                json!({ "tonemap": "aces" }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetTonemap {
+                tonemap: word_of(
+                    with,
+                    "tonemap",
+                    &TONEMAPS,
+                    karakuri_operation::Tonemap::name,
+                    "a transfer",
+                )?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "tonemap": p_word(
+                        words(&TONEMAPS, karakuri_operation::Tonemap::name),
+                        "the transfer from unbounded linear HDR to something a display can show",
+                    ),
+                }),
+                &["tonemap"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetExposure { exposure: 1.0 },
+                json!({ "exposure": 1.0 }),
+            )
+        },
+        make: Some(|with, _| {
+            Ok(Operation::SetExposure {
+                exposure: f32_of(with, "exposure")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({ "exposure": p_number("the level going into that transfer") }),
+                &["exposure"],
+            )
+        }),
+    },
+    // ----- The sequencer ---------------------------------------------------
+    Spelled {
+        sample: || {
+            (
+                Operation::SetStep {
+                    pattern: 0,
+                    lane: 0,
+                    step: 0,
+                    on: false,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetLaneMute {
+                    pattern: 0,
+                    lane: 0,
+                    muted: false,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::PointLane {
+                    pattern: 0,
+                    target: karakuri_operation::LaneTarget::Fader { deck: 0 },
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetPatternGrid {
+                    pattern: 0,
+                    grid: karakuri_operation::StepMode::Sixteenth,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::SelectPattern { pattern: 0 }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    // ----- Inside a Set ----------------------------------------------------
+    Spelled {
+        sample: || {
+            (
+                Operation::WriteParam {
+                    deck: 0,
+                    param: karakuri_operation::ParamAt {
+                        node: None,
+                        key: "radius".into(),
+                    },
+                    value: karakuri_operation::ParamValue::Scalar(1.0),
+                },
+                json!({ "deck": 0, "param": { "key": "radius" }, "value": 1.0 }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::WriteParam {
+                deck: deck_of(with, "deck", slots)?,
+                param: param_of(with, "param")?,
+                value: value_of(with, "value")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "param": {
+                        "type": "object",
+                        "description": "which parameter. A `node` left out is every node of the Set that declares this key, which is what `--param exposure=2.0` means",
+                        "properties": { "key": p_string("the parameter's own name inside the node"), "node": p_node("one node of the Set") },
+                        "required": ["key"],
+                        "additionalProperties": false,
+                    },
+                    "value": json!({
+                        "description": "a number, or an array of two or three — the three widths a `.kir` can declare. Never a range: a range is the procedure's declaration",
+                    }),
+                }),
+                &["deck", "param", "value"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::AttachSignal {
+                    deck: 0,
+                    param: karakuri_operation::BindAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: None,
+                        key: "radius".into(),
+                    },
+                    signal: "energy".into(),
+                    curve: karakuri_operation::Curve::Lin,
+                    range: [0.0, 1.0],
+                },
+                json!({
+                    "deck": 0,
+                    "param": { "layer": "L4", "key": "radius" },
+                    "signal": "energy",
+                    "curve": "lin",
+                    "range": [0.0, 1.0],
+                }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::AttachSignal {
+                deck: deck_of(with, "deck", slots)?,
+                param: bind_of(with, "param")?,
+                signal: named_of(with, "signal", "a signal")?,
+                curve: word_of(
+                    with,
+                    "curve",
+                    &karakuri_operation::Curve::ALL,
+                    karakuri_operation::Curve::name,
+                    "a curve",
+                )?,
+                range: range_of(with, "range")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "param": {
+                        "type": "object",
+                        "description": "which parameter, as an attachment addresses one: the layer is always said, and an `index` left out is every node of that layer declaring the key",
+                        "properties": {
+                            "layer": { "type": "string", "enum": layer_words() },
+                            "index": p_int("which node of that layer"),
+                            "key": p_string("the parameter's name, and a component key such as `glow.x` where it is a vector"),
+                        },
+                        "required": ["layer", "key"],
+                        "additionalProperties": false,
+                    },
+                    "signal": p_string("what drives it — a signal on the bus, or `control:NAME` for a published control"),
+                    "curve": p_word(
+                        words(&karakuri_operation::Curve::ALL, karakuri_operation::Curve::name),
+                        "how the signal is shaped on its way to the parameter",
+                    ),
+                    "range": json!({
+                        "type": "array",
+                        "description": "`[low, high]`: what the signal is mapped between",
+                    }),
+                }),
+                &["deck", "param", "signal", "curve", "range"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::TakeParamBack {
+                    deck: 0,
+                    param: karakuri_operation::BindAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: None,
+                        key: "radius".into(),
+                    },
+                },
+                json!({ "deck": 0, "param": { "layer": "L4", "key": "radius" } }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::TakeParamBack {
+                deck: deck_of(with, "deck", slots)?,
+                param: bind_of(with, "param")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "param": {
+                        "type": "object",
+                        "description": "the attachment to remove, addressed as `Attach a signal to a parameter` addresses one",
+                        "properties": {
+                            "layer": { "type": "string", "enum": layer_words() },
+                            "index": p_int("which node of that layer"),
+                            "key": p_string("the parameter's name"),
+                        },
+                        "required": ["layer", "key"],
+                        "additionalProperties": false,
+                    },
+                }),
+                &["deck", "param"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::WireInput {
+                    deck: 0,
+                    node: String::new(),
+                    slot: String::new(),
+                    to: String::new(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::Publish {
+                    deck: 0,
+                    controls: Vec::new(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetProperty {
+                    deck: 0,
+                    property: karakuri_operation::Property::Capacity { elements: 65536 },
+                },
+                json!({ "deck": 0, "property": { "capacity": 65536 } }),
+            )
+        },
+        make: Some(|with, slots| {
+            let deck = deck_of(with, "deck", slots)?;
+            let at = with.get("property").ok_or(
+                "`with.property` is required and is either `{\"capacity\": N}` — how many \
+                 elements this slot's geometries run at — or `{\"seed\": N}`, the salt its \
+                 randomness comes from",
+            )?;
+            let property = match (at.get("capacity"), at.get("seed")) {
+                (Some(Value::Null) | None, Some(Value::Null) | None) => {
+                    return Err("`with.property` says neither `capacity` nor `seed`".into())
+                }
+                (Some(_), Some(_)) => {
+                    return Err(
+                        "`with.property` says both `capacity` and `seed`, which are two \
+                         answers to which property — say one"
+                            .into(),
+                    )
+                }
+                (Some(_), _) => karakuri_operation::Property::Capacity {
+                    elements: u32_of(at, "capacity")?,
+                },
+                (_, Some(_)) => karakuri_operation::Property::Seed {
+                    salt: u32_of(at, "seed")?,
+                },
+            };
+            Ok(Operation::SetProperty { deck, property })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "property": {
+                        "type": "object",
+                        "description": "either `capacity`, how many elements this slot's geometries run at — a slot that already runs at it is refused, because it would buy a recompile and land on the same picture — or `seed`, the salt its randomness comes from",
+                        "properties": {
+                            "capacity": p_int("the element count"),
+                            "seed": p_int("the salt"),
+                        },
+                        "additionalProperties": false,
+                    },
+                }),
+                &["deck", "property"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetAuthority {
+                    deck: 0,
+                    node: NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 0,
+                    },
+                    authority: karakuri_operation::Authority::Manual,
+                },
+                json!({ "deck": 0, "node": { "layer": "L4" }, "authority": "manual" }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetAuthority {
+                deck: deck_of(with, "deck", slots)?,
+                node: node_of(with, "node")?,
+                authority: word_of(
+                    with,
+                    "authority",
+                    &AUTHORITIES,
+                    karakuri_operation::Authority::name,
+                    "an authority",
+                )?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "node": p_node("which node the authority is over"),
+                    "authority": p_word(words(&AUTHORITIES, karakuri_operation::Authority::name), "who may move this node's parameters"),
+                }),
+                &["deck", "node", "authority"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::KeepProcedure {
+                    deck: 0,
+                    node: NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 0,
+                    },
+                    id: None,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::PointPane {
+                    pane: "inspector-1".to_string(),
+                    deck: 0,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    // ----- The library -----------------------------------------------------
+    Spelled {
+        sample: || (Operation::SaveSet { deck: 0, id: None }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::ListSets {
+                    holds: None,
+                    layer: None,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::FilterLibrary {
+                    kinds: karakuri_operation::LibraryKinds::EVERYTHING,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SelectScope {
+                    scope: karakuri_operation::Undecided,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetFavourite {
+                    id: String::new(),
+                    favourite: false,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::ReadSet { id: String::new() }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::TransferSet {
+                    transfer: karakuri_operation::SetTransfer::Send { id: String::new() },
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::WalkHistory {
+                    step: karakuri_operation::Undecided,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::LoadProcedure {
+                    deck: 0,
+                    procedure: "orbit_wide".to_string(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    // ----- Procedures ------------------------------------------------------
+    Spelled {
+        sample: || {
+            (
+                Operation::ReadProcedure {
+                    deck: 0,
+                    node: NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 0,
+                    },
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::WriteProcedure {
+                    deck: 0,
+                    node: NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 0,
+                    },
+                    source: String::new(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::WatchFiles {
+                    watching: karakuri_operation::Undecided,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::SwapOutcome, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::KeepCandidate {
+                    deck: 0,
+                    node: NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 0,
+                    },
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::RestoreProcedure {
+                    deck: 0,
+                    revision: karakuri_operation::Revision::Previous(NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 0,
+                    }),
+                },
+                json!({ "deck": 0, "revision": { "previous": { "layer": "L4" } } }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::RestoreProcedure {
+                deck: deck_of(with, "deck", slots)?,
+                revision: revision_of(with, "revision")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "revision": {
+                        "type": "object",
+                        "description": "either `previous`, naming the node whose present source is to be replaced by the one it replaced, or `picked`, a version by the name the store filed it under — which is the name `write_procedure` hands back",
+                        "properties": {
+                            "previous": p_node("the node to step back one version on"),
+                            "picked": json!({ "type": "string", "pattern": ID_PATTERN, "description": "a filed version's name" }),
+                        },
+                        "additionalProperties": false,
+                    },
+                }),
+                &["deck", "revision"],
+            )
+        }),
+    },
+    // ----- Arranging the console -------------------------------------------
+    Spelled {
+        sample: || {
+            (
+                Operation::MoveBoundary {
+                    boundary: karakuri_operation::Undecided,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::FoldBay { bay: String::new() }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::FoldPane {
+                    pane: String::new(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::Unfold { region: None }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::Solo { region: None }, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::ResetArrangement, Value::Null),
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SaveArrangement {
+                    name: String::new(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::RestoreArrangement {
+                    name: String::new(),
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SizeWindow {
+                    width: 0,
+                    height: 0,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    // ----- The run ---------------------------------------------------------
+    Spelled {
+        sample: || {
+            (
+                Operation::RouteFrame {
+                    output: karakuri_operation::Output::Program,
+                    on: true,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::RecordSession {
+                    recording: karakuri_operation::Recording::Stop,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || (Operation::Quit, json!({})),
+        make: Some(|_, _| Ok(Operation::Quit)),
+        shape: Some(|| shaped(json!({}), &[])),
+    },
+];
+
+/// The layers as words, from [`LAYERS`] rather than written out beside it —
+/// [`tools`]'s own arrangement, in a function because this table asks for it in
+/// three places.
+fn layer_words() -> Vec<&'static str> {
+    LAYERS.iter().map(|layer| layer_name(*layer)).collect()
+}
+
+/// Every operation `operate` takes, in the manual's order.
+fn operable() -> Vec<&'static Spelled> {
+    SPELLED.iter().filter(|row| row.make.is_some()).collect()
+}
+
+/// The row for one heading, or `None` where the vocabulary does not carry it.
+fn spelled_named(title: &str) -> Option<&'static Spelled> {
+    SPELLED.iter().find(|row| row.title() == title)
+}
+
+/// **The heading nearest to a name this vocabulary does not carry.**
+///
+/// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+/// a model that misremembers a heading by one word gets the heading back rather
+/// than a list of sixty-four to search. The measure is how many words the name
+/// and the heading share, with the closest length for a tie, and it is
+/// deliberately not an edit distance: the mistakes here are whole words rather
+/// than letters.
+///
+/// **The joining words are dropped, and matching whole words is the point.**
+/// Matched as substrings, *set the gain* comes back as *Reset the arrangement*
+/// — `the` is in both and `set` is inside `Reset` — which is a confident wrong
+/// answer of exactly the kind
+/// [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
+/// is about.
+fn nearest(said: &str) -> &'static str {
+    /// The words that say nothing about which operation is meant.
+    const COMMON: [&str; 16] = [
+        "the", "a", "an", "of", "to", "in", "on", "is", "it", "and", "or", "what", "which", "one",
+        "at", "for",
+    ];
+    fn parts(text: &str) -> Vec<String> {
+        text.to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|word| !word.is_empty() && !COMMON.contains(word))
+            .map(str::to_string)
+            .collect()
+    }
+    let asked = parts(said);
+    let mut best = ("", 0usize, usize::MAX);
+    for title in Operation::TITLES {
+        let held = parts(title);
+        let shared = asked.iter().filter(|word| held.contains(word)).count();
+        let apart = title.len().abs_diff(said.len());
+        if shared > best.1 || (shared == best.1 && apart < best.2) {
+            best = (title, shared, apart);
+        }
+    }
+    best.0
+}
+
+/// **One `operate` call as the operation it names, or the refusal it earned.**
+///
+/// The two halves are a name and a payload, and they are refused in that order
+/// for [`asked`]'s reason: a call with two mistakes in it is told about the one
+/// a reader would fix first.
+fn operated(args: &Value, slots: &Slots) -> Result<Operation, String> {
+    let named = args.get("operation").and_then(Value::as_str).ok_or(
+        "`operation` is required and is an operation's own heading, spelled exactly as \
+             `docs/manual/operations.html` writes it — this tool's `operation` list is every \
+             one it takes",
+    )?;
+    let Some(row) = spelled_named(named) else {
+        return Err(format!(
+            "no operation `{named}` — the nearest heading this vocabulary carries is \
+             `{}`. Every name this tool takes is in its own `operation` list, and \
+             `karakuri://operations` is that list with each payload's shape beside it",
+            nearest(named)
+        ));
+    };
+    let Some(make) = row.make else {
+        let (operation, _) = (row.sample)();
+        return Err(match sayable(&operation) {
+            // Cannot happen: `make` is `Some` for exactly the operable rows, and
+            // `the_table_and_the_classification_agree` is what says so. Written
+            // out rather than left to a wildcard for [`absent`]'s reason.
+            Sayable::Operable => format!(
+                "`{named}` is an operation this tool takes and this server has no spelling \
+                 for, which is a fault in the server rather than in the call"
+            ),
+            Sayable::Tool(tool) => format!(
+                "`{named}` is reached over MCP by `{tool}` rather than by `operate`: it does \
+                 something only this server can do — a file, the store, a listing — and a \
+                 second spelling of a tool is a second spelling. Call `{tool}`"
+            ),
+            Sayable::Window => format!(
+                "`{named}` is a surface's own state, and a route into a surface's own state \
+                 is a route into a window a model is not looking at. Nothing here can ask \
+                 for it, and the person at the panel is who it belongs to"
+            ),
+            Sayable::Undecided => format!(
+                "`{named}` carries a payload this vocabulary has not settled — what the \
+                 operation acts on is an open question — so no surface can say it yet, \
+                 including this one"
+            ),
+            Sayable::Unperformed(why) => format!(
+                "`{named}` is named by this vocabulary and is not performed on the frame \
+                 this tool lands on: {why}. It is refused rather than accepted, because a \
+                 call answered `ok` for work that did not happen is worse than one refused"
+            ),
+        });
+    };
+    make(&payload(args), slots)
+}
+
+/// **The `operate` tool, generated from [`SPELLED`].**
+///
+/// The `operation` list is every heading this surface takes, in the manual's
+/// order, and the payloads are described under it rather than as one `oneOf`:
+/// what a client needs before it calls is *which names there are* and *what
+/// each one takes*, and a schema that expressed the second as a union of
+/// thirty objects would be read by nothing and understood by no one. The shapes
+/// go to `karakuri://operations`, which is the same table rendered
+/// ([ADR-0092](../../../docs/adr/0092-a-resource-listing-is-a-curriculum.md)).
+fn operate_tool() -> Value {
+    let names: Vec<&'static str> = operable().iter().map(|row| row.title()).collect();
+    json!({
+        "name": "operate",
+        "description":
+            "Ask for one operation of this instrument by its own name. The names are the \
+             headings of `docs/manual/operations.html`, which is the one vocabulary every \
+             surface routes into — the panel, the keyboard, a MIDI map and this server all \
+             name the same things, so an operation asked for here is performed where a hand \
+             on the panel would have performed it, on the next frame. Read \
+             `karakuri://operations` for the payload each name takes.\n\n\
+             Operations that could stop a performance are refused until the operator opens \
+             their class at the panel. The refusal says which class it is in and where the \
+             operator opens it, so it can be handed to the person sitting there. The list \
+             above never shortens: an operation is connected whether or not its class is \
+             open, and the answer is a refusal rather than a missing tool.\n\n\
+             The seven tools beside this one are not spelled here. Each of them does \
+             something only this server can do, and `operate` names the tool instead.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": names,
+                    "description": "the operation's own heading, verbatim",
+                },
+                "with": {
+                    "type": "object",
+                    "description":
+                        "the payload, whose shape follows the operation — \
+                         `karakuri://operations` has one schema per name. Absent where the \
+                         operation takes none",
+                },
+            },
+            "required": ["operation"],
+        },
+    })
+}
+
+/// **Every operation this surface takes, with its payload's shape** — the
+/// curriculum a client reads before it calls, generated from [`SPELLED`] rather
+/// than written down beside it.
+fn operations() -> String {
+    let mut out = String::from(
+        "# Operations `operate` takes\n\n\
+         Generated from this server's own table, so this is exactly what will be \
+         accepted. Each heading is the name to put in `operation`, and the schema under \
+         it is the `with` object.\n\n\
+         An operation whose class the operator has not opened is **refused**, and the \
+         refusal says which class and where it opens. That is not a reason to avoid \
+         calling it: the refusal is what tells the person at the panel what to open.\n\n",
+    );
+    for row in operable() {
+        let (_, call) = (row.sample)();
+        let shape = (row.shape).expect("an operable row has a shape")();
+        out.push_str(&format!(
+            "## {}\n\n```json\n{}\n```\n\nOne call:\n\n```json\n{}\n```\n\n",
+            row.title(),
+            serde_json::to_string_pretty(&shape).unwrap_or_else(|_| shape.to_string()),
+            serde_json::to_string_pretty(&json!({ "operation": row.title(), "with": call }))
+                .unwrap_or_default(),
+        ));
+    }
+    out
+}
+
+/// **[`Operation`], asked of the render loop.**
+///
+/// The third thing this server reaches the loop for, and it is the loop for the
+/// reason a save and an edge are: this is where every other surface's presses
+/// are performed. A model's `SetGain` and an operator's hand on the fader end
+/// in one function, on one thread, at one frame — which is what
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// asks of a fourth route and what performing it here instead would give up.
+///
+/// **What the loop owes a request it takes**, written where the sender is:
+///
+/// 1. **Perform it where a press of the same operation is performed**, and
+///    nowhere else. Not a second route into the deck.
+/// 2. **Answer once, at the frame it was performed on** — [`Reply::settled`].
+///    Not at the swap: what a *rebuild* made of an operation that starts one is
+///    `swap_outcome`'s answer, as it is for a written procedure.
+pub struct OperateRequest {
+    /// The operation, already through the audit — see [`audited`]. The loop
+    /// performs it and does not judge it again.
+    pub operation: Operation,
+    /// Where the answer goes. One message: see the contract above.
+    pub reply: Reply,
+}
+
+/// **[`Operation`], done**: hand it to the render loop and give the caller back
+/// the half it waits on.
+///
+/// Nothing is performed here and nothing could be: this thread holds no deck,
+/// no look and no chain, and a surface that performed the mix on a connection
+/// thread would be the second route
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// exists to prevent. It is [`save_set`]'s shape and [`wire_input`]'s promise.
+fn operate(operation: &Operation, state: &State) -> Result<mpsc::Receiver<News>, String> {
+    let (tx, rx) = mpsc::channel();
+    state
+        .operating
+        .try_send(OperateRequest {
+            operation: operation.clone(),
+            reply: Reply(tx),
+        })
+        .map_err(|e| match e {
+            mpsc::TrySendError::Full(_) => format!(
+                "the render loop has {ASKED} operations queued and no room for another: it \
+                 is taking them slower than they are arriving, or it is not running frames \
+                 at all. Nothing was performed, and asking again is safe"
+            ),
+            mpsc::TrySendError::Disconnected(_) => {
+                "the render loop has ended: this run is shutting down and nothing was \
+                 performed"
+                    .to_string()
+            }
+        })?;
+    Ok(rx)
+}
+
 /// **One named operation, done.**
 ///
 /// **It takes an [`Allowed`] and not an [`Operation`], which is the audit made
@@ -1968,10 +4188,24 @@ fn perform(allowed: &Allowed<'_>, state: &mut State) -> Called {
             Ok(news) => Called::Saving(news),
             Err(refusal) => Called::Answered(Err(refusal)),
         },
-        other => Called::Answered(Err(format!(
-            "`{}` is an operation this server publishes no tool for",
-            other.title()
-        ))),
+        // **Everything `operate` names, and it is one arm because it is one
+        // route.** The seven above are matched by their own operations, so
+        // nothing reaches here that has a tool of its own; what does reach here
+        // has been through [`operated`], which took it only if [`sayable`] says
+        // this surface can name it, and then through [`audited`]. So the answer
+        // is *hand it to the frame every other surface's presses are performed
+        // on* — and the last arm is the one that cannot happen, kept for
+        // [`absent`]'s reason.
+        other => match sayable(other) {
+            Sayable::Operable => match operate(other, state) {
+                Ok(news) => Called::Operating(news),
+                Err(refusal) => Called::Answered(Err(refusal)),
+            },
+            _ => Called::Answered(Err(format!(
+                "`{}` is an operation this server publishes no tool for",
+                other.title()
+            ))),
+        },
     }
 }
 
@@ -3156,6 +5390,7 @@ const ENDPOINT: &str = "/";
 
 const SPEC: &str = "karakuri://ir-spec";
 const VOCABULARY: &str = "karakuri://ir-vocabulary";
+const OPERATIONS: &str = "karakuri://operations";
 
 fn resources() -> Value {
     json!([
@@ -3176,6 +5411,15 @@ fn resources() -> Value {
                  cannot, because the same list is what rejects a procedure.",
             "mimeType": "text/markdown",
         },
+        {
+            "uri": OPERATIONS,
+            "name": "Operations `operate` takes",
+            "description":
+                "Every operation this instrument can be asked for by name, with the shape \
+                 of each payload and one call that names it — generated from the same \
+                 table the tool accepts against. Read this before calling `operate`.",
+            "mimeType": "text/markdown",
+        },
     ])
 }
 
@@ -3188,6 +5432,7 @@ fn read_resource(request: &Value) -> Result<Value, String> {
     let text = match uri {
         SPEC => include_str!("../../../docs/ir-spec.md").to_string(),
         VOCABULARY => vocabulary(),
+        OPERATIONS => operations(),
         other => return Err(format!("no resource `{other}`")),
     };
     Ok(json!({
@@ -5851,6 +8096,78 @@ proc probe_knobs {
     /// [`asked`], because the gate could have been wired into the wrong seam
     /// and a unit test on the right one would never notice.
     ///
+    /// **An `operate` the audit passes reaches the render loop's drain and is
+    /// performed there; one it refuses never reaches it at all.**
+    ///
+    /// This is the whole claim of the eighth tool, and both halves of it are
+    /// here because they are one mechanism: the operation is named on a
+    /// connection thread, audited on that thread, and *performed* on the frame
+    /// the panel performs a press on — so nothing that a closed class would have
+    /// stopped can be sitting in the queue when the operator looks
+    /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    ///
+    /// **No device, and a stand-in for the loop.** What a put-back *is* belongs
+    /// to `crates/karakuri`'s own performer and needs a window; what is asserted
+    /// here is that the operation crosses the channel with its payload as it was
+    /// spelled, and that what the loop says is what the client is handed.
+    ///
+    /// **Watched to fail** with the audit moved after the send: the second call
+    /// then comes back as a success and the loop has two operations rather than
+    /// one, which is the failure this is really about.
+    #[test]
+    fn an_operate_the_audit_passes_reaches_the_loop_and_a_closed_one_does_not() {
+        let (server, reporter) = started(true);
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let taken = seen.clone();
+        // The stand-in drains what `Keeping::operated` drains, answers where it
+        // answers, and holds the reporter alive — see [`stand_in`], whose shape
+        // this is for the third channel.
+        std::thread::spawn(move || loop {
+            for OperateRequest { operation, reply } in reporter.operations() {
+                taken.lock().expect("lock").push(operation.clone());
+                reply.settled(Ok(format!("`{}` was performed", operation.title())));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        });
+
+        let (failed, said) = call(
+            server.port,
+            "operate",
+            json!({
+                "operation": "Put a node's previous version back",
+                "with": {"deck": 0, "revision": {"picked": "20260908-143052-271_slot0_L4"}},
+            }),
+        );
+        assert!(!failed, "{said}");
+        assert!(said.contains("was performed"), "{said}");
+        assert_eq!(
+            seen.lock().expect("lock").as_slice(),
+            [Operation::RestoreProcedure {
+                deck: 0,
+                revision: karakuri_operation::Revision::Picked(
+                    "20260908-143052-271_slot0_L4".into()
+                ),
+            }],
+            "the operation reached the loop as something other than what was spelled"
+        );
+
+        // And the mix is closed on this fixture, so this one is answered on the
+        // connection thread and the loop never hears about it.
+        let (failed, said) = call(
+            server.port,
+            "operate",
+            json!({"operation": "Gain", "with": {"deck": 0, "gain": 0.25}}),
+        );
+        assert!(failed, "{said}");
+        assert!(said.contains("the mix faders"), "{said}");
+        assert!(said.contains("Mixer"), "{said}");
+        assert_eq!(
+            seen.lock().expect("lock").len(),
+            1,
+            "a refused operation reached the render loop"
+        );
+    }
+
     /// **Two assertions, and the weaker one covers more.** The four this
     /// fixture can carry to a real answer must succeed outright. All seven must
     /// come back saying something other than the refusal — a tool that fails
@@ -5925,6 +8242,7 @@ mod tests {
             events,
             asked: mpsc::sync_channel(ASKED).0,
             wiring: mpsc::sync_channel(ASKED).0,
+            operating: mpsc::sync_channel(ASKED).0,
             recent: Vec::new(),
             dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
@@ -6325,6 +8643,20 @@ mod tests {
             ("read_set", json!({"id": "a"})),
             ("list_sets", json!({})),
             ("save_set", json!({"slot": 0})),
+            // **`operate` names thirty operations and twenty-nine of them are
+            // closed**, so what is driven here is the one the audit lets
+            // through. That is not this test going soft: the promise it holds
+            // is *a tool this server publishes is callable today*, and for
+            // `operate` that promise is about the tool rather than about every
+            // name it takes. Which name stands where is
+            // `every_operation_operate_takes_stands_where_the_page_says_it_does`.
+            (
+                "operate",
+                json!({
+                    "operation": "Put a node's previous version back",
+                    "with": {"deck": 0, "revision": {"previous": {"layer": "L4"}}},
+                }),
+            ),
         ];
         // Sorted, because the order a tool is published in is `tools()`'s to
         // choose and is not what this is about.
@@ -6356,6 +8688,220 @@ mod tests {
                 )
             });
         }
+    }
+
+    /// **Every operation of the vocabulary is spelled here, once**, and this is
+    /// the test that stops a sixty-fifth arriving without an answer.
+    ///
+    /// [`sayable`] already stops the build, so this catches the other half: a
+    /// row of [`SPELLED`] whose heading no longer exists, and a heading with two
+    /// rows. Both directions, because they are two different mistakes.
+    #[test]
+    fn every_operation_of_the_vocabulary_is_spelled_here() {
+        let spelled: Vec<&'static str> = SPELLED.iter().map(Spelled::title).collect();
+        assert_eq!(
+            spelled.len(),
+            Operation::TITLES.len(),
+            "the vocabulary has {} operations and this table has {}",
+            Operation::TITLES.len(),
+            spelled.len()
+        );
+        for title in Operation::TITLES {
+            let found = spelled.iter().filter(|had| *had == title).count();
+            assert_eq!(
+                found, 1,
+                "`{title}` is an operation of the vocabulary and this table names it {found} \
+                 times — a model that asks for it is answered by the wrong row, or by none"
+            );
+        }
+        // The order is the page's, which is what makes the table readable
+        // beside the manual and what `operations()` publishes.
+        assert_eq!(spelled, Operation::TITLES.to_vec());
+    }
+
+    /// **The table and the classification agree**: a row has a spelling exactly
+    /// where [`sayable`] says this surface can name the operation.
+    ///
+    /// Two lists that could disagree are what this crate exists to abolish, and
+    /// these two genuinely can: `make` is written per row and [`sayable`] is
+    /// written per variant. So they are checked against each other rather than
+    /// kept in step by hand.
+    #[test]
+    fn the_table_and_the_classification_agree() {
+        for row in SPELLED {
+            let (operation, call) = (row.sample)();
+            let operable = sayable(&operation) == Sayable::Operable;
+            assert_eq!(
+                row.make.is_some(),
+                operable,
+                "`{}`: the table {} and `sayable` says {}",
+                row.title(),
+                match row.make.is_some() {
+                    true => "spells it",
+                    false => "does not",
+                },
+                match operable {
+                    true => "it can be named",
+                    false => "it cannot",
+                }
+            );
+            assert_eq!(
+                row.shape.is_some(),
+                operable,
+                "`{}`: a row this surface takes has a schema and one it refuses has none",
+                row.title()
+            );
+            assert_eq!(
+                call == Value::Null,
+                !operable,
+                "`{}`: a row this surface takes carries one call and one it refuses carries \
+                 none",
+                row.title()
+            );
+        }
+    }
+
+    /// **Every operation `operate` takes round-trips through the spelling.**
+    ///
+    /// A table test over [`SPELLED`], which is what makes the sample beside each
+    /// `make` one statement rather than two: the call written there has to come
+    /// back as the operation written beside it, for all thirty, or the shape a
+    /// client is told and the shape the server reads have come apart.
+    ///
+    /// **Watched to fail**: with `deck_of` reading `"deck"` where
+    /// `Operation::Crossfade` says `from`, six rows come back with the wrong
+    /// deck and this names each of them.
+    #[test]
+    fn every_operation_operate_takes_round_trips_through_the_wire() {
+        let slots = slots();
+        let mut checked = 0;
+        for row in SPELLED {
+            let (operation, call) = (row.sample)();
+            let Some(make) = row.make else { continue };
+            // The sample is the `with` object itself, which is what `make`
+            // takes — `payload` is what lifts it out of a whole call, and is
+            // exercised over the wire rather than here.
+            let read = make(&call, &slots).unwrap_or_else(|refusal| {
+                panic!(
+                    "`{}`: the call written beside it in this table is refused by its own \
+                     spelling — {refusal}",
+                    row.title()
+                )
+            });
+            assert_eq!(
+                read,
+                operation,
+                "`{}` does not come back as itself through the wire",
+                row.title()
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 30,
+            "only {checked} operations round-tripped — a scan that found nothing would pass \
+             every assertion above"
+        );
+    }
+
+    /// **The tool's `operation` list is every name the spelling accepts**, in
+    /// the manual's order, so a client is told exactly what it may ask for.
+    #[test]
+    fn the_schema_lists_every_operation_the_spelling_accepts() {
+        let tools = tools();
+        let tool = tools
+            .as_array()
+            .expect("a list")
+            .iter()
+            .find(|tool| tool["name"] == json!("operate"))
+            .expect("`operate` is published");
+        let listed: Vec<&str> = tool["inputSchema"]["properties"]["operation"]["enum"]
+            .as_array()
+            .expect("an enum of names")
+            .iter()
+            .map(|name| name.as_str().expect("a name"))
+            .collect();
+        let takes: Vec<&'static str> = operable().iter().map(|row| row.title()).collect();
+        assert_eq!(listed, takes);
+        assert!(
+            !takes.is_empty() && takes.len() < Operation::TITLES.len(),
+            "the list is every operation or none of them, which is not what this surface is"
+        );
+        // And the curriculum is the same table, so a name in one is a name in
+        // the other.
+        let curriculum = operations();
+        for title in takes {
+            assert!(
+                curriculum.contains(&format!("## {title}\n")),
+                "`{title}` is offered by the tool and is not in `karakuri://operations`"
+            );
+        }
+    }
+
+    /// **An `operate` on a closed class is refused with the gate's own
+    /// sentence**, by equality and not by a `contains` — P-0090's *one refusal,
+    /// one sentence*, and the sentence is `karakuri_operation::gate`'s.
+    #[test]
+    fn an_operate_on_a_closed_class_is_refused_with_the_gates_sentence() {
+        use karakuri_operation::gate::{Class, Standing};
+        let (_tx, rx) = mpsc::channel();
+        let mut state = state(rx);
+        let request = json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": "operate",
+                "arguments": {"operation": "Gain", "with": {"deck": 0, "gain": 0.25}},
+            },
+        });
+        let reply = dispatch(&request, &mut state)
+            .settled()
+            .expect("a call is answered");
+        let result = &reply["result"];
+        assert_eq!(result["isError"], json!(true));
+        assert_eq!(
+            result["content"][0]["text"].as_str().expect("text"),
+            gate::refusal(
+                &Operation::SetGain {
+                    deck: 0,
+                    gain: 0.25
+                },
+                Standing::Closed(Class::MixFaders)
+            )
+            .expect("a refusal")
+        );
+    }
+
+    /// **A name this vocabulary does not carry is refused naming the nearest**,
+    /// which is
+    /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+    /// the mistake a model makes here is a paraphrase, and the next attempt
+    /// needs the heading rather than a list of sixty-four.
+    ///
+    /// **And a name it does carry but this surface will not take is refused with
+    /// its own reason**, which is the other half: a model told only *no* about
+    /// `Read one node's source` would go looking for a tool that is sitting
+    /// right there.
+    #[test]
+    fn a_name_the_vocabulary_does_not_carry_is_refused_naming_the_nearest() {
+        let slots = slots();
+        let refusal = operated(&json!({ "operation": "set the gain" }), &slots)
+            .expect_err("no operation is headed `set the gain`");
+        assert!(refusal.contains("`Gain`"), "{refusal}");
+
+        let refusal = operated(&json!({ "operation": "Read one node's source" }), &slots)
+            .expect_err("`read_procedure` is that row's tool");
+        assert!(refusal.contains("read_procedure"), "{refusal}");
+
+        let refusal = operated(&json!({ "operation": "Fold a bay away" }), &slots)
+            .expect_err("a model has no window");
+        assert!(refusal.contains("window"), "{refusal}");
+
+        let refusal = operated(&json!({ "operation": "Walk the edit history" }), &slots)
+            .expect_err("its payload is undecided");
+        assert!(refusal.contains("settled"), "{refusal}");
+
+        let refusal = operated(&json!({ "operation": "Record the session" }), &slots)
+            .expect_err("nothing on this frame performs it");
+        assert!(refusal.contains("press arm"), "{refusal}");
     }
 
     /// **A closed operation is refused at the seam every tool crosses, in the
@@ -6698,6 +9244,19 @@ mod tests {
             "save_set" => json!({ "slot": 0 }),
             "read_set" => json!({ "id": "a_set" }),
             "list_sets" => json!({}),
+            // **The one operation `operate` names that the audit lets through**,
+            // which is what makes this survey mean the same thing for the eighth
+            // tool as it does for the seven: the other twenty-nine are refused
+            // by the gate by design, and a sample drawn from those would make
+            // *every tool names an operation the gate lets through* false about
+            // a tool that is working exactly as ADR-0235 says it should. The
+            // rows that are closed are surveyed by
+            // `every_operation_operate_takes_stands_where_the_page_says_it_does`
+            // instead.
+            "operate" => json!({
+                "operation": "Put a node's previous version back",
+                "with": { "deck": 0, "revision": { "previous": { "layer": "L4" } } },
+            }),
             other => panic!(
                 "`{other}` is published by `tools()` and this file has no arguments for it — \
                  add the smallest call that gets past its schema, so the survey below reaches \
@@ -6807,6 +9366,26 @@ mod tests {
         );
         let published = published();
         for (title, _, names) in claimed {
+            // **`operate` is checked against the spelling rather than against
+            // one operation**, which is the difference between the eighth tool
+            // and the seven: a tool of its own names one row, and `operate`
+            // names every row the spelling takes. So the page claiming
+            // `operate` on a row is checked by asking [`SPELLED`] whether it
+            // takes that row's operation — the same question a call asks.
+            if names == "operate" {
+                let row = spelled_named(title).unwrap_or_else(|| {
+                    panic!(
+                        "{PAGE} says `{title}` is reached over MCP by `operate`, and this \
+                         vocabulary carries no operation with that heading"
+                    )
+                });
+                assert!(
+                    row.make.is_some(),
+                    "{PAGE} says `{title}` is reached over MCP by `operate`, and `operate` \
+                     refuses that name — the page claims a route a model cannot take"
+                );
+                continue;
+            }
             let tool = published
                 .iter()
                 .find(|(name, _)| name == names)
@@ -6825,6 +9404,51 @@ mod tests {
                  `{}` — one operation on the page and another in the server",
                 tool.1.title()
             );
+        }
+    }
+
+    /// **Every operation the spelling takes has a row marked `has operate`, and
+    /// every row that is not marked so is one the spelling refuses.**
+    ///
+    /// The other direction of the test above, and the one that catches the
+    /// silent half: a row `operate` reaches whose badge still reads `plan` is a
+    /// route a model can take and the page does not describe, which nothing else
+    /// here would notice.
+    #[test]
+    fn every_operation_operate_takes_stands_where_the_page_says_it_does() {
+        let routes = mcp_routes();
+        assert!(
+            routes.len() >= 50,
+            "only {} rows with an MCP badge found in {PAGE}",
+            routes.len()
+        );
+        for row in SPELLED {
+            let title = row.title();
+            let (badge, names) = routes
+                .iter()
+                .find(|(heading, _, _)| heading == title)
+                .map(|(_, class, names)| (class.as_str(), names.as_str()))
+                .unwrap_or_else(|| panic!("{PAGE} has no row headed `{title}`"));
+            match row.make {
+                Some(_) => assert_eq!(
+                    (badge, names),
+                    ("has", "operate"),
+                    "`operate` takes `{title}` and {PAGE} marks it `{badge}` naming \
+                     `{names}` — a route a model can take that the page does not describe"
+                ),
+                None => assert!(
+                    names != "operate",
+                    "{PAGE} says `{title}` is reached by `operate`, and `operate` refuses \
+                     it: {}",
+                    match sayable(&(row.sample)().0) {
+                        Sayable::Tool(tool) => format!("`{tool}` is its tool"),
+                        Sayable::Window => "a model has no window".to_string(),
+                        Sayable::Undecided => "its payload is undecided".to_string(),
+                        Sayable::Unperformed(why) => why.to_string(),
+                        Sayable::Operable => "it does not".to_string(),
+                    }
+                ),
+            }
         }
     }
 
@@ -6861,6 +9485,16 @@ mod tests {
                 // **Nothing carries it**, which is the hole named above and not
                 // a question this tool asks or work it lands.
                 "wire_input" => Silent::NoRecord,
+                // **`operate` is the tool this claim is not about**, and saying
+                // so is the point rather than an exception. The seven perform
+                // themselves *because* they write nothing where they are asked;
+                // `operate` performs nothing and hands the operation to the
+                // frame the panel performs presses on, so whatever it writes is
+                // written there, by the same `written` this asserts against, at
+                // the same instant a press of it would write. The sample here is
+                // `RestoreProcedure`, whose `Record::Procedure` lands at the
+                // swap.
+                "operate" => Silent::OnLanding,
                 other => {
                     panic!("`{other}` is published and this test does not know what it writes")
                 }

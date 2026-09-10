@@ -183,7 +183,7 @@
 //!    is a fact about two capsules being one height, not a number either of
 //!    them inherited.
 //!
-//!    **A deck head's four are the first controls that are not in a row of
+//!    **A deck head's seven are the first controls that are not in a row of
 //!    their own**, and they are measured off their own rectangles like
 //!    everything else here. A deck head is the second row *inside* an
 //!    inspector pane, so the nearest boundary is not the one under the row it
@@ -390,7 +390,7 @@
 //! on a track, and the reason is written at the method: a fader has a knob and
 //! a value that must not jump under a hand mid-gesture, and this has neither.
 //!
-//! **So are the deck head's three**, two bays down and reached the same way:
+//! **So are the deck head's six**, two bays down and reached the same way:
 //! [`crate::view::DeckHead::sync`] answers `SetSync` naming the mode the
 //! cycle arrived at — with a mode this deck's material cannot honour **skipped
 //! rather than offered**, which is the blend chip's affordance over a list one
@@ -399,7 +399,14 @@
 //! beside it structurally cannot say and is the whole of ADR-0218; and
 //! [`crate::view::DeckHead::scrub`] answers `ScrubDeck` by an amount, which is
 //! the one control on this panel that does not name a destination — because
-//! the vocabulary has none for it to name.
+//! the vocabulary has none for it to name. The other three are the row's build
+//! chips and are one shape: [`crate::view::DeckHead::compositing`] answers
+//! `SetCompositing` naming the layering the deck is *not* in,
+//! [`crate::view::DeckHead::resized`] answers `SetProperty` naming the element
+//! count its step arrived at, and [`crate::view::DeckHead::re_salted`] answers
+//! `SetProperty` naming the salt it was handed — each one field of the aim the
+//! slot's watcher is pointed at, and none of them a step, a flip or an *again*
+//! (ADR-0314, ADR-0328).
 //!
 //! **So is the audio-in pill**, which is the same shape over a device:
 //! [`crate::view::AudioInPill::ask`] answers *what does a press on it ask for*
@@ -580,9 +587,10 @@ use karakuri_operation::gate::Class;
 
 use crate::panel::{Panel, GRAB};
 use crate::view::{
-    arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, library, look,
-    master, mcp_pill, mixer, outputs, program_bay, program_head, sequencer, staging, tracker_group,
-    transition, transport, Field, Scope, View, BAY_GRIPS, DECKS, REGIONS,
+    arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
+    library, look, map_pill, master, mcp_pill, mixer, outputs, program_bay, program_head,
+    sequencer, staging, tracker_group, transition, transport, Field, Scope, View, BAY_GRIPS, DECKS,
+    REGIONS,
 };
 
 /// **What each of rule 4's derivations answers for**, one row per probe and in
@@ -590,7 +598,7 @@ use crate::view::{
 /// tracker group's three, the arrangement pill, the look group's two, the
 /// transport row's `rec` pill, a
 /// strip's five, the transition row's four, the Master bay's one, the
-/// Inspector pane heads' `keep`, a deck head's four, the renderer chips, a
+/// Inspector pane heads' `keep`, a deck head's seven, the renderer chips, a
 /// parameter row's fader, the
 /// Program bay head's `solo`, the four deck preview cells,
 /// the Library bay's scope chips, its two filter fields, the `params` chip in
@@ -715,7 +723,7 @@ use crate::view::{
 /// answering a different question. So the **list** is the control and which row
 /// is inside [`crate::view::LibraryBay::take`], which is the `params` chip's
 /// row read the other way round.
-pub const PROBES: [Probe; 30] = [
+pub const PROBES: [Probe; 34] = [
     Probe {
         name: "the Outputs row's sinks",
         claims: 1,
@@ -730,6 +738,21 @@ pub const PROBES: [Probe; 30] = [
         name: "the tracker group's three",
         claims: 3,
         ask: on_tracker,
+    },
+    Probe {
+        name: "the transport row's learn pill",
+        claims: 1,
+        ask: on_learn,
+    },
+    // **A readout and still a row here**, which is what this table is for: it
+    // registers what the *pointer* reaches, and a press on the `map` pill
+    // lands on the panel and does nothing. Handing it to `egui` instead would
+    // make a press on a control the panel drew fall through to whatever is
+    // behind it, and it is what carries the pill's tooltip.
+    Probe {
+        name: "the transport row's map pill",
+        claims: 1,
+        ask: on_map,
     },
     Probe {
         name: "the arrangement pill",
@@ -777,8 +800,8 @@ pub const PROBES: [Probe; 30] = [
         ask: on_keep,
     },
     Probe {
-        name: "a deck head's five",
-        claims: 5,
+        name: "a deck head's seven",
+        claims: 7,
         ask: on_deck_head,
     },
     Probe {
@@ -790,6 +813,16 @@ pub const PROBES: [Probe; 30] = [
         name: "a parameter row's fader",
         claims: 1,
         ask: on_param,
+    },
+    Probe {
+        name: "a parameter row's publish mark",
+        claims: 1,
+        ask: on_publish,
+    },
+    Probe {
+        name: "a node group's `uses` capsule and its card",
+        claims: 2,
+        ask: on_uses,
     },
     Probe {
         name: "a node head's three authority chips",
@@ -1046,6 +1079,7 @@ fn on_pill(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
         view.transport,
         view.audio.as_ref(),
         view.tracker,
+        None,
         &view.arrangement,
     )
     .is_some_and(|pill| pill.hit(p))
@@ -1121,6 +1155,36 @@ fn on_transition(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> b
 /// The two at the end of the transport row, derived once for
 /// both: the exposure track's place is measured from the tone map's
 /// capsule, so they are two questions about one laid-out group.
+/// **The `learn` pill**, derived the one way [`crate::view::learn_pill`]
+/// derives it — armed or not, since a control's rectangle does not move with
+/// its lamp.
+fn on_learn(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    learn_pill(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        view.tracker,
+        view.map.as_ref(),
+        view.learn,
+    )
+    .is_some_and(|pill| pill.hit(p))
+}
+
+/// **The `map` pill**, which is a readout: the pointer reaches it and a press
+/// on it asks for nothing.
+fn on_map(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    map_pill(
+        ctx,
+        panel.layout(),
+        view.transport,
+        view.audio.as_ref(),
+        view.tracker,
+        view.map.as_ref(),
+    )
+    .is_some_and(|row| row.pill.contains(egui::Pos2::new(p.x, p.y)))
+}
+
 fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     look(
         ctx,
@@ -1128,6 +1192,7 @@ fn on_look(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
         view.transport,
         view.audio.as_ref(),
         view.tracker,
+        None,
         &view.arrangement,
         view.look,
     )
@@ -1200,21 +1265,29 @@ fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     })
 }
 
-/// **The deck head's five, one pane at a time**, and each pane is
+/// **The deck head's seven, one pane at a time**, and each pane is
 /// derived once for all of them exactly as a strip is: the anchor's
 /// place is measured from the mode chip's, the arrows' from the
-/// anchor's and the fold is what the row is laid out *to*, so they are
-/// five questions about one laid-out pane. A
+/// anchor's, and the fold is what the row is laid out *to* with the two build
+/// chips measured leftwards from it — so they are seven questions about one
+/// laid-out pane. A
 /// console with no deck behind it has no panes and pays nothing —
 /// [`View::inspector`] is empty, and this iterates over nothing.
 ///
-/// **Five controls and four methods**, which is why the row's `claims` is not
+/// **Seven controls and six methods**, which is why the row's `claims` is not
 /// the number of calls `karakuri/src/main.rs` makes on the head: the two
 /// arrows are one control each and `DeckHead::scrub` answers for both of them.
 ///
 /// **The fold is the fifth, since 2026-09-09.** A press on it asks the slot to
 /// composite or to overdraw, which the window turns into a re-aim and a
 /// rebuild (ADR-0314); it used to be drawn and claimed by nothing.
+///
+/// **The capacity chip and the `re-salt` capsule are the sixth and seventh**,
+/// and they are the fold's mechanism with a different field of the aim changed
+/// (ADR-0328). Both are drawn only where the deck has a geometry, and the
+/// capacity is claimed only where its ladder has somewhere to go — *a control
+/// claims what it acts on and no more*, which on this row the inert scrub
+/// already answers with a state.
 fn on_deck_head(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
@@ -1234,6 +1307,53 @@ fn on_rend(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
             .is_some_and(|at| at.select_renderer(ctx, pane, p).is_some())
+    })
+}
+
+/// **A parameter row's publish mark**, which is the row's leftmost cell — the
+/// number where the control is on the interface and a dot where it is not.
+///
+/// The count is **one** for the fader's reason and not the authority chips':
+/// how many rows a pane draws is a property of the Set in the slot, where the
+/// three authority levels are a closed list this console owns.
+///
+/// **It is the same cell in both states**, so this is one control and not two:
+/// what the press asks for differs — off the list or back onto the end of it —
+/// and the mark a hand lands on does not (`docs/adr/0329-…`).
+fn on_publish(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    let _ = ctx;
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.publishing(pane, p).is_some())
+    })
+}
+
+/// **A node group's `uses` capsule, and the card a press on it brings down** —
+/// two controls and one row, which is the Library bay's `load` button and deck
+/// pulldown's arrangement and its reason: they are one derivation and one ask.
+///
+/// **The capsule emits nothing**, which is what makes it a control here and no
+/// row on the operations page: it opens a list, and *open the list* is not
+/// something a map or a model could want to say (ADR-0305). The card's rows
+/// emit `WireInput`.
+///
+/// **The card is asked first**, because it is drawn over the pane the capsule
+/// sits in: a press inside it belongs to the card. That ordering is rule 2's
+/// job at the top of [`claim`] and this is the same fact inside one bay.
+fn on_uses(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    let room = crate::view::to_egui(panel.layout().viewport());
+    if let Some((pane_at, node, input)) = view.wiring_open() {
+        let picked = view.inspector.get(pane_at).is_some_and(|pane| {
+            inspector(panel.layout(), pane_at, pane, view.scroll_in(pane_at))
+                .is_some_and(|at| at.wired(ctx, pane, room, (node, input), p).is_some())
+        });
+        if picked {
+            return true;
+        }
+    }
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .is_some_and(|at| at.uses_chip(ctx, pane, p).is_some())
     })
 }
 
@@ -1605,6 +1725,12 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // both be down: the press that would open the second one lands while
         // the first is open, so this claims it and it shuts that one.
         || view.target_open()
+        // **And a `uses` line's card, which is a fifth**: it hangs off a line
+        // inside an Inspector pane and down over the groups under it, so while
+        // it is down a press inside it belongs to the card and a press anywhere
+        // else is the dismissal (`docs/adr/0329-…`). It can never be down while
+        // any of the others is, for their reason.
+        || view.wiring_open().is_some()
         // **And a row's menu, which is a fourth**, hanging off a row of that
         // same list and down over the rows under it. It is here rather than
         // among rule 4's controls for the reason the three above it are: a
@@ -1682,12 +1808,13 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
     if panel.dragging() {
         return None;
     }
-    // Rule 2, the same five cards and the same order as [`claim`]: a hand
+    // Rule 2, the same cards and the same order as [`claim`]: a hand
     // mid-choice is not a hand on a pane.
     if view.arrangement.open()
         || view.audio.as_ref().is_some_and(|audio| audio.open())
         || view.naming_set().is_some()
         || view.target_open()
+        || view.wiring_open().is_some()
         || view.menu_open()
     {
         return None;

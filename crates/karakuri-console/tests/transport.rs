@@ -1187,6 +1187,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
         view.transport,
         None,
         None,
+        None,
         &view.arrangement,
     )
     .expect("the row draws its one control");

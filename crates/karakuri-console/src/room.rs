@@ -536,6 +536,35 @@ pub mod size {
     /// it — the view's `caption_of` is where the second half of it is.
     pub const DROP_RING: f32 = 2.0;
 
+    /// `.wfocus`'s `outline: 2px dashed var(--c-sun)`: **the second of the
+    /// mock's two focuses**, and the one the panel draws since 2026-09-09 —
+    /// the ring on the bay a key press is addressed to (ADR-0259, and
+    /// [`crate::focus::mark`] for where it goes).
+    ///
+    /// The same 2 as [`STRIP_FOCUS_RING`] on purpose, which is that constant's
+    /// own sentence read from this side: *"the two have to be told apart by
+    /// their line and not by their weight"*. What tells them apart is that this
+    /// one is dashed, in `--c-sun` rather than `--c-lav`, and outside the box
+    /// rather than inset.
+    pub const WFOCUS_RING: f32 = 2.0;
+
+    /// `.wfocus`'s `outline-offset: 2px`: the ring is drawn **proud** of the
+    /// thing it marks, where [`STRIP_FOCUS_RING`] is inset — which is what
+    /// lets a bay head wear this and a strip inside it wear that without
+    /// either mark touching the other.
+    pub const WFOCUS_OFFSET: f32 = 2.0;
+
+    /// **How long one dash of that outline is, and the gap after it** — the
+    /// console's own, because `dashed` is a CSS keyword and a browser picks the
+    /// pattern. What the mock states is that the line is broken; these two are
+    /// what breaking it costs, chosen so that a [`HEAD_H`] head's short edge
+    /// carries whole dashes rather than one long one.
+    pub const WFOCUS_DASH: f32 = 4.0;
+
+    /// The gap between two dashes of [`WFOCUS_DASH`] — the console's own, for
+    /// that constant's reason and stated beside it.
+    pub const WFOCUS_GAP: f32 = 3.0;
+
     /// `.strip`'s `padding: 7px 4px`.
     pub const STRIP_PAD_X: f32 = 4.0;
     pub const STRIP_PAD_Y: f32 = 7.0;
@@ -1188,6 +1217,34 @@ pub mod size {
     /// named for this row, so a change to one is not silently a change to the
     /// other. The mock gives `.sens`'s pills no padding of their own.
     pub const SENS_CHIP_PAD_X: f32 = PILL_PAD_X;
+
+    // -- a node's declared inputs -------------------------------------------
+
+    /// `.uses`'s `font-size: 10px`, which the capsule in it inherits — the
+    /// sensitivity row's size, and for the same reason: both are a line of
+    /// prose with a control on the end of it rather than a row of the pane's
+    /// own type.
+    pub const USES_SIZE: f32 = 10.0;
+
+    /// `.uses`'s `padding: 2px 10px 4px 12px`, top and bottom. The left is
+    /// [`PARAM_PAD_L`] and the right [`PARAM_PAD_R`] — the same indent a
+    /// parameter row stands on, because the line belongs to the rows under it.
+    pub const USES_PAD_T: f32 = 2.0;
+    /// The bottom of `.uses`'s `padding: 2px 10px 4px 12px`, which is a little
+    /// more than the top for [`SENS_PAD_B`]'s reason: the line sits tight under
+    /// the head it belongs to and clear of the rows it stands over.
+    pub const USES_PAD_B: f32 = 4.0;
+
+    /// `.uses`'s `gap: 6px`, between the slot's word and the capsule.
+    pub const USES_GAP: f32 = 6.0;
+
+    /// A `.uses` capsule's box: [`USES_SIZE`] at [`LINE`] inside a pill's
+    /// border — [`SENS_CHIP_H`]'s arithmetic at this row's own type size, and
+    /// the same number, because the two rows are the same size.
+    pub const USES_CHIP_H: f32 = USES_SIZE * LINE + HAIRLINE * 2.0;
+
+    /// One `.uses` line's box: a capsule inside that padding — **23**.
+    pub const USES_H: f32 = USES_PAD_T + USES_CHIP_H + USES_PAD_B;
 
     // -- the sequencer bay --------------------------------------------------
 

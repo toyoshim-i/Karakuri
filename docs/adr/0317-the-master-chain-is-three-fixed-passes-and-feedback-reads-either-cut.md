@@ -9,6 +9,15 @@ principles: [0064, 0085, 0090, 0091, 0092]
 tags: [engine, console, vocabulary, store, manual]
 ---
 
+> **Annotated 2026-09-10.** The deferral this record made — a writable L5 revives *"the day
+> somebody writes the compositing down"* — is taken up by
+> [ADR-0340](0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md): `kind L5`
+> is specified under `docs/ir-spec.md`'s *Beyond* boundary, the chain becomes an ordered list of
+> L5 slots, and the three passes here ship as L5 procedures. Two clauses of this record are
+> superseded there — a pass at zero records no pass (a list spells *no pass* as *no slot*), and the
+> four-field `master_chain` record. What stands: the three passes as written, the two feedback
+> cuts, the linear-HDR placement before the tone map, and the measurements, which M5.16 re-takes.
+
 # The master chain is three fixed passes, and feedback reads either cut
 
 ## Context

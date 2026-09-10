@@ -53,7 +53,7 @@ use karakuri_operation::{Authority, BindAt, Curve, Layer, NodeAt, Operation, Par
 /// A row nothing is holding.
 fn row(ord: usize, name: &str, index: u32, range: [f32; 2], value: f32) -> Param {
     Param {
-        ord,
+        ord: Some(ord),
         name: name.to_owned(),
         value,
         range,
@@ -121,6 +121,7 @@ fn shell() -> Node {
             },
             level: Authority::Manual,
         }),
+        uses: Vec::new(),
         renderers: Vec::new(),
         params: vec![
             row(1, "radius", 0, [0.0, 4.0], 2.4),
@@ -140,6 +141,7 @@ fn shell() -> Node {
 /// neither an authority nor an address to press.
 fn renderers() -> Node {
     Node {
+        uses: Vec::new(),
         addr: "L4".to_owned(),
         name: "renderers".to_owned(),
         authority: None,
@@ -164,6 +166,9 @@ fn mock() -> Pane {
         anchor_bpm: 128.0,
         scrub_beats: 0.0,
         composite: true,
+        // Not this test's row: the deck head's two build chips are
+        // drawn from this and nothing here is about them.
+        aimed: None,
         nodes: vec![shell(), renderers()],
     }
 }
