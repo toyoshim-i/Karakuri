@@ -12397,18 +12397,19 @@ const OPACITY_STEP: f32 = 0.1;
 ///
 /// # Why the digits are a guard and not ten arms
 ///
-/// `key_column::bound` reads this file's `Key::Character("…")` literals to
-/// answer *which keys does this program bind*, and that answer was complete
-/// while every key was a letter. It is not complete for a digit: `1` in the
-/// Mixer is deck A's strip and `1` in the Library is its first row, so ten arms
-/// naming ten literals would say the digits are bound and say nothing about
-/// what they reach. **The dispatch table is what says that** —
-/// `karakuri_console::focus::BUILT` — and `key_column` reads it beside the
-/// text scan rather than instead of it (ADR-0333).
+/// `1` in the Mixer is deck A's strip and `1` in the Library is its first
+/// row, so ten arms naming ten literals would say the digits are bound and
+/// say nothing about what they reach. **The dispatch table is what says
+/// that** — `karakuri_console::focus::BUILT` — so the digit is a guard here
+/// rather than ten characters (ADR-0333).
 ///
-/// The named keys below are still literals and are still found by that scan, so
-/// only the digit is contributed by the table. That is the seam, and it is one
-/// key wide.
+/// **`key_column::bound` no longer reads this file's text at all** — since
+/// the ten literal keys `window_event` binds outside this guard moved into
+/// `KEY_BINDINGS`, there is nothing left in this file's source for a scan to
+/// find that a declared fact could not say instead. What this function still
+/// binds — `space`, `enter`, the four arrows and the digit — is declared in
+/// `key_column::bound` alongside `KEY_BINDINGS`' own keys rather than
+/// scanned for, the same as the digit always was.
 fn grammar(key: &Key<&str>) -> Option<focus::Press> {
     match key {
         Key::Named(NamedKey::Space) => Some(focus::Press::Space),
@@ -16374,6 +16375,262 @@ impl Keeping {
     }
 }
 
+/// **A key `window_event` binds outside the grammar guard** — the ~ten
+/// literal `Key::Character("…")` and `Key::Named(NamedKey::…)` arms the
+/// `match` on `key.logical_key` used to spell inline, one each in
+/// [`KEY_BINDINGS`] now.
+///
+/// **Why a table and not the arms it replaced**: those differed only in
+/// which key they answered to and what they did about it, and a bare
+/// `match` said that in five hundred lines a test could read only by
+/// re-parsing this file as text — `key_column::bound`'s old shape, which
+/// stopped at the first `#[cfg(test)]` and broke on a stray comment or a
+/// reordered arm. The facts are the same; they are data now, and
+/// `key_column::bound` reads them as data instead of as this file's own
+/// source.
+///
+/// **Not the grammar guard**, which stays exactly the `match` arm it always
+/// was — `named if grammar(&named).is_some()` — because it is already
+/// table-driven one layer down, through `karakuri_console::focus`, and
+/// binds a different key in every bay it reaches. Nothing here duplicates
+/// it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BoundKey {
+    Named(NamedKey),
+    Character(&'static str),
+}
+
+impl BoundKey {
+    /// Whether `key`, as `window_event` hands it in from
+    /// `key.logical_key.as_ref()`, is this one.
+    fn matches(self, key: &Key<&str>) -> bool {
+        match (self, key) {
+            (BoundKey::Named(named), Key::Named(other)) => named == *other,
+            (BoundKey::Character(text), Key::Character(other)) => text == *other,
+            _ => false,
+        }
+    }
+}
+
+/// **Exactly the fields a bound key's action needs, and not `self`.**
+///
+/// `window_event` is already holding a live `&mut Gfx` reborrowed out of
+/// `self.gfx` by the time a key is dispatched (see its own opening lines),
+/// so an action taking `&mut App` would have to borrow all of `self` a
+/// second time and collide with that borrow. `App::performed` and
+/// `App::wants` solved the same problem the same way, by naming the
+/// individual fields they touch instead of taking `&mut self` — this is
+/// that solution collected into one struct because ten call sites named the
+/// same eight fields.
+struct KeyCtx<'a> {
+    readout: &'a mut Readout,
+    egui_due: &'a mut Option<Instant>,
+    costs: &'a mut Costs,
+    recording: &'a mut Sessions,
+    keeping: &'a mut Keeping,
+    store: &'a std::path::Path,
+    started: Instant,
+    shift: bool,
+}
+
+/// **What pressing a bound key does**, once [`KEY_BINDINGS`] has found its
+/// entry.
+///
+/// The arms this table replaced were not one shape: `Op::FoldEnclosing`,
+/// `Op::UnfoldAll` and `Op::Reset` fell through to `self.readout.op(op)`
+/// below the old `match`, and the rest — a view moved, an `Operation`
+/// emitted, a frame asked for — handled the whole press themselves and
+/// returned. Rather than force one payload on bodies that were never one
+/// shape, each variant here carries the function pointer for the shape it
+/// is.
+#[derive(Clone, Copy)]
+enum KeyAction {
+    /// Produces the `panel::Op` that falls through to `self.readout.op(op)`,
+    /// or `None` where the press has nothing to act on (`g` off every bay).
+    Panel(fn(&mut KeyCtx) -> Option<Op>),
+    /// Handles the whole press — asks for whatever frame it owes, if any —
+    /// and the window loop returns immediately after calling it.
+    Handled(fn(&mut KeyCtx, &mut Gfx)),
+}
+
+/// **One row of the window loop's own keyboard**, checked against
+/// `docs/manual/operations.html` directly by `key_column`'s tests rather
+/// than through a second list nothing holds against the page.
+struct KeyBinding {
+    key: BoundKey,
+    /// The word this key is bound under, both in `key_column::KEYS`'s
+    /// legend and in the page's own key-column badges —
+    /// `docs/manual/operations.html`'s spelling, not `winit`'s.
+    ///
+    /// **Read only by `key_column`'s tests** — dispatch itself never asks
+    /// this table what a key is *called*, only which one `matches`.
+    #[cfg_attr(not(test), allow(dead_code))]
+    legend: &'static str,
+    /// The bay a badge naming this key is addressed to — `Some(focus::ANY)`
+    /// for the one key of this table that is not global, `None` for every
+    /// other one. Read only by `key_column`'s tests, for `legend`'s reason.
+    #[cfg_attr(not(test), allow(dead_code))]
+    bay: Option<&'static str>,
+    /// The `<h3>` title this key reaches on the page, or `None` for a
+    /// view-only action the page does not specify as an operation — moving
+    /// focus, abandoning a name, the room's colours. Read only by
+    /// `key_column`'s tests, for `legend`'s reason.
+    #[cfg_attr(not(test), allow(dead_code))]
+    title: Option<&'static str>,
+    action: KeyAction,
+}
+
+/// **Every key `window_event` binds outside the grammar guard.**
+///
+/// Ten entries for the ten literal arms `window_event`'s `match` used to
+/// spell — `tab`, `esc`, `g`, `z`, `r`, `k`, `b`, `,`, `.`, `n` — the same
+/// ten `key_column::KEYS` prints beside the eight the grammar guard answers
+/// for. What each one reaches on `docs/manual/operations.html` is
+/// [`KeyBinding::title`], checked in `key_column` rather than assumed.
+const KEY_BINDINGS: &[KeyBinding] = &[
+    // **`Tab` moves focus to the next bay, and `shift-Tab` to the one
+    // before** — ADR-0259's first key, and the whole of what makes the six
+    // that follow it addressable.
+    //
+    // **The walk is the console's and the key is this file's**, which is the
+    // seam every control on this panel already crosses (ADR-0156): the ring
+    // is derived from the arrangement by `karakuri_console::focus::ring`,
+    // and what `key_tab` knows is which direction was asked for.
+    //
+    // **It names no operation and asks for no record**, which is the two
+    // library cursor keys' arrangement one bay out: focus is a pointer this
+    // console owns, nothing downstream can be the model of record for it,
+    // and `Change::Pointed` is the answer for *a key moved a pointer*. The
+    // page says the same thing by leaving this row's key column alone —
+    // there is no *move focus* row, because moving focus is not an
+    // operation. Hence `title: None`.
+    //
+    // **`egui` never gets a say.** `egui-winit` 0.36.1 reports `consumed`
+    // for every `Tab` whatever has focus, and `App::to_egui` reads `repaint`
+    // and nothing else — the invariant `event_response`'s test holds, and
+    // the reason this key is reachable at all.
+    KeyBinding {
+        key: BoundKey::Named(NamedKey::Tab),
+        legend: "tab",
+        bay: None,
+        title: None,
+        action: KeyAction::Handled(key_tab),
+    },
+    // **`esc` goes up one level of the focused bay's address, and it does
+    // not quit** (ADR-0259). Quitting follows the platform's own
+    // accelerator — `⌘Q`, `Alt-F4` — which arrives as
+    // `WindowEvent::CloseRequested` and is answered at the top of
+    // `window_event`, saves waited for and recording flushed. **A quit
+    // ladder is a sequence that ends in something irreversible, in front of
+    // an audience, reached by repeating one key**
+    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    //
+    // **At bay level it acts on nothing and says so**, because there is no
+    // unfocused state to fall out into and a key that declines silently is
+    // indistinguishable from one that is not bound.
+    //
+    // **While a name is being typed it abandons the name**, and that is not
+    // an exception — both letter-taking flows return before this `match` is
+    // ever reached, and ADR-0259 reads them as a *field*: *"`esc` … from a
+    // field it abandons the name"*.
+    KeyBinding {
+        key: BoundKey::Named(NamedKey::Escape),
+        legend: "esc",
+        bay: None,
+        title: None,
+        action: KeyAction::Handled(key_escape),
+    },
+    // **The one letter left that names a region, and it takes it from the
+    // focus rather than from the pointer** (ADR-0259, ADR-0343). `g` folds
+    // the split enclosing the focused bay, which is a pane every time — a
+    // bay's parent is a split and never another bay — so this is the one
+    // route to *Fold a pane away* from the keyboard alone, and it is the row
+    // `space` on a bay does not reach. **Rule 01 is what it buys** — *every
+    // operation is reachable from the keyboard alone* — because a key whose
+    // region came from the pointer was not.
+    KeyBinding {
+        key: BoundKey::Character("g"),
+        legend: "g",
+        bay: Some(focus::ANY),
+        title: Some("Fold a pane away"),
+        action: KeyAction::Panel(key_fold_enclosing),
+    },
+    KeyBinding {
+        key: BoundKey::Character("z"),
+        legend: "z",
+        bay: None,
+        title: Some("Bring back what is folded"),
+        action: KeyAction::Panel(key_unfold_all),
+    },
+    KeyBinding {
+        key: BoundKey::Character("r"),
+        legend: "r",
+        bay: None,
+        title: Some("Reset the arrangement"),
+        action: KeyAction::Panel(key_reset),
+    },
+    // **Keep what the selected deck is playing**, filed under a stamp
+    // because a bare key press cannot type a name — see
+    // `karakuri_environment::accepted_save`, whose convention that is and
+    // whose reason it borrows: an operator looks for the time they saved it.
+    //
+    // **The selected deck and not a slot in the key**, which is the split
+    // every deck-addressed control on this panel makes: the deck an
+    // operator means is the one they have already addressed in the Mixer,
+    // and a model has no selection and names the slot in the call.
+    //
+    // **The panel column of this row is still `plan`.** A key is not a
+    // control, the Library bay has no *keep* pill drawn, and a badge that
+    // said otherwise would be a claim about a control that is not there.
+    KeyBinding {
+        key: BoundKey::Character("k"),
+        legend: "k",
+        bay: None,
+        title: Some("Keep what a deck is playing"),
+        action: KeyAction::Handled(key_save),
+    },
+    // **The beat, tapped.** The one key on this panel that reaches the room
+    // rather than the deck or the arrangement, and the first of three that
+    // need an input open. What it does and why it does not go through
+    // `written` is [`tapped`].
+    KeyBinding {
+        key: BoundKey::Character("b"),
+        legend: "b",
+        bay: None,
+        title: Some("Tap the beat"),
+        action: KeyAction::Handled(key_tap_beat),
+    },
+    // **The grid, an octave either way**, and the two keys the page
+    // specifies for it. Refused where the result would leave the trackable
+    // range, which is the beat lock's call — see [`scaled`].
+    KeyBinding {
+        key: BoundKey::Character(","),
+        legend: ",",
+        bay: None,
+        title: Some("Halve or double the grid"),
+        action: KeyAction::Handled(key_scale_grid_halve),
+    },
+    KeyBinding {
+        key: BoundKey::Character("."),
+        legend: ".",
+        bay: None,
+        title: Some("Halve or double the grid"),
+        action: KeyAction::Handled(key_scale_grid_double),
+    },
+    // **The key that changes the screen without touching the pointer and
+    // without touching the model.** The room is the view's: every colour on
+    // the panel changes and nothing in the arrangement moves, so no
+    // `Outcome` says so and `Change::Room` is the only thing that does —
+    // hence `title: None`, the same as `Tab` and `Escape`.
+    KeyBinding {
+        key: BoundKey::Character("n"),
+        legend: "n",
+        bay: None,
+        title: None,
+        action: KeyAction::Handled(key_room),
+    },
+];
+
 impl App {
     /// **The opening is handed in rather than made here**, which is the whole of
     /// what pairing the four pills with a server took: [`main`] gives the same
@@ -17309,6 +17566,138 @@ impl App {
             }
         }
     }
+}
+
+// -- KEY_BINDINGS' actions, one free function per entry ---------------------
+//
+// Free functions and not methods, and each takes a [`KeyCtx`] rather than
+// `&mut App`, for the reason [`KeyCtx`] itself gives: `window_event` is
+// already holding a `&mut Gfx` reborrowed out of `self.gfx` by the time one
+// of these is called. Each body is exactly what the arm it replaced had —
+// see [`KEY_BINDINGS`] for the doc comment that used to sit on the arm
+// itself.
+
+fn key_tab(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let step = match ctx.shift {
+        true => -1,
+        false => 1,
+    };
+    let moved = ctx.readout.view.tab(&ctx.readout.panel, step);
+    App::wants(
+        gfx,
+        ctx.egui_due,
+        ctx.costs,
+        Change::Pointed(moved).repaint(),
+    );
+}
+
+fn key_escape(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let moved = ctx.readout.view.focus_up(&ctx.readout.panel);
+    if !moved {
+        println!(
+            "  esc: the address is already at the {} bay and there is no \
+             level above it — press tab to move focus to another bay, or \
+             close the window to quit",
+            ctx.readout
+                .view
+                .focused(&ctx.readout.panel)
+                .map_or("focused", |bay| bay.name)
+        );
+    }
+    App::wants(
+        gfx,
+        ctx.egui_due,
+        ctx.costs,
+        Change::Pointed(moved).repaint(),
+    );
+}
+
+fn key_fold_enclosing(ctx: &mut KeyCtx) -> Option<Op> {
+    ctx.readout
+        .view
+        .focused(&ctx.readout.panel)
+        .and_then(|bay| ctx.readout.panel.layout().find(bay.name))
+        .map(Op::FoldEnclosing)
+}
+
+fn key_unfold_all(_ctx: &mut KeyCtx) -> Option<Op> {
+    Some(Op::UnfoldAll)
+}
+
+fn key_reset(_ctx: &mut KeyCtx) -> Option<Op> {
+    Some(Op::Reset)
+}
+
+fn key_save(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let deck = ctx.readout.view.selection();
+    // **`None`, and it is the payload saying so rather than this function
+    // inventing a stamp.** A caller that can type a name is not made to
+    // take a timestamp, and a key press is not one of them.
+    let acted = Acted::Emitted(Some(Operation::SaveSet { deck, id: None }));
+    // **Named through `performed` and performed beside it**, which is
+    // `e`'s shape: the emission is what records the press as
+    // `Silent(OnLanding)` rather than as nothing at all, and the save
+    // itself is this function's because `Operation::SaveSet` writes no
+    // record here — the `save` record is written where the work lands,
+    // and this program records no session to write it into.
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    );
+    ctx.keeping.save_set(
+        &gfx.engine,
+        ctx.store,
+        Asked::Operator,
+        usize::from(deck),
+        None,
+        None,
+    );
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+fn key_tap_beat(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let acted = Acted::Emitted(Some(Operation::TapBeat));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    );
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+/// The shared half of [`key_scale_grid_halve`] and [`key_scale_grid_double`]
+/// — the two keys' one difference is `by`.
+fn key_scale_grid(ctx: &mut KeyCtx, gfx: &mut Gfx, by: GridScale) {
+    let acted = Acted::Emitted(Some(Operation::ScaleGrid { by }));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    );
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+fn key_scale_grid_halve(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    key_scale_grid(ctx, gfx, GridScale::Halve);
+}
+
+fn key_scale_grid_double(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    key_scale_grid(ctx, gfx, GridScale::Double);
+}
+
+fn key_room(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    ctx.readout.room();
+    App::wants(gfx, ctx.egui_due, ctx.costs, Change::Room.repaint());
 }
 
 impl ApplicationHandler for App {
@@ -18517,86 +18906,6 @@ impl ApplicationHandler for App {
                     return;
                 }
                 let op = match key.logical_key.as_ref() {
-                    // **`Tab` moves focus to the next bay, and `shift-Tab` to
-                    // the one before** — ADR-0259's first key, and the whole of
-                    // what makes the six that follow it addressable.
-                    //
-                    // **The walk is the console's and the key is this
-                    // file's**, which is the seam every control on this panel
-                    // already crosses (ADR-0156): the ring is derived from the
-                    // arrangement by `karakuri_console::focus::ring`, and what
-                    // this arm knows is which direction was asked for.
-                    //
-                    // **It names no operation and asks for no record**, which
-                    // is the two library cursor keys' arrangement one bay out:
-                    // focus is a pointer this console owns, nothing downstream
-                    // can be the model of record for it, and `Change::Pointed`
-                    // is the answer for *a key moved a pointer*. The page says
-                    // the same thing by leaving this row's key column alone —
-                    // there is no *move focus* row, because moving focus is
-                    // not an operation.
-                    //
-                    // **`egui` never gets a say.** `egui-winit` 0.36.1 reports
-                    // `consumed` for every `Tab` whatever has focus, and
-                    // `App::to_egui` reads `repaint` and nothing else — the
-                    // invariant `event_response`'s test holds, and the reason
-                    // this arm is reachable at all.
-                    Key::Named(NamedKey::Tab) => {
-                        let step = match self.shift {
-                            true => -1,
-                            false => 1,
-                        };
-                        let moved = self.readout.view.tab(&self.readout.panel, step);
-                        App::wants(
-                            gfx,
-                            &mut self.egui_due,
-                            &mut self.costs,
-                            Change::Pointed(moved).repaint(),
-                        );
-                        return;
-                    }
-                    // **`esc` goes up one level of the focused bay's address,
-                    // and it does not quit** (ADR-0259). Quitting follows the
-                    // platform's own accelerator — `⌘Q`, `Alt-F4` — which
-                    // arrives as `WindowEvent::CloseRequested` and is answered
-                    // at the top of this `match`, saves waited for and
-                    // recording flushed. **A quit ladder is a sequence that
-                    // ends in something irreversible, in front of an audience,
-                    // reached by repeating one key**
-                    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-                    //
-                    // **At bay level it acts on nothing and says so**, because
-                    // there is no unfocused state to fall out into and a key
-                    // that declines silently is indistinguishable from one that
-                    // is not bound — the sentence this file already writes at
-                    // `tapped` and at `scaled`, one key along.
-                    //
-                    // **While a name is being typed it abandons the name**, and
-                    // that is not an exception: both letter-taking flows return
-                    // above this line, and ADR-0259 reads them as a *field*,
-                    // which is one of the seven kinds — *"`esc` … from a field
-                    // it abandons the name"*.
-                    Key::Named(NamedKey::Escape) => {
-                        let moved = self.readout.view.focus_up(&self.readout.panel);
-                        if !moved {
-                            println!(
-                                "  esc: the address is already at the {} bay and there is no \
-                                 level above it — press tab to move focus to another bay, or \
-                                 close the window to quit",
-                                self.readout
-                                    .view
-                                    .focused(&self.readout.panel)
-                                    .map_or("focused", |bay| bay.name)
-                            );
-                        }
-                        App::wants(
-                            gfx,
-                            &mut self.egui_due,
-                            &mut self.costs,
-                            Change::Pointed(moved).repaint(),
-                        );
-                        return;
-                    }
                     // **The four keys of the grammar, dispatched to the bay
                     // that has focus** — a digit names the nth thing one level
                     // below the address and `0` the bay's head, the arrows take
@@ -18922,155 +19231,49 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                    // **The one letter left that names a region, and it
-                    // takes it from the focus rather than from the pointer**
-                    // (ADR-0259, ADR-0343). `g` folds the split enclosing the
-                    // focused bay, which is a pane every time — a bay's parent
-                    // is a split and never another bay — so this is the one
-                    // route to *Fold a pane away* from the keyboard alone, and
-                    // it is the row `space` on a bay does not reach.
-                    //
-                    // **`f` and `s` went with `Readout::target`.** The grammar
-                    // reaches both of their rows: `space` on a bay is the fold
-                    // and `space` on the Program head's `solo` is the solo, and
-                    // a letter goes when the grammar reaches the same row.
-                    // **Rule 01 is what it buys** — *every operation is
-                    // reachable from the keyboard alone* — because a key whose
-                    // region came from the pointer was not.
-                    Key::Character("g") => {
-                        match self
-                            .readout
-                            .view
-                            .focused(&self.readout.panel)
-                            .and_then(|bay| self.readout.panel.layout().find(bay.name))
-                        {
-                            Some(id) => Op::FoldEnclosing(id),
-                            None => return,
+                    // **Everything else this loop binds is one lookup into
+                    // `KEY_BINDINGS`** — the ten literal keys it used to spell
+                    // as ten arms, now a table checked against
+                    // `docs/manual/operations.html` by `key_column` directly
+                    // (see [`KEY_BINDINGS`] for why a table and not arms, and
+                    // for the doc comment each arm here used to carry).
+                    other => match KEY_BINDINGS
+                        .iter()
+                        .find(|binding| binding.key.matches(&other))
+                    {
+                        Some(binding) => {
+                            // **Disjoint fields, not `self`.** `gfx` is
+                            // already a live `&mut` borrow out of `self.gfx`
+                            // (see the top of `window_event`), so a bound
+                            // action takes exactly the other fields it
+                            // needs rather than all of `self` — the same
+                            // reason `App::performed` and `App::wants` never
+                            // took `&mut self` either.
+                            let mut ctx = KeyCtx {
+                                readout: &mut self.readout,
+                                egui_due: &mut self.egui_due,
+                                costs: &mut self.costs,
+                                recording: &mut self.recording,
+                                keeping: &mut self.keeping,
+                                store: &self.store,
+                                started: self.started,
+                                shift: self.shift,
+                            };
+                            match binding.action {
+                                KeyAction::Handled(act) => {
+                                    act(&mut ctx, gfx);
+                                    return;
+                                }
+                                KeyAction::Panel(act) => match act(&mut ctx) {
+                                    Some(op) => op,
+                                    None => return,
+                                },
+                            }
                         }
-                    }
-                    Key::Character("z") => Op::UnfoldAll,
-                    Key::Character("r") => Op::Reset,
-                    // **Keep what the selected deck is playing**, filed under a
-                    // stamp because a bare key press cannot type a name — see
-                    // `karakuri_environment::accepted_save`, whose convention
-                    // that is and whose reason it borrows: an operator looks for
-                    // the time they saved it.
-                    //
-                    // **The selected deck and not a slot in the key**, which is
-                    // the split every deck-addressed control on this panel
-                    // makes: the deck an operator means is the one they have
-                    // already addressed in the Mixer, and a model has no
-                    // selection and names the slot in the call.
-                    //
-                    // **Named through `performed` and performed beside it**,
-                    // which is `e`'s shape: the emission is what records the
-                    // press as `Silent(OnLanding)` rather than as nothing at
-                    // all, and the save itself is this arm's because
-                    // `Operation::SaveSet` writes no record here — the `save`
-                    // record is written where the work lands, and this program
-                    // records no session to write it into.
-                    //
-                    // **The panel column of this row is still `plan`.** A key is
-                    // not a control, the Library bay has no *keep* pill drawn,
-                    // and a badge that said otherwise would be a claim about a
-                    // control that is not there.
-                    Key::Character("k") => {
-                        let deck = self.readout.view.selection();
-                        let acted = Acted::Emitted(Some(Operation::SaveSet {
-                            deck,
-                            // **`None`, and it is the payload saying so rather
-                            // than this arm inventing a stamp.** A caller that
-                            // can type a name is not made to take a timestamp,
-                            // and a key press is not one of them.
-                            id: None,
-                        }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        self.keeping.save_set(
-                            &gfx.engine,
-                            &self.store,
-                            Asked::Operator,
-                            usize::from(deck),
-                            None,
-                            None,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The beat, tapped.** The one key on this panel
-                    // that reaches the room rather than the deck or the
-                    // arrangement, and the first of three that need an input
-                    // open. What it does and why it does not go through
-                    // `written` is [`tapped`].
-                    //
-                    // **It emits and goes through [`App::performed`] like
-                    // every other key here**, and it did not until the `tap`
-                    // pill landed: this arm called [`tapped`] itself, because
-                    // `performed` would have printed the `Owed` line about a
-                    // press that moved the grid. `performed` takes the two
-                    // tracker operations out before it reaches that line
-                    // ([`tracked`]), so the key and the pill are now one route
-                    // — which is what P-0090 asks of every other control on
-                    // this panel.
-                    Key::Character("b") => {
-                        let acted = Acted::Emitted(Some(Operation::TapBeat));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    // **The grid, an octave either way**, and the two keys the
-                    // page specifies for it. Refused where the result would
-                    // leave the trackable range, which is the beat lock's call
-                    // — see [`scaled`]. It emits and leaves by
-                    // [`App::performed`] for the arm above's reason, so the two
-                    // keys and the two halves of the `½ ×2` chip are one route.
-                    Key::Character(",") | Key::Character(".") => {
-                        let by = match key.logical_key.as_ref() {
-                            Key::Character(",") => GridScale::Halve,
-                            _ => GridScale::Double,
-                        };
-                        let acted = Acted::Emitted(Some(Operation::ScaleGrid { by }));
-                        let repaint = App::performed(
-                            gfx,
-                            self.started,
-                            &mut self.readout,
-                            self.recording.recorder(),
-                            &acted,
-                            Repaint::Never,
-                        );
-                        App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                        return;
-                    }
-                    Key::Character("n") => {
-                        // **The key that changes the screen without touching
-                        // the pointer and without touching the model.** The
-                        // room is the view's: every colour on the panel
-                        // changes and nothing in the arrangement moves, so no
-                        // `Outcome` says so and `Change::Room` is the only
-                        // thing that does.
-                        self.readout.room();
-                        App::wants(
-                            gfx,
-                            &mut self.egui_due,
-                            &mut self.costs,
-                            Change::Room.repaint(),
-                        );
-                        return;
-                    }
-                    _ => return,
+                        // Not one of the grammar's four and not in the table
+                        // either — an unbound key, answered with nothing.
+                        None => return,
+                    },
                 };
                 let outcome = self.readout.op(op);
                 App::wants(
@@ -28980,12 +29183,17 @@ mod tests {
 /// library it means.
 ///
 /// **Below `mod tests` rather than beside [`Sources`], and that is not a
-/// matter of taste.** [`key_column::bound`] reads this file's own text for the
-/// keys the window loop binds and stops at the first line that is
-/// `#[cfg(test)]`; a test-only item placed above the loop moves that stop line
-/// up past the `match`, and the scan then finds nothing and every check built
-/// on it passes over an empty set. It did exactly that once, on the way to
-/// writing this. Here it is after the boundary, and reachable from all three
+/// matter of taste.** [`key_column::code`] reads this file's own text down to
+/// the first line that is `#[cfg(test)]`, and several of `key_column`'s own
+/// tests — and `focus_keys`', `outputs_row`'s, `press_handler`'s beside it —
+/// are built on what it finds; a test-only item placed above the window loop
+/// moves that stop line up past the code those tests are about, and the scan
+/// then finds nothing and every check built on it passes over an empty set.
+/// It did exactly that once, on the way to writing this — when the same risk
+/// still sat on [`key_column::bound`] too, before the window loop's own
+/// literal keys moved into [`super::KEY_BINDINGS`] and `bound` stopped
+/// reading this file's text at all. Here it is after the boundary, and
+/// reachable from all three
 /// test modules — [`tests`], [`key_column`] and [`gpu`] — because it is at the
 /// file's own scope, which the two that are not inside [`tests`] need.
 /// One `.kir`, parsed and checked, for the tests that need a `Checked` and no
@@ -29001,10 +29209,11 @@ mod tests {
 /// to *does this file check* the day either moved.
 ///
 /// **Below `mod tests` for [`shipped`]'s reason, which is the same reason and
-/// was learned here.** [`key_column::bound`] stops reading this file at the
+/// was learned here.** [`key_column::code`] stops reading this file at the
 /// first `#[cfg(test)]` line, so a test-only item above the window loop's
-/// `match` moves that stop line past every key arm — the scan then finds no
-/// keys at all and both checks built on it pass over an empty set. This
+/// `match` moves that stop line past the code every test built on `code`
+/// is about — the scan then finds nothing and every check built on it
+/// passes over an empty set. This
 /// function sat beside [`capacity_of`] when it became test-only, and that is
 /// exactly what happened.
 #[cfg(test)]
@@ -29097,7 +29306,9 @@ mod key_column {
     //!
     //! The page now says whose, in its legend: **the key column is the
     //! instrument's keyboard**, which is this file's `match` on
-    //! `key.logical_key`. That is ADR-0213's definition one column along — the
+    //! `key.logical_key` — the ten literal keys through
+    //! [`super::KEY_BINDINGS`] since 2026-09-10, the grammar's own four
+    //! through the guard beside it. That is ADR-0213's definition one column along — the
     //! property is *the operator at the panel presses it*, and *which cargo
     //! target binds a letter* is the shape ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
     //! This is the check that definition owes, both ways round, in the shape
@@ -29131,27 +29342,32 @@ mod key_column {
     //!
     //! # What it cannot see, and which way each one fails
     //!
-    //! - **A key bound anywhere but a literal arm** — through a table, a
-    //!   helper, or `egui`'s own shortcut handling. Invisible to [`bound`], and
-    //!   a *false negative*: it cannot fail the direction that says every bound
-    //!   key is on the page, and it surfaces from the other direction the
-    //!   moment somebody marks that row built.
-    //! - **A key arm inside a block comment.** `/* … */` is not a line comment
-    //!   and reads as bound. A *false positive*, and it fails loudly:
-    //!   [`super::KEYS`] has no entry for it and
-    //!   [`the_keys_this_file_lists_are_the_keys_the_window_loop_binds`] names
-    //!   it.
-    //! - **This file does not press a key.** It reads an arm and reads the
-    //!   page. That `Op::Solo` actually solos is
+    //! - **A key `window_event` dispatches that is declared in none of
+    //!   [`bound`]'s four sources** — [`super::KEY_BINDINGS`],
+    //!   [`GRAMMAR_KEYS`], [`DIGIT`] and [`NAME_ENTRY_KEY`] — through `egui`'s
+    //!   own shortcut handling, say. Invisible to [`bound`], and a *false
+    //!   negative*: it cannot fail the direction that says every bound key is
+    //!   on the page, and it surfaces from the other direction the moment
+    //!   somebody marks that row built. **This one key wider than it was**:
+    //!   the ten keys of [`super::KEY_BINDINGS`] cannot drift from what
+    //!   `window_event` dispatches — the same array is both, so there is
+    //!   nothing left to scan for and nothing left to miss — but
+    //!   [`GRAMMAR_KEYS`] and [`NAME_ENTRY_KEY`] are declared facts about
+    //!   `super::grammar` and the two letter-taking flows rather than
+    //!   anything read out of them, so a key those stop binding, or start
+    //!   binding a different one, is invisible here exactly as it always was
+    //!   for [`DIGIT`].
+    //! - **This file does not press a key.** It reads the table, reads the
+    //!   grammar guard, and reads the page. That `Op::Solo` actually solos is
     //!   `karakuri-console/tests/vocabulary.rs`'s, which asks a running `Panel`;
-    //!   that the arm is reached at all is what
+    //!   that a binding is reached at all is what
     //!   `tests::a_drag_through_the_window_loops_own_routing_never_reaches_egui`
     //!   asks about the pointer, and nothing asks it for keys.
     //!   **`egui` sees every key before this `match` does**, and if it ever
-    //!   grew a focused widget that consumed one, the arm would still be here
-    //!   and this file would go on claiming an operator reaches it. That is the
-    //!   sufficient half, and it is not checked here either — one boundary
-    //!   further out than the two files above stop at.
+    //!   grew a focused widget that consumed one, the binding would still be
+    //!   here and this file would go on claiming an operator reaches it. That
+    //!   is the sufficient half, and it is not checked here either — one
+    //!   boundary further out than the two files above stop at.
     //! - **Which rows a key lands on is written down rather than derived**, in
     //!   [`ROWS`]. It has to be: `Op::Fold` folds a bay or a pane depending on
     //!   what the pointer is over, and only the page separates those two rows.
@@ -29235,50 +29451,17 @@ mod key_column {
     /// `input::PROBES`.
     pub(super) const TESTS: &str = "#[cfg(test)]";
 
-    /// The two arm shapes the window loop's `match` is written in.
-    const CHARACTER: &str = r#"Key::Character(""#;
-    const NAMED: &str = "Key::Named(NamedKey::";
-
-    /// How the page spells a named key. Nothing in `NamedKey::Escape` says
-    /// `esc`, and the page is written for a person rather than for `winit`;
-    /// `karakuri-cli` keeps the same two-column table for the same reason.
+    /// **The digit, declared rather than scanned.**
     ///
-    /// **Three of the four are only live while a name is being typed**, and
-    /// they are spelled all the same: this table is what a key is *called*,
-    /// and when it is bound is [`super::KEYS`]' business.
-    const NAMED_KEYS: &[(&str, &str)] = &[
-        ("Escape", "esc"),
-        // **`enter` and not `return`**, since 2026-09-10. It was `return`
-        // while the key was live only inside the arrangement pill's name;
-        // ADR-0259 spells the act of the grammar `enter`, the page's badges
-        // say `enter`, and one key with two spellings is a badge nobody can
-        // resolve. `winit` calls it `Enter` too.
-        ("Enter", "enter"),
-        ("Backspace", "backspace"),
-        ("Space", "space"),
-        ("ArrowUp", "up"),
-        ("ArrowDown", "down"),
-        ("ArrowLeft", "left"),
-        ("ArrowRight", "right"),
-        // **`shift-Tab` is not a second entry here**, and that is `winit`
-        // rather than a decision: a shifted `Tab` arrives as
-        // `NamedKey::Tab` with the modifier on a different event, so the
-        // `match` binds one key and [`super::App::shift`] is what tells the
-        // two presses apart. The legend says both in one line for the same
-        // reason.
-        ("Tab", "tab"),
-    ];
-
-    /// **The one key of the grammar this file's text cannot see.**
-    ///
-    /// [`bound`] answers *which keys does this program bind* by reading
-    /// `Key::Character("…")` and `Key::Named(NamedKey::…)` out of this file,
-    /// and `super::grammar` binds the digits with a guard rather than with ten
-    /// literals — deliberately, because ten literals would say the digits are
-    /// bound and say nothing about what they reach. So it is contributed by
-    /// `karakuri_console::focus::BUILT` instead, which is the half that *can*
-    /// say: a digit reaches a different row in every bay, and the dispatch
-    /// table is what knows which (ADR-0259, ADR-0333).
+    /// [`bound`] answers *which keys does this program bind* out of
+    /// [`super::KEY_BINDINGS`] and [`GRAMMAR_KEYS`] now, and the digit is
+    /// the one key of the grammar neither carries: `super::grammar` binds it
+    /// with a guard rather than a literal, deliberately, because ten
+    /// literals would say the digits are bound and say nothing about what
+    /// they reach — a digit reaches a different row in every bay, and the
+    /// dispatch table is what knows which (ADR-0259, ADR-0333). So this one
+    /// entry is still conditioned on `karakuri_console::focus::BUILT` rather
+    /// than asserted outright, in [`bound`] itself.
     const DIGIT: &str = "digit";
 
     /// **How the page spells each key of the grammar**, and what a badge
@@ -29684,58 +29867,59 @@ mod key_column {
         })
     }
 
-    /// **Every key the window loop's `match` binds**, read out of this file.
+    /// **The grammar guard's own keys, beside the digit.**
     ///
-    /// Two cuts, `panel_column.rs`'s: a line whose first non-space characters
-    /// are `//` is dropped whole, and what is left is truncated at its first
-    /// `//`. The read stops at [`TESTS`].
+    /// `super::grammar` matches all six as literals — `Key::Named(NamedKey::…)`
+    /// arms `bound` used to scan for — but they stay declared here rather
+    /// than scanned for the same reason [`DIGIT`] always was one line down:
+    /// [`super::KEY_BINDINGS`] is checked against
+    /// `docs/manual/operations.html` directly by
+    /// [`every_binding_the_table_names_a_title_for_reaches_a_route_marked_built`]
+    /// below, and a scan of this file's text is not what answers *what does
+    /// the window loop bind* for any key any more, table-driven or guard.
+    const GRAMMAR_KEYS: &[&str] = &["up", "down", "left", "right", "space", "enter"];
+
+    /// **`backspace`, which is neither in [`super::KEY_BINDINGS`] nor in
+    /// `super::grammar`.** It is a literal in the two letter-taking flows —
+    /// the arrangement pill's name and the inspector's — that return before
+    /// `window_event`'s own `match` on `key.logical_key` is ever reached, so
+    /// it belongs to neither table. Both flows bind it unconditionally, so
+    /// unlike [`DIGIT`] it is declared outright in [`bound`] rather than
+    /// asked of anything at runtime.
+    const NAME_ENTRY_KEY: &str = "backspace";
+
+    /// **Every key the window loop binds, both the table and the grammar
+    /// guard beside it — declared rather than scanned.**
+    ///
+    /// [`super::KEY_BINDINGS`] answers the ten literal keys directly: this
+    /// is now a lookup over data `window_event` itself dispatches through,
+    /// not a second copy of it. The other eight — `super::grammar`'s four
+    /// named keys, the four arrows, and the digit — are not in that table
+    /// (`super::grammar`'s own doc comment says why: it is a guard rather
+    /// than arms, for the same reason the digits were always a special
+    /// case here), so they are declared in [`GRAMMAR_KEYS`] and [`DIGIT`]
+    /// rather than read out of this file's source. And `backspace` — see
+    /// [`NAME_ENTRY_KEY`] — is neither the table's nor the grammar's, and is
+    /// declared for its own reason beside them. None of the four is data
+    /// this function could observe wrongly — every one names permanent
+    /// code, not a configuration — so declaring them is not a weaker check
+    /// than scanning for them was; it is the same facts, asserted instead
+    /// of parsed.
     fn bound() -> BTreeSet<String> {
-        let path = workspace().join(SRC);
-        let text = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{} holds the keys and is unreadable: {e}", path.display()));
-        let mut found = BTreeSet::new();
-        for line in text.lines() {
-            let line = line.trim();
-            if line == TESTS {
-                break;
-            }
-            if line.starts_with("//") {
-                continue;
-            }
-            let code = match line.find("//") {
-                Some(at) => &line[..at],
-                None => line,
-            };
-            for after in code.split(CHARACTER).skip(1) {
-                let Some(shut) = after.find('"') else {
-                    continue;
-                };
-                found.insert(after[..shut].to_owned());
-            }
-            for after in code.split(NAMED).skip(1) {
-                let end = after
-                    .find(|c: char| !c.is_alphanumeric() && c != '_')
-                    .unwrap_or(after.len());
-                let name = &after[..end];
-                let spelled = NAMED_KEYS
-                    .iter()
-                    .find(|(winit, _)| *winit == name)
-                    .map(|(_, page)| *page)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "this file binds `NamedKey::{name}` and `NAMED_KEYS` has no spelling \
-                             for it — {PAGE} names a key in the words a person would say, and \
-                             nothing in `winit`'s name is those words"
-                        )
-                    });
-                found.insert(spelled.to_owned());
-            }
-        }
-        // **And the one key the text cannot see**, contributed by the console's
-        // dispatch table rather than by this file's arms — see [`DIGIT`].
-        // `super::grammar` binds the digits with a guard, so a scan of
-        // `Key::Character("…")` finds nothing for them and would report a
-        // program that does not bind the digits at all.
+        let mut found: BTreeSet<String> = super::KEY_BINDINGS
+            .iter()
+            .map(|binding| binding.legend.to_owned())
+            .collect();
+        found.extend(GRAMMAR_KEYS.iter().map(|key| (*key).to_owned()));
+        found.insert(NAME_ENTRY_KEY.to_owned());
+        // **The one key of the grammar that names a different row in every
+        // bay**, contributed by the console's dispatch table rather than
+        // declared unconditionally like the rest of [`GRAMMAR_KEYS`] — see
+        // [`DIGIT`]. `super::grammar` binds it with a guard rather than a
+        // literal, and *which* rows it reaches depends on
+        // `karakuri_console::focus::BUILT` rather than on anything this
+        // file says, so this is the one entry that still asks the console
+        // rather than stating a fact `main.rs` alone could get wrong.
         if !karakuri_console::focus::BUILT.is_empty() {
             found.insert(DIGIT.to_owned());
         }
@@ -29892,6 +30076,72 @@ mod key_column {
              is a legend naming a key an operator presses to no effect"
         );
     }
+
+    /// **[`super::KEY_BINDINGS`] checked directly against the page**, which
+    /// is what a table buys that a text scan never could: a key that names
+    /// a row can be held against that row, rather than merely counted.
+    /// [`ROWS`] checks the same page for the same ten keys already, by
+    /// hand, in [`every_key_the_instrument_binds_reaches_a_route_marked_built`]
+    /// below — this is the table checking itself, off `KeyBinding::title`
+    /// rather than off a second, hand-written list, and it is what makes
+    /// `title` a fact this file relies on rather than a field nothing reads.
+    #[test]
+    fn every_binding_the_table_names_a_title_for_reaches_a_route_marked_built() {
+        let badges = key_badges();
+        for binding in super::KEY_BINDINGS {
+            let Some(title) = binding.title else {
+                continue;
+            };
+            let found = badges
+                .iter()
+                .find(|(page_title, _, _)| page_title == title)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{}` names `{title}` and {PAGE} has no row with that heading — the \
+                         page is the specification, so add the row there first",
+                        binding.legend
+                    )
+                });
+            assert_eq!(
+                found.1,
+                "has",
+                "`{}`{} performs `{title}` at the panel, which {PAGE} marks `{}` in the key \
+                 column — an operation an operator reaches from the keyboard and a page that \
+                 says the instrument does not",
+                binding.legend,
+                said(binding.bay),
+                found.1
+            );
+            let (keys, named) = parsed(&found.2).unwrap_or_else(|| {
+                panic!(
+                    "{PAGE} marks `{title}` built in the key column and its badge `{}` names a \
+                     bay this file has no name for",
+                    found.2
+                )
+            });
+            assert_eq!(
+                named,
+                binding.bay,
+                "`{}`{} performs `{title}` and {PAGE}'s badge for it reads `{}`{} — a press \
+                 goes to the bay that has focus, so a badge naming the wrong bay tells an \
+                 operator to address the key somewhere the press does nothing",
+                binding.legend,
+                said(binding.bay),
+                found.2,
+                said(named)
+            );
+            assert!(
+                keys.iter().any(|k| k == binding.legend),
+                "`{}`{} performs `{title}` and {PAGE} marks that row built in the key column \
+                 naming `{}` — a badge that says an operator reaches it by pressing something \
+                 else",
+                binding.legend,
+                said(binding.bay),
+                found.2
+            );
+        }
+    }
+
     /// **This file's code, down to the first test, as one line with its
     /// comments cut** — [`bound`]'s two cuts, and then the newlines go too.
     ///
@@ -29923,30 +30173,6 @@ mod key_column {
             kept.push(' ');
         }
         kept
-    }
-
-    /// **One arm of the window loop's `match`**, from the pattern `head` names
-    /// to wherever the next arm begins.
-    ///
-    /// The end is the next [`CHARACTER`] or [`NAMED`], which is the same two
-    /// shapes [`bound`] counts arms by — and it is `Key::Character("` with the
-    /// quote rather than without, so the `let Key::Character(name) = …` inside
-    /// two of these arms is not mistaken for the arm after them.
-    ///
-    /// **`pub(super)` for [`super::focus_keys`]**, which cuts two more arms out
-    /// of the same flattened text and would otherwise write this again.
-    pub(super) fn arm(code: &str, head: &str) -> String {
-        let at = code.find(head).unwrap_or_else(|| {
-            panic!("{SRC} has no arm beginning `{head}` — the `match` has been rewritten")
-        });
-        let rest = &code[at + head.len()..];
-        let end = match (rest.find(CHARACTER), rest.find(NAMED)) {
-            (Some(a), Some(b)) => a.min(b),
-            (Some(a), None) => a,
-            (None, Some(b)) => b,
-            (None, None) => rest.len(),
-        };
-        rest[..end].to_owned()
     }
 
     /// **The grammar's mix answers act on the deck the address is on, and read
@@ -30428,17 +30654,23 @@ mod focus_keys {
     //!
     //! [`super::key_column`]'s machinery, one question along: this file read as
     //! text, cut at the first `#[cfg(test)]`, comments dropped and the lines
-    //! joined — [`code`] — and [`arm`], which cuts one arm of the window loop's
-    //! `match` out of it. Two call sites for each, and one answer to *what does
-    //! this file say before its tests begin*.
+    //! joined — [`code`]. **Not the arm-cutting `key_column` used to export**,
+    //! which went with it: `Tab` and `esc` moved out of the window loop's own
+    //! `match` into [`super::key_tab`] and [`super::key_escape`], two free
+    //! functions the old shape — cut at the next `Key::Character("…")` or
+    //! `Key::Named(NamedKey::…)` — cannot bound any more, since nothing marks
+    //! where a function that is not a `match` arm ends. [`one`] cuts each at
+    //! the next function's own name instead, the same way
+    //! `key_column::the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
+    //! already cut `holding` from `masked`.
     //!
     //! # What it cannot see, and which way each one fails
     //!
-    //! - **A press.** That the arm is reached, that `egui` did not swallow the
-    //!   key, and that the ring moves on a running panel are three claims this
-    //!   makes none of; the first is `event_response`'s, the second is the
-    //!   invariant that test holds, and the third is `mod gpu`'s and is not
-    //!   asked. A *false negative*, and it is the boundary
+    //! - **A press.** That the function is reached, that `egui` did not
+    //!   swallow the key, and that the ring moves on a running panel are
+    //!   three claims this makes none of; the first is `event_response`'s,
+    //!   the second is the invariant that test holds, and the third is `mod
+    //!   gpu`'s and is not asked. A *false negative*, and it is the boundary
     //!   [`super::key_column`]'s own documentation stops at.
     //! - **A quit reached by another route** — `std::process::exit`, a panic in
     //!   an event handler, a drop that takes the loop with it. The count below
@@ -30448,65 +30680,39 @@ mod focus_keys {
     //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
     //!   is what fails the day one is written.
 
-    use super::key_column::{arm, code, SRC};
+    use super::key_column::{code, SRC};
 
     /// The one way out of the run, spelled once so the count below can name it.
     const EXIT: &str = "event_loop.exit()";
 
-    /// The two arms this module is about, as the `match` writes their patterns.
-    const TAB: &str = "Key::Named(NamedKey::Tab) => {";
-    const ESC: &str = "Key::Named(NamedKey::Escape) => {";
+    /// **The two functions this module is about**, as [`super::KEY_BINDINGS`]
+    /// declares them — free functions since 2026-09-10, not `match` arms.
+    const TAB: &str = "fn key_tab(ctx: &mut KeyCtx, gfx: &mut Gfx) {";
+    const ESC: &str = "fn key_escape(ctx: &mut KeyCtx, gfx: &mut Gfx) {";
 
-    /// **The arm that follows `esc`, and the reason [`one`] exists.**
-    ///
-    /// The four keys of the grammar are dispatched from a single guarded arm
-    /// that names no `Key::Character("…")` and no `Key::Named(NamedKey::…)` of
-    /// its own — the digits are a guard and the named keys are matched inside
-    /// `super::grammar` — so [`arm`](super::key_column::arm), which cuts at
-    /// those two shapes, runs straight through it and hands back the `esc` arm
-    /// with the whole grammar arm stuck to the end of it.
-    ///
-    /// Cutting at this instead is exact rather than a guess: the head is one
-    /// statement, and a rewrite that moved or renamed it fails the floor in
-    /// [`tab_moves_the_focus_and_esc_goes_up_a_level`] rather than silently
-    /// asserting against a body that is two arms.
-    const GRAMMAR: &str = "named if grammar(&named).is_some() => {";
+    /// **Where each of [`TAB`] and [`ESC`] ends**: the next function's own
+    /// name, in the order `super::KEY_BINDINGS` declares them —
+    /// `key_tab`, then `key_escape`, then `key_fold_enclosing`. Two
+    /// standalone functions have no `arm`-shaped marker between them any
+    /// more, so this cuts at a name instead, exactly as
+    /// `key_column::the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
+    /// already does for `holding` and `masked`.
+    const AFTER_TAB: &str = "fn key_escape(";
+    const AFTER_ESC: &str = "fn key_fold_enclosing(";
 
-    /// One arm of the window loop's own `match`, ending where the grammar arm
-    /// begins.
-    fn one(code: &str, head: &str) -> String {
-        let body = arm(keys(code), head);
-        match body.find(GRAMMAR) {
-            Some(at) => body[..at].to_owned(),
-            None => body,
-        }
-    }
-
-    /// **The window loop's own `match`, and not the two above it.**
-    ///
-    /// The key handler runs three `match`es in a row: one while the arrangement
-    /// pill is asking for a name, one while the Inspector's keep is, and then
-    /// the panel's. **All three have an `Escape` arm** — a field is one of
-    /// ADR-0259's seven kinds and `esc` abandons the name — and
-    /// [`arm`](super::key_column::arm) finds the *first* of whatever it is
-    /// asked for, so a scan over the whole file would have read the
-    /// arrangement pill's arm and said the panel's `esc` was missing. It did,
-    /// on the first run of this test.
-    ///
-    /// Cutting at [`TAB`] is what fixes it and is checkable rather than a bet:
-    /// only the third `match` binds `Tab`, and [`arm`](super::key_column::arm)
-    /// panics if the head it is given is not there — so a rewrite that moved
-    /// the arm out of that `match` fails here rather than silently reading
-    /// another one.
-    fn keys(code: &str) -> &str {
-        let at = code.find(TAB).unwrap_or_else(|| {
+    /// One function's body, from `head` to the next function named `next`.
+    fn one(code: &str, head: &str, next: &str) -> String {
+        let at = code.find(head).unwrap_or_else(|| {
             panic!(
-                "{SRC} has no arm beginning `{TAB}` — the window loop's `match` no longer binds \
-                 the key that moves focus between bays, and the two arms below are being read \
-                 out of whichever `match` came first"
+                "{SRC} has no function beginning `{head}` — `Tab` or `esc` moved again, or back \
+                 into the window loop's own `match`"
             )
         });
-        &code[at..]
+        let rest = &code[at..];
+        match rest.split_once(next) {
+            Some((body, _)) => body.to_owned(),
+            None => rest.to_owned(),
+        }
     }
 
     /// **The run ends at the window's close and nowhere else.**
@@ -30539,73 +30745,78 @@ mod focus_keys {
     /// **`Tab` moves focus and `esc` goes up a level**, and each reaches the
     /// console rather than deciding anything itself.
     ///
-    /// Three claims per arm, and the third is the one that fails loudest: the
-    /// arm asks `karakuri-console` for the move — the ring is derived from the
-    /// arrangement there and a walk written here would be a second answer
-    /// (ADR-0156) — it asks for the frame through `Change::Pointed`, which is
-    /// *a key moved a pointer*, and it does not reach the event loop.
+    /// Three claims per function, and the third is the one that fails
+    /// loudest: it asks `karakuri-console` for the move — the ring is
+    /// derived from the arrangement there and a walk written here would be a
+    /// second answer (ADR-0156) — it asks for the frame through
+    /// `Change::Pointed`, which is *a key moved a pointer*, and it does not
+    /// reach the event loop.
     #[test]
     fn tab_moves_the_focus_and_esc_goes_up_a_level() {
         let code = code();
-        let arms = [
+        let functions = [
             (
                 TAB,
-                "self.readout.view.tab(",
+                AFTER_TAB,
+                "ctx.readout.view.tab(",
                 "`Tab`",
                 "the tab ring is `karakuri_console::focus::ring`'s, derived from the \
                  arrangement's own tree",
             ),
             (
                 ESC,
-                "self.readout.view.focus_up(",
+                AFTER_ESC,
+                "ctx.readout.view.focus_up(",
                 "`esc`",
                 "going up a level is the console's address and not this file's",
             ),
         ];
-        for (head, call, what, why) in arms {
-            let body = one(&code, head);
+        for (head, next, call, what, why) in functions {
+            let body = one(&code, head, next);
             assert!(
                 !body.is_empty(),
-                "{what}'s arm came back empty, so everything below it is asserting nothing"
+                "{what}'s function came back empty, so everything below it is asserting nothing"
             );
             assert!(
                 body.len() < 1500,
-                "{what}'s arm came back {} characters long, which is not one arm — the shape \
-                 `arm` cuts at has changed",
+                "{what}'s function came back {} characters long, which is not one function — the \
+                 shape [`one`] cuts at has changed",
                 body.len()
             );
             assert!(
                 body.contains(call),
-                "{what}'s arm does not call `{call}` — {why}: {body}"
+                "{what}'s function does not call `{call}` — {why}: {body}"
             );
             assert!(
                 body.contains("Change::Pointed(moved)"),
-                "{what}'s arm does not ask for its frame through `Change::Pointed`, which is the \
-                 answer for *a key moved a pointer* — focus is a pointer this console owns, so \
-                 nothing in the arrangement moved and no `Outcome` says so: {body}"
+                "{what}'s function does not ask for its frame through `Change::Pointed`, which is \
+                 the answer for *a key moved a pointer* — focus is a pointer this console owns, \
+                 so nothing in the arrangement moved and no `Outcome` says so: {body}"
             );
             assert!(
                 !body.contains("event_loop"),
-                "{what}'s arm reaches the event loop. Neither of these two keys ends the run — \
-                 the window's own close does, and it is the one place it is reached from: {body}"
+                "{what}'s function reaches the event loop. Neither of these two keys ends the \
+                 run — the window's own close does, and it is the one place it is reached from: \
+                 {body}"
             );
         }
 
         // **`shift-Tab` is the same key with the modifier read off this
-        // loop's own copy**, because `winit`'s `KeyEvent` carries none. A `Tab`
-        // arm that had stopped reading it would walk one way only, and the
-        // failure looks like a key that works — see `App::shift`.
-        let tab = one(&code, TAB);
+        // loop's own copy**, because `winit`'s `KeyEvent` carries none. A
+        // `key_tab` that had stopped reading it would walk one way only, and
+        // the failure looks like a key that works — see `App::shift`, read
+        // here off `KeyCtx::shift`.
+        let tab = one(&code, TAB, AFTER_TAB);
         assert!(
-            tab.contains("self.shift"),
-            "the `Tab` arm does not read `App::shift`, so `shift-Tab` walks the ring forward. \
+            tab.contains("ctx.shift"),
+            "`key_tab` does not read `KeyCtx::shift`, so `shift-Tab` walks the ring forward. \
              `winit`'s `KeyEvent` carries no modifier state, so the answer has to have been \
              listened for on `WindowEvent::ModifiersChanged`: {tab}"
         );
         assert!(
             code.contains("WindowEvent::ModifiersChanged(state) => {"),
             "{SRC} does not listen for `WindowEvent::ModifiersChanged`, so `App::shift` is never \
-             written and the arm above reads a `bool` that is `false` forever"
+             written and the function above reads a `bool` that is `false` forever"
         );
     }
 }
@@ -30781,9 +30992,12 @@ mod press_handler {
     //!
     //! The same trap has been sprung once already from the other side, where a
     //! test-only item placed *above* the window loop moved [`key_column`]'s
-    //! stop line past every key arm and left both of its checks passing over an
-    //! empty set. [`shipped`] and [`checked`] carry that account, and they sit
-    //! below `mod tests` for it.
+    //! stop line past every key arm and left both of its `bound`-built checks
+    //! passing over an empty set — back when `bound` read this file's text for
+    //! the window loop's literal keys, before they moved into
+    //! `super::KEY_BINDINGS`. [`shipped`] and [`checked`] carry that account,
+    //! and they sit below `mod tests` for it, and for [`code`]'s share of the
+    //! same risk today.
     //!
     //! # What it cannot see, and which way each one fails
     //!
@@ -31280,8 +31494,10 @@ mod press_handler {
     ///
     /// [`code`] does the reading and the flattening — including stopping at
     /// this file's first `#[cfg(test)]`, which is the whole point — and this
-    /// cuts one function out of it by [`key_column::arm`]'s technique: from
-    /// the head to the next `fn `, which is the next method of the same `impl`.
+    /// cuts one function out of it the same way `key_column`'s own
+    /// `the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
+    /// cuts `holding` from `masked`: from the head to the next `fn `, which is
+    /// the next method of the same `impl`.
     ///
     /// **The one thing added is `" ."` → `"."`.** `rustfmt` breaks a long
     /// method chain *before* the dot, so `row .shape(at)` is what the flattened
