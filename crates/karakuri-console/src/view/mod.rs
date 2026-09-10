@@ -37,12 +37,12 @@
 //! So the two rules are one rule. Nothing is drawn that claims something
 //! exists which does not; a cell with no slot behind it exists and says so.
 //! See [`DECKS`], [`preview_rects`] and [`View::previews`], and
-//! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+//! [ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 //! for the alternative that lost and for what would reopen it.
 //!
 //! # The Staging lane draws a row per node a build changed
 //!
-//! [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+//! [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 //! draws every part of the mock that has a value behind it and omits the
 //! rest. Applied to this bay it draws **four** of the six things a candidate
 //! row could carry — the deck, the node's address, what that node's procedure
@@ -59,7 +59,7 @@
 //! `HotSwap::fixed`, whose `Receiver`'s `Sender` is dropped at construction —
 //! so no `swap::Event` of any variant was emitted in any run of it, and a row
 //! would have been
-//! [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
+//! [ADR-0191](../../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
 //! parked chip. That was host wiring and it is now wired: `crates/karakuri`
 //! watches its own `.kir` pair per slot, and a save is a build, a swap and a
 //! verdict.
@@ -73,7 +73,7 @@
 //! hashes do. The caller takes it where both lists are in one hand and hands
 //! in one [`Candidate`] per changed node, with the build's one verdict on each
 //! of them
-//! ([ADR-0326](../../../docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)).
+//! ([ADR-0326](../../../../docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)).
 //! **A verdict with no changed node behind it draws one row on the slot with
 //! no address** — a build that did not happen has no node list to hold against
 //! the one before it, and a rebuild that restated the stack unchanged has an
@@ -127,15 +127,15 @@
 //!
 //! It is why [`Kind::Previews`] draws nothing: the row's region is not where
 //! the cells are, and past the crossover it is not even in the plan.
-//! [ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)
+//! [ADR-0182](../../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)
 //! is the arrangement and
-//! [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
+//! [ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
 //! is the bit.
 //!
 //! The transport and the outputs are **rows, not bays**: they carry no
 //! heading, because they have none in the mock — both carry `class="bay"`,
 //! which is the card styling, and neither carries a `.bay-head`
-//! ([ADR-0159](../../../docs/adr/0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md)).
+//! ([ADR-0159](../../../../docs/adr/0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md)).
 //!
 //! # The transport row is four readouts and nine controls
 //!
@@ -152,7 +152,7 @@
 //! of them are [`transport`]'s own — the tempo figure
 //! ([`TransportRow::tempo`]) and the `rec` pill ([`TransportRow::record`]),
 //! which landed together and are why the tempo is not counted above: the
-//! number **is** the track a press names a value on ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+//! number **is** the track a press names a value on ([ADR-0291](../../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
 //! The other seven are laid out from that row and derived beside it: the
 //! audio-in pill ([`audio_in`]), the tracker group's tap, offset and octave
 //! ([`tracker_group`]), the arrangement pill ([`arrangement`]), and the tone
@@ -175,7 +175,7 @@
 //! resets it. So `arr · night ▾` is a control over something that exists,
 //! which is the only test this module's rule has ever applied — see
 //! [`arrangement`], [`Arrangement`] and
-//! [ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md).
+//! [ADR-0221](../../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md).
 //! It is the mock's own `map · nanoKONTROL2 ▾` in shape and in position,
 //! because a named file with *save*, *load* and *start a new one* under one
 //! control is exactly the family, and the map pill is the same three over a
@@ -226,10 +226,10 @@
 //! and the source says which rather than leaving the next reader to discover
 //! it. The two fader knobs are played, and the blend mini, the tally chip and
 //! the mask mini each cycle
-//! ([ADR-0185](../../../docs/adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md),
-//! [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
-//! [ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md),
-//! [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)):
+//! ([ADR-0185](../../../../docs/adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md),
+//! [ADR-0187](../../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
+//! [ADR-0195](../../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md),
+//! [ADR-0203](../../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)):
 //! each emits an [`Operation`] and applies nothing, because the value belongs
 //! to the engine rather than to the arrangement. The meter and the number are
 //! drawn from what the deck says and a press on either reaches nothing — and
@@ -245,8 +245,8 @@
 //! is what a slot is doing and `Deck::requested_residency` is what it was asked
 //! to do, and while they disagree the chip's word rolls part of the way toward
 //! the request and falls back, once a second, and never lands — see
-//! [`Strip::pending`], [`roll_at`] and [`tally_into`], and
-//! [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
+//! [`Strip::pending`], [`roll_at`] and [`mixer::tally_into`], and
+//! [P-0087](../../../../docs/principles/0087-name-the-property-never-the-shape.md)
 //! for what that has to say. **A press on it cycles from the residency that
 //! was *requested*** ([`Mixer::tally`]), which is what makes a parked chip's
 //! press the withdrawal of its own prime request with no case in the code for
@@ -292,6 +292,21 @@ use crate::budget::{Declared, PANEL_PASS};
 use crate::focus::{self, Focus};
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
+
+mod mixer;
+
+/// **The Mixer bay's own module**, split out under
+/// [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md)'s
+/// rule that a move carries its reasoning with it: every symbol below is
+/// [`mixer`]'s, re-exported here so that nothing outside this crate that
+/// already writes `view::mixer` or `view::TransitionRow` has to learn a
+/// second path for it.
+pub use mixer::{
+    after, mixer, roll_at, roll_moves_in, transition, Fader, Go, Level, Mask, Meter, Mixer, Phase,
+    Reach, Strip, StripBox, Tally, TransitionRow, TransitionSettings, ROLL_PERIOD, ROLL_REACH,
+    ROLL_STALENESS, ROLL_TRAVEL,
+};
+pub(crate) use mixer::{next, next_shape, residency, wipe_kind};
 
 /// The whole of a texture, in `egui`'s texture coordinates. The picture fills
 /// its rectangle, and that is now one answer rather than two.
@@ -345,7 +360,7 @@ pub const DECKS: usize = 4;
 /// Public because a harness saying *which deck a fader moved* has to say it in
 /// the letters the cells are drawn with, and a second list written out there
 /// would be a copy that goes on saying `A B C D` the day this one does not —
-/// [ADR-0179](../../../docs/adr/0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md)
+/// [ADR-0179](../../../../docs/adr/0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md)
 /// on a word instead of on a number.
 pub const DECK_LETTERS: [&str; DECKS] = ["A", "B", "C", "D"];
 
@@ -427,7 +442,7 @@ pub enum Kind {
     /// from, and for the four things in the mock's row that are **not** drawn.
     Outputs,
     /// **The Mixer bay**, which is a bay in every other respect: the same card
-    /// and the same [`bay_head`], carrying [`MIXER_TITLE`], no pill and no
+    /// and the same [`bay_head`], carrying [`mixer::MIXER_TITLE`], no pill and no
     /// grip — the mock gives the mixer none of the three.
     ///
     /// A kind of its own for the reason [`Kind::Picture`] is one, and it is
@@ -802,7 +817,7 @@ pub struct Head {
 pub fn head_of(region: &Region) -> Option<Head> {
     let (title, pills): (_, &'static [&'static str]) = match region.kind {
         Kind::Bay { title, pills, .. } => (title, pills),
-        Kind::Mixer => (MIXER_TITLE, &[]),
+        Kind::Mixer => (mixer::MIXER_TITLE, &[]),
         Kind::Master => (MASTER_TITLE, &[]),
         Kind::Library => (LIBRARY_TITLE, &[]),
         Kind::Staging => (STAGING_TITLE, &[]),
@@ -1062,12 +1077,12 @@ fn bank_capsules(ctx: &egui::Context, rect: Rect, head: &Head, open: Open) -> Ve
 ///
 /// # It was two controls and it is one, because a pane stopped needing a shape
 ///
-/// [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
+/// [ADR-0295](../../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
 /// gave *Fold a pane away* a second derivation here — `pane_edge`, a band
 /// `GRAB` deep on the pane's outer edge with nothing drawn in it — and it was
 /// never registered, because that band lay over the outer three pixels of
 /// every row of the Library bay's list.
-/// [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
+/// [ADR-0300](../../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
 /// replaced it with a **drag**: a pane's boundary pulled out past the pane's
 /// own minimum closes it, and the divider it leaves behind at the window's
 /// edge is what pulls it back. There is no band while the pane is open,
@@ -1136,7 +1151,7 @@ impl FoldGrip {
 /// height, so the reading a press takes is the reading the mark already
 /// carries. **A *reading* which is a control does not get a second shape
 /// invented for it**
-/// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)),
+/// ([ADR-0291](../../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)),
 /// so nothing new is drawn here: [`bay_head`] paints the same six dots it
 /// painted before this function existed.
 ///
@@ -1147,7 +1162,7 @@ impl FoldGrip {
 /// rather than to this function: the mark would stop saying which side of a
 /// divider the number belongs to, which is the whole of what the lede says it
 /// is for.
-/// [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
+/// [ADR-0295](../../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
 /// is where that is taken.
 ///
 /// # Where the rectangle is, and the 0.75 of a pixel it shares with `solo`
@@ -1223,7 +1238,7 @@ pub fn bay_grip(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip
 /// [`Outputs::op`] and [`ProgramHead::op`] both answer *what does a press ask
 /// for* with a named [`Op`], and every other control on this panel answers with
 /// an [`Operation`]. **This one answers with neither**, and
-/// [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
+/// [ADR-0236](../../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
 /// is why: the opening is **configuration of the map** — the layer every
 /// surface reaches the vocabulary through — and not a member of the vocabulary
 /// the map addresses. The rule it draws is narrower than *map configuration is
@@ -1493,7 +1508,7 @@ pub struct Picture {
 /// taken off the bay would be two answers to *where does the picture go*, and
 /// they would differ by two columns and a divider. **One derivation, and this
 /// is one of its readers**: [`program_bay`] arranges the whole body once and
-/// this is its picture. See [ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md).
+/// this is its picture. See [ADR-0182](../../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md).
 ///
 /// **The `None` rule moved with it**, and that is the one line of this that is
 /// not the same sentence it was. *A folded region keeps its rectangle and
@@ -1533,7 +1548,7 @@ fn positive(rect: Rect) -> bool {
 ///
 /// [`picture_rect`] fits the canvas into what the bay's body leaves it and
 /// [`preview_cells`] fits a cell into its track, and
-/// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+/// [ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 /// states the second in words the first now takes unchanged: *"as large as the
 /// track's width and the row's height both allow, centred"*. Two copies of it
 /// is two chances for a picture and the thumbnails under it to disagree about
@@ -1594,7 +1609,7 @@ fn fitted(inside: Rect, aspect: (u32, u32)) -> Rect {
 /// canvas on [`View`] and writing it per frame"*, and there was no canvas on
 /// [`View`] to read. There is one now ([`View::canvas`]), so that reason is
 /// spent; what holds the number is
-/// [ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)'s
+/// [ADR-0182](../../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)'s
 /// own decision instead — a cell is the mock's shape and never the canvas's,
 /// asserted by `a_cell_is_the_mocks_shape_and_never_the_canvass` — and making
 /// it the canvas's is still a pass of its own, with the second fit above to
@@ -1769,7 +1784,7 @@ fn above_caption(slot: Rect) -> Rect {
 /// would put texels over the letter.
 ///
 /// The image's width and not the track's: the image is centred in its track
-/// ([ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)),
+/// ([ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)),
 /// and a caption starting at the track's left edge would sit off under the
 /// ground beside the cell it names.
 ///
@@ -1781,7 +1796,7 @@ fn above_caption(slot: Rect) -> Rect {
 /// one and a rectangle that quietly included the caption would put texels over
 /// the letter. Renaming the field is a ripple through six test files and the
 /// program's frame path, so the clash is written down here instead
-/// ([`docs/contributing.md`](../../../docs/contributing.md) §4
+/// ([`docs/contributing.md`](../../../../docs/contributing.md) §4
 /// is the rule it is in tension with, and this is the report rather than the
 /// fix).
 pub fn caption_of(image: Rect) -> Rect {
@@ -1885,7 +1900,7 @@ pub struct Body {
 ///
 /// # Why there is a second arrangement at all
 ///
-/// [ADR-0181](../../../docs/adr/0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md)
+/// [ADR-0181](../../../../docs/adr/0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md)
 /// gave the picture the canvas's shape, and the leftover became the console's
 /// ground. On a wide bay that leftover is **ground down each side**: at a
 /// 1920-wide window the body is 1396 x 333 and the picture is 466 x 262, so
@@ -1899,7 +1914,7 @@ pub struct Body {
 /// [`Placement::Below`]**, which is the mock's. Both are computed and their
 /// pictures compared; nothing is stored, nothing is remembered between frames,
 /// and the same rectangle always gives the same answer — so
-/// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
+/// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md)
 /// is untouched, and so is the property it buys: a window dragged wide and
 /// back again comes back to exactly the arrangement it left.
 ///
@@ -1972,7 +1987,7 @@ pub struct Body {
 ///
 /// **With fewer than four decks running nothing fills and nothing shifts.**
 /// The mock's head reads *previews 3 of 4* and
-/// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+/// [ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 /// is the answer: a cell is drawn whether or not a deck is behind it, because
 /// *an empty cell is what off looks like, not a stand-in for a full one*. So
 /// the question *does the left column fill first, or do they alternate* has a
@@ -2172,7 +2187,7 @@ impl ProgramBay {
     /// deck with no slot* is already a strip that is not there. **The row is
     /// [`DECKS`] cells whatever the deck holds** — a cell that vanished would
     /// move the other three, and the letter is the only thing naming a deck
-    /// ([ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md))
+    /// ([ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md))
     /// — so the fourth cell of a three-slot deck is a rectangle whose letter
     /// names no deck, and a release on it has nothing to load into. It
     /// answers `None`, which is the same refusal `3` gets from the keyboard
@@ -2201,7 +2216,7 @@ impl ProgramBay {
     ///
     /// This used to answer `Operation::SetPreview` — the cell's deck, or the
     /// mix where the press was on the cell the output was already showing.
-    /// [ADR-0240](../../../docs/adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md)
+    /// [ADR-0240](../../../../docs/adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md)
     /// retired that operation: the Program Picture always presents the master
     /// mix and the four cells always audition their own decks, drawn from
     /// `karakuri_engine::deck::Deck::slot_view` every frame, so there is
@@ -2216,7 +2231,7 @@ impl ProgramBay {
     /// weakening.** [`ProgramBay::dropped`] is where it is, and a press and a
     /// release are two moments: nothing is in hand at the press, so there is
     /// still nothing for it to ask for — the carry is what puts the second
-    /// operand there ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
+    /// operand there ([ADR-0273](../../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
     ///
     /// Whether `p` is on any of the cells -- the union of the four, for
     /// [`crate::input`]'s rule 4.
@@ -2244,7 +2259,7 @@ impl ProgramBay {
 /// bay's rectangle does not depend on the bit this decision writes.** The bay
 /// is `Fixed(378)` over a flexible `program-view`, so what it can use is
 /// unbounded whether or not the row is set aside
-/// ([ADR-0174](../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)),
+/// ([ADR-0174](../../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)),
 /// and the placement is therefore a fixed point after one write rather than
 /// something that could chase itself around the solve. [`rearrange`] is where
 /// that argument is finished.
@@ -2257,7 +2272,7 @@ impl ProgramBay {
 /// the Program bay would vanish from the panel — and the manual promises the
 /// opposite: the deck previews *"are auditions of their own, so they stay when
 /// it goes"*.
-/// [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
+/// [ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
 /// says outright that this rule is the caller's, *"and a crate that does not
 /// know what a picture is may not hold it"*. So it is here, and it is
 /// structural rather than a check: with the picture folded there is nothing to
@@ -2577,7 +2592,7 @@ pub fn rearrange(panel: &mut Panel, canvas: (u32, u32)) -> bool {
 /// A `Deck` here would put the engine in this crate's dependencies; an
 /// `Instant` here would put a clock in it, and then the row would be reading
 /// wall time in a repository whose first principle is that nothing does
-/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+/// ([P-0092](../../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
 ///
 /// **It carries what cannot be derived and nothing that can.** The beat within
 /// the bar and the bar number are arithmetic on [`Transport::beats`] and are
@@ -2735,7 +2750,7 @@ pub struct Transport {
 /// open nothing is being recorded and the pill says so.
 ///
 /// **A two-valued enum rather than a `bool`**, which is
-/// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md):
+/// [P-0087](../../../../docs/principles/0087-name-the-property-never-the-shape.md):
 /// `Some(true)` at a call site says nothing, and this is read at four of them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rec {
@@ -2767,7 +2782,7 @@ impl Transport {
     ///
     /// **A position and not an index**, which is the whole of what the grid
     /// draws now
-    /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)):
+    /// ([ADR-0212](../../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)):
     /// the light is somewhere on the grid at every instant rather than on one
     /// dot at a time, so what the row reads is the fractional beat the
     /// oscillator already accumulates rather than a truncation of it. The
@@ -2924,7 +2939,7 @@ impl Transport {
 /// Most of the mock's items carry a `data-tip` and so do most of the drawn
 /// ones — the beat grid's is what the travelling light means, and it landed
 /// with the light
-/// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). A tooltip needs `egui` to own a widget, this console paints, and
+/// ([ADR-0212](../../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). A tooltip needs `egui` to own a widget, this console paints, and
 /// giving one readout a widget is a decision about who owns the pointer — see
 /// [`outputs`], where the same sentence is written about a control.
 ///
@@ -3083,7 +3098,7 @@ pub struct TransportRow {
 /// would turn a press the operator did not mean into a 15% move of the grid,
 /// which is the loudest thing this row can do; ignoring it leaves the tempo
 /// where it was, and a tempo that did not move is a press the operator can see
-/// did not land ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+/// did not land ([ADR-0291](../../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
 ///
 /// # It is here and nowhere else
 ///
@@ -3213,7 +3228,7 @@ impl TransportRow {
     /// on the refused half of the octave does, rather than being swallowed by
     /// a control that then does nothing, which is the one outcome an operator
     /// cannot tell from a panel that has stopped
-    /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    /// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     ///
     /// **The number's own box is the target and nothing is grown**, unlike
     /// [`OffsetTrack::grip`]: `.bpm` is 20px type at `line-height: 1.5`, so
@@ -3234,7 +3249,7 @@ impl TransportRow {
     /// *"A press names a value outright rather than stepping, so the figure is
     /// the track and the number under your finger is the one you get."* It is
     /// [`OffsetTrack`]'s sentence one control to the left
-    /// ([ADR-0277](../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)),
+    /// ([ADR-0277](../../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)),
     /// and it arrives here without that record's derivation: **this row has no
     /// key**, so there is no press to make a pixel out of, and what decides the
     /// figure's scale is the figure's own width and [`TEMPO_BAND`].
@@ -3328,7 +3343,7 @@ const BEAT_MICROS: u64 = 60 * 1_000_000 * 1_000 / MOCK_BPM_MILLI;
 /// **How many steps one beat of travel is drawn in**: the pixels in one
 /// [`BEAT_PITCH`], so the light moves by at most one of them between updates.
 ///
-/// [`ROLL_STEPS`]'s shape and a different answer, because the two motions are
+/// [`mixer::ROLL_STEPS`]'s shape and a different answer, because the two motions are
 /// different sizes: the roll travels a few pixels of a word's pitch and twelve
 /// steps is smooth over it, where the light crosses a whole dot and a gap
 /// every beat.
@@ -3336,26 +3351,26 @@ const BEAT_STEPS: u64 = BEAT_PITCH as u64;
 
 /// **How stale the beat grid may get**, which is what the transport row
 /// declares under
-/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
+/// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 /// and what the harness turns into a deadline.
 ///
 /// [`BEAT_MICROS`] in [`BEAT_STEPS`] steps — **24.67 ms, about forty a
 /// second**. One beat of travel is one [`BEAT_PITCH`], so this is the light
 /// moving by one pixel and no more, which is the coarsest step that reads as a
 /// movement rather than as a sequence of positions
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 ///
 /// **Stated at the mock's tempo, and it is the one number here that the music
 /// moves.** A beat is 468.75 ms at 128.0 BPM and 375 ms at 160, so the same
 /// declaration is a pixel and a quarter a step up there. The alternative —
 /// derive it per frame from [`Transport::bpm`], which the row is handed — is
-/// [ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
+/// [ADR-0212](../../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
 /// and it lost on what it does to the arithmetic rather than on the drawing: a
 /// staleness that falls with the tempo makes `Σ (cost / staleness)` a function
 /// of how fast the music is, so the two schedulability conditions could only
 /// be asserted against a fastest tempo nobody has written down — and inventing
 /// one inside the test that noticed it was missing is exactly what
-/// [ADR-0210](../../../docs/adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)
+/// [ADR-0210](../../../../docs/adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)
 /// refused for the panel's share of the budget.
 ///
 /// **Finer than [`ROLL_STALENESS`]'s 33.33 ms and coarser than a frame**, and
@@ -3850,7 +3865,7 @@ const AUDIO_LABEL: &str = "audio-in";
 /// preview cell's `C · no slot` one bay down.
 ///
 /// **It is not the same statement as silence**, which is the whole of
-/// [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md):
+/// [P-0084](../../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md):
 /// a quiet room measures `0.0` at full confidence and this pill would name the
 /// input it measured it through. `none` is *no provider* — every name answers
 /// what it answered before audio existed — and the two must not read alike on
@@ -4469,7 +4484,7 @@ const OFFSET_PRESSES: f32 =
 /// **The track, in pixels: one pixel a press** — [`EXPOSURE_TRACK_W`]'s whole
 /// argument, one control along and on a value that is a difference rather than
 /// a ratio
-/// ([ADR-0277](../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)).
+/// ([ADR-0277](../../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)).
 ///
 /// A pointer on this track can ask for any of the eighty positions along it
 /// and `o` and `p` can ask for any of the eighty values between the ends, so
@@ -5067,8 +5082,8 @@ impl LearnPill {
     /// It is a `bool` and not an [`Operation`] because **a learn is not an
     /// operation** — it is a setting of the map layer every surface reaches
     /// the vocabulary through, which is `Vocabulary::Setting`'s own shape
-    /// ([ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md),
-    /// and [ADR-0336](../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)
+    /// ([ADR-0236](../../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md),
+    /// and [ADR-0336](../../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)
     /// for the argument against the other reading). The four `mcp` pills are
     /// the same kind of control and carry no operation either.
     pub fn next(&self) -> bool {
@@ -5207,7 +5222,7 @@ const ARRANGEMENT_LABEL: &str = "arr";
 /// The default arrangement *has* no name: it reaches
 /// [`crate::layout`] rather than a file, so it is the one arrangement nobody
 /// could have saved and nothing filed can shadow it
-/// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
+/// ([ADR-0221](../../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
 /// §2). Writing `default` here would be this console inventing one — and a
 /// worse invention than most, because an operator *may* save an arrangement
 /// called `default` and it shadows nothing, so the pill would read the same
@@ -5319,8 +5334,8 @@ pub enum Menu {
     /// **Nothing in it is checked.** A name that is not one path component is
     /// refused where the record is applied, in one sentence, by whoever writes
     /// the file — the surface owns the affordance and never the authority
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md),
-    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md),
+    /// [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     /// A pill that quietly dropped the characters it did not like would be a
     /// rule an operator could only find by experiment.
     Naming(String),
@@ -5451,7 +5466,7 @@ pub enum Item {
 /// Every arm is either a move of this control's own state or one named
 /// operation, and never a change to the arrangement made here: the pill asks,
 /// and whoever applies the record decides
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 /// **Nothing is refused in this list.** A name nothing is filed under and a
 /// file that disagrees with itself are both refused where the bytes are, in
 /// one sentence each, and this control cannot see either.
@@ -5467,7 +5482,7 @@ pub enum Ask {
     Name,
     /// **The reset**, which reaches code and not a file, and is the same
     /// [`Op`] the `r` key performs — one operation, two surfaces
-    /// ([ADR-0208](../../../docs/adr/0208-resetting-is-the-default-case-of-restoring-an-arrangement.md)).
+    /// ([ADR-0208](../../../../docs/adr/0208-resetting-is-the-default-case-of-restoring-an-arrangement.md)).
     Panel(Op),
     /// **One operation of the vocabulary, named**: a save under a name, or a
     /// restore of one. Both reach a file and only whoever holds the store can
@@ -6109,7 +6124,7 @@ const EXPOSURE_LABEL: &str = "exp";
 /// and it is what [`next_tonemap`] is checked against.
 ///
 /// The order is the engine's own declaration order, which is the order
-/// [ADR-0037](../../../docs/adr/0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md)
+/// [ADR-0037](../../../../docs/adr/0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md)
 /// compared them in: `Clamp` first, because it is *"not a tone mapper — the
 /// control that shows what the other three are fixing"* and is where a
 /// `Present` that nobody has written to starts. A cycle should start where the
@@ -6159,7 +6174,7 @@ const EXPOSURE_PRESSES: f32 = EXPOSURE_STOPS * 4.0;
 /// other cannot** — and one pixel is the coarsest step that still reads as a
 /// movement rather than as a sequence of positions, which is
 /// [`BEAT_STALENESS`]' own rule about the beat's travel
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 ///
 /// A width picked for looks would have been a number with nothing behind it,
 /// which is what the mock's `width: 48px` says here as well.
@@ -6180,14 +6195,14 @@ pub const EXPOSURE_TRACK_W: f32 = EXPOSURE_PRESSES;
 /// names. That is the vocabulary's own line — `Operation::SetExposure` asks
 /// for the level and nothing else, and whoever writes the record fills the
 /// other two thirds in from the look that is running
-/// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+/// ([ADR-0192](../../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
 ///
 /// **And `exposure` here is the tone mapper's, never `Deck::set_out`.** The
 /// two are levels that multiply in different places — the master out where the
 /// mix writes the composited frame, this where the present pass reads it — and
 /// with nothing in the master chain they are indistinguishable in every frame
 /// this program can draw
-/// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
+/// ([ADR-0224](../../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
 /// The Master bay's row is the other one and nothing can move it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Look {
@@ -6211,7 +6226,7 @@ pub struct Look {
 /// # Two controls and one type, because they are one group in the row
 ///
 /// They are two operations and two presses
-/// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)),
+/// ([ADR-0192](../../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)),
 /// and they are laid out together because the second's place is measured from
 /// the first's — which is what a flex row is. Splitting them into two
 /// functions would mean measuring the capsule twice, once to draw it and once
@@ -6284,7 +6299,7 @@ impl LookRow {
     /// [`Operation::SetTonemap`] naming the **destination**, never a step,
     /// because there is no step in the vocabulary to name. The affordance is
     /// [`Mixer::blend`]'s exactly
-    /// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
+    /// ([ADR-0187](../../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
     /// and so is the division it rests on: the cycle is [`next_tonemap`] here
     /// and nothing at all in `karakuri-operation`, which is P-0090's
     /// division: a toggle is an affordance, built over operations by whoever
@@ -6299,7 +6314,7 @@ impl LookRow {
     /// ADR-0187 could not have a popup: the blend chip is in a 53-wide strip,
     /// and a card had nowhere to be and no rule to be modal under. Both of
     /// those changed
-    /// ([ADR-0225](../../../docs/adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)),
+    /// ([ADR-0225](../../../../docs/adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)),
     /// so the alternative is genuinely available here and it is still refused.
     /// A menu is **a gesture in hand**: it takes every pointer event on the
     /// console until it is shut, and a boundary cannot be dragged while it is
@@ -6339,7 +6354,7 @@ impl LookRow {
     ///
     /// # It says one thing per press, so it needs no coalescing
     ///
-    /// [ADR-0207](../../../docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md)
+    /// [ADR-0207](../../../../docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md)
     /// coalesces a swept MIDI fader to one operation a frame, and names the
     /// console's own fader as the other precedent — which emits only when the
     /// value changed, because it holds the value it last drew. Neither applies
@@ -6348,7 +6363,7 @@ impl LookRow {
     ///
     /// # And it can never be pending, which is why nothing marks a destination
     ///
-    /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)
+    /// [ADR-0206](../../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)
     /// gives a fader a mark for where a scheduled move is going.
     /// `karakuri_engine::deck::Control` is **per slot** — a gain, an opacity
     /// and a mask front — so there is no transition that can be scheduled on
@@ -6438,8 +6453,8 @@ pub fn unit_of(exposure: f32) -> f32 {
 /// of the left half, and the row then reads in the order a frame does, since
 /// the tone map is the one transfer the pipeline ends in, applied immediately
 /// before the single encode at the output
-/// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md),
-/// [ADR-0037](../../../docs/adr/0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md)).
+/// ([P-0064](../../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md),
+/// [ADR-0037](../../../../docs/adr/0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md)).
 ///
 /// **Nothing already drawn moves**, which was a consequence rather than the
 /// reason and is worth reading with its date on it: this said [`arrangement`]
@@ -6611,7 +6626,7 @@ fn tone_text(tonemap: Tonemap) -> String {
 /// **The level, as the Master bay's own row writes it** — `out 1.00`, two
 /// places. The two are the same kind of reading and are deliberately written
 /// the same way; where they stop being the same *number* is
-/// [ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md).
+/// [ADR-0224](../../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md).
 fn exposure_text(exposure: f32) -> String {
     format!("{exposure:.2}")
 }
@@ -6767,7 +6782,7 @@ impl SinkChip {
     ///
     /// The `on` it names is the state being *asked for* and not the state it
     /// is in: an operation names a destination and never a toggle
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// and the chip's toggle is this method.
     pub fn route(&self) -> Option<Operation> {
         self.present.then_some(Operation::RouteFrame {
@@ -6803,7 +6818,7 @@ impl SinkChip {
 /// [`Layout::visible`] on the picture's node and there is no second copy of it
 /// to drift — a fold from the keyboard lights the dot down, and the dot folds
 /// the same node the keyboard does.
-/// [ADR-0161](../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
+/// [ADR-0161](../../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
 /// stored `soloed` because it could not be derived; this can.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Outputs {
@@ -6888,7 +6903,7 @@ impl Outputs {
     /// the fold, so the operation names the output and the fold is what
     /// carries it out. Storing a second `on` beside the layout node is what
     /// this refuses —
-    /// [ADR-0161](../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
+    /// [ADR-0161](../../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
     /// stored `soloed` because it could not be derived; this can.
     pub fn route(&self) -> Operation {
         Operation::RouteFrame {
@@ -6901,7 +6916,7 @@ impl Outputs {
     ///
     /// The picture's state is a layout node and this row reads it; a projector
     /// window is `crates/karakuri`'s and there is nothing in this crate that
-    /// could know ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
+    /// could know ([ADR-0156](../../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
     /// — the console takes no device). So it arrives the way
     /// [`View::picture`] does: written by whoever owns the window, beside the
     /// frame that draws it.
@@ -7148,2283 +7163,6 @@ fn label_job(colour: Color32) -> LayoutJob {
     )
 }
 
-// ---------------------------------------------------------------------------
-// The Mixer bay
-// ---------------------------------------------------------------------------
-
-/// **The word at the head of the Mixer bay**, in the source's own
-/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
-/// that is done at paint time so the word a reader searches for is the word in
-/// the source.
-const MIXER_TITLE: &str = "Mixer";
-
-/// `.trim .lbl`: the `g`, which is the only word in this bay that is neither
-/// the deck's nor the engine's — it is the mock's.
-const TRIM_LABEL: &str = "g";
-
-/// **How long the panel has been animating**, and the one value everything
-/// that moves on it derives its own rate from.
-///
-/// # One phase, panel-wide, because two clocks drift and one does not
-///
-/// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
-/// decided exactly this: *"two controls moving out of step looks broken
-/// rather than informative, and N animations are N deadlines where one phase
-/// is one."* Two strips parked at once
-/// are two rolls, and they are the same roll because they are read off the
-/// same number.
-///
-/// # It is elapsed time and not a wrapped fraction
-///
-/// A phase already reduced to *where we are in the cycle* fixes the cycle, and
-/// then a second presentation at another rate cannot be derived from it at all
-/// — it would need a phase of its own, which is the drift this exists to
-/// prevent. So the value is the whole elapsed interval and each presentation
-/// takes its own [`Phase::cycle`] out of it. The console has one moving thing
-/// today; it is about to have the beat and the rest of the mixer, and *this is
-/// where the second one is either free or a second clock*.
-///
-/// # It is a `Duration` and not an `Instant`, which is the whole seam
-///
-/// `src/` reads no clock. [`Transport`]'s own doc says why in the general
-/// case — *"an `Instant` here would put a clock in it, and then the row would
-/// be reading wall time in a repository whose first principle is that nothing
-/// does"*
-/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md))
-/// — and every `Instant::now` in this crate is in `crates/karakuri/src/main.rs`, which
-/// owns the window. An `Instant` is a *reading*; a `Duration` is a number, and
-/// a number is what a caller writes and a test chooses. So this arrives per
-/// frame the way [`Transport`] and [`View::mixer`] arrive
-/// ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)),
-/// and a test asserting an animation writes the phase it wants rather than
-/// catching one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct Phase(Duration);
-
-impl Phase {
-    /// The origin, and what a console with no clock behind it is at — every
-    /// test in this crate, and the first frame of a window.
-    pub const ZERO: Phase = Phase(Duration::ZERO);
-
-    /// A phase from the interval that has elapsed since whoever owns the clock
-    /// started counting. Where the origin is does not matter and is not
-    /// asked: every presentation is periodic in it.
-    pub const fn since(elapsed: Duration) -> Phase {
-        Phase(elapsed)
-    }
-
-    /// **Where this phase sits inside one `period`**, as a fraction in
-    /// `[0, 1)`.
-    ///
-    /// The one operation a presentation performs on a phase, and the reason
-    /// the carrier is an interval: a rate is chosen here, by the thing that
-    /// moves, rather than baked into the value the harness writes.
-    ///
-    /// In `f64` and returned as `f32`. A session runs for hours and a phase is
-    /// seconds from an origin — at 3600 s an `f32` step is already coarser
-    /// than a millisecond, and the fractional part is what survives the
-    /// division, so the division is the one place the extra bits are worth
-    /// having.
-    pub fn cycle(self, period: Duration) -> f32 {
-        let period = period.as_secs_f64();
-        match period > 0.0 {
-            true => (self.0.as_secs_f64() / period).fract() as f32,
-            false => 0.0,
-        }
-    }
-}
-
-/// **How often anything pending on this panel sets off toward where it is
-/// going**, and the period every other number in the presentation is a
-/// fraction of.
-///
-/// One second, which is the roll's *"about once a second"* and is the rate
-/// that reads as *waiting* rather than as a fault. See
-/// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
-///
-/// **Two users, one rate, and that is the rule rather than a coincidence**:
-/// the tally's word rolling toward a residency, and a fader's fill reaching
-/// toward a scheduled value ([`Reach`],
-/// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
-/// ADR-0190 asks for one phase panel-wide because two controls moving out of
-/// step looks broken rather than informative, and a second period here is how
-/// that would happen with nothing failing to compile.
-pub const ROLL_PERIOD: Duration = Duration::from_millis(1000);
-
-/// **How much of the period the word is moving for**: 400 ms out and back,
-/// and 600 ms at rest.
-///
-/// The rest is not slack. It is what makes the roll read as *an attempt that
-/// keeps being made* rather than as a chip that wobbles — and it is what makes
-/// most of a parked strip's frames the strip's settled appearance, so the
-/// operator reads the effective residency off a still chip nearly two thirds
-/// of the time — the first of the three things P-0087 asks a pending control
-/// to say, which is where it *is*.
-pub const ROLL_TRAVEL: Duration = Duration::from_millis(400);
-
-/// **How far toward the destination the moving thing gets**: a fraction of the
-/// pitch between the two words on the tally, and a fraction of the gap between
-/// the two values on a fader.
-///
-/// Less than one, and that is the presentation: *"a slot machine that never
-/// quite lands"*. Landing is what arrival looks like, so a roll that reached
-/// 1.0 would state the opposite of the truth once a second — and a band that
-/// covered the gap to a fader's mark would say a scheduled fade had already
-/// run. At 0.4 the current word keeps most of its rows and the destination
-/// shows enough of its own to be read.
-pub const ROLL_REACH: f32 = 0.4;
-
-/// **How many steps the travel is drawn in**, which is the only reason
-/// [`ROLL_STALENESS`] is a number at all.
-const ROLL_STEPS: u32 = 12;
-
-/// **How stale the roll may get**, which is what a presentation declares under
-/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
-/// and what the harness turns into a deadline.
-///
-/// [`ROLL_TRAVEL`] in [`ROLL_STEPS`] steps — 33.33 ms, about thirty a second.
-/// It is **one number for the whole period** rather than a fine one while the
-/// word moves and a coarse one while it rests: two numbers is two live regions
-/// wearing one name, and choosing between them frame by frame is a scheduler's
-/// job (ADR-0164's second half) rather than a presentation's. A presentation
-/// declares what it needs; what the panel can afford is decided somewhere
-/// else.
-pub const ROLL_STALENESS: Duration =
-    Duration::from_micros(ROLL_TRAVEL.as_millis() as u64 * 1000 / ROLL_STEPS as u64);
-
-/// **How far a pending presentation has got toward its destination this
-/// frame**, as a fraction of the distance to it: `0.0` at rest, [`ROLL_REACH`]
-/// at the top of the travel, and never `1.0`.
-///
-/// One curve, two readers — the pitch between the tally's two words
-/// ([`tally_into`]) and the gap between a fader's value and its mark
-/// ([`reach`]).
-///
-/// A raised cosine over [`ROLL_TRAVEL`], flat for the rest of
-/// [`ROLL_PERIOD`]. It is that curve rather than a triangle for one reason
-/// worth having: it leaves and arrives at zero *with zero velocity*, so the
-/// word does not snap into the rest it holds for the next 600 ms, and the
-/// frame the travel begins on is not a jump.
-///
-/// **A pure function of the phase, which is the point of the phase being a
-/// value.** A test asserts it at a phase it chose; nothing samples a clock to
-/// find out what the panel is doing.
-pub fn roll_at(phase: Phase) -> f32 {
-    let travel = ROLL_TRAVEL.as_secs_f32() / ROLL_PERIOD.as_secs_f32();
-    let t = phase.cycle(ROLL_PERIOD);
-    match t < travel {
-        true => ROLL_REACH * 0.5 * (1.0 - (t / travel * std::f32::consts::TAU).cos()),
-        false => 0.0,
-    }
-}
-
-/// **How long until anything rolling on this panel next moves**, from
-/// `phase` — [`ROLL_STALENESS`] while the travel is under way, and the rest of
-/// the rest while it is not.
-///
-/// # What it is for
-///
-/// [`roll_at`] is exactly `0.0` for the 600 ms of every [`ROLL_PERIOD`] that
-/// is not [`ROLL_TRAVEL`], so a chip drawn at the start of the rest and a chip
-/// drawn 33 ms later are the same picture, pixel for pixel. Servicing
-/// [`ROLL_STALENESS`] through that stretch buys seventeen frames a second of
-/// the panel being redrawn exactly as it already is — 31 asked for in a period
-/// where 14 draw something, counted in `tests/moving.rs`. This is what the
-/// declaration answers instead, and
-/// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
-/// is the argument.
-///
-/// **It is not a second rate.** ADR-0190 rejected *a fine deadline while the
-/// word moves and a coarse one while it rests* on the grounds that two numbers
-/// is two live regions wearing one name; the rest here is not a second
-/// tolerance somebody chose but the same two constants read for when the curve
-/// leaves zero, so there is nothing that could drift from the rate and nothing
-/// to arbitrate between. [`ROLL_STALENESS`] is still the only staleness this
-/// presentation declares, and it is still what the arithmetic sums.
-///
-/// # It never answers finer than the rate it declared
-///
-/// A rest with less than one step left of it answers one step, which is
-/// [`crate::budget::Declared::moves_in`]'s invariant and costs at most the
-/// first [`ROLL_STALENESS`] of the travel — one step out of twelve, and inside
-/// the tolerance the presentation itself named. The alternative is a deadline
-/// tending to zero as the period wraps, which is the spin
-/// [`crate::repaint`] exists to refuse.
-///
-/// **A pure function of the phase**, for [`roll_at`]'s reason: a test chooses
-/// the phase it asserts at, and nothing here reads a clock.
-pub fn roll_moves_in(phase: Phase) -> Duration {
-    let travel = ROLL_TRAVEL.as_secs_f32() / ROLL_PERIOD.as_secs_f32();
-    let t = phase.cycle(ROLL_PERIOD);
-    match t < travel {
-        true => ROLL_STALENESS,
-        // `cycle` is `[0, 1)`, so this is positive and no longer than the
-        // whole period.
-        false => ROLL_PERIOD.mul_f32(1.0 - t).max(ROLL_STALENESS),
-    }
-}
-
-/// **Where a slot sits between compiled and composited**, which is the mock's
-/// `.tally` and `karakuri_engine`'s `Residency` — three states and no fourth.
-///
-/// The words are the mock's abbreviations and the variants are the engine's
-/// names, because each document owns one end: `live`, `prim` and `alloc` are
-/// what fits in a strip 53 wide, and `Live`, `Priming` and `Allocated` are
-/// what `Deck::residency` answers.
-///
-/// **The mock drew a fourth and it was not a residency.** Its `.strip.empty`
-/// read `empty` through a `.tally.off` rule, and a `Deck` has no such slot:
-/// every one of its `slot_count` slots holds a `HotSwap`. An empty strip is a
-/// *track on the page nothing fills*, and this bay draws nothing at all in one
-/// rather than a strip full of dashes — see [`mixer`].
-///
-/// **The page has since agreed**: `39f1e6b` took that strip out under
-/// ADR-0178, and `.tally.off` went with it as the one rule only that strip
-/// used. The argument is kept in the past tense rather than deleted, because
-/// it is still why there is no fourth variant here — the three below are the
-/// residencies a `Deck` has, and a fourth would have to be invented whether or
-/// not a mock is drawing one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tally {
-    /// `.tally.live` — stepped and composited. On air.
-    Live,
-    /// `.tally.priming` — stepped and warming its buffers, drawn into its own
-    /// cell, and asked for.
-    Priming,
-    /// `.tally.alloc` — stepped and drawn like a priming slot, and asked of
-    /// nothing. Off air, not at rest: every slot runs at the room's tempo so
-    /// that its cell is a preview rather than a still (ADR-0269).
-    Allocated,
-}
-
-impl Tally {
-    /// **Every residency there is**, so that anything which has to hold all
-    /// three cannot be given two.
-    ///
-    /// One customer today and it is [`mixer`], which measures the chip against
-    /// the widest word rather than the current one. A `match` cannot express
-    /// *the widest of them*, and a list written at the call site would be a
-    /// second list of the residencies — the exact drift a fourth variant would
-    /// walk straight past. Here it is one line under the enum, and a fourth
-    /// variant that is not added to it is a `[Tally; 3]` that no longer
-    /// compiles.
-    pub const ALL: [Tally; 3] = [Tally::Live, Tally::Priming, Tally::Allocated];
-
-    /// The mock's own word, lower-case here and upper-cased at paint time
-    /// because `.tally` is `text-transform: uppercase` — the rule
-    /// [`Kind::Bay`]'s title states.
-    pub fn word(self) -> &'static str {
-        match self {
-            Tally::Live => "live",
-            Tally::Priming => "prim",
-            Tally::Allocated => "alloc",
-        }
-    }
-}
-
-/// **What shape of the frame a layer reaches**: the second `.mini` in a strip,
-/// and `karakuri_engine`'s `MaskKind` — three kinds and no fourth.
-///
-/// # It is a mark rather than a word, and the mark is drawn rather than typed
-///
-/// The mock writes `&#9711;` and `&#9681;` — a circle, and a circle with one
-/// half filled — and it has to: a strip is 53 wide inside its padding, and
-/// `over` beside `linear` is 75 before either mini's border. So the mask says
-/// its state in a shape.
-///
-/// **Drawn rather than set as a glyph**, which is [`grip_dots`]'s argument one
-/// control along: whether `◯` and `◑` are in `egui`'s default face is a
-/// question with no good answer, and a circle is the same mark either way. It
-/// also settles the third one. The mock names `◯` in its own tooltip —
-/// *"Mask: none"* — and draws `◑` on the strip beside it without saying which
-/// kind that is, and it draws no third mark anywhere; a glyph for the third
-/// would be a character picked out of a font, where a **mark** is the shape
-/// the mask makes and can be argued from the mask.
-///
-/// # There is no `ALL` beside it, where [`Tally`] and `BlendMode` have one
-///
-/// Both of those constants exist for a **reader**: `Tally::ALL` is what
-/// [`mixer`] measures the tally capsule against, because a `match` cannot
-/// express *the widest of them*, and `BlendMode::ALL` is what a map file is
-/// offered. Nothing measures this chip against its three shapes — it holds a
-/// mark rather than a word and is [`size::MINI_SIZE`] wide whichever shape it
-/// is showing — and no map target names a shape, which is why
-/// `karakuri_operation::WipeKind` has no `ALL` either and says so at
-/// [`WipeKind::name`]. A list written here would be a second statement of the
-/// order with no reader, and the order is [`next_shape`]'s: a `match`, so a
-/// fourth shape does not compile until somebody says what follows it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mask {
-    /// No mask: the layer reaches the whole frame. The mock's `◯`.
-    None,
-    /// A straight edge across the frame — the mock's `◑`, which is what a hard
-    /// edge down the middle of a circle looks like.
-    Linear,
-    /// A circle. The same outline with a filled centre, which is the same
-    /// family as the mock's two and is the shape a radial mask makes.
-    Radial,
-}
-
-/// **What a slot's meter last read**, which is two of the four numbers
-/// `karakuri_engine::meter::Level` carries.
-///
-/// Plain numbers, for [`Transport`]'s reason: this crate takes no engine
-/// (ADR-0156), so whoever owns the deck reads a level and writes this.
-///
-/// # What is left out, and why each
-///
-/// - **`frames_behind`.** `Deck::level` reads back without ever waiting, so a
-///   reading is a few frames old and the engine says by how many. It is not
-///   carried, and not because it does not matter: the engine's own
-///   measurements are **1** frame behind under pacing, *"2 or 3"* on a vsync
-///   window, and *"tens: 13 to 101"* with nothing pacing the loop at all — and
-///   all three are normal. A staleness threshold picked in this crate would
-///   blank a healthy meter on one loop and pass a dead one on another, because
-///   the console does not know which loop it is on. What the meter draws is a
-///   fact about a frame that has already been drawn, exactly as
-///   [`Transport::frame_ms`] is, and it does not go stale by standing still
-///   the way a *rate* does — which is the whole of why `frame_ms` is a number
-///   and `fps` is an `Option`. So **handing over no reading at all is the
-///   caller's decision**, on the same terms `fps: None` is, and the caller is
-///   the one thing that knows its own loop.
-/// - **`bad_texels`.** It is the denominator the mean was taken over rather
-///   than a reading — *"`mean` and `peak` are computed over the texels this
-///   did not count"* — and the mock's 6px meter has nowhere to say it. A meter
-///   that drew it would be reporting on the measurement instead of on the
-///   image.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Level {
-    /// Mean luminance over the whole frame — *"the figure to match faders
-    /// on"*, and what the meter's column is as tall as.
-    pub mean: f32,
-    /// The brightest single texel. What the peak mark sits on.
-    pub peak: f32,
-}
-
-/// **What one mixer strip reads this frame**: what the deck is playing, where
-/// the slot sits, and the four numbers in front of it.
-///
-/// # The same seam as [`Transport`], and it is not crossed
-///
-/// Every field is a string, a number or a word, and none of them is a `Deck`.
-/// `src/` takes no device and no engine (ADR-0156), so whoever owns the deck
-/// reads `Deck::residency`, `gain`, `opacity`, `blend`, `mask` and `level` and
-/// writes one of these per slot per frame — exactly as whoever owns the device
-/// registers a texture and writes [`View::picture`].
-///
-/// **No repaint arm for the values arriving**, which is [`Transport`]'s
-/// reason and **not the picture's**: these move when the engine draws a
-/// frame, and the engine draws a frame on the frames this panel is drawn on —
-/// so a value that has arrived is a value already on screen, whether or not
-/// there is a picture two bays along asking for frames of its own. The one
-/// that has to be said out loud is [`Strip::level`], because it moves on
-/// every one of those frames and declares nothing: see
-/// [`View::mixer_declares`], where that is decided, and
-/// [ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md).
-///
-/// **A drag on one of the two faders is a different thing and does have an
-/// arm** — [`crate::repaint::Change::Emitted`]. That is not the value
-/// arriving; it is an operation leaving, on a gesture an operator is making,
-/// and it is on the list because [`crate::repaint::Change`] is one list of
-/// everything that can change what the console shows and a fader that reached
-/// no repaint would leave the strip drawn at the value before the drag.
-///
-/// # Five of these are controls and the rest are readouts, and the source
-/// says which
-///
-/// **The two faders are played.** A press on the trim's knob or the fader's
-/// knob takes it in hand ([`Mixer::grab`]), and dragging it emits
-/// [`Operation::SetGain`] or `SetOpacity` for the caller to turn into a
-/// record. Nothing here applies it, and nothing here keeps the value: the
-/// fields below are still written by whoever owns the deck, every frame, so a
-/// fader that has just been dragged shows the new number **because the deck
-/// changed**.
-///
-/// **The blend chip is the third, and it cycles.** A press on it emits
-/// [`Operation::SetBlendMode`] naming the mode after this one ([`Mixer::blend`]),
-/// and nothing here applies that either. It is one control emitting three
-/// operations, which is the affordance P-0090 leaves to whoever draws the
-/// control — see
-/// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md).
-///
-/// **The tally chip is the fourth, and it cycles too.** A press on it emits
-/// [`Operation::SetResidency`] naming the next of the three ([`Mixer::tally`])
-/// — counted from [`Strip::requested`] rather than from [`Strip::tally`],
-/// which is what makes a press on a parked chip the withdrawal of its own
-/// prime request without a case in the code for it
-/// ([ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)).
-///
-/// **The mask mini is the fifth, and it cycles too.** A press on it emits
-/// [`Operation::SetMaskShape`] naming the shape after this one ([`Mixer::mask`])
-/// — **and the angle this strip is already wearing**, which is
-/// [`Strip::mask_angle`]: the chip chooses a shape and the angle is not its
-/// business, so it hands back the one it was given rather than a default that
-/// would straighten a diagonal front
-/// ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
-///
-/// **Everything else in the bay is a readout.** The meter and the number are
-/// drawn from what the deck says and a press on either reaches nothing — and
-/// so does a press on a fader's *track*, off the knob, which would otherwise
-/// be a jump nobody asked for. `tests/mixer.rs` asserts both directions rather
-/// than leaving either to be inferred from the absence of a hit test.
-///
-/// **[`Strip::gain_to`] and [`Strip::opacity_to`] are readouts too**, and the
-/// order is the tally's: the roll was drawn a commit before the chip became a
-/// control, because a control that could not yet say it was pending would look
-/// dead for exactly as long as that commit. Nothing here schedules a move,
-/// nothing here cancels one, and no press on a mark reaches anything — a
-/// scheduled fade is armed from a key, a map or an MCP call, and what this
-/// strip owes it is that it is not invisible until it happens
-/// ([ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Strip {
-    /// **What the deck is playing**, in `.strip-name`.
-    ///
-    /// A `String`, and **the harness's word rather than the engine's**:
-    /// nothing reachable from a `Deck` carries a name for the material in a
-    /// slot. `Deck::slot` hands out a `HotSwap`, `HotSwap::set` hands out a
-    /// `Set`, and a `Set` names its *nodes* (`Set::node_names`) and its
-    /// *published controls* (`Published::name`) and has no name of its own —
-    /// which is right, because a Set is built from a list of `.kir` files and
-    /// only whoever passed that list knows what to call the result. So the
-    /// caller names its own material, and a name invented in `src/` would be a
-    /// label the console made up about somebody else's Set.
-    ///
-    /// Elided rather than wrapped where it does not fit, which is
-    /// `.strip-name`'s own `overflow: hidden; text-overflow: ellipsis;
-    /// white-space: nowrap`: a strip is 53 wide inside its padding and most
-    /// real names are wider. An empty string draws no name at all, which is a
-    /// harness with nothing to say rather than a strip with nothing in it.
-    pub name: String,
-    /// Where the slot sits — `Deck::residency`, which is the **effective**
-    /// residency and not `requested_residency`. The governor moves a slot down
-    /// without anybody asking it to, and a tally that did not follow it would
-    /// be showing what was asked for over a slot doing something else.
-    ///
-    /// **What the chip draws, and not what a press on it counts from.**
-    /// [`Mixer::tally`] steps from [`Strip::requested`]: the word says where
-    /// the deck *is*, and the cycle is about what was last asked for. The two
-    /// are the same value on every settled slot and they part exactly where it
-    /// matters — see [`Mixer::tally`] for the parked case, which is the whole
-    /// argument.
-    pub tally: Tally,
-    /// **What was asked for** — `Deck::requested_residency`, the other half of
-    /// the pair [`Strip::tally`] is one of, and **what a press on the chip
-    /// counts from** ([`Mixer::tally`]).
-    ///
-    /// # Why the strip carries both and derives nothing else
-    ///
-    /// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
-    /// asks a pending control to say three things — where it is, where it is
-    /// going, and that it has not arrived — and the first two *are* these two
-    /// values. The third is [`Strip::pending`], which is a comparison of them.
-    ///
-    /// **There is deliberately no `parked: bool` beside them.** A third field
-    /// would be the same fact stored twice, and the copy is the one that goes
-    /// stale: the harness could write a `tally` and a `requested` that
-    /// disagree and a `parked` that says they do not, and nothing in this
-    /// crate could tell. One derivation with several readers is this crate's
-    /// habit — [`StripBox::fader_at`] is the same shape — and it is P-0087's
-    /// *a pending state is derived every frame* read one level down, in the surface
-    /// rather than in the engine.
-    ///
-    /// **Two fields rather than one `Tally` grown into a pair.** `Tally` is
-    /// the mock's `.tally` and the engine's `Residency`, and both of those
-    /// name *one* place a slot can sit; a variant meaning "allocated, and
-    /// asked to prime" would be a fourth residency in a type whose own
-    /// documentation says there are three and no fourth. The relation between
-    /// two residencies is not a residency.
-    pub requested: Tally,
-    /// **The trim** — `Deck::gain`: linear, floored at zero, and deliberately
-    /// open above 1.0 because the mix is HDR.
-    ///
-    /// Its own field and not the fader's twin. *"`gain` is a trim and
-    /// `opacity` is the fader"*: opacity at zero silences under every blend
-    /// mode and gain at zero does not silence `over`, which
-    /// `karakuri-engine/src/mix.rs` states outright — so these are two
-    /// controls, and the bay draws them as two rather than as two identical
-    /// sliders. A `g` and a mini fader lying down against the tall one in the
-    /// middle of the strip.
-    pub gain: f32,
-    /// **Where a scheduled move is taking the trim**, or `None` for a trim
-    /// nothing is moving — `Deck::transitions_on(slot)`'s
-    /// `Control::Gain` entry, and its `Transition::to`.
-    ///
-    /// # It is the destination and nothing else about the move
-    ///
-    /// A `Transition` also carries the instant it starts, how long it lasts
-    /// and the curve it takes. None of the three is here, and the reason is
-    /// the same seam every other field on this type is on: **the console has
-    /// no beat count**, so a start in beats and a length in beats are two
-    /// numbers it could not turn into anything a strip draws. What it can draw
-    /// is where the control is going, which is the second of the three things
-    /// P-0087 asks for and the whole of what the fader is being asked to say.
-    ///
-    /// **Armed and running are the same state here, deliberately.** A
-    /// transition is in the deck's list from the moment it is scheduled until
-    /// the beat it finishes on, and `Deck::transitions_on` answers with it
-    /// throughout — so a fade quantised to the next bar and a fade halfway
-    /// through are both *a request that has not arrived*, which is exactly the
-    /// relation P-0087 is about. What separates them on the surface is that
-    /// the value under the knob is moving in the second case, and the mark
-    /// stands still in both.
-    ///
-    /// **One per control, because the engine allows one**: `Deck::schedule`
-    /// cancels whatever was moving that pair before pushing, so a harness that
-    /// finds two has read the wrong slot.
-    ///
-    /// # What it cannot say, and it is the trim's existing gap
-    ///
-    /// The track shows `[0, 1]` and the mix is HDR, so a move from 1.5 to 2.0
-    /// is two values the track draws in one place — see [`StripBox::trim_at`],
-    /// where that gap is already written down. [`Strip::gain_pending`] answers
-    /// `None` there rather than declaring a staleness for an animation that
-    /// would not move a pixel.
-    pub gain_to: Option<f32>,
-    /// **The fader** — `Deck::opacity`: a proportion in `[0, 1]`, and the one
-    /// control that silences a slot under every blend mode, which is what
-    /// makes it the way out of material that has gone NaN.
-    pub opacity: f32,
-    /// **Where a scheduled move is taking the fader**, or `None` for a fader
-    /// nothing is moving — `Deck::transitions_on(slot)`'s `Control::Opacity`
-    /// entry, on [`Strip::gain_to`]'s terms and for its reasons.
-    ///
-    /// # And the third control has nowhere to say it
-    ///
-    /// `Control` has three members and this strip carries two of them.
-    /// `Control::MaskPosition` — *how far a mask's front has travelled* — is
-    /// the one a wipe is made of, and **the strip has no control and no
-    /// readout for it at all**: the mask `.mini` names a *shape*, and the
-    /// position, the angle and the softness are an inspector row that does not
-    /// exist yet ([`Strip::mask`] says so, and [`Strip::mask_angle`] is the
-    /// same fact from the other side). A destination carried here for it would
-    /// be a number with nowhere to be drawn, and drawing it on the shape chip
-    /// would say a shape was changing when none is.
-    ///
-    /// So an armed wipe is invisible on this panel, it is an under-draw rather
-    /// than a decision that it does not matter, and it is
-    /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)'s
-    /// named consequence: what closes it is a mask-position control, and it
-    /// closes the same day that control lands.
-    pub opacity_to: Option<f32>,
-    /// **The blend in force**, as one of the vocabulary's three — and the word
-    /// drawn on the chip is [`BlendMode::name`].
-    ///
-    /// # Why this is not the engine's word
-    ///
-    /// It was a `&'static str` — `Blend::name`, handed straight through, on
-    /// the argument that the console has nothing to do with the blend but draw
-    /// the engine's word. **That stopped being true when the chip became a
-    /// control** ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)):
-    /// to say what the *next* mode is, [`Mixer::blend`] has to know which of
-    /// the three this one is, and a string it cannot exhaustively match is the
-    /// wrong carrier for that. A `&str` would make the chip's arithmetic a
-    /// comparison against three literals with a fourth case that has no
-    /// answer.
-    ///
-    /// **So the type is the vocabulary's, and the harness converts.**
-    /// `karakuri-console` already depends on `karakuri-operation`, and
-    /// `crates/karakuri/src/main.rs` turns `Deck::blend`'s `karakuri_engine::deck::Blend`
-    /// into one of these with a `match`. The failure that buys is worth
-    /// stating: a fourth engine blend mode with no operation variant stops
-    /// compiling **at the harness**, rather than drawing a word on a chip no
-    /// control can reach and no map can ask for. That is the vocabulary doing
-    /// its job — P-0090's price, paid rather than avoided: a vocabulary that
-    /// names a destination has to own the lists a destination is drawn from,
-    /// or it is back to toggles (ADR-0180).
-    ///
-    /// The mock's own tooltip lists four — *"add, over, screen, multiply"* —
-    /// and there are three. The disagreement was the mock's to settle and
-    /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)
-    /// settled it: `docs/manual/console.html` now lists the three that exist.
-    pub blend: BlendMode,
-    /// The mask in force — `Deck::mask(slot).kind()`. Its angle, position and
-    /// softness are not drawn: `.mini` is a chip that says *which shape*, and
-    /// three numbers about that shape are the inspector's row, not this one.
-    ///
-    /// **What a press on the chip counts from** ([`Mixer::mask`]), the way
-    /// [`Strip::requested`] is what the tally's press counts from.
-    pub mask: Mask,
-    /// **The angle the mask is already wearing** — `Deck::mask(slot).angle()`,
-    /// in radians. **Read to build an operation, and drawn nowhere.**
-    ///
-    /// # Why the strip carries a number no part of it paints
-    ///
-    /// [`Operation::SetMaskShape`] carries a shape **and an angle**, because
-    /// the vocabulary's row is one an operator can say the whole of and a
-    /// record is written whole
-    /// ([ADR-0201](../../../docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)).
-    /// The chip names the shape and nothing on this strip names the angle — so
-    /// a press has to carry a value the control does not control, and the only
-    /// honest one is **the value it already has**. Sending `0.0` would make
-    /// choosing a shape silently straighten a diagonal wipe: a press that
-    /// changed something nobody asked it to, which is the class of failure
-    /// [ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)
-    /// and ADR-0201 are both about, arriving one layer further out.
-    ///
-    /// **It is [`Strip::requested`]'s arrangement exactly**: a value the strip
-    /// carries because a press has to be computed from it, written by whoever
-    /// owns the deck like every other field here, and never a value this crate
-    /// keeps. See
-    /// [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md).
-    ///
-    /// **Not the position and not the softness**, which the record also
-    /// carries: neither is in the operation at all, and the half a shape
-    /// operation does not ask for is filled in from a reading of the mask that
-    /// is running, where the record is written — `karakuri_operation_record`'s
-    /// `Current`. The angle is here because the *operation* names it; those
-    /// two are not, because it does not.
-    pub mask_angle: f32,
-    /// **What the slot's meter last read**, or `None` for no reading at all.
-    ///
-    /// `Deck::level` is already `None` for *no meter, no measurement yet, a
-    /// slot that is neither Live nor being auditioned, and a slot whose
-    /// material was just replaced by a resize or a swap* — every case where a
-    /// held reading would be about a different image. So `None` here draws the
-    /// meter's well and nothing in it, which is the mock's own `alloc` strip:
-    /// a `.vmeter` with no `b` and no `u` inside it.
-    ///
-    /// **The one value on a strip that moves without a hand on anything, and
-    /// it declares nothing** — decided rather than missed, in
-    /// [`View::mixer_declares`].
-    pub level: Option<Level>,
-}
-
-impl Strip {
-    /// **Where this slot has been asked to go and has not got to**, or `None`
-    /// for a slot that is where it was asked to be.
-    ///
-    /// The one derivation the pending presentation reads, and it answers a
-    /// *word* rather than a `bool` because that is what the surface has to
-    /// draw: the second of P-0087's three is where the control is going, which
-    /// ADR-0188 states as *identifiable from the surface itself* — so the thing
-    /// worth deriving is the destination
-    /// and not the fact that there is one.
-    ///
-    /// # Why it is an inequality and not the engine's pair
-    ///
-    /// `Deck::is_parked` is exactly `requested == Residency::Priming &&
-    /// effective == Residency::Allocated`, and today this answers `Some` on
-    /// precisely those slots — `deck.rs`'s module doc closes the other cases
-    /// itself: *"the governor may hold a slot below what was asked for, and
-    /// may never put one above it"*, and *"effective Live and requested Live
-    /// are the same set of slots"*. So the two forms agree slot for slot, and
-    /// there is no frame on which they differ.
-    ///
-    /// They differ in what a **second** kind of disagreement would do to them.
-    /// Written as the engine's pair, a surface matching `Priming` over
-    /// `Allocated` draws a settled chip over any other outstanding request —
-    /// an under-draw, silent, and exactly the failure the rule exists to name.
-    /// Written as an inequality it draws the new one without being taught,
-    /// because the presentation was never about *parked*: it is about a
-    /// request that has not landed, which is
-    /// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
-    /// — the property rather than the one shape it currently takes.
-    ///
-    /// **`park` is still the word**, and it is the status line's: `karakuri-cli`
-    /// spells it out for an operator in prose, which is the same clause met by
-    /// a different means (ADR-0188).
-    pub fn pending(&self) -> Option<Tally> {
-        match self.requested == self.tally {
-            true => None,
-            false => Some(self.requested),
-        }
-    }
-
-    /// **Where the trim is going and has not got to**, or `None` for a trim
-    /// that is where it has been asked to be.
-    ///
-    /// [`Strip::pending`] one control along, and the same shape: the field is
-    /// the request, the derivation is the third clause, and nothing is stored
-    /// that says *a move is pending* — that fact is `self.gain_to` against
-    /// `self.gain`, read every frame off values the harness rewrote this
-    /// frame.
-    ///
-    /// # It compares what the track can show, and that is not the same as the
-    /// raw pair
-    ///
-    /// The trim draws `[0, 1]` and gain is open above unity, so a scheduled
-    /// move from 1.5 to 2.0 is two values with **one position** on this track
-    /// ([`StripBox::trim_at`]). Compared raw it is pending; compared through
-    /// [`unit`] it is not, and this compares through [`unit`].
-    ///
-    /// The reason is [`View::animating`] rather than the mark: a `Some` here
-    /// declares a staleness, and a staleness bought for an animation that
-    /// cannot move a pixel is the cost ADR-0193 refused to pay for a bay
-    /// nobody can see, arriving through the other door. **It is still an
-    /// under-draw and it is the trim's existing gap, not a new one** — the
-    /// same track that cannot show 1.0 against 3.0 cannot show a move between
-    /// them, and both close together, on the pass that lets a hand push the
-    /// control past the top.
-    ///
-    /// A destination that is not a number is zero, which is [`unit`]'s rule
-    /// and is where a NaN out of an engine stops being a `NaN`-wide band.
-    pub fn gain_pending(&self) -> Option<f32> {
-        self.gain_to
-            .filter(|to| unit(*to) != unit(self.gain))
-            .map(unit)
-    }
-
-    /// **Where the fader is going and has not got to**, on
-    /// [`Strip::gain_pending`]'s terms.
-    ///
-    /// Opacity is a proportion, so the clamp is the identity on every value a
-    /// deck can hold and the comparison is the plain one. It is written
-    /// through [`unit`] anyway, because a harness writing a destination the
-    /// engine never held is the case both of these are the last line of
-    /// defence for — and two derivations that agree except in the case nobody
-    /// tests are worse than one shape written twice.
-    pub fn opacity_pending(&self) -> Option<f32> {
-        self.opacity_to
-            .filter(|to| unit(*to) != unit(self.opacity))
-            .map(unit)
-    }
-}
-
-/// **A fader, laid out**: the track, the length of it the value fills, and the
-/// knob sitting on the value.
-///
-/// One type and one derivation for both of a strip's faders — see [`fader`].
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Fader {
-    /// The well: `.fader`'s 5px capsule lying down, or `.vfader`'s 17px one
-    /// standing up.
-    pub track: Rect,
-    /// Which way it runs. [`Axis::Row`] fills from the left and
-    /// [`Axis::Column`] fills from the **bottom**, because a fader stands up.
-    pub axis: Axis,
-    /// What the value fills, from the track's own zero.
-    pub fill: Rect,
-    /// The knob, centred on the fill's moving edge.
-    pub knob: Rect,
-    /// **How far the knob's centre moves between the two ends**: the track
-    /// less the inset the fill sits inside it by, along the axis.
-    ///
-    /// A field, and not a fill stored beside its track — the thing
-    /// [`StripBox`] refuses. The fill says where the value *is* and says
-    /// nothing about how far it could go; the zero end is recoverable from the
-    /// fill (a row's `fill.min.x`, a column's `fill.max.y`, neither of which
-    /// moves) and the length is not recoverable from anything here. It is what
-    /// turns a pointer back into a value — see [`Mixer::grab`] — so the
-    /// derivation that draws the fader and the one that grabs it are one.
-    pub travel: f32,
-}
-
-/// **A meter, laid out**: the well, the column the mean fills, and the peak's
-/// mark.
-///
-/// # It is not a [`Fader`], and the difference is not the handle alone
-///
-/// They share exactly one thing and it is [`filled`] — a value turned into a
-/// length up a track — which is why that is a function of its own with three
-/// call sites rather than a shared type. What they do not share is what each
-/// **is**: a fader's knob is a grab target and [`Mixer::grab`] is what makes
-/// it one, while a peak mark is a reading and never will be. A shared type
-/// would be a type half of whose fields are about a gesture the other half can
-/// never have — and [`Fader::travel`], which is the length a *hand* moves the
-/// value along, is the field that says so.
-///
-/// They disagree about the track as well. `.vfader b` sits
-/// [`size::VFADER_INSET`] inside its well and `.vmeter b` fills its own edge
-/// to edge; `.vfader`'s fill is a capsule and `.vmeter` is `overflow: hidden`
-/// around a square column; and a knob is meant to stand proud of its track
-/// where nothing in a meter may leave the well.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Meter {
-    /// `.vmeter`'s 6px capsule.
-    pub well: Rect,
-    /// [`Level::mean`], up from the bottom.
-    pub fill: Rect,
-    /// [`Level::peak`], a [`size::VMETER_PEAK_H`] bar across the well.
-    pub peak: Rect,
-}
-
-/// **A scheduled move on a fader, laid out**: the mark on the destination, and
-/// how far this frame's attempt to get there has reached.
-///
-/// The presentation
-/// [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
-/// is met with on a track, decided in
-/// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md):
-/// **the knob and the fill go on saying where the control is, a mark says
-/// where it is going, and the fill keeps setting off toward the mark and
-/// falling back**. Nothing about the value moves, which is a stricter first
-/// clause than the tally's roll manages — the word there is lifted off its
-/// centre line and this is not.
-///
-/// # Two rectangles and no phase
-///
-/// It is a [`Fader`]'s neighbour and it is measured the same way: a pure
-/// function of the two values and the displacement, with no clock and no
-/// `Phase` in it — [`roll_at`] is applied by whoever is painting, exactly as
-/// it is for the tally's word. A test asks for a reach at a displacement it
-/// chose.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Reach {
-    /// **The destination**, as a hairline across the track at the position the
-    /// knob would sit at if the move had landed.
-    ///
-    /// **As long as the knob is wide**, so it is the knob's own footprint
-    /// reduced to a line — and so it always has the same two pixels of strip
-    /// to be read against that the knob stands proud on
-    /// ([`size::VFADER_KNOB_OUT`]), whatever the fill is doing underneath. A
-    /// mark the width of the *track* would cross the fill's own lavender end
-    /// in its own colour on a move down from the top.
-    ///
-    /// It is painted **over** the knob rather than under it. Where the two
-    /// nearly coincide the knob would otherwise swallow it — 9 pixels of knob
-    /// on a 98-pixel travel is every move under about a tenth of the fader,
-    /// and a quarter of the trim — and a mark that disappears exactly when the
-    /// control is nearly there says *arrived* at the one moment it must not.
-    pub mark: Rect,
-    /// **What the reach has covered at this displacement**: from the value's
-    /// own edge toward [`Reach::mark`], and never as far as it — [`ROLL_REACH`]
-    /// of the way at the top of the travel, nothing at rest.
-    ///
-    /// Across the fill's own width rather than the track's, because it is the
-    /// fill reaching. Empty at rest, which is a rectangle with no area and
-    /// nothing painted.
-    pub band: Rect,
-}
-
-/// **One strip's furniture**: a rectangle for each of the six things stacked
-/// in it, and the two tracks a value rides.
-///
-/// The fills and the knobs are **not** fields, because each is a function of a
-/// value this already knows where to put — see [`StripBox::trim_at`],
-/// [`StripBox::fader_at`] and [`StripBox::meter_at`]. A fill stored beside its
-/// track is two statements about one number.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct StripBox {
-    /// `.strip` itself: the 9px well everything else is inside.
-    pub rect: Rect,
-    /// `.strip-name`, the full width of the strip's content box because the
-    /// CSS says `width: 100%`.
-    pub name: Rect,
-    /// `.tally`'s capsule, as wide as **the widest** of the three residency
-    /// words inside its padding — the same box whichever one it is showing,
-    /// so the chip does not resize when the deck moves and does not resize
-    /// under a word rolling through it. See [`mixer`], where it is measured.
-    ///
-    /// The word is centred in it ([`tally_into`]), and the capsule is centred
-    /// in the strip, so widening the box does not move the word: it grows
-    /// symmetrically around type that was already on the strip's centre line.
-    ///
-    /// **It is the chip a press acts on** and not only the box a word is
-    /// painted into — [`Mixer::tally`] hit-tests exactly this rectangle, the
-    /// way [`StripBox::blend`] is hit-tested. Being the widest word's width
-    /// rather than the shown word's is what the blend chip cannot say: this
-    /// target stands still while the deck moves under it and while a word
-    /// rolls through it.
-    pub tally: Rect,
-    /// The `g` in `.trim`.
-    pub trim_label: Rect,
-    /// `.trim`'s `.fader`: the horizontal track, [`size::FADER_H`] tall.
-    pub trim: Rect,
-    /// `.vfader`: the tall track, [`size::FADER_COL_H`] high.
-    pub fader: Rect,
-    /// `.vmeter`, beside it.
-    pub meter: Rect,
-    /// `.strip-num`: the opacity as a number.
-    pub num: Rect,
-    /// The blend `.mini`, which is **the chip a press acts on** and not only
-    /// the box a word is painted into — [`Mixer::blend`] hit-tests exactly
-    /// this rectangle. As wide as the word in it, inside `.mini`'s padding and
-    /// border.
-    pub blend: Rect,
-    /// The mask `.mini`, which is **the chip a press acts on** and not only
-    /// the box a mark is drawn into — [`Mixer::mask`] hit-tests exactly this
-    /// rectangle, the way [`StripBox::blend`] and [`StripBox::tally`] are.
-    /// It holds a mark rather than a word, so it is the same width whichever
-    /// shape it is showing: a target that stands still while the deck moves
-    /// under it, which the tally's capsule buys by being the widest word's and
-    /// the blend chip cannot say at all.
-    pub mask: Rect,
-}
-
-impl StripBox {
-    /// **The trim at a gain**, which is [`fader`] on the horizontal track.
-    ///
-    /// The gain is shown over `[0, 1]`, and that range is read off
-    /// `karakuri-midi`'s `GAIN_RANGE` rather than chosen here: *"`[0, 1]` for
-    /// gain even though the mix is HDR and values above 1.0 are ordinary …
-    /// a fader whose top is unity is what a fader means."* So a gain pushed
-    /// past unity fills the track and stops, and this bay cannot yet show the
-    /// difference between 1.0 and 3.0 — a real gap, and it belongs with the
-    /// pass that lets a hand push the control past the top.
-    pub fn trim_at(&self, gain: f32) -> Fader {
-        fader(
-            self.trim,
-            Axis::Row,
-            gain,
-            0.0,
-            egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
-        )
-    }
-
-    /// **The fader at an opacity**, which is [`fader`] on the vertical track.
-    pub fn fader_at(&self, opacity: f32) -> Fader {
-        fader(
-            self.fader,
-            Axis::Column,
-            opacity,
-            size::VFADER_INSET,
-            egui::vec2(size::VFADER_KNOB_W, size::VFADER_KNOB_H),
-        )
-    }
-
-    /// **The trim's scheduled move**, from the gain it is at to the one it was
-    /// asked for, `rolled` of the way — which is [`reach`] on the horizontal
-    /// track.
-    ///
-    /// Off [`StripBox::trim_at`] twice rather than off any arithmetic of its
-    /// own: the destination's mark is *where the knob would be*, so it is the
-    /// same derivation asked a second question, and a mark that drifted from
-    /// the knob it stands for would be a fader with two ideas of what a value
-    /// looks like.
-    pub fn trim_reach(&self, gain: f32, to: f32, rolled: f32) -> Reach {
-        reach(self.trim_at(gain), self.trim_at(to), rolled)
-    }
-
-    /// **The fader's scheduled move**, on [`StripBox::trim_reach`]'s terms and
-    /// off [`StripBox::fader_at`].
-    pub fn fader_reach(&self, opacity: f32, to: f32, rolled: f32) -> Reach {
-        reach(self.fader_at(opacity), self.fader_at(to), rolled)
-    }
-
-    /// **The meter at a reading.**
-    pub fn meter_at(&self, level: Level) -> Meter {
-        // **The peak mark stays inside the well.** `.vmeter u` is placed by
-        // its own `bottom`, so a 2px bar at a peak of 1.0 would sit from the
-        // top of the well to two pixels above it — and `.vmeter` is
-        // `overflow: hidden`, which clips it away exactly at the reading that
-        // matters most. Its travel is the well's height less its own, which is
-        // the clamp `Transport::beat` makes on the far end of a grid.
-        let travel = (self.meter.height() - size::VMETER_PEAK_H).max(0.0);
-        let top = self.meter.max.y - size::VMETER_PEAK_H - travel * unit(level.peak);
-        Meter {
-            well: self.meter,
-            fill: filled(self.meter, Axis::Column, level.mean),
-            peak: Rect::from_min_size(
-                Pos2::new(self.meter.min.x, top),
-                egui::vec2(self.meter.width(), size::VMETER_PEAK_H),
-            ),
-        }
-    }
-}
-
-/// **The mixer's strips, laid out**: the values, and where each one goes.
-///
-/// # It borrows the values rather than carrying a copy
-///
-/// [`TransportRow`] carries the [`Transport`] it was measured from, for
-/// [`Picture`]'s reason: whoever measured the type and whoever paints it are
-/// then one statement, so a row laid out for one value and painted with
-/// another cannot be written by accident. A [`Strip`] carries a name, so it is
-/// not `Copy` and a copy per frame would be a `String` allocated per strip per
-/// frame. The borrow says the same thing for nothing — these boxes were
-/// measured from *these* strips — and the compiler holds it.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Mixer<'a> {
-    /// **The values these rectangles were measured from**, in slot order.
-    pub strips: &'a [Strip],
-    /// Where each of them is. `None` past the last strip: a track on the page
-    /// no deck fills, which is drawn as nothing at all.
-    boxes: [Option<StripBox>; DECKS],
-}
-
-impl<'a> Mixer<'a> {
-    /// How many strips there are — the deck's slot count, as far as one page
-    /// of this bay reaches.
-    pub fn count(&self) -> usize {
-        self.boxes.iter().filter(|at| at.is_some()).count()
-    }
-
-    /// One strip's furniture. Panics on a strip this bay has not got, which is
-    /// a caller having invented a slot — the rule [`TransportRow::dot`] states
-    /// about a dot of a grid.
-    pub fn strip(&self, index: usize) -> StripBox {
-        let count = self.count();
-        self.boxes
-            .get(index)
-            .copied()
-            .flatten()
-            .unwrap_or_else(|| panic!("strip {index} of a mixer of {count}"))
-    }
-
-    /// **What a press at `p` takes hold of**, or `None` where there is nothing
-    /// under it that a hand can move.
-    ///
-    /// # It is the knob, and the track is deliberately not a target
-    ///
-    /// **A press on the track, off the knob, does nothing.** A fader at 0.3
-    /// whose top is clicked would jump to 1.0 — a change to the mix nobody
-    /// asked for, made on stage — and this bay's controls are played during a
-    /// performance. So the answer is `None` there, and it is a decision rather
-    /// than a hit test that stops at the knob by accident.
-    ///
-    /// It also decides who the *event* belongs to, since
-    /// [`crate::input::claim`]'s rule 3 asks this: **the panel claims what it
-    /// acts on**, so a press on a track goes to `egui`, which owns no widget
-    /// there and does nothing with it — which is the same nothing, arrived at
-    /// without the panel claiming a press it would throw away.
-    ///
-    /// # One derivation, asked twice
-    ///
-    /// [`crate::input::claim`] asks this and so does the caller that acts on
-    /// the press, exactly as [`Outputs::op`] is asked after [`Outputs::hit`]
-    /// (ADR-0176). Two copies of *where the knob is* is a control drawn where
-    /// it cannot be grabbed, with nothing on screen saying so.
-    ///
-    /// **The value is part of the geometry here**, which the Outputs chip does
-    /// not have to deal with: the knob sits on the fill's moving edge, so
-    /// where it is depends on what the deck said this frame. That is the same
-    /// [`Strip`] the bay was laid out from, so the knob a hand sees and the
-    /// knob it grabs are the same one.
-    pub fn grab(&self, p: karakuri_layout::Point) -> Option<Grab> {
-        let p = Pos2::new(p.x, p.y);
-        self.strips
-            .iter()
-            .zip(self.boxes)
-            .enumerate()
-            .find_map(|(index, (strip, at))| {
-                let at = at?;
-                // The manual's *deck* is the code's *slot*, and a deck holds
-                // `MAX_SLOTS` of them — `DECKS`, which is 4 — so the index is
-                // a `u8` with room to spare. See `Knob::operation`.
-                let deck = index as u8;
-                grabbed(at.trim_at(strip.gain), Knob::Trim { deck }, p)
-                    .or_else(|| grabbed(at.fader_at(strip.opacity), Knob::Fader { deck }, p))
-            })
-    }
-
-    /// **What a press at `p` asks the blend to become**, or `None` where
-    /// there is no blend chip under it.
-    ///
-    /// # The chip cycles, and the operation names where it arrived
-    ///
-    /// Click it and the deck's blend moves to the next of
-    /// [`BlendMode::ALL`], wrapping from the last back to the first. What
-    /// comes out is [`Operation::SetBlendMode`] naming the **destination** —
-    /// never a step, because there is no step in the vocabulary to name.
-    ///
-    /// That is the affordance P-0090 leaves to whoever draws the control
-    /// rather than an exception to it: a toggle is built over operations by
-    /// whoever draws them, and a mini that cycles the blend is one control
-    /// emitting three — the operator sees a toggle and the vocabulary never
-    /// does. The cycle is [`after`], which is four lines in this file and
-    /// nothing at all in `karakuri-operation`.
-    ///
-    /// **What a MIDI map is offered is the three values, not the cycle** —
-    /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
-    /// which is the decision this affordance forces and the reason it is
-    /// recorded at all.
-    ///
-    /// # One derivation, asked twice, and the whole chip is the target
-    ///
-    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that
-    /// acts on the press — the arrangement [`Outputs::op`] and [`Mixer::grab`]
-    /// both have, where the derivation that claims a press is asked again
-    /// rather than copied. [`StripBox::blend`] is the chip's own rectangle,
-    /// the one the word is painted into, so a chip a hand sees and a chip it
-    /// clicks are the same one.
-    ///
-    /// **The whole chip is the target and not the glyphs in it**, which is
-    /// [`Outputs::sink`]'s rule one bay along: a 15px word is not something a
-    /// hand finds, and `.mini`'s padding is what makes it one.
-    ///
-    /// # It names the strip's own deck
-    ///
-    /// The slot index, cast the way [`Mixer::grab`] casts it — the manual's
-    /// *deck* is the code's *slot* (ADR-0180), and a deck holds `MAX_SLOTS` of
-    /// them, so the index is a `u8` with room to spare.
-    pub fn blend(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        let p = Pos2::new(p.x, p.y);
-        self.strips
-            .iter()
-            .zip(self.boxes)
-            .enumerate()
-            .find_map(|(index, (strip, at))| {
-                at.filter(|at| at.blend.contains(p))
-                    .map(|_| Operation::SetBlendMode {
-                        deck: index as u8,
-                        blend: after(strip.blend),
-                    })
-            })
-    }
-
-    /// **What a press at `p` asks the residency to become**, or `None` where
-    /// there is no tally chip under it.
-    ///
-    /// # The chip cycles, and it cycles from what was *requested*
-    ///
-    /// Click it and the deck is asked for the next of [`Tally::ALL`] —
-    /// `live`, `prim`, `alloc`, wrapping — and what comes out is
-    /// [`Operation::SetResidency`] naming that **destination**. The
-    /// affordance is the blend chip's ([`Mixer::blend`], ADR-0187) and so is
-    /// the division it rests on: the cycle is [`next`] here and nothing at all
-    /// in `karakuri-operation`, which is P-0090's division: a toggle is an
-    /// affordance, built over operations by whoever draws the control.
-    ///
-    /// **The step is taken from [`Strip::requested`] and not from
-    /// [`Strip::tally`]**, and that is the decision rather than a detail. The
-    /// two disagree exactly while a request has not landed, and cycling from
-    /// the request is what makes that case come out right **with no case in
-    /// the code for it**: a parked slot's request is `Priming`, so the next is
-    /// `Allocated` — which *is* the withdrawal of the prime request, said by
-    /// the ordinary arithmetic. Cycling from the effective residency would
-    /// answer `Live` there, and a press meant to take a request back would put
-    /// the deck on air.
-    ///
-    /// That is what
-    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-    /// permits a surface: *"a press on a control whose transition is pending
-    /// may ask for the withdrawal"* — a control choosing which destination a
-    /// press names, arrived at out of one rule rather than a branch, and
-    /// **not** a lock. The chip refuses nothing; every request is handed over
-    /// and the engine decides.
-    ///
-    /// It is also what `karakuri-cli`'s `w` already does: `toggle_priming`
-    /// reads `Deck::requested_residency` to choose its direction, so a parked
-    /// slot's `w` withdraws rather than re-asking. Two surfaces reading
-    /// different halves of the pair would disagree about what a press means
-    /// on exactly the slots where it matters.
-    ///
-    /// # One derivation, asked twice, and the whole chip is the target
-    ///
-    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that
-    /// acts on the press — [`Outputs::op`], [`Mixer::grab`] and
-    /// [`Mixer::blend`] are the same arrangement. [`StripBox::tally`] is the
-    /// capsule the word is painted into, and it is **the widest of the three
-    /// words whatever it is showing** ([`mixer`]), so this target does not
-    /// move when the deck moves under it and does not move while a word is
-    /// rolling through it — which the blend chip, sized to the word it shows,
-    /// cannot say.
-    ///
-    /// # It names the strip's own deck
-    ///
-    /// The slot index, cast the way [`Mixer::grab`] and [`Mixer::blend`] cast
-    /// it — the manual's *deck* is the code's *slot* (ADR-0180), and a deck
-    /// holds `MAX_SLOTS` of them, so the index is a `u8` with room to spare.
-    pub fn tally(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        let p = Pos2::new(p.x, p.y);
-        self.strips
-            .iter()
-            .zip(self.boxes)
-            .enumerate()
-            .find_map(|(index, (strip, at))| {
-                at.filter(|at| at.tally.contains(p))
-                    .map(|_| Operation::SetResidency {
-                        deck: index as u8,
-                        residency: residency(next(strip.requested)),
-                    })
-            })
-    }
-
-    /// **What a press at `p` asks the mask's shape to become**, or `None`
-    /// where there is no mask mini under it.
-    ///
-    /// # The chip cycles, and the operation names where it arrived
-    ///
-    /// Click it and the deck's mask moves to the next shape — none, linear,
-    /// radial, wrapping — and what comes out is
-    /// [`Operation::SetMaskShape`] naming that **destination**. The affordance
-    /// is the blend chip's ([`Mixer::blend`], ADR-0187) and the tally's
-    /// (ADR-0195), and so is the division under it: the cycle is
-    /// [`next_shape`] here and nothing at all in `karakuri-operation`, which
-    /// is P-0090's division: a toggle is an affordance, built over operations
-    /// by whoever draws the control.
-    ///
-    /// **The order starts at `None`**, which is
-    /// `karakuri_engine::deck::MaskKind::ALL`'s and is written down there:
-    /// *"`None` first, because it is the default and a cycle should start
-    /// where a slot starts."* This crate has no engine (ADR-0156), so the
-    /// order is restated in [`next_shape`] rather than read from it.
-    ///
-    /// # It carries the angle it does not control, and that is the decision
-    ///
-    /// [`Operation::SetMaskShape`] is a shape **and an angle**, and this chip
-    /// names only the shape — *"`.mini` is a chip that says which shape, and
-    /// three numbers about that shape are the inspector's row, not this one."*
-    /// So the angle handed back is [`Strip::mask_angle`], the one the slot is
-    /// already wearing: a press chooses a shape and changes nothing else.
-    /// Sending `0.0` would make choosing a shape straighten a diagonal front,
-    /// which is a surface asking for a change nobody made — see
-    /// [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md).
-    ///
-    /// **The position and the softness are not here at all.** The operation
-    /// does not name them, and the record that does is filled in from a
-    /// reading of the running mask where the record is written (ADR-0201).
-    /// A surface carrying a value no operation asks for would be this crate
-    /// keeping half a deck.
-    ///
-    /// # One derivation, asked twice, and the whole chip is the target
-    ///
-    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that
-    /// acts on the press — [`Outputs::op`], [`Mixer::grab`], [`Mixer::blend`]
-    /// and [`Mixer::tally`] are the same arrangement. [`StripBox::mask`] is
-    /// the chip's own rectangle, the one the mark is drawn into, and it is
-    /// [`size::MINI_SIZE`] wide inside `.mini`'s padding whichever shape it is
-    /// showing — so this target, like the tally's capsule and unlike the blend
-    /// chip's, does not move under the value it draws.
-    ///
-    /// # It names the strip's own deck
-    ///
-    /// The slot index, cast the way [`Mixer::grab`], [`Mixer::blend`] and
-    /// [`Mixer::tally`] cast it — the manual's *deck* is the code's *slot*
-    /// (ADR-0180), and a deck holds `MAX_SLOTS` of them, so the index is a
-    /// `u8` with room to spare.
-    pub fn mask(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        let p = Pos2::new(p.x, p.y);
-        self.strips
-            .iter()
-            .zip(self.boxes)
-            .enumerate()
-            .find_map(|(index, (strip, at))| {
-                at.filter(|at| at.mask.contains(p))
-                    .map(|_| Operation::SetMaskShape {
-                        deck: index as u8,
-                        kind: wipe_kind(next_shape(strip.mask)),
-                        angle: strip.mask_angle,
-                    })
-            })
-    }
-
-    /// **Which deck a press at `p` selects**, or `None` where no strip is
-    /// under it.
-    ///
-    /// # The strip is the control, and it is the last question this bay asks
-    ///
-    /// A strip's rectangle contains the trim, the fader, the two chips and the
-    /// mask mini, so this would answer for a press on any of them if it were
-    /// asked first. It is asked **last**: whoever routes a press tries the
-    /// four questions that name something inside the column, and this is what
-    /// is left over — a press on the strip's name, on its number, on the
-    /// ground between its rows. That is the affordance `console.html` states
-    /// — *"a press anywhere on a strip that no knob under the pointer
-    /// claimed"* — and it is why the bay needs no sixth control drawn to carry
-    /// it.
-    ///
-    /// **It is one of rule 4's probes like every other control here**, and it
-    /// is asked twice for the same reason they are: once by
-    /// [`crate::input::claim`] to decide the press is the panel's, and once by
-    /// whoever acts on it. It went eight days claimed by nobody —
-    /// `input::on_strip` asked the four inside the column and not this one, so
-    /// the press reached `egui`, which owns no widget on the console and did
-    /// nothing with it. `tests/mixer.rs` is what says otherwise now.
-    ///
-    /// [`Operation::SelectDeck`] writes no record and is the console's own
-    /// pointer, so whoever emits it performs it: there is nothing on the deck
-    /// for it to move. What it moves is [`View::selection`], which the ring
-    /// above and the Library bay's pill both read.
-    pub fn select(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        self.deck_at(p).map(|deck| Operation::SelectDeck { deck })
-    }
-
-    /// **Which deck a carry let go at `p` lands on**, or `None` where no strip
-    /// is under it — which is a drop that asks for nothing at all
-    /// ([`crate::panel::Released::Nowhere`]).
-    ///
-    /// # It is a release where every other question in this bay is a press
-    ///
-    /// [`Mixer::grab`] and the four beside it answer *what does a press here
-    /// ask for*, and they are asked twice — once by [`crate::input::claim`] to
-    /// decide whose event it is, and once by whoever acts on it. Nothing asks
-    /// this one first: a carry already holds the pointer under `claim`'s rule
-    /// 1, so there is no claim to decide, and what is left is the second ask
-    /// on its own. What that buys is the destination resolved against the
-    /// geometry the frame *last drew* rather than against the geometry the
-    /// press was made on — the strips can have moved under a carry that took a
-    /// boundary with it on the way, and where the row lands is where the strip
-    /// is now.
-    ///
-    /// **The whole strip, where [`Mixer::select`] is what is left over.** The
-    /// two answer off one derivation ([`Mixer::deck_at`]) and differ in
-    /// nothing else, and that is the point: a press is offered the strip only
-    /// after the knobs and chips inside it have declined, because a press on a
-    /// knob is a press on that knob — but a Set let go over a knob is a Set
-    /// let go over **that deck**, since none of the five controls is a place a
-    /// Set could go instead. So this is asked of no other question first.
-    ///
-    /// **It reads no residency and no reading of any kind.** A drop on a live
-    /// deck asks for the load and the instrument decides
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md),
-    /// and `console.html`'s *"Nothing refuses it"*), so
-    /// [`Strip::tally`] is not consulted here and a strip's values reach this
-    /// only as the rectangle they were laid out into.
-    ///
-    /// **It is one of two answers now, and never both.** The four deck
-    /// preview cells take the drop as well ([`ProgramBay::dropped`]), and the
-    /// two bays are in two regions of the panel — so a point is inside one
-    /// set of rectangles or the other or neither, and *at most one rectangle
-    /// is marked* is a fact about where the pointer is rather than a rule
-    /// either of them enforces
-    /// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
-    pub fn dropped(&self, p: karakuri_layout::Point) -> Option<u8> {
-        self.deck_at(p)
-    }
-
-    /// **Which strip's rectangle `p` is inside**, as a deck.
-    ///
-    /// Private, and the one derivation [`Mixer::select`] and
-    /// [`Mixer::dropped`] both read: *which column is the pointer in* is one
-    /// question, and two spellings of it would be a press that selects one
-    /// deck and a drop that loads another from the same point. The manual's
-    /// *deck* is the code's *slot* and a deck holds `MAX_SLOTS` of them, so
-    /// the index is a `u8` with room to spare — [`Mixer::grab`]'s note.
-    fn deck_at(&self, p: karakuri_layout::Point) -> Option<u8> {
-        let p = Pos2::new(p.x, p.y);
-        self.boxes
-            .iter()
-            .enumerate()
-            .find_map(|(index, at)| at.filter(|at| at.rect.contains(p)).map(|_| index as u8))
-    }
-
-    /// **Where the deck selection's ring goes**, and `None` for a selection
-    /// this bay has no strip for.
-    ///
-    /// The one box in this bay that is the strip's *whole* rectangle rather
-    /// than something inside it, because what the selection addresses is the
-    /// deck and not any one of the six readings in the column. Answered from
-    /// the same `boxes` every other rectangle here comes off, so the ring is
-    /// painted round the strip a press on that track would select
-    /// ([`crate::input::claim`]) and never round a neighbour.
-    pub fn selected(&self, deck: u8) -> Option<Rect> {
-        self.boxes
-            .get(usize::from(deck))
-            .copied()
-            .flatten()
-            .map(|at| at.rect)
-    }
-
-    /// Every strip and its box, in slot order.
-    pub fn placed(&self) -> impl Iterator<Item = (&'a Strip, StripBox)> {
-        let boxes = self.boxes;
-        self.strips
-            .iter()
-            .zip(boxes)
-            .filter_map(|(strip, at)| at.map(|at| (strip, at)))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// The Mixer bay's transition row
-// ---------------------------------------------------------------------------
-
-/// **What the next scheduled move means**: the shape a wipe's front takes and
-/// which way it runs, the musical grid the move starts on, and how long it
-/// lasts.
-///
-/// # It is the console's own model of record, and that is not a convenience
-///
-/// Every other value this bay draws is a reading handed in by whoever owns the
-/// deck. These three are not, and [`Operation::SetTransition`] is why: it
-/// *"changes nothing you can see and writes nothing to the stream"*, it is
-/// `Written::Silent(Silent::Surface)`, and no record in
-/// `karakuri-store` carries any of the three. So there is nothing downstream
-/// that could be asked what the quantum is, and a host that kept a copy would
-/// be keeping the console's state on its behalf — which is
-/// [`View::selection`]'s argument arriving at a fourth pointer.
-///
-/// **What reads it is the wipe.** `karakuri_operation_record::Current::transition`
-/// wants the quantum, the length and the front's shape together, and
-/// [`Operation::Wipe`] is converted against them — so this is what a host
-/// hands that conversion, and `karakuri-cli` holds the same four numbers as
-/// `quantum`, `fade_beats`, `mask_kind` and `mask_angle` for the same reason.
-///
-/// # One value and not four fields on [`View`]
-///
-/// [`Operation::SetTransition`] is one operation with a three-armed payload,
-/// and the manual has the row as one heading — *"This row is three operations
-/// and the manual has it as one"*, which is `TransitionSetting`'s own
-/// sentence. Four loose fields would be that sum taken apart in the one crate
-/// that draws the row it is a sum for.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TransitionSettings {
-    /// The shape the next wipe's front takes. [`WipeKind::None`] is *no
-    /// shape*, under which `karakuri-cli`'s `c` is refused — which is the
-    /// vocabulary's own sentence at that variant, not a rule this row holds.
-    pub kind: WipeKind,
-    /// Which way a linear front runs, in radians.
-    ///
-    /// **Its own field beside the kind, because the operation carries both
-    /// together**: `TransitionSetting::WipeShape { kind, angle }` is one
-    /// setting, and a shape chosen without an angle would be a surface
-    /// straightening a diagonal front nobody touched — [`Mixer::mask`]'s
-    /// argument (ADR-0203) one row down. Here the two move together because
-    /// the pill's cycle names both, which is what [`WIPE_SHAPES`] is.
-    pub angle: f32,
-    /// The grid the next scheduled move starts on, in beats: 4 for the next
-    /// bar, 1 for the next beat, 0 for now.
-    pub quantum: f64,
-    /// How long the next scheduled move lasts, in beats. Zero is a cut.
-    pub length: f64,
-}
-
-/// **The shapes the row's first pill offers, in cycle order, with the angle
-/// each runs at and the word the pill reads.**
-///
-/// # The vocabulary has no list, so a surface curates one
-///
-/// `karakuri_operation::TransitionSetting` has no `ALL` and no `name`, and
-/// `WipeKind` has an `ALL` for nobody: a wipe shape is **a kind and an
-/// angle**, so the thing a control cycles is a set of *pairs* and no
-/// enumeration of a kind can be it. `WipeKind`'s own documentation says so —
-/// *"an arbitrary angle is a dial, and a dial with nowhere to show its value
-/// is a control an operator cannot read … the curation is a keyboard's
-/// compromise, not the operation"* — and names `karakuri-cli`'s `MASK_SHAPES`
-/// as the surface that curates one. This is the second, and the six pairs are
-/// that one's exactly, so two surfaces stepping this setting arrive at the
-/// same six places.
-///
-/// **The words are not that one's**, and they are the only half that differs:
-/// `MASK_SHAPES` writes a sentence into a status line (*"linear, left to
-/// right"*) where this writes into a capsule the width of its own word.
-/// `docs/manual/console.html` draws the row's shape pill reading `iris`, so
-/// the register is the mock's.
-///
-/// **`WipeKind::None` reads `no shape` and never `off`**, which is not a
-/// preference: `off` is a *residency* word on this console — the one a deck
-/// preview's caption said until ADR-0240 — and `tests/preview_caption.rs`
-/// asserts it is painted nowhere on the panel, because it is a state the
-/// program cannot be in. `no shape` is `MASK_SHAPES`' own sentence for the
-/// same entry (*"`c` needs a shape"*) in this console's register, beside
-/// `no slot`.
-///
-/// **`None` first**, which is `MASK_SHAPES`' own reason and
-/// `karakuri_engine::deck::MaskKind::ALL`'s before it: *"a deck nobody has
-/// touched wipes with nothing and says so rather than doing something."* It
-/// is also [`TransitionSettings::START`], so a console nobody has pressed
-/// anything on and a program nobody has pressed anything on begin in the same
-/// place.
-///
-/// **A table rather than a `match`**, where [`after`], [`next`] and
-/// [`next_shape`] are all matches. Those cycle a *vocabulary* enumeration, and
-/// a match is what stops a fourth variant compiling until somebody says what
-/// follows it. This cycles a curation — six of an unbounded set of pairs —
-/// and there is no enumeration for the compiler to hold it against, so a table
-/// is the honest shape: the list is the decision.
-const WIPE_SHAPES: [(WipeKind, f32, &str); 6] = [
-    (WipeKind::None, 0.0, "no shape"),
-    (WipeKind::Linear, 0.0, "left"),
-    (WipeKind::Linear, std::f32::consts::FRAC_PI_2, "up"),
-    (WipeKind::Linear, std::f32::consts::FRAC_PI_4, "diagonal"),
-    (
-        WipeKind::Linear,
-        -std::f32::consts::FRAC_PI_4,
-        "back diagonal",
-    ),
-    (WipeKind::Radial, 0.0, "iris"),
-];
-
-/// **The grids the row's second pill offers, in cycle order**, with the word
-/// the pill reads.
-///
-/// The three are `karakuri-cli`'s `QUANTA`, values and order, for
-/// [`WIPE_SHAPES`]' reason: two surfaces stepping one setting arrive at the
-/// same places. **A bar is four beats here**, which is that constant's own
-/// assumption rather than a measurement — nothing in the signal bus knows a
-/// time signature.
-///
-/// The words are shortened to the mock's own, which draws this pill reading
-/// `next bar`.
-const QUANTA: [(f64, &str); 3] = [(4.0, "next bar"), (1.0, "next beat"), (0.0, "now")];
-
-/// **The lengths the row's third pill offers, in cycle order**, with the word
-/// the pill reads.
-///
-/// `karakuri-cli`'s `FADE_BEATS`, values and order: *"a bar, half a bar, two
-/// bars, and a cut — the four an operator reaches for, in the order they are
-/// reached for."* The mock draws this pill reading `8 beats`, which is the
-/// third of them.
-///
-/// **Zero reads `cut` rather than `0 beats`**, because that is what a fade of
-/// no length is and is the word `karakuri-cli` prints for it.
-const FADE_BEATS: [(f64, &str); 4] = [
-    (4.0, "4 beats"),
-    (2.0, "2 beats"),
-    (8.0, "8 beats"),
-    (0.0, "cut"),
-];
-
-impl TransitionSettings {
-    /// **Where a run starts**: no shape, the next bar, four beats — the first
-    /// entry of each of the three cycles.
-    ///
-    /// It is `karakuri-cli`'s own opening state (`MASK_SHAPES[0]`, `QUANTA[0]`
-    /// and `FADE_BEATS[0]` at `Live::new`), so two surfaces that step the same
-    /// three settings also begin at the same three values. A console that
-    /// opened on the mock's `iris · next bar · 8 beats` would be starting a
-    /// run somewhere a hand had to have put it.
-    pub const START: TransitionSettings = TransitionSettings {
-        kind: WIPE_SHAPES[0].0,
-        angle: WIPE_SHAPES[0].1,
-        quantum: QUANTA[0].0,
-        length: FADE_BEATS[0].0,
-    };
-
-    /// Where this shape sits in [`WIPE_SHAPES`].
-    ///
-    /// **The fallback is unreachable while [`View::set_transition`] is the
-    /// only way in**, because that setter refuses a value no entry of the
-    /// table names — see it for why. It falls back rather than panicking for
-    /// the reason nothing on the frame path panics: the cost of being wrong
-    /// here is one pill reading the wrong word, and the cost of being right
-    /// about it is a console that stops drawing.
-    fn shape_at(&self) -> usize {
-        WIPE_SHAPES
-            .iter()
-            .position(|(kind, angle, _)| *kind == self.kind && *angle == self.angle)
-            .unwrap_or(0)
-    }
-
-    fn quantum_at(&self) -> usize {
-        QUANTA
-            .iter()
-            .position(|(beats, _)| *beats == self.quantum)
-            .unwrap_or(0)
-    }
-
-    fn length_at(&self) -> usize {
-        FADE_BEATS
-            .iter()
-            .position(|(beats, _)| *beats == self.length)
-            .unwrap_or(0)
-    }
-
-    /// **What the shape pill reads.**
-    pub fn shape_word(&self) -> &'static str {
-        WIPE_SHAPES[self.shape_at()].2
-    }
-
-    /// **What the quantum pill reads.**
-    pub fn quantum_word(&self) -> &'static str {
-        QUANTA[self.quantum_at()].1
-    }
-
-    /// **What the length pill reads.**
-    pub fn length_word(&self) -> &'static str {
-        FADE_BEATS[self.length_at()].1
-    }
-
-    /// **Whether a shape is chosen at all**, which is what draws the pill
-    /// armed: `.pill.armed` is *armed, bound, live in the good sense*, and a
-    /// row whose shape reads `no shape` has nothing armed to say.
-    ///
-    /// It is not a rule about what a wipe may do. `WipeKind::None` refuses a
-    /// wipe where the record is applied and not here — every way in meets the
-    /// same wall
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-    pub fn armed(&self) -> bool {
-        self.kind != WipeKind::None
-    }
-
-    /// **The next shape round the cycle**, as the setting an operation
-    /// carries.
-    pub(crate) fn next_wipe_shape(&self) -> TransitionSetting {
-        let (kind, angle, _) = WIPE_SHAPES[(self.shape_at() + 1) % WIPE_SHAPES.len()];
-        TransitionSetting::WipeShape { kind, angle }
-    }
-
-    /// **The next quantum round the cycle**, as the setting an operation
-    /// carries.
-    pub(crate) fn next_quantum(&self) -> TransitionSetting {
-        TransitionSetting::Quantum {
-            beats: QUANTA[(self.quantum_at() + 1) % QUANTA.len()].0,
-        }
-    }
-
-    /// **The next length round the cycle**, as the setting an operation
-    /// carries.
-    pub(crate) fn next_length(&self) -> TransitionSetting {
-        TransitionSetting::Length {
-            beats: FADE_BEATS[(self.length_at() + 1) % FADE_BEATS.len()].0,
-        }
-    }
-
-    /// **Take a setting, and answer whether anything moved** — the whole of
-    /// what [`View::set_transition`] does, kept beside the three tables that
-    /// decide it.
-    ///
-    /// `false` for a setting no entry of the cycles names, and for one that
-    /// names where the row already is.
-    fn take(&mut self, setting: TransitionSetting) -> bool {
-        let was = *self;
-        match setting {
-            TransitionSetting::WipeShape { kind, angle } => {
-                if !WIPE_SHAPES
-                    .iter()
-                    .any(|(k, a, _)| *k == kind && *a == angle)
-                {
-                    return false;
-                }
-                self.kind = kind;
-                self.angle = angle;
-            }
-            TransitionSetting::Quantum { beats } => {
-                if !QUANTA.iter().any(|(b, _)| *b == beats) {
-                    return false;
-                }
-                self.quantum = beats;
-            }
-            TransitionSetting::Length { beats } => {
-                if !FADE_BEATS.iter().any(|(b, _)| *b == beats) {
-                    return false;
-                }
-                self.length = beats;
-            }
-        }
-        *self != was
-    }
-}
-
-/// **The Mixer bay's transition row, laid out**: `.xfade` under the strips,
-/// the three setting pills in it, and the `go` capsule at the right end.
-///
-/// # It carries the settings it was measured from
-///
-/// [`Mixer`] borrows the strips for [`Picture`]'s reason and this carries a
-/// copy for the same one: a pill is as wide as the word in it and the word is
-/// the setting's, so whoever measured the row and whoever paints it are one
-/// statement. [`TransitionSettings`] is four scalars and `Copy`, so there is
-/// no borrow to take.
-///
-/// # The `go` pill is drawn now, and what changed is not this crate
-///
-/// It was left out while [`Operation::Wipe`] could not be converted anywhere:
-/// a wipe is written against `karakuri_operation_record::Current::transition`
-/// **and** `Current::mix`, `crates/karakuri/src/main.rs` answered `None` for
-/// both, and a capsule the mock lights `on` that a press does nothing with is
-/// the scaffolding this module refuses. That window supplies both readings
-/// now, so the capsule is a control and is drawn.
-///
-/// **`.sep` is honoured rather than drawn.** It is `flex: 1` and paints
-/// nothing at all; what it does is push the `go` capsule to the right end of
-/// the row, which is where [`transition`] puts it — measured in from
-/// `.xfade`'s own padding, the way the shape pill is measured in from the
-/// other side.
-///
-/// # What the mock draws here and this does not
-///
-/// - **The `wipe` pill beside the shape.** The mock draws the shape as two
-///   spans — an armed `wipe` and the shape's own word — and that is one
-///   statement about one setting: *a wipe shape is armed, and it is an iris*.
-///   There is one setting in `TransitionSetting` for it, so there is one
-///   control here, and the armed treatment the mock puts on the first span is
-///   carried by the pill that names the shape
-///   ([`TransitionSettings::armed`]).
-/// - **The row's tooltip.** Every control on this console is a painted shape
-///   and a tooltip needs `egui` to own a widget — the sentence [`outputs`]
-///   writes about a control, three bays along.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TransitionRow {
-    /// `.xfade` itself: the block under the strips, the full width of the bay,
-    /// with its rule along the top edge.
-    pub rect: Rect,
-    /// The shape pill, which is **the capsule a press acts on** and not only
-    /// the box a word is painted into — [`TransitionRow::shape`] hit-tests
-    /// exactly this rectangle, the way [`StripBox::blend`] is. As wide as the
-    /// word in it, inside `.pill`'s padding and border.
-    pub shape: Rect,
-    /// The quantum pill, on the same terms.
-    pub quantum: Rect,
-    /// The length pill, on the same terms.
-    pub length: Rect,
-    /// **The `go` capsule**, at the right end of the row with `.sep`'s
-    /// `flex: 1` between it and the length pill. On the same terms as the
-    /// three: it is the rectangle a press acts on, and
-    /// [`TransitionRow::go`] hit-tests exactly it.
-    pub go: Rect,
-    /// **The settings these rectangles were measured from.**
-    pub settings: TransitionSettings,
-}
-
-/// **What a press on the `go` capsule comes to**: a wipe, or the reason there
-/// is not one.
-///
-/// # A refusal is an answer this control has and the record layer does not
-///
-/// [`Operation::Wipe`] says *"Refused with no shape chosen"* at its own
-/// definition and `karakuri-operation-record`'s arm says the same from the
-/// other side: `Written` has three answers and none of them is a refusal,
-/// because the shape is **a surface's own setting** and a surface is the only
-/// thing that can see it is unset. `karakuri-cli`'s `c` is the precedent for
-/// both of these arms — it turns a one-slot deck and a chosen-nothing shape
-/// away before it asks — and this is that key's two refusals as a value,
-/// because this crate has nowhere to print.
-///
-/// **It says which refusal and not what to do about it**, which is where the
-/// seam between this crate and the window that runs it falls: the sentence an
-/// operator reads is `crates/karakuri/src/main.rs`'s, and
-/// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
-/// is what that sentence owes — the shape pill is two capsules to the left,
-/// and a second deck is a `--set` away.
-///
-/// **Not `Option<Operation>`**, which would make a press on a row with no
-/// shape chosen indistinguishable from a press on the card beside it. A
-/// control that claims a press has acted on it
-/// ([`crate::input::claim`]'s rule 4), and the act here is the refusal.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Go {
-    /// **Run it**: [`Operation::Wipe`] naming the deck being covered and the
-    /// deck arriving over it. See [`TransitionRow::go`] for which is which.
-    Wipe(Operation),
-    /// **There is nowhere for the wipe to come from**: the mixer draws fewer
-    /// than two strips, so the deck the selection is on is the only deck
-    /// there is. `karakuri-cli`'s *"a wipe needs somewhere to come from —
-    /// this deck holds one slot"*.
-    NoOtherDeck,
-    /// **No shape is chosen**, so there is nothing for the front to be. The
-    /// shape pill on this row is where one is picked, and
-    /// [`TransitionSettings::armed`] is the same fact drawn.
-    NoShape,
-}
-
-impl TransitionRow {
-    /// **What a press at `p` asks the wipe shape to become**, or `None` where
-    /// there is no shape pill under it.
-    ///
-    /// # The pill cycles, and the operation names where it arrived
-    ///
-    /// Click it and the shape moves to the next of [`WIPE_SHAPES`], wrapping
-    /// from the last back to the first, and what comes out is
-    /// [`Operation::SetTransition`] naming the **destination** — never a step,
-    /// because there is no step in the vocabulary to name.
-    ///
-    /// That is the affordance
-    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-    /// leaves to whoever draws the control, and [`Mixer::blend`] is the
-    /// precedent (ADR-0187): a pill that cycles is one control emitting six,
-    /// the operator sees a toggle and the vocabulary never does. What P-0090
-    /// forbids is an operation that says *step*, and this emits none.
-    ///
-    /// **The cycle is curated here because the vocabulary has no list to
-    /// cycle** — see [`WIPE_SHAPES`], where that is the whole argument, and
-    /// `karakuri-cli`'s `MASK_SHAPES`, which is the precedent for a surface
-    /// curating one.
-    ///
-    /// # One derivation, asked twice, and the whole pill is the target
-    ///
-    /// [`crate::input::claim`]'s rule 4 asks this and so does the caller that
-    /// acts on the press — the arrangement [`Mixer::blend`], [`Mixer::mask`]
-    /// and [`Outputs::op`] are all in. [`TransitionRow::shape`] is the pill's
-    /// own rectangle, the one the word is painted into, so a pill a hand sees
-    /// and a pill it clicks are the same one, and the padding is what makes a
-    /// word a hand can find ([`Outputs::sink`]'s rule).
-    ///
-    /// # It names no deck, and there is nothing missing
-    ///
-    /// The settings decide what the *next* move means wherever it lands, so
-    /// [`Operation::SetTransition`] carries a setting and no slot — the one
-    /// row of this bay that does, for [`Operation::SetMasterOut`]'s reason
-    /// one bay down.
-    pub fn shape(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        self.pressed(self.shape, p, self.settings.next_wipe_shape())
-    }
-
-    /// **What a press at `p` asks the quantum to become**, or `None` where
-    /// there is no quantum pill under it. [`TransitionRow::shape`]'s
-    /// affordance over [`QUANTA`].
-    pub fn quantum(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        self.pressed(self.quantum, p, self.settings.next_quantum())
-    }
-
-    /// **What a press at `p` asks the length to become**, or `None` where
-    /// there is no length pill under it. [`TransitionRow::shape`]'s affordance
-    /// over [`FADE_BEATS`].
-    pub fn length(&self, p: karakuri_layout::Point) -> Option<Operation> {
-        self.pressed(self.length, p, self.settings.next_length())
-    }
-
-    /// **What a press at `p` on the `go` capsule comes to**, or `None` where
-    /// there is no capsule under it.
-    ///
-    /// # Which two decks a wipe names
-    ///
-    /// [`Operation::Wipe`] carries *the deck being covered* and *the deck
-    /// arriving over it*, and this row names them the way `karakuri-cli`'s `c`
-    /// does: **the deck the selection is on is covered, and the next one round
-    /// arrives over it.** *The next deck* is the surface's translation and
-    /// never the operation — the vocabulary's own sentence at that variant —
-    /// and here the addressed deck is [`View::selection`], which is the ring
-    /// this bay draws round a strip and the letter the library's `load` pill
-    /// reads. `decks` is how many strips the mixer has, which is
-    /// [`View::mixer`]'s length and the same count [`View::select`] refuses a
-    /// selection against, so the wrap cannot name a deck with no strip.
-    ///
-    /// **Neither deck is decided here beyond that.** What the wipe *does* to
-    /// them — the mask at 0, the put-on-air, whether `over` is written at all
-    /// — is the conversion's and the deck's
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-    ///
-    /// # The two refusals are this control's, and they are its own
-    ///
-    /// A one-deck mixer and a shape reading `no shape` are both turned away
-    /// here, in `karakuri-cli`'s order, and see [`Go`] for why a refusal is a
-    /// value rather than a `None`.
-    pub fn go(&self, p: karakuri_layout::Point, selection: u8, decks: usize) -> Option<Go> {
-        if !self.go.contains(Pos2::new(p.x, p.y)) {
-            return None;
-        }
-        if decks < 2 {
-            return Some(Go::NoOtherDeck);
-        }
-        if !self.settings.armed() {
-            return Some(Go::NoShape);
-        }
-        let from = usize::from(selection).min(decks - 1);
-        Some(Go::Wipe(Operation::Wipe {
-            from: from as u8,
-            to: ((from + 1) % decks) as u8,
-        }))
-    }
-
-    /// **Whether a press on the `go` capsule would run a wipe**, which is what
-    /// draws it lit: `.pill.on` is the mock's *this is the press that does the
-    /// thing*, and a capsule lit over a refusal would be the row saying it can
-    /// do something it cannot.
-    ///
-    /// It is [`TransitionSettings::armed`] with the deck count beside it —
-    /// exactly the two conditions [`TransitionRow::go`] refuses on, asked
-    /// again rather than copied, so the pill a hand sees lit and the press
-    /// that runs cannot come apart.
-    pub fn runs(&self, decks: usize) -> bool {
-        decks >= 2 && self.settings.armed()
-    }
-
-    /// One pill's hit test, written once because the three differ only in
-    /// which rectangle and which cycle — the shape [`Mixer`]'s five share by
-    /// being five questions about one laid-out strip.
-    fn pressed(
-        &self,
-        pill: Rect,
-        p: karakuri_layout::Point,
-        setting: TransitionSetting,
-    ) -> Option<Operation> {
-        pill.contains(Pos2::new(p.x, p.y))
-            .then_some(Operation::SetTransition { setting })
-    }
-
-    /// **Whether a press at `p` is on any of the row's four capsules**, which
-    /// is what [`crate::input::claim`] asks: the panel claims what it acts on,
-    /// and the row's own ground between two pills is not something it acts on.
-    ///
-    /// [`MasterRow::owns`]'s shape one bay up, and asked of the four
-    /// derivations rather than of [`TransitionRow::rect`] — a press on the
-    /// card either side of the pills reaches nothing, so claiming it would be
-    /// taking an event to throw away. **`.sep` is ground and not a control**,
-    /// for exactly that reason: it is the gap the `go` capsule is pushed to
-    /// the end by, and there is nothing there to press.
-    ///
-    /// **The `go` capsule is claimed whether or not a wipe would run**, which
-    /// is the one place this differs from the three pills: a press that is
-    /// refused *is* acted on — the window says why — so claiming it is the
-    /// rule met rather than bent.
-    pub fn owns(&self, p: karakuri_layout::Point) -> bool {
-        self.shape(p).is_some()
-            || self.quantum(p).is_some()
-            || self.length(p).is_some()
-            || self.go.contains(Pos2::new(p.x, p.y))
-    }
-}
-
-/// **Where the transition row goes**: the `.xfade` block inside a mixer
-/// region.
-///
-/// Directly under `.mixer-strips`, which is [`strips_row`] plus the
-/// [`size::STRIPS_PAD`] below it, and exactly [`size::XFADE_H`] tall rather
-/// than whatever the bay has left — the bay is taller than its contents by
-/// design, and what is under this block is the 23.5 the crossfader took with
-/// it when the mixer was decided to have none. It is the **full width of the
-/// bay**, because `.xfade` is a child of `.bay` and its own padding is
-/// [`size::XFADE_PAD_X`]; the rule along its top spans the card the way a bay
-/// head's does.
-///
-/// `None` where the region cannot hold it — folded away, soloed away, or a
-/// window too small — which is [`strips_row`]'s rule stated on the row under
-/// it.
-fn xfade_row(region: Rect) -> Option<Rect> {
-    let block = Rect::from_min_size(
-        Pos2::new(
-            region.min.x,
-            region.min.y + size::HEAD_H + size::STRIPS_PAD * 2.0 + size::STRIP_H,
-        ),
-        egui::vec2(region.width(), size::XFADE_H),
-    );
-    match block.width() > 0.0 && region.contains_rect(block) {
-        true => Some(block),
-        false => None,
-    }
-}
-
-/// **The Mixer bay's transition row, derived**: the block under the strips,
-/// the three setting pills laid end to end from its left padding, and the `go`
-/// capsule against its right one.
-///
-/// # It is drawn with or without a deck, and that is not the strips' rule
-///   broken
-///
-/// [`mixer`] answers `None` for a console with no deck behind it, because six
-/// readings a slot with no slot to read is ADR-0177's row of zeroes. **These
-/// three are not readings.** They are the console's own pointer
-/// ([`TransitionSettings`]) and it always has a value — the same thing that is
-/// true of [`View::selection`] and of the arrangement pill, which is drawn
-/// with no store behind it. A row blanked for want of a deck would be a
-/// setting an operator cannot make until something else has happened.
-///
-/// **The `go` capsule is drawn there too**, and what it says about a deckless
-/// console is said in the paint and in the answer rather than by leaving it
-/// out: it is not lit ([`TransitionRow::runs`]) and a press on it is
-/// [`Go::NoOtherDeck`]. A capsule that vanished with the strips would be the
-/// one control on this row an operator has to discover.
-///
-/// # All four capsules or none
-///
-/// The three settings are laid from the left of the block's padding, one
-/// [`size::XROW_GAP`] apart; `go` is measured back from the padding on the
-/// other side, which is `.sep`'s `flex: 1` — the separator takes whatever is
-/// between them and paints nothing. If the three would reach it the whole row
-/// answers `None`. **Not the chips-that-fit
-/// rule** `.scopes` and `.rend-row` are drawn under: those are a *list* whose
-/// length is a value, and what is dropped off the end is one more of the same
-/// question. This is three different settings and the press that runs them,
-/// and one of them silently missing is a control with nothing on screen saying
-/// where it went. The bay's
-/// track is a fixed 400 wide (`lib.rs`), so the case is a window below the
-/// arrangement's own minimum rather than an ordinary narrow console.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one. `ctx` is asked for the type, because a pill is as wide as the word in
-/// it.
-pub fn transition(
-    ctx: &egui::Context,
-    layout: &karakuri_layout::Layout,
-    settings: TransitionSettings,
-) -> Option<TransitionRow> {
-    // Fonts are not valid until `egui` has run a pass, exactly as in `mixer`,
-    // `outputs` and `transport`.
-    if ctx.cumulative_pass_nr() == 0 {
-        return None;
-    }
-    let region = to_egui(layout.rect(layout.find("mixer")?));
-    let block = xfade_row(region)?;
-    let mut x = block.min.x + size::XFADE_PAD_X;
-    let top = block.min.y + size::HAIRLINE + size::XFADE_PAD_TOP;
-    let right = block.max.x - size::XFADE_PAD_X;
-    let mut pill = |text: &str| {
-        // `.pill`'s padding either side of the word, and its own border,
-        // which `pill_width` does not count — see `size::XPILL_H`, where the
-        // two pixels are argued.
-        let w = pill_width(ctx, text) + size::HAIRLINE * 2.0;
-        let at = Rect::from_min_size(Pos2::new(x, top), egui::vec2(w, size::XPILL_H));
-        x = at.max.x + size::XROW_GAP;
-        at
-    };
-    let shape = pill(settings.shape_word());
-    let quantum = pill(settings.quantum_word());
-    let length = pill(settings.length_word());
-    // **`go` from the other end**, which is what `.sep`'s `flex: 1` puts it:
-    // the separator absorbs whatever is left between the length pill and this
-    // one, so the capsule's place is measured off the block's right padding
-    // and never off the words to its left.
-    let go_w = pill_width(ctx, GO) + size::HAIRLINE * 2.0;
-    let go = Rect::from_min_size(
-        Pos2::new(right - go_w, top),
-        egui::vec2(go_w, size::XPILL_H),
-    );
-    // The separator is `flex: 1` and so is never negative: where the three
-    // settings would reach the capsule there is no row, for the reason the
-    // header gives. One `.xrow` gap is the least `.sep` can be and still be a
-    // gap between two pills rather than two capsules touching.
-    if length.max.x + size::XROW_GAP > go.min.x {
-        return None;
-    }
-    Some(TransitionRow {
-        rect: block,
-        shape,
-        quantum,
-        length,
-        go,
-        settings,
-    })
-}
-
-/// **What the `go` capsule reads**, which is the mock's own word and the only
-/// one on this row that is not a setting's.
-///
-/// It is a *verb* where the three beside it are values — `docs/manual/console.html`
-/// draws `iris · next bar · 8 beats · go` — so it has no cycle behind it and
-/// no table to come out of. Written here rather than inline because
-/// [`transition`] measures the capsule from it and [`transition_into`] paints
-/// it from it, which is this module's rule about every word it draws.
-const GO: &str = "go";
-
-/// **The Mixer bay's strips, derived**: one per slot the deck has, and none at
-/// all where there is no deck.
-///
-/// # The page has [`DECKS`] tracks whatever the deck holds
-///
-/// `.mixer-strips` is `grid-template-columns: repeat(4, 1fr)`, and that four
-/// is the same four [`DECKS`] is — `MAX_SLOTS` is 4, so no deck can fill a
-/// fifth. **A strip is one of four tracks wide even where there is one
-/// strip**, and that is read off the arrangement rather than chosen here: the
-/// right pane's minimum width is written as *"four mixer strips still side by
-/// side … four of them with three 4px gaps inside `.mixer-strips`' 6 + 6 is
-/// 172"*. Tracks that followed the strip *count* would make a one-slot deck's
-/// strip 244 wide in a pane sized for four 61-wide ones, and would re-derive
-/// that minimum every time a slot was installed.
-///
-/// So a track with no strip in it **draws nothing at all** — not an empty
-/// strip. That is the opposite of what [`preview`] does with a cell that has
-/// no slot behind it, and the two are not in tension: a preview cell is the
-/// region's own face and its caption says `no slot`, where a strip is six
-/// readings and an empty one is six readings nobody took. The mock drew such a
-/// strip — `.strip.empty`, with `—` for a name, `empty` for a tally and both
-/// tracks bare — until `39f1e6b` took it out under ADR-0178; inventing one
-/// here would be ADR-0177's row of zeroes with a different glyph, which is why
-/// the strip going does not make this rule the mock's rather than the
-/// record's.
-///
-/// **The example's deck has one slot, so it draws one strip**, and that is the
-/// example rather than a gap in it — exactly as three of its preview cells
-/// read `no slot`.
-///
-/// # What is in the mock's bay and is deliberately not here
-///
-/// - **The head's `3 of 3 · page 1`.** *"The strip is a paged list whose
-///   length is a number, the header says how long the list is, and it says
-///   which page you are on"* — so both halves of that pill are about paging,
-///   and there is none. Every strip the deck has is drawn, on the one page, so
-///   the pill could only ever read `n of n · page 1`: two numbers that are
-///   always equal and a third that is always 1. That is [`Kind::Bay`]'s own
-///   rule about a pill stating a value the console does not have, and the
-///   number that *is* known — how many
-///   strips there are — is on the face of the bay already. It arrives with
-///   paging.
-/// - **`.xfade`, the transition row under the strips.** It is drawn now, and
-///   it is [`transition`] rather than this: the three settings are the
-///   console's own pointer and not six readings a slot, so the row survives a
-///   console with no deck behind it where these strips do not. **The A/B
-///   track that used to sit above it is not a row this console owes**: the
-///   mixer has no crossfader, and `console.html`'s *The mixer has no
-///   crossfader* is the argument. The block is 37.5 of the mock's bay
-///   ([`size::XFADE_H`], which is what this console now carves) and the bay
-///   still reserves 61 for it — the 16.5 row and the 7 gap the crossfader
-///   took with it. That height has still not been re-derived, and
-///   `tests/mixer.rs` now states the leftover in the row's own terms rather
-///   than as a subtraction.
-/// - **`.wfocus`, which is the second of the mock's two focuses**: keyboard
-///   focus, transient, wherever tab lands. The mock draws it as a dashed sun
-///   outline and the deck selection as a solid lavender ring, on purpose,
-///   because *"Drawing them the same way would erase which of the two a reader
-///   is looking at"*. **The selection exists here now** and is drawn —
-///   [`View::selection`], and [`mixer_into`] for the ring — which is the
-///   sentence ADR-0219 recorded as owed. Keyboard focus does not: nothing in
-///   this console takes it, so a dashed outline would be drawn around a state
-///   that is not kept.
-/// - **Every tooltip.** Four of this bay's controls carry one, and a tooltip
-///   needs `egui` to own a widget — the sentence [`outputs`] writes about a
-///   control, one bay along.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one. `ctx` is asked for the type, because the tally's capsule and the
-/// blend's mini are as wide as the words in them.
-pub fn mixer<'a>(
-    ctx: &egui::Context,
-    layout: &karakuri_layout::Layout,
-    strips: &'a [Strip],
-) -> Option<Mixer<'a>> {
-    // **No deck behind the console, so there are no strips.** Every test in
-    // this crate is here, and so is the whole of `cargo test -p
-    // karakuri-console`. Drawing four empty strips would be inventing six
-    // readings a slot; this is `View::picture`'s rule, one bay along.
-    if strips.is_empty() {
-        return None;
-    }
-    // Fonts are not valid until `egui` has run a pass, exactly as in
-    // `outputs` and `transport`.
-    if ctx.cumulative_pass_nr() == 0 {
-        return None;
-    }
-    let region = to_egui(layout.rect(layout.find("mixer")?));
-    let row = strips_row(region)?;
-    let width = |job: LayoutJob| ctx.fonts_mut(|f| f.layout_job(job).size().x);
-    let label = width(span_at(
-        TRIM_LABEL,
-        size::TRIM_LABEL_SIZE,
-        Color32::PLACEHOLDER,
-    ));
-    // **The chip is as wide as the widest residency, not as the one it is
-    // showing.** Measured once for the bay rather than per strip: it is the
-    // same three words in every strip, so a per-strip measurement would be
-    // three galley layouts a strip for one answer.
-    //
-    // It read `strip.tally` alone until the tally learned to say that a
-    // request had not landed, and that was a defect rather than a
-    // simplification: a chip sized to the current word is a capsule that
-    // changes width when the deck moves under it, and one that changes width
-    // *while a word is rolling through it* would be a control resizing on its
-    // own animation. What the mock does not have is the reason it survived —
-    // a still page draws each chip once, so shrink-to-fit and this are the
-    // same picture there and only one of them is the same picture over time.
-    let tally = Tally::ALL
-        .into_iter()
-        .map(|tally| width(tally_job(tally, Color32::PLACEHOLDER)))
-        .fold(0.0f32, f32::max);
-    let mut boxes = [None; DECKS];
-    for (index, strip) in strips.iter().take(DECKS).enumerate() {
-        let blend = width(span_at(
-            strip.blend.name(),
-            size::MINI_SIZE,
-            Color32::PLACEHOLDER,
-        ));
-        boxes[index] = strip_box(
-            track(row, DECKS, index, size::STRIP_GAP, Axis::Row),
-            label,
-            tally,
-            blend,
-        );
-    }
-    Some(Mixer { strips, boxes })
-}
-
-/// **Where the strips go**: the `.mixer-strips` grid inside a mixer region.
-///
-/// The region less [`size::HEAD_H`] for the bay head painted over the top of
-/// it, inset by [`size::STRIPS_PAD`] left, right and top, and **exactly
-/// [`size::STRIP_H`] tall** rather than whatever is left over. The bay is
-/// taller than its strips by design — the reservation for `.xfade` is the
-/// other 61 of it, of which [`xfade_row`] carves [`size::XFADE_H`] and 23.5
-/// is the crossfader row the mock no longer draws — and a
-/// mixer with room to grow (it is the only visible child of a soloed right
-/// pane, and a fixed child with room takes it, ADR-0157) grows the bay and not
-/// the strips: a `.strip` is a column of fixed type around a `.fader-col`
-/// whose 104 is stated in the CSS, so there is nothing in it that gets bigger
-/// any more than there is anything that gets smaller.
-///
-/// `None` where the region cannot hold it — folded away, soloed away, or a
-/// window too small — which is [`picture_rect`]'s rule stated on a row of
-/// strips.
-fn strips_row(region: Rect) -> Option<Rect> {
-    let row = Rect::from_min_size(
-        Pos2::new(
-            region.min.x + size::STRIPS_PAD,
-            region.min.y + size::HEAD_H + size::STRIPS_PAD,
-        ),
-        egui::vec2(region.width() - size::STRIPS_PAD * 2.0, size::STRIP_H),
-    );
-    match row.width() > 0.0 && region.contains_rect(row) {
-        true => Some(row),
-        false => None,
-    }
-}
-
-/// The arithmetic of one strip, away from the type it measures and the layout
-/// it reads.
-///
-/// Term for term from `.strip` and what is in it, in `style.css`:
-///
-/// - `.strip { display: flex; flex-direction: column; align-items: center;
-///   gap: 5px; padding: 7px 4px }` — six things stacked from the top of the
-///   strip's content box, one [`size::STRIP_GAP_Y`] between each pair, each
-///   **centred across the strip** rather than filling it. Two are the
-///   exception, and the CSS states both: `.strip-name` and `.trim` are
-///   `width: 100%`.
-/// - `.trim { gap: 5px; padding: 0 3px }` with `.trim .fader { flex: 1 }` —
-///   the `g`, then the track, which takes what is left and is centred in the
-///   row because the label is the taller of the two.
-/// - `.fader-col { display: flex; gap: 6px; height: 104px }` around a
-///   `.vfader` of 17 and a `.vmeter` of 6, both `height: 100%` — so the column
-///   is 29 wide, centred, and its `align-items: flex-end` has nothing left to
-///   align.
-/// - `.strip-mode { gap: 3px }` — two minis, centred.
-///
-/// `None` where the track is too narrow to hold what is in it, which is
-/// [`picture_rect`]'s rule stated on a strip: the fader column is the widest
-/// fixed thing in it, and a strip that cannot hold that has no readings to
-/// show. At the right pane's own minimum of 172 a track is exactly 37 and the
-/// column is exactly 29 inside 4 + 4 of padding, so the arrangement's minimum
-/// and this are one number or neither.
-fn strip_box(track: Rect, label_w: f32, tally_w: f32, blend_w: f32) -> Option<StripBox> {
-    let inner = Rect::from_min_max(
-        Pos2::new(
-            track.min.x + size::STRIP_PAD_X,
-            track.min.y + size::STRIP_PAD_Y,
-        ),
-        Pos2::new(
-            track.max.x - size::STRIP_PAD_X,
-            track.max.y - size::STRIP_PAD_Y,
-        ),
-    );
-    let column_w = size::VFADER_W + size::FADER_COL_GAP + size::VMETER_W;
-    if inner.width() < column_w {
-        return None;
-    }
-    // Each row starts one gap after the one before it ended, and is as tall as
-    // its own type — which is what a flex column is.
-    let mut y = inner.min.y;
-    let mut row = |h: f32| {
-        let at = Rect::from_min_size(Pos2::new(inner.min.x, y), egui::vec2(inner.width(), h));
-        y = at.max.y + size::STRIP_GAP_Y;
-        at
-    };
-    let name = row(size::STRIP_NAME_SIZE * size::LINE);
-    let tally = centred_in(row(size::TALLY_H), tally_w + size::TALLY_PAD_X * 2.0);
-    let trim = row(size::TRIM_H);
-    let column = centred_in(row(size::FADER_COL_H), column_w);
-    let num = row(size::STRIP_NUM_SIZE * size::LINE);
-    let blend_w = blend_w + size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0;
-    // The mask's mini holds a mark rather than a word, and the mark is drawn
-    // at the size the glyph it stands in for would have been — see `Mask`.
-    let mask_w = size::MINI_SIZE + size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0;
-    let mode = centred_in(row(size::MINI_H), blend_w + size::MODE_GAP + mask_w);
-
-    let trim_label = Rect::from_min_size(
-        Pos2::new(trim.min.x + size::TRIM_PAD_X, trim.min.y),
-        egui::vec2(label_w, trim.height()),
-    );
-    let trim_track = Rect::from_min_size(
-        Pos2::new(
-            trim_label.max.x + size::TRIM_GAP,
-            trim.center().y - size::FADER_H * 0.5,
-        ),
-        egui::vec2(
-            trim.max.x - size::TRIM_PAD_X - trim_label.max.x - size::TRIM_GAP,
-            size::FADER_H,
-        ),
-    );
-    match trim_track.width() > 0.0 {
-        true => Some(StripBox {
-            rect: track,
-            name,
-            tally,
-            trim_label,
-            trim: trim_track,
-            fader: Rect::from_min_size(column.min, egui::vec2(size::VFADER_W, column.height())),
-            meter: Rect::from_min_size(
-                Pos2::new(column.max.x - size::VMETER_W, column.min.y),
-                egui::vec2(size::VMETER_W, column.height()),
-            ),
-            num,
-            blend: Rect::from_min_size(mode.min, egui::vec2(blend_w, mode.height())),
-            mask: Rect::from_min_size(
-                Pos2::new(mode.max.x - mask_w, mode.min.y),
-                egui::vec2(mask_w, mode.height()),
-            ),
-        }),
-        false => None,
-    }
-}
-
-/// A box `w` wide centred across `row`, which is `align-items: center` on one
-/// child of a flex column.
-fn centred_in(row: Rect, w: f32) -> Rect {
-    Rect::from_min_size(
-        Pos2::new(row.center().x - w * 0.5, row.min.y),
-        egui::vec2(w, row.height()),
-    )
-}
-
 /// **How much of a track a value fills**, from the track's own zero — the left
 /// end of a row, and the **bottom** of a column, because a fader stands up and
 /// a meter fills from the floor.
@@ -9487,58 +7225,6 @@ fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Vec2) -> Fade
     }
 }
 
-/// **A scheduled move on a laid-out fader**: the mark on where it is going,
-/// and the band reaching `rolled` of the way from where it is.
-///
-/// **Two faders in and no value arithmetic**, which is what keeps this honest:
-/// `now` and `to` are the same track measured at the two values, so the mark
-/// lands exactly where the knob would and the band starts exactly where the
-/// fill ends. The knob's centre is the fill's moving edge — [`fader`] says so
-/// — and that one number is the whole of what this reads out of each.
-///
-/// **The displacement is a fraction of the gap rather than a distance**, so
-/// the reach is in proportion to the move: a fade across the fader sets off a
-/// long way and a fade of a hundredth sets off a pixel. That is the honest
-/// picture and it is also the limit — under about a hundredth of the travel
-/// the whole disagreement is a pixel, and what carries the message there is
-/// the mark rather than the motion. See
-/// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md).
-///
-/// Two call sites the day it is written, which is this repository's rule about
-/// an abstraction: the trim and the opacity fader, exactly as [`fader`] itself
-/// has.
-fn reach(now: Fader, to: Fader, rolled: f32) -> Reach {
-    let (from, dest) = (now.knob.center(), to.knob.center());
-    match now.axis {
-        Axis::Row => {
-            let head = from.x + (dest.x - from.x) * rolled;
-            Reach {
-                mark: Rect::from_center_size(
-                    Pos2::new(dest.x, now.track.center().y),
-                    egui::vec2(size::HAIRLINE, now.knob.height()),
-                ),
-                band: Rect::from_min_max(
-                    Pos2::new(from.x.min(head), now.fill.min.y),
-                    Pos2::new(from.x.max(head), now.fill.max.y),
-                ),
-            }
-        }
-        Axis::Column => {
-            let head = from.y + (dest.y - from.y) * rolled;
-            Reach {
-                mark: Rect::from_center_size(
-                    Pos2::new(now.track.center().x, dest.y),
-                    egui::vec2(now.knob.width(), size::HAIRLINE),
-                ),
-                band: Rect::from_min_max(
-                    Pos2::new(now.fill.min.x, from.y.min(head)),
-                    Pos2::new(now.fill.max.x, from.y.max(head)),
-                ),
-            }
-        }
-    }
-}
-
 /// **One laid-out fader, taken hold of at `p`** — or `None` where `p` is not
 /// on its knob.
 ///
@@ -9560,147 +7246,6 @@ fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
     Grab::new(knob, fader.axis, zero, fader.travel, coord - edge)
 }
 
-/// **The next blend mode round the cycle**, wrapping from the last back to the
-/// first — and the whole of the affordance the blend chip is.
-///
-/// It is four lines here and nothing at all in `karakuri-operation`, which is
-/// P-0090's division: a toggle is an affordance, built over operations by
-/// whoever draws the control, and it belongs there. The vocabulary owns the
-/// three values; this owns the order a pointer walks them in.
-///
-/// **A match rather than an index into [`BlendMode::ALL`]**, for the reason
-/// [`BlendMode::name`] is one: a fourth mode does not compile until somebody
-/// says what follows it. The cost is that the order is written twice — here
-/// and in `ALL` — so `tests/blend.rs` walks `ALL` through this and asserts
-/// they are the same cycle, which is the measurement that keeps the two from
-/// drifting rather than a comment promising they will not.
-///
-/// # It is the workspace's only blend cycle, and it is `pub` for that
-///
-/// `crates/karakuri/src/main.rs` had one of its own — `after_blend`, what one
-/// press of `m` asked for — saying the same three modes in the same order,
-/// with a test each. Under the grammar `space` on an addressed blend chip asks
-/// [`crate::focus::press`], which asks this, so the key and the chip are one
-/// cycle and the copy is gone
-/// ([ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md)).
-/// What is left in that file is a device test asserting where the cycle
-/// arrives on a real deck, and it asks this rather than restating it — which
-/// is the whole of why this is `pub` where [`next`] and [`next_shape`] beside
-/// it are `pub(crate)`.
-pub fn after(blend: BlendMode) -> BlendMode {
-    match blend {
-        BlendMode::Add => BlendMode::Over,
-        BlendMode::Over => BlendMode::Max,
-        BlendMode::Max => BlendMode::Add,
-    }
-}
-
-/// **The next residency round the cycle**, wrapping from the last back to the
-/// first — the whole of the affordance the tally chip is, and the order the
-/// mock's own tooltip lists: *"one of three residencies — live, priming,
-/// allocated"*.
-///
-/// [`after`]'s division, one control along: the cycle is three lines here and
-/// nothing in `karakuri-operation`, which owns the three values and not the
-/// order a pointer walks them in (P-0090).
-///
-/// **A match rather than an index into [`Tally::ALL`]**, for [`after`]'s
-/// reason: a fourth residency does not compile until somebody says what
-/// follows it. The price is that the order is written twice — here and in
-/// `ALL` — so `tests/tally.rs` walks `ALL` through this and asserts they are
-/// the same cycle.
-///
-/// **What it is asked about is [`Strip::requested`]**, and why is
-/// [`Mixer::tally`].
-pub(crate) fn next(tally: Tally) -> Tally {
-    match tally {
-        Tally::Live => Tally::Priming,
-        Tally::Priming => Tally::Allocated,
-        Tally::Allocated => Tally::Live,
-    }
-}
-
-/// **The console's word for a residency, as the vocabulary's** — and it is the
-/// whole of what the console has to know about the difference.
-///
-/// [`Tally`] is the mock's `.tally` and the engine's `Residency` seen from the
-/// surface; [`karakuri_operation::Residency`] is what an operation may name.
-/// They are the same three states and two crates' words for them, so the
-/// translation is a match — and a match rather than a cast so that a fourth
-/// state on either side stops the build here, where the two lists meet, rather
-/// than at a chip drawing a word no operation can carry.
-///
-/// The mirror image of it is `crates/karakuri/src/main.rs`'s `tally`, which turns the
-/// *engine's* `Residency` into a [`Tally`] on the way in. Three names for
-/// three states is the cost `karakuri-operation` pays for depending on nothing
-/// (P-0090), and this is one of the two places it is paid.
-pub(crate) fn residency(tally: Tally) -> Residency {
-    match tally {
-        Tally::Live => Residency::Live,
-        Tally::Priming => Residency::Priming,
-        Tally::Allocated => Residency::Allocated,
-    }
-}
-
-/// **The next mask shape round the cycle**, wrapping from the last back to the
-/// first — the whole of the affordance the mask mini is.
-///
-/// [`after`]'s division, one control along: the cycle is three lines here and
-/// nothing in `karakuri-operation`, which owns the three shapes and not the
-/// order a pointer walks them in (P-0090).
-///
-/// **A match, for [`after`]'s reason**: a fourth shape does not compile until
-/// somebody says what follows it. Unlike [`after`] and [`next`] the price is
-/// not a second copy of the order — [`Mask`] has no `ALL` and neither does
-/// `karakuri_operation::WipeKind`, because nothing reads one (see [`Mask`]) —
-/// so this is the only statement of the order in this crate, and
-/// `tests/mask.rs` is what checks it against the order it is a copy of.
-///
-/// **It starts at [`Mask::None`]**, which is `karakuri_engine::deck::MaskKind::ALL`'s
-/// own order and its own reason: *"`None` first, because it is the default and
-/// a cycle should start where a slot starts."* A cycle that began at `Linear`
-/// would be a control whose first press on a fresh slot moves it somewhere it
-/// has never been.
-pub(crate) fn next_shape(mask: Mask) -> Mask {
-    match mask {
-        Mask::None => Mask::Linear,
-        Mask::Linear => Mask::Radial,
-        Mask::Radial => Mask::None,
-    }
-}
-
-/// **The console's word for a mask shape, as the vocabulary's** — [`residency`]
-/// one control along, and for its reason exactly.
-///
-/// [`Mask`] is the mock's second `.mini` and the engine's `MaskKind` seen from
-/// the surface; [`karakuri_operation::WipeKind`] is what an operation may name.
-/// They are the same three shapes and two crates' words for them, so the
-/// translation is a match — and a match rather than a cast so that a fourth
-/// shape on either side stops the build here, where the two lists meet, rather
-/// than at a chip drawing a mark no operation can carry.
-///
-/// The mirror image of it is `crates/karakuri/src/main.rs`'s reading of
-/// `Deck::mask(slot).kind()`, which turns the *engine's* `MaskKind` into a
-/// [`Mask`] on the way in.
-pub(crate) fn wipe_kind(mask: Mask) -> WipeKind {
-    match mask {
-        Mask::None => WipeKind::None,
-        Mask::Linear => WipeKind::Linear,
-        Mask::Radial => WipeKind::Radial,
-    }
-}
-
-/// The tally's word as one laid-out run, so that measuring it and painting it
-/// cannot be two different runs of type.
-fn tally_job(tally: Tally, colour: Color32) -> LayoutJob {
-    spaced(
-        &tally.word().to_uppercase(),
-        size::TALLY_SIZE,
-        colour,
-        size::TALLY_TRACKING,
-    )
-}
-
 /// A plain span at a size that is not the console's [`size::BASE`] — this bay
 /// has four of them, which is why it takes one.
 fn span_at(text: &str, size: f32, colour: Color32) -> LayoutJob {
@@ -9709,71 +7254,6 @@ fn span_at(text: &str, size: f32, colour: Color32) -> LayoutJob {
         FontId::new(size, FontFamily::Proportional),
         colour,
     )
-}
-
-/// `.strip-name` as one laid-out run: `overflow: hidden; text-overflow:
-/// ellipsis; white-space: nowrap` is exactly one row, broken anywhere, with an
-/// ellipsis standing for what did not fit.
-fn name_job(name: &str, width: f32, colour: Color32) -> LayoutJob {
-    let mut job = span_at(name, size::STRIP_NAME_SIZE, colour);
-    job.wrap = egui::epaint::text::TextWrapping {
-        max_width: width,
-        max_rows: 1,
-        break_anywhere: true,
-        overflow_character: Some('…'),
-    };
-    job
-}
-
-/// **The Mixer bay's strips, painted.**
-///
-/// Where everything goes is [`mixer`]'s, so this paints and derives nothing.
-///
-/// **`marked` is the strip a carried Set would land on**, and it is handed in
-/// rather than asked here for the reason `selection` is: it is a *pointer*,
-/// and one of the two the panel holds. [`View::draw`] resolves it off
-/// [`Mixer::dropped`] — the derivation the release asks — so the ring is
-/// painted round the strip that release would name and never round a
-/// neighbour.
-fn mixer_into(
-    ui: &Ui,
-    pal: &Palette,
-    mixer: &Mixer,
-    phase: Phase,
-    selection: u8,
-    marked: Option<u8>,
-) {
-    for (strip, at) in mixer.placed() {
-        strip_into(ui, pal, strip, at, phase);
-    }
-    // `.strip.drop` — `outline: 2px solid var(--c-text)` at `outline-offset:
-    // 0`, the rectangle a Set in hand lands on if it is let go here. Drawn
-    // **before** the selection below and outside the strip's own edge where
-    // that one is inset, which is how one strip wears both at once — the mock
-    // draws deck A wearing exactly that pair.
-    if let Some(rect) = marked.and_then(|deck| mixer.selected(deck)) {
-        drop_ring(ui, pal, rect, size::STRIP_RADIUS);
-    }
-    // `.strip.focus` — `box-shadow: inset 0 0 0 2px var(--c-lav)`, the deck
-    // selection, drawn **after every strip** because an inset shadow is over a
-    // strip's contents and not under them. It is a solid ring where the mock's
-    // keyboard focus is a dashed outline, which is `console.html`'s *Two
-    // focuses, and they do not look alike*: drawn the same way, a reader could
-    // not tell which of the two they were looking at. Nothing draws the dashed
-    // one — this console takes no keyboard focus.
-    //
-    // `None` where the selection names a slot this bay is not drawing, which
-    // [`View::select`] refuses at the source and this answers again because a
-    // rectangle is what it has: a bay one frame behind a deck that lost a slot
-    // would otherwise ring a track no strip is in.
-    if let Some(rect) = mixer.selected(selection) {
-        ui.painter().with_clip_rect(rect).rect_stroke(
-            rect,
-            CornerRadius::same(size::STRIP_RADIUS as u8),
-            Stroke::new(size::STRIP_FOCUS_RING, pal.lav),
-            StrokeKind::Inside,
-        );
-    }
 }
 
 /// **The drop mark**: `.strip.drop` and `.cell.drop`'s `outline: 2px solid
@@ -9795,7 +7275,7 @@ fn mixer_into(
 /// star, mint is armed — and the text ink is what a word is drawn in when
 /// nothing is being said about it. That is exactly what this mark has to say:
 /// it says **where** the release lands and never **whether** it is allowed
-/// ([ADR-0265](../../../docs/adr/0265-a-release-names-the-deck-and-nothing-is-refused.md)).
+/// ([ADR-0265](../../../../docs/adr/0265-a-release-names-the-deck-and-nothing-is-refused.md)).
 /// Lavender is ruled out twice over — the selection is already a lavender ring
 /// round a strip, and the deck being carried to is usually the deck already
 /// selected, so the two would be one mark on one strip in the moment it is
@@ -9899,264 +7379,6 @@ fn folded_head_into(ui: &Ui, pal: &Palette, at: Rect, title: &str) {
     painter.galley(Pos2::new(after, mid - says.size().y * 0.5), says, pal.faint);
 }
 
-/// **The Mixer bay's transition row, painted**, term for term from
-/// `style.css`:
-///
-/// - `.xfade` — `border-top: 1px solid var(--c-hair)`, the rule that separates
-///   the row from the strips above it, drawn inside the block's own top edge
-///   the way `.scopes`' is drawn inside its bottom one.
-/// - `.xrow` — three `.pill`s laid from the left, one `.xrow` gap apart, and
-///   the `go` capsule at the right end with `.sep`'s `flex: 1` between. The
-///   separator has no background and no border, so honouring it is placing the
-///   capsule and painting nothing.
-/// - `.pill.armed` on the shape while a shape is chosen, and the plain
-///   `.pill` on it while it reads `no shape` — see
-///   [`TransitionSettings::armed`].
-///   The two settings between them are always plain, which is what the mock
-///   draws.
-/// - `.pill.on` on `go` while a press on it would run a wipe, and the plain
-///   `.pill` otherwise — see [`TransitionRow::runs`], which is the same pair
-///   of conditions [`TransitionRow::go`] refuses on. The mock draws it lit
-///   because the row it draws is armed with two decks under it.
-///
-/// Where everything goes is [`transition`]'s, so this paints and derives
-/// nothing — [`mixer_into`]'s own sentence, one row up. **`decks` is the one
-/// thing it is told rather than measured**: whether the capsule is lit is a
-/// fact about the mixer above it, and it is the same count
-/// [`TransitionRow::go`] is asked with.
-fn transition_into(ui: &Ui, pal: &Palette, row: &TransitionRow, decks: usize) {
-    // The rule is inside the block rather than above it, which is what keeps
-    // the pills where `transition` put them: `size::XFADE_H` counts the
-    // hairline as the first pixel of the block.
-    let rule = row.rect.min.y + size::HAIRLINE * 0.5;
-    ui.painter().line_segment(
-        [
-            Pos2::new(row.rect.min.x, rule),
-            Pos2::new(row.rect.max.x, rule),
-        ],
-        Stroke::new(size::HAIRLINE, pal.hair),
-    );
-    pill_into(
-        ui,
-        pal,
-        row.shape,
-        row.settings.shape_word(),
-        row.settings.armed(),
-    );
-    pill_into(ui, pal, row.quantum, row.settings.quantum_word(), false);
-    pill_into(ui, pal, row.length, row.settings.length_word(), false);
-    match row.runs(decks) {
-        true => on_pill_at(ui, pal, row.go, GO),
-        false => pill_at(ui, pal, row.go, GO),
-    }
-}
-
-/// **One strip**, term for term from `style.css`:
-///
-/// - `.strip` — `background: var(--c-well)`, `border-radius: 9px`.
-/// - `.strip-name` — `font-size: 10px`, `var(--c-dim)`, centred, elided.
-/// - `.tally` — three washes and three inks, which is [`tally_into`]'s.
-/// - `.trim .lbl` — `font-size: 9px`, `var(--c-faint)`.
-/// - `.fader` and `.vfader` — [`fader_into`]'s.
-/// - `.vmeter` — [`meter_into`]'s.
-/// - `.strip-num` — `var(--c-text)`, *a value*, and `font-weight: 500` is not
-///   honoured because `egui`'s default proportional face has no bold.
-/// - `.strip-mode` — two [`mini_into`]s.
-fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox, phase: Phase) {
-    // Clipped to the strip and half the gap around it: a fader's knob is
-    // meant to stand proud of its track, and `.mixer-strips`' 4px gap is where
-    // that goes — but nothing in one strip may reach the strip beside it.
-    let painter = ui
-        .painter()
-        .with_clip_rect(at.rect.expand(size::STRIP_GAP * 0.5));
-    painter.rect_filled(
-        at.rect,
-        CornerRadius::same(size::STRIP_RADIUS as u8),
-        pal.well,
-    );
-
-    if !strip.name.is_empty() {
-        let galley = painter.layout_job(name_job(&strip.name, at.name.width(), pal.dim));
-        centre_galley(&painter, at.name, galley, pal.dim);
-    }
-
-    tally_into(&painter, pal, at.tally, strip.tally, strip.pending(), phase);
-
-    let galley = painter.layout_job(span_at(TRIM_LABEL, size::TRIM_LABEL_SIZE, pal.faint));
-    painter.galley(
-        Pos2::new(
-            at.trim_label.min.x,
-            at.trim_label.center().y - galley.size().y * 0.5,
-        ),
-        galley,
-        pal.faint,
-    );
-    // **The same displacement for both faders and for the chip above them**,
-    // because it is the same phase: ADR-0190's *one phase, not one per
-    // animation*, which on this strip is three presentations reading one
-    // number. A strip with a fade on each fader reaches twice, in step.
-    let rolled = roll_at(phase);
-    fader_into(
-        &painter,
-        pal,
-        at.trim_at(strip.gain),
-        false,
-        strip
-            .gain_pending()
-            .map(|to| at.trim_reach(strip.gain, to, rolled)),
-    );
-    fader_into(
-        &painter,
-        pal,
-        at.fader_at(strip.opacity),
-        strip.tally == Tally::Live,
-        strip
-            .opacity_pending()
-            .map(|to| at.fader_reach(strip.opacity, to, rolled)),
-    );
-    meter_into(&painter, pal, at.meter, strip.level.map(|l| at.meter_at(l)));
-
-    // `.strip-num`: the opacity to two places, which is what the mock writes.
-    // The value itself and not the fader's clamped one — the fader clamps
-    // because a track has ends and a number does not.
-    let galley = painter.layout_job(span_at(
-        &format!("{:.2}", strip.opacity),
-        size::STRIP_NUM_SIZE,
-        pal.text,
-    ));
-    centre_galley(&painter, at.num, galley, pal.text);
-
-    mini_into(&painter, pal, at.blend, true, |painter, colour| {
-        let galley = painter.layout_job(span_at(strip.blend.name(), size::MINI_SIZE, colour));
-        centre_galley(painter, at.blend, galley, colour);
-    });
-    mini_into(&painter, pal, at.mask, false, |painter, colour| {
-        mask_mark(painter, at.mask.center(), colour, strip.mask);
-    });
-}
-
-/// A galley centred in a box, both ways — which is `align-items: center` on a
-/// flex column done where the type's real height is known.
-fn centre_galley(
-    painter: &egui::Painter,
-    rect: Rect,
-    galley: std::sync::Arc<egui::Galley>,
-    colour: Color32,
-) {
-    painter.galley(
-        Pos2::new(
-            rect.center().x - galley.size().x * 0.5,
-            rect.center().y - galley.size().y * 0.5,
-        ),
-        galley,
-        colour,
-    );
-}
-
-/// `.tally`: a capsule with the residency's word in it, in the residency's own
-/// colours.
-///
-/// - `.tally.live` — `color-mix(in srgb, var(--c-pink) 18%, transparent)`
-///   behind `var(--c-pink)`, with `box-shadow: 0 0 10px var(--c-glowp)`. The
-///   halo is an [`egui::epaint::Shadow`], the mechanism the transport's lit
-///   beat and the Outputs row's dot both use.
-/// - `.tally.priming` — a 20% wash of `var(--c-sun)` behind `var(--c-sun)`,
-///   and **no halo**: priming is warming out of sight, not on air.
-/// - `.tally.alloc` — `var(--c-tint)` behind `var(--c-dim)`, which is the
-///   palette's own *"the wash behind a node head, and the allocated tally"* —
-///   the first use of `--c-tint` in this crate, and it was transcribed against
-///   this day.
-///
-/// # And the roll, where the request has not landed
-///
-/// `pending` is [`Strip::pending`] — the residency this slot was asked for and
-/// has not reached. While it is `Some`, the word rolls part of the way toward
-/// it and falls back, once a second, and never arrives: [`roll_at`] is the
-/// displacement and [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
-/// is why it is a roll and not two lamps side by side — 53 pixels, and the
-/// pair the rule exists for is 85.125 of them.
-///
-/// # The clip is new, not narrowed
-///
-/// Nothing called `with_clip_rect` on a tally before this: the chip painted a
-/// filled rect and a galley that fitted inside it, so there was nothing to
-/// clip and no clip to get wrong. A second word travelling through the box is
-/// the first thing here that is drawn to be cut off, and the cut is what makes
-/// the roll a roll rather than two words overlapping the trim row underneath.
-/// It is introduced deliberately and it is on the type alone — see the note at
-/// the clip itself, because the halo has to go on spilling.
-fn tally_into(
-    painter: &egui::Painter,
-    pal: &Palette,
-    rect: Rect,
-    tally: Tally,
-    pending: Option<Tally>,
-    phase: Phase,
-) {
-    let radius = CornerRadius::same((size::TALLY_H * 0.5) as u8);
-    let ink = |tally| match tally {
-        Tally::Live => (tint(pal.pink, 18), pal.pink),
-        Tally::Priming => (tint(pal.sun, 20), pal.sun),
-        Tally::Allocated => (pal.tint, pal.dim),
-    };
-    let (fill, ink_now) = ink(tally);
-    if tally == Tally::Live {
-        painter.add(
-            egui::epaint::Shadow {
-                offset: [0, 0],
-                blur: size::TALLY_GLOW,
-                spread: 0,
-                color: pal.glow_pink,
-            }
-            .as_shape(rect, radius),
-        );
-    }
-    painter.rect_filled(rect, radius, fill);
-
-    // **The clip is the capsule, and it is on the words alone.** The halo is
-    // drawn to spill — `.tally.live`'s `box-shadow: 0 0 10px` is 10px of it
-    // outside the box — so a clip taken before the shadow would trim the one
-    // shape in this chip that is meant to leave it. Everything after this
-    // line is type that may be halfway out of the box on purpose.
-    let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
-
-    let galley = painter.layout_job(tally_job(tally, ink_now));
-    // **The pitch is the travel's, not the geometry's**, and it is at least
-    // the box: at the natural row pitch the two words would both be partly
-    // visible with nothing between them, which at 9px is mud. One box height
-    // apart leaves a blank band of exactly the slack the chip already has —
-    // 13.5 less a 10.0 ink row is 3.5 — for every displacement, because the
-    // band is the difference of two constants and not a function of how far
-    // the roll has got. It costs the chip nothing: the second word is
-    // outside the capsule at rest and clipped away.
-    let pitch = size::TALLY_H.max(galley.size().y);
-    let rolled = match pending {
-        Some(_) => roll_at(phase) * pitch,
-        None => 0.0,
-    };
-    let word_into = |painter: &egui::Painter, galley: std::sync::Arc<egui::Galley>, colour, dy| {
-        painter.galley(
-            Pos2::new(
-                rect.center().x - galley.size().x * 0.5,
-                rect.center().y - galley.size().y * 0.5 + dy,
-            ),
-            galley,
-            colour,
-        );
-    };
-    word_into(&painter, galley, ink_now, -rolled);
-    // **The destination in its own ink**, which is the second half of what is
-    // being said: the word names where the slot is going and the colour is the
-    // one that slot will be drawn in when it gets there. It comes up from
-    // below — one pitch under the settled word — so a still frame of a chip
-    // that is not rolling is the chip as it was.
-    if let Some(to) = pending {
-        let (_, ink_to) = ink(to);
-        let galley = painter.layout_job(tally_job(to, ink_to));
-        word_into(&painter, galley, ink_to, pitch - rolled);
-    }
-}
-
 /// A fader: the well, the fill and the knob.
 ///
 /// - `.fader` / `.vfader` — `background: var(--c-well)` with
@@ -10251,33 +7473,6 @@ fn fader_into(
     }
 }
 
-/// The meter: the well, the mean's column and the peak's mark — and **nothing
-/// in the well where there is no reading**, which is the mock's own `alloc`
-/// strip.
-///
-/// - `.vmeter` — the fader's well, at 6 wide.
-/// - `.vmeter b` — `linear-gradient(0deg, var(--c-mint), var(--c-sun))`, and
-///   square rather than a capsule: `.vmeter` is `overflow: hidden` and the
-///   column is clipped by the well rather than rounded itself.
-/// - `.vmeter u` — `background: var(--c-pink)`, *on air*, which is the colour
-///   the peak shares with the live tally and the lit beat.
-fn meter_into(painter: &egui::Painter, pal: &Palette, well: Rect, meter: Option<Meter>) {
-    let radius = CornerRadius::same((well.width() * 0.5) as u8);
-    painter.rect_filled(well, radius, pal.well);
-    painter.rect_stroke(
-        well,
-        radius,
-        Stroke::new(size::HAIRLINE, pal.hair),
-        StrokeKind::Inside,
-    );
-    let Some(meter) = meter else {
-        return;
-    };
-    let painter = painter.with_clip_rect(meter.well);
-    gradient(&painter, meter.fill, Axis::Column, pal.mint, pal.sun, false);
-    painter.rect_filled(meter.peak, CornerRadius::ZERO, pal.pink);
-}
-
 /// One `.mini`: a capsule with a 1px border and whatever goes in it.
 ///
 /// `sel` is `.mini.sel` — `color: var(--c-lav)`, `border-color: transparent`,
@@ -10313,33 +7508,6 @@ fn mini_into(
             false => pal.faint,
         },
     );
-}
-
-/// The mask's mark, drawn rather than typed — see [`Mask`].
-///
-/// A circle [`size::MINI_SIZE`] across, which is the size the glyph it stands
-/// in for would have been, and then what the mask does to it: nothing, one
-/// half filled, or a filled centre.
-fn mask_mark(painter: &egui::Painter, centre: Pos2, colour: Color32, mask: Mask) {
-    let r = size::MINI_SIZE * 0.5;
-    match mask {
-        Mask::None => {}
-        // A half-disc is a circle with half of it not painted, so it is a clip
-        // rather than a path: `epaint` has no arc and a polygon of one would
-        // be a curve this file approximated by hand.
-        Mask::Linear => {
-            painter
-                .with_clip_rect(Rect::from_min_max(
-                    Pos2::new(centre.x, centre.y - r),
-                    Pos2::new(centre.x + r, centre.y + r),
-                ))
-                .circle_filled(centre, r, colour);
-        }
-        Mask::Radial => {
-            painter.circle_filled(centre, r * 0.5, colour);
-        }
-    }
-    painter.circle_stroke(centre, r, Stroke::new(size::HAIRLINE, colour));
 }
 
 /// **A two-colour ramp along `axis`**, which is `linear-gradient` and a
@@ -10445,7 +7613,7 @@ const MASTER_LABEL: &str = "out";
 /// `docs/manual/console.html` draws three effects under this row — feedback,
 /// bloom and rgb shift — and the word `master` appears nowhere in
 /// `karakuri-engine` except at the level this row moves
-/// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
+/// ([ADR-0224](../../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)).
 /// There is no chain, so there is nothing to draw a chain from: a row of
 /// effects over machinery that does not exist is the scaffolding this module's
 /// documentation refuses, and the bay's card shows through under this row
@@ -10474,12 +7642,12 @@ pub struct MasterRow {
     ///
     /// **A fixed three and not a list**, because the chain is fixed: three
     /// built-in passes, all of them loaded, in that order
-    /// ([ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
+    /// ([ADR-0317](../../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
     /// A `Vec` here would be a claim that the count can change, which is the
     /// `+ add` row's question and is not this one's.
     ///
     /// A row drops out from the bottom up when the bay is short, on
-    /// [`strips_row`]'s rule: the arrangement's own minimum for this bay keeps
+    /// [`mixer::strips_row`]'s rule: the arrangement's own minimum for this bay keeps
     /// room for the out row and one effect, so a bay at its minimum draws one.
     pub fx: [Option<FxRow>; 3],
 }
@@ -10688,7 +7856,7 @@ impl MasterRow {
 /// **The widest is measured and not assumed**: all ten `d.dd` strings are laid
 /// out and the widest of them wins, because whether `0.00` is wider than
 /// `1.11` is a fact about whatever font the room is drawn in and not one to
-/// take on trust ([`docs/contributing.md`](../../../docs/contributing.md) §1).
+/// take on trust ([`docs/contributing.md`](../../../../docs/contributing.md) §1).
 /// Ten cached layouts of four characters, on a pointer event and on a frame.
 ///
 /// **A reading outside `[0, 1]` is the one case it does not cover**, and it is
@@ -10703,7 +7871,7 @@ impl MasterRow {
 ///
 /// `None` for a console with no engine behind it — which is every test in this
 /// crate that does not hand a level in — and `None` for a bay with no room for
-/// the row, which is [`strips_row`]'s rule one bay up: folded away, soloed
+/// the row, which is [`mixer::strips_row`]'s rule one bay up: folded away, soloed
 /// away, or a window too small.
 ///
 /// # What it costs to ask
@@ -11156,7 +8324,7 @@ pub struct LaneChoice {
 /// # What is in the list, and why it is one deck's parameters and every deck's fader
 ///
 /// A lane's target is `Fader { deck }` or `Param { deck, param }`
-/// ([ADR-0321](../../../docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)),
+/// ([ADR-0321](../../../../docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)),
 /// so the list is the faders of every deck the mixer draws a strip for —
 /// [`View::select`]'s own count read a fourth time — and the published controls
 /// of **one** deck: the Library bay's load pulldown's
@@ -11169,7 +8337,7 @@ pub struct LaneChoice {
 /// three (ADR-0305's counting argument). Listing every deck's keys instead
 /// would put the same key in the list once per deck, so the operator would pick
 /// a deck by reading a list four times as long rather than by a control.
-/// [ADR-0327](../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md).
+/// [ADR-0327](../../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md).
 ///
 /// **What the console does not hold, it does not offer.** The parameters are
 /// [`View::inspector`]'s, which is written when a Set lands, and the inspector
@@ -11234,7 +8402,7 @@ pub struct SeqRow {
 ///
 /// # What is drawn and what is not
 ///
-/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// is satisfied here for the first time in this bay, and ADR-0222 said why it
 /// could not be before: every part of the drawing now reads a value that
 /// exists, because a pattern exists. **One thing the mock draws is still not
@@ -11248,7 +8416,7 @@ pub struct SeqRow {
 /// are one derivation. **Four pills and no `+`**: with four fixed banks the
 /// mock's `+` is `Operation::SelectPattern` at an empty bank, which is what a
 /// press on `seq 3` already is
-/// ([ADR-0327](../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
+/// ([ADR-0327](../../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
 ///
 /// # The cells are the row divided by the count, and the count follows the mode
 ///
@@ -11629,7 +8797,7 @@ impl LaneCard {
 /// [`Aim`]'s shape three bays along, and the same division: every arm is either
 /// this console's own state moving or one named operation, and never a lane
 /// appended here
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Chose {
     /// Put the card down — a press on `+ lane` with it up.
@@ -11989,7 +9157,7 @@ const MUTED_LANE: u8 = 30;
 
 /// **How stale the sequencer's picture may get**, which is what this bay
 /// declares under
-/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
+/// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 /// and what the harness turns into a deadline.
 ///
 /// **One sixteenth at the mock's tempo — 117.19 ms**, which is
@@ -12083,7 +9251,7 @@ const LOAD_ARROW: f32 = size::BASE * 0.5;
 
 /// **What a row menu's four load items are called, without the letter** —
 /// `Load to Slot A`, and it is the maintainer's own spelling
-/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+/// ([ADR-0311](../../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
 ///
 /// **It says *slot* where the rest of this panel says *deck*, and that is
 /// kept.** The words the operator asked for are the words the menu carries;
@@ -12144,7 +9312,7 @@ const STAR_WAIST: f32 = 0.46;
 /// other candidate was `expand`, and it lost on the same test: it names the
 /// *motion*, and nothing else on this panel is named for one — `load`, `go`,
 /// `rec`, `keep`, `solo` are all nouns or verbs about the instrument
-/// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+/// ([ADR-0312](../../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
 ///
 /// # It carries a lit state now, and it did not
 ///
@@ -12152,7 +9320,7 @@ const STAR_WAIST: f32 = 0.46;
 /// where it is still true: a run of lines appears under the cursor, *"which is
 /// not a thing anybody misses"*, so the block is the loudest part of the
 /// state. **That was an argument for the block being enough and not for the
-/// chip being wrong**, and rule 03 of [the manual](../../../docs/manual/index.html)
+/// chip being wrong**, and rule 03 of [the manual](../../../../docs/manual/index.html)
 /// asks a symbol what state it is in. So it is [`armed_pill_at`]'s mint while a
 /// reading is open and [`pill_at`]'s hairline round `--c-dim` while none is.
 ///
@@ -12882,7 +10050,7 @@ pub struct Pointed<'a> {
 ///   *which store is asked at all*, which is the host's outside the operation
 ///   entirely.
 /// - [`Scope::MySets`] waited on somewhere for a star to be, and
-///   [ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md)
+///   [ADR-0299](../../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md)
 ///   is that: `<store>/favourites.json`, beside the Sets. The chip that lists
 ///   everything the store holds is [`Scope::AllSets`], which is what that
 ///   record's *"what lists everything the store holds still needs a chip"*
@@ -12918,7 +10086,7 @@ pub enum Scope {
     /// store holds is what a take-in makes, and [`Scope::MySets`] is the
     /// **starred** subset of that, so it appears there only if somebody
     /// presses its star
-    /// ([ADR-0299](../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md)).
+    /// ([ADR-0299](../../../../docs/adr/0299-my-sets-is-the-starred-subset-and-the-star-is-kept-beside-the-sets.md)).
     /// This sentence said `my sets` until that record was written.
     Presets,
     /// A directory somebody names during the run.
@@ -13105,7 +10273,7 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// The manual: *"A scope and a walk, not one flat list: favourites, my sets,
 /// app presets, a folder."* **The scopes are drawn, and all four are answered
 /// now** — `all`, which is
-/// [`karakuri_store::Store::list_sets`](../../../crates/karakuri-store/src/store.rs)
+/// [`karakuri_store::Store::list_sets`](../../../../crates/karakuri-store/src/store.rs)
 /// and is a directory of Set files; `my sets`, which is the starred subset of
 /// it and is `<store>/favourites.json` intersected with that listing
 /// (ADR-0299); `presets`, which is the `.kset` files in the root the program
@@ -13135,7 +10303,7 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// two things at once (`console.html`): the walk inside a folder scope, and
 /// the place a send's save dialog opens on, so a Set handed to somebody starts
 /// where the listing is
-/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
+/// ([ADR-0311](../../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
 /// **It said *the place a send lands* until 2026-09-09**, which was ADR-0267
 /// and is superseded: the file is named in the system's own dialog now, and
 /// where it lands is the operator's answer rather than this row's.
@@ -13246,7 +10414,7 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// it, and this section used to end *what this bay owes is the drag; what it
 /// must not grow is a button*. **It grew one, and the argument that was
 /// against it is in
-/// [ADR-0305](../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)
+/// [ADR-0305](../../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)
 /// rather than deleted**, because it is a good argument that lost to one fact:
 /// a readout reading the selection cannot aim a load at a deck without taking
 /// the keys off the deck being played.
@@ -13295,12 +10463,12 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// where the surface that asked puts answers, so `SetTransfer::Send { id }`
 /// gains no field. What *this* surface asks with is the system's own save
 /// dialog, opened by the host on the file the operator names
-/// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)),
+/// ([ADR-0311](../../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)),
 /// and **no path crosses this crate at all**: nothing here reads a disk
 /// (ADR-0156) and nothing here spells a place.
 ///
 /// **It was the `.path` row's folder until 2026-09-09**, which is
-/// [ADR-0267](../../../docs/adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md),
+/// [ADR-0267](../../../../docs/adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md),
 /// superseded by ADR-0311. That row is still drawn and is still this library's
 /// readout — [`Pointed`], and ADR-0275's — and what it is for a send now is
 /// where the dialog opens rather than where the file lands.
@@ -13341,11 +10509,11 @@ fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
 /// said **this bay** does not scroll — *"which is honest, because it has no
 /// scroll position and inventing one here would be a control"* — and then, once
 /// an Inspector pane had one
-/// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
+/// ([ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
 /// that the reason **this list** had none was unchanged. Both are gone: the bay
 /// scrolls, the position is [`View::library_scroll`], and the wheel over the
 /// bay is the way in
-/// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+/// ([ADR-0312](../../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
 ///
 /// **What the old argument got right is what the count still does.** A row out
 /// of reach *was* a row a press would name and a hand could not see, and that
@@ -13414,7 +10582,7 @@ pub struct LibraryBay {
     pub list: Rect,
     /// **How many rows this bay is drawing whole**, which is the `n` of the
     /// `n of m` in its foot — rule 04 of
-    /// [the manual](../../../docs/manual/index.html): *"A list that showed you
+    /// [the manual](../../../../docs/manual/index.html): *"A list that showed you
     /// part of itself says so and says how much."*
     ///
     /// # It is the readout's number and not the walk's
@@ -13426,8 +10594,8 @@ pub struct LibraryBay {
     /// `m of m` means *nothing is out of sight* and can never be read off a
     /// bay with a row hanging over an edge. [`InspectorPane::shown`] is the
     /// same pair one bay over, and for the same reason
-    /// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md),
-    /// [ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    /// ([ADR-0312](../../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md),
+    /// [ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
     ///
     /// **It used to be how many were drawn, and the two were one number**,
     /// because there was nowhere to scroll to: a listing longer than the list
@@ -13453,7 +10621,7 @@ pub struct LibraryBay {
     /// range move when a divider moves — so a clamp written back into [`View`]
     /// would be a resize rewriting what an operator scrolled to. That is
     /// [`InspectorPane::scroll`]'s rule one bay over and
-    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md):
+    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md):
     /// **a shorter bay draws less of the same position and stores nothing**,
     /// so dragging it back reproduces what was on screen exactly rather than
     /// nearly.
@@ -13577,7 +10745,7 @@ pub enum Aim {
 /// [`Aim`]'s shape one bay along and the same division: every arm is either a
 /// move of this console's own state or one named operation, and never a
 /// rewiring performed here
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 /// The capsule asks for nothing at all — opening a list is this console's own
 /// pointer moving — which is why it has an arm of its own rather than an
 /// `Operation`, and why the row it belongs to owes the operations page nothing
@@ -13610,7 +10778,7 @@ pub enum Wiring {
 /// [`Wiring`]'s shape one row up and the same division: every arm is either a
 /// move of this console's own state or one named operation, and never a pane
 /// pointed here
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 /// The mark asks for nothing at all — opening a list is this console's own
 /// pointer moving — which is why it has an arm of its own rather than an
 /// `Operation`, and why the operations page carries one row for this control
@@ -13647,7 +10815,7 @@ pub enum Pointing {
 /// and nothing in [`crate::input::claim`] hit-tested any of it. What that
 /// could not do is aim a load at a deck without taking the keys off the deck
 /// being played, and that is what the split bought
-/// ([ADR-0305](../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
+/// ([ADR-0305](../../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
 ///
 /// **Two of the three parts are controls and the middle one is not.** The
 /// button asks for the load, the pulldown names the deck, and the `→` between
@@ -13835,7 +11003,7 @@ pub enum Picked {
     /// `SetTransfer::Send`, with the id off the row the menu was opened on.
     /// **No destination**, which is that operation's own shape: sending is a
     /// read, and where the answer goes is the surface's
-    /// ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)).
+    /// ([ADR-0260](../../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)).
     Send(Operation),
 }
 
@@ -15706,7 +12874,7 @@ struct Listed<'a> {
 /// not convex: `egui::Shape::convex_polygon` fans from the first vertex, which
 /// for this outline puts triangles outside the ink. A star *is* star-shaped
 /// about its own centre, so a fan anchored there is exact — which is
-/// [`mask_mark`]'s answer to `epaint` having no arc, one shape along.
+/// [`mixer::mask_mark`]'s answer to `epaint` having no arc, one shape along.
 fn star_mark(painter: &egui::Painter, centre: Pos2, across: f32, colour: Color32, filled: bool) {
     let outer = across * 0.5;
     let rim: Vec<Pos2> = (0..10)
@@ -16361,7 +13529,7 @@ pub struct Candidate {
 /// the node's address, the name and the verdict**, and, on the one verdict
 /// that has produced nothing to look at, **what the checker said**
 /// ([`Candidate::said`]);
-/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// is why the rest is omitted outright rather than drawn hollow.
 ///
 /// **The node arrived on 2026-09-09 and it is what a row now *is*.**
@@ -16965,7 +14133,7 @@ pub const SYNCS: [Sync; 3] = [Sync::Free, Sync::Tempo, Sync::Beat];
 /// instead of offering it"*. Whether a mode is honourable is
 /// `karakuri_engine::deck::Deck::sync_allowed`'s and arrives here as
 /// [`Pane::allows`] — the surface owns the affordance and never the authority
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
 /// so this chooses which destination to name and refuses nothing.
 ///
 /// # Landing back on `at` is a state and not a failure
@@ -16977,7 +14145,7 @@ pub const SYNCS: [Sync; 3] = [Sync::Free, Sync::Tempo, Sync::Beat];
 /// that refuses two modes is material that accumulates *and* reads the beat,
 /// where the mode left is `Free` and `Free` reads no anchor. The control that
 /// can ask for it deliberately is [`DeckHead::anchor`]
-/// ([ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)).
+/// ([ADR-0218](../../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)).
 ///
 /// `Free` is refused by nothing, so the loop always finds something and there
 /// is no `None` to answer.
@@ -17048,7 +14216,7 @@ pub struct Pane {
     /// properties instead would put a third copy of `Transport::allows`' rule
     /// in a crate that owns no material, and a control is not the authority on
     /// what it may ask for
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
     /// **A property of the Set, so it moves when a build lands in the slot** —
     /// the engine says so at `sync_allowed`, and it is why this is read beside
@@ -17079,7 +14247,7 @@ pub struct Pane {
     /// the word [`deck_head_into`] draws and the state
     /// [`DeckHead::composite`] reads to say which layering a press is asking
     /// for — a destination and never a flip
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
     /// **It said the press was not a control until 2026-09-09**, on the
     /// grounds that layering is a *build* decision in the engine —
@@ -17090,7 +14258,7 @@ pub struct Pane {
     /// the aim a watcher is pointed at, so a press re-aims the slot and the
     /// worker rebuilds it — the route a library load takes, judged against the
     /// budget like any other build
-    /// ([ADR-0314](../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+    /// ([ADR-0314](../../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
     /// It is a **readout of what landed** rather than of what was asked for,
     /// which is `Mixer::residency`'s division: the build may still be rolled
     /// back, and the Staging lane is what says so.
@@ -17118,13 +14286,13 @@ pub struct Pane {
 /// slot is actually running. So both cross the seam as answers rather than as
 /// the facts they are computed from, exactly as [`Pane::allows`] does and for
 /// the same reason: a control is not the authority on what it may ask for
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
 /// and this crate holds no engine and no store (ADR-0156).
 ///
 /// **The salt is handed over rather than invented**, which is the half worth
 /// stating twice. A console that reached for a random number would produce a
 /// picture no later run could produce again
-/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md));
+/// ([P-0092](../../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md));
 /// a console handed the next value of a sequence names a destination the way
 /// every other control here does.
 /// `docs/adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md`.
@@ -17224,8 +14392,8 @@ pub struct Node {
 ///
 /// `uses far : Geometry` names `far` and stops, because a part that names the
 /// parts around it is bound to one Set and stops being a library part
-/// ([P-0086](../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md),
-/// [ADR-0152](../../../docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md)).
+/// ([P-0086](../../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md),
+/// [ADR-0152](../../../../docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md)).
 /// So `slot` is the declaration's own word and `to` is a node's name, which is
 /// exactly `karakuri_engine::set::Edge`'s two halves and exactly what
 /// [`Operation::WireInput`](karakuri_operation::Operation::WireInput) carries.
@@ -17238,7 +14406,7 @@ pub struct Node {
 /// engine (ADR-0156). **What is offered is not what may be reached** — a name
 /// the Set cannot use is refused where the Set is built, in the sentence a
 /// model's `wire_input` meets
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Uses {
     /// **What the procedure calls this input** — `far` in `--edge morph.far=…`.
@@ -17259,7 +14427,7 @@ pub struct Uses {
 /// that field is the mock's `L1:0`, a display string in the layer word
 /// `docs/ir-spec.md` owns, and reading an address back out of what is drawn is
 /// the shape *a statement is held true by the thing it describes* forbids
-/// ([ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)).
+/// ([ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeAuthority {
     pub at: NodeAt,
@@ -17294,7 +14462,7 @@ pub struct Param {
     /// and its figure — drawn so the mark can be pressed again, because this
     /// bay is where publishing is chosen and a choice nobody can see is one
     /// nobody can unmake
-    /// ([ADR-0100](../../../docs/adr/0100-a-published-interface-is-a-choice-of-attention.md),
+    /// ([ADR-0100](../../../../docs/adr/0100-a-published-interface-is-a-choice-of-attention.md),
     /// `docs/adr/0329-…`).
     ///
     /// **It is not *hidden* and it is not *locked***: `--param`, a `param`
@@ -17321,7 +14489,7 @@ pub struct Param {
     /// the range whichever way this field is spelled. So the position is
     /// [`Param::at`], derived here, and the two directions are one statement
     /// in one place: [`ParamGrip`] and
-    /// [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+    /// [ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
     pub range: [f32; 2],
     /// **Which control this row is**, as the vocabulary addresses one —
     /// `Published::at` and `Published::key`, carried over unchanged.
@@ -17334,7 +14502,7 @@ pub struct Param {
     /// The vocabulary's own type rather than a pair of this crate's, because
     /// the operation carries exactly this and a second spelling of an address
     /// is what `karakuri-operation` exists to stop
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     pub param: karakuri_operation::ParamAt,
     /// **What is holding this control**, or `None` for a row nothing is
     /// driving — the mock's `.param.bound` and the `.sens` row under it.
@@ -17431,12 +14599,12 @@ impl Param {
     /// *from*, and at a measurement's full confidence that value carries no
     /// weight at all — so the handle would move under the hand and the picture
     /// would not, which is the one thing
-    /// [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)
+    /// [ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)
     /// refuses a track press for: *"a handle that jumped to the pointer would
     /// be a lie about what a handle is"*, read on the value axis.
     ///
     /// **It is not a refusal of the write**, and that distinction is
-    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)'s:
+    /// [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)'s:
     /// `Operation::WriteParam` on a bound parameter is legal, lands, and
     /// leaves the attachment where it is — a `--param` does exactly that
     /// today. What this says is that *this row's fader* is not the affordance
@@ -17479,7 +14647,7 @@ impl Param {
 ///
 /// # What is in the mock's pane and is deliberately not here
 ///
-/// This is [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// This is [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// applied to the bay it named as the next one and the hardest: *draw every
 /// part of the mock that has a value behind it and omit the rest outright — no
 /// placeholder, and no empty case the mock did not itself draw.* Nine things
@@ -17514,10 +14682,10 @@ impl Param {
 /// press re-aims the slot — the layering is one field of `watch::Aim` — and the
 /// worker builds it off the render thread, which is the route a library load
 /// takes
-/// ([ADR-0314](../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+/// ([ADR-0314](../../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
 ///
 /// **And the fourth was the anchor, which the mock draws as a readout and
-/// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
+/// [ADR-0218](../../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
 /// made a control.** A press on it emits `SetSync` naming the mode the deck is
 /// already in, which re-anchors, and its face goes on being a reading of two
 /// numbers the deck has. The sync chip beside it and the scrub's two arrows
@@ -17581,9 +14749,9 @@ pub struct InspectorPane {
     /// range move when the pane is dragged — so a clamp written back into
     /// [`View`] would be a resize rewriting what an operator scrolled to. That
     /// is
-    /// [ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)'s
+    /// [ADR-0250](../../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)'s
     /// rejected *clamp the stored size during the solve*, one region in, and
-    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md) is
+    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md) is
     /// the rule: **a shorter pane draws less of the same position and stores
     /// nothing**, so dragging it back reproduces what was on screen exactly
     /// rather than nearly.
@@ -17602,7 +14770,7 @@ pub struct InspectorPane {
     pub content: f32,
     /// **How many node groups this pane is showing whole**, which is the `n`
     /// of the `n of m` its head reads — [`pane_count`], and rule 04 of
-    /// [the manual](../../../docs/manual/index.html): *"A list that showed you
+    /// [the manual](../../../../docs/manual/index.html): *"A list that showed you
     /// part of itself says so and says how much."*
     ///
     /// # It is the readout's number and not the walk's
@@ -17622,7 +14790,7 @@ pub struct InspectorPane {
     /// is the half of the old rule that survives it: a part-drawn group is no
     /// longer a lie about what a node has, because the count says how many are
     /// whole and the rest is one notch of the wheel away
-    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    /// ([ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
     ///
     /// **Zero is a state and not a `None`.** A pane too short to hold one
     /// group whole still says which deck it is showing and what that deck's
@@ -17697,7 +14865,7 @@ impl InspectorPane {
     ///
     /// # The row is a choice only where the deck composites and holds two
     ///
-    /// [Every operation](../../../docs/manual/operations.html) states the
+    /// [Every operation](../../../../docs/manual/operations.html) states the
     /// condition on the row itself — *"Only where the deck composites and
     /// holds two or more. One-way: no position in the cycle folds them all
     /// back in"* — and `docs/manual/console.html` states it from the chips'
@@ -17713,7 +14881,7 @@ impl InspectorPane {
     ///
     /// **Every chip of a live row is claimed, the lit one included.** It names
     /// a destination, which is what an operation on this panel is
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// and pressing the lit one is the selection the deck already has asked
     /// for again — the anchor's shape two rows up. A chip that stopped being
     /// pressable the moment it lit would take the claim out from under a hand
@@ -17831,7 +14999,7 @@ impl InspectorPane {
     ///
     /// **`id: None`, and the store names the file.** This is the press that
     /// types nothing, so it takes the stamp —
-    /// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)'s
+    /// [ADR-0128](../../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)'s
     /// two routes drawn on one capsule, exactly as [`KeepPill`] draws them for
     /// the deck. The name a head *has* typed is
     /// [`View::named_set`]'s, and the host is what pairs the two: a keep sent
@@ -18007,7 +15175,7 @@ impl InspectorPane {
     /// the list — and names it. Nothing here says *drop this one*, which is
     /// what keeps two hands on one deck from disagreeing about what is
     /// published
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
     /// **Sorted by [`Param::ord`] and not by where the rows are drawn.** A
     /// wildcard control is *placed* in whichever group it resolves to and is
@@ -18150,7 +15318,7 @@ impl InspectorPane {
     /// is refused where the Set is *built*, by name and with what the Set does
     /// hold — the same wall a model's `wire_input` meets, which sends its edge
     /// to the same place with no check of its own
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
     /// **A pick replaces**, and that is the language's shape rather than this
     /// control's: an input takes one node, `SetError::SlotBoundTwice` refuses
@@ -18237,7 +15405,7 @@ impl InspectorPane {
 /// authorities (ADR-0223). The row was *placed* in a group by resolving that
 /// wildcard where it covered exactly one node, and writing what the placement
 /// resolved to would narrow the control to the node it happens to reach today
-/// — [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+/// — [ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamGrip<'a> {
     /// **Which deck's**, which is the manual's word for what the code calls a
@@ -18549,7 +15717,7 @@ pub const TAKE_BACK: &str = "take back";
 ///   comes back at confidence 0.0 — so there is no list of sources anywhere
 ///   for a chooser to be built over, and a console inventing one would be the
 ///   surface deciding what may be asked for, which is
-///   [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+///   [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 ///   exactly inverted. A source is named where a source can be named: a Set
 ///   file's `bind` line, or `--bind`.
 /// - **[`SensChip::Curve`] is the control**, and it is the blend chip's shape
@@ -18695,7 +15863,7 @@ fn sens_width(ctx: &egui::Context, text: &str) -> f32 {
 /// exactly as it did before this pass — [`mixer`]'s rule, one bay along.
 ///
 /// **The bay head is taken off the top here and not in [`pane_box`]**, which
-/// is what [`strips_row`] and [`library_box`] do one bay along: the head is
+/// is what [`mixer::strips_row`] and [`library_box`] do one bay along: the head is
 /// painted *over* the region rather than laid out beside it, so every body in
 /// this file starts at `region.min.y + size::HEAD_H` and the arithmetic under
 /// it is written as if the head were not there. A pane is the one body in the
@@ -18972,7 +16140,7 @@ pub struct DeckHead {
 /// arrived at and `Property::Seed` carries the salt. The affordance —
 /// *press it and it moves on* — is the surface's, which is
 /// [`DeckHead::sync`]'s division and [`Mixer::blend`]'s
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AimChips {
     /// **The capacity chip**, reading [`Aimed::capacity`]. `.mini`'s box round
@@ -19080,7 +16248,7 @@ impl DeckHead {
     /// [`Operation::SetSync`] naming the **destination**, never a step,
     /// because there is no step in the vocabulary to name. The affordance is
     /// [`Mixer::blend`]'s and [`LookRow::tonemap`]'s exactly
-    /// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)),
+    /// ([ADR-0187](../../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)),
     /// and so is the division it rests on: the cycle is [`next_sync`] here and
     /// nothing at all in `karakuri-operation`, which is P-0090's division: a
     /// toggle is an affordance, built over operations by whoever draws the
@@ -19088,7 +16256,7 @@ impl DeckHead {
     ///
     /// **The skip is the one thing this cycle has that the other two do not**,
     /// and it is not a refusal: what may be asked for is the engine's
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// and this chip is choosing which of the destinations *it* offers to
     /// name, out of a reading somebody else took. A mode this material cannot
     /// honour is passed over rather than handed on to be refused, which is the
@@ -19126,7 +16294,7 @@ impl DeckHead {
     /// of the affordance and not a gap in the vocabulary, and it is why there
     /// is no `ReAnchor` variant here to name — an operation whose meaning is
     /// *again* is the shape P-0090 rules out
-    /// ([ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)).
+    /// ([ADR-0218](../../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)).
     ///
     /// **A free deck has no anchor and loses nothing.** `Free` is the absence
     /// of a transport rather than a setting and reads no anchor at all, so
@@ -19167,7 +16335,7 @@ impl DeckHead {
     ///
     /// # One press is one operation
     ///
-    /// [ADR-0207](../../../docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md)
+    /// [ADR-0207](../../../../docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md)
     /// coalesces a swept MIDI fader to one operation a frame; neither half of
     /// it applies to a press, and a second press in the same frame is a second
     /// quarter beat an operator asked for. That is the whole reason the amount
@@ -19188,7 +16356,7 @@ impl DeckHead {
     /// *press it and it changes*, and what leaves this crate is the state
     /// being asked for. Nothing in `karakuri-operation` says *toggle*, because
     /// two surfaces stepping one control disagree about where they are
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// and the destination is computed from [`DeckHead::composited`] — the
     /// state the frame that laid this row out drew — so the chip a hand
     /// pressed and the operation that leaves are one statement.
@@ -19208,9 +16376,9 @@ impl DeckHead {
     /// hold the frame — which is
     /// the point rather than the price, because compositing costs a
     /// frame-sized target per renderer
-    /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md),
-    /// [P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md),
-    /// [ADR-0314](../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
+    /// ([P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md),
+    /// [P-0085](../../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md),
+    /// [ADR-0314](../../../../docs/adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md)).
     ///
     /// **Nothing here knows any of that**, and this crate could not: it names
     /// a destination and a deck, and where the rebuild happens is the window's
@@ -19238,9 +16406,9 @@ impl DeckHead {
     /// for a parameter is a uniform write and for a capacity is a full rebuild
     /// of the slot with every element buffer in it reallocated — dozens of them
     /// across one gesture, which is
-    /// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
+    /// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
     /// at its widest. So the affordance is the Library filters' one bay over
-    /// ([ADR-0262](../../../docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md)):
+    /// ([ADR-0262](../../../../docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md)):
     /// the field steps a closed list and the operation names where it arrived.
     ///
     /// **What it steps is not this console's list.** The powers of two inside a
@@ -19277,7 +16445,7 @@ impl DeckHead {
     /// A salt is the one payload on this row that could plausibly be *made up*,
     /// and a console that made one up would be a surface producing a picture no
     /// later run could produce again
-    /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+    /// ([P-0092](../../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
     /// [`Aimed::salt`] is the next value of the slot's own deterministic
     /// sequence, derived by whoever read the Set from the salt the slot is
     /// actually running — so this names a destination like every other control
@@ -19338,7 +16506,7 @@ impl DeckHead {
 /// chips at all, where it used to draw chips cut in half by
 /// [`inspector_into`]'s clip rectangle — which is a picture of a control that
 /// cannot be pressed
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
 pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option<DeckHead> {
     // Fonts are not valid until `egui` has run a pass, exactly as in
     // [`transport`], [`outputs`] and [`mixer`] — and on the frame before the
@@ -19419,7 +16587,7 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
     // build chips are dropped first and the row goes on drawing what it drew
     // before them, and the page says so rather than leaving an operator to
     // discover it by dragging
-    // ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    // ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     let aim = pane.aimed.as_ref().and_then(|aimed| {
         let word = aimed.capacity.to_string();
         let width_of = |text: &str| mini(text, row.min.x).width();
@@ -19472,13 +16640,13 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
 /// pane's deck while the selection stays where the operator put it. The key
 /// `k` keeps *the selected deck*, because a bare key press cannot say which,
 /// and the two are one operation asked for from two ends
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 ///
 /// # What it files it under
 ///
 /// [`Operation::SaveSet`] with **no id**, which is the same call the key makes
 /// and is a decision rather than an omission
-/// ([ADR-0287](../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md)).
+/// ([ADR-0287](../../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md)).
 /// What the store does with a `None` is `karakuri_environment::accepted_save`'s
 /// convention — a stamp, because *"an operator looks for the time they saved
 /// it"*.
@@ -19487,9 +16655,9 @@ pub fn deck_head(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
 /// `None` from there being one letter-taking flow on this console and it being
 /// an arrangement's; there are two now, and the second is the name in the head
 /// beside this capsule
-/// ([ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
+/// ([ADR-0292](../../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
 /// What holds the capsule at `None` from here on is
-/// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)
+/// [ADR-0128](../../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)
 /// rather than the absence of a field: *"an operator's own act gets the name it
 /// asked for; a key press cannot type one and takes a stamp"*. This is the
 /// press that types nothing, so this is the one that takes the stamp — see
@@ -19589,7 +16757,7 @@ pub fn keep_pill(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
 }
 
 /// **The word in the capsule**, which is the mock's own and is the row's name
-/// in the panel column of [every operation](../../../docs/manual/operations.html).
+/// in the panel column of [every operation](../../../../docs/manual/operations.html).
 const KEEP_LABEL: &str = "keep";
 
 /// **The letter of the deck a pane is pointed at**, or `?` for a pane pointed
@@ -19643,11 +16811,11 @@ fn head_label(naming: Option<&str>) -> &'static str {
 
 /// **The name in a pane head, laid out** — the mock's `.what`, and this
 /// console's **second** letter-taking flow
-/// ([ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
+/// ([ADR-0292](../../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md)).
 ///
 /// # A press on it names the Set, and the capsule beside it goes on stamping
 ///
-/// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)
+/// [ADR-0128](../../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)
 /// is what puts two routes on one row: *"an operator's own act gets the name it
 /// asked for; a key press cannot type one and takes a stamp"*. The `keep`
 /// capsule is the second of those and is unchanged — [`KeepPill::keep`] emits
@@ -19702,7 +16870,7 @@ impl DeckName {
 ///
 /// The Library foot's `5 of 27` counted on this bay's items rather than on
 /// that one's rows, which is what
-/// [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
+/// [ADR-0259](../../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
 /// says a pane's items are: *"Items are its panes; a pane's controls are its
 /// deck head and its node groups"*. A percentage would be a number about a
 /// rectangle, and what an operator counts is groups.
@@ -19714,7 +16882,7 @@ pub fn count_text(at: &InspectorPane, pane: &Pane) -> String {
 /// head with no room for it between the label and the capsule.
 ///
 /// It is a **readout**: nothing hit-tests it, it names no operation, and it
-/// carries no row on [every operation](../../../docs/manual/operations.html) —
+/// carries no row on [every operation](../../../../docs/manual/operations.html) —
 /// the mixer head's `3 of 3 · page 1` one bay along, and the reason is the
 /// same one that keeps the Library's cursor off that page. What it is *for* is
 /// rule 04 — *"A list that showed you part of itself says so and says how
@@ -19735,7 +16903,7 @@ pub fn count_text(at: &InspectorPane, pane: &Pane) -> String {
 /// read on a readout: measured against the room between the label and the
 /// capsule, so a head that would have to draw this over the words draws none
 /// of it. A pane at the declared minimum of 208 has room for all three
-/// ([ADR-0279](../../../docs/adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)),
+/// ([ADR-0279](../../../../docs/adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)),
 /// so this `None` is a pane below what the arrangement admits rather than a
 /// state rule 04 is broken in.
 pub fn pane_count(
@@ -19909,7 +17077,7 @@ pub fn deck_name(
 /// # A pulldown and not a flip
 ///
 /// The maintainer's choice, and
-/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 /// underneath it: a flip is a *step*, so two panes stepping cannot both be
 /// aimed without knowing where they started, and a key, a map line or a model
 /// would have to count presses to say *deck C*. Every row of this card names a
@@ -20049,7 +17217,7 @@ pub fn pane_target(
 /// [`Menu::Naming`]'s rule, unchanged and for its reason: a name that is not
 /// one path component is refused where the file is written, in one sentence, by
 /// whoever writes it — the surface owns the affordance and never the authority
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 /// A head that quietly dropped the characters it did not like would be a rule
 /// an operator could only find by experiment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20631,7 +17799,7 @@ fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
 /// sug / auto` on each node head, never a global mode."* What is drawn is
 /// which of the three this node is on, and **all three are claimed**: each
 /// names a destination, which is what an operation on this panel is
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
+/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
 /// and pressing the one a node is already on asks for what it already has —
 /// the renderer row's rule one row down, and the anchor's two bays over. A
 /// chip that stopped being pressable the moment it lit would take the claim
@@ -21218,7 +18386,7 @@ pub struct View {
     /// Outputs row reads it there; a projector is a second window, a second
     /// surface and a second [`karakuri_engine::frame::Sink`], and this crate
     /// takes no device
-    /// ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
+    /// ([ADR-0156](../../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
     /// So it arrives the way [`View::picture`] does: written per frame by
     /// whoever owns the window. `false` for every test in this crate, which is
     /// a console with no engine behind it.
@@ -21243,7 +18411,7 @@ pub struct View {
     /// material whatever the slot's residency — a parked deck's still and a
     /// warming deck's picture are the two an operator most needs to see, which
     /// is
-    /// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
+    /// [ADR-0258](../../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
     /// `None` is a cell with nothing to sample at all: a deck of fewer slots
     /// than there are cells, or a console with no engine behind it.
     ///
@@ -21275,7 +18443,7 @@ pub struct View {
     /// [`PREVIEW_MATERIAL`] — because the picture cannot say it: a held frame
     /// of good material looks like material, and an unmarked still is a
     /// preview that lies
-    /// ([ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
+    /// ([ADR-0269](../../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
     ///
     /// **A `bool` beside the picture rather than a third state of it.** The two
     /// keep different clocks, exactly as [`View::costs`] does: a picture is a
@@ -21370,7 +18538,7 @@ pub struct View {
     /// one thing rule 04 lets be a mode, because the pill *is* the readout: it
     /// is lit for exactly as long as the mode is on, and nothing else on the
     /// panel changes meaning while it is
-    /// ([ADR-0336](../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)).
+    /// ([ADR-0336](../../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)).
     ///
     /// **A `bool` and not an `Option`, where [`View::map`] beside it is an
     /// `Option`**, and the difference is the same one `audio` draws: whether a
@@ -21445,8 +18613,8 @@ pub struct View {
     /// chain is set to is [`View::master_chain`] beside it. The two are two
     /// fields for the reason they are two records — one is a level a fader
     /// rides and one is a set of settings a press moves
-    /// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md),
-    /// [ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
+    /// ([ADR-0224](../../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md),
+    /// [ADR-0317](../../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
     pub master_out: Option<f32>,
     /// **What the Master bay's three effect rows read this frame**, or `None`
     /// for a console with no engine behind it — in which case the bay draws
@@ -21745,8 +18913,8 @@ pub struct View {
     /// written at it — *"nothing downstream can be the model of record for it,
     /// and a host that kept a copy would be keeping the console's state on its
     /// behalf"* — and that paragraph is written once now
-    /// ([ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md),
-    /// [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
+    /// ([ADR-0259](../../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md),
+    /// [ADR-0332](../../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
     /// **Nothing about what any of the three means changes**, which is the
     /// record's own clause: what each of them refuses is still refused where it
     /// was refused, by [`View::select`], [`View::walk`] and
@@ -21758,7 +18926,7 @@ pub struct View {
     /// rule: what a *pointer* is at is not something the program can be told,
     /// because the console is what refuses a deck there is no strip for.
     ///
-    /// **Read by [`mixer_into`] for the solid ring, by [`View::focus_mark`]
+    /// **Read by [`mixer::mixer_into`] for the solid ring, by [`View::focus_mark`]
     /// for the dashed one, and by nothing else on the panel.** The Library
     /// bay's foot read the selection for its letter until 2026-09-08 and reads
     /// [`View::target`] now (ADR-0305), which is what lets a load be aimed at a
@@ -21774,7 +18942,7 @@ pub struct View {
     /// Library bay's foot lands on, and the two are free to name two different
     /// decks — which is the one thing the selection cannot do, and the whole of
     /// what the pulldown bought
-    /// ([ADR-0305](../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
+    /// ([ADR-0305](../../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
     /// `l` goes on reading the selection.
     ///
     /// **It writes no record and no operation names it**, which is
@@ -21862,8 +19030,8 @@ pub struct View {
     /// be the model of record for it, and it is not part of the arrangement —
     /// `karakuri-layout`'s tree holds sizes and folds and holds no scroll
     /// position
-    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md),
-    /// [ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+    /// ([ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md),
+    /// [ADR-0312](../../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
     ///
     /// **One and not one per scope.** A scope is a different listing in the
     /// same bay, the way a build landing is a different pane's contents one
@@ -21960,7 +19128,7 @@ pub struct View {
     /// of the arrangement either — `karakuri-layout`'s tree holds sizes and
     /// folds, which is what a saved arrangement carries — so a save does not
     /// take it and a restore does not move it
-    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    /// ([ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
     ///
     /// **It cannot live in [`View::inspector`]**, which is [`View::naming`]'s
     /// reason one field up: a pane is rewritten whenever a Set lands, so a
@@ -22222,7 +19390,7 @@ impl View {
     /// other variant names its deck instead of meaning the selected one"* — so
     /// nothing downstream can be the model of record for it, and a host that
     /// kept a copy would be keeping the console's state on its behalf.
-    /// [ADR-0219](../../../docs/adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)
+    /// [ADR-0219](../../../../docs/adr/0219-the-crossfader-spans-the-selection-and-the-one-after-it.md)
     /// recorded it as living *"in the specification and not in
     /// `karakuri-console`'s code"*; [`View::focus`] the field is where that
     /// stopped being true, and ADR-0259 is why it is the same field the library
@@ -22331,11 +19499,11 @@ impl View {
     ///
     /// **At bay level it acts on nothing and the caller says so**, which is
     /// ADR-0259's own clause and
-    /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+    /// [P-0083](../../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
     /// there is no unfocused state to fall out into, and a key that declines
     /// silently is indistinguishable from one that is not bound. **It does not
     /// quit** — the window's own close is what does
-    /// ([ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)).
+    /// ([ADR-0315](../../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)).
     pub fn focus_up(&mut self, panel: &Panel) -> bool {
         self.focus.up(panel.layout())
     }
@@ -22657,7 +19825,7 @@ impl View {
     ///
     /// The other clamp is against the list's own height and belongs where the
     /// bay is laid out — `library_box`, which is
-    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md):
+    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md):
     /// a shorter bay draws less of the same position and stores nothing, so
     /// dragging it back reproduces the picture exactly rather than nearly.
     ///
@@ -22751,12 +19919,12 @@ impl View {
     /// past them would sit on a row nobody can see, under a pill that says a
     /// press will load it. What has changed is that *drawn* is a **range**
     /// rather than a prefix, because the bay scrolls now
-    /// ([ADR-0312](../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
+    /// ([ADR-0312](../../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
     /// It used to take a count and clamp to `0..listed`.
     ///
     /// **The wheel is what moves the window and the arrows are what move the
     /// cursor inside it**, which is the division
-    /// [ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)
+    /// [ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)
     /// made one bay over: *"the keyboard's route is not bound here"*. Nothing
     /// the keyboard could reach before is out of reach now — the rows past the
     /// end of the list were unreachable by any means, and they are one notch
@@ -22843,7 +20011,7 @@ impl View {
     ///
     /// The other clamp is against the pane's own height and belongs where the
     /// pane is laid out — [`InspectorPane::scroll`], which is
-    /// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md):
+    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md):
     /// a shorter pane draws less of the same position and stores nothing, so
     /// dragging it back reproduces the picture exactly rather than nearly
     /// (ADR-0250's argument one region in).
@@ -23204,7 +20372,7 @@ impl View {
             // at four hundred pixels down draws its last row or nothing at
             // all. **It is a press moving the console's own state and not a
             // resize rewriting it**, which is what
-            // [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
+            // [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md)
             // is about: the clamp at the draw is still the only clamp, and a
             // scope pressed twice does not move it a second time
             // (ADR-0312).
@@ -23226,7 +20394,7 @@ impl View {
     /// [`Operation::SelectScope`]'s own instruction: *"The key steps and this
     /// does not … that is the translator's arithmetic rather than this
     /// operation's payload"*
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     /// A bare press cannot type a name and here it does not have to: the
     /// scopes are a short row of chips in front of you, so stepping says
     /// *which* by showing you.
@@ -23343,48 +20511,6 @@ impl View {
         moved
     }
 
-    /// **What the next fade, crossfade or wipe means** — see
-    /// [`View::transition`] the field, which is where the argument is.
-    ///
-    /// Read back bare, where [`View::cursor_row`] and [`View::scope`] are both
-    /// answered against a listing: there is no listing under this one to fall
-    /// out of, because the three cycles are the console's own and
-    /// [`View::set_transition`] refuses anything that is not on them.
-    pub fn transition(&self) -> TransitionSettings {
-        self.transition
-    }
-
-    /// **Take one of the three settings, and answer whether that moved
-    /// anything.**
-    ///
-    /// **A setting no pill can draw is refused**, which is [`View::select`]'s
-    /// rule and the same reasoning: the row is three capsules and each reads
-    /// the word its cycle gives the value it is on, so a shape or a beat count
-    /// off the cycle would be a pill with nothing to say — and, once it was
-    /// there, a press on it stepping from wherever the fallback in
-    /// [`TransitionSettings::shape_at`] landed rather than from what the pill
-    /// reads. The cycles are [`WIPE_SHAPES`], [`QUANTA`] and [`FADE_BEATS`],
-    /// and each is a *curation*: an angle between two of them is a value the
-    /// operation can carry and this row cannot show
-    /// (`karakuri_operation::WipeKind`'s own *"a dial with nowhere to show its
-    /// value is a control an operator cannot read"*).
-    ///
-    /// **It refuses rather than clamping**, for [`View::select`]'s reason: the
-    /// nearest curated angle is not the angle that was asked for, and a wipe
-    /// that ran at it would be a move nobody asked for made on stage.
-    ///
-    /// **This is not a lock, and P-0090 is what says so.** What may be asked
-    /// of the *instrument* is decided where the record is applied; nothing is
-    /// applied here at all. The console is the model of record for these three
-    /// ([`View::transition`] the field), and a model of record refusing a value
-    /// it cannot hold is not a surface deciding what may be asked.
-    ///
-    /// The `bool` is [`View::select`]'s: a caller repaints on a move and not
-    /// on a press, so a press that changed nothing costs no frame (P-0091).
-    pub fn set_transition(&mut self, setting: TransitionSetting) -> bool {
-        self.transition.take(setting)
-    }
-
     /// **Every live region that is declaring this frame**, each with what one
     /// update of it costs, how stale it may get, and when its picture is next
     /// different from the one on screen.
@@ -23393,11 +20519,11 @@ impl View {
     /// third is [`crate::budget::Declared::moves_in`], it is a function of the
     /// frame, and it exists because *how often must this be drawn* and *is
     /// this moving now* are two questions and only one of them was being asked
-    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+    /// ([ADR-0283](../../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
     ///
     /// # This is P-0091's naming, and the unit is a region
     ///
-    /// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md):
+    /// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md):
     /// *"Anything that must be live names two numbers — what its update costs,
     /// and how stale it may get in milliseconds."* This is that naming, and [`crate::budget`] holds the
     /// numbers with the arguments for where each came from. **A region is
@@ -23409,7 +20535,7 @@ impl View {
     ///
     /// **The transport row**, whenever the beat grid is drawn: the light
     /// travels the grid once a bar and it is the panel's continuous motion,
-    /// which [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+    /// which [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
     /// says is how a stopped panel announces itself. It declares
     /// [`BEAT_STALENESS`] and **it does not ask whether anything is pending**,
     /// which is the whole point of it: a signal that only ran while something
@@ -23420,8 +20546,8 @@ impl View {
     /// each of a strip's two faders reaches toward a value a transition has
     /// not reached yet — three presentations at one rate, off one [`Phase`],
     /// so they are one term and not three
-    /// ([ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
-    /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
+    /// ([ADR-0190](../../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+    /// [ADR-0206](../../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
     /// A second *rate* would be a second declaration; a second *user* of one
     /// rate is not — which is why the beat is a second entry here and the two
     /// faders are not.
@@ -23443,13 +20569,13 @@ impl View {
     /// mixer bay on top of that moved the price of a frame and not the rate.
     /// It draws nothing at all now. The alternative — declare it anyway and
     /// let a scheduler drop it — is
-    /// [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md),
+    /// [ADR-0193](../../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md),
     /// which is where it lost, and it lost on the sentence being **false**
     /// rather than unaffordable: a region nobody can see is not showing
     /// anything, so it cannot be showing anything out of date.
     ///
     /// This is
-    /// [P-0073](../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
+    /// [P-0073](../../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
     /// in time rather than in space — *a node claims only what its visible
     /// content can use*, where what is claimed is a share of the frame budget
     /// rather than a share of the viewport.
@@ -23563,7 +20689,7 @@ impl View {
     /// nothing for it to stand on and this bay is a head and a ruler that do
     /// not move. A declaration made for it would buy frames that redraw a
     /// still picture, which is the whole of what
-    /// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
+    /// [ADR-0283](../../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
     /// is about. **A muted lane still counts**: the mute stops the lane
     /// *writing*, and the column goes on crossing its cells.
     ///
@@ -23587,79 +20713,6 @@ impl View {
         })
     }
 
-    /// **What the mixer bay declares**: the roll's staleness while anything in
-    /// it is pending *and* the bay is laid out, and nothing otherwise — with
-    /// the deadline it asks for taken from where the roll has got to rather
-    /// than from the fact that something is pending.
-    ///
-    /// Three pending things, one rate — see [`View::declares`], which carries
-    /// the whole argument.
-    ///
-    /// # Pending is when it declares; moving is when it asks for a frame
-    ///
-    /// The three presentations in this bay are one curve ([`roll_at`]) off one
-    /// [`Phase`], and that curve is **exactly zero** for the 600 ms of every
-    /// [`ROLL_PERIOD`] that is not [`ROLL_TRAVEL`]. So *is anything pending*
-    /// is the right question for whether this region is live — it is what
-    /// separates a strip that has somewhere to go from one that has arrived —
-    /// and it is the wrong question for whether a frame is owed thirty
-    /// milliseconds from now. [`roll_moves_in`] answers the second one, and
-    /// [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
-    /// is where the two are separated.
-    ///
-    /// **The region stays in both sums throughout**, rest included: a parked
-    /// slot is a live region for as long as it is parked, and a schedule
-    /// admitted on the 40% of the period that moves would be a schedule that
-    /// could not afford the thing it admitted.
-    ///
-    /// # The level meter is in this bay and is not in this declaration
-    ///
-    /// [`Strip::level`] is the one thing on a strip that is a *measurement*
-    /// rather than a setting, and it moves on every frame the engine renders
-    /// — so *nothing in this bay changes while the roll rests* is a sentence
-    /// about the roll and not about the bay. It declares nothing anyway, and
-    /// the reason is **where the reading comes from**: `Deck::level` moves
-    /// inside `Deck::begin_frame`, which is the only caller of
-    /// `Meters::collect`, and a caller calls it once per composed frame. The
-    /// meter's picture is therefore a function of **the frames this panel is
-    /// drawn on** rather than of wall time, and there is no moment between two
-    /// frames at which what is on screen is not the newest reading taken —
-    /// because no reading is taken between two frames.
-    ///
-    /// That is what separates it from [`roll_at`], which is different at
-    /// 400 ms from what it was at 399 whether or not anybody drew anything and
-    /// can therefore say when it next moves. It is also what separates it from
-    /// the beat, which moves per composed frame as well and declares anyway on
-    /// P-0094's forced clause: *something is moving continuously while the
-    /// console is live*. There is no such clause for a meter, and a deadline
-    /// for one would be asking for the frames that produce the readings it
-    /// would then draw — measured in
-    /// [ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md),
-    /// which is where the alternatives are, and held in `tests/metered.rs`.
-    ///
-    /// **What would change it is ballistics.** A peak that is held and decays,
-    /// or a fill that falls at a rate rather than following the reading, is a
-    /// function of the clock exactly as the roll is: it would move between two
-    /// frames, and it would then have to declare. `tests/metered.rs` asserts
-    /// that premise — the meter's geometry is a function of the reading and of
-    /// nothing else — so the day a meter grows a fall time is a test failure
-    /// rather than a readout that freezes with nothing saying so.
-    fn mixer_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
-        let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
-        let moving = bay
-            && self.mixer.iter().any(|strip| {
-                strip.pending().is_some()
-                    || strip.gain_pending().is_some()
-                    || strip.opacity_pending().is_some()
-            });
-        moving.then_some(Declared {
-            region: "mixer",
-            cost: PANEL_PASS,
-            staleness: ROLL_STALENESS,
-            moves_in: roll_moves_in(self.phase),
-        })
-    }
-
     /// **The soonest any live region on this panel will next look different
     /// from what is on screen**, and `None` when nothing on it is moving.
     ///
@@ -23675,7 +20728,7 @@ impl View {
     /// answers instead, `staleness` stays the constant `tests/schedulable.rs`
     /// sums, and the invariant between them — `moves_in >= staleness` — is why
     /// this can only take a frame away and never bring one forward
-    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
+    /// ([ADR-0283](../../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
     ///
     /// **Nothing about the beat changes**, and P-0094 is why it must not: the
     /// light travels the grid on every frame the session advances, so its two
@@ -23711,7 +20764,7 @@ impl View {
     /// **With an engine behind it and the transport row on screen this never
     /// answers `None`**, because the beat is moving and says so
     /// ([`View::transport_declares`],
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
+    /// [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
     /// That is ADR-0164's still-panel clause narrowing rather than failing: a panel
     /// with something moving on it is a panel with something changing on it,
     /// and the reason it is moving is a declaration rather than an accident.
@@ -23983,7 +21036,7 @@ impl View {
                             // is the derivation the release asks, so the ring
                             // is painted round the strip that release names.
                             let marked = carried.and_then(|at| bay.dropped(at));
-                            mixer_into(ui, &pal, &bay, phase, selection, marked);
+                            mixer::mixer_into(ui, &pal, &bay, phase, selection, marked);
                         }
                         // **The transition row, under the strips**, and it is
                         // painted from here rather than from inside
@@ -24003,7 +21056,7 @@ impl View {
                         // to come from*, which is the mixer's own length and
                         // the same count `TransitionRow::go` is asked with.
                         if let Some(row) = transition(ui.ctx(), panel.layout(), transition_at) {
-                            transition_into(ui, &pal, &row, strips.len());
+                            mixer::transition_into(ui, &pal, &row, strips.len());
                         }
                     }
                     // **The third bay with something in its body, and it is
@@ -24435,7 +21488,7 @@ impl View {
         // would be decoration, where this one is the difference between a
         // gesture still running and a press that was missed. The page is
         // where that was settled
-        // ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md));
+        // ([ADR-0273](../../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md));
         // ADR-0265's consequence naming the old shape is annotated there.
         //
         // **Still one writer and still one icon per frame.** The grab is set
@@ -24527,7 +21580,7 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
 /// - [`PREVIEW_MATERIAL`] — there is a deck slot behind this cell and the
 ///   image is that slot's own target. It says nothing about residency: a
 ///   parked deck's still and a live deck's frame are the same word, which is
-///   [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
+///   [ADR-0258](../../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
 /// - [`PREVIEW_OVERLOADED`] — there is a slot behind this cell and it has
 ///   **stopped updating**: the version in it costs more than one frame may, so
 ///   the engine skips its step and its draw and the image is the last frame it
@@ -24535,7 +21588,7 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
 ///   cell shows**, which is the whole shape of the decision — the image stays,
 ///   because blanking it would be indistinguishable from an empty slot, and
 ///   the word is what separates a still from a preview
-///   ([ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
+///   ([ADR-0269](../../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
 ///   It is not residency either: this cell reads the same word on air and off.
 /// - [`PREVIEW_NO_SLOT`] — there is no slot behind this cell at all: a deck of
 ///   fewer slots than there are cells, or a console with no engine behind it.
@@ -24546,7 +21599,7 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Picture>) {
 ///
 /// **Not `empty` and not `off`, and both of those are worth naming.** The
 /// mock's D cell said `D · off` when
-/// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+/// [ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 /// landed and this function's ancestor copied the word; the page has since
 /// moved and neither word is what the cell distinguishes. *Off* was residency,
 /// and residency has not gated a cell since ADR-0240. *Empty* is a slot that
@@ -24584,7 +21637,7 @@ pub const PREVIEW_NO_SLOT: &str = "no slot";
 /// `karakuri_engine::governor::Decision` carries `budgeted_ms` and a `Basis`
 /// saying whether it is the two-draw estimate at the output's size or the
 /// single-draw measurement at the reference resolution
-/// ([ADR-0296](../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)).
+/// ([ADR-0296](../../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)).
 /// This is that pair, arriving the way every other value does: `src/` takes no
 /// engine (ADR-0156), so whoever holds the deck reads the report and writes
 /// [`View::costs`].
@@ -24744,7 +21797,7 @@ pub const BAND_PURPLE_MS: f32 = 16.0;
 ///   would vanish at the moment an operator loaded something — and a slot the
 ///   governor parks on a measured number would be parked with no visible
 ///   cause, which is
-///   [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
+///   [ADR-0191](../../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
 ///   complaint. **A refusal is not a green dot; a number that was spent is not
 ///   a refusal.**
 /// - **The mock does not distinguish them**, and the page moves first. `.risk`
@@ -24816,7 +21869,7 @@ pub fn band_of(ms: f32) -> Band {
 /// already describes and is not a fifth thing this function invents: not
 /// hollow, not grey, not green by default, each of which would assert a
 /// reading nobody took —
-/// [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md),
+/// [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md),
 /// draw the values that exist and omit the rest. It covers three cases and
 /// they are three different nothings: the governor found neither number for
 /// this slot (`governor::Basis::Unbudgetable`, which does not cross the seam —
