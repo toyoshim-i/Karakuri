@@ -49,7 +49,7 @@ use std::collections::{HashMap, HashSet};
 
 use karakuri_codegen::{generate_l1, generate_l2};
 use karakuri_ir::layout::{ElementLayout, Synthetic};
-use karakuri_ir::typed::Checked;
+use karakuri_ir::typed::{Checked, InputPort};
 use karakuri_ir::Kind;
 
 use crate::binding::{Binding, ParamWrite, Signals, CONTROL_PREFIX};
@@ -1195,7 +1195,7 @@ pub struct Edge {
     /// The node that declares the slot.
     pub node: String,
     /// What that node's procedure calls the slot, from its `uses` declaration.
-    pub slot: String,
+    pub slot: InputPort,
     /// The node bound to it.
     pub to: String,
 }
@@ -1868,7 +1868,7 @@ impl Set {
             if !declared.iter().any(|slot| slot.name == edge.slot) {
                 return Err(SetError::NoSuchSlot {
                     node: edge.node.clone(),
-                    slot: edge.slot.clone(),
+                    slot: edge.slot.to_string(),
                     declares: match declared.is_empty() {
                         true => String::new(),
                         false => format!(
@@ -1923,7 +1923,7 @@ impl Set {
                 let mut bound = wiring
                     .edges
                     .iter()
-                    .filter(|e| e.node == node && e.slot == slot);
+                    .filter(|e| e.node == node && e.slot.as_str() == slot);
                 let Some(edge) = bound.next() else {
                     return Err(SetError::SlotUnbound {
                         node,
@@ -2024,7 +2024,7 @@ impl Set {
                 let Some(edge) = bound.next() else {
                     return Err(SetError::SlotUnbound {
                         node: node_name,
-                        slot: slot.name.clone(),
+                        slot: slot.name.to_string(),
                         takes: slot.ty.name(),
                         holds: holds(),
                     });
@@ -2032,21 +2032,21 @@ impl Set {
                 if let Some(second) = bound.next() {
                     return Err(SetError::SlotBoundTwice {
                         node: node_name,
-                        slot: slot.name.clone(),
+                        slot: slot.name.to_string(),
                         first: edge.to.clone(),
                         second: second.to.clone(),
                     });
                 }
                 match node_at(&edge.to).map(|to| (to, field_ordinal(to))) {
                     Some((_, Some(ordinal))) => {
-                        field_bound.push((at, slot.name.clone(), ordinal));
+                        field_bound.push((at, slot.name.to_string(), ordinal));
                     }
                     // In the Set and not a field: the layer it *is* is the
                     // useful half of the sentence.
                     Some((other, None)) => {
                         return Err(SetError::EdgeToNotField {
                             node: node_name,
-                            slot: slot.name.clone(),
+                            slot: slot.name.to_string(),
                             to: edge.to.clone(),
                             layer: layer_of(other),
                             fields: holds_fields(),
@@ -2055,7 +2055,7 @@ impl Set {
                     None => {
                         return Err(SetError::EdgeToUnknown {
                             node: node_name,
-                            slot: slot.name.clone(),
+                            slot: slot.name.to_string(),
                             to: edge.to.clone(),
                             holds: holds(),
                         })
@@ -2094,7 +2094,7 @@ impl Set {
                 let Some(edge) = bound.next() else {
                     return Err(SetError::SlotUnbound {
                         node: node_name,
-                        slot: slot.name.clone(),
+                        slot: slot.name.to_string(),
                         takes: slot.ty.name(),
                         holds: holds(),
                     });
@@ -2107,7 +2107,7 @@ impl Set {
                 if let Some(second) = bound.next() {
                     return Err(SetError::SlotBoundTwice {
                         node: node_name,
-                        slot: slot.name.clone(),
+                        slot: slot.name.to_string(),
                         first: edge.to.clone(),
                         second: second.to.clone(),
                     });
@@ -2117,7 +2117,7 @@ impl Set {
                     Some((other, None)) => {
                         return Err(SetError::EdgeToNotCamera {
                             node: node_name,
-                            slot: slot.name.clone(),
+                            slot: slot.name.to_string(),
                             to: edge.to.clone(),
                             layer: layer_of(other),
                             cameras: holds_cameras(),
@@ -2126,7 +2126,7 @@ impl Set {
                     None => {
                         return Err(SetError::EdgeToUnknown {
                             node: node_name,
-                            slot: slot.name.clone(),
+                            slot: slot.name.to_string(),
                             to: edge.to.clone(),
                             holds: holds(),
                         })
@@ -2166,7 +2166,7 @@ impl Set {
                 let Some(edge) = bound.next() else {
                     return Err(SetError::SlotUnbound {
                         node: node_name,
-                        slot: slot.name.clone(),
+                        slot: slot.name.to_string(),
                         takes: slot.ty.name(),
                         holds: holds(),
                     });
@@ -2174,18 +2174,18 @@ impl Set {
                 if let Some(second) = bound.next() {
                     return Err(SetError::SlotBoundTwice {
                         node: node_name,
-                        slot: slot.name.clone(),
+                        slot: slot.name.to_string(),
                         first: edge.to.clone(),
                         second: second.to.clone(),
                     });
                 }
                 match node_at(&edge.to) {
                     Some(to) => match geometry_at(&edge.to) {
-                        Some(l1_at) => source_bound.push((at, slot.name.clone(), l1_at)),
+                        Some(l1_at) => source_bound.push((at, slot.name.to_string(), l1_at)),
                         None => {
                             return Err(SetError::EdgeToNotSource {
                                 node: node_name,
-                                slot: slot.name.clone(),
+                                slot: slot.name.to_string(),
                                 to: edge.to.clone(),
                                 layer: layer_of(to),
                                 sources: sources(),
@@ -2195,7 +2195,7 @@ impl Set {
                     None => {
                         return Err(SetError::EdgeToUnknown {
                             node: node_name,
-                            slot: slot.name.clone(),
+                            slot: slot.name.to_string(),
                             to: edge.to.clone(),
                             holds: holds(),
                         })

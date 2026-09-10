@@ -12257,7 +12257,7 @@ fn uses_of(
                 .cloned()
                 .collect();
             Some(view::Uses {
-                slot: edge.slot.clone(),
+                slot: edge.slot.as_str().into(),
                 to: edge.to.clone(),
                 candidates,
             })
@@ -13881,7 +13881,7 @@ fn wired_input(
         usize::from(*deck),
         karakuri_engine::set::Edge {
             node: node.clone(),
-            slot: slot.clone(),
+            slot: slot.as_str().into(),
             to: to.clone(),
         },
     )];
@@ -28487,7 +28487,7 @@ mod tests {
     fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() {
         let edge = |node: &str, slot: &str, to: &str| karakuri_engine::set::Edge {
             node: node.to_string(),
-            slot: slot.to_string(),
+            slot: slot.into(),
             to: to.to_string(),
         };
         let (tx, rx) = std::sync::mpsc::channel();
@@ -28690,7 +28690,7 @@ mod tests {
                 bindings: Vec::new(),
                 edges: vec![karakuri_engine::set::Edge {
                     node: "flares".to_string(),
-                    slot: "shape".to_string(),
+                    slot: "shape".into(),
                     to: "shell".to_string(),
                 }],
                 authorities: Vec::new(),
@@ -28835,7 +28835,7 @@ mod tests {
                 bindings: Vec::new(),
                 edges: vec![karakuri_engine::set::Edge {
                     node: "warp".to_string(),
-                    slot: "shape".to_string(),
+                    slot: "shape".into(),
                     to: "field".to_string(),
                 }],
                 authorities: Vec::new(),

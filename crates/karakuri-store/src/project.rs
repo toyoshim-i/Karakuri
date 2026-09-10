@@ -29,7 +29,7 @@ use std::collections::HashMap;
 
 use crate::hash::Hash;
 use crate::ndjson::Line;
-use crate::record::{Layer, Record};
+use crate::record::{InputPort, Layer, Record};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Key {
@@ -48,7 +48,7 @@ enum Key {
     Seed(Layer, u32),
     /// A node and the *input slot* of it being bound — the two halves of what an edge
     /// is *about*, where the node it is bound *to* is what the edge says.
-    Edge(String, String),
+    Edge(String, InputPort),
     Src(Hash, u32),
     /// An unfoldable line (currently only `Record::Unknown`), identified by
     /// its position in the input so it never coalesces with another.

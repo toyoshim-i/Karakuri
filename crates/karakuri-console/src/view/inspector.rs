@@ -388,7 +388,7 @@ pub struct Node {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Uses {
     /// **What the procedure calls this input** — `far` in `--edge morph.far=…`.
-    pub slot: String,
+    pub slot: karakuri_operation::InputPort,
     /// **The node filling it**, by name. There is no unfilled state: a Set with
     /// an empty input does not build, so this control replaces and never
     /// clears.

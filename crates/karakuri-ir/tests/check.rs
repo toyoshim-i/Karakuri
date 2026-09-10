@@ -2935,7 +2935,7 @@ fn a_used_geometry_checks_clean_and_carries_its_name() {
     assert_eq!(
         checked.uses,
         vec![Slot {
-            name: "far".to_string(),
+            name: "far".into(),
             ty: SlotTy::Geometry,
         }]
     );
@@ -3196,7 +3196,7 @@ fn a_declared_field_slot_is_called_and_carries_its_name() {
     assert_eq!(
         checked.uses,
         vec![Slot {
-            name: "shape".to_string(),
+            name: "shape".into(),
             ty: SlotTy::Field,
         }]
     );
@@ -3501,7 +3501,7 @@ fn a_declared_camera_slot_is_read_as_a_member() {
     assert_eq!(
         checked.uses,
         vec![Slot {
-            name: "view".to_string(),
+            name: "view".into(),
             ty: SlotTy::Camera,
         }]
     );
@@ -3990,7 +3990,7 @@ fn a_declared_source_slot_is_read_as_a_value() {
     assert_eq!(
         checked.uses,
         vec![Slot {
-            name: "only".to_string(),
+            name: "only".into(),
             ty: SlotTy::Source,
         }]
     );
@@ -4562,7 +4562,7 @@ proc over {
     assert_eq!(
         checked.uses,
         vec![Slot {
-            name: "under".to_string(),
+            name: "under".into(),
             ty: SlotTy::Texture,
         }]
     );

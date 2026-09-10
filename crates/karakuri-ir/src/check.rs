@@ -112,7 +112,7 @@ use crate::ast::{
 use crate::builtin::{Builtin, Domain, Shape};
 use crate::error::{IrError, IrResult, Stage};
 use crate::span::Span;
-use crate::typed::{Checked, Slot, TBlock, TExpr, TExprKind, TStmt, Target, TexRef};
+use crate::typed::{Checked, InputPort, Slot, TBlock, TExpr, TExprKind, TStmt, Target, TexRef};
 
 /// The spelling [`Output::PointRate`] had before its unit stopped being pixels.
 ///
@@ -325,7 +325,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                 .uses
                 .iter()
                 .map(|u| Slot {
-                    name: u.name.clone(),
+                    name: InputPort(u.name.clone()),
                     ty: u.ty,
                 })
                 .collect(),
@@ -2133,7 +2133,7 @@ impl<'a> Checker<'a> {
             return Some(TexRef::Held);
         }
         if self.textures.contains(&name) {
-            return Some(TexRef::Slot(name.to_string()));
+            return Some(TexRef::Slot(InputPort(name.to_string())));
         }
         None
     }

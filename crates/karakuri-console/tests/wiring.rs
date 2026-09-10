@@ -100,7 +100,7 @@ fn mock() -> Pane {
                 name: "swirl_warp".to_owned(),
                 authority: None,
                 uses: vec![Uses {
-                    slot: "far".to_owned(),
+                    slot: "far".into(),
                     to: "sphere_shell".to_owned(),
                     candidates: vec!["drift_shell".to_owned()],
                 }],
@@ -291,7 +291,7 @@ fn a_pick_names_the_node_the_input_and_the_deck() {
         Some(Operation::WireInput {
             deck: 0,
             node: "swirl_warp".to_owned(),
-            slot: "far".to_owned(),
+            slot: "far".into(),
             to: "drift_shell".to_owned(),
         })
     );

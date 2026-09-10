@@ -663,7 +663,7 @@ fn sample(variant: &str) -> Operation {
         "WireInput" => Operation::WireInput {
             deck: 0,
             node: "swirl_warp".to_owned(),
-            slot: "far".to_owned(),
+            slot: "far".into(),
             to: "sphere_shell".to_owned(),
         },
         // **The mark at the left of a parameter row**, which is the control's

@@ -1478,7 +1478,7 @@ mod tests {
             .collect();
         let edges = vec![karakuri_engine::set::Edge {
             node: "morph".to_string(),
-            slot: "far".to_string(),
+            slot: "far".into(),
             to: "far".to_string(),
         }];
         let mut watch = Watch::new(

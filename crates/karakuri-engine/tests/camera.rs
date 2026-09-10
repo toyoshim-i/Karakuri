@@ -714,7 +714,7 @@ proc plain {
             .iter()
             .map(|(node, slot, to)| karakuri_engine::set::Edge {
                 node: node.to_string(),
-                slot: slot.to_string(),
+                slot: (*slot).into(),
                 to: to.to_string(),
             })
             .collect();
@@ -1170,7 +1170,7 @@ mod refused {
             .iter()
             .map(|(node, slot, to)| Edge {
                 node: node.to_string(),
-                slot: slot.to_string(),
+                slot: (*slot).into(),
                 to: to.to_string(),
             })
             .collect();

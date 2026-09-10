@@ -1120,7 +1120,7 @@ fn parse_edge(value: &str) -> Result<karakuri_engine::set::Edge, String> {
     }
     Ok(karakuri_engine::set::Edge {
         node: node.to_string(),
-        slot: slot.to_string(),
+        slot: slot.into(),
         to: to.to_string(),
     })
 }
@@ -8283,7 +8283,7 @@ proc points {
             args.edges,
             vec![karakuri_engine::set::Edge {
                 node: "morph".to_string(),
-                slot: "far".to_string(),
+                slot: "far".into(),
                 to: "sphere_shell".to_string(),
             }]
         );
@@ -8293,7 +8293,7 @@ proc points {
         // identifier, which cannot.
         let args = parse(&["--edge", "my.morph.far=sphere"]).expect("parses");
         assert_eq!(args.edges[0].node, "my.morph");
-        assert_eq!(args.edges[0].slot, "far");
+        assert_eq!(args.edges[0].slot, "far".into());
     }
 
     /// **A malformed edge is refused rather than dropped**, on `--param`'s
@@ -8553,7 +8553,7 @@ proc points {
         // open, which is exactly the failure this test is about.
         args.edges = vec![karakuri_engine::set::Edge {
             node: "morph".to_string(),
-            slot: "far".to_string(),
+            slot: "far".into(),
             to: "sphere_shell".to_string(),
         }];
         args.store = dir.path().to_path_buf();
@@ -11675,7 +11675,7 @@ mod wire_tests {
     fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
         karakuri_engine::set::Edge {
             node: node.to_string(),
-            slot: slot.to_string(),
+            slot: slot.into(),
             to: to.to_string(),
         }
     }

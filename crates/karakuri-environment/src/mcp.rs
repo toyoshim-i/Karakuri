@@ -121,7 +121,7 @@ use karakuri_ir::Kind;
 // pays on purpose, and this package is where two of them are checked against
 // each other.
 use karakuri_operation::gate::{self, Allowed};
-use karakuri_operation::{NodeAt, Operation};
+use karakuri_operation::{InputPort, NodeAt, Operation};
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
 use karakuri_store::record::{Layer, Record};
@@ -1938,7 +1938,7 @@ fn wired_input(args: &Value, slots: &Slots) -> Result<Operation, String> {
         // `input` exists to avoid
         // (`docs/contributing.md` §4),
         // and this line is where the two spellings meet.
-        slot: input,
+        slot: input.into(),
         to,
     })
 }
@@ -3597,7 +3597,7 @@ const SPELLED: &[Spelled] = &[
                 Operation::WireInput {
                     deck: 0,
                     node: String::new(),
-                    slot: String::new(),
+                    slot: InputPort(String::new()),
                     to: String::new(),
                 },
                 Value::Null,
@@ -4566,7 +4566,7 @@ fn perform(allowed: &Allowed<'_>, state: &mut State) -> Called {
             node,
             slot,
             to,
-        } => match wire_input(*deck, node, slot, to, state) {
+        } => match wire_input(*deck, node, slot.as_str(), to, state) {
             Ok((news, note)) => Called::Wiring { news, note },
             Err(refusal) => Called::Answered(Err(refusal)),
         },
@@ -4938,7 +4938,7 @@ fn wire_input(
             slot,
             edge: karakuri_engine::set::Edge {
                 node: node.to_string(),
-                slot: input.to_string(),
+                slot: input.into(),
                 to: to.to_string(),
             },
             reply: Reply(tx),
@@ -8610,7 +8610,8 @@ proc probe_knobs {
         assert_eq!(*slot, 0, "the deck slot the call named");
         assert_eq!(edge.node, "declaring_node", "the node that declares it");
         assert_eq!(
-            edge.slot, "the_input",
+            edge.slot,
+            "the_input".into(),
             "`input` on the wire is the edge's `slot`, which is what the procedure calls \
              its declared input — the deck's slot is the request's own field"
         );
@@ -10552,7 +10553,11 @@ mod tests {
         };
         assert_eq!(deck, 0, "`slot` on the wire is the deck slot");
         assert_eq!(node, "morph");
-        assert_eq!(slot, "far", "`input` on the wire is the operation's `slot`");
+        assert_eq!(
+            slot,
+            "far".into(),
+            "`input` on the wire is the operation's `slot`"
+        );
         assert_eq!(to, "sphere_shell");
     }
 
