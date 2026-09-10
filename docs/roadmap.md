@@ -712,14 +712,31 @@ empty slice, which is the reading rule above said as a value. The box is the moc
 a tip appears or goes and for nothing at all while one is up (ADR-0283).
 `crates/karakuri-console/tests/hover.rs` is where all of that is held.
 
-**Exit, and it is not a grep.** *Every compact control explains itself on hover* is **not met
-yet**, and what is left is entries rather than a decision. The compile-time half is met: every row
-of `input::PROBES` has an entry, and `tests/hover.rs` fails if one loses its tips or if a citation
-stops resolving against the page. What is short is inside the rows that claim several controls and are
-tipped once: the Sequencer bay's five kinds of control, the four class pills, the four preview
-cells, the Master bay's three effect rows, a sensitivity row's second control, and the two the deck
-head gained on 2026-09-09. Each is one more `Tipped` entry carrying the sub-question the press
-handler already asks — forty-seven controls are tipped today, across twenty-six of the thirty rows.
+**Exit, and it is not a grep.** *Every compact control explains itself on hover* is **met**, with
+one exception that is owed elsewhere: every control the mock tips and this console draws now
+resolves to its own tip, except **the Master bay's three effect rows**, which are M5.16's pass 2b
+rather than this sub-milestone's — [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
+makes the chain an ordered list of kind L5 procedures, so a citation per row of the chain the mock
+draws would be written against a bay that is about to be rebuilt. Seventy-six controls are tipped
+as of 2026-09-10, across thirty-four of the thirty-eight rows of `input::PROBES`. The rows that were
+short on 2026-09-09 are written: the Sequencer bay's five kinds of control are eight entries — four
+bank pills, a lane's cell, a lane's label, the mode pill and `+ lane` — the four class pills and the
+four preview cells are four entries each, a sensitivity row has its `take back` capsule beside its
+curve chip, and the deck head has the capacity chip and `re-salt`. Every one of them carries the
+sub-question the press handler already asks, read one question finer: which operation
+`Sequencer::press` hands back, which deck `ProgramBay::cell` answers, which chip
+`SensChip::operation` names, and `DeckHead::resized` and `re_salted` for the two build chips.
+
+**How the test holds it.** Three checks in `crates/karakuri-console/tests/hover.rs`, and they are
+three different halves. The array is `PROBES.len()` long, so a **row** that goes untipped is a
+compile error. A row carries **one entry per control the row claims**, which is `PROBES`' own
+number, unless `UNEVEN` names it, says why, and says how many it does carry. That is the half the
+array's length cannot hold: a fifth control on a row of four used to leave the pointer resolving to
+a neighbour's words with nothing saying so. And every **citation** is resolved against
+`docs/manual/console.html`, so a tip rewritten out of the page fails there naming the control
+rather than leaving that control drawing nothing. The four rows the mock is silent about are named
+in `SILENT` — a pane head's name, a bay head's grip, the Library bay's list and the Staging lane's
+`back` capsules — and a fifth empty row fails.
 
 **And one clause of rule 03 is paid in the mock's tense.** *Density is bought with hover* asks a
 symbol for three things — what it is, what state it is in, what a click will do — and a tip quoted
