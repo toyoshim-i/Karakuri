@@ -370,6 +370,7 @@ number; new records continue from the end.
 | [ADR-0342](0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md) | A walk names the Set it is of, and the two rows beside it are `gap` | 2026-09-10 | accepted |
 | [ADR-0343](0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md) | The grammar reaches all nine bays, and `space` on a bay is the fold | 2026-09-10 | accepted |
 | [ADR-0344](0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md) | `slot` is disambiguated into three types, and ADR-0049's wait is over | 2026-09-11 | accepted |
+| [ADR-0345](0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md) | A file that crosses 1000 lines gets a nudge, not a gate | 2026-09-11 | accepted |
 
 ## Retired numbers
 

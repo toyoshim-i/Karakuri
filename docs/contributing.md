@@ -45,6 +45,10 @@ anything on the frame path; the colour rule in particular is
   screen, then never break it"
 - Keep it running. Do not commit a state that does not build
 - Before adding an abstraction, confirm it has at least two call sites
+- **A `.rs` file that crosses 1000 lines gets a pre-commit printout the day it happens, and never
+  again after** — [ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md).
+  It is a nudge, not a gate: the commit still lands either way. Read the printout before the file
+  grows further, not instead of committing
 - Any change touching performance comes with a GPU-timestamp measurement — **which does not work
   on the two backends this project is developed and run on.** `wgpu` advertises and enables
   `TIMESTAMP_QUERY`, and a deliberately enormous workload still resolves to zero or to a negative
@@ -170,9 +174,13 @@ Karakuri provides pre-commit and pre-push hooks under `.githooks/`. Enable them 
 git config core.hooksPath .githooks
 ```
 
-- **`pre-commit`**: Runs `cargo fmt --check` on the **staged content**, and nothing else. It
-  reads what is being committed rather than the working tree, so a half-finished edit on
-  disk neither blocks a good commit nor hides a bad one.
+- **`pre-commit`**: Runs `cargo fmt --check` on the **staged content**; this is the only thing
+  that can fail the commit. It reads what is being committed rather than the working tree, so
+  a half-finished edit on disk neither blocks a good commit nor hides a bad one. It also prints
+  — without failing anything — when a staged `.rs` file's line count crosses 1000 for the first
+  time (compared against its `HEAD` version), and stays quiet on every later commit to a file
+  already past that line. See [ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md)
+  for why this is one printout at the crossing rather than a standing warning or a gate.
 - **`pre-push`**: Runs `cargo fmt --check`, `cargo clippy` and the whole suite **on a tag
   push, and on nothing else**. A tag is the deploy; a branch push is part of working —
   backing up, moving between machines, opening something for review — and a gate there asks

@@ -1,13 +1,16 @@
 #!/bin/sh
-# Refuse a commit whose Rust is not what `cargo fmt` would write. Nothing else.
+# Refuse a commit whose Rust is not what `cargo fmt` would write, and warn —
+# without refusing anything — the commit that pushes a file's staged content
+# past 1000 lines for the first time. See ADR-0345 for why the second check
+# never fails a commit.
 #
 # **It checks the staged content, not the working tree.** Those differ whenever
 # something is half-finished on disk, and a hook that reads the disk either
 # blocks a good commit for an unrelated edit or passes a bad one that was fixed
 # after staging. What is being committed is what has to be right.
 #
-# Why formatting is the only thing here, and where the tests went, is at the
-# bottom of this file.
+# Why formatting is the only thing that can fail this hook, and where the
+# tests went, is at the bottom of this file.
 set -e
 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
@@ -71,6 +74,31 @@ if [ -n "$bad" ]; then
     echo "run \`cargo fmt\`, stage the result, and commit again."
     echo "\`git commit --no-verify\` skips this, and there is no reason to."
     exit 1
+fi
+
+# **A file crossing 1000 lines is worth one printout, on the commit that does
+# it, and nothing on every commit after** (ADR-0345). Comparing against `HEAD`
+# rather than just checking the staged size is what makes this fire once: a
+# file already over the line stays quiet on every later touch, because the
+# fact was already said the day it became true. `2>/dev/null` on the `HEAD`
+# read is a new file, which counts as crossing from zero.
+threshold=1000
+crossed=""
+for f in $files; do
+    after=$(git show ":$f" | wc -l | tr -d ' ')
+    before=$(git show "HEAD:$f" 2>/dev/null | wc -l | tr -d ' ')
+    [ -n "$before" ] || before=0
+    if [ "$after" -gt "$threshold" ] && [ "$before" -le "$threshold" ]; then
+        crossed="$crossed  $f ($before -> $after lines)
+"
+    fi
+done
+
+if [ -n "$crossed" ]; then
+    echo "just crossed $threshold lines:"
+    printf '%s' "$crossed"
+    echo "not a reason to stop — see docs/adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md"
+    echo "for why this is a nudge and not a gate. Worth a look before it grows further."
 fi
 
 # **No tests here, and that is a decision rather than an omission.** This
