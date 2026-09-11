@@ -66,7 +66,7 @@ pub mod video_source;
 pub use binding::{Binding, Curve, ParamWrite, Signals};
 pub use camera::Orbit;
 pub use compaction::Compaction;
-pub use deck::{Blend, Deck, Frame, Mask, MaskKind, Residency};
+pub use deck::{Blend, Deck, DeckSlot, Frame, Mask, MaskKind, Residency};
 pub use estimate::{Estimate, Fit, Unfit, PREPARATION_RESOLUTION};
 pub use frame::{compose, Committed, Look, Outcome, Sink, Skip, WindowSink};
 pub use governor::{Basis, Decision, Estimated, FloorRead, Governor, Reason, Report, SlotState};

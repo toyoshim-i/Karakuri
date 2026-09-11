@@ -989,17 +989,17 @@ mod gpu {
             HEIGHT,
         );
         deck.set_compute_budget_ms(16.0);
-        deck.set_residency(1, Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
 
         let report = deck.govern();
         assert_eq!(report.decisions[1].reason, Reason::NoHeadroom);
         assert_eq!(
-            deck.residency(1),
+            deck.residency(karakuri_engine::DeckSlot(1)),
             Residency::Allocated,
             "the governor decided to demote and the deck did not move"
         );
         assert_eq!(
-            deck.residency(0),
+            deck.residency(karakuri_engine::DeckSlot(0)),
             Residency::Live,
             "the governor moved a Live slot"
         );
@@ -1008,7 +1008,7 @@ mod gpu {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             FRAMES as u64,
             "the Live slot stopped stepping"
         );
@@ -1020,7 +1020,7 @@ mod gpu {
         // `0` here, and the sentence it carried, *the demotion was a report and
         // not an action*, is now the wrong test of the right claim.
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             FRAMES as u64,
             "a parked slot stopped stepping, so the cell an operator is judging this \
          candidate by went to a still the moment the budget refused it"
@@ -1033,12 +1033,21 @@ mod gpu {
         // `a_parked_slot_primes_again_by_itself_when_the_deck_empties`'s subject.
         deck.set_compute_budget_ms(100.0);
         assert_eq!(deck.govern().decisions[1].reason, Reason::Fits);
-        assert_eq!(deck.residency(1), Residency::Priming);
+        assert_eq!(
+            deck.residency(karakuri_engine::DeckSlot(1)),
+            Residency::Priming
+        );
         for _ in 0..FRAMES {
             frame(&gpu, &mut deck, &present, 1);
         }
-        assert_eq!(steps_taken(deck.slot(1).set()), 2 * FRAMES as u64);
-        assert_eq!(steps_taken(deck.slot(0).set()), 2 * FRAMES as u64);
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
+            2 * FRAMES as u64
+        );
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
+            2 * FRAMES as u64
+        );
     }
     /// The closed-form flag reaches the governor **off the Set**, through the check
     /// pass and `Set::build`, rather than being handed to it by a test. Two decks
@@ -1055,7 +1064,7 @@ mod gpu {
                 HEIGHT,
             );
             deck.set_compute_budget_ms(1000.0);
-            deck.set_residency(0, Residency::Priming);
+            deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Priming);
             deck.govern().decisions[0].reason
         };
 
@@ -1099,7 +1108,7 @@ mod gpu {
         // 8 ms on air against 10 leaves 2, which will not take an 8 ms
         // candidate.
         deck.set_compute_budget_ms(10.0);
-        deck.set_residency(1, Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
         assert_eq!(deck.govern().decisions[1].reason, Reason::NoHeadroom);
 
         for _ in 0..FRAMES {
@@ -1109,12 +1118,15 @@ mod gpu {
                 Reason::NoHeadroom,
                 "the verdict changed under a repeated call with nothing else changing"
             );
-            assert!(deck.is_parked(1), "the request was not held across a pass");
+            assert!(
+                deck.is_parked(karakuri_engine::DeckSlot(1)),
+                "the request was not held across a pass"
+            );
             frame(&gpu, &mut deck, &present, 1);
         }
 
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             FRAMES as u64,
             "a parked slot did not step; a park withholds the grant and not the \
          simulation, and the cell an operator is judging this candidate by is a \
@@ -1152,17 +1164,20 @@ mod gpu {
         // what makes this a park rather than a Set that is simply too
         // expensive.
         deck.set_compute_budget_ms(16.0);
-        deck.set_residency(1, Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
 
         assert_eq!(deck.govern().decisions[1].reason, Reason::NoHeadroom);
-        assert_eq!(deck.residency(1), Residency::Allocated);
+        assert_eq!(
+            deck.residency(karakuri_engine::DeckSlot(1)),
+            Residency::Allocated
+        );
         assert!(
-            deck.is_parked(1),
+            deck.is_parked(karakuri_engine::DeckSlot(1)),
             "a refused request reads as a slot nobody asked about"
         );
         assert_eq!(deck.parked_slots(), 1);
         assert_eq!(
-            deck.requested_residency(1),
+            deck.requested_residency(karakuri_engine::DeckSlot(1)),
             Residency::Priming,
             "the demotion destroyed the operator's request"
         );
@@ -1174,13 +1189,13 @@ mod gpu {
         // simulation (ADR-0269) — so what changes when the deck empties below is
         // the residency and the report, and not the `t`.
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             FRAMES as u64,
             "a parked slot stopped stepping"
         );
 
         // The deck empties. Slot 1 is not mentioned.
-        deck.set_residency(0, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Allocated);
         let report = deck.govern();
 
         assert_eq!(
@@ -1189,13 +1204,16 @@ mod gpu {
             "the slot never primed again after the deck emptied; the request did not \
          survive the demotion"
         );
-        assert_eq!(deck.residency(1), Residency::Priming);
-        assert!(!deck.is_parked(1));
+        assert_eq!(
+            deck.residency(karakuri_engine::DeckSlot(1)),
+            Residency::Priming
+        );
+        assert!(!deck.is_parked(karakuri_engine::DeckSlot(1)));
         for _ in 0..FRAMES {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             2 * FRAMES as u64,
             "the report said Priming and the slot did not step"
         );
@@ -1226,16 +1244,16 @@ mod gpu {
             HEIGHT,
         );
         deck.set_compute_budget_ms(16.0);
-        deck.set_residency(1, Residency::Priming);
-        deck.set_residency(2, Residency::Priming);
-        deck.set_residency(3, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(2), Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(3), Residency::Allocated);
 
         let before = deck.govern();
         assert!(!before.over_budget);
         assert_eq!(deck.priming_slots(), 2);
 
         // The heavy Set goes on air: 34 ms committed against 16.
-        deck.set_residency(3, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(3), Residency::Live);
         let during = deck.govern();
         assert!(
             during.over_budget,
@@ -1252,11 +1270,14 @@ mod gpu {
             "the requests were cancelled, not parked"
         );
         for slot in [1, 2] {
-            assert_eq!(deck.requested_residency(slot), Residency::Priming);
+            assert_eq!(
+                deck.requested_residency(karakuri_engine::DeckSlot(slot)),
+                Residency::Priming
+            );
         }
 
         // And off again. Nothing is re-requested.
-        deck.set_residency(3, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(3), Residency::Allocated);
         let after = deck.govern();
 
         assert!(!after.over_budget);
@@ -1301,7 +1322,7 @@ mod gpu {
         // Generous, so that "no room" can never be the explanation for anything
         // below: whatever this machine measures the Live Set at, it fits.
         deck.set_compute_budget_ms(10_000.0);
-        deck.set_residency(1, Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
 
         let refused = deck.govern();
         assert_eq!(
@@ -1312,7 +1333,10 @@ mod gpu {
         assert_eq!(refused.unmeasured_live, 1);
         assert_eq!(refused.headroom_ms(), None);
         assert_eq!(deck.priming_slots(), 0);
-        assert!(deck.is_parked(1), "the refusal cancelled the request");
+        assert!(
+            deck.is_parked(karakuri_engine::DeckSlot(1)),
+            "the refusal cancelled the request"
+        );
 
         // The one call a caller owes at startup.
         assert_eq!(deck.measure_slots(&gpu.device, &gpu.queue), 1);
@@ -1354,7 +1378,10 @@ mod gpu {
         for _ in 0..FRAMES {
             frame(&gpu, &mut deck, &present, 1);
         }
-        assert_eq!(steps_taken(deck.slot(0).set()), FRAMES as u64);
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
+            FRAMES as u64
+        );
 
         assert_eq!(
             deck.measure_slots(&gpu.device, &gpu.queue),
@@ -1362,7 +1389,7 @@ mod gpu {
             "a running Set was measured, which rewinds it"
         );
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             FRAMES as u64,
             "measuring a running slot reset it to cold; `Set::rewind` restores what \
          `build` left, not what `measure` found"
@@ -1373,7 +1400,10 @@ mod gpu {
         // `measure_slots` doing nothing at all.
         let mut cold = Deck::new(&gpu.device, vec![swap_of(&gpu, L1, 1, None)], WIDTH, HEIGHT);
         assert_eq!(cold.measure_slots(&gpu.device, &gpu.queue), 1);
-        assert_eq!(steps_taken(cold.slot(0).set()), 0);
+        assert_eq!(
+            steps_taken(cold.slot(karakuri_engine::DeckSlot(0)).set()),
+            0
+        );
     }
 
     /// **`estimate` reaches `Deck::govern`, end to end on a device.**
@@ -1417,7 +1447,7 @@ mod gpu {
             "a second pass re-estimated a slot that already had one"
         );
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             0,
             "estimating left the Set stepped; `Set::rewind` restores what \
          `build` left, and a slot must arrive on air cold"
@@ -1426,7 +1456,7 @@ mod gpu {
         // Cloned rather than borrowed: `govern` below needs the deck mutably,
         // and the point of this test is the two readings side by side.
         let e = deck
-            .slot(0)
+            .slot(karakuri_engine::DeckSlot(0))
             .estimated_cost()
             .expect("estimate_slots stored one")
             .clone();
@@ -1495,7 +1525,10 @@ mod gpu {
         // Without this the deck would go on budgeting a 128x128 number against
         // a frame twice as wide.
         deck.resize(&gpu.device, WIDTH * 2, HEIGHT * 2);
-        assert!(deck.slot(0).estimated_cost().is_none());
+        assert!(deck
+            .slot(karakuri_engine::DeckSlot(0))
+            .estimated_cost()
+            .is_none());
         let resized = deck.govern();
         assert_eq!(
             resized.decisions[0].basis,

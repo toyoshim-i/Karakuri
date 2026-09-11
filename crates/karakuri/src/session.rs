@@ -17,7 +17,7 @@ use crate::{
 };
 use karakuri_console::view;
 use karakuri_engine::set::Layering;
-use karakuri_engine::{Gpu, HotSwap, Set, DEFAULT_BUDGET_MS};
+use karakuri_engine::{DeckSlot as EngineSlot, Gpu, HotSwap, Set, DEFAULT_BUDGET_MS};
 use karakuri_environment::{history, mcp, session, setfile, watch, Asked};
 use karakuri_store::store::Store;
 use std::time::Instant;
@@ -982,7 +982,10 @@ impl Keeping {
         }
         let id =
             karakuri_environment::accepted_save(slot, asked, id, &sources, root, reply.as_ref());
-        let values = playing_values(engine.deck.slot(slot).set(), &engine.edges);
+        let values = playing_values(
+            engine.deck.slot(EngineSlot(slot as u8)).set(),
+            &engine.edges,
+        );
         let save = Save {
             slot,
             asked,
@@ -1198,7 +1201,10 @@ impl Keeping {
             id: format!("{session}-material"),
             root: root.to_path_buf(),
             sources,
-            values: playing_values(engine.deck.slot(HEAD_SLOT).set(), &engine.edges),
+            values: playing_values(
+                engine.deck.slot(EngineSlot(HEAD_SLOT as u8)).set(),
+                &engine.edges,
+            ),
         })
     }
 

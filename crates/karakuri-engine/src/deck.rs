@@ -459,6 +459,65 @@ use crate::video_source::VideoSource;
 /// resident at all.
 pub const MAX_SLOTS: usize = 4;
 
+/// **A member of the deck** — an index into the mixer, and nothing about the
+/// Set playing in it — carried as the `slot` parameter on every one of
+/// [`Deck`]'s own per-slot methods: [`Deck::gain`], [`Deck::set_gain`],
+/// [`Deck::opacity`] and the rest.
+///
+/// **Its own type because this crate already has a `Slot`, and it means
+/// something else entirely.** [`crate::master::Slot`] is one link of the
+/// master chain, a step applied to the composited frame; this is a position
+/// in the mixer, one to four of them wide, upstream of the master chain by a
+/// whole composite pass. Naming this `DeckSlot` rather than reusing `Slot`
+/// keeps the two apart at the one place in the workspace where they sit in
+/// sibling files of the same crate — see
+/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
+///
+/// **Mirrors `karakuri_store::record::DeckSlot` rather than depending on
+/// it.** This crate has no dependency on `karakuri-store` and none is being
+/// added for one field: the two are the same address one crate along,
+/// deliberately not renamed on the way across, on
+/// `karakuri_store::record::NodeAddress`'s own precedent (see that type's
+/// documentation) for a type more than one dependency-isolated crate needs.
+///
+/// **A fallible constructor is the construction-time validation ADR-0344
+/// asks for.** [`DeckSlot::new`] is the one place "is this a valid deck
+/// position" is decided at a caller's boundary; [`Deck`]'s own methods index
+/// with [`DeckSlot::index`] and panic exactly as they did on a bare index
+/// before this type existed — the ADR asks for validation at construction,
+/// not for `Deck` itself to become fallible at the point it indexes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DeckSlot(pub u8);
+
+impl DeckSlot {
+    /// `slot` is in range for a deck of `count` members, or it is not — the
+    /// one place that question is answered on this side of the
+    /// `karakuri-store` boundary; see [`DeckSlot`]'s own documentation.
+    pub fn new(slot: u8, count: usize) -> Option<DeckSlot> {
+        if (slot as usize) < count {
+            Some(DeckSlot(slot))
+        } else {
+            None
+        }
+    }
+
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl std::fmt::Display for DeckSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u8> for DeckSlot {
+    fn from(slot: u8) -> DeckSlot {
+        DeckSlot(slot)
+    }
+}
+
 /// A gain the mix can use: floored at zero, NaN read as zero, and deliberately
 /// open above 1.0.
 ///
@@ -1098,8 +1157,8 @@ impl Deck {
     /// A level is a few frames old and says so: [`Level::frames_behind`]. What
     /// it is never is a reading of an image the slot is no longer showing; see
     /// "Level metering" in the module doc for what retires one.
-    pub fn level(&self, slot: usize) -> Option<Level> {
-        self.meters.as_ref().and_then(|m| m.level(slot))
+    pub fn level(&self, slot: DeckSlot) -> Option<Level> {
+        self.meters.as_ref().and_then(|m| m.level(slot.index()))
     }
 
     /// The top of a frame: installs whatever the workers finished, opens the
@@ -1304,12 +1363,12 @@ impl Deck {
     /// by editing a file and letting the worker build it, which is what the
     /// budget watchdog is attached to. This is the other end of that — reading
     /// back what a run already did.
-    pub fn install(&mut self, device: &wgpu::Device, slot: usize, set: crate::set::Set) {
-        self.slots[slot].swap.install(device, set);
+    pub fn install(&mut self, device: &wgpu::Device, slot: DeckSlot, set: crate::set::Set) {
+        self.slots[slot.index()].swap.install(device, set);
     }
 
-    pub fn slot(&self, slot: usize) -> &HotSwap {
-        &self.slots[slot].swap
+    pub fn slot(&self, slot: DeckSlot) -> &HotSwap {
+        &self.slots[slot.index()].swap
     }
 
     /// **Write one parameter of the Set a slot is playing, now**, and say how
@@ -1350,10 +1409,10 @@ impl Deck {
     /// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
     pub fn write_param(
         &mut self,
-        slot: usize,
+        slot: DeckSlot,
         write: &crate::binding::ParamWrite,
     ) -> Result<usize, crate::set::CrossesAuthority> {
-        self.slots[slot].swap.live_mut().write_param(write)
+        self.slots[slot.index()].swap.live_mut().write_param(write)
     }
 
     /// **Attach a signal to one parameter of the Set a slot is playing, now.**
@@ -1381,8 +1440,8 @@ impl Deck {
     /// same swap: see
     /// `docs/adr/0339-a-rebuild-inherits-the-attachments-somebody-made.md`,
     /// and ADR-0319 for the record this writes.
-    pub fn bind(&mut self, slot: usize, binding: crate::binding::Binding) -> crate::set::Bound {
-        self.slots[slot].swap.live_mut().bind(binding)
+    pub fn bind(&mut self, slot: DeckSlot, binding: crate::binding::Binding) -> crate::set::Bound {
+        self.slots[slot.index()].swap.live_mut().bind(binding)
     }
 
     /// **Take one parameter of the Set a slot is playing back**, and say
@@ -1399,12 +1458,15 @@ impl Deck {
     /// nothing beside the binding for a hand to win against.
     pub fn unbind(
         &mut self,
-        slot: usize,
+        slot: DeckSlot,
         layer: karakuri_ir::Kind,
         index: Option<u32>,
         key: &str,
     ) -> bool {
-        self.slots[slot].swap.live_mut().unbind(layer, index, key)
+        self.slots[slot.index()]
+            .swap
+            .live_mut()
+            .unbind(layer, index, key)
     }
 
     /// **Say who may move one node of the Set a slot is playing**, and answer
@@ -1434,27 +1496,27 @@ impl Deck {
     /// refused against it when something writes one.
     pub fn set_authority(
         &mut self,
-        slot: usize,
+        slot: DeckSlot,
         layer: karakuri_ir::Kind,
         index: u32,
         authority: crate::set::Authority,
     ) -> bool {
-        self.slots[slot]
+        self.slots[slot.index()]
             .swap
             .live_mut()
             .set_authority(layer, index, authority)
     }
 
     /// The linear HDR render target for one slot.
-    pub fn slot_view(&self, slot: usize) -> Option<&wgpu::TextureView> {
-        self.slots.get(slot).map(|s| &s.view)
+    pub fn slot_view(&self, slot: DeckSlot) -> Option<&wgpu::TextureView> {
+        self.slots.get(slot.index()).map(|s| &s.view)
     }
 
     /// Everything that has happened to one slot since this was last called.
     /// Draining is the only mutation a caller gets on a `HotSwap` through the
     /// deck, and it cannot change which Set is live.
-    pub fn events(&mut self, slot: usize) -> std::vec::Drain<'_, Event> {
-        self.slots[slot].swap.events()
+    pub fn events(&mut self, slot: DeckSlot) -> std::vec::Drain<'_, Event> {
+        self.slots[slot.index()].swap.events()
     }
 
     /// **What the slot is doing** — the effective residency. What the frame
@@ -1464,15 +1526,15 @@ impl Deck {
     /// interchangeable: a slot reading Allocated here may be one the operator
     /// asked to prime and the budget has parked. See "Residency: requested and
     /// effective" in the module doc.
-    pub fn residency(&self, slot: usize) -> Residency {
-        self.slots[slot].effective
+    pub fn residency(&self, slot: DeckSlot) -> Residency {
+        self.slots[slot.index()].effective
     }
 
     /// **What was asked for.** Written only by [`Deck::set_residency`] and
     /// never by [`Deck::govern`], so it survives any number of demotions and is
     /// still there when there is room again.
-    pub fn requested_residency(&self, slot: usize) -> Residency {
-        self.slots[slot].requested
+    pub fn requested_residency(&self, slot: DeckSlot) -> Residency {
+        self.slots[slot.index()].requested
     }
 
     /// **Asked to prime, and not priming**: the request stands and the budget
@@ -1482,8 +1544,8 @@ impl Deck {
     ///
     /// Why it is waiting is [`Reason`](crate::governor::Reason), on the last
     /// [`Report`] rather than here — the deck holds no memory of a pass.
-    pub fn is_parked(&self, slot: usize) -> bool {
-        let slot = &self.slots[slot];
+    pub fn is_parked(&self, slot: DeckSlot) -> bool {
+        let slot = &self.slots[slot.index()];
         slot.requested == Residency::Priming && slot.effective == Residency::Allocated
     }
 
@@ -1500,8 +1562,8 @@ impl Deck {
     ///
     /// Only a build clears it. See the two paths in
     /// [`Frame::render`] for what it costs: nothing.
-    pub fn overloaded(&self, slot: usize) -> bool {
-        self.slots[slot].swap.overloaded()
+    pub fn overloaded(&self, slot: DeckSlot) -> bool {
+        self.slots[slot.index()].swap.overloaded()
     }
 
     /// Move a slot between residency levels.
@@ -1520,8 +1582,8 @@ impl Deck {
     /// there is room. Nothing here consults the budget, so the request takes
     /// effect immediately and a caller that never calls `govern` primes at full
     /// rate and is responsible for its own arithmetic.
-    pub fn set_residency(&mut self, slot: usize, residency: Residency) {
-        self.slots[slot].requested = residency;
+    pub fn set_residency(&mut self, slot: DeckSlot, residency: Residency) {
+        self.slots[slot.index()].requested = residency;
         // Effective follows the request until a governor pass says otherwise:
         // a deck with no governor driving it behaves exactly as it did when
         // there was one field, and `govern` is what introduces the gap.
@@ -1532,11 +1594,11 @@ impl Deck {
     /// whenever it moves. The one place it is written — [`Deck::govern`] and
     /// [`Deck::set_residency`] both come through here, so neither can forget
     /// half of it.
-    fn set_effective(&mut self, slot: usize, residency: Residency) {
-        if self.slots[slot].effective == residency {
+    fn set_effective(&mut self, slot: DeckSlot, residency: Residency) {
+        if self.slots[slot.index()].effective == residency {
             return;
         }
-        self.slots[slot].effective = residency;
+        self.slots[slot.index()].effective = residency;
         // Off air is off the meter, immediately and including whatever is
         // still in flight: an Allocated slot's target holds whatever it last
         // drew, and reporting that as a level would be a stale number
@@ -1551,14 +1613,14 @@ impl Deck {
         // it under the generation this bumped.
         if residency != Residency::Live {
             if let Some(meters) = &mut self.meters {
-                meters.retire(slot);
+                meters.retire(slot.index());
             }
         }
     }
 
     /// What this slot's clock is doing with the session's.
-    pub fn transport(&self, slot: usize) -> &Transport {
-        &self.slots[slot].transport
+    pub fn transport(&self, slot: DeckSlot) -> &Transport {
+        &self.slots[slot.index()].transport
     }
 
     /// **Put a slot's clock under a sync mode**, or say why it cannot go there.
@@ -1576,13 +1638,13 @@ impl Deck {
     /// them when an operator engages a mode by hand.
     pub fn set_transport(
         &mut self,
-        slot: usize,
+        slot: DeckSlot,
         sync: Sync,
         anchor_bpm: f32,
         scrub_beats: f64,
     ) -> Result<(), crate::transport::Refusal> {
         self.sync_allowed(slot, sync)?;
-        self.slots[slot]
+        self.slots[slot.index()]
             .transport
             .set(sync, anchor_bpm, scrub_beats);
         Ok(())
@@ -1596,8 +1658,12 @@ impl Deck {
     /// swap that replaces closed-form material with accumulating material can
     /// therefore make the mode a slot is *already in* unavailable; nothing here
     /// resolves that, and whatever wires swapping to this owes it.
-    pub fn sync_allowed(&self, slot: usize, sync: Sync) -> Result<(), crate::transport::Refusal> {
-        let set = self.slots[slot].swap.set();
+    pub fn sync_allowed(
+        &self,
+        slot: DeckSlot,
+        sync: Sync,
+    ) -> Result<(), crate::transport::Refusal> {
+        let set = self.slots[slot.index()].swap.set();
         Transport::allows(sync, set.is_closed_form(), set.reads_beats())
     }
 
@@ -1616,7 +1682,9 @@ impl Deck {
     /// How many slots asked to prime and are waiting for room — see
     /// [`Deck::is_parked`].
     pub fn parked_slots(&self) -> usize {
-        (0..self.slots.len()).filter(|&i| self.is_parked(i)).count()
+        (0..self.slots.len())
+            .filter(|&i| self.is_parked(DeckSlot(i as u8)))
+            .count()
     }
 
     /// The compute budget priming is decided against, in milliseconds of
@@ -1925,13 +1993,13 @@ impl Deck {
             // wrote the field directly would leave a level reported for a slot
             // it had just taken off air. Not `set_residency` — that writes the
             // request too, which is the one thing this pass may not do.
-            self.set_effective(decision.slot, decision.effective);
+            self.set_effective(DeckSlot(decision.slot as u8), decision.effective);
         }
         report
     }
 
-    pub fn gain(&self, slot: usize) -> f32 {
-        self.slots[slot].gain
+    pub fn gain(&self, slot: DeckSlot) -> f32 {
+        self.slots[slot.index()].gain
     }
 
     /// Per-slot linear gain, applied to that slot's colour before the blend.
@@ -1950,15 +2018,15 @@ impl Deck {
     ///
     /// Not the fader. See [`Deck::set_opacity`], and [`Blend`] for why the
     /// difference is only visible under a mode that is not `add`.
-    pub fn set_gain(&mut self, slot: usize, gain: f32) {
+    pub fn set_gain(&mut self, slot: DeckSlot, gain: f32) {
         // A hand on the control stops whatever was moving it. See "The operator
         // wins" in [`crate::transition`].
         self.cancel(slot, Control::Gain);
-        self.slots[slot].gain = clamp_gain(gain);
+        self.slots[slot.index()].gain = clamp_gain(gain);
     }
 
-    pub fn opacity(&self, slot: usize) -> f32 {
-        self.slots[slot].opacity
+    pub fn opacity(&self, slot: DeckSlot) -> f32 {
+        self.slots[slot.index()].opacity
     }
 
     /// **The fader.** How much of this deck slot's layer's blend lands, and the one control
@@ -1979,9 +2047,9 @@ impl Deck {
     /// number is a broken control, and of the two available readings — "this
     /// slot goes dark" and "the whole mix goes dark" — only one of them is a
     /// fader.
-    pub fn set_opacity(&mut self, slot: usize, opacity: f32) {
+    pub fn set_opacity(&mut self, slot: DeckSlot, opacity: f32) {
         self.cancel(slot, Control::Opacity);
-        self.slots[slot].opacity = clamp_opacity(opacity);
+        self.slots[slot.index()].opacity = clamp_opacity(opacity);
     }
 
     pub fn out(&self) -> f32 {
@@ -2033,12 +2101,12 @@ impl Deck {
         self.out = clamp_gain(out);
     }
 
-    pub fn blend(&self, slot: usize) -> Blend {
-        self.slots[slot].blend
+    pub fn blend(&self, slot: DeckSlot) -> Blend {
+        self.slots[slot.index()].blend
     }
 
-    pub fn mask(&self, slot: usize) -> Mask {
-        self.slots[slot].mask
+    pub fn mask(&self, slot: DeckSlot) -> Mask {
+        self.slots[slot.index()].mask
     }
 
     /// **The shape of this slot's mask, and nothing else.** See [`Mask`].
@@ -2058,9 +2126,9 @@ impl Deck {
     /// and a setter that took both could only answer it one way. The
     /// vocabulary is split the same way and for a related reason
     /// (`karakuri_operation::Operation::SetMaskShape`).
-    pub fn set_mask_shape(&mut self, slot: usize, kind: MaskKind, angle: f32) {
-        let mask = self.slots[slot].mask;
-        self.slots[slot].mask = Mask::new(kind, angle, mask.position(), mask.softness());
+    pub fn set_mask_shape(&mut self, slot: DeckSlot, kind: MaskKind, angle: f32) {
+        let mask = self.slots[slot.index()].mask;
+        self.slots[slot.index()].mask = Mask::new(kind, angle, mask.position(), mask.softness());
     }
 
     /// **How far this slot's mask front has travelled**, `[0, 1]`.
@@ -2072,10 +2140,10 @@ impl Deck {
     /// exemption at [`Deck::set_mask_shape`] never covered — it was written
     /// when the only caller wrote position 0 before scheduling, and it stops
     /// being safe the moment a surface can write a position.
-    pub fn set_mask_position(&mut self, slot: usize, position: f32) {
+    pub fn set_mask_position(&mut self, slot: DeckSlot, position: f32) {
         self.cancel(slot, Control::MaskPosition);
-        let mask = self.slots[slot].mask;
-        self.slots[slot].mask = mask.at(position);
+        let mask = self.slots[slot.index()].mask;
+        self.slots[slot.index()].mask = mask.at(position);
     }
 
     /// **The whole mask at once** — the shape, the front and the soft edge.
@@ -2087,7 +2155,7 @@ impl Deck {
     /// restated the front from a hand that moved it, and of the two readings
     /// only one leaves the operator winning. The two setters above are what
     /// keep the distinction where it can still be made.
-    pub fn set_mask(&mut self, slot: usize, mask: Mask) {
+    pub fn set_mask(&mut self, slot: DeckSlot, mask: Mask) {
         // The two halves through the setters that own them, rather than one
         // assignment beside them: the cancel is [`Deck::set_mask_position`]'s
         // rule and this is a caller of it, not a second place stating it.
@@ -2096,8 +2164,9 @@ impl Deck {
         // And the soft edge, which neither of them names because no operation
         // does — `MASK_SOFTNESS` in `karakuri-cli` is the only value it has
         // ever had.
-        let at = self.slots[slot].mask;
-        self.slots[slot].mask = Mask::new(at.kind(), at.angle(), at.position(), mask.softness());
+        let at = self.slots[slot.index()].mask;
+        self.slots[slot.index()].mask =
+            Mask::new(at.kind(), at.angle(), at.position(), mask.softness());
     }
 
     /// **Schedule a move**, replacing whatever was already moving that control.
@@ -2122,7 +2191,7 @@ impl Deck {
             transition.slot(),
             self.slots.len() - 1
         );
-        self.cancel(transition.slot(), transition.control());
+        self.cancel(DeckSlot(transition.slot() as u8), transition.control());
         self.transitions.push(transition);
     }
 
@@ -2131,15 +2200,17 @@ impl Deck {
     /// **Called by hand on every manual write**, which is the rule: an operator
     /// reaching for a fader is the one place an automatic thing must not be
     /// writing too. See "The operator wins" in [`crate::transition`].
-    pub fn cancel(&mut self, slot: usize, control: Control) {
+    pub fn cancel(&mut self, slot: DeckSlot, control: Control) {
         self.transitions
-            .retain(|t| !(t.slot() == slot && t.control() == control));
+            .retain(|t| !(t.slot() == slot.index() && t.control() == control));
     }
 
     /// What is moving on this slot, for a status line. Empty on a deck nobody
     /// has scheduled anything on.
-    pub fn transitions_on(&self, slot: usize) -> impl Iterator<Item = &Transition> {
-        self.transitions.iter().filter(move |t| t.slot() == slot)
+    pub fn transitions_on(&self, slot: DeckSlot) -> impl Iterator<Item = &Transition> {
+        self.transitions
+            .iter()
+            .filter(move |t| t.slot() == slot.index())
     }
 
     /// **Schedule which renderer of a slot's Set is the live one**, replacing
@@ -2171,8 +2242,10 @@ impl Deck {
     /// What is waiting to be selected on this slot, for a status line. On
     /// [`Deck::transitions_on`]'s terms and for its reason: an armed choice is
     /// invisible for up to a bar otherwise.
-    pub fn selections_on(&self, slot: usize) -> impl Iterator<Item = &Selection> {
-        self.selections.iter().filter(move |s| s.slot() == slot)
+    pub fn selections_on(&self, slot: DeckSlot) -> impl Iterator<Item = &Selection> {
+        self.selections
+            .iter()
+            .filter(move |s| s.slot() == slot.index())
     }
 
     /// Every selection whose instant has arrived, applied, and dropped.
@@ -2247,16 +2320,16 @@ impl Deck {
     }
 
     /// How this deck slot's layer meets the ones under it. See [`Blend`].
-    pub fn set_blend(&mut self, slot: usize, blend: Blend) {
-        self.slots[slot].blend = blend;
+    pub fn set_blend(&mut self, slot: DeckSlot, blend: Blend) {
+        self.slots[slot.index()].blend = blend;
     }
 
     /// The target a slot renders into, for a readback or a preview. The mix is
     /// written to whatever [`Frame::render`] is handed, which is the present
     /// pass's HDR target; the deck owns no mix target of its own, because
     /// owning one would mean copying it into the present pass's.
-    pub fn slot_target(&self, slot: usize) -> &wgpu::Texture {
-        &self.slots[slot].target
+    pub fn slot_target(&self, slot: DeckSlot) -> &wgpu::Texture {
+        &self.slots[slot.index()].target
     }
 }
 

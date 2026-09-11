@@ -20,7 +20,7 @@ mod gpu {
     use std::sync::mpsc;
     use std::time::Instant;
 
-    use karakuri_engine::deck::{Deck, Residency};
+    use karakuri_engine::deck::{Deck, DeckSlot, Residency};
     use karakuri_engine::meter::{Level, Meters};
     use karakuri_engine::swap::{Event, HotSwap, Request};
     use karakuri_engine::{Gpu, Present, Set};
@@ -627,7 +627,7 @@ proc nan_points {
     ) -> (Level, usize) {
         for n in 1..=PATIENCE {
             frame(gpu, deck, present);
-            if let Some(level) = deck.level(slot) {
+            if let Some(level) = deck.level(DeckSlot(slot as u8)) {
                 return (level, n);
             }
         }
@@ -654,10 +654,10 @@ proc nan_points {
 
         let (bright, _) = wait_for_level(&gpu, &mut deck, &present, 0);
         let dim = deck
-            .level(1)
+            .level(karakuri_engine::DeckSlot(1))
             .expect("every slot is metered from the same frame");
         let dark = deck
-            .level(2)
+            .level(karakuri_engine::DeckSlot(2))
             .expect("every slot is metered from the same frame");
 
         assert!(
@@ -711,7 +711,7 @@ proc nan_points {
 
         let (bad, _) = wait_for_level(&gpu, &mut deck, &present, 0);
         let good = deck
-            .level(1)
+            .level(karakuri_engine::DeckSlot(1))
             .expect("every slot is metered from the same frame");
 
         assert!(
@@ -760,9 +760,9 @@ proc nan_points {
         let (live, _) = wait_for_level(&gpu, &mut deck, &present, 1);
         assert!(live.mean > 0.0, "the slot measured nothing while Live");
 
-        deck.set_residency(1, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         assert_eq!(
-            deck.level(1),
+            deck.level(karakuri_engine::DeckSlot(1)),
             None,
             "a slot taken off air kept the level it had while it was on"
         );
@@ -771,16 +771,19 @@ proc nan_points {
         for _ in 0..30 {
             frame(&gpu, &mut deck, &present);
             assert_eq!(
-                deck.level(1),
+                deck.level(karakuri_engine::DeckSlot(1)),
                 None,
                 "a measurement recorded while the slot was Live arrived after it went off \
              air and became a level for a slot that is rendering nothing"
             );
         }
         // The other slot is unaffected: retiring is per slot.
-        assert!(deck.level(0).is_some(), "retiring one slot retired another");
+        assert!(
+            deck.level(karakuri_engine::DeckSlot(0)).is_some(),
+            "retiring one slot retired another"
+        );
 
-        deck.set_residency(1, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
         let (again, frames) = wait_for_level(&gpu, &mut deck, &present, 1);
         assert!(
             again.mean > 0.0,
@@ -861,7 +864,10 @@ proc nan_points {
         let mut landed = false;
         for _ in 0..PATIENCE {
             frame(&gpu, &mut deck, &present);
-            if deck.events(0).any(|e| matches!(e, Event::Swapped { .. })) {
+            if deck
+                .events(karakuri_engine::DeckSlot(0))
+                .any(|e| matches!(e, Event::Swapped { .. }))
+            {
                 landed = true;
                 break;
             }
@@ -871,7 +877,7 @@ proc nan_points {
         // The frame that just ran was drawn entirely by the black Set. Anything
         // here is the previous Set's light, reported as this one's.
         assert_eq!(
-            deck.level(0),
+            deck.level(karakuri_engine::DeckSlot(0)),
             None,
             "a build landed and the slot kept the outgoing Set's reading — the Set on air \
          draws black and the meter is reporting the one before it, which is a stale \
@@ -932,7 +938,7 @@ proc nan_points {
         let mut lags: Vec<u32> = Vec::new();
         for n in 1..=PATIENCE {
             frame_without_waiting(&gpu, &mut deck, &present);
-            if let Some(level) = deck.level(0) {
+            if let Some(level) = deck.level(karakuri_engine::DeckSlot(0)) {
                 first.get_or_insert(n);
                 lags.push(level.frames_behind);
                 assert!(
@@ -1002,7 +1008,7 @@ proc nan_points {
         let started = Instant::now();
         for n in 1..=FRAMES {
             frame(&gpu, &mut deck, &present);
-            if let Some(level) = deck.level(0) {
+            if let Some(level) = deck.level(karakuri_engine::DeckSlot(0)) {
                 first.get_or_insert(n);
                 lags.push(level.frames_behind);
             }

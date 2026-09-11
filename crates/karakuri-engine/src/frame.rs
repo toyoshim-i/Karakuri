@@ -84,6 +84,8 @@
 //! than to a frame — the clock, the recorder, the PNG writer.
 
 use crate::deck::Deck;
+#[cfg(test)]
+use crate::deck::DeckSlot;
 use crate::gpu::Gpu;
 use crate::present::{Present, TonemapOp};
 
@@ -843,7 +845,7 @@ mod tests {
             let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
             let mut sink = TestSink::new(&gpu, vec![Err(Skip::Transient)]);
 
-            let before = deck.slot(0).set().time();
+            let before = deck.slot(DeckSlot(0)).set().time();
             {
                 let mut sinks = one(&mut sink);
                 compose(
@@ -860,7 +862,7 @@ mod tests {
                 )
                 .expect("compose");
             }
-            let refused = deck.slot(0).set().time() - before;
+            let refused = deck.slot(DeckSlot(0)).set().time() - before;
             assert!(
                 refused > 0.0,
                 "a frame with nowhere to draw did not step the simulation"
@@ -869,7 +871,7 @@ mod tests {
             // The accepted frame is the control: without it, "it moved" could
             // be a deck that moves for some other reason, and the equality
             // below is what says a sink has no say in how far it moves.
-            let mid = deck.slot(0).set().time();
+            let mid = deck.slot(DeckSlot(0)).set().time();
             {
                 let mut sinks = one(&mut sink);
                 compose(
@@ -886,7 +888,7 @@ mod tests {
                 )
                 .expect("compose");
             }
-            let accepted = deck.slot(0).set().time() - mid;
+            let accepted = deck.slot(DeckSlot(0)).set().time() - mid;
             assert!(
                 (accepted - refused).abs() < 1e-6,
                 "a refused frame advanced by {refused} and an accepted one by {accepted}"
@@ -916,7 +918,7 @@ mod tests {
             let mut commits = 0;
             let mut refusals = 0;
 
-            let before = deck.slot(0).set().time();
+            let before = deck.slot(DeckSlot(0)).set().time();
             let outcome = compose(
                 &gpu,
                 &mut deck,
@@ -936,7 +938,7 @@ mod tests {
 
             assert_eq!(commits, 1, "the frame did not commit");
             assert!(
-                deck.slot(0).set().time() > before,
+                deck.slot(DeckSlot(0)).set().time() > before,
                 "the deck stopped when the outputs went off"
             );
             assert_eq!(
@@ -1188,7 +1190,7 @@ mod tests {
                     &mut sinks,
                     &mut |_, _| {},
                     |deck| {
-                        deck.set_opacity(0, 0.0);
+                        deck.set_opacity(DeckSlot(0), 0.0);
                         Committed {
                             steps: 1,
                             look: look(),

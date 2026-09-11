@@ -172,7 +172,7 @@ pub struct Decks<'a>(pub &'a karakuri_engine::deck::Deck);
 
 impl Interface for Decks<'_> {
     fn control_at(&self, slot: u8, position: u16) -> Option<(ParamAt, [f32; 2])> {
-        let set = self.0.slot(usize::from(slot)).set();
+        let set = self.0.slot(karakuri_engine::DeckSlot(slot)).set();
         // **Counting from one**, and `checked_sub` rather than `- 1`: a zero
         // is refused at parse time, so reaching here with one is a caller that
         // built a `Parameter` by hand.
@@ -233,8 +233,7 @@ impl Feedback for Lit<'_> {
         // panic: `Deck::gain` and its neighbours index directly, and a map
         // written against a deck of four played on a deck of one is the
         // ordinary state the router already says one sentence about.
-        let slot =
-            |deck: u8| (usize::from(deck) < self.deck.slot_count()).then_some(usize::from(deck));
+        let slot = |deck: u8| karakuri_engine::DeckSlot::new(deck, self.deck.slot_count());
         Some(match control {
             Control::Gain { deck } => Shown::At(self.deck.gain(slot(deck)?)),
             Control::Opacity { deck } => Shown::At(self.deck.opacity(slot(deck)?)),

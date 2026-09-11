@@ -58,8 +58,8 @@ use karakuri_engine::frame;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::Sync;
 use karakuri_engine::{
-    Binding, Blend, Deck, Gpu, HotSwap, Look, MaskKind, ParamWrite, Present, Residency, Set,
-    Signals, TonemapOp, DEFAULT_BUDGET_MS,
+    Binding, Blend, Deck, DeckSlot as EngineSlot, Gpu, HotSwap, Look, MaskKind, ParamWrite,
+    Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_operation::Operation;
 use karakuri_operation_record::{Current, Written};
@@ -2292,7 +2292,7 @@ fn replay_session(args: &Args, id: &str) {
             }
             for slot in changed {
                 match rebuild(&gpu, &store, &playing[slot], args, slot, layering, live) {
-                    Ok(set) => deck.install(&gpu.device, slot, set),
+                    Ok(set) => deck.install(&gpu.device, EngineSlot(slot as u8), set),
                     Err(e) => eprintln!("  slot {slot}: {e} — it keeps what it had"),
                 }
             }
@@ -2442,10 +2442,16 @@ fn apply_replayed(
         _ => {}
     }
     match mix::change(record, deck.slot_count()) {
-        Ok(Some(mix::Change::Gain { slot, value })) => deck.set_gain(slot, value),
-        Ok(Some(mix::Change::Opacity { slot, value })) => deck.set_opacity(slot, value),
-        Ok(Some(mix::Change::Blend { slot, mode })) => deck.set_blend(slot, mode),
-        Ok(Some(mix::Change::Mask { slot, mask })) => deck.set_mask(slot, mask),
+        Ok(Some(mix::Change::Gain { slot, value })) => {
+            deck.set_gain(EngineSlot(slot as u8), value)
+        }
+        Ok(Some(mix::Change::Opacity { slot, value })) => {
+            deck.set_opacity(EngineSlot(slot as u8), value)
+        }
+        Ok(Some(mix::Change::Blend { slot, mode })) => {
+            deck.set_blend(EngineSlot(slot as u8), mode)
+        }
+        Ok(Some(mix::Change::Mask { slot, mask })) => deck.set_mask(EngineSlot(slot as u8), mask),
         Ok(Some(mix::Change::Transition {
             slot,
             control,
@@ -2462,7 +2468,7 @@ fn apply_replayed(
             // The same check the live path makes, against the same fact, and
             // this is the path it is actually likely on: a session replayed
             // against material that has since lost a renderer.
-            let count = deck.slot(slot).set().inputs().len();
+            let count = deck.slot(EngineSlot(slot as u8)).set().inputs().len();
             match renderer_in_range(slot, renderer, count) {
                 Ok(()) => deck.schedule_selection(karakuri_engine::transition::Selection::new(
                     slot, renderer, start,
@@ -2477,7 +2483,7 @@ fn apply_replayed(
         // above.
         Ok(Some(mix::Change::Ride { slot, writes })) => {
             for write in &writes {
-                match deck.write_param(slot, write) {
+                match deck.write_param(EngineSlot(slot as u8), write) {
                     Ok(0) => eprintln!("  {} — skipped", no_such_param(slot, &write.key)),
                     Ok(_) => {}
                     Err(refused) => eprintln!("  {refused}"),
@@ -2511,7 +2517,7 @@ fn apply_replayed(
             key,
             binding,
         })) => match binding {
-            Some(binding) => match deck.bind(slot, binding) {
+            Some(binding) => match deck.bind(EngineSlot(slot as u8), binding) {
                 karakuri_engine::set::Bound::Yes => {}
                 karakuri_engine::set::Bound::NoSuchParam => {
                     eprintln!("  {} — skipped", no_such_param(slot, &key))
@@ -2521,7 +2527,7 @@ fn apply_replayed(
                 ),
             },
             None => {
-                if !deck.unbind(slot, layer, index, &key) {
+                if !deck.unbind(EngineSlot(slot as u8), layer, index, &key) {
                     eprintln!("  slot {slot}: nothing was driving `{key}` — skipped");
                 }
             }
@@ -2535,7 +2541,7 @@ fn apply_replayed(
             index,
             authority,
         })) => {
-            if !deck.set_authority(slot, layer, index, authority) {
+            if !deck.set_authority(EngineSlot(slot as u8), layer, index, authority) {
                 eprintln!(
                     "  slot {slot}: no node {}:{index} to make {} — skipped",
                     karakuri_environment::setfile::layer_name(
@@ -2546,7 +2552,7 @@ fn apply_replayed(
             }
         }
         Ok(Some(mix::Change::Residency { slot, level })) => {
-            deck.set_residency(slot, level);
+            deck.set_residency(EngineSlot(slot as u8), level);
             report_governing(&deck.govern(), "residency");
         }
         Ok(Some(mix::Change::Look(l))) => *look = l,
@@ -2566,7 +2572,9 @@ fn apply_replayed(
             anchor_bpm,
             scrub_beats,
         })) => {
-            if let Err(refusal) = deck.set_transport(slot, sync, anchor_bpm, scrub_beats) {
+            if let Err(refusal) =
+                deck.set_transport(EngineSlot(slot as u8), sync, anchor_bpm, scrub_beats)
+            {
                 eprintln!("  slot {slot}: {} sync refused — {refusal}", sync.name());
             }
         }
@@ -2594,10 +2602,11 @@ fn schedule_from(
     curve: Curve,
 ) -> karakuri_engine::Transition {
     use karakuri_engine::transition::Control;
+    let addr = EngineSlot(slot as u8);
     let from = match control {
-        Control::Gain => deck.gain(slot),
-        Control::Opacity => deck.opacity(slot),
-        Control::MaskPosition => deck.mask(slot).position(),
+        Control::Gain => deck.gain(addr),
+        Control::Opacity => deck.opacity(addr),
+        Control::MaskPosition => deck.mask(addr).position(),
     };
     karakuri_engine::Transition::new(slot, control, from, to, start, beats, curve)
 }
@@ -3722,7 +3731,7 @@ fn main() {
 fn report_live_counts(gpu: &Gpu, deck: &Deck) {
     eprintln!("elements at the end of the run (a stall; not printed while running):");
     for slot in 0..deck.slot_count() {
-        let set = deck.slot(slot).set();
+        let set = deck.slot(EngineSlot(slot as u8)).set();
         eprintln!(
             "  slot {slot}: {} live of {} allocated",
             set.live_count(&gpu.device, &gpu.queue),
@@ -5977,11 +5986,12 @@ impl Live {
             return;
         }
         self.focus = slot;
+        let addr = EngineSlot(slot as u8);
         eprintln!(
             "focus slot {slot} — {}, gain {:.2}, t {:.2}s",
-            residency_name(self.deck.residency(slot), self.deck.is_parked(slot)),
-            self.deck.gain(slot),
-            self.deck.slot(slot).set().time()
+            residency_name(self.deck.residency(addr), self.deck.is_parked(addr)),
+            self.deck.gain(addr),
+            self.deck.slot(addr).set().time()
         );
     }
 
@@ -6002,8 +6012,9 @@ impl Live {
     /// on the line and does not come through here at all — it used to, and the
     /// state it landed in was this function's to decide.
     fn toggle_on_air(&mut self, slot: usize) {
-        let t = self.deck.slot(slot).set().time();
-        match self.deck.residency(slot) {
+        let addr = EngineSlot(slot as u8);
+        let t = self.deck.slot(addr).set().time();
+        match self.deck.residency(addr) {
             Residency::Live => {
                 self.operate(&Operation::SetResidency {
                     deck: slot as u8,
@@ -6036,11 +6047,12 @@ impl Live {
     /// on air to prime could only mean taking it off air, and that is what
     /// space is for.
     fn toggle_priming(&mut self, slot: usize) {
-        if self.deck.residency(slot) == Residency::Live {
+        let addr = EngineSlot(slot as u8);
+        if self.deck.residency(addr) == Residency::Live {
             eprintln!("slot {slot} is on air — priming is off-air warming; take it off with space");
             return;
         }
-        let requested = self.deck.requested_residency(slot);
+        let requested = self.deck.requested_residency(addr);
         let want = if requested == Residency::Priming {
             Residency::Allocated
         } else {
@@ -6231,7 +6243,7 @@ impl Live {
         // read here that needs a `Deck`, and the accept has to be on the side
         // of it a test can reach.
         let id = accepted_save(slot, asked, id, &sources, &self.store_root, reply.as_ref());
-        let values = playing_values(self.deck.slot(slot).set(), &self.edges);
+        let values = playing_values(self.deck.slot(EngineSlot(slot as u8)).set(), &self.edges);
         let save = Save {
             slot,
             asked,
@@ -6437,7 +6449,8 @@ impl Live {
     /// (P-0090).
     fn cycle_sync(&mut self) {
         let slot = self.focus;
-        let current = self.deck.transport(slot).sync();
+        let addr = EngineSlot(slot as u8);
+        let current = self.deck.transport(addr).sync();
         let at = Sync::ALL.iter().position(|s| *s == current).unwrap_or(0);
 
         let mut refused: Vec<String> = Vec::new();
@@ -6445,7 +6458,7 @@ impl Live {
         // Every other mode, in cycle order, starting after the current one.
         for step in 1..=Sync::ALL.len() {
             let candidate = Sync::ALL[(at + step) % Sync::ALL.len()];
-            match self.deck.sync_allowed(slot, candidate) {
+            match self.deck.sync_allowed(addr, candidate) {
                 Ok(()) => {
                     next = Some(candidate);
                     break;
@@ -6493,7 +6506,8 @@ impl Live {
     /// Scrub the focused slot, in beats. The one control that goes backwards.
     fn scrub(&mut self, beats: f64) {
         let slot = self.focus;
-        let transport = self.deck.transport(slot);
+        let addr = EngineSlot(slot as u8);
+        let transport = self.deck.transport(addr);
         if transport.sync() != Sync::Beat {
             eprintln!(
                 "slot {slot} is {} — scrubbing moves a position, and only beat sync has one (y)",
@@ -6507,7 +6521,7 @@ impl Live {
         });
         eprintln!(
             "slot {slot} scrub {:+.2} beats",
-            self.deck.transport(slot).scrub_beats()
+            self.deck.transport(addr).scrub_beats()
         );
     }
 
@@ -6605,7 +6619,10 @@ impl Live {
     }
 
     fn nudge_gain(&mut self, delta: f32) {
-        self.set_gain(self.focus, self.deck.gain(self.focus) + delta);
+        self.set_gain(
+            self.focus,
+            self.deck.gain(EngineSlot(self.focus as u8)) + delta,
+        );
     }
 
     fn set_gain(&mut self, slot: usize, gain: f32) {
@@ -6613,7 +6630,10 @@ impl Live {
             deck: slot as u8,
             gain: clamp_gain(gain),
         });
-        eprintln!("slot {slot} gain {:.2}", self.deck.gain(slot));
+        eprintln!(
+            "slot {slot} gain {:.2}",
+            self.deck.gain(EngineSlot(slot as u8))
+        );
     }
 
     /// **The fader**, and the one control that silences a slot under every
@@ -6625,7 +6645,7 @@ impl Live {
     /// depends on it: under `add` opacity and gain are the same dial twice.
     fn nudge_opacity(&mut self, delta: f32) {
         let slot = self.focus;
-        self.set_opacity(slot, self.deck.opacity(slot) + delta);
+        self.set_opacity(slot, self.deck.opacity(EngineSlot(slot as u8)) + delta);
     }
 
     fn set_opacity(&mut self, slot: usize, value: f32) {
@@ -6634,10 +6654,11 @@ impl Live {
             deck: slot as u8,
             opacity,
         });
+        let addr = EngineSlot(slot as u8);
         eprintln!(
             "slot {slot} opacity {:.2} ({})",
-            self.deck.opacity(slot),
-            self.deck.blend(slot).name()
+            self.deck.opacity(addr),
+            self.deck.blend(addr).name()
         );
     }
 
@@ -6876,7 +6897,8 @@ impl Live {
     /// here, which is the whole of what is left of this function's arithmetic.
     fn cycle_renderer(&mut self) {
         let slot = self.focus;
-        let set = self.deck.slot(slot).set();
+        let addr = EngineSlot(slot as u8);
+        let set = self.deck.slot(addr).set();
         let count = set.inputs().len();
         let composited = set.layering() == karakuri_engine::set::Layering::Composite;
         // The live edges, read before anything is scheduled: with nothing
@@ -6904,7 +6926,7 @@ impl Live {
             );
             return;
         }
-        let armed = self.deck.selections_on(slot).next().map(|s| s.renderer());
+        let armed = self.deck.selections_on(addr).next().map(|s| s.renderer());
         let next = match (armed, live.as_slice()) {
             // The one waiting to land, so a second press inside the same bar
             // moves past it rather than choosing it again.
@@ -6972,7 +6994,8 @@ impl Live {
     /// every mode is available to every slot, because a blend mode is a
     /// question about pixels and not about what the material can do.
     fn cycle_blend(&mut self, slot: usize) {
-        let current = self.deck.blend(slot);
+        let addr = EngineSlot(slot as u8);
+        let current = self.deck.blend(addr);
         let at = Blend::ALL.iter().position(|b| *b == current).unwrap_or(0);
         let next = Blend::ALL[(at + 1) % Blend::ALL.len()];
         self.operate(&Operation::SetBlendMode {
@@ -6981,9 +7004,9 @@ impl Live {
         });
         eprintln!(
             "slot {slot} blend {} — gain {:.2}, opacity {:.2}",
-            self.deck.blend(slot).name(),
-            self.deck.gain(slot),
-            self.deck.opacity(slot)
+            self.deck.blend(addr).name(),
+            self.deck.gain(addr),
+            self.deck.opacity(addr)
         );
     }
 
@@ -7081,11 +7104,8 @@ impl Live {
     /// somebody may not be reading.
     fn performed(&mut self, operation: &Operation) -> Result<(), String> {
         let transport = match operation {
-            Operation::ScrubDeck { deck, .. } => {
-                let slot = usize::from(*deck);
-                slot_in_range(slot, self.deck.slot_count())
-                    .then(|| mix::current_transport(self.deck.transport(slot)))
-            }
+            Operation::ScrubDeck { deck, .. } => EngineSlot::new(*deck, self.deck.slot_count())
+                .map(|slot| mix::current_transport(self.deck.transport(slot))),
             _ => None,
         };
         // The mask of the deck the operation names, on the transport's terms:
@@ -7099,11 +7119,8 @@ impl Live {
         let mask = match operation {
             Operation::SetMaskShape { deck, .. }
             | Operation::SetMaskPosition { deck, .. }
-            | Operation::Wipe { to: deck, .. } => {
-                let slot = usize::from(*deck);
-                slot_in_range(slot, self.deck.slot_count())
-                    .then(|| mix::current_mask(self.deck.mask(slot)))
-            }
+            | Operation::Wipe { to: deck, .. } => EngineSlot::new(*deck, self.deck.slot_count())
+                .map(|slot| mix::current_mask(self.deck.mask(slot))),
             _ => None,
         };
         // **The session tempo, for the one operation anchored to it.**
@@ -7145,11 +7162,8 @@ impl Live {
         // values rather than the vocabulary's, so the crossing is made in one
         // place, exactly as the mask's and the transition's are.
         let mix = match operation {
-            Operation::Wipe { to: deck, .. } => {
-                let slot = usize::from(*deck);
-                slot_in_range(slot, self.deck.slot_count())
-                    .then(|| mix::current_mix(self.deck.blend(slot), self.deck.residency(slot)))
-            }
+            Operation::Wipe { to: deck, .. } => EngineSlot::new(*deck, self.deck.slot_count())
+                .map(|slot| mix::current_mix(self.deck.blend(slot), self.deck.residency(slot))),
             _ => None,
         };
         let transition = match operation {
@@ -7221,10 +7235,12 @@ impl Live {
     /// What one decoded record does. The only place the mix is written.
     fn apply(&mut self, change: mix::Change) {
         match change {
-            mix::Change::Gain { slot, value } => self.deck.set_gain(slot, value),
-            mix::Change::Opacity { slot, value } => self.deck.set_opacity(slot, value),
-            mix::Change::Blend { slot, mode } => self.deck.set_blend(slot, mode),
-            mix::Change::Mask { slot, mask } => self.deck.set_mask(slot, mask),
+            mix::Change::Gain { slot, value } => self.deck.set_gain(EngineSlot(slot as u8), value),
+            mix::Change::Opacity { slot, value } => {
+                self.deck.set_opacity(EngineSlot(slot as u8), value)
+            }
+            mix::Change::Blend { slot, mode } => self.deck.set_blend(EngineSlot(slot as u8), mode),
+            mix::Change::Mask { slot, mask } => self.deck.set_mask(EngineSlot(slot as u8), mask),
             mix::Change::Transition {
                 slot,
                 control,
@@ -7245,7 +7261,7 @@ impl Live {
                 renderer,
                 start,
             } => {
-                let count = self.deck.slot(slot).set().inputs().len();
+                let count = self.deck.slot(EngineSlot(slot as u8)).set().inputs().len();
                 match renderer_in_range(slot, renderer, count) {
                     Ok(()) => {
                         self.deck
@@ -7270,7 +7286,7 @@ impl Live {
             // than the record was.
             mix::Change::Ride { slot, writes } => {
                 for write in &writes {
-                    match self.deck.write_param(slot, write) {
+                    match self.deck.write_param(EngineSlot(slot as u8), write) {
                         Ok(0) => eprintln!("{}", no_such_param(slot, &write.key)),
                         Ok(_) => {}
                         Err(refused) => eprintln!("{refused}"),
@@ -7294,7 +7310,7 @@ impl Live {
                 key,
                 binding,
             } => match binding {
-                Some(binding) => match self.deck.bind(slot, binding) {
+                Some(binding) => match self.deck.bind(EngineSlot(slot as u8), binding) {
                     karakuri_engine::set::Bound::Yes => {}
                     karakuri_engine::set::Bound::NoSuchParam => {
                         eprintln!("{}", no_such_param(slot, &key))
@@ -7304,7 +7320,7 @@ impl Live {
                     ),
                 },
                 None => {
-                    if !self.deck.unbind(slot, layer, index, &key) {
+                    if !self.deck.unbind(EngineSlot(slot as u8), layer, index, &key) {
                         eprintln!("slot {slot}: nothing was driving `{key}`");
                     }
                 }
@@ -7318,7 +7334,10 @@ impl Live {
                 index,
                 authority,
             } => {
-                if !self.deck.set_authority(slot, layer, index, authority) {
+                if !self
+                    .deck
+                    .set_authority(EngineSlot(slot as u8), layer, index, authority)
+                {
                     eprintln!(
                         "slot {slot}: no node {}:{index} to make {}",
                         karakuri_environment::setfile::layer_name(
@@ -7329,7 +7348,7 @@ impl Live {
                 }
             }
             mix::Change::Residency { slot, level } => {
-                self.deck.set_residency(slot, level);
+                self.deck.set_residency(EngineSlot(slot as u8), level);
                 // A slot arriving or leaving changes what is committed, and the
                 // deck's headroom with it: a slot that could not be admitted a
                 // moment ago may fit now, and one that fitted may not. Requests
@@ -7394,7 +7413,10 @@ impl Live {
                 // allows — but a session recorded against one Set and replayed
                 // against another is exactly where it can, and a slot silently
                 // left free would be a performance replayed wrong.
-                if let Err(refusal) = self.deck.set_transport(slot, sync, anchor_bpm, scrub_beats) {
+                if let Err(refusal) =
+                    self.deck
+                        .set_transport(EngineSlot(slot as u8), sync, anchor_bpm, scrub_beats)
+                {
                     eprintln!("slot {slot}: {} sync refused — {refusal}", sync.name());
                 }
             }
@@ -7528,7 +7550,7 @@ impl Live {
         // needs the recorder.
         let mut procedures: Vec<(usize, u64)> = Vec::new();
         for slot in 0..self.deck.slot_count() {
-            for event in self.deck.events(slot) {
+            for event in self.deck.events(EngineSlot(slot as u8)) {
                 set_changed |= matches!(event, Event::Swapped { .. });
                 // **The same words, to whoever is not at the terminal.** A
                 // model that wrote a procedure has no other way to learn that
@@ -7587,13 +7609,14 @@ impl Live {
 
         self.status.clear();
         for slot in 0..self.deck.slot_count() {
+            let addr = EngineSlot(slot as u8);
             let _ = write!(
                 self.status,
                 "{}{slot} {} g{:.2} t{:.1}s ",
                 if slot == self.focus { ">" } else { " " },
-                residency_tag(self.deck.residency(slot), self.deck.is_parked(slot)),
-                self.deck.gain(slot),
-                self.deck.slot(slot).set().time()
+                residency_tag(self.deck.residency(addr), self.deck.is_parked(addr)),
+                self.deck.gain(addr),
+                self.deck.slot(addr).set().time()
             );
             // **The slot has stopped updating, and only while it has.** The
             // version in it costs more than one frame may, so the engine skips
@@ -7605,14 +7628,14 @@ impl Live {
             // slot is still mixed, and `t` standing still beside `LIVE` is
             // exactly the reading an operator would otherwise take for a bug.
             self.status
-                .push_str(stopped_tag(self.deck.overloaded(slot)));
+                .push_str(stopped_tag(self.deck.overloaded(addr)));
             // **What is moving, and where it is going.** An armed fade is
             // invisible otherwise: with the default quantum it is due up to a
             // bar after the key, and the only thing that said so was one line
             // at press time. A control that changes something invisible is
             // indistinguishable from a control that is broken, which is this
             // file's own argument for printing on every key.
-            for t in self.deck.transitions_on(slot) {
+            for t in self.deck.transitions_on(addr) {
                 let _ = write!(
                     self.status,
                     "{}>{:.2} ",
@@ -7628,7 +7651,7 @@ impl Live {
             // the same reason: a selection armed for the next bar is invisible
             // between the key and the music, and `r>1` is the only thing on
             // screen that says a renderer is about to change.
-            for selection in self.deck.selections_on(slot) {
+            for selection in self.deck.selections_on(addr) {
                 let _ = write!(self.status, "r>{} ", selection.renderer());
             }
             // The fader and the mode, **only when they are doing something**,
@@ -7636,18 +7659,18 @@ impl Live {
             // touched prints the line it always printed. Full opacity under
             // `add` is what every slot comes up as, and a column repeating it
             // four times is four columns of nothing to read in the dark.
-            if self.deck.opacity(slot) != 1.0 {
-                let _ = write!(self.status, "o{:.2} ", self.deck.opacity(slot));
+            if self.deck.opacity(addr) != 1.0 {
+                let _ = write!(self.status, "o{:.2} ", self.deck.opacity(addr));
             }
-            if self.deck.blend(slot) != Blend::Add {
-                let _ = write!(self.status, "{} ", self.deck.blend(slot).name());
+            if self.deck.blend(addr) != Blend::Add {
+                let _ = write!(self.status, "{} ", self.deck.blend(addr).name());
             }
             // The transport, and **only when it is doing something**: a deck
             // nobody has synced prints the line it always printed. `free` is
             // the absence of a transport rather than a setting, and a column
             // reading `free` on every slot would be four characters of nothing
             // on a line that has to be read at a glance in the dark.
-            let transport = self.deck.transport(slot);
+            let transport = self.deck.transport(addr);
             match transport.sync() {
                 Sync::Free => {}
                 Sync::Tempo => {
@@ -7671,7 +7694,7 @@ impl Live {
             // lands regardless of its fader. `None` for an off-air slot is the
             // meter saying it has nothing current rather than showing the last
             // thing the slot drew — see `Deck::level`.
-            match self.deck.level(slot) {
+            match self.deck.level(addr) {
                 Some(level) => {
                     let _ = write!(self.status, "m{:.3} p{:.1}", level.mean, level.peak);
                     // Texels the meter left out because they were not a finite
@@ -7695,7 +7718,7 @@ impl Live {
             // attached, which is the whole reason confidence is worth seeing
             // rather than merely being applied. Nothing is printed for a slot
             // with no bindings, so the default status line is unchanged.
-            for (key, value) in self.deck.slot(slot).set().bound() {
+            for (key, value) in self.deck.slot(addr).set().bound() {
                 let _ = write!(self.status, "{key}={value:.3}  ");
             }
         }

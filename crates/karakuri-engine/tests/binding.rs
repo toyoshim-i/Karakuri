@@ -16,7 +16,7 @@
 //!   values, bit for bit, through a noise binding.
 
 use karakuri_engine::binding::{blend, Curve, Signals};
-use karakuri_engine::deck::{Deck, Residency};
+use karakuri_engine::deck::{Deck, DeckSlot, Residency};
 use karakuri_engine::swap::HotSwap;
 use karakuri_engine::{Binding, Gpu, Present, Set};
 use karakuri_ir::typed::Checked;
@@ -202,7 +202,7 @@ fn readback(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u16> {
 }
 
 fn value_of(deck: &Deck, slot: usize, key: &str) -> f32 {
-    deck.slot(slot)
+    deck.slot(DeckSlot(slot as u8))
         .set()
         .bound()
         .find(|(name, _)| *name == key)
@@ -474,14 +474,14 @@ mod gpu {
         let untouched = rendered(&|_deck| {});
         let attached = rendered(&|deck| {
             assert!(
-                deck.bind(0, driven()).attached(),
+                deck.bind(karakuri_engine::DeckSlot(0), driven()).attached(),
                 "`radius` is a declared L1 param"
             );
         });
         let taken_back = rendered(&|deck| {
-            assert!(deck.bind(0, driven()).attached());
+            assert!(deck.bind(karakuri_engine::DeckSlot(0), driven()).attached());
             assert!(
-                deck.unbind(0, Kind::L1, None, "radius"),
+                deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, None, "radius"),
                 "there was an attachment at that address to remove"
             );
         });
@@ -500,19 +500,19 @@ mod gpu {
         // failing**, which is the caller's cue and not an error: a rebuild may
         // no longer declare the name.
         let (mut deck, _present) = deck_of(&gpu, vec![material()], 6);
-        assert!(!deck.unbind(0, Kind::L1, None, "radius"));
-        assert!(deck.bind(0, driven()).attached());
-        assert!(deck.unbind(0, Kind::L1, None, "radius"));
+        assert!(!deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, None, "radius"));
+        assert!(deck.bind(karakuri_engine::DeckSlot(0), driven()).attached());
+        assert!(deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, None, "radius"));
         assert!(
-            !deck.unbind(0, Kind::L1, None, "radius"),
+            !deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, None, "radius"),
             "a second take-back claimed to remove something"
         );
         // **And it is addressed**: the attachment above is the layer's, so a
         // take-back naming one node of it is a different address and removes
         // nothing.
-        assert!(deck.bind(0, driven()).attached());
+        assert!(deck.bind(karakuri_engine::DeckSlot(0), driven()).attached());
         assert!(
-            !deck.unbind(0, Kind::L1, Some(0), "radius"),
+            !deck.unbind(karakuri_engine::DeckSlot(0), Kind::L1, Some(0), "radius"),
             "an addressed take-back removed the layer's attachment"
         );
     }
@@ -530,24 +530,40 @@ mod gpu {
         let (mut deck, _present) = deck_of(&gpu, vec![build(&gpu)], 1);
 
         assert_eq!(
-            deck.slot(0).set().authority(Kind::L1, 0),
+            deck.slot(karakuri_engine::DeckSlot(0))
+                .set()
+                .authority(Kind::L1, 0),
             Some(karakuri_engine::set::Authority::Manual),
             "a node nobody has spoken for is manual"
         );
-        assert!(deck.set_authority(0, Kind::L1, 0, karakuri_engine::set::Authority::Automatic));
+        assert!(deck.set_authority(
+            karakuri_engine::DeckSlot(0),
+            Kind::L1,
+            0,
+            karakuri_engine::set::Authority::Automatic
+        ));
         assert_eq!(
-            deck.slot(0).set().authority(Kind::L1, 0),
+            deck.slot(karakuri_engine::DeckSlot(0))
+                .set()
+                .authority(Kind::L1, 0),
             Some(karakuri_engine::set::Authority::Automatic),
             "the level did not land on the node it named"
         );
         // The L4 beside it is untouched, which is what *per node* means.
         assert_eq!(
-            deck.slot(0).set().authority(Kind::L4, 0),
+            deck.slot(karakuri_engine::DeckSlot(0))
+                .set()
+                .authority(Kind::L4, 0),
             Some(karakuri_engine::set::Authority::Manual),
             "setting one node's authority moved another node's"
         );
         assert!(
-            !deck.set_authority(0, Kind::L1, 7, karakuri_engine::set::Authority::Manual),
+            !deck.set_authority(
+                karakuri_engine::DeckSlot(0),
+                Kind::L1,
+                7,
+                karakuri_engine::set::Authority::Manual
+            ),
             "a node this Set has not got was taken rather than reported"
         );
     }
@@ -709,7 +725,9 @@ mod gpu {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            deck.slot(0).set().live_count(&gpu.device, &gpu.queue),
+            deck.slot(karakuri_engine::DeckSlot(0))
+                .set()
+                .live_count(&gpu.device, &gpu.queue),
             0,
             "a manual spawn_rate of zero spawned something"
         );
@@ -737,7 +755,10 @@ mod gpu {
             frame(&gpu, &mut deck, &present, 1);
         }
         // 3000 per second for half a second, give or take the accumulator's carry.
-        let live = deck.slot(0).set().live_count(&gpu.device, &gpu.queue);
+        let live = deck
+            .slot(karakuri_engine::DeckSlot(0))
+            .set()
+            .live_count(&gpu.device, &gpu.queue);
         assert!(
             (1400..=1600).contains(&live),
             "the spawn accumulator produced {live} elements, not the bound rate's ~1500"
@@ -774,7 +795,11 @@ mod gpu {
             frame(&gpu, &mut deck, &present, 1);
         }
 
-        let manual = deck.slot(0).set().param("radius").expect("declared");
+        let manual = deck
+            .slot(karakuri_engine::DeckSlot(0))
+            .set()
+            .param("radius")
+            .expect("declared");
         assert_eq!(manual, 7.0, "the binding overwrote the manual value");
 
         let energy = deck.signals().sample("energy");
@@ -818,7 +843,13 @@ mod gpu {
                 "a signal with no provider moved a param"
             );
         }
-        assert_eq!(deck.slot(0).set().param("radius").expect("declared"), 3.25);
+        assert_eq!(
+            deck.slot(karakuri_engine::DeckSlot(0))
+                .set()
+                .param("radius")
+                .expect("declared"),
+            3.25
+        );
     }
     /// The same tick sequence and the same seed reproduce every bound value bit
     /// for bit, through a noise binding — so a binding is inside the determinism
@@ -912,7 +943,7 @@ mod gpu {
         // and it was the parked slot's cell that made that wrong: a bound
         // parameter frozen at the value it had when the fader came down is a
         // cell showing a still.
-        deck.set_residency(1, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         let off_air_at = value_of(&deck, 1, "radius");
         let mut moved = false;
         for _ in 0..7 {
@@ -930,7 +961,7 @@ mod gpu {
              holds against a slot that stopped resolving as much as against one that \
              did not"
         );
-        deck.set_residency(1, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
         frame(&gpu, &mut deck, &present, 1);
         assert_eq!(
             value_of(&deck, 0, "radius"),
@@ -1099,7 +1130,7 @@ mod gpu {
         frame(&gpu, &mut deck, &present, 1);
 
         let resolved = |layer: Kind| -> f32 {
-            deck.slot(0)
+            deck.slot(karakuri_engine::DeckSlot(0))
                 .set()
                 .bindings()
                 .iter()
@@ -1303,7 +1334,7 @@ mod gpu {
             // **The road a press takes**, and the one this test is about.
             assert!(
                 deck.bind(
-                    0,
+                    karakuri_engine::DeckSlot(0),
                     Binding::new(Kind::L1, "radius", "energy", Curve::Lin, [0.5, 8.0],)
                 )
                 .attached(),
@@ -1324,7 +1355,10 @@ mod gpu {
             let mut landed = false;
             for _ in 0..600 {
                 frame(&gpu, &mut deck, &present, 1);
-                if deck.events(0).any(|e| matches!(e, Event::Swapped { .. })) {
+                if deck
+                    .events(karakuri_engine::DeckSlot(0))
+                    .any(|e| matches!(e, Event::Swapped { .. }))
+                {
                     landed = true;
                     break;
                 }
@@ -1332,7 +1366,10 @@ mod gpu {
             }
             assert!(landed, "no rebuild landed, so nothing was asserted");
             assert_eq!(
-                deck.slot(0).set().bindings().len(),
+                deck.slot(karakuri_engine::DeckSlot(0))
+                    .set()
+                    .bindings()
+                    .len(),
                 1,
                 "the rebuild left the slot with no attachment at all: what an operator \
                  attached to `radius` was walked back by a save that states no binding"

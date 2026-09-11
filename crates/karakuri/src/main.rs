@@ -364,8 +364,8 @@ use karakuri_engine::set::{Layering, Published};
 use karakuri_engine::transition::Selection;
 use karakuri_engine::transport::Sync as EngineSync;
 use karakuri_engine::{
-    compose, Blend, Committed, Control, Cut, Deck, Event, Gpu, HotSwap, Look, Mask, MaskKind,
-    Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink,
+    compose, Blend, Committed, Control, Cut, Deck, DeckSlot as EngineSlot, Event, Gpu, HotSwap,
+    Look, Mask, MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink,
 };
 use karakuri_environment::clock::Clock;
 use karakuri_environment::{audio, history, mcp, midi, mix, setfile, watch, Asked, Opening};
@@ -7268,7 +7268,7 @@ impl Engine {
         // which is *the governor was not asked about this slot*.
         for slot in 0..SLOTS {
             if slot != ON_AIR {
-                deck.set_residency(slot, Residency::Allocated);
+                deck.set_residency(EngineSlot(slot as u8), Residency::Allocated);
             }
         }
         // **The meters are on, and that is a decision rather than a default.**
@@ -7318,7 +7318,7 @@ impl Engine {
             ),
         ];
         let slot_bind_groups = std::array::from_fn(|slot| {
-            deck.slot_view(slot)
+            deck.slot_view(EngineSlot(slot as u8))
                 .map(|view| present.create_bind_group_for(&gpu.device, view))
         });
         Engine {
@@ -7424,7 +7424,8 @@ impl Engine {
         // and it is taken at the deck's own size, so a deck on a small output
         // stops being judged against a frame nobody is drawing.
         self.deck.estimate_slots(&gpu.device, &gpu.queue);
-        self.deck.set_residency(ASKED_TO_PRIME, Residency::Priming);
+        self.deck
+            .set_residency(EngineSlot(ASKED_TO_PRIME as u8), Residency::Priming);
         // **The number the governor will spend for this slot**, which since
         // ADR-0303 is not the same quantity as its measurement.
         //
@@ -7451,8 +7452,8 @@ impl Engine {
                 .or_else(|| slot.measured_cost().map(|cost| cost.ms))
         };
         if let (Some(committed), Some(warming)) = (
-            budgeted(self.deck.slot(ON_AIR)),
-            budgeted(self.deck.slot(ASKED_TO_PRIME)),
+            budgeted(self.deck.slot(EngineSlot(ON_AIR as u8))),
+            budgeted(self.deck.slot(EngineSlot(ASKED_TO_PRIME as u8))),
         ) {
             self.deck.set_compute_budget_ms(committed + warming / 2.0);
         }
@@ -7608,7 +7609,7 @@ impl Engine {
                 // the first time the deck was resized from here.
                 self.slot_bind_groups = std::array::from_fn(|slot| {
                     self.deck
-                        .slot_view(slot)
+                        .slot_view(EngineSlot(slot as u8))
                         .map(|view| self.present.create_bind_group_for(&gpu.device, view))
                 });
             }
@@ -10459,7 +10460,7 @@ fn put_arrangement_back(root: &std::path::Path, panel: &mut Panel, name: &str) -
 /// beats and its curve as well, and none of the three crosses this seam: the
 /// console has no beat count, so what it could draw out of them is nothing.
 /// See `view::Strip::gain_to`.
-fn destination(deck: &Deck, slot: usize, control: Control) -> Option<f32> {
+fn destination(deck: &Deck, slot: EngineSlot, control: Control) -> Option<f32> {
     deck.transitions_on(slot)
         .find(|t| t.control() == control)
         .map(|t| t.to())
@@ -10532,6 +10533,7 @@ fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
             strip.name.clear();
             strip.name.push_str(name);
         }
+        let slot = EngineSlot(slot as u8);
         strip.tally = tally(deck.residency(slot));
         strip.requested = tally(deck.requested_residency(slot));
         strip.gain = deck.gain(slot);
@@ -10685,13 +10687,14 @@ fn staging(
 ) -> bool {
     let mut landed = false;
     for slot in 0..deck.slot_count() {
+        let addr = EngineSlot(slot as u8);
         // **Taken out of the channel before anything else is asked of the
         // deck.** `Deck::events` borrows the deck for as long as it is being
         // read, and what the rows need afterwards is the Set the swap in this
         // same drain installed — `Set::node_names`, which is what a node is
         // called. An empty drain collects into a `Vec` that allocates nothing,
         // so a frame on which nothing was built pays for this in a branch.
-        let events: Vec<Event> = deck.events(slot).collect();
+        let events: Vec<Event> = deck.events(addr).collect();
         // **What the build that landed changed, kept across the drain**, so
         // that the `Overloaded` following its `Swapped` draws the same rows:
         // both are about one build and carry its id, and the diff is taken
@@ -10722,7 +10725,7 @@ fn staging(
             // that diff, one per node, named off the Set the swap installed.
             if let Event::Swapped { id, .. } = &event {
                 let changed = keeping.took_up(aims, slot, *id);
-                diffed.push((*id, changed_rows(deck.slot(slot).set(), &changed)));
+                diffed.push((*id, changed_rows(deck.slot(addr).set(), &changed)));
             }
             // **Whether the *live Set* changed**, which is a different
             // question from whether a row did and is why this is read here
@@ -10858,7 +10861,7 @@ fn node_addr(layer: Layer, index: u32) -> String {
 /// A function rather than four lines in the frame loop, so that the bound is
 /// written once and can be named from a test.
 fn stopped_slots(deck: &Deck) -> [bool; view::DECKS] {
-    std::array::from_fn(|slot| slot < deck.slot_count() && deck.overloaded(slot))
+    std::array::from_fn(|slot| slot < deck.slot_count() && deck.overloaded(EngineSlot(slot as u8)))
 }
 
 /// **What one verdict does to the lane** — the whole of the mapping, in a
@@ -11216,8 +11219,9 @@ fn inspector(
         // pane head reads `deck A · drift_night`, and after a load that is the
         // Set the operator chose rather than the pair the run opened with.
         let material = names.get(slot).map_or("", String::as_str);
-        let set = deck.slot(slot).set();
-        let transport = deck.transport(slot);
+        let addr = EngineSlot(target);
+        let set = deck.slot(addr).set();
+        let transport = deck.transport(addr);
         let composite = set.layering() == Layering::Composite;
         // **The deck head's two build chips**, and all three readings are of
         // what **landed** rather than of what was asked: the number the slot is
@@ -11550,7 +11554,7 @@ fn inspector(
             // this array line up with the field it fills;
             // `the_two_crates_walk_the_sync_modes_in_one_order` is what says
             // so rather than this comment.
-            allows: EngineSync::ALL.map(|mode| deck.sync_allowed(slot, mode).is_ok()),
+            allows: EngineSync::ALL.map(|mode| deck.sync_allowed(addr, mode).is_ok()),
             anchor_bpm: transport.anchor_bpm(),
             scrub_beats: transport.scrub_beats(),
             composite,
@@ -12098,8 +12102,8 @@ fn offset_key(step: Step, from: f32) -> f32 {
 /// and [`apply`] refuse the same slot: a press reads the deck before it names
 /// a destination and the record writes it afterwards, and a guard on only the
 /// second of the two would be a read that panicked on its way to a refusal.
-fn held(deck: &Deck, slot: u8) -> Option<usize> {
-    DeckSlot::new(slot, deck.slot_count()).map(|slot| slot.index())
+fn held(deck: &Deck, slot: u8) -> Option<EngineSlot> {
+    EngineSlot::new(slot, deck.slot_count())
 }
 
 /// **The engine's look, as the console reads it** — [`blend_mode`]'s function
@@ -13684,7 +13688,7 @@ fn apply(
             Some(format!(
                 "  fader: deck {} trim -> SetGain {{ deck: {slot}, gain: {value:.3} }} \
                  -> Record::Gain -> deck.gain({slot}) = {:.3}",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.gain(slot)
             ))
         }
@@ -13694,7 +13698,7 @@ fn apply(
             Some(format!(
                 "  fader: deck {} fader -> SetOpacity {{ deck: {slot}, opacity: {value:.3} }} \
                  -> Record::Opacity -> deck.opacity({slot}) = {:.3}",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.opacity(slot)
             ))
         }
@@ -13713,7 +13717,7 @@ fn apply(
             Some(format!(
                 "  blend: deck {} -> SetBlendMode {{ deck: {slot}, blend: {mode} }} \
                  -> Record::Blend -> deck.blend({slot}) = {}",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.blend(slot).name()
             ))
         }
@@ -13737,7 +13741,7 @@ fn apply(
                 "  tally: deck {} -> SetResidency {{ deck: {slot}, residency: {level} }} \
                  -> Record::Residency -> deck.requested_residency({slot}) = {:?}, \
                  deck.residency({slot}) = {:?}",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.requested_residency(slot),
                 deck.residency(slot)
             ))
@@ -13775,7 +13779,7 @@ fn apply(
                 "  mask: deck {} -> SetMaskShape {{ deck: {slot}, kind: {kind}, \
                  angle: {angle:.3} }} -> Record::Mask -> deck.mask({slot}) = {} \
                  at {:.3} rad, front at {:.3}",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.mask(slot).kind().name(),
                 deck.mask(slot).angle(),
                 deck.mask(slot).position()
@@ -13857,13 +13861,19 @@ fn apply(
                 Control::MaskPosition => deck.mask(slot).position(),
             };
             deck.schedule(karakuri_engine::Transition::new(
-                slot, control, from, to, start, beats, curve,
+                slot.index(),
+                control,
+                from,
+                to,
+                start,
+                beats,
+                curve,
             ));
             Some(format!(
                 "  transition: deck {} {} {from:.3} -> {to:.3} -> Record::Transition {{ \
                  start: {start:.3}, beats: {beats:.3}, curve: {} }} -> \
                  deck.transitions_on({slot}) = {}",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 control.name(),
                 curve.name(),
                 deck.transitions_on(slot).count()
@@ -13905,7 +13915,7 @@ fn apply(
                 Ok(Some(karakuri_environment::mix::Change::Ride { slot, writes })) => {
                     let mut reached = 0;
                     for write in &writes {
-                        match deck.write_param(slot, write) {
+                        match deck.write_param(EngineSlot(slot as u8), write) {
                             Ok(n) => reached += n,
                             Err(refused) => return Some(format!("  {refused}")),
                         }
@@ -13961,7 +13971,7 @@ fn apply(
                         let signal = binding.signal.clone();
                         let curve = binding.curve.name();
                         let range = binding.range;
-                        match deck.bind(slot, binding) {
+                        match deck.bind(EngineSlot(slot as u8), binding) {
                                 karakuri_engine::set::Bound::Yes => (
                                     slot,
                                     key,
@@ -13983,7 +13993,7 @@ fn apply(
                                 }
                             }
                     }
-                    None => match deck.unbind(slot, layer, index, &key) {
+                    None => match deck.unbind(EngineSlot(slot as u8), layer, index, &key) {
                         true => (slot, key, "nothing — taken back".to_string()),
                         false => {
                             return Some(format!("  slot {slot}: nothing was driving `{key}`"))
@@ -14010,7 +14020,7 @@ fn apply(
                     layer,
                     index,
                     authority,
-                })) => match deck.set_authority(slot, layer, index, authority) {
+                })) => match deck.set_authority(EngineSlot(slot as u8), layer, index, authority) {
                     true => (slot, authority),
                     false => {
                         return Some(format!(
@@ -14128,7 +14138,7 @@ fn apply(
                 "  scrub: deck {} -> ScrubDeck {{ deck: {slot} }} -> Record::Transport {{ \
                  sync: {sync}, anchor_bpm: {anchor_bpm:.1}, scrub_beats: {scrub_beats:+.2} }} \
                  -> deck.transport({slot}).scrub_beats() = {:+.2} beats",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.transport(slot).scrub_beats()
             ))
         }
@@ -14156,12 +14166,12 @@ fn apply(
             start,
         } => {
             let slot = held(deck, slot.0)?;
-            deck.schedule_selection(Selection::new(slot, renderer as usize, start));
+            deck.schedule_selection(Selection::new(slot.index(), renderer as usize, start));
             Some(format!(
                 "  renderer: deck {} -> SelectRenderer {{ renderer: {renderer} }} -> \
                  Record::Select {{ start: {start:.3} }} -> deck.selections_on({slot}) = {} \
                  armed, landing on the beat grid",
-                deck_letter(slot as u8),
+                deck_letter(slot.0),
                 deck.selections_on(slot).count()
             ))
         }
@@ -14311,8 +14321,7 @@ fn reading(
     // reading up.
     let transport = match *operation {
         Operation::ScrubDeck { deck: slot, .. } => {
-            let slot = usize::from(slot);
-            (slot < deck.slot_count()).then(|| {
+            EngineSlot::new(slot, deck.slot_count()).map(|slot| {
                 let transport = deck.transport(slot);
                 karakuri_operation_record::Transport {
                     sync: mix::sync(transport.sync()),
@@ -14362,8 +14371,7 @@ fn reading(
         Operation::SetMaskShape { deck: slot, .. }
         | Operation::SetMaskPosition { deck: slot, .. }
         | Operation::Wipe { to: slot, .. } => {
-            let slot = usize::from(slot);
-            (slot < deck.slot_count()).then(|| {
+            EngineSlot::new(slot, deck.slot_count()).map(|slot| {
                 let mask = deck.mask(slot);
                 karakuri_operation_record::Mask {
                     kind: wipe_kind(mask.kind()),
@@ -14440,11 +14448,8 @@ fn reading(
     // request, and what a wipe needs to know is whether the put-on-air it is
     // about to write would change anything.
     let mix = match *operation {
-        Operation::Wipe { to: slot, .. } => {
-            let slot = usize::from(slot);
-            (slot < deck.slot_count())
-                .then(|| mix::current_mix(deck.blend(slot), deck.residency(slot)))
-        }
+        Operation::Wipe { to: slot, .. } => EngineSlot::new(slot, deck.slot_count())
+            .map(|slot| mix::current_mix(deck.blend(slot), deck.residency(slot))),
         _ => None,
     };
     Current {
@@ -18833,7 +18838,7 @@ fn target_of(operation: &Operation, deck: &Deck) -> Result<String, String> {
             if index >= deck.slot_count() {
                 return Err(karakuri_environment::no_such_slot(index, deck.slot_count()));
             }
-            let set = deck.slot(index).set();
+            let set = deck.slot(EngineSlot(*slot)).set();
             let at = set.published().iter().position(|control| {
                 control.key == param.key
                     && control
@@ -29131,7 +29136,7 @@ mod gpu {
         // three surfaces below, which is what makes them a check rather than a
         // value compared with itself. See this test's documentation for why
         // both answers are states of the instrument and neither is a failure.
-        let stopped = engine.deck.overloaded(ON_AIR);
+        let stopped = engine.deck.overloaded(EngineSlot(ON_AIR as u8));
         let row = rows.iter().find(|row| row.deck == ON_AIR);
 
         // **The same sentence, out of the server.** `swap_outcome` answers with
@@ -29340,7 +29345,7 @@ mod gpu {
         // (`docs/contributing.md` §3). What is being checked is that the offer
         // is the *material's* declaration: a ladder built from the wrong range
         // is a chip that asks for builds the engine refuses (ADR-0328).
-        let set = engine.deck.slot(0).set();
+        let set = engine.deck.slot(karakuri_engine::DeckSlot(0)).set();
         let aimed = pane
             .aimed
             .as_ref()
@@ -29465,7 +29470,12 @@ mod gpu {
         // **Every published control found a node**, and the ordinals are the
         // interface's own positions spanning the groups — the number a MIDI
         // control is learned against.
-        let published = engine.deck.slot(0).set().published().len();
+        let published = engine
+            .deck
+            .slot(karakuri_engine::DeckSlot(0))
+            .set()
+            .published()
+            .len();
         assert!(published > 0, "the pair publishes what it declares");
         // **No node of this pair declares an input**, so no group draws a
         // `uses` line — read off the aims rather than assumed, because an empty
@@ -30264,7 +30274,7 @@ mod gpu {
              the assertion below rather than one of them"
         );
         assert!(
-            engine.deck.slot_view(DECKS).is_none(),
+            engine.deck.slot_view(EngineSlot(DECKS as u8)).is_none(),
             "the deck answered with a view for a slot it does not have, so a cell past \
              the last slot would sample somebody else's texture"
         );
@@ -30277,7 +30287,9 @@ mod gpu {
         // material has to be there first. Live is how a slot gets it here;
         // priming is how an operator gets it without the room seeing.
         for slot in 0..DECKS {
-            engine.deck.set_residency(slot, Residency::Live);
+            engine
+                .deck
+                .set_residency(EngineSlot(slot as u8), Residency::Live);
         }
         engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         for _ in 0..4 {
@@ -30319,7 +30331,7 @@ mod gpu {
             [Residency::Priming; DECKS],
         ] {
             for (slot, residency) in residencies.into_iter().enumerate() {
-                engine.deck.set_residency(slot, residency);
+                engine.deck.set_residency(EngineSlot(slot as u8), residency);
             }
             let (_, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
             for (slot, aimed) in previews.into_iter().enumerate() {
@@ -30730,7 +30742,7 @@ mod gpu {
         let mut strips = Vec::new();
         mixer(&engine.deck, &material, &mut strips);
         assert_eq!(strips.len(), engine.deck.slot_count());
-        let was = engine.deck.gain(0);
+        let was = engine.deck.gain(karakuri_engine::DeckSlot(0));
 
         // A knob, taken hold of and dragged to the bottom of its track. The
         // context has to have drawn once, because a strip is laid out with the
@@ -30751,7 +30763,7 @@ mod gpu {
 
         // **Nothing has been told anything yet**, so the deck is where it was
         // and so is the strip the frame would draw.
-        assert_eq!(engine.deck.gain(0), was);
+        assert_eq!(engine.deck.gain(karakuri_engine::DeckSlot(0)), was);
         let mut after = Vec::new();
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(
@@ -30769,7 +30781,7 @@ mod gpu {
         )
         .is_some());
         assert_eq!(
-            engine.deck.gain(0),
+            engine.deck.gain(karakuri_engine::DeckSlot(0)),
             0.0,
             "the record was built and the deck did not move, so the control ends nowhere"
         );
@@ -30785,7 +30797,7 @@ mod gpu {
         // The other direction, so that *follows the deck* is not *always
         // zero*: something else writes the deck and the strip says so without
         // a pointer anywhere near it.
-        engine.deck.set_gain(0, 0.5);
+        engine.deck.set_gain(karakuri_engine::DeckSlot(0), 0.5);
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(after[0].gain, 0.5);
     }
@@ -30871,6 +30883,7 @@ mod gpu {
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
         let here = usize::from(SELECTED);
+        let here_slot = EngineSlot(SELECTED);
         assert!(
             here < engine.deck.slot_count(),
             "this deck has {} slots and the test selects deck {SELECTED}, so there is nothing \
@@ -30889,9 +30902,10 @@ mod gpu {
             (0.80, 0.30, Blend::Add),
         ];
         for (slot, (gain, opacity, blend)) in seeded.iter().copied().enumerate() {
-            engine.deck.set_gain(slot, gain);
-            engine.deck.set_opacity(slot, opacity);
-            engine.deck.set_blend(slot, blend);
+            let addr = EngineSlot(slot as u8);
+            engine.deck.set_gain(addr, gain);
+            engine.deck.set_opacity(addr, opacity);
+            engine.deck.set_blend(addr, blend);
         }
 
         // The console, with the strips the frame would have written into it —
@@ -30921,7 +30935,10 @@ mod gpu {
         /// press is allowed to have touched.
         fn snapshot(deck: &Deck) -> Vec<(f32, f32, Blend)> {
             (0..deck.slot_count())
-                .map(|slot| (deck.gain(slot), deck.opacity(slot), deck.blend(slot)))
+                .map(|slot| {
+                    let addr = EngineSlot(slot as u8);
+                    (deck.gain(addr), deck.opacity(addr), deck.blend(addr))
+                })
                 .collect()
         }
 
@@ -31026,7 +31043,7 @@ mod gpu {
         for slot in 0..past {
             assert_eq!(
                 held(&engine.deck, slot as u8),
-                Some(slot),
+                Some(EngineSlot(slot as u8)),
                 "slot {slot} is one this deck has and the guard refused it, so every press \
                  would return without doing anything"
             );
@@ -31039,8 +31056,9 @@ mod gpu {
         assert_eq!(held(&engine.deck, u8::MAX), None);
         let quiet = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
-        let read =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| engine.deck.gain(past)));
+        let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            engine.deck.gain(EngineSlot(past as u8))
+        }));
         std::panic::set_hook(quiet);
         assert!(
             read.is_err(),
@@ -31059,17 +31077,17 @@ mod gpu {
         mixer(&engine.deck, &material, &mut strips);
         assert_eq!(
             strips[here].gain,
-            engine.deck.gain(here),
+            engine.deck.gain(here_slot),
             "the strips were just read off the deck and already disagree with it"
         );
-        engine.deck.set_gain(here, 0.25);
+        engine.deck.set_gain(here_slot, 0.25);
         assert_ne!(
             strips[here].gain,
-            engine.deck.gain(here),
+            engine.deck.gain(here_slot),
             "the deck moved and the copy the console is holding moved with it, so there is no \
              stale reading here to tell the two sources apart"
         );
-        let off_the_deck = gain_key(Step::Up, engine.deck.gain(here));
+        let off_the_deck = gain_key(Step::Up, engine.deck.gain(here_slot));
         let off_the_strip = gain_key(Step::Up, strips[here].gain);
         assert_ne!(
             off_the_deck, off_the_strip,
@@ -31088,13 +31106,13 @@ mod gpu {
         )
         .is_some());
         assert!(
-            (engine.deck.gain(here) - (0.25 + GAIN_STEP)).abs() <= CLOSE,
+            (engine.deck.gain(here_slot) - (0.25 + GAIN_STEP)).abs() <= CLOSE,
             "a press stepping from the deck's own reading landed at {} rather than at {}",
-            engine.deck.gain(here),
+            engine.deck.gain(here_slot),
             0.25 + GAIN_STEP
         );
         assert!(
-            (engine.deck.gain(here) - off_the_strip).abs() > CLOSE,
+            (engine.deck.gain(here_slot) - off_the_strip).abs() > CLOSE,
             "the press landed where a step off the stale strip would have put it"
         );
     }
@@ -31262,7 +31280,11 @@ mod gpu {
         );
         let salts: Vec<u32> = (0..engine.deck.slot_count())
             .map(|slot| {
-                let salts = engine.deck.slot(slot).set().source_salts();
+                let salts = engine
+                    .deck
+                    .slot(EngineSlot(slot as u8))
+                    .set()
+                    .source_salts();
                 assert_eq!(
                     salts.len(),
                     1,
@@ -31387,7 +31409,7 @@ mod gpu {
         // The engine's predicate first, since the console's is derived from
         // the same two values.
         assert!(
-            engine.deck.is_parked(ASKED_TO_PRIME),
+            engine.deck.is_parked(EngineSlot(ASKED_TO_PRIME as u8)),
             "the request was granted rather than parked — {governed}"
         );
         let parked: Vec<_> = governed.parked().collect();
@@ -31399,7 +31421,7 @@ mod gpu {
             "deck B is parked for a reason that is not the budget — {governed}"
         );
         assert_eq!(
-            engine.deck.residency(ON_AIR),
+            engine.deck.residency(EngineSlot(ON_AIR as u8)),
             Residency::Live,
             "the governor took the picture off air"
         );
@@ -31468,7 +31490,7 @@ mod gpu {
         // `Probe` for the deck, at the probe's own resolution rather than at
         // `CANVAS`.
         let costs: Vec<f32> = (0..SLOTS)
-            .filter_map(|slot| engine.deck.slot(slot).measured_cost())
+            .filter_map(|slot| engine.deck.slot(EngineSlot(slot as u8)).measured_cost())
             .map(|cost| cost.ms)
             .collect();
         println!(
@@ -31570,6 +31592,7 @@ mod gpu {
         );
         let material = vec![shipped().material(); engine.deck.slot_count()];
         let over = (UNDER + 1) % engine.deck.slot_count();
+        let over_slot = EngineSlot(over as u8);
         assert!(
             engine.deck.slot_count() >= 2,
             "a deck of one slot cannot wipe and this test needs one that can"
@@ -31650,9 +31673,9 @@ mod gpu {
         // **Nothing has been told anything yet**, which is the middle step the
         // device is worth: the console asks and the deck moves when the record
         // does.
-        let before = engine.deck.mask(over);
+        let before = engine.deck.mask(over_slot);
         assert_eq!(
-            engine.deck.transitions_on(over).count(),
+            engine.deck.transitions_on(over_slot).count(),
             0,
             "something was already moving on the deck this wipe arrives on"
         );
@@ -31729,12 +31752,12 @@ mod gpu {
             );
         }
         assert_eq!(
-            engine.deck.mask(over).kind(),
+            engine.deck.mask(over_slot).kind(),
             MaskKind::Radial,
             "the records were built and the arriving deck is not wearing the row's shape"
         );
         assert_eq!(
-            engine.deck.transitions_on(over).count(),
+            engine.deck.transitions_on(over_slot).count(),
             1,
             "the wipe wrote its records and nothing is moving on the deck it arrives on"
         );
@@ -31753,7 +31776,7 @@ mod gpu {
         // cannot make: a conversion that took a default here would pass
         // against a hand-written `Current` and put a shape nobody chose on a
         // deck mid-wipe.
-        let wearing = engine.deck.mask(over);
+        let wearing = engine.deck.mask(over_slot);
         let (kind, angle, softness) = (wearing.kind(), wearing.angle(), wearing.softness());
         let front = Operation::SetMaskPosition {
             deck: over as u8,
@@ -31827,7 +31850,7 @@ mod gpu {
         // The state, produced by the governor and not written here.
         let governed = engine.ask_to_prime(&gpu);
         assert!(
-            engine.deck.is_parked(ASKED_TO_PRIME),
+            engine.deck.is_parked(EngineSlot(ASKED_TO_PRIME as u8)),
             "the request was granted rather than parked — {governed}"
         );
         let mut strips = Vec::new();
@@ -31865,7 +31888,7 @@ mod gpu {
 
         // **Nothing has been told anything yet**, so the deck is where the
         // governor left it and so is the strip the frame would draw.
-        assert!(engine.deck.is_parked(ASKED_TO_PRIME));
+        assert!(engine.deck.is_parked(EngineSlot(ASKED_TO_PRIME as u8)));
         let mut after = Vec::new();
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(
@@ -31891,21 +31914,23 @@ mod gpu {
         )
         .is_some());
         assert_eq!(
-            engine.deck.requested_residency(ASKED_TO_PRIME),
+            engine
+                .deck
+                .requested_residency(EngineSlot(ASKED_TO_PRIME as u8)),
             Residency::Allocated,
             "the record was built and the request did not move, so the control ends nowhere"
         );
         assert_eq!(
-            engine.deck.residency(ASKED_TO_PRIME),
+            engine.deck.residency(EngineSlot(ASKED_TO_PRIME as u8)),
             Residency::Allocated,
             "the withdrawal left the slot somewhere other than where it was being held"
         );
         assert!(
-            !engine.deck.is_parked(ASKED_TO_PRIME),
+            !engine.deck.is_parked(EngineSlot(ASKED_TO_PRIME as u8)),
             "the slot is still parked, so the request was not withdrawn"
         );
         assert_eq!(
-            engine.deck.residency(ON_AIR),
+            engine.deck.residency(EngineSlot(ON_AIR as u8)),
             Residency::Live,
             "withdrawing deck B's request took deck A off air"
         );
@@ -31961,12 +31986,14 @@ mod gpu {
         )
         .is_some());
         assert_eq!(
-            engine.deck.requested_residency(ASKED_TO_PRIME),
+            engine
+                .deck
+                .requested_residency(EngineSlot(ASKED_TO_PRIME as u8)),
             Residency::Priming,
             "the request was not written"
         );
         assert!(
-            engine.deck.is_parked(ASKED_TO_PRIME),
+            engine.deck.is_parked(EngineSlot(ASKED_TO_PRIME as u8)),
             "the prime request was granted rather than parked, so nothing governed the record \
              and the panel is drawing a residency the budget never allowed"
         );
@@ -32025,9 +32052,10 @@ mod gpu {
 
         // A wipe in progress on the deck that is on air: a straight front,
         // running at an angle, part of the way across.
-        engine
-            .deck
-            .set_mask(ON_AIR, Mask::new(MaskKind::Linear, ANGLE, FRONT, SOFTNESS));
+        engine.deck.set_mask(
+            EngineSlot(ON_AIR as u8),
+            Mask::new(MaskKind::Linear, ANGLE, FRONT, SOFTNESS),
+        );
         let mut strips = Vec::new();
         mixer(&engine.deck, &material, &mut strips);
         assert_eq!(
@@ -32070,7 +32098,10 @@ mod gpu {
 
         // **Nothing has been told anything yet**, so the deck is where it was
         // and so is the strip the frame would draw.
-        assert_eq!(engine.deck.mask(ON_AIR).kind(), MaskKind::Linear);
+        assert_eq!(
+            engine.deck.mask(EngineSlot(ON_AIR as u8)).kind(),
+            MaskKind::Linear
+        );
         let mut after = Vec::new();
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(
@@ -32120,7 +32151,7 @@ mod gpu {
             &mut engine.chain
         )
         .is_some());
-        let mask = engine.deck.mask(ON_AIR);
+        let mask = engine.deck.mask(EngineSlot(ON_AIR as u8));
         assert_eq!(
             mask.kind(),
             MaskKind::Radial,
