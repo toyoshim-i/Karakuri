@@ -1553,6 +1553,7 @@ name = "karakuri-store"
 version = "0.1.0"
 dependencies = [
  "karakuri-layout",
+ "memmap2",
  "serde",
  "serde_json",
  "sha2",

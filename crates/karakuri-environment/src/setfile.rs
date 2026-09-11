@@ -977,6 +977,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
 
     for line in lines {
         match line.record() {
+            Record::Header { .. } => {}
             Record::Set { id, v } => {
                 if *v != VERSION {
                     notes.push(format!(

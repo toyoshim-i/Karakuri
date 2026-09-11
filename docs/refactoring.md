@@ -272,9 +272,12 @@ During live recording and replay, every frame line is serialized/deserialized us
 
 ### Refactoring Plan
 - **Zero-Allocation Stream Reader**:
-  - Implement a zero-copy streaming parser operating over memory-mapped (`mmap`) session files.
+  - Implement a zero-copy streaming parser operating over memory-mapped (`mmap`) session files (`MmapStreamReader`).
+  - Provide zero-allocation line slicing (`lines_raw`, `lines`) and fast tick indexing (`TickIndexEntry`, `scan_ticks`) without intermediate full JSON object deserialization.
+  - Provide buffer-direct record iterator `records()`.
 - **Explicit Schema Versioning & Migration**:
-  - Add explicit file header versioning (`version: 2`) to `.kbset` and session ndjson streams, with automated migration passes.
+  - Add explicit file header versioning (`Record::Header { version: 2 }`) to `.kbset` and session ndjson streams (`CURRENT_SCHEMA_VERSION = 2`).
+  - Provide `detect_version` and automated migration via `migrate_to_current` ensuring header at line 0 while preserving all records.
 
 ---
 
@@ -315,5 +318,5 @@ During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to
 | **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | Planned | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
 | **Phase 2B** | **P17** | **Structured AI Repair Loop** | **DONE** | Machine-readable `DiagnosticReport`; visual degeneracy detector `check_degeneracy` |
 | **Phase 2B** | **P18** | **Signal Bus Vectorization** | **DONE** | Vectorized `SignalValue`/`VectorSample`; interned `SignalId` zero-cost dispatch |
-| **Phase 2B** | **P19** | **Zero-Allocation Stream Replay** | Planned | Mmap zero-copy ndjson/binary reader; stream versioning |
+| **Phase 2B** | **P19** | **Zero-Allocation Stream Replay** | **DONE** | Mmap zero-copy ndjson reader (`MmapStreamReader`), fast tick indexing, schema versioning (v2) & automated migration |
 | **Phase 2B** | **P20** | **Converge CLI & GUI Keyboards** | **DONE** | Migrate colliding CLI keys (`F G N R S U Z`); align on `operations.html` (ADR-0346) |
