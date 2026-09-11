@@ -36,7 +36,7 @@ use karakuri_console::view::{
     count_text, inspector, pane_count, InspectorPane, Node, NodeAuthority, Pane, Param, View, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Authority, Layer, NodeAt, ParamAt, Sync};
+use karakuri_operation::{Authority, Layer, NodeAddress, ParamAt, Sync};
 
 /// A row over `[0, 1]` at the middle of it, so **every** knob in these panes
 /// is at the same place across its row: a fixed point is on whichever row is
@@ -49,7 +49,7 @@ fn row(ord: usize, name: &str) -> Param {
         value: 0.5,
         range: [0.0, 1.0],
         param: ParamAt {
-            node: Some(NodeAt {
+            node: Some(NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             }),
@@ -66,7 +66,7 @@ fn node(index: usize, params: usize) -> Node {
         addr: format!("L1:{index}"),
         name: format!("node_{index}"),
         authority: Some(NodeAuthority {
-            at: NodeAt {
+            at: NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             },

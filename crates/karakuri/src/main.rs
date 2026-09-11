@@ -11438,7 +11438,7 @@ fn staging(
 /// filled together or not at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Changed {
-    at: karakuri_operation::NodeAt,
+    at: karakuri_operation::NodeAddress,
     addr: String,
     name: String,
 }
@@ -11474,7 +11474,7 @@ fn changed_rows(set: &Set, changed: &[(&'static str, u32)]) -> Vec<Changed> {
             continue;
         }
         rows.push(Changed {
-            at: karakuri_operation::NodeAt {
+            at: karakuri_operation::NodeAddress {
                 layer: asked_layer(layer),
                 index,
             },
@@ -11946,10 +11946,12 @@ fn inspector(
                     // declares the key and meets `Set::write_param`'s
                     // authority refusal (ADR-0286, ADR-0223).
                     param: karakuri_operation::ParamAt {
-                        node: control.at.map(|(layer, index)| karakuri_operation::NodeAt {
-                            layer: asked_layer(layer),
-                            index,
-                        }),
+                        node: control
+                            .at
+                            .map(|(layer, index)| karakuri_operation::NodeAddress {
+                                layer: asked_layer(layer),
+                                index,
+                            }),
                         key: control.key.clone(),
                     },
                     // **The seventh reading, and the one this pane used to
@@ -12004,10 +12006,12 @@ fn inspector(
                     // drawn from `declared_interface`, which never narrows.
                     range: control.range,
                     param: karakuri_operation::ParamAt {
-                        node: control.at.map(|(layer, index)| karakuri_operation::NodeAt {
-                            layer: asked_layer(layer),
-                            index,
-                        }),
+                        node: control
+                            .at
+                            .map(|(layer, index)| karakuri_operation::NodeAddress {
+                                layer: asked_layer(layer),
+                                index,
+                            }),
                         key: control.key.clone(),
                     },
                     // **Nothing can be holding it**, because a binding names a
@@ -12058,7 +12062,7 @@ fn inspector(
             let authority = set
                 .authority(layer, index)
                 .map(|level| view::NodeAuthority {
-                    at: karakuri_operation::NodeAt {
+                    at: karakuri_operation::NodeAddress {
                         layer: asked_layer(layer),
                         index,
                     },
@@ -12099,7 +12103,7 @@ fn inspector(
                 // renderer has one node under that head and carries the
                 // capsule like any other.
                 renderer_keep = match renderer_nodes {
-                    1 => Some(karakuri_operation::NodeAt {
+                    1 => Some(karakuri_operation::NodeAddress {
                         layer: asked_layer(layer),
                         index,
                     }),
@@ -12116,7 +12120,7 @@ fn inspector(
                 // rides with it rather than beside it, for `view::Node::keep`'s
                 // own reason: a head with nothing to keep has no node either.
                 keep: (layer != Layer::L3 || Some(index) != builtin_camera).then_some(
-                    karakuri_operation::NodeAt {
+                    karakuri_operation::NodeAddress {
                         layer: asked_layer(layer),
                         index,
                     },
@@ -13540,7 +13544,7 @@ fn derived_material(base: &str, procedure: &str) -> String {
 /// carries none, and `L4:0` is the renderer a `kind L4` replaces. The second
 /// renderer of a three-renderer Set is unreachable from this row, and the day
 /// the Inspector's node head grows a *replace this node* control is the day the
-/// payload gains a `NodeAt` (ADR-0338, stated at the point it bites).
+/// payload gains a `NodeAddress` (ADR-0338, stated at the point it bites).
 ///
 /// **Where the slot has no node of that kind the procedure is added as node 0 of
 /// it**, which is the case the request is about: a Set of a geometry and a
@@ -15957,7 +15961,7 @@ impl Keeping {
         root: &std::path::Path,
         asked: Asked,
         slot: usize,
-        node: karakuri_operation::NodeAt,
+        node: karakuri_operation::NodeAddress,
         id: Option<String>,
         reply: Option<mcp::Reply>,
     ) {
@@ -20559,10 +20563,13 @@ fn target_of(operation: &Operation, deck: &Deck) -> Result<String, String> {
             let set = deck.slot(index).set();
             let at = set.published().iter().position(|control| {
                 control.key == param.key
-                    && control.at.map(|(kind, index)| karakuri_operation::NodeAt {
-                        layer: asked_layer(kind),
-                        index,
-                    }) == param.node
+                    && control
+                        .at
+                        .map(|(kind, index)| karakuri_operation::NodeAddress {
+                            layer: asked_layer(kind),
+                            index,
+                        })
+                        == param.node
             });
             match at {
                 Some(at) => Ok(format!("param {slot} {}", at + 1)),
@@ -22419,7 +22426,7 @@ mod tests {
     #[test]
     fn a_build_that_changed_two_nodes_draws_a_row_each() {
         let node = |layer: karakuri_operation::Layer, index: u32, name: &str| Changed {
-            at: karakuri_operation::NodeAt { layer, index },
+            at: karakuri_operation::NodeAddress { layer, index },
             addr: node_addr(ir_layer(layer), index),
             name: name.to_owned(),
         };
@@ -22791,7 +22798,7 @@ mod tests {
             "kind L1\n// a newer edit of the geometry\n",
         );
 
-        let renderer = karakuri_operation::NodeAt {
+        let renderer = karakuri_operation::NodeAddress {
             layer: karakuri_operation::Layer::L4,
             index: 0,
         };
@@ -22822,7 +22829,7 @@ mod tests {
         // which is an ordinary state rather than a fault — the first edit of a
         // node files one version, and a step back at that point has nowhere to
         // go. P-0083: the sentence names what is in the way.
-        let geometry = karakuri_operation::NodeAt {
+        let geometry = karakuri_operation::NodeAddress {
             layer: karakuri_operation::Layer::L1,
             index: 0,
         };
@@ -22847,7 +22854,7 @@ mod tests {
         // **And a node the history has never heard of**, which is the same
         // refusal one step further out: nothing is filed, so there is not even
         // a version running.
-        let field = karakuri_operation::NodeAt {
+        let field = karakuri_operation::NodeAddress {
             layer: karakuri_operation::Layer::Field,
             index: 0,
         };
@@ -22888,7 +22895,7 @@ mod tests {
     #[test]
     fn a_keep_takes_its_own_row_off_the_lane() {
         let node = |layer: karakuri_operation::Layer, index: u32, name: &str| Changed {
-            at: karakuri_operation::NodeAt { layer, index },
+            at: karakuri_operation::NodeAddress { layer, index },
             addr: node_addr(ir_layer(layer), index),
             name: name.to_owned(),
         };
@@ -25040,7 +25047,7 @@ mod tests {
         let mut banks = karakuri_pattern::Banks::default();
         let mut playhead = karakuri_pattern::Playhead::default();
         let param = karakuri_operation::ParamAt {
-            node: Some(karakuri_operation::NodeAt {
+            node: Some(karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L2,
                 index: 0,
             }),
@@ -25655,13 +25662,13 @@ mod tests {
                     addr: format!("L1:{node}"),
                     name: format!("node_{node}"),
                     authority: Some(view::NodeAuthority {
-                        at: karakuri_operation::NodeAt {
+                        at: karakuri_operation::NodeAddress {
                             layer: karakuri_operation::Layer::L1,
                             index: node as u32,
                         },
                         level: karakuri_operation::Authority::Manual,
                     }),
-                    keep: Some(karakuri_operation::NodeAt {
+                    keep: Some(karakuri_operation::NodeAddress {
                         layer: karakuri_operation::Layer::L1,
                         index: node as u32,
                     }),
@@ -25674,7 +25681,7 @@ mod tests {
                             value: 0.5,
                             range: [0.0, 1.0],
                             param: karakuri_operation::ParamAt {
-                                node: Some(karakuri_operation::NodeAt {
+                                node: Some(karakuri_operation::NodeAddress {
                                     layer: karakuri_operation::Layer::L1,
                                     index: node as u32,
                                 }),
@@ -25953,8 +25960,7 @@ mod tests {
 
         let slot = |layer, index, hash| {
             Line::new(Record::Slot {
-                layer,
-                index,
+                at: karakuri_store::record::NodeAddress { layer, index },
                 name: None,
                 proc_hash: hash,
             })
@@ -26378,8 +26384,10 @@ mod tests {
             .write_set(
                 "night01",
                 &[karakuri_store::ndjson::Line::new(Record::Slot {
-                    layer: karakuri_store::record::Layer::L1,
-                    index: 0,
+                    at: karakuri_store::record::NodeAddress {
+                        layer: karakuri_store::record::Layer::L1,
+                        index: 0,
+                    },
                     name: Some("geo".to_owned()),
                     proc_hash: hash,
                 })],
@@ -27406,8 +27414,10 @@ mod tests {
             .write_set(
                 "night01",
                 &[Line::new(Record::Slot {
-                    layer: Written::L1,
-                    index: 0,
+                    at: karakuri_store::record::NodeAddress {
+                        layer: Written::L1,
+                        index: 0,
+                    },
                     name: Some("drift_shell".to_owned()),
                     proc_hash: Hash::of(b"drift_shell"),
                 })],
@@ -27565,8 +27575,7 @@ mod tests {
         let store = Store::open(&root).expect("a store to list");
         let slot = |layer: Written, name: &str| {
             Line::new(Record::Slot {
-                layer,
-                index: 0,
+                at: karakuri_store::record::NodeAddress { layer, index: 0 },
                 name: Some(name.to_owned()),
                 proc_hash: Hash::of(name.as_bytes()),
             })

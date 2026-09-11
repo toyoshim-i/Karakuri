@@ -38,7 +38,7 @@ use karakuri_console::view::{
     inspector, rend_chips, InspectorPane, Node, NodeAuthority, Pane, Renderer, PANE_NAMES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Authority, Layer, NodeAt, Operation, Sync};
+use karakuri_operation::{Authority, Layer, NodeAddress, Operation, Sync};
 
 /// **The mock's own `L4 renderers` group**: three renderers folded under one
 /// head, the first of them live, and no authority chip — a head standing over
@@ -72,7 +72,7 @@ fn shell() -> Node {
         addr: "L1:0".to_owned(),
         name: "drift_shell".to_owned(),
         authority: Some(NodeAuthority {
-            at: NodeAt {
+            at: NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             },

@@ -593,12 +593,12 @@ mod tests {
     use super::*;
     use crate::{
         Authority, BeatSource, BlendMode, Bloom, Control, Curve, Feedback, GridScale, LaneTarget,
-        Layer, NodeAt, Output, ParamAt, ParamValue, Property, Recording, Residency, RgbShift,
+        Layer, NodeAddress, Output, ParamAt, ParamValue, Property, Recording, Residency, RgbShift,
         SetTransfer, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
     };
 
-    fn node() -> NodeAt {
-        NodeAt {
+    fn node() -> NodeAddress {
+        NodeAddress {
             layer: Layer::L4,
             index: 0,
         }

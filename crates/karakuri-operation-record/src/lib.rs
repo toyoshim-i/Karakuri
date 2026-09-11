@@ -920,8 +920,10 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             authority,
         } => one(Record::Authority {
             slot: *deck,
-            layer: store_layer(node.layer),
-            index: node.index,
+            at: karakuri_store::record::NodeAddress {
+                layer: store_layer(node.layer),
+                index: node.index,
+            },
             authority: authority.name().to_string(),
         }),
         // **A knob turn, and it needs no reading either.** This was
@@ -937,10 +939,10 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
         //
         // **The wildcard crosses as an absence and not as an invented layer.**
-        // `ParamAt::node` is `Option<NodeAt>` and a bare key names no node, so
+        // `ParamAt::node` is `Option<NodeAddress>` and a bare key names no node, so
         // it names no layer either; `Record::Ride`'s `at` is the same
         // `Option`, which is the reason that record carries a
-        // `karakuri_store::record::NodeAt` rather than `Record::Param`'s
+        // `karakuri_store::record::NodeAddress` rather than `Record::Param`'s
         // `layer` beside an `index`. A conversion that had to fill a `layer` in
         // for a wildcard would be writing down a placeholder, which is what
         // `Record::Param`'s `layer` was and is still living with.
@@ -955,7 +957,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // may no longer have, and the applier is what says so.
         Operation::WriteParam { deck, param, value } => one(Record::Ride {
             slot: *deck,
-            at: param.node.map(|node| karakuri_store::record::NodeAt {
+            at: param.node.map(|node| karakuri_store::record::NodeAddress {
                 layer: store_layer(node.layer),
                 index: node.index,
             }),
@@ -1009,7 +1011,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // `t`s the projection drops for one reason and the applier has to keep
         // in step by care; one record whose payload is present or absent is a
         // thing nothing can write down half-detached, which is
-        // `docs/contributing.md` §4's structural tier and `NodeAt`'s argument
+        // `docs/contributing.md` §4's structural tier and `NodeAddress`'s argument
         // one record along.
         //
         // **It removes rather than suspends**, and the reason is that there is
@@ -2478,8 +2480,9 @@ mod tests {
     /// Its own test rather than a fourth assertion in
     /// [`the_faders_records_need_no_reading`], because what it pins is not the
     /// absence of a reading but the **address**: this is the only conversion
-    /// here that turns a `NodeAt` into a record's `(layer, index)`, and
-    /// `store_layer` is a second spelling of a list that has to stay in step.
+    /// here that turns a `karakuri_operation::NodeAddress` into a
+    /// `karakuri_store::record::NodeAddress`, and `store_layer` is a second
+    /// spelling of a list that has to stay in step.
     /// A conversion that dropped the index would put every renderer's authority
     /// on the first one; one that mistranslated the layer would put an L4's on
     /// an L1.
@@ -2489,7 +2492,7 @@ mod tests {
             records(written(
                 &Operation::SetAuthority {
                     deck: 2,
-                    node: karakuri_operation::NodeAt {
+                    node: karakuri_operation::NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 1,
                     },
@@ -2499,8 +2502,10 @@ mod tests {
             )),
             vec![Record::Authority {
                 slot: 2,
-                layer: karakuri_store::record::Layer::L4,
-                index: 1,
+                at: karakuri_store::record::NodeAddress {
+                    layer: karakuri_store::record::Layer::L4,
+                    index: 1,
+                },
                 authority: "suggesting".to_string(),
             }],
             "an authority landed on another node, another deck slot or another \
@@ -2514,7 +2519,7 @@ mod tests {
             records(written(
                 &Operation::SetAuthority {
                     deck: 0,
-                    node: karakuri_operation::NodeAt {
+                    node: karakuri_operation::NodeAddress {
                         layer: karakuri_operation::Layer::Field,
                         index: 0,
                     },
@@ -2524,8 +2529,10 @@ mod tests {
             )),
             vec![Record::Authority {
                 slot: 0,
-                layer: karakuri_store::record::Layer::Field,
-                index: 0,
+                at: karakuri_store::record::NodeAddress {
+                    layer: karakuri_store::record::Layer::Field,
+                    index: 0,
+                },
                 authority: "manual".to_string(),
             }]
         );
@@ -2648,7 +2655,7 @@ mod tests {
                 &Operation::WriteParam {
                     deck: 2,
                     param: karakuri_operation::ParamAt {
-                        node: Some(karakuri_operation::NodeAt {
+                        node: Some(karakuri_operation::NodeAddress {
                             layer: karakuri_operation::Layer::L4,
                             index: 1,
                         }),
@@ -2660,7 +2667,7 @@ mod tests {
             )),
             vec![Record::Ride {
                 slot: 2,
-                at: Some(karakuri_store::record::NodeAt {
+                at: Some(karakuri_store::record::NodeAddress {
                     layer: karakuri_store::record::Layer::L4,
                     index: 1,
                 }),
@@ -2676,7 +2683,7 @@ mod tests {
     ///
     /// `ParamAt::node` is `None` for a wildcard, which means it names no layer
     /// either — and `Record::Ride`'s `at` is the same `Option`, which is the
-    /// whole reason that record carries a `NodeAt` rather than
+    /// whole reason that record carries a `NodeAddress` rather than
     /// `Record::Param`'s `layer` beside an `index`. A conversion that filled a
     /// layer in here would be writing a placeholder that a reader then has to
     /// be told to ignore, which is exactly the wart `Record::Param` is still

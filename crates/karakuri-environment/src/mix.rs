@@ -1072,7 +1072,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             Ok(Some(Change::Residency { slot, level }))
         }
         // **A knob turn, decoded into the writes it is.** The address crosses
-        // as a unit — `karakuri_store::record::NodeAt` is `Option`al on the
+        // as a unit — `karakuri_store::record::NodeAddress` is `Option`al on the
         // record and `karakuri_engine::ParamWrite::at` is `Option`al here, and
         // absent means the same wildcard on both sides — so there is nothing to
         // check and nothing that can be half an address.
@@ -1140,8 +1140,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
         // rather than a parser that refuses the line.
         Record::Authority {
             slot,
-            layer,
-            index,
+            at,
             authority,
         } => {
             let slot = in_range(*slot)?;
@@ -1157,8 +1156,8 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Authority {
                 slot,
-                layer: crate::setfile::kind_of(*layer),
-                index: *index,
+                layer: crate::setfile::kind_of(at.layer),
+                index: at.index,
                 authority: level,
             }))
         }
@@ -2107,7 +2106,7 @@ mod tests {
         let record = from_operation(karakuri_operation::Operation::WriteParam {
             deck: 2,
             param: karakuri_operation::ParamAt {
-                node: Some(karakuri_operation::NodeAt {
+                node: Some(karakuri_operation::NodeAddress {
                     layer: karakuri_operation::Layer::L4,
                     index: 1,
                 }),
@@ -2263,7 +2262,7 @@ mod tests {
     fn an_authority_decodes_into_the_level_it_names() {
         let record = from_operation(karakuri_operation::Operation::SetAuthority {
             deck: 3,
-            node: karakuri_operation::NodeAt {
+            node: karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L4,
                 index: 1,
             },
@@ -2284,8 +2283,10 @@ mod tests {
 
         let unknown = Record::Authority {
             slot: 0,
-            layer: karakuri_store::record::Layer::L1,
-            index: 0,
+            at: karakuri_store::record::NodeAddress {
+                layer: karakuri_store::record::Layer::L1,
+                index: 0,
+            },
             authority: "supervising".to_string(),
         };
         let refused = change(&unknown, 4).expect_err("a level this build has not got");

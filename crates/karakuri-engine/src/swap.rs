@@ -546,7 +546,7 @@ pub struct Request {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuthorityAt {
     /// Which node, `(layer, index)` — the address every surface in this system
-    /// uses and the one `karakuri_operation::NodeAt` carries.
+    /// uses and the one `karakuri_operation::NodeAddress` carries.
     pub at: (Kind, u32),
     pub authority: Authority,
 }

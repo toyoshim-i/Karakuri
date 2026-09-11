@@ -48,7 +48,7 @@ use karakuri_console::view::{
     Source, AUTHORITIES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Authority, BindAt, Curve, Layer, NodeAt, Operation, ParamAt, Sync};
+use karakuri_operation::{Authority, BindAt, Curve, Layer, NodeAddress, Operation, ParamAt, Sync};
 
 /// A row nothing is holding.
 fn row(ord: usize, name: &str, index: u32, range: [f32; 2], value: f32) -> Param {
@@ -58,7 +58,7 @@ fn row(ord: usize, name: &str, index: u32, range: [f32; 2], value: f32) -> Param
         value,
         range,
         param: ParamAt {
-            node: Some(NodeAt {
+            node: Some(NodeAddress {
                 layer: Layer::L1,
                 index,
             }),
@@ -116,7 +116,7 @@ fn shell() -> Node {
         addr: "L1:0".to_owned(),
         name: "drift_shell".to_owned(),
         authority: Some(NodeAuthority {
-            at: NodeAt {
+            at: NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             },
@@ -498,7 +498,7 @@ fn every_authority_chip_names_the_level_it_lands_on() {
                 .unwrap_or_else(|| panic!("the {level:?} chip claimed nothing")),
             Operation::SetAuthority {
                 deck: 0,
-                node: NodeAt {
+                node: NodeAddress {
                     layer: Layer::L1,
                     index: 0,
                 },

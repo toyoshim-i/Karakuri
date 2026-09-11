@@ -89,7 +89,7 @@ use karakuri_ir::Kind;
 use karakuri_signal::{NoiseConfig, NoiseKind};
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
-use karakuri_store::record::{BindNoise, Layer, Record, Value};
+use karakuri_store::record::{BindNoise, Layer, NodeAddress, Record, Value};
 use karakuri_store::store::{Store, StoreError};
 
 // **The card goes down with the artifact**, which is the policy `meta` states
@@ -857,8 +857,10 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
     ordered.sort_by_key(|n| (layer_ordinal(n.layer), n.index));
     for node in ordered {
         lines.push(Line::new(Record::Slot {
-            layer: layer_of(node.layer),
-            index: node.index,
+            at: NodeAddress {
+                layer: layer_of(node.layer),
+                index: node.index,
+            },
             // **Written only where the operator wrote one.** A name belongs to
             // the use rather than to the procedure, so a bare path has none to
             // record, and an absent name is written as nothing — which is what
@@ -880,8 +882,10 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
     // its own range and one number cannot serve two of them.
     for (index, value) in capacities.iter().enumerate() {
         lines.push(Line::new(Record::Capacity {
-            layer: Layer::L1,
-            index: index as u32,
+            at: NodeAddress {
+                layer: Layer::L1,
+                index: index as u32,
+            },
             value: *value,
         }));
     }
@@ -919,13 +923,15 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
         .collect();
     for ((at, key), value) in ordered {
         lines.push(Line::new(Record::Param {
-            // **`layer` is load-bearing exactly when `index` is beside it.** It
-            // was a placeholder before the address existed — written as `L1` on
-            // everything and ignored on read — so an unaddressed write still
-            // says `L1` and still means every node declaring the name. See
-            // `Record::Param`.
-            layer: at.map_or(Layer::L1, |(l, _)| layer_from_ordinal(l)),
-            index: at.map(|(_, i)| i),
+            // **`at` is `None` for an unaddressed write**, which still means
+            // every node declaring the name — see `Record::Param` and
+            // `node_or_every_node`, which is what lets this stay `None`
+            // rather than reinventing the placeholder layer the format used
+            // to need.
+            at: at.map(|(l, i)| NodeAddress {
+                layer: layer_from_ordinal(l),
+                index: i,
+            }),
             key: key.to_string(),
             value: Value::Scalar(value),
         }));
@@ -1070,11 +1076,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 file_id = id.clone();
             }
             Record::Slot {
-                layer,
-                index,
+                at,
                 name,
                 proc_hash,
             } => {
+                let (layer, index) = (&at.layer, &at.index);
                 // **A name is carried now, where it used to be reported and
                 // dropped.** "Nothing this build points at a node by name" was
                 // true until an `edge` did: an edge names the node that
@@ -1156,13 +1162,9 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // held one number per Set; it holds one per source now, so the
             // number reaches the geometry the file wrote it against rather than
             // resizing the wrong one.
-            Record::Capacity {
-                layer,
-                index,
-                value,
-            } => match *layer {
+            Record::Capacity { at, value } => match at.layer {
                 Layer::L1 => {
-                    let at = *index as usize;
+                    let at = at.index as usize;
                     if capacities.len() <= at {
                         capacities.resize(at + 1, None);
                     }
@@ -1187,17 +1189,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // collected in file order and expanded below, where the
             // declarations are.
             //
-            // The address is `(layer, index)` present or absent as a unit, so
-            // a record with no index is a wildcard whatever its `layer` says —
-            // which is what keeps every file written before the address
-            // existed meaning what it meant.
-            Record::Param {
-                layer,
-                index,
-                key,
-                value,
-            } => param_records.push((
-                index.map(|at| (kind_of(*layer), at)),
+            // `at` absent is the wildcard, and `at`'s own type is what keeps a
+            // record with no node meaning *every* node regardless of what
+            // placeholder `layer` the wire line carries.
+            Record::Param { at, key, value } => param_records.push((
+                at.map(|at| (kind_of(at.layer), at.index)),
                 key.clone(),
                 *value,
             )),
@@ -1811,8 +1807,10 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
                 // a `part` says what a `slot` says, and an `edge` in this same
                 // file points at it by that name.
                 out.push(Line::new(Record::Slot {
-                    layer: *layer,
-                    index: *index,
+                    at: NodeAddress {
+                        layer: *layer,
+                        index: *index,
+                    },
                     name: name.clone(),
                     proc_hash,
                 }));
@@ -2006,8 +2004,7 @@ fn with_inlined_source(store: &Store, id: &str, lines: Vec<Line>) -> Result<Vec<
     let mut inlined: Vec<Hash> = Vec::new();
     for line in &out {
         let Record::Slot {
-            layer,
-            index,
+            at,
             name,
             proc_hash,
         } = line.record()
@@ -2027,13 +2024,13 @@ fn with_inlined_source(store: &Store, id: &str, lines: Vec<Line>) -> Result<Vec<
             format!(
                 "set `{id}`: {} is not in this store ({e}), so it cannot be inlined — \
                  a bundle carries every source or it is not one",
-                node_at(*layer, *index, name.as_deref(), proc_hash)
+                node_at(at.layer, at.index, name.as_deref(), proc_hash)
             )
         })?;
         let src = String::from_utf8(bytes).map_err(|e| {
             format!(
                 "set `{id}`: the source of {} is not UTF-8: {e}",
-                node_at(*layer, *index, name.as_deref(), proc_hash)
+                node_at(at.layer, at.index, name.as_deref(), proc_hash)
             )
         })?;
         // **`split` and not `lines`**, because this has to be exactly
@@ -2114,13 +2111,12 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         match line.record() {
             Record::Set { id, .. } => file_id = Some(id.clone()),
             Record::Slot {
-                layer,
-                index,
+                at,
                 name,
                 proc_hash,
             } => slots.push(Slot {
-                layer: *layer,
-                index: *index,
+                layer: at.layer,
+                index: at.index,
                 name: name.clone(),
                 hash: *proc_hash,
             }),
@@ -2391,8 +2387,7 @@ pub fn summarise(store: &Store) -> Result<Vec<SetSummary>, StoreError> {
                     // reason: sorting by layer here would impose an order
                     // nobody wrote.
                     let Record::Slot {
-                        layer,
-                        index,
+                        at,
                         name,
                         proc_hash,
                     } = line.record()
@@ -2407,8 +2402,8 @@ pub fn summarise(store: &Store) -> Result<Vec<SetSummary>, StoreError> {
                             .clone(),
                     };
                     nodes.push(NodeSummary {
-                        layer: *layer,
-                        index: *index,
+                        layer: at.layer,
+                        index: at.index,
                         name: node_called(name.as_deref(), declared.as_deref(), proc_hash),
                         hash: *proc_hash,
                     });
@@ -3072,11 +3067,8 @@ proc dissolve {
         // Bundle it: every slot's source inlined, line by line, as `src`.
         let mut bundled = Vec::new();
         for line in &lines {
-            if let Record::Slot {
-                proc_hash, layer, ..
-            } = line.record()
-            {
-                let src = match layer {
+            if let Record::Slot { proc_hash, at, .. } = line.record() {
+                let src = match at.layer {
                     Layer::L1 => L1,
                     _ => L4,
                 };
@@ -3166,13 +3158,14 @@ proc dissolve {
             value: 7,
         }));
         lines.push(Line::new(Record::Capacity {
-            layer: Layer::L4,
-            index: 0,
+            at: NodeAddress {
+                layer: Layer::L4,
+                index: 0,
+            },
             value: 128,
         }));
         lines.push(Line::new(Record::Param {
-            layer: Layer::L1,
-            index: None,
+            at: None,
             key: "tint".to_string(),
             value: Value::Vec3([1.0, 0.0, 0.0]),
         }));
@@ -3248,8 +3241,10 @@ proc glowing {
             &store,
             &nodes,
             vec![Record::Param {
-                layer: Layer::L4,
-                index: Some(0),
+                at: Some(NodeAddress {
+                    layer: Layer::L4,
+                    index: 0,
+                }),
                 key: "glow".to_string(),
                 value: Value::Vec3([0.4, 0.7, 1.0]),
             }],
@@ -3335,8 +3330,10 @@ proc glowing {
         let mut as_a_vector = store.read_set("g2").expect("read");
         as_a_vector.retain(|line| !matches!(line.record(), Record::Param { .. }));
         as_a_vector.push(Line::new(Record::Param {
-            layer: Layer::L4,
-            index: Some(0),
+            at: Some(NodeAddress {
+                layer: Layer::L4,
+                index: 0,
+            }),
             key: "glow".to_string(),
             value: Value::Vec3([0.4, 0.7, 1.0]),
         }));
@@ -3359,8 +3356,10 @@ proc glowing {
             &store,
             &nodes,
             vec![Record::Param {
-                layer: Layer::L4,
-                index: Some(0),
+                at: Some(NodeAddress {
+                    layer: Layer::L4,
+                    index: 0,
+                }),
                 key: "glow".to_string(),
                 value: Value::Scalar(0.5),
             }],
@@ -4875,14 +4874,18 @@ proc glowing {
                 v: VERSION,
             }),
             Line::new(Record::Slot {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 name: None,
                 proc_hash: geometry,
             }),
             Line::new(Record::Slot {
-                layer: Layer::L4,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L4,
+                    index: 0,
+                },
                 name: Some("veil".to_string()),
                 proc_hash: renderer,
             }),
@@ -4970,12 +4973,12 @@ proc glowing {
         let l4_hash = Hash::of(&std::fs::read(&l4).expect("read"));
         let records: Vec<&Record> = resolved.iter().map(Line::record).collect();
         assert!(
-            matches!(records[1], Record::Slot { layer: Layer::L1, index: 0, name: None, proc_hash } if *proc_hash == l1_hash),
+            matches!(records[1], Record::Slot { at: NodeAddress { layer: Layer::L1, index: 0 }, name: None, proc_hash } if *proc_hash == l1_hash),
             "the L1 part became a slot naming its source's address: {:?}",
             records[1]
         );
         assert!(
-            matches!(records[2], Record::Slot { layer: Layer::L4, name: Some(name), proc_hash, .. } if name == "veil" && *proc_hash == l4_hash),
+            matches!(records[2], Record::Slot { at: NodeAddress { layer: Layer::L4, .. }, name: Some(name), proc_hash, .. } if name == "veil" && *proc_hash == l4_hash),
             "the L4 part kept the name this Set gave it: {:?}",
             records[2]
         );
@@ -4990,8 +4993,10 @@ proc glowing {
             matches!(
                 records[3],
                 Record::Capacity {
-                    layer: Layer::L1,
-                    index: 0,
+                    at: NodeAddress {
+                        layer: Layer::L1,
+                        index: 0
+                    },
                     value: 8192
                 }
             ),

@@ -180,10 +180,12 @@ impl Interface for Decks<'_> {
         let control = set.published().into_iter().nth(at)?;
         Some((
             ParamAt {
-                node: control.at.map(|(kind, index)| karakuri_operation::NodeAt {
-                    layer: layer_of(kind),
-                    index,
-                }),
+                node: control
+                    .at
+                    .map(|(kind, index)| karakuri_operation::NodeAddress {
+                        layer: layer_of(kind),
+                        index,
+                    }),
                 key: control.key,
             },
             control.range,

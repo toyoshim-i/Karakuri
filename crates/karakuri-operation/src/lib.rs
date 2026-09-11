@@ -228,7 +228,7 @@ pub struct Undecided;
 /// This crate is a leaf by charter — see the crate documentation on why it
 /// has no dependencies — so a shared type is not an option here the way it is
 /// between `karakuri-engine` and `karakuri-ir`; three definitions of the same
-/// concept is the cost, on [`NodeAt`]'s own precedent below.
+/// concept is the cost, on [`NodeAddress`]'s own precedent below.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InputPort(pub String);
 
@@ -272,7 +272,7 @@ impl From<&str> for InputPort {
 /// So [`Operation::WireInput`] takes names and everything else takes this, and
 /// the two are not interchangeable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NodeAt {
+pub struct NodeAddress {
     pub layer: Layer,
     /// Which node of that layer, in the order the deck's files were named.
     pub index: u32,
@@ -305,14 +305,14 @@ pub struct NodeAt {
 pub enum Revision {
     /// **The version this node's present source replaced.** One step, and
     /// never a cursor — walking further is [`Operation::WalkHistory`].
-    Previous(NodeAt),
+    Previous(NodeAddress),
     /// **A version an operator picked out of a walk**, by the name the store
     /// filed it under — `20260908-143052-271_slot0_L4_beat_strokes`.
     ///
     /// **The name is the node's address as well as the moment**, because that
     /// is how a version is filed
     /// (`docs/adr/0276-a-versions-set-id-goes-in-the-snapshots-name-and-a-run-without-one-writes-none.md`),
-    /// so this arm needs no [`NodeAt`] beside it and a second spelling of the
+    /// so this arm needs no [`NodeAddress`] beside it and a second spelling of the
     /// address is not invented here.
     Picked(String),
 }
@@ -340,7 +340,7 @@ pub enum Revision {
 /// addressed [`ParamAt`] meets nothing — it says which node it means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParamAt {
-    pub node: Option<NodeAt>,
+    pub node: Option<NodeAddress>,
     /// The param's own name inside the node.
     pub key: String,
 }
@@ -1226,7 +1226,7 @@ pub enum TransitionSetting {
 pub struct Control {
     /// What the console shows.
     pub name: String,
-    pub node: Option<NodeAt>,
+    pub node: Option<NodeAddress>,
     pub key: String,
     pub range: [f32; 2],
 }
@@ -1261,7 +1261,7 @@ pub struct Control {
 ///
 /// # Neither arm names a node, and that is where the mismatch was closed
 ///
-/// Both carried a [`NodeAt`] until 2026-09-09, and the capacity's was the
+/// Both carried a [`NodeAddress`] until 2026-09-09, and the capacity's was the
 /// standing reason the row could not be drawn: *"an aim carries one capacity
 /// for the whole slot where `Property::Capacity` addresses a node"*, which is
 /// [ADR-0228](../../docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)'s
@@ -1852,7 +1852,7 @@ operations! {
     /// number reaches three and a node address reaches one
     /// (`docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md`).
     /// It was [`Undecided`] until 2026-09-09 because *"a deck fader is a slot
-    /// number and a Set parameter is a [`NodeAt`] and a [`ParamAt`], and
+    /// number and a Set parameter is a [`NodeAddress`] and a [`ParamAt`], and
     /// nothing here spells both"* — the spelling that reaches both is the one
     /// this vocabulary already uses to reach either.
     ///
@@ -2035,7 +2035,7 @@ operations! {
     /// morph blends towards is the exact failure that record exists to end.
     ///
     /// So the workspace really does spell a node address two ways, and the two
-    /// are not a drift to be resolved — [`NodeAt`] is positional because a
+    /// are not a drift to be resolved — [`NodeAddress`] is positional because a
     /// param write wants a wildcard and a position is what a `.kir` gives, and
     /// this is by name because an edge must survive a reorder.
     WireInput {
@@ -2070,7 +2070,7 @@ operations! {
     /// surface asks for a destination rather than for a step
     /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). And it addresses a node of a deck's Set,
     /// which is [`Operation::WriteProcedure`]'s shape: a `deck` beside a
-    /// [`NodeAt`], which is *"one address shape for within a Set and one for
+    /// [`NodeAddress`], which is *"one address shape for within a Set and one for
     /// which Set"*.
     ///
     /// **Per node rather than per deck slot**, and the manual rules the slot
@@ -2110,7 +2110,7 @@ operations! {
     /// than that.
     SetAuthority {
         deck: u8,
-        node: NodeAt,
+        node: NodeAddress,
         authority: Authority,
     } => "Set a node's authority",
 
@@ -2146,7 +2146,7 @@ operations! {
     /// answer.
     KeepProcedure {
         deck: u8,
-        node: NodeAt,
+        node: NodeAddress,
         /// What to file it under, or a stamp — [`Operation::SaveSet`]'s field
         /// and its reason.
         id: Option<String>,
@@ -2346,7 +2346,7 @@ operations! {
     /// cannot say an index, and a field only one surface could ever fill would
     /// be a payload for a control nobody has drawn; the day the Inspector's
     /// node head grows a *replace this node* control is the day this gains a
-    /// [`NodeAt`]. Where the deck has no node of that kind the procedure is
+    /// [`NodeAddress`]. Where the deck has no node of that kind the procedure is
     /// added as node 0 of it, which is the case the row is for: a Set
     /// declaring no camera holds the built-in orbit at `L3:0`.
     ///
@@ -2369,12 +2369,12 @@ operations! {
     // ----- Procedures ---------------------------------------------------
 
     /// Addressed by deck, layer and index. Read before writing.
-    ReadProcedure { deck: u8, node: NodeAt } => "Read one node's source",
+    ReadProcedure { deck: u8, node: NodeAddress } => "Read one node's source",
 
     /// Checked as you write it; built on a worker and swapped at a frame
     /// boundary. The source's own `kind` line must name the same layer as the
     /// address, which is a refusal and not a payload.
-    WriteProcedure { deck: u8, node: NodeAt, source: String }
+    WriteProcedure { deck: u8, node: NodeAddress, source: String }
         => "Check and write one node's source",
 
     /// **This row names an event, not an operation, and that is the
@@ -2460,7 +2460,7 @@ operations! {
     /// already changed and `karakuri_store::record::Record::Procedure` was
     /// written where the swap landed. What this changes is the lane: the node
     /// stops being one with a version nobody has ruled on.
-    KeepCandidate { deck: u8, node: NodeAt } => "Keep a candidate",
+    KeepCandidate { deck: u8, node: NodeAddress } => "Keep a candidate",
 
     /// **What *a rejected candidate costs nothing* is made of.** The version
     /// before it is a file under `<store>/history/`, kept because it

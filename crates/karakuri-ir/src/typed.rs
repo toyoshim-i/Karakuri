@@ -39,7 +39,7 @@ use crate::span::Span;
 /// `karakuri-store` nor `karakuri-operation` depends on this crate —
 /// `karakuri-operation` is a leaf by charter and a serialised record wants its
 /// own `Serialize`/`Deserialize` — so each defines its own copy, on
-/// `karakuri_operation::NodeAt`'s precedent: three definitions agreeing costs
+/// `karakuri_operation::NodeAddress`'s precedent: three definitions agreeing costs
 /// less than a dependency none of the three crates already pays for.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InputPort(pub String);

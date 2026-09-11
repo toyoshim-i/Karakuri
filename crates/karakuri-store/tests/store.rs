@@ -4,13 +4,16 @@
 use std::fs;
 use std::time::{Duration, SystemTime};
 
-use karakuri_store::{project, Hash, Layer, Line, Record, Store, StoreError, Value};
+use karakuri_store::{project, Hash, Layer, Line, NodeAddress, Record, Store, StoreError, Value};
 use tempfile::tempdir;
 
-fn param(layer: Layer, key: &str, value: f32) -> Record {
+/// A wildcard write, on every param `key` declares — the callers below only
+/// ever pass `Layer::L1`, and a wildcard's `at` is `None` regardless, so the
+/// layer never reached the record even before it stopped being a field of
+/// its own.
+fn param(key: &str, value: f32) -> Record {
     Record::Param {
-        layer,
-        index: None,
+        at: None,
         key: key.into(),
         value: Value::Scalar(value),
     }
@@ -279,17 +282,21 @@ fn set_file_round_trips() {
             v: 1,
         }),
         Line::new(Record::Slot {
-            layer: Layer::L1,
-            index: 0,
+            at: NodeAddress {
+                layer: Layer::L1,
+                index: 0,
+            },
             name: None,
             proc_hash,
         }),
         Line::new(Record::Capacity {
-            layer: Layer::L1,
-            index: 0,
+            at: NodeAddress {
+                layer: Layer::L1,
+                index: 0,
+            },
             value: 524288,
         }),
-        Line::new(param(Layer::L1, "radius", 2.4)),
+        Line::new(param("radius", 2.4)),
         Line::new(Record::Seed {
             stream: Layer::L1,
             index: 0,
@@ -317,7 +324,7 @@ fn session_stream_round_trips_including_ticks() {
         }),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(Record::Tick { steps: 1 }),
-        Line::new(param(Layer::L1, "radius", 2.6)),
+        Line::new(param("radius", 2.6)),
         Line::new(Record::Tick { steps: 1 }),
     ];
 
@@ -416,14 +423,18 @@ fn write_set_accepts_a_merge_record() {
             v: 1,
         }),
         Line::new(Record::Slot {
-            layer: Layer::L4,
-            index: 0,
+            at: NodeAddress {
+                layer: Layer::L4,
+                index: 0,
+            },
             name: None,
             proc_hash,
         }),
         Line::new(Record::Slot {
-            layer: Layer::L4,
-            index: 1,
+            at: NodeAddress {
+                layer: Layer::L4,
+                index: 1,
+            },
             name: None,
             proc_hash,
         }),
@@ -584,15 +595,17 @@ fn save_session_as_set_projects_and_persists() {
             v: 1,
         }),
         Line::new(Record::Slot {
-            layer: Layer::L1,
-            index: 0,
+            at: NodeAddress {
+                layer: Layer::L1,
+                index: 0,
+            },
             name: None,
             proc_hash,
         }),
-        Line::new(param(Layer::L1, "radius", 2.0)),
+        Line::new(param("radius", 2.0)),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(Record::Tick { steps: 1 }),
-        Line::new(param(Layer::L1, "radius", 2.6)), // repeated edit to the same key
+        Line::new(param("radius", 2.6)), // repeated edit to the same key
         Line::new(Record::Tick { steps: 1 }),
     ];
 
@@ -607,21 +620,21 @@ fn save_session_as_set_projects_and_persists() {
         .filter(|l| matches!(l.record(), Record::Param { key, .. } if key == "radius"))
         .collect();
     assert_eq!(radius_records.len(), 1);
-    assert_eq!(radius_records[0].record(), &param(Layer::L1, "radius", 2.6));
+    assert_eq!(radius_records[0].record(), &param("radius", 2.6));
 }
 
 #[test]
 fn projection_folds_repeated_edits_last_write_wins() {
     let session = vec![
-        Line::new(param(Layer::L1, "radius", 1.0)),
-        Line::new(param(Layer::L1, "radius", 2.0)),
-        Line::new(param(Layer::L1, "radius", 3.0)),
+        Line::new(param("radius", 1.0)),
+        Line::new(param("radius", 2.0)),
+        Line::new(param("radius", 3.0)),
         Line::new(Record::Tick { steps: 1 }),
     ];
 
     let set = project(&session);
     assert_eq!(set.len(), 1);
-    assert_eq!(set[0].record(), &param(Layer::L1, "radius", 3.0));
+    assert_eq!(set[0].record(), &param("radius", 3.0));
 }
 
 /// The same rule for the two records audio added. A Set file carries no time,
@@ -809,8 +822,10 @@ fn a_part_is_dropped_by_the_projection() {
             v: 1,
         }),
         Line::new(Record::Slot {
-            layer: Layer::L1,
-            index: 0,
+            at: NodeAddress {
+                layer: Layer::L1,
+                index: 0,
+            },
             name: None,
             proc_hash: hash,
         }),

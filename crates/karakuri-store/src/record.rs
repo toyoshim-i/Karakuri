@@ -99,8 +99,8 @@ use crate::hash::Hash;
 /// **Mirrors `karakuri_ir::typed::InputPort` and `karakuri_operation::InputPort`
 /// rather than depending on either.** This crate has no dependency on
 /// `karakuri-ir` and none is being added for one field; the three are the same
-/// concept with three definitions, on `karakuri_operation::NodeAt`'s own
-/// precedent (see [`NodeAt`]'s documentation) for a type more than one
+/// concept with three definitions, on `karakuri_operation::NodeAddress`'s own
+/// precedent (see [`NodeAddress`]'s documentation) for a type more than one
 /// dependency-isolated crate needs.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct InputPort(pub String);
@@ -175,32 +175,114 @@ pub enum Value {
 }
 
 /// **One node of a Set, as a value rather than as two fields beside each
-/// other** — the address [`Record::Ride`] carries and the only place in this
-/// vocabulary a node address is a thing of its own.
+/// other.** [`Record::Slot`], [`Record::Capacity`], [`Record::Procedure`] and
+/// [`Record::Authority`] each hold one directly; [`Record::Param`] and
+/// [`Record::Ride`] hold an `Option<NodeAddress>`, for the wildcard described
+/// below.
 ///
-/// **A struct so that half an address cannot be written down.** Every other
-/// record here spells the address as a `layer` beside an `index`, and
-/// [`Record::Param`] pays for it: `index` absent is a wildcard, `layer` is then
-/// read by nobody, and the pair has to be documented as *present or absent as a
-/// unit* because nothing else can hold it to that. An `Option<NodeAt>` holds it
-/// structurally — `docs/contributing.md` §4's third tier — and the wildcard is
-/// the `None`, which is what a wildcard is: a write that names no node, and so
-/// names no layer either.
+/// **[`Record::Bind`] and [`Record::Source`] deliberately do not**, and the
+/// reason is a fact about what their wildcard means rather than an
+/// oversight: `karakuri_operation::BindAt`'s own documentation draws the
+/// line — *"a value has a wildcard that names no layer, because a value
+/// lands wherever the name is declared; an attachment's wildcard is a
+/// layer's, because the signal is written into that layer's uniform
+/// buffer."* [`Record::Param`]'s wildcard is [`karakuri_engine::set::Set::set_param`]'s,
+/// which walks every node of every layer — a real absence of address, which
+/// is what `None` means here. A binding's wildcard walks one layer's nodes
+/// alone (`Set::bind`), so its `layer` is never noise the way `Param`'s can
+/// be: `Record::Bind` keeps its own `layer: Layer` field beside an
+/// `index: Option<u32>` rather than gaining this type, on purpose — see that
+/// field's own documentation.
 ///
-/// **Named for `karakuri_operation::NodeAt`, which is the same address one
+/// **A struct so that half an address cannot be written down.** Before this
+/// type reached it, [`Record::Param`] spelled the address as a `layer`
+/// beside an `index`, and paid for it: `index` absent is a wildcard, `layer`
+/// is then read by nobody, and the pair had to be documented as *present or
+/// absent as a unit* because nothing else held it to that.
+/// `Option<NodeAddress>` holds it structurally — `docs/contributing.md` §4's
+/// third tier — and the wildcard is the `None`, which is what a wildcard is:
+/// a write that names no node, and so names no layer either. **The wire
+/// keeps the old shape regardless**: a `.kbset` file or a session stream
+/// still sees `layer` on every `param` line, including a wildcard's, because
+/// [`Record::Param`] reads it back through [`mod@node_or_every_node`] rather
+/// than a bare `#[serde(flatten)]` — see that module's own documentation for
+/// why the generic `Option` behaviour cannot be trusted with a field old
+/// files always wrote.
+///
+/// **Named for `karakuri_operation::NodeAddress`, which is the same address one
 /// crate along**, and deliberately not renamed on the way across: an operation
 /// says `{layer, index}` and the record it becomes says `{layer, index}`, so
 /// there is one thing to learn rather than two spellings of it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NodeAt {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodeAddress {
     pub layer: Layer,
     /// **Which node of that layer. Absent is 0 and 0 is not written**, on
     /// [`Record::Procedure`]'s terms and emphatically not
     /// [`Record::Param`]'s: this address names one node, and the "every node
     /// declaring the key" reading lives one level up, in the absence of the
-    /// whole [`NodeAt`].
+    /// whole [`NodeAddress`].
     #[serde(default, skip_serializing_if = "is_zero")]
     pub index: u32,
+}
+
+/// **Backward-compatible (de)serialization for [`Record::Param`]'s
+/// wildcard-capable node address.**
+///
+/// A bare `#[serde(flatten)]` on `Option<NodeAddress>` cannot be used here.
+/// Serde's rule for a flattened `Option` is *any leftover key is reason enough
+/// to parse `Some`* — and `layer` is a leftover key on every wildcard `param`
+/// line ever written, because the writer put `L1` on everything before this
+/// address existed and still does today (see the comment on the placeholder
+/// in `karakuri-environment/src/setfile.rs`). Trusting the
+/// generic behaviour would read every existing wildcard `param` as an
+/// address to node 0, silently narrowing a write that has always meant *every
+/// node declaring the key*.
+///
+/// So this reads and writes the pair by hand: `index` absent is the wildcard
+/// and `None`, full stop, whatever `layer` says; `index` present is
+/// `Some(NodeAddress { layer, index })`, exactly what [`NodeAddress`] would
+/// have parsed on its own. Writing follows the same rule in reverse —
+/// `layer: L1` is written for a wildcard, matching every writer before this
+/// type existed, so the wire shape `Record::Param`'s own documentation
+/// describes is unchanged.
+mod node_or_every_node {
+    use super::{Layer, NodeAddress};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct Wire {
+        layer: Layer,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+    }
+
+    pub fn serialize<S>(at: &Option<NodeAddress>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let wire = match at {
+            Some(at) => Wire {
+                layer: at.layer,
+                index: Some(at.index),
+            },
+            None => Wire {
+                layer: Layer::L1,
+                index: None,
+            },
+        };
+        wire.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<NodeAddress>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = Wire::deserialize(deserializer)?;
+        Ok(wire.index.map(|index| NodeAddress {
+            layer: wire.layer,
+            index,
+        }))
+    }
 }
 
 /// The noise generator a `bind` declares for itself.
@@ -274,7 +356,7 @@ impl Default for BindNoise {
 ///
 /// **A struct rather than four fields on the record**, because it is present
 /// or absent as a unit — an attachment names all four or there is no
-/// attachment — which is [`NodeAt`]'s argument one record along and
+/// attachment — which is [`NodeAddress`]'s argument one record along and
 /// `docs/contributing.md` §4's structural tier. A take-back spelled as four
 /// absent fields would be a record that could be written half detached.
 ///
@@ -360,20 +442,20 @@ pub enum Record {
         v: u32,
     },
     Slot {
-        layer: Layer,
-        /// **Which node of that layer**, on the same terms
+        /// **Which node of a Set this record is about**, on the same terms
         /// [`Record::Procedure`] uses it: a Set draws with one L1 and however
         /// many L4s, so a layer alone no longer names a procedure.
         ///
-        /// Absent means 0 and 0 is not written, so a file from before stacks
-        /// existed round-trips byte for byte. It is what the *projection* folds
-        /// on — several `slot` records on one layer are several nodes rather
-        /// than one node corrected several times, and a fold keyed by layer
-        /// alone would keep the last of them. Reading order would have been
-        /// enough for the file format and is not enough for the fold, because a
-        /// fold has no order to appeal to.
-        #[serde(default, skip_serializing_if = "is_zero")]
-        index: u32,
+        /// `index` absent means 0 and 0 is not written, so a file from before
+        /// stacks existed round-trips byte for byte. It is what the
+        /// *projection* folds on — several `slot` records at one `layer` are
+        /// several nodes rather than one node corrected several times, and a
+        /// fold keyed by layer alone would keep the last of them. Reading
+        /// order would have been enough for the file format and is not enough
+        /// for the fold, because a fold has no order to appeal to. See
+        /// [`NodeAddress`] for why the two are one field.
+        #[serde(flatten)]
+        at: NodeAddress,
         /// **What this Set calls the node**, for whatever wants to point at it.
         ///
         /// On the terms HTML gives an `id`, and the analogy settles where it
@@ -481,8 +563,7 @@ pub enum Record {
     /// Overrides the `.kir` default. Outside the range the artifact declares,
     /// the Set is rejected at build time.
     Capacity {
-        layer: Layer,
-        /// **Which geometry of that layer**, on the same terms
+        /// **Which geometry this record resizes**, on the same terms
         /// [`Record::Slot`] uses it. A Set holds more than one source now,
         /// each running at the default its own procedure declares, so a layer
         /// alone cannot say which of them is being resized: two geometries at
@@ -491,22 +572,22 @@ pub enum Record {
         /// naming work rather than a follow-on to it — see
         /// `docs/adr/0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md`.
         ///
-        /// **Absent is node 0, not a wildcard**, which is [`Record::Slot`]'s
-        /// rule rather than [`Record::Param`]'s: this record names one node,
-        /// and "every geometry at 524288" is not something a capacity has ever
-        /// said. It is also why honouring the field cannot retarget anything —
-        /// a Set that held one geometry had only node 0 to resize, so every
-        /// file ever written means what it always meant, and 0 is not written,
-        /// so it round-trips byte for byte.
-        #[serde(default, skip_serializing_if = "is_zero")]
-        index: u32,
+        /// **`index` absent is node 0, not a wildcard**, which is
+        /// [`Record::Slot`]'s rule rather than [`Record::Param`]'s: this
+        /// record names one node, and "every geometry at 524288" is not
+        /// something a capacity has ever said. It is also why honouring the
+        /// field cannot retarget anything — a Set that held one geometry had
+        /// only node 0 to resize, so every file ever written means what it
+        /// always meant, and 0 is not written, so it round-trips byte for
+        /// byte. See [`NodeAddress`] for why the two are one field.
+        #[serde(flatten)]
+        at: NodeAddress,
         value: u32,
     },
     Param {
-        layer: Layer,
-        /// **Which node of that layer, or every node declaring `key`.**
+        /// **Which node, or every node declaring `key`.**
         ///
-        /// `Some(n)` addresses one node. **Absent is a wildcard, not node 0** —
+        /// `Some` addresses one node. **`None` is a wildcard, not node 0** —
         /// and that is the difference from [`Record::Slot`] and
         /// [`Record::Procedure`], where absent *is* 0 because those records
         /// name exactly one node and always did. This one addresses a *value*,
@@ -520,9 +601,12 @@ pub enum Record {
         /// honouring it now would silently retarget those files. The address is
         /// `(layer, index)` present or absent as a unit, so `layer` becomes
         /// load-bearing exactly when an `index` appears beside it, which is
-        /// only in files this build wrote.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        index: Option<u32>,
+        /// only in files this build wrote — see [`mod@node_or_every_node`] for
+        /// how the wildcard survives being folded into one `Option<NodeAddress>`
+        /// field without a bare `#[serde(flatten)]` mistaking a placeholder
+        /// `layer` for an address.
+        #[serde(flatten, with = "node_or_every_node")]
+        at: Option<NodeAddress>,
         key: String,
         value: Value,
     },
@@ -531,9 +615,21 @@ pub enum Record {
     /// blended against the param's own value by the sample's confidence — see
     /// "Set file format" in `docs/ir-spec.md`.
     Bind {
+        /// **Which procedure declares the `param`**, and — unlike
+        /// [`Record::Param`]'s — always load-bearing, wildcard or not: a
+        /// binding resolves through the nodes of *one layer*
+        /// (`karakuri_engine::binding::Binding` carries a required `layer`
+        /// and an optional `index`, and `Set::bind` walks that layer's nodes
+        /// alone), so there has never been a binding that meant *every
+        /// layer*. That is why this stays a plain [`Layer`] rather than
+        /// gaining [`NodeAddress`]'s treatment: `NodeAddress` and
+        /// [`mod@node_or_every_node`] both hold *one whole address, or
+        /// none*, and a bound layer with no index is not "no address" — it
+        /// is a real, narrower one, on `karakuri_operation::BindAt`'s own
+        /// words: *"an attachment's wildcard is a layer's, because the
+        /// signal is written into that layer's uniform buffer."*
         layer: Layer,
-        /// Which node of that layer, or every node declaring `key` — see
-        /// [`Record::Param`], which this follows exactly.
+        /// Which node of that layer, or every node of it declaring `key`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         index: Option<u32>,
         key: String,
@@ -934,18 +1030,19 @@ pub enum Record {
     /// this vocabulary and is recorded as one rather than patched here.
     Procedure {
         slot: u8,
-        layer: Layer,
-        /// **Which node of that layer**, when a deck slot has more than one.
+        /// **Which node the deck slot is playing this procedure on**, when it
+        /// has more than one.
         ///
         /// A deck slot draws with one L1 and however many L4s — several renderers
         /// over one geometry, in draw order — so naming a layer is no longer
-        /// enough to name a procedure. Zero for the L1 and for the first
-        /// renderer, which is every stream written before stacks existed:
-        /// absent means zero and zero is not written, so an old stream replays
-        /// byte for byte and a new one adds a field only where it says
-        /// something.
-        #[serde(default, skip_serializing_if = "is_zero")]
-        index: u32,
+        /// enough to name a procedure. `index` zero for the L1 and for the
+        /// first renderer, which is every stream written before stacks
+        /// existed: absent means zero and zero is not written, so an old
+        /// stream replays byte for byte and a new one adds a field only where
+        /// it says something. See [`NodeAddress`] for why the two are one
+        /// field.
+        #[serde(flatten)]
+        at: NodeAddress,
         #[serde(rename = "proc")]
         proc_hash: Hash,
     },
@@ -990,11 +1087,11 @@ pub enum Record {
     /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`.
     Authority {
         slot: u8,
-        layer: Layer,
-        /// **Which node of that layer.** Absent is 0 and 0 is not written, on
-        /// [`Record::Procedure`]'s terms.
-        #[serde(default, skip_serializing_if = "is_zero")]
-        index: u32,
+        /// **Which node this authority is over.** `index` absent is 0 and 0
+        /// is not written, on [`Record::Procedure`]'s terms. See
+        /// [`NodeAddress`] for why the two are one field.
+        #[serde(flatten)]
+        at: NodeAddress,
         /// `manual`, `suggesting` or `automatic` — the words
         /// `karakuri_operation::Authority::name` writes. Named for the concept
         /// rather than shortened, because there is no shorter word for it that
@@ -1051,9 +1148,9 @@ pub enum Record {
         /// [`Record::Procedure`]'s and [`Record::Authority`]'s terms.
         slot: u8,
         /// **Which node, or every node declaring `key`.** Absent is the
-        /// wildcard; see [`NodeAt`] for why the address is one field.
+        /// wildcard; see [`NodeAddress`] for why the address is one field.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        at: Option<NodeAt>,
+        at: Option<NodeAddress>,
         key: String,
         value: Value,
     },
@@ -1082,7 +1179,7 @@ pub enum Record {
     /// **The address is [`Record::Bind`]'s and not [`Record::Ride`]'s**, and
     /// the difference is not a drift. A `ride` writes a value, and a value has
     /// a wildcard that names no layer — every node declaring the key, across
-    /// every layer — which is why its address is one `Option<NodeAt>`. A
+    /// every layer — which is why its address is one `Option<NodeAddress>`. A
     /// binding is a layer's: `karakuri_engine::binding::Binding` carries a
     /// required `layer` and an optional `index`, `Set::bind` resolves the
     /// nodes through it, and there has never been a binding that meant *every
@@ -1873,7 +1970,7 @@ mod tests {
             rec,
             Record::Ride {
                 slot: 2,
-                at: Some(NodeAt {
+                at: Some(NodeAddress {
                     layer: Layer::L4,
                     index: 1
                 }),
@@ -1897,7 +1994,7 @@ mod tests {
             rec,
             Record::Ride {
                 slot: 0,
-                at: Some(NodeAt {
+                at: Some(NodeAddress {
                     layer: Layer::L1,
                     index: 0
                 }),
@@ -2302,17 +2399,21 @@ mod tests {
     fn a_procedure_round_trips_and_an_absent_index_stays_absent() {
         let hash = "sha256:486779000000000000000000000000000000000000000000000000000000abcd";
         let old = format!(r#"{{"t":"procedure","slot":0,"layer":"L4","proc":"{hash}"}}"#);
-        let Record::Procedure { index, slot, .. } = round_trip_verbatim(&old) else {
+        let Record::Procedure { at, slot, .. } = round_trip_verbatim(&old) else {
             panic!("not a procedure");
         };
-        assert_eq!((slot, index), (0, 0), "an absent index is the first node");
+        assert_eq!(
+            (slot, at.index),
+            (0, 0),
+            "an absent index is the first node"
+        );
 
         let stacked =
             format!(r#"{{"t":"procedure","slot":2,"layer":"L4","index":1,"proc":"{hash}"}}"#);
-        let Record::Procedure { index, slot, .. } = round_trip_verbatim(&stacked) else {
+        let Record::Procedure { at, slot, .. } = round_trip_verbatim(&stacked) else {
             panic!("not a procedure");
         };
-        assert_eq!((slot, index), (2, 1), "the second renderer of slot 2");
+        assert_eq!((slot, at.index), (2, 1), "the second renderer of slot 2");
     }
 
     /// **A `source` round-trips both ways round**, bytes and all — with an
@@ -2418,8 +2519,10 @@ mod tests {
             rec,
             Record::Authority {
                 slot: 0,
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 authority: "manual".to_string(),
             },
             "an absent index is the first node of that layer"
@@ -2437,8 +2540,10 @@ mod tests {
             round_trip_verbatim(second),
             Record::Authority {
                 slot: 2,
-                layer: Layer::L4,
-                index: 1,
+                at: NodeAddress {
+                    layer: Layer::L4,
+                    index: 1,
+                },
                 authority: "suggesting".to_string(),
             },
             "the second renderer of deck slot 2"
@@ -2452,8 +2557,10 @@ mod tests {
             ),
             Record::Authority {
                 slot: 1,
-                layer: Layer::Field,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::Field,
+                    index: 0,
+                },
                 authority: "automatic".to_string(),
             }
         );
@@ -2472,30 +2579,30 @@ mod tests {
     fn a_slot_round_trips_and_an_absent_index_or_name_stays_absent() {
         let hash = "sha256:9c1b04000000000000000000000000000000000000000000000000000000abcd";
         let old = format!(r#"{{"t":"slot","layer":"L4","proc":"{hash}"}}"#);
-        let Record::Slot { index, name, .. } = round_trip_verbatim(&old) else {
+        let Record::Slot { at, name, .. } = round_trip_verbatim(&old) else {
             panic!("not a slot");
         };
-        assert_eq!(index, 0);
+        assert_eq!(at.index, 0);
         assert_eq!(
             name, None,
             "a slot from before names existed is unnamed, not named nothing"
         );
 
         let stacked = format!(r#"{{"t":"slot","layer":"L4","index":2,"proc":"{hash}"}}"#);
-        let Record::Slot { index, .. } = round_trip_verbatim(&stacked) else {
+        let Record::Slot { at, .. } = round_trip_verbatim(&stacked) else {
             panic!("not a slot");
         };
-        assert_eq!(index, 2);
+        assert_eq!(at.index, 2);
 
         // The spec's own example of a named source, verbatim — so the field
         // order is asserted here too, and a name written after `proc` would be
         // a file this reader wrote and the specification did not print.
         let named =
             format!(r#"{{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"{hash}"}}"#);
-        let Record::Slot { index, name, .. } = round_trip_verbatim(&named) else {
+        let Record::Slot { at, name, .. } = round_trip_verbatim(&named) else {
             panic!("not a slot");
         };
-        assert_eq!((index, name.as_deref()), (1, Some("veil")));
+        assert_eq!((at.index, name.as_deref()), (1, Some("veil")));
     }
 
     #[test]
@@ -2520,8 +2627,10 @@ mod tests {
         assert_eq!(
             round_trip_verbatim(r#"{"t":"capacity","layer":"L1","value":524288}"#),
             Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 value: 524288
             }
         );
@@ -2530,8 +2639,10 @@ mod tests {
         assert_eq!(
             round_trip_verbatim(r#"{"t":"capacity","layer":"L1","index":1,"value":65536}"#),
             Record::Capacity {
-                layer: Layer::L1,
-                index: 1,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 1,
+                },
                 value: 65536
             }
         );
@@ -2562,6 +2673,60 @@ mod tests {
                 stream: Layer::L1,
                 index: 1,
                 value: 4
+            }
+        );
+    }
+
+    /// **A `param` round-trips through the flat wire shape `layer`/`index`
+    /// always had**, bytes and all, in both of its shapes: addressed, and the
+    /// wildcard — and this is the one that exercises [`mod@node_or_every_node`],
+    /// since a bare `#[serde(flatten)]` on `Option<NodeAddress>` would read the
+    /// wildcard line below as addressed to node 0 instead (`layer` is present
+    /// on it, same as every wildcard `param` ever written).
+    #[test]
+    fn a_param_round_trips_addressed_and_as_a_wildcard() {
+        // Addressed: `at` is `Some`, and `index` is written because it says
+        // something.
+        assert_eq!(
+            round_trip_verbatim(
+                r#"{"t":"param","layer":"L4","index":1,"key":"glow.x","value":0.4}"#
+            ),
+            Record::Param {
+                at: Some(NodeAddress {
+                    layer: Layer::L4,
+                    index: 1,
+                }),
+                key: "glow.x".to_string(),
+                value: Value::Scalar(0.4),
+            }
+        );
+
+        // Node 0, addressed — `index` is written explicitly even though it is
+        // zero, because that is what tells it apart from the wildcard below;
+        // `at` is `Some` because a node was named.
+        assert_eq!(
+            round_trip_verbatim(
+                r#"{"t":"param","layer":"L1","index":0,"key":"radius","value":2.6}"#
+            ),
+            Record::Param {
+                at: Some(NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                }),
+                key: "radius".to_string(),
+                value: Value::Scalar(2.6),
+            }
+        );
+
+        // The wildcard: `layer` is still on the wire — the placeholder every
+        // writer before this address existed wrote, and every writer since —
+        // but `index` is absent, and that alone is what makes `at` `None`.
+        assert_eq!(
+            round_trip_verbatim(r#"{"t":"param","layer":"L1","key":"exposure","value":2.0}"#),
+            Record::Param {
+                at: None,
+                key: "exposure".to_string(),
+                value: Value::Scalar(2.0),
             }
         );
     }

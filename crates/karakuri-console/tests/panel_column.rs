@@ -457,7 +457,7 @@ fn sample(variant: &str) -> Operation {
         // an operator reaches the row.
         "KeepCandidate" => Operation::KeepCandidate {
             deck: 0,
-            node: karakuri_operation::NodeAt {
+            node: karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L1,
                 index: 0,
             },
@@ -597,7 +597,7 @@ fn sample(variant: &str) -> Operation {
         // (ADR-0320, ADR-0327).
         "SelectPattern" => Operation::SelectPattern { pattern: 0 },
         // **The Inspector's three, and the two addresses are the two facts.**
-        // A node head's chip names a `NodeAt`, a sensitivity chip names a
+        // A node head's chip names a `NodeAddress`, a sensitivity chip names a
         // `BindAt` — a layer, one node of it or all of them, and a key —
         // because an attachment is one layer's where a value's wildcard names
         // no layer at all (ADR-0319).
@@ -607,7 +607,7 @@ fn sample(variant: &str) -> Operation {
         // above and P-0090's requirement.
         "SetAuthority" => Operation::SetAuthority {
             deck: 0,
-            node: karakuri_operation::NodeAt {
+            node: karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L1,
                 index: 0,
             },
@@ -702,7 +702,7 @@ fn sample(variant: &str) -> Operation {
         // what pairs the two.
         "KeepProcedure" => Operation::KeepProcedure {
             deck: 0,
-            node: karakuri_operation::NodeAt {
+            node: karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L1,
                 index: 0,
             },
