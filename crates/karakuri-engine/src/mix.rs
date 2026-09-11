@@ -314,32 +314,19 @@ impl Composite {
     /// Fold the inputs into `target`, from whatever [`Composite::write_uniform`]
     /// last wrote.
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("composite"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    // The triangle covers the whole target, so this only
-                    // matters for a mix with nothing live in it — which mixes
-                    // to black, and should say so rather than showing whatever
-                    // was there last frame. `TRANSPARENT` rather than `BLACK`
-                    // because the alpha channel is coverage: an empty mix
-                    // covers nothing, and `BLACK` would claim it covered
-                    // everything opaquely.
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.draw(0..3, 0..1);
+        crate::pass::record_fullscreen_pass(
+            encoder,
+            Some("composite"),
+            target,
+            &self.pipeline,
+            &[&self.bind_group],
+        );
+    }
+}
+
+impl crate::pass::RenderPassNode for Composite {
+    fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+        self.record(encoder, target);
     }
 }
 

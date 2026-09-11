@@ -41,7 +41,7 @@ graph TD
         P10["P10: Eliminate panel::Op & Decouple from HTML Docs<br/><b>[DONE]</b>"]
         P11["P11: Untangle karakuri-environment Cycles & Align CLI<br/><b>[DONE]</b>"]
         P12["P12: Implement True Two-Phase Atomic Frame Commit<br/><b>[DONE]</b>"]
-        P13["P13: Unify Geometry & L5 Image Pass Execution"]
+        P13["P13: Unify Geometry & L5 Image Pass Execution<br/><b>[DONE]</b>"]
     end
 
     subgraph Phase2B["Phase 2B: Core Modernization & AI Autonomy"]
@@ -205,19 +205,30 @@ Meanwhile, `karakuri-cli` had 8 keys performing different actions compared to th
 ### Audit Reality
 Commits `3159154` and `ac873bf` implemented M5.16 by adding `kind L5` and Master Chain execution. However, this was done by grafting ~1,500 lines of bespoke pass-execution code directly into `karakuri-engine/src/master.rs`.
 - Geometry passes (L1–L4) are managed through `Set`.
-- Image/Post-processing passes (L5) are managed through a completely separate list in `master.rs`.
-- Set-level post-processing nodes and Master-level compositing nodes cannot share execution machinery, duplicating uniform uploads, texture binding, and retention logic.
+- Image/Post-processing passes (L5) were managed through a completely separate list in `master.rs`.
+- Set-level post-processing nodes and Master-level compositing nodes did not share execution machinery, duplicating uniform uploads, texture binding, and retention logic.
 
-### Refactoring Plan
-- **Introduce a Unified `Pass` Trait Hierarchy**:
+### Refactoring Implementation
+- **Unified `RenderPassNode` Trait**:
   ```rust
   pub trait RenderPassNode {
-      fn execute(&mut self, ctx: &mut PassContext, encoder: &mut wgpu::CommandEncoder);
+      fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView);
   }
   ```
-- **Unify Texture Passes**:
-  - Both per-Set texture operations and Master Chain L5 slots implement a shared `ImagePass` pipeline.
-  - Retention buffers (`retains`) are managed uniformly across both layers.
+  Implemented across `BoundImagePass`, `MasterChain`, `Composite`, and `Merge`. All fullscreen and compositing passes record commands through this unified contract.
+- **Unified `ImagePass` Pipeline Abstraction**:
+  - `ImagePass` in `crates/karakuri-engine/src/pass.rs` encapsulates fullscreen pipeline construction, execution (`pass.draw(0..3, 0..1)`), uniform block packing (`write_uniform` and fast-path `write_clock`), and standard L5 texture/sampler bind group generation.
+  - Pairable with an active bind group via `bound(&self, bind_group)` returning `BoundImagePass`, which implements `RenderPassNode`.
+- **Unified History Retention (`RetentionManager`)**:
+  - Extracted history buffer allocation and sanitized retention rendering into reusable pass machinery.
+  - Manages `Cut::Mix` and `Cut::Exit` targets and bind groups; sanitizes NaNs/infinities via `fs_keep` in `shaders/master.wgsl`.
+- **Refactored `Slot` and `MasterChain`**:
+  - `Slot` in `master.rs` now wraps `ImagePass`, delegating pipeline compilation, uniform uploads, and bind group creation.
+  - `MasterChain` now drives each slot pass through `slot.bound(&bind).record(encoder, target)` and drives retentions through `retention.record(encoder)`.
+- **Verification**:
+  - All 13 master chain tests (including bit-exact comparison against hand-written WGSL passes) pass.
+  - Full engine test suite passing without regressions (`cargo test -p karakuri-engine -- --skip gpu`).
+  - Zero clippy warnings across the codebase.
 
 ---
 
@@ -326,7 +337,7 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 2A** | **P10** | **Eliminate `panel::Op`** | **DONE** | Bridge `panel::Op` into vocabulary; decouple code from manual HTML state |
 | **Phase 2A** | **P11** | **Untangle Environment & Align CLI** | **DONE** | Broke `setfile` ↔ `compile` cycles via `ProcedureCompiler` & `meta`; aligned CLI keys & deprecated collisions |
 | **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Two-phase atomic frame commit across Simulation, Set, Deck, and VideoSource |
-| **Phase 2A** | **P13** | **Unify Geometry & L5 Image Passes** | **Urgent** | Merge `master.rs` L5 chain and Set passes into unified `ImagePass` |
+| **Phase 2A** | **P13** | **Unify Geometry & L5 Image Passes** | **DONE** | Unified `RenderPassNode`, `ImagePass`, and `RetentionManager` across Set & Master chains |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | Planned | First-class `ParamValue`; eliminate `.x/.y/.z` string splitting |
 | **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |
 | **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | Planned | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |

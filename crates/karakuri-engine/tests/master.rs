@@ -35,7 +35,9 @@
 mod gpu {
     use std::collections::BTreeMap;
 
-    use karakuri_engine::{Chain, Cut, Gpu, Points, Present, Slot, VideoSource};
+    use karakuri_engine::{
+        Chain, Cut, Gpu, Points, Present, RenderPassNode, RetentionManager, Slot, VideoSource,
+    };
     use karakuri_ir::typed::Checked;
 
     const WIDTH: u32 = 128;
@@ -1040,5 +1042,54 @@ fn fs_rgb_shift(in: VsOut) -> @location(0) vec4<f32> {
         assert!(bare.contains("mix") && bare.contains("exit"), "{bare}");
         let extra = build(BLOOM, Some(Cut::Exit)).expect("a cut with no `retains` is refused");
         assert!(extra.contains("retains"), "{extra}");
+    }
+
+    /// **Unified image pass and retention manager abstractions.**
+    #[test]
+    fn unified_image_pass_and_retention_abstractions_record() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = present(&gpu);
+        let s = slot(&gpu, &present, FEEDBACK, Some(Cut::Mix), 0.5);
+
+        assert_eq!(s.pass().name(), "feedback");
+        assert_eq!(s.name(), "feedback");
+
+        let mut retention = RetentionManager::new(&gpu.device);
+        assert_eq!(retention.count(), 0);
+        let mix_src = target(&gpu, "mix src").create_view(&Default::default());
+        let exit_src = target(&gpu, "exit src").create_view(&Default::default());
+        retention.allocate(
+            &gpu.device,
+            WIDTH,
+            HEIGHT,
+            &[Cut::Mix, Cut::Exit],
+            Some(&mix_src),
+            Some(&exit_src),
+        );
+        assert_eq!(retention.count(), 2);
+        assert!(retention.is_held(Cut::Mix));
+        assert!(retention.is_held(Cut::Exit));
+        assert!(retention.held(Cut::Mix).is_some());
+
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        retention.record(&mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+
+        // Verify bound pass implements RenderPassNode
+        let dst = target(&gpu, "dst target").create_view(&Default::default());
+        let held = target(&gpu, "held target").create_view(&Default::default());
+        let sampler = gpu.device.create_sampler(&Default::default());
+        let bg = s.pass().bind(
+            &gpu.device,
+            present.chain_layout(),
+            &mix_src,
+            &held,
+            &sampler,
+            Some("test bg"),
+        );
+        let bound = s.bound(&bg);
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        bound.record(&mut encoder, &dst);
+        gpu.queue.submit([encoder.finish()]);
     }
 }
