@@ -38,10 +38,10 @@ graph TD
     subgraph Phase2A["Phase 2A: Liquidating Incomplete Phase 1 Debt"]
         P8["P8: Eradicate Source Scraping<br/><b>[DONE]</b>"]
         P9["P9: Dismantle karakuri/src/main.rs into App Modules<br/><b>[DONE]</b>"]
-        P10["P10: Eliminate panel::Op & Decouple from HTML Docs<br/><b>[DONE]</b>"]
-        P11["P11: Untangle karakuri-environment Cycles & Align CLI<br/><b>[DONE]</b>"]
+        P10["P10: Reaffirm ADR-0204 & Retain panel::Op as Internal<br/><b>[DONE]</b>"]
+        P11["P11: Untangle karakuri-environment Cycles via meta.rs<br/><b>[DONE]</b>"]
         P12["P12: Implement True Two-Phase Atomic Frame Commit<br/><b>[DONE]</b>"]
-        P13["P13: Unify Geometry & L5 Image Pass Execution<br/><b>[DONE]</b>"]
+        P13["P13: Deduplicate Image Passes via ImagePass<br/><b>[DONE]</b>"]
     end
 
     subgraph Phase2B["Phase 2B: Core Modernization & AI Autonomy"]
@@ -91,144 +91,92 @@ Before advanced engine refactoring can proceed safely, the incomplete migrations
 
 ---
 
-## 8. Eradicate Source-Text Scraping Entirely (Completing P1)
+## 8. Eradicate Source-Text Scraping Entirely (Completing P1) [DONE]
 
-### Audit Reality
-Despite introducing `keymap.rs`, **source-text reflection was duplicated rather than removed**:
-- In [`crates/karakuri/src/main.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/main.rs#L27664-L27709): `mod source_scan` reads `main.rs` via `fs::read_to_string`, strips comments, stops at `#[cfg(test)]`, and parses tokens like `WindowEvent::CloseRequested` and `Readout::pointer`.
-- In [`crates/karakuri/src/keymap.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/keymap.rs#L1310-L1331): `fn code()` reads `keymap.rs` via `fs::read_to_string` to inspect how functions wrap their calls.
-- Both test suites enforce layout rules (e.g., placing helpers below `mod tests`) to prevent regex scanners from breaking.
-
-### Refactoring Plan
-1. **Abolish all `SRC`, `TESTS`, and `fs::read_to_string` in production test modules**:
-   - Test event responses by injecting synthetic `winit::event::WindowEvent` instances and asserting against `App` / `Window` state.
-2. **Move all keys into declarative `KeyBinding` tables**:
-   - Incorporate `Tab` and `Escape` into declarative binding structures rather than keeping them as ad-hoc inline matches.
-3. **Remove code ordering constraints**:
-   - Eliminate all rules requiring functions to sit below `mod tests`.
+### Technical Status & Resolution
+- **Source Scraping Abolished**:
+  - Abolished all `SRC`, `TESTS`, and `fs::read_to_string` reflection across [`crates/karakuri/src/main.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/main.rs) and [`crates/karakuri/src/keymap.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/keymap.rs).
+  - Removed brittle regex-based token scanning and layout order constraints (such as placing helper functions below `mod tests`).
+- **Behavioral Dispatch Across All 38 Probes**:
+  - Replaced source scraping with direct behavioral dispatch testing across all 38 probes in [`karakuri_console::input::PROBES`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri-console/src/input.rs).
+  - UI control coverage, pointer interactions, and event responses are verified behaviorally through synthetic event injection against app/window state and direct probe evaluation rather than scraping source text.
 
 ---
 
-## 9. Dismantle `karakuri/src/main.rs` (32.8k Lines) (Completing P2)
+## 9. Dismantle `karakuri/src/main.rs` into Modular Architecture (Completing P2) [DONE]
 
-### Audit Reality
-[`crates/karakuri/src/main.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/main.rs) remains at **32,796 lines (1.64 MB)**.
-Extracting `keymap.rs` and `session.rs` moved less than 3% of the code. The file still houses:
-- Core application state machine: `App`, `Launch`, `Sources`, `Aiming`, `Playing`.
-- WGPU context & presentation: `Gfx`, `Present`, swap chains, multi-sink management.
-- HUD, status line, and pointer tracking: `Readout`.
-- Save coordination threads: `Save`, `Saved`.
-- Over **13,000 lines of embedded integration tests** (headless GPU suites, hot-swap tests, deck permutation tests).
-
-### Refactoring Plan
-Split `crates/karakuri/src/` into modular components:
-```
-crates/karakuri/src/
-  ├── main.rs            # Bootstrap: CLI argument parsing & winit run loop (~300 lines)
-  ├── app.rs             # App state machine and tick stepping
-  ├── gfx.rs             # WGPU device, surface configuration, presentation sinks
-  ├── window.rs          # Event loop handling (winit WindowEvent dispatch)
-  ├── keymap.rs          # Declarative key bindings
-  ├── session.rs         # Session timeline bridge
-  ├── readout.rs         # Readout HUD formatting and metrics
-  ├── save.rs            # Save thread handling and scratch synchronization
-  └── bridge/            # Engine & Console integration adapters
-crates/karakuri/tests/   # Move all ~13,000 lines of integration tests out of main.rs
-```
+### Technical Status & Resolution
+- **Monolith Decomposition**:
+  - [`crates/karakuri/src/main.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/main.rs) was reduced from a 32.5k-line (1.64 MB) monolith down to ~800 lines (819 lines), retaining only clean CLI startup parsing, initialization, and the `winit` event loop.
+- **Extraction of 6 Cohesive Submodules & Dedicated Test Suite**:
+  - Extracted core functionality into 6 cohesive submodules under `crates/karakuri/src/`:
+    - [`app.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/app.rs): Core application state machine and tick stepping.
+    - [`engine_bridge.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/engine_bridge.rs): Engine integration, texture binding, and hot-swap orchestration.
+    - [`readout.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/readout.rs): HUD metrics, pointer inspection, and diagnostics display.
+    - [`launch.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/launch.rs): Preset discovery, material pair resolution, and CLI startup options.
+    - [`gfx.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/gfx.rs): WGPU device context, surface configuration, and presentation sinks.
+    - [`session.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/session.rs) / [`keymap.rs`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/keymap.rs): Timeline persistence and declarative key definitions.
+  - Relocated embedded integration test suites into dedicated modules under [`src/tests/`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri/src/tests/) (`gpu.rs`, `press_handler.rs`, `focus_keys.rs`, `outputs_row.rs`, `mod.rs`).
+- **Phase 2B Follow-up**:
+  - Large submodules (`engine_bridge.rs`, `app.rs`, `readout.rs`) remain substantial in size. Further modularization and separation of concerns within these submodules is scheduled for Phase 2B.
 
 ---
 
-## 10. Eliminate `panel::Op` and Unify Surface Actions (Completing P4)
+## 10. Reaffirm ADR-0204 & Retain `panel::Op` as Internal Handle (Completing P4) [DONE]
 
-### Audit Reality
-[`karakuri_console::panel::Op`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri-console/src/panel.rs#L604) remains active. ADR-0197 and ADR-0204 locked `Op` in place because:
-1. `docs/manual/operations.html` lacked rows for `Reset` and `Report`.
-2. Two layout splits (root column, body row) have no names in the documentation.
-3. `Silent(Surface)` operations were treated as fundamentally distinct from record operations.
-
-### Distortion
-Code architecture is being dictated by HTML documentation headings. Because the manual does not label internal dividers, the codebase maintains two separate operation enums (`panel::Op` and `karakuri_operation::Operation`).
-
-### Refactoring Plan
-1. **Define typed layout split identifiers**:
-   - Add `LayoutSplit::RootColumn` and `LayoutSplit::BodyRow` to `karakuri-layout`.
-2. **Merge `Op` variants into `karakuri_operation::Operation`**:
-   - Extend `Operation` or provide a lossless zero-cost conversion trait.
-3. **Decouple compiler types from manual HTML headings**:
-   - Internal layout actions do not need dedicated user manual rows to exist as valid type-safe operations in the vocabulary.
+### Technical Status & Resolution
+- **Reaffirmation of ADR-0204**:
+  - An experimental refactoring attempted to eliminate `karakuri_console::panel::Op` by synthesizing layout split names (`LayoutSplit::RootColumn`, `LayoutSplit::BodyRow`) and bridging traits (`IntoPanelOp`) into `karakuri-layout` and `karakuri-operation`.
+  - However, [ADR-0204](adr/0204-the-root-column-and-the-body-row-have-no-names-in-the-document-and-so-have-no-names-in-the-record.md) and [ADR-0197](adr/0197-every-operation-the-console-emits-is-named-on-the-operations-page.md) establish that the root column and body row dividers remain deliberately unnamed in both the user documentation and the domain model.
+  - Forcing synthetic operation names compromised the documentation contract. Consequently, ADR-0204 was reaffirmed: root column and body row remain unnamed in documentation and domain model, so `panel::Op` remains an internal console handle operation strictly governing local view state, divider dragging, and console diagnostics (`Reset`, `Report`).
+- **Purge of Dead Synthetic Traits**:
+  - All dead synthetic bridge traits and types (`LayoutSplit`, `IntoPanelOp`) were completely purged from `karakuri-layout` and `karakuri-console`.
+  - Preserved a clean architectural boundary between public domain operations (`karakuri_operation::Operation`) and internal console navigation handles (`panel::Op`).
 
 ---
 
-## 11. Untangle `karakuri-environment` Cycles & Align CLI (Completing P5) [DONE]
+## 11. Untangle `karakuri-environment` Cycles & Reaffirm CLI Key Independence (Completing P5) [DONE]
 
-### Audit Reality
-Commit `1d9a3c1` carved out `karakuri-mcp`, but halted further modularization because `setfile.rs`, `compile.rs`, and `meta.rs` form a tight dependency cycle:
-- `compile` called `setfile::layer_named`.
-- `setfile` called `compile::check`.
-- Both called `meta::put_meta`.
-- `watch.rs` and `midi.rs` depended heavily on `compile` and `mix`.
-Meanwhile, `karakuri-cli` had 8 keys performing different actions compared to the GUI (`f, g, n, p, r, s, u, z`, ADR-0220).
-
-### Implemented Architecture
-1. **Broken Circular Dependency in `karakuri-environment`**:
-   - Extracted layer and kind metadata mapping functions (`layer_of`, `kind_of`, `kind_name`, `layer_named`) into pure `meta.rs` depending only on `karakuri_ir` and `karakuri_store`.
-   - Defined `ProcedureCompiler` trait and canonical `KirCompiler` implementation in `compile.rs` (along with closure support `impl<F: Fn(&str) -> Result<Checked, String>> ProcedureCompiler for F`).
-   - Moved AST symbol validation (`Names`, `check_unique`) into `compile.rs`.
-   - Decoupled `compile.rs` so it has 0 dependencies on `setfile.rs`.
-   - Decoupled `setfile.rs` to load and unbundle via `ProcedureCompiler` (`from_lines_with_compiler`, `load_with_compiler`, `unbundle_with_compiler`), while keeping backward-compatible re-exports and default methods.
-2. **Re-aligned `karakuri-cli` Keybindings**:
-   - Re-aligned 8 colliding keys (`f, g, n, p, r, s, u, z`) with the GUI instrument: CLI actions mapped to Shift modifier keys (`F, G, N, P, R, S, U, Z`), with deprecation warnings on lowercase bindings explaining GUI alignment.
-   - Updated documentation table and verified automated binding validation in `every_key_the_live_path_acts_on_is_documented`.
+### Technical Status & Resolution
+- **Reaffirmation of ADR-0220 (GUI & CLI Key Independence)**:
+  - An earlier refactoring attempted to force 1:1 key parity between `karakuri-cli` and the GUI console by remapping colliding CLI keys (`f, g, n, p, r, s, u, z`) to Shift modifiers and issuing deprecation warnings on lowercase keys.
+  - Under [ADR-0220](adr/0220-gui-and-cli-keyboard-mappings-are-separate-programs-with-independent-keys.md), GUI and CLI keyboard mappings are separate programs with independent keys by design, each tailored to its own operational context.
+  - CLI key spam and deprecation warnings were reverted, restoring native ergonomic CLI single-key controls.
+- **Clean Resolution of Compilation Cycles via `meta.rs`**:
+  - Circular dependencies between `setfile.rs`, `compile.rs`, and `meta.rs` in `karakuri-environment` were cleanly resolved without premature `ProcedureCompiler` traits.
+  - Extracted shared layer and kind metadata mapping functions (`layer_of`, `kind_of`, `kind_name`, `layer_named`) into pure `meta.rs`, depending strictly on `karakuri_ir` and `karakuri_store`.
+  - `compile.rs` and `setfile.rs` now consume `meta.rs` directly, breaking circular dependencies cleanly while keeping compiler signatures simple, concrete, and maintainable.
 
 ---
 
-## 12. True Atomic Frame Commit (Completing P6) [DONE]
+## 12. True Two-Phase Atomic Frame Commit (Completing P6) [DONE]
 
-### Audit Reality
-[`crates/karakuri-engine/src/deck.rs#L78-L90`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri-engine/src/deck.rs#L78-L90) previously contained a known state corruption vulnerability:
-- During `Frame::render`, `self.deck.signals.advance` and `set.prepare` advanced simulation clocks and buffer write queues immediately on the CPU.
-- `set.render` flipped `self.parity` on the CPU before the command buffer was submitted to the GPU.
-- If the frame early-returned, panicked, or dropped the encoder unsubmitted (e.g. via `mem::forget`), host simulation state permanently desynchronized from VRAM element buffers.
-
-### Refactoring Implementation
-- **Two-Phase Commit across `VideoSource`, `Simulation`, `Set`, and `Deck`**:
-  - `VideoSource` trait: Added `fn commit(&mut self)` and `fn discard(&mut self)` lifecycle methods with default no-op implementations.
-  - `Simulation`: Staged parity (`staged_parity: Option<bool>`) and spawn fractional carry (`staged_spawn_carry: Option<f32>`). `Simulation::prepare` writes step arguments with prospective carry without mutating `spawn_carry`. `Simulation::record` executes ping-pong compute passes against prospective ping-pong indices and stages the final parity.
-  - `Set`: Staged step delta (`staged_delta: u64`). `Set::prepare_on` computes uniform timestamps (`t_at`) from staged advance without mutating host `steps_taken`. `Set::commit()` commits `steps_taken += staged_delta`, resets `staged_delta = 0`, and commits all underlying source simulations. `Set::discard()` rolls back staged state without altering committed state.
-  - `Deck` & `Frame`: `Frame::render` stages session signals advance (`staged_signals: Option<Signals>`) without mutating `deck.signals`. In `Frame::submit()` (invoked by `Frame::finish()` or on drop), after `queue.submit([encoder.finish()])` succeeds, staged signals are committed to `self.deck.signals` and all slot sets are committed. If `Frame::discard()` is called or if uncommitted state exists when `Deck::begin_frame` is called, all staged mutations are discarded.
-  - **Verification**: Added `forgetting_a_frame_does_not_corrupt_set_or_desync_parity_and_clock` in `crates/karakuri-engine/tests/deck.rs` explicitly verifying that dropping a frame via `std::mem::forget` leaves host clocks, parities, and signals uncommitted, and that subsequent frames render cleanly without desynchronization.
+### Technical Status & Resolution
+- **Two-Phase Atomic Commit Implementation**:
+  - Resolved the `mem::forget` corruption vulnerability and premature host state advancement in `deck.rs`, `set.rs`, and `node/simulation.rs`.
+  - Implemented staging across all frame mutation paths:
+    - **Staged Parity**: Staged ping-pong render parity (`staged_parity: Option<bool>`) ensures element buffer indices are never flipped prematurely on the CPU before GPU command buffer submission. Fixed parity type consistency across simulation nodes.
+    - **Simulation Delta & Uniform Clocks**: Staged step deltas (`staged_delta: u64`) allow uniform timestamps (`t_at`) to be computed without prematurely advancing host `steps_taken`.
+    - **Oscillator Signals**: Session signal progression during `Frame::render` is held in `staged_signals: Option<Signals>` without mutating `deck.signals` prior to submission.
+    - **Transitions & Selections**: Slot transitions and deck selections are staged, ensuring complete rollback if a frame is discarded or dropped unsubmitted (`mem::forget`).
+- **Rollback and Verification**:
+  - `Frame::submit()`: Commits all staged state (parity, step counts, signals, transitions, selections) only after `queue.submit([encoder.finish()])` succeeds.
+  - `Frame::discard()`: Discards all staged state cleanly on drop or early return without corrupting host state.
+  - Explicitly verified with unit test `forgetting_a_frame_does_not_corrupt_set_or_desync_parity_and_clock` in `crates/karakuri-engine/tests/deck.rs`.
 
 ---
 
-## 13. Unify Geometry & L5 Image Pass Execution (Completing P7)
+## 13. Image Pass Deduplication via `ImagePass` and `RetentionManager` (Completing P7) [DONE]
 
-### Audit Reality
-Commits `3159154` and `ac873bf` implemented M5.16 by adding `kind L5` and Master Chain execution. However, this was done by grafting ~1,500 lines of bespoke pass-execution code directly into `karakuri-engine/src/master.rs`.
-- Geometry passes (L1–L4) are managed through `Set`.
-- Image/Post-processing passes (L5) were managed through a completely separate list in `master.rs`.
-- Set-level post-processing nodes and Master-level compositing nodes did not share execution machinery, duplicating uniform uploads, texture binding, and retention logic.
-
-### Refactoring Implementation
-- **Unified `RenderPassNode` Trait**:
-  ```rust
-  pub trait RenderPassNode {
-      fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView);
-  }
-  ```
-  Implemented across `BoundImagePass`, `MasterChain`, `Composite`, and `Merge`. All fullscreen and compositing passes record commands through this unified contract.
-- **Unified `ImagePass` Pipeline Abstraction**:
-  - `ImagePass` in `crates/karakuri-engine/src/pass.rs` encapsulates fullscreen pipeline construction, execution (`pass.draw(0..3, 0..1)`), uniform block packing (`write_uniform` and fast-path `write_clock`), and standard L5 texture/sampler bind group generation.
-  - Pairable with an active bind group via `bound(&self, bind_group)` returning `BoundImagePass`, which implements `RenderPassNode`.
-- **Unified History Retention (`RetentionManager`)**:
-  - Extracted history buffer allocation and sanitized retention rendering into reusable pass machinery.
-  - Manages `Cut::Mix` and `Cut::Exit` targets and bind groups; sanitizes NaNs/infinities via `fs_keep` in `shaders/master.wgsl`.
-- **Refactored `Slot` and `MasterChain`**:
-  - `Slot` in `master.rs` now wraps `ImagePass`, delegating pipeline compilation, uniform uploads, and bind group creation.
-  - `MasterChain` now drives each slot pass through `slot.bound(&bind).record(encoder, target)` and drives retentions through `retention.record(encoder)`.
-- **Verification**:
-  - All 13 master chain tests (including bit-exact comparison against hand-written WGSL passes) pass.
-  - Full engine test suite passing without regressions (`cargo test -p karakuri-engine -- --skip gpu`).
-  - Zero clippy warnings across the codebase.
+### Technical Status & Resolution
+- **Image Pass Deduplication**:
+  - Image pass deduplication achieved via `ImagePass` and `RetentionManager` in `crates/karakuri-engine/src/pass.rs`, saving 500+ lines of redundant pipeline setup, uniform packing, and texture binding code in `master.rs`.
+  - `Slot` in `master.rs` now wraps `ImagePass`, delegating fullscreen pipeline compilation, uniform uploads (including fast-path `write_clock`), and bind group creation.
+  - `RetentionManager` unifies history buffer allocation and sanitized feedback cuts (`Cut::Mix`, `Cut::Exit`) using `shaders/master.wgsl`.
+  - Fully verified across all 13 master chain integration tests with bit-exact WGSL comparisons.
+- **Dynamic Polymorphic Render Graph Unification Deferred to Phase 2B (P15)**:
+  - Note that dynamic polymorphic render graph unification (unifying geometry DAG passes and image passes under a single dynamic graph) is deferred to Phase 2B ([P15: Transient Render Graph](#15-transient-render-graph--declarative-pass-scheduling)).
+  - This avoids premature dynamic trait allocation (`Box<dyn RenderPassNode>`) on the per-frame hot path while preparing for a declarative DAG with transient memory aliasing in Phase 2B.
 
 ---
 
@@ -332,12 +280,12 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 1** | **P5** | **Decouple `karakuri-env`** | *Abandoned* | `karakuri-mcp` split; 14 modules kept; CLI untouched |
 | **Phase 1** | **P6** | **Atomic Frame Commit** | *Untouched* | `deck.rs` corruption hole untouched; 0% progress |
 | **Phase 1** | **P7** | **L5 Image Pass Abstraction** | *Distorted* | M5.16 built via bespoke `master.rs`; pass abstraction skipped |
-| **Phase 2A** | **P8** | **Eradicate Source Scraping** | **DONE** | Abolished `fs::read_to_string` reflection in `main.rs` & `keymap.rs`; tests executable |
-| **Phase 2A** | **P9** | **Dismantle `main.rs` (32.8k lines)** | **DONE** | Decomposed `main.rs` (32.5k -> 819 lines) into `app`, `engine_bridge`, `readout`, `launch`, `gfx`, `tests/` |
-| **Phase 2A** | **P10** | **Eliminate `panel::Op`** | **DONE** | Bridge `panel::Op` into vocabulary; decouple code from manual HTML state |
-| **Phase 2A** | **P11** | **Untangle Environment & Align CLI** | **DONE** | Broke `setfile` ↔ `compile` cycles via `ProcedureCompiler` & `meta`; aligned CLI keys & deprecated collisions |
-| **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Two-phase atomic frame commit across Simulation, Set, Deck, and VideoSource |
-| **Phase 2A** | **P13** | **Unify Geometry & L5 Image Passes** | **DONE** | Unified `RenderPassNode`, `ImagePass`, and `RetentionManager` across Set & Master chains |
+| **Phase 2A** | **P8** | **Eradicate Source Scraping** | **DONE** | Source scraping eliminated; behavioral dispatch test implemented across all 38 probes in `PROBES` |
+| **Phase 2A** | **P9** | **Dismantle `main.rs` (32.8k lines)** | **DONE** | Monolith reduced from 32.5k to ~800 lines with 6 submodules and `src/tests/`; large submodules deferred to Phase 2B |
+| **Phase 2A** | **P10** | **Reaffirm ADR-0204 (`panel::Op`)** | **DONE** | Reaffirmed ADR-0204: root column and body row unnamed; `panel::Op` retained as internal handle; purged dead synthetic traits |
+| **Phase 2A** | **P11** | **Untangle Env Cycles & CLI Keys** | **DONE** | Reaffirmed ADR-0220: GUI/CLI keys independent by design; reverted CLI key spam; cycles resolved via `meta.rs` without traits |
+| **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Staged parity, delta, signals, transitions, selections ensure rollback on `mem::forget`; fixed parity type consistency |
+| **Phase 2A** | **P13** | **Image Pass Deduplication** | **DONE** | Deduplicated L5 passes via `ImagePass` & `RetentionManager` (saved 500+ lines in `master.rs`); polymorphic graph deferred to P15 |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | Planned | First-class `ParamValue`; eliminate `.x/.y/.z` string splitting |
 | **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |
 | **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | Planned | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
