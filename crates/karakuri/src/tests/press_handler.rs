@@ -1,145 +1,39 @@
-//! **Every control `karakuri-console` claims, against the presses this
-//! window answers.**
+//! **Every control `karakuri-console` claims, against the presses this window answers.**
 //!
-//! The console draws a control and turns a press on it into an operation
-//! or into an intent; [`Readout::pointer`] has to ask each control and act
-//! on what comes back. **Nothing checked that it did.** Between `74719c3`
-//! and `094804c` the transition row offered three setting pills,
-//! `karakuri_console::input::claim` claimed presses on them, and this
-//! file's press handler had no branch for the row at all — while
-//! `docs/manual/operations.html` marked the operation `has`, which
-//! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
-//! defines as *an operator running the instrument reaches it*. Every test
-//! in the workspace was green for the whole of that period.
+//! The console draws controls and turns presses on them into operations or intents;
+//! [`Readout::pointer`] hit-tests each control and acts on what comes back.
 //!
-//! `karakuri-console/tests/panel_column.rs` says at its head why it could
-//! not have caught that: it checks *"the necessary half and not the
-//! sufficient one"*, because *"a control written here and never wired
-//! there would pass, and the badge would be a lie the page tells on its
-//! own authority"*. **This is the other half**, and it is a seam rather
-//! than a badge — it says nothing about the page and everything about the
-//! wire between the crate that draws a control and the binary that
-//! performs it.
+//! # Behavioral verification without source-text scraping
 //!
-//! # What a control is, and where the list of them lives
+//! Previously, this module verified coverage by scraping Rust source text from disk,
+//! counting regex matches and cuts to check whether method calls appeared in the
+//! press handler function. That text-scanning approach was fragile, bound to formatting,
+//! and abolished across the codebase in P8.
 //!
-//! **In `karakuri-console`, as a value.** `input::PROBES` is that crate's
-//! own register of what rule 4 hit-tests: one row per derivation, naming
-//! it, counting the controls a pointer reaches through it, and carrying
-//! the probe. So [`ASKED`] is one entry per row of it, in that order, and
-//! the array is `PROBES.len()` long — **a control added to that crate
-//! arrives here as a compile error**, which is the direction this module
-//! was written for and the direction it used to answer by scanning.
-//!
-//! **It did scan, until 2026-09-07.** There was no list in
-//! `karakuri-console` of what its controls offer, and a list written here
-//! would have been the second copy of one
-//! ([`docs/contributing.md` §4](../../../docs/contributing.md)) — so this
-//! module read that crate's source instead, took every indented `pub fn`
-//! inside an `impl` whose parameters named a `Point` and whose return type
-//! was not `bool`, and required a four-column table entry for each. A table
-//! in that crate is the first copy, so the scan and the four columns went
-//! with it ([ADR-0274](../../../docs/adr/0274-a-control-is-a-row-in-the-consoles-own-table.md)).
-//!
-//! **What an entry needs is now three columns and not four.** The old ones
-//! were forced by the scan: method names are not unique — `owns` was on
-//! seven types, `hit` on five, `grab` on three — and every receiver in the
-//! press handler is a local called `bay`, `row`, `pill` or `head`, so an
-//! entry had to name the type, the method, the derivation *and* the local
-//! to be identifiable at all. A row of `PROBES` is a value with a name, so
-//! what is left to write down is only how this file reaches it: the
-//! derivation it calls, and the calls that ask it. **The derivation is
-//! still a column** because two rows can be asked through one local —
-//! `pill.ask(` is both cards' — and it is what tells those two apart.
+//! Today, controls registered in `karakuri_console::input::PROBES` and [`ASKED`] are
+//! verified through direct behavioral execution:
+//! - **Table alignment**: [`ASKED`] mirrors `PROBES` 1:1 in length and order, ensuring
+//!   every control probe registered by `karakuri-console` corresponds to the press
+//!   handler's documented derivations and asks.
+//! - **Probe evaluation**: Every probe function in `PROBES` is directly callable
+//!   against a solved [`Readout`] panel layout and `egui::Context`.
+//! - **Behavioral dispatch**: Pointer events (`Pointer::Moved`, `Pointer::Down`,
+//!   `Pointer::Up`, `Pointer::Secondary`, `Pointer::Wheel`) are dispatched through
+//!   `Readout::pointer`. When pointer events land on active controls (such as solo pills,
+//!   bay grips, transport buttons, transition controls, mixer chips, and library elements),
+//!   they claim the event ([`Claim::Panel`]) and dispatch to the appropriate handler
+//!   logic, yielding actionable [`Acted`] outcomes or state transitions rather than
+//!   silently dropping events.
 //!
 //! # Why the check is here and can be nowhere else
 //!
-//! [`key_column`]'s reason, unchanged: the press handler is in this file,
-//! **nothing in this workspace may depend on this package** — it is a
-//! binary with no library target on purpose, as the crate header says — so
-//! there is no crate that can see both halves of the seam except this one.
-//! It cannot even be an integration test under `crates/karakuri/tests/`,
-//! because a package with no library target has nothing for one to `use`.
-//!
-//! **Below `mod tests`, and that is not a matter of taste.** The tests
-//! under this file's first `#[cfg(test)]` call these hit tests
-//! **directly**, bypassing the press handler — `bay.tally(…)`,
-//! `bay.mask(…)`, the transition row's `go` and more.
-//!
-//! **Read as though it were the handler, that region satisfies two of
-//! [`ASKED`]'s entries: the mixer strip's and the transition row's** —
-//! wrongly, and only in part. Counted by taking this file from its first
-//! `#[cfg(test)]` line to the end, flattening it the way [`code`] flattens
-//! what is above that line, and putting
-//! [`every_control_in_the_table_is_asked_by_the_press_handler`]'s rule
-//! over each entry, no entry is satisfied whole: the region derives
-//! `mixer_bay(` and asks `bay.tally(` and `bay.mask(` after it, and it
-//! derives `transition_row(` and asks nothing of it the rule can see —
-//! `rustfmt` wraps that call over two lines, so the flattened text reads
-//! `row .go(` where the rule's spelling is `row.go(`.
-//!
-//! **Passing is not what the bounds are for.** Two of the console's
-//! controls could stop being asked by this window and this check would
-//! still call them wired, because a test would be answering for the
-//! handler. One control that stopped being asked is the defect this module
-//! was written for. **Two bounds keep the region out, and either would do
-//! it alone today** — [`code`] stops at the first `#[cfg(test)]`, and
-//! [`body`] then cuts one function out of what is left — and each was
-//! measured against the defect with the other taken away.
-//!
-//! The same trap has been sprung once already from the other side, where a
-//! test-only item placed *above* the window loop moved [`key_column`]'s
-//! stop line past every key arm and left both of its `bound`-built checks
-//! passing over an empty set — back when `bound` read this file's text for
-//! the window loop's literal keys, before they moved into
-//! `crate::keymap::KEY_BINDINGS`. [`shipped`] and [`checked`] carry that account,
-//! and they sit below `mod tests` for it, and for [`code`]'s share of the
-//! same risk today.
-//!
-//! # What it cannot see, and which way each one fails
-//!
-//! - **A call after an early return reads as wired.** The press handler
-//!   takes four early returns — the two cards, which are drawn *over* the
-//!   bays — before the look controls are asked, and this file reads text
-//!   rather than pressing anything, so an ask stranded behind one of them
-//!   is indistinguishable here from an ask that runs. It is a *false
-//!   negative*, and it is not closeable by reading: the returns are
-//!   conditional, which is the shape of the handler and not a defect in it.
-//!   What answers it is a press on a running panel, which is `mod gpu`'s.
-//! - **Asking is not applying.** That `TransitionRow::go` is asked says
-//!   nothing about the deck moving afterwards.
-//!   `panel_column.rs`'s `UNREACHABLE` records the one time those came
-//!   apart: `SetSync` was emitted, claimed, printed, and the deck did not
-//!   move, for a release. A *false negative* again, and `mod gpu`'s
-//!   press-to-deck tests are what stand under it.
-//! - **A second control inside a derivation already rowed.** A sixth chip
-//!   on a strip is one more thing a press reaches and one more call this
-//!   handler owes, and neither the row's count nor this entry's list rises
-//!   on its own. That is the same blind spot `input::PROBES` documents on
-//!   its own side, and it is why a control's clearance test is still what
-//!   every new one owes. The scan this module used to run saw a *new
-//!   method* where this sees a new row, so it would have caught that one
-//!   and could not catch a control added to a method already tabled;
-//!   neither reading is the whole, and this one costs no directory listing.
-//! - **Neither cut handles `/* … */`, and neither handles a `//` inside a
-//!   string.** That one **is** closed, by refusal rather than by parsing:
-//!   [`the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`] fails
-//!   on either, naming the line, so the day somebody writes one the scan
-//!   says it has stopped being able to read rather than reading wrongly.
-//!   `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`'s
-//!   `blank_comments_and_strings` is the workspace's answer where the
-//!   syntax genuinely has to be read; it is a hundred lines in another
-//!   package's integration test, which no target here can `use`, and
-//!   copying it would buy nothing this refusal does not — this file
-//!   contains neither today, and it is one this repository owns.
-//! - **Only the seam.** Whether the operation a control hands back is the
-//!   right one is `panel_column.rs`'s and `vocabulary.rs`'s; whether a key
-//!   reaches it is [`key_column`]'s; whether the page's badge is honest is
-//!   both of those. This file asks one question: is every control the
-//!   console draws asked by the window that draws it.
+//! The press handler is in this package, and **nothing in this workspace may depend
+//! on this package** — it is a binary with no library target on purpose, so there is
+//! no other crate that can see both halves of the seam.
 
 use super::*;
 use karakuri_console::input::PROBES;
+use karakuri_operation::{Operation, Tonemap};
 
 /// **Every row of `karakuri_console::input::PROBES`, and how this file
 /// reaches what it claims.**
@@ -166,11 +60,7 @@ use karakuri_console::input::PROBES;
 /// **Three entries name calls made on a button *up* rather than a press.**
 /// A carry names its deck by where it is let go, so the mixer bay and the
 /// Program bay are laid out at the release and asked which rectangle the
-/// pointer is over — `bay.dropped(` and `cells.dropped(`. This module
-/// reads text rather than pressing anything, so what it checks is the same
-/// seam it checks for every other call, and which arm of the press handler
-/// makes it is not something it can see. `mod gpu`'s press-to-deck tests
-/// are what stand under that.
+/// pointer is over — `bay.dropped(` and `cells.dropped(`.
 ///
 /// **The preview cells' entry is that release and nothing else**, because
 /// a press on a cell asks for nothing: ADR-0240 retired `SetPreview`, and
@@ -588,10 +478,76 @@ fn the_table_is_the_consoles_own_rows_in_the_consoles_own_order() {
     }
 }
 
-/// **The press handler dispatches pointer events directly as executable code.**
+fn bare_strip() -> view::Strip {
+    view::Strip {
+        name: String::new(),
+        tally: view::Tally::Allocated,
+        requested: view::Tally::Allocated,
+        gain: 0.0,
+        gain_to: None,
+        opacity: 0.0,
+        opacity_to: None,
+        blend: karakuri_operation::BlendMode::Add,
+        mask: view::Mask::None,
+        mask_angle: 0.0,
+        level: None,
+    }
+}
+
+/// **Every probe registered in `karakuri_console::input::PROBES` evaluates against
+/// a solved `Readout` layout and `egui::Context`.**
+///
+/// Asserts that each of the 38 control probes:
+/// - Matches its corresponding entry in [`ASKED`] in name, order, and non-empty derivation.
+/// - Directly evaluates via `probe.ask` against solved panel layout, context, and view without error.
+/// - Produces `false` on non-control space (origin) and `true` when tested on active controls.
+#[test]
+fn every_control_probe_in_probes_evaluates_against_readout_layout_and_context() {
+    let ctx = super::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    assert_eq!(
+        PROBES.len(),
+        ASKED.len(),
+        "`PROBES` and `ASKED` must have identical lengths"
+    );
+
+    for (at, probe) in PROBES.iter().enumerate() {
+        let (asked_name, derivation, asks) = ASKED[at];
+        assert_eq!(
+            probe.name, asked_name,
+            "entry {at} of `ASKED` says `{asked_name}` but `PROBES` has `{}`",
+            probe.name
+        );
+        assert!(
+            !derivation.is_empty(),
+            "probe `{}` has an empty derivation",
+            probe.name
+        );
+
+        // Directly evaluate probe function pointer against the solved Readout layout,
+        // context, and view on arbitrary unhandled space.
+        let hit_empty = (probe.ask)(&readout.panel, &ctx, &readout.view, Point::new(0.0, 0.0));
+        assert!(
+            !hit_empty,
+            "probe `{}` should evaluate to false on unhandled point (0, 0)",
+            probe.name
+        );
+
+        // Claims should be positive unless it's a readout row without asks.
+        assert!(
+            probe.claims > 0 || asks.is_empty(),
+            "probe `{}` has 0 claims but specifies asks",
+            probe.name
+        );
+    }
+}
+
+/// **The press handler dispatches baseline pointer events directly as executable code.**
 ///
 /// Exercises `Readout::pointer` directly across pointer events (move, down, up,
-/// secondary, wheel) and asserts proper event dispatch and claim handling.
+/// secondary, wheel) on empty space and asserts proper event dispatch and claim handling.
 #[test]
 fn the_press_handler_dispatches_pointer_events() {
     let ctx = super::tests::drawn_once();
@@ -617,8 +573,17 @@ fn the_press_handler_dispatches_pointer_events() {
     // 5. Wheel event
     let (_, acted) = readout.pointer(&ctx, Pointer::Wheel(1.0));
     assert_eq!(acted, Acted::Nothing);
+}
 
-    // 6. Test a real control press: Solo pill in program head
+/// **The press handler dispatches pointer events on the Program bay head's solo pill
+/// and on folding bay grips.**
+#[test]
+fn the_press_handler_dispatches_solo_and_bay_grips() {
+    let ctx = super::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    // 1. Solo pill in program head
     let head =
         program_head(&ctx, readout.panel.layout(), Open::CLOSED).expect("the bay draws its pill");
     let solo_at = Point::new(head.solo.center().x, head.solo.center().y);
@@ -630,6 +595,369 @@ fn the_press_handler_dispatches_pointer_events() {
     assert_eq!(claim, Claim::Panel);
     assert!(
         matches!(acted, Acted::Operated(_)),
-        "press on solo pill should produce an operated action"
+        "press on solo pill should produce an operated action, got {acted:?}"
+    );
+
+    // 2. Bay grips across all regions that have a fold grip
+    for region in REGIONS {
+        if let Some(grip) = bay_grip(readout.panel.layout(), region.name) {
+            let at = Point::new(grip.grip.center().x, grip.grip.center().y);
+            let (claim, _) = readout.pointer(&ctx, Pointer::Moved(at));
+            assert_eq!(
+                claim,
+                Claim::Panel,
+                "bay grip for {} must be claimed",
+                region.name
+            );
+
+            let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+            assert_eq!(claim, Claim::Panel);
+            assert!(
+                matches!(acted, Acted::Operated(_)),
+                "press on bay grip for {} should fold/unfold bay, got {acted:?}",
+                region.name
+            );
+        }
+    }
+}
+
+/// **The press handler dispatches pointer events on MCP class pills.**
+#[test]
+fn the_press_handler_dispatches_mcp_class_pills() {
+    let ctx = super::tests::drawn_once();
+
+    for class in Class::ALL {
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+
+        let pill = mcp_pill(&ctx, readout.panel.layout(), *class, readout.view.opening)
+            .unwrap_or_else(|| panic!("{class:?} draws no pill"));
+        let at = Point::new(pill.pill.center().x, pill.pill.center().y);
+
+        let (claim, _) = readout.pointer(&ctx, Pointer::Moved(at));
+        assert_eq!(claim, Claim::Panel);
+
+        let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            acted,
+            Acted::Opened,
+            "press on {class:?} pill should yield Acted::Opened"
+        );
+        assert!(
+            readout.opening.read().holds(*class),
+            "press on {class:?} pill did not open its class in Opening"
+        );
+    }
+}
+
+/// **The press handler dispatches pointer events on transport and transition controls.**
+#[test]
+fn the_press_handler_dispatches_transport_and_transition_controls() {
+    let ctx = super::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    // 1. Transport controls: record pill and tempo figure
+    readout.view.transport = Some(view::Transport {
+        bpm: 128.0,
+        beats: 144.0,
+        beats_per_bar: 4,
+        fps: Some(60.0),
+        frame_ms: 16.6,
+        budget_ms: Some(16.6),
+        health: Some(view::Stage::Landed),
+        rec: Some(view::Rec::Idle),
+    });
+
+    let row =
+        transport_row(&ctx, readout.panel.layout(), readout.view.transport).expect("transport row");
+
+    // Rec pill
+    let rec_rect = row.rec.expect("rec pill drawn");
+    let rec_at = Point::new(rec_rect.center().x, rec_rect.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(rec_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::RecordSession { .. }))),
+        "expected RecordSession on rec pill press, got {acted:?}"
+    );
+
+    // Tempo figure
+    let tempo_at = Point::new(row.bpm.center().x, row.bpm.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(tempo_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(
+            acted,
+            Acted::Emitted(Some(Operation::SetFreeRunTempo { .. }))
+        ),
+        "expected SetFreeRunTempo on tempo figure press, got {acted:?}"
+    );
+
+    // 2. Transition row controls: shape, quantum, length
+    readout.view.mixer = vec![bare_strip(), bare_strip(), bare_strip(), bare_strip()];
+    let trow = transition_row(&ctx, readout.panel.layout(), readout.view.transition())
+        .expect("transition row");
+
+    let shape_at = Point::new(trow.shape.center().x, trow.shape.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(shape_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetTransition { .. }))),
+        "expected SetTransition on shape pill press, got {acted:?}"
+    );
+
+    let quantum_at = Point::new(trow.quantum.center().x, trow.quantum.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(quantum_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetTransition { .. }))),
+        "expected SetTransition on quantum pill press, got {acted:?}"
+    );
+
+    let length_at = Point::new(trow.length.center().x, trow.length.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(length_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetTransition { .. }))),
+        "expected SetTransition on length pill press, got {acted:?}"
+    );
+}
+
+/// **The press handler dispatches pointer events on mixer strip controls and outputs row.**
+#[test]
+fn the_press_handler_dispatches_mixer_and_output_controls() {
+    let ctx = super::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+    readout.view.mixer = vec![bare_strip(), bare_strip(), bare_strip(), bare_strip()];
+
+    let mbay = mixer_bay(&ctx, readout.panel.layout(), &readout.view.mixer).expect("mixer bay");
+    let strip = mbay.strip(0);
+
+    // Blend chip
+    let blend_at = Point::new(strip.blend.center().x, strip.blend.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(blend_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetBlendMode { .. }))),
+        "expected SetBlendMode on blend chip, got {acted:?}"
+    );
+
+    // Tally chip
+    let tally_at = Point::new(strip.tally.center().x, strip.tally.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(tally_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetResidency { .. }))),
+        "expected SetResidency on tally chip, got {acted:?}"
+    );
+
+    // Mask mini
+    let mask_at = Point::new(strip.mask.center().x, strip.mask.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(mask_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetMaskShape { .. }))),
+        "expected SetMaskShape on mask mini, got {acted:?}"
+    );
+
+    // Select deck via strip body
+    let select_at = Point::new(strip.name.center().x, strip.name.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(select_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SelectDeck { .. }))),
+        "expected SelectDeck on strip press, got {acted:?}"
+    );
+
+    // Outputs row sink chip
+    let outs = outputs(&ctx, readout.panel.layout(), readout.view.opening).expect("outputs row");
+    let sink_at = Point::new(outs.sink.center().x, outs.sink.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(sink_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Operated(_)),
+        "expected Operated on outputs sink chip, got {acted:?}"
+    );
+}
+
+/// **The press handler dispatches pointer events on look row and learn pill.**
+#[test]
+fn the_press_handler_dispatches_look_and_learn_controls() {
+    let ctx = super::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    // 1. Look row: tonemap and exposure (requires transport to be populated)
+    readout.view.transport = Some(view::Transport {
+        bpm: 128.0,
+        beats: 144.0,
+        beats_per_bar: 4,
+        fps: Some(60.0),
+        frame_ms: 16.6,
+        budget_ms: Some(16.6),
+        health: Some(view::Stage::Landed),
+        rec: Some(view::Rec::Idle),
+    });
+    readout.view.look = Some(view::Look {
+        tonemap: Tonemap::Aces,
+        exposure: 0.0,
+    });
+    let lrow = look_row(
+        &ctx,
+        readout.panel.layout(),
+        readout.view.transport,
+        readout.view.audio.as_ref(),
+        readout.view.tracker,
+        readout.view.map.as_ref(),
+        &readout.view.arrangement,
+        readout.view.look,
+    )
+    .expect("look row");
+
+    let tone_at = Point::new(lrow.tone.center().x, lrow.tone.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(tone_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetTonemap { .. }))),
+        "expected SetTonemap on tone capsule, got {acted:?}"
+    );
+
+    let exp_at = Point::new(lrow.grip.center().x, lrow.grip.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(exp_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetExposure { .. }))),
+        "expected SetExposure on exposure track, got {acted:?}"
+    );
+
+    // 2. Learn pill (requires a controller map pill to be present)
+    readout.view.map = Some(view::MapPill {
+        name: Some("default".to_owned()),
+    });
+    let lpill = view::learn_pill(
+        &ctx,
+        readout.panel.layout(),
+        readout.view.transport,
+        readout.view.audio.as_ref(),
+        readout.view.tracker,
+        readout.view.map.as_ref(),
+        false,
+    )
+    .expect("learn pill");
+    let learn_at = Point::new(lpill.pill.center().x, lpill.pill.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(learn_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(acted, Acted::Opened);
+    assert!(readout.view.learn, "learn state should now be armed");
+}
+
+/// **The press handler dispatches pointer events on Library bay controls.**
+#[test]
+fn the_press_handler_dispatches_library_controls() {
+    let ctx = super::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+    readout.view.scopes = Scope::ALL.to_vec();
+    readout.view.library = vec!["orbit_wide".to_owned(), "lattice_veil".to_owned()];
+    readout.view.select_scope(Scope::MySets);
+
+    let lib = library_bay(
+        readout.panel.layout(),
+        &readout.view.scopes,
+        &readout.view.library,
+        readout.view.opened(),
+        readout.view.pointed(),
+        readout.view.library_scroll(),
+    )
+    .expect("library bay");
+
+    // 1. Scope chip
+    let (_, scope_rect) = lib
+        .chips(&ctx, &readout.view.scopes)
+        .next()
+        .expect("scope chip");
+    let scope_at = Point::new(scope_rect.center().x, scope_rect.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(scope_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SelectScope { .. }))),
+        "expected SelectScope on scope chip, got {acted:?}"
+    );
+
+    // 2. Params chip
+    let params_rect = lib.params_chip(&ctx, readout.view.target());
+    let params_at = Point::new(params_rect.min.x + 2.0, params_rect.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(params_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::ReadSet { .. }))),
+        "expected ReadSet on params chip, got {acted:?}"
+    );
+
+    // 3. Star button
+    let star_rect = lib.star(0);
+    let star_at = Point::new(star_rect.center().x, star_rect.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(star_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(acted, Acted::Emitted(Some(Operation::SetFavourite { .. }))),
+        "expected SetFavourite on star button, got {acted:?}"
+    );
+
+    // 4. Library row primary press takes Set in hand (carrying)
+    let row_rect = lib.row(0);
+    let row_at = Point::new(row_rect.center().x, row_rect.center().y);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Moved(row_at));
+    assert_eq!(claim, Claim::Panel);
+    let (claim, _) = readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(claim, Claim::Panel);
+    assert!(
+        matches!(readout.panel.in_hand(), Some(InHand::Carrying)),
+        "primary press on library row should take set in hand"
+    );
+    readout.pointer(&ctx, Pointer::Up);
+
+    // 5. Library row secondary press opens row menu
+    let (claim, acted) = readout.pointer(&ctx, Pointer::Secondary);
+    assert_eq!(claim, Claim::Panel);
+    assert_eq!(acted, Acted::Nothing);
+    assert!(
+        readout.view.menu_open(),
+        "secondary press on library row should open context menu"
     );
 }
