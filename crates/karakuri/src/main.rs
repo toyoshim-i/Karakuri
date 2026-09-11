@@ -376,7 +376,7 @@ use karakuri_operation::{
     BeatSource, BlendMode, GridScale, Operation, Output, SetTransfer, Undecided,
 };
 use karakuri_operation_record::{written, Current, Written};
-use karakuri_store::record::Record;
+use karakuri_store::record::{DeckSlot, Record};
 use karakuri_store::store::Store;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
@@ -6803,8 +6803,18 @@ fn selected_renderer(inputs: &[karakuri_engine::mix::Input]) -> Option<u32> {
 /// Whether this deck holds `slot`. The companion of
 /// [`karakuri_environment::no_such_slot`], which is the sentence it is refused
 /// in.
+///
+/// **A raw `usize` in and a raw `usize` checked**, on [`held`]'s own terms
+/// elsewhere in this file: the callers here (`Keeping::save_set`'s and
+/// `Keeping::keep_procedure`'s slot arguments, an MCP request's own number)
+/// have no address yet to hand a [`DeckSlot`] — only a number to validate
+/// before one can be made. It checks through [`DeckSlot::new`] rather than
+/// `slot < slot_count` again, which is the same question [`held`] and
+/// `karakuri-cli`'s own `slot_in_range` answer.
 fn slot_in_range(slot: usize, slot_count: usize) -> bool {
-    slot < slot_count
+    u8::try_from(slot)
+        .ok()
+        .is_some_and(|slot| DeckSlot::new(slot, slot_count).is_some())
 }
 
 /// **One live save, from the frame that asked for it to the file on disk.**
@@ -12089,7 +12099,7 @@ fn offset_key(step: Step, from: f32) -> f32 {
 /// a destination and the record writes it afterwards, and a guard on only the
 /// second of the two would be a read that panicked on its way to a refusal.
 fn held(deck: &Deck, slot: u8) -> Option<usize> {
-    (usize::from(slot) < deck.slot_count()).then_some(usize::from(slot))
+    DeckSlot::new(slot, deck.slot_count()).map(|slot| slot.index())
 }
 
 /// **The engine's look, as the console reads it** — [`blend_mode`]'s function
@@ -13669,7 +13679,7 @@ fn apply(
     // refusal. The argument for refusing at all is at that function.
     match *record {
         Record::Gain { slot, value } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             deck.set_gain(slot, value);
             Some(format!(
                 "  fader: deck {} trim -> SetGain {{ deck: {slot}, gain: {value:.3} }} \
@@ -13679,7 +13689,7 @@ fn apply(
             ))
         }
         Record::Opacity { slot, value } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             deck.set_opacity(slot, value);
             Some(format!(
                 "  fader: deck {} fader -> SetOpacity {{ deck: {slot}, opacity: {value:.3} }} \
@@ -13697,7 +13707,7 @@ fn apply(
         // only ever emits one of `BlendMode::ALL`, so this is the guard rather
         // than the message.
         Record::Blend { slot, ref mode } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             let blend = Blend::from_name(mode)?;
             deck.set_blend(slot, blend);
             Some(format!(
@@ -13719,7 +13729,7 @@ fn apply(
         // it. The report is dropped here rather than printed: the line below
         // says what the deck ended up at, which is the half this window shows.
         Record::Residency { slot, ref level } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             let residency = mix::parse_residency(level)?;
             deck.set_residency(slot, residency);
             deck.govern();
@@ -13758,7 +13768,7 @@ fn apply(
             position,
             softness,
         } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             let shape = MaskKind::from_name(kind)?;
             deck.set_mask(slot, Mask::new(shape, angle, position, softness));
             Some(format!(
@@ -13838,7 +13848,7 @@ fn apply(
             beats,
             ref curve,
         } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             let control = Control::from_name(control)?;
             let curve = karakuri_engine::binding::Curve::parse(curve)?;
             let from = match control {
@@ -14110,7 +14120,7 @@ fn apply(
             anchor_bpm,
             scrub_beats,
         } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             let mode = EngineSync::from_name(sync)?;
             deck.set_transport(slot, mode, anchor_bpm, scrub_beats)
                 .ok()?;
@@ -14145,7 +14155,7 @@ fn apply(
             renderer,
             start,
         } => {
-            let slot = held(deck, slot)?;
+            let slot = held(deck, slot.0)?;
             deck.schedule_selection(Selection::new(slot, renderer as usize, start));
             Some(format!(
                 "  renderer: deck {} -> SelectRenderer {{ renderer: {renderer} }} -> \
@@ -26116,7 +26126,7 @@ mod tests {
             // What `mix::gain_record(2, 0.75)` wrote, before ADR-0194 deleted
             // it in favour of this conversion.
             Record::Gain {
-                slot: 2,
+                slot: DeckSlot(2),
                 value: 0.75
             }
         );
@@ -26127,7 +26137,7 @@ mod tests {
             }),
             // `mix::opacity_record(0, 0.25)`.
             Record::Opacity {
-                slot: 0,
+                slot: DeckSlot(0),
                 value: 0.25
             }
         );
@@ -26141,7 +26151,7 @@ mod tests {
                 only_record(&Operation::SetBlendMode { deck, blend }),
                 // `mix::blend_record(deck, blend)`.
                 Record::Blend {
-                    slot: deck,
+                    slot: DeckSlot(deck),
                     mode: blend.name().to_owned(),
                 },
                 "`{}` did not become the record `mix::blend_record` writes",
@@ -26177,7 +26187,7 @@ mod tests {
                 only_record(&Operation::SetResidency { deck, residency }),
                 // `mix::residency_record(deck, residency)`.
                 Record::Residency {
-                    slot: deck,
+                    slot: DeckSlot(deck),
                     level: level.to_owned(),
                 },
                 "{residency:?} did not become the record `mix::residency_record` writes"
@@ -26505,7 +26515,7 @@ mod tests {
         assert_eq!(
             written(&scrub, &current),
             Written::Records(vec![Record::Transport {
-                slot: 1,
+                slot: DeckSlot(1),
                 sync: "beat".to_owned(),
                 anchor_bpm: 128.0,
                 scrub_beats: -1.25,
@@ -26552,7 +26562,7 @@ mod tests {
         assert_eq!(
             written(&set, &engaged),
             Written::Records(vec![Record::Transport {
-                slot: 1,
+                slot: DeckSlot(1),
                 sync: "beat".to_owned(),
                 anchor_bpm: 126.0,
                 scrub_beats: 0.0,
@@ -31675,7 +31685,7 @@ mod gpu {
         );
         assert!(
             records.contains(&Record::Transition {
-                slot: over as u8,
+                slot: DeckSlot(over as u8),
                 control: "mask".to_owned(),
                 to: 1.0,
                 start,
@@ -31699,7 +31709,7 @@ mod gpu {
         // puts the front at 0, which is what makes the move a wipe.
         assert!(
             records.contains(&Record::Mask {
-                slot: over as u8,
+                slot: DeckSlot(over as u8),
                 kind: "radial".to_owned(),
                 angle: 0.0,
                 position: 0.0,
@@ -31755,7 +31765,7 @@ mod gpu {
                 &reading(&front, &engine.deck, &engine.look, &engine.chain, settings)
             ),
             Written::Records(vec![Record::Mask {
-                slot: over as u8,
+                slot: DeckSlot(over as u8),
                 kind: wipe_kind(kind).name().to_string(),
                 angle,
                 position: 0.5,
@@ -31869,7 +31879,7 @@ mod gpu {
         assert_eq!(
             record,
             Record::Residency {
-                slot: ASKED_TO_PRIME as u8,
+                slot: DeckSlot(ASKED_TO_PRIME as u8),
                 level: "allocated".to_owned(),
             }
         );
@@ -31940,7 +31950,7 @@ mod gpu {
         // would draw a primed deck the governor never admitted, which is
         // ADR-0191 read forwards.
         let again = Record::Residency {
-            slot: ASKED_TO_PRIME as u8,
+            slot: DeckSlot(ASKED_TO_PRIME as u8),
             level: "priming".to_owned(),
         };
         assert!(apply(
@@ -32093,7 +32103,7 @@ mod gpu {
         assert_eq!(
             records.as_slice(),
             [Record::Mask {
-                slot: ON_AIR as u8,
+                slot: DeckSlot(ON_AIR as u8),
                 kind: "radial".to_owned(),
                 angle: ANGLE,
                 position: FRONT,

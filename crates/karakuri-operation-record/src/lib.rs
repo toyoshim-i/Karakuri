@@ -137,7 +137,7 @@
 //! clamped would be a second opinion about a range the surface already has.
 
 use karakuri_operation::Operation;
-use karakuri_store::record::Record;
+use karakuri_store::record::{DeckSlot, Record};
 
 /// **The output look that is running**, which is what
 /// [`Operation::SetTonemap`] and [`Operation::SetExposure`] each need the
@@ -869,18 +869,18 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // where a console can reach them; the seventh, an authority, never had
         // one anywhere, and nor did the eighth.
         Operation::SetGain { deck, gain } => one(Record::Gain {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             value: *gain,
         }),
         Operation::SetOpacity { deck, opacity } => one(Record::Opacity {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             value: *opacity,
         }),
         // `Record::Blend` carries the mode as a `String` — *"what a mode is
         // allowed to be is the engine's to say"* — so this is where a named
         // destination becomes a wire name.
         Operation::SetBlendMode { deck, blend } => one(Record::Blend {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             mode: blend.name().to_string(),
         }),
         // **The request, never the effective level.** The governor recomputes
@@ -888,7 +888,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // running, which is why only the request is an operation and only the
         // request is a record.
         Operation::SetResidency { deck, residency } => one(Record::Residency {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             level: residency.name().to_string(),
         }),
         // **One value across, and it is the arm that says the master out is
@@ -919,7 +919,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             node,
             authority,
         } => one(Record::Authority {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             at: karakuri_store::record::NodeAddress {
                 layer: store_layer(node.layer),
                 index: node.index,
@@ -956,7 +956,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // already: `written` answers a `Record::Select` for a renderer the Set
         // may no longer have, and the applier is what says so.
         Operation::WriteParam { deck, param, value } => one(Record::Ride {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             at: param.node.map(|node| karakuri_store::record::NodeAddress {
                 layer: store_layer(node.layer),
                 index: node.index,
@@ -995,7 +995,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             curve,
             range,
         } => one(Record::Source {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             layer: store_layer(param.layer),
             index: param.index,
             key: param.key.clone(),
@@ -1020,7 +1020,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // the absence — P-0084's blend writes the param's own value when
         // nothing is attached.
         Operation::TakeParamBack { deck, param } => one(Record::Source {
-            slot: *deck,
+            slot: DeckSlot(*deck),
             layer: store_layer(param.layer),
             index: param.index,
             key: param.key.clone(),
@@ -1110,7 +1110,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`.
         Operation::SetMaskShape { deck, kind, angle } => match current.mask {
             Some(mask) => one(Record::Mask {
-                slot: *deck,
+                slot: DeckSlot(*deck),
                 kind: kind.name().to_string(),
                 angle: *angle,
                 position: mask.position,
@@ -1120,7 +1120,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         },
         Operation::SetMaskPosition { deck, position } => match current.mask {
             Some(mask) => one(Record::Mask {
-                slot: *deck,
+                slot: DeckSlot(*deck),
                 kind: mask.kind.name().to_string(),
                 angle: mask.angle,
                 position: *position,
@@ -1134,7 +1134,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // needs a reading where `SetGain` does not.
         Operation::ScrubDeck { deck, beats } => match current.transport {
             Some(transport) => one(Record::Transport {
-                slot: *deck,
+                slot: DeckSlot(*deck),
                 sync: transport.sync.name().to_string(),
                 anchor_bpm: transport.anchor_bpm,
                 scrub_beats: transport.scrub_beats + *beats,
@@ -1165,7 +1165,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // the replay is running on.
         Operation::SetSync { deck, sync } => match current.tempo {
             Some(bpm) => one(Record::Transport {
-                slot: *deck,
+                slot: DeckSlot(*deck),
                 sync: sync.name().to_string(),
                 anchor_bpm: bpm,
                 scrub_beats: 0.0,
@@ -1222,11 +1222,11 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         Operation::Crossfade { from, to } => match current.transition {
             Some(transition) => Written::Records(vec![
                 Record::Opacity {
-                    slot: *to,
+                    slot: DeckSlot(*to),
                     value: 0.0,
                 },
                 Record::Residency {
-                    slot: *to,
+                    slot: DeckSlot(*to),
                     level: karakuri_operation::Residency::Live.name().to_string(),
                 },
                 fade(*from, 0.0, transition),
@@ -1243,7 +1243,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // it.
         Operation::SelectRenderer { deck, renderer } => match current.transition {
             Some(transition) => one(Record::Select {
-                slot: *deck,
+                slot: DeckSlot(*deck),
                 renderer: *renderer,
                 start: transition.start,
             }),
@@ -1328,38 +1328,38 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
                 (Some(transition), Some(mask), Some(mix)) => {
                     let mut records = vec![
                         Record::Mask {
-                            slot: *to,
+                            slot: DeckSlot(*to),
                             kind: transition.wipe_kind.name().to_string(),
                             angle: transition.wipe_angle,
                             position: mask.position,
                             softness: mask.softness,
                         },
                         Record::Mask {
-                            slot: *to,
+                            slot: DeckSlot(*to),
                             kind: transition.wipe_kind.name().to_string(),
                             angle: transition.wipe_angle,
                             position: 0.0,
                             softness: mask.softness,
                         },
                         Record::Opacity {
-                            slot: *to,
+                            slot: DeckSlot(*to),
                             value: 1.0,
                         },
                     ];
                     if mix.blend == karakuri_operation::BlendMode::Add {
                         records.push(Record::Blend {
-                            slot: *to,
+                            slot: DeckSlot(*to),
                             mode: karakuri_operation::BlendMode::Over.name().to_string(),
                         });
                     }
                     if mix.residency != karakuri_operation::Residency::Live {
                         records.push(Record::Residency {
-                            slot: *to,
+                            slot: DeckSlot(*to),
                             level: karakuri_operation::Residency::Live.name().to_string(),
                         });
                     }
                     records.push(Record::Transition {
-                        slot: *to,
+                        slot: DeckSlot(*to),
                         control: MASK.to_string(),
                         to: 1.0,
                         start: transition.start,
@@ -1769,7 +1769,7 @@ fn one(record: Record) -> Written {
 /// is exactly the drift this crate exists to end.
 fn fade(slot: u8, to: f32, transition: Transition) -> Record {
     Record::Transition {
-        slot,
+        slot: DeckSlot(slot),
         control: OPACITY.to_string(),
         to,
         start: transition.start,
@@ -2248,7 +2248,7 @@ mod tests {
         assert_eq!(
             records(written),
             vec![Record::Mask {
-                slot: 2,
+                slot: DeckSlot(2),
                 kind: "linear".to_string(),
                 angle: 0.0,
                 position: 0.4,
@@ -2282,7 +2282,7 @@ mod tests {
         assert_eq!(
             records(written),
             vec![Record::Mask {
-                slot: 2,
+                slot: DeckSlot(2),
                 kind: "radial".to_string(),
                 angle: 1.25,
                 position: 1.0,
@@ -2354,7 +2354,7 @@ mod tests {
         assert_eq!(
             records(written),
             vec![Record::Transport {
-                slot: 2,
+                slot: DeckSlot(2),
                 sync: "beat".to_string(),
                 anchor_bpm: 128.0,
                 scrub_beats: -1.25,
@@ -2398,7 +2398,7 @@ mod tests {
         assert_eq!(
             records(written),
             vec![Record::Transport {
-                slot: 2,
+                slot: DeckSlot(2),
                 sync: "beat".to_string(),
                 anchor_bpm: 126.0,
                 scrub_beats: 0.0,
@@ -2441,7 +2441,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Gain {
-                slot: 3,
+                slot: DeckSlot(3),
                 value: 2.0
             }]
         );
@@ -2454,7 +2454,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Opacity {
-                slot: 1,
+                slot: DeckSlot(1),
                 value: 0.5
             }]
         );
@@ -2467,7 +2467,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Blend {
-                slot: 0,
+                slot: DeckSlot(0),
                 mode: "over".to_string()
             }],
             "a fader whose record needed a reading would be a console control that \
@@ -2501,7 +2501,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Authority {
-                slot: 2,
+                slot: DeckSlot(2),
                 at: karakuri_store::record::NodeAddress {
                     layer: karakuri_store::record::Layer::L4,
                     index: 1,
@@ -2528,7 +2528,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Authority {
-                slot: 0,
+                slot: DeckSlot(0),
                 at: karakuri_store::record::NodeAddress {
                     layer: karakuri_store::record::Layer::Field,
                     index: 0,
@@ -2568,7 +2568,7 @@ mod tests {
         assert_eq!(
             attached,
             vec![Record::Source {
-                slot: 3,
+                slot: DeckSlot(3),
                 layer: karakuri_store::record::Layer::L1,
                 index: Some(2),
                 key: "turbulence".to_string(),
@@ -2603,7 +2603,7 @@ mod tests {
         assert_eq!(
             taken,
             vec![Record::Source {
-                slot: 3,
+                slot: DeckSlot(3),
                 layer: karakuri_store::record::Layer::L1,
                 index: Some(2),
                 key: "turbulence".to_string(),
@@ -2630,7 +2630,7 @@ mod tests {
         assert_eq!(
             wild,
             vec![Record::Source {
-                slot: 0,
+                slot: DeckSlot(0),
                 layer: karakuri_store::record::Layer::L4,
                 index: None,
                 key: "exposure".to_string(),
@@ -2666,7 +2666,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Ride {
-                slot: 2,
+                slot: DeckSlot(2),
                 at: Some(karakuri_store::record::NodeAddress {
                     layer: karakuri_store::record::Layer::L4,
                     index: 1,
@@ -2707,7 +2707,7 @@ mod tests {
                 &Current::default()
             )),
             vec![Record::Ride {
-                slot: 0,
+                slot: DeckSlot(0),
                 at: None,
                 key: "glow".to_string(),
                 value: karakuri_store::record::Value::Vec3([0.4, 0.7, 1.0]),
@@ -2810,7 +2810,7 @@ mod tests {
         assert_eq!(
             records(written(&Operation::FadeDeck { deck: 2, to: 0.0 }, &current)),
             vec![Record::Transition {
-                slot: 2,
+                slot: DeckSlot(2),
                 control: "opacity".to_string(),
                 to: 0.0,
                 start: 37.0,
@@ -2846,15 +2846,15 @@ mod tests {
             records(written(&Operation::Crossfade { from: 0, to: 1 }, &current)),
             vec![
                 Record::Opacity {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     value: 0.0,
                 },
                 Record::Residency {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     level: "live".to_string(),
                 },
                 Record::Transition {
-                    slot: 0,
+                    slot: DeckSlot(0),
                     control: "opacity".to_string(),
                     to: 0.0,
                     start: 37.0,
@@ -2862,7 +2862,7 @@ mod tests {
                     curve: "smooth".to_string(),
                 },
                 Record::Transition {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     control: "opacity".to_string(),
                     to: 1.0,
                     start: 37.0,
@@ -2890,7 +2890,7 @@ mod tests {
             renderer: 2,
         };
         let expected = vec![Record::Select {
-            slot: 3,
+            slot: DeckSlot(3),
             renderer: 2,
             start: 37.0,
         }];
@@ -2952,7 +2952,7 @@ mod tests {
         assert_eq!(
             records(written(&Operation::FadeDeck { deck: 1, to: 1.0 }, &current)),
             vec![Record::Transition {
-                slot: 1,
+                slot: DeckSlot(1),
                 control: "opacity".to_string(),
                 to: 1.0,
                 start: 12.375,
@@ -2994,33 +2994,33 @@ mod tests {
             records(written(&Operation::Wipe { from: 3, to: 1 }, &current)),
             vec![
                 Record::Mask {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     kind: "linear".to_string(),
                     angle: 0.75,
                     position: 0.4,
                     softness: 0.02,
                 },
                 Record::Mask {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     kind: "linear".to_string(),
                     angle: 0.75,
                     position: 0.0,
                     softness: 0.02,
                 },
                 Record::Opacity {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     value: 1.0,
                 },
                 Record::Blend {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     mode: "over".to_string(),
                 },
                 Record::Residency {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     level: "live".to_string(),
                 },
                 Record::Transition {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     control: "mask".to_string(),
                     to: 1.0,
                     start: 37.0,
@@ -3059,7 +3059,8 @@ mod tests {
                 other => panic!("a wipe wrote {other:?}, which is not one of its six"),
             };
             assert_eq!(
-                slot, 1,
+                slot,
+                DeckSlot(1),
                 "a wipe wrote a record about slot {slot} — it names two decks and \
                  writes about the one arriving"
             );
@@ -3130,25 +3131,25 @@ mod tests {
             written,
             vec![
                 Record::Mask {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     kind: "linear".to_string(),
                     angle: 0.75,
                     position: 0.4,
                     softness: 0.02,
                 },
                 Record::Mask {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     kind: "linear".to_string(),
                     angle: 0.75,
                     position: 0.0,
                     softness: 0.02,
                 },
                 Record::Opacity {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     value: 1.0,
                 },
                 Record::Transition {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     control: "mask".to_string(),
                     to: 1.0,
                     start: 37.0,
@@ -3190,7 +3191,7 @@ mod tests {
         assert_eq!(
             written[3],
             Record::Residency {
-                slot: 1,
+                slot: DeckSlot(1),
                 level: "live".to_string(),
             },
             "the record a wipe writes for a deck already under `over` is not the \

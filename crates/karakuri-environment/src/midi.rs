@@ -1633,6 +1633,7 @@ mod tests {
     #[test]
     fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
         use karakuri_operation_record::{written, Current, Written};
+        use karakuri_store::record::DeckSlot;
         use karakuri_store::Record;
 
         let mut r = router("cc 1 -> gain 0");
@@ -1654,7 +1655,7 @@ mod tests {
         assert_eq!(
             records,
             vec![Record::Gain {
-                slot: 0,
+                slot: DeckSlot(0),
                 value: 1.0
             }]
         );

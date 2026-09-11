@@ -296,7 +296,7 @@ pub fn project(session: &[Line]) -> Vec<Line> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::record::Value;
+    use crate::record::{DeckSlot, Value};
 
     fn line(record: Record) -> Line {
         Line::new(record)
@@ -336,11 +336,11 @@ mod tests {
                 v: 1,
             }),
             line(Record::Gain {
-                slot: 2,
+                slot: DeckSlot(2),
                 value: 0.25,
             }),
             line(Record::Residency {
-                slot: 0,
+                slot: DeckSlot(0),
                 level: "live".into(),
             }),
             line(Record::Look {
@@ -352,7 +352,7 @@ mod tests {
             // A second value for the same key, so a projection that folded
             // these would still produce exactly one line each and look right.
             line(Record::Gain {
-                slot: 2,
+                slot: DeckSlot(2),
                 value: 0.9,
             }),
         ];
@@ -460,7 +460,7 @@ mod tests {
             }),
             line(Record::Tick { steps: 1 }),
             line(Record::Ride {
-                slot: 0,
+                slot: DeckSlot(0),
                 at: Some(crate::record::NodeAddress {
                     layer: Layer::L1,
                     index: 0,
@@ -469,7 +469,7 @@ mod tests {
                 value: Value::Scalar(9.0),
             }),
             line(Record::Ride {
-                slot: 3,
+                slot: DeckSlot(3),
                 at: Some(crate::record::NodeAddress {
                     layer: Layer::L1,
                     index: 0,
@@ -824,7 +824,7 @@ mod tests {
             line(Record::Merge { live: None }),
             line(Record::Tick { steps: 1 }),
             line(Record::Select {
-                slot: 1,
+                slot: DeckSlot(1),
                 renderer: 2,
                 start: 64.0,
             }),
