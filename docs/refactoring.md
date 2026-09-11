@@ -1,260 +1,210 @@
-# Architectural Refactoring & Design Smells Report (Phase 3)
+# Architectural Refactoring & Design Smells Report (Phase 3 - Revised)
 
-This document records the architectural smells, structural friction, and design distortions identified in the **Karakuri** codebase, along with the phased modernization roadmap for **Phase 3: Architectural Decomposition & Structural Decoupling (P21–P27)**.
-
-While Karakuri maintains extreme real-time discipline on its hot paths through the standing rules in [`docs/principles/`](principles/) and architecture decision records in [`docs/adr/`](adr/), the rapid evolution across milestones M1–M5 and the interim scaffolding layers created significant structural rigidity and maintenance bottlenecks.
+This document records the architectural smells, structural friction, and design distortions identified in the **Karakuri** codebase, along with the corrected modernization roadmap for **Phase 3: Architectural Decomposition & Structural Decoupling (P21–P26)**.
 
 ---
 
-## 1. Executive Context & Paradigm Shift
+## 1. Executive Context & Ground-Truth Baseline
 
 ### The Transition from Phase 2 to Phase 3
 - **Phase 1 & Phase 2 (P1–P20) [COMPLETED]**:
-  - Successfully addressed critical performance bottlenecks, transient render graph DAG allocation (P15), structured WGSL AST & pass fusion (P16), machine-readable AI diagnostics (P17), zero-allocation stream replay (P19), and unified keymap convergence (P20).
-  - Undertook the first-pass triage decomposition: dismantled the original 33.1k-line `karakuri/src/main.rs` into submodules (`engine_bridge.rs`, `app.rs`, `readout.rs`, etc.), split `karakuri-console/src/view.rs` (24.2k lines) into bay modules, and extracted `karakuri-mcp` into its own crate.
-- **The Limit of First-Pass File Splitting**:
-  - The first-pass triage proved that splitting files alone without fundamental architectural decoupling leaves high maintenance friction: `crates/karakuri-cli/src/main.rs` remains at **12,300 lines**, `crates/karakuri-mcp/src/lib.rs` sits at **10,888 lines**, and the GUI bridge (`engine_bridge.rs` at **8,309 lines** and `readout.rs` at **4,805 lines**) has become an immense procedural adapter.
-  - [ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md) established that crossing 1,000 lines is a *nudge, not a gate*. The file size is merely a measurable symptom; **the root cause is structural coupling, lack of shared domain primitives, dual orchestration duplication, and kitchen-sink crates.**
-- **Phase 3 Objective**:
-  - Dissolve the fundamental architectural distortions, establish single sources of truth for core domain models, extract headless runtime orchestration, and make all subsystems modular, testable, and maintainable.
+  - Addressed critical hot-path and simulation constraints: transient render graph DAG allocation (P15), structured WGSL AST & pass fusion (P16), machine-readable AI diagnostics (P17), zero-allocation stream replay (P19), and unified keymap convergence (P20).
+  - Executed emergency first-pass triage: dismantled the original 33.1k-line `karakuri/src/main.rs` into submodules (`engine_bridge.rs`, `app.rs`, `readout.rs`, etc.), split `karakuri-console/src/view.rs` (24.2k lines) into bay modules, and extracted `karakuri-mcp` into its own package.
+- **The Limit of Raw File Decomposition**:
+  - The first-pass triage made file boundaries visible, but several monolithic modules and procedural adapters remain:
+    - `crates/karakuri-cli/src/main.rs`: **12,300 lines** (untouched scaffolding monolith)
+    - `crates/karakuri-mcp/src/lib.rs`: **10,888 lines** (6,254 lines of production code, 4,634 lines of tests)
+    - `crates/karakuri/src/engine_bridge.rs`: **8,309 lines** (procedural bridge combining 4 distinct responsibilities)
+    - `crates/karakuri-console/src/view/mod.rs`: **7,493 lines** (bay orchestrator coupled with shared widget drawing)
+  - [ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md) established that crossing 1,000 lines is a *nudge, not a gate*. The size is a measurable indicator; **the work of Phase 3 is resolving the structural coupling, duplicated orchestration, and cohesive module boundaries.**
 
 ---
 
-## 2. Analysis of 7 Core Structural Smells
+## 2. Analysis of Core Structural Smells (Ground-Truth Corrected)
 
-```mermaid
-flowchart TD
-    subgraph UI_Surface["Surfaces & Glue (Duplicated Orchestration)"]
-        CLI["karakuri-cli<br>(12.3k lines)"]
-        GUI["karakuri (GUI)<br>(app.rs: 5.1k lines)"]
-        BRIDGE["engine_bridge.rs (8.3k lines)<br>readout.rs (4.8k lines)"]
-        CONSOLE["karakuri-console<br>(view/*: 26k lines)"]
-    end
-
-    subgraph Runtime_Void["Missing Abstraction"]
-        RUNTIME["[Missing] Headless Runtime / Session Controller<br>(HotSwap, Deck, Clock, Session, Replay)"]
-    end
-
-    subgraph Operation_Rigidity["Operation Rigidity"]
-        OP["karakuri-operation<br>(9-site manual maintenance)"]
-        OPREC["karakuri-operation-record"]
-    end
-
-    subgraph Kitchen_Sink["Kitchen-Sink Coupling"]
-        ENV["karakuri-environment<br>(Audio/MIDI/Watch/SetFile/Mix/Scratch...)"]
-        MCP["karakuri-mcp<br>(10.8k line single-file monolith)"]
-    end
-
-    subgraph Type_Drift["Primitive Fragmentation (Conversion Hell)"]
-        T1["karakuri-ir::Kind"]
-        T2["karakuri-operation::Layer"]
-        T3["karakuri-store::record::Layer"]
-    end
-
-    CLI -. duplicates .-> RUNTIME
-    GUI -. duplicates .-> RUNTIME
-    BRIDGE --> CONSOLE
-    BRIDGE --> ENV
-    CLI --> ENV
-    GUI --> OP
-    CLI --> OP
-    T1 -. boilerplate conversion .-> T2
-    T2 -. boilerplate conversion .-> T3
-```
-
-### Smell 1: Core Domain Primitive Fragmentation ("Conversion Hell")
-- **Phenomenon**: The foundational concept of a pipeline layer/kind (`L1`, `L2`, `L3`, `L4`, `Field`, `L5`) is independently defined as an enum across three separate crates:
-  1. `karakuri_ir::Kind`
-  2. `karakuri_operation::Layer`
-  3. `karakuri_store::record::Layer`
-- **Impact**: To avoid circular dependencies, each crate and file implements bespoke, private conversion functions: `kind_of`, `layer_of`, `ir_layer`, `asked_layer`, `layer_named`, `kind_name`. Adding or modifying a layer requires updating dozens of manual match arms across the entire codebase.
+### Smell 1: Layer Primitive Duplication & Conversion Scattering
+- **Phenomenon**: The 6-variant pipeline layer (`L1`, `L2`, `L3`, `L4`, `Field`, `L5`) is independently defined as an enum across three crates:
+  1. `karakuri_ir::ast::Kind` (internal AST/IR type)
+  2. `karakuri_operation::Layer` (strictly zero-dependency vocabulary leaf; derives `Debug, Clone, Copy, PartialEq, Eq`)
+  3. `karakuri_store::record::Layer` (persistent `.ndjson` schema; derives `Hash, Serialize, Deserialize`)
+- **Impact**: Because derive sets and dependency requirements deliberately differ (per `karakuri-operation`'s charter of having zero dependencies), conversions between them are duplicated across:
+  - `karakuri-environment/src/meta.rs`: 4 functions (`kind_of`, `layer_of`, `kind_name`, `layer_named`)
+  - `karakuri/src/engine_bridge.rs`: `asked_layer`, `ir_layer`, and string parser `kind_of`
+  - `karakuri-mcp/src/lib.rs`: `layer_of`, `kind_of`, `layer_name`, `layer_named`
+  - `karakuri-environment/src/midi.rs`: `layer_of`
+  - `karakuri-engine/src/set.rs`: `kind_of_layer`
+- **Key Insight**: String parsing (`FromStr` / `layer_named`) is functionally distinct from enum-to-enum mapping. Any unification must preserve `karakuri-operation`'s zero-dependency invariant and maintain strict serialized JSON compatibility for `record::Layer`.
 
 ### Smell 2: Dual Orchestration Duplication (CLI vs. GUI)
-- **Phenomenon**: `karakuri-cli` was intended as scaffolding, yet remains a 12,300-line monolith. Both `karakuri-cli` (via its `Live` struct) and `karakuri` (via `engine_bridge.rs` and `app.rs`) independently orchestrate:
-  - Multi-slot deck lifecycle and residency transitions.
-  - Background `HotSwap` compilation, channel polling, and atomic swap.
-  - File watching, preset loading, and scratch directory synchronisation.
+- **Phenomenon**: `karakuri-cli` remains a 12,300-line single-file binary. Both `karakuri-cli` (via its `Live` struct and event loop) and `karakuri` GUI (via `app.rs` and `engine_bridge.rs`) independently coordinate:
+  - Multi-slot deck state, residency switching, and Set building.
+  - Background `HotSwap` compilation worker channels and atomic swap.
+  - Preset directory scanning, scratch space synchronisation, and Set file loading.
   - Session recording (`ndjson`) and replay driving.
-- **Impact**: Double the maintenance cost; features implemented in CLI (like headless session replay) are missing or lagged in the GUI console, and vice versa.
+- **Impact**: Maintenance overhead is doubled; capabilities divergence (e.g. headless session replay working only in CLI) persists.
 
-### Smell 3: `karakuri-environment` as a Kitchen-Sink Crate
-- **Phenomenon**: ADR-0215 grouped "everything outside this process" into `karakuri-environment`. It holds audio capture, MIDI mappings, tempo source IPC, file watching, clock step derivation, `.kir` compilation, Set file formats (`setfile.rs` at 5,156 lines), session recording, PNG offscreen rendering, and mixer records (`mix.rs` at 2,810 lines).
-- **Impact**: Extremely low cohesion. Any modification to file formats, audio hardware drivers, or mixer logic forces a full rebuild across almost every consuming crate and binary.
+### Smell 3: Multi-Responsibility Congestion in `engine_bridge.rs` (8,309 lines)
+- **Phenomenon**: `karakuri-console` keeps `wgpu::Device` out of its dependencies so that arrangement and panel logic can be tested on machines without a GPU adapter (ADR-0156). To wire this console to the actual runtime device, `engine_bridge.rs` was created in `karakuri`. However, it has accumulated **four entirely different responsibilities**:
+  1. **Render Targets & egui Sinks**: Managing `Presented`, `wgpu::TextureView`, resize handling, and egui user texture registrations (`Sink` implementation).
+  2. **Engine Lifecycle & Coordination**: Deck instantiation, step advancement, HotSwap polling, and Governor budget verification.
+  3. **Filesystem & Asset Discovery**: `Taking`, Presets directory scanning, folder drag-and-drop ingestion, and Set loading.
+  4. **Operation Dispatch & Reconciliation**: Transforming UI interaction outcomes into `Operation` / `Record` batches and updating panel state.
+- **Key Insight**: The ~8,300 lines cannot be eliminated by introducing intermediate snapshots (which would re-introduce render-thread heap allocations via `Arc`). Instead, this monolithic file must be decomposed by responsibility into dedicated submodules.
 
-### Smell 4: Overgrown Procedural GUI Bridge (`engine_bridge.rs` & `readout.rs`)
-- **Phenomenon**: To preserve `karakuri-console`'s purity (no `wgpu`/device dependencies, per ADR-0156), the GUI application maintains `engine_bridge.rs` (8,309 lines) and `readout.rs` (4,805 lines).
-- **Impact**: These files imperatively gather, map, and reconcile engine state into `Reading`, `View`, and `Panel` structures every frame. Instead of a clean, reactive, unidirectional data flow, thousands of lines of procedural glue synchronize GUI states with engine internals.
+### Smell 4: `karakuri-mcp` Monolithic Packaging (10,888 lines)
+- **Phenomenon**: `crates/karakuri-mcp/src/lib.rs` contains the entire MCP subsystem in a single file:
+  - **Production Code (6,254 lines)**:
+    - Transport & Server: JSON-RPC parsing, TCP stream handling, HTTP header checks, client session state (~2,430 lines).
+    - Declarative Operation Schema (`SPELLED` array): JSON schema definitions, sample constructors, and argument parsers for all 64 operations (~1,940 lines).
+    - Tool Implementations & Handlers: 10 tools (`check_procedure`, `check_set`, `read_procedure`, `write_procedure`, `wire_input`, `swap_outcome`, `read_set`, `list_sets`, `walk_history`, `save_set`, `operate`) and resource endpoints (`vocabulary`) (~1,880 lines).
+  - **Test Suites (4,634 lines)**:
+    - `mod wire_tests` (lines 6,255–9,194): Socket-level integration test suite (**2,940 lines**).
+    - `mod tests` (lines 9,195–10,888): In-memory unit test suite (**1,694 lines**).
 
-### Smell 5: `karakuri-mcp` Single-File Monolith (10,888 lines)
-- **Phenomenon**: While extracted into its own package, `crates/karakuri-mcp/src/lib.rs` is an enormous 10,888-line file containing JSON-RPC protocol parsing, connection loops, client state, 7 individual tool implementations, and ~1,700 lines of inline unit tests.
-- **Impact**: Poor code readability, high risk of regression when editing tools, and severe cognitive overload.
-
-### Smell 6: Entangled Console Bay Views & Shared Widgets (`view/mod.rs`)
-- **Phenomenon**: `crates/karakuri-console/src/view/mod.rs` (7,493 lines) acts as both a bay dispatcher and a repository of shared UI widgets (Capsules, Pills, Grips, Chips, HeadWords, Outputs).
-- **Impact**: The boundaries between shared reusable UI components, geometry layout solving (`plan_into`), and bay-specific drawing logic are blurred.
-
-### Smell 7: Hardcoded 9-Site Operation Maintenance
-- **Phenomenon**: Adding, removing, or changing an `Operation` variant requires manual edits across 9 explicit sites (as documented in `docs/contributing.md §5`): `Operation` enum, `OperationRecord` match arms, Gate classification, two manual HTML files, CLI key handlers, Console UI mapping, MCP tool bindings, and integration tests.
-- **Impact**: High development friction, discouraging UI refactoring and parameter extensions.
+### Smell 5: Entangled Console Bay Composition & Widget Drawing (`view/mod.rs`)
+- **Phenomenon**: `crates/karakuri-console/src/view/mod.rs` (7,493 lines) acts as both the top-level bay dispatcher and the implementation home of shared interactive UI widgets.
+  - Reusable controls (Capsules, Pills, Grips, Head bars, Output chips) and layout math (`plan_into`, `track`, `held_inside`) are inlined directly into `mod.rs`.
 
 ---
 
-## 3. Phase 3 Initiatives: Comprehensive Execution Roadmap
+## 3. Phase 3 Modernization Initiatives
 
 ```mermaid
 graph TD
-    P21["<b>P21: Unified Core Domain Primitives</b><br/>karakuri-types (Layer, NodeAddress, DeckSlot)"]
-    P22["<b>P22: Headless Runtime & Orchestrator</b><br/>karakuri-runtime (SessionController, HotSwap)"]
-    P23["<b>P23: Decompose karakuri-environment</b><br/>karakuri-io, karakuri-format, karakuri-watch"]
-    P24["<b>P24: Reactive Snapshot Architecture</b><br/>Unidirectional EngineSnapshot for GUI Console"]
-    P25["<b>P25: Modular Subsystem Decomposition of karakuri-mcp</b><br/>protocol, tools, server, state, tests"]
-    P26["<b>P26: Componentize Console UI & Shared Widgets</b><br/>view/widgets (capsule, pill, grip) & layout"]
-    P27["<b>P27: Declarative / Macro-Driven Operation System</b><br/>Code-gen / macro reduction of 9-site friction"]
+    P26["<b>P26: Componentize Console UI & Shared Widgets</b><br/>Extract view/widgets and view/layout.rs [READY]"]
+    P25["<b>P25: Decompose karakuri-mcp Monolith</b><br/>Separate server, spelled, tools, and test suites [READY]"]
+    P24["<b>P24: Decompose engine_bridge.rs by Responsibility</b><br/>Split sinks, engine, filesystem, and handlers [READY]"]
+    P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [PLANNED]"]
+    P21["<b>P21: Consolidate Layer Conversions & Contracts</b><br/>Centralize mappings; preserve zero-dep & serde compatibility [PLANNED]"]
+    P23["<b>P23: Rationalize karakuri-environment Boundaries</b><br/>Map all 14 modules; resolve circular coupling [PLANNED]"]
 
-    P21 --> P22
-    P21 --> P25
-    P22 --> P24
-    P23 --> P22
     P26 --> P24
-    P21 --> P27
+    P25 --> P21
+    P24 --> P22
+    P21 --> P22
 ```
 
 ---
 
-### P21. Unified Core Domain Primitives (`karakuri-types`)
+### P26. Componentize Console UI & Shared Widgets (`view/widgets`) [READY FOR EXECUTION]
 
 #### Phenomenon
-`karakuri_ir::Kind`, `karakuri_operation::Layer`, and `karakuri_store::record::Layer` duplicate the fundamental 6-variant pipeline layer definition, breeding dozens of boilerplate conversion functions across crates.
-
-#### Refactoring Plan
-1. **Create `crates/karakuri-types`**:
-   - Zero-dependency leaf crate defining canonical domain primitives:
-     - `Layer` (L1, L2, L3, L4, Field, L5) with `Display`, `FromStr`, `Serialize`, `Deserialize`.
-     - `NodeAddress { layer: Layer, index: u32 }`.
-     - Canonical `DeckSlot` and residency representations.
-2. **Eliminate Redundant Enums**:
-   - Deprecate `karakuri_operation::Layer` and `karakuri_store::record::Layer` in favor of `karakuri_types::Layer`.
-   - Update `karakuri-ir` to use `karakuri_types::Layer` (or alias `Kind = Layer`).
-3. **Purge Conversion Boilerplate**:
-   - Remove `kind_of`, `layer_of`, `ir_layer`, `asked_layer`, and `layer_named` across `engine_bridge.rs`, `mcp`, `setfile.rs`, and `midi.rs`.
-
----
-
-### P22. Headless Runtime & Orchestrator (`karakuri-runtime`)
-
-#### Phenomenon
-Both `karakuri-cli` (12.3k lines) and `karakuri` GUI (13.4k lines across `app.rs` and `engine_bridge.rs`) duplicate real-time orchestration logic: deck composition, HotSwap compilation worker channels, session recording, and transport clock driving.
-
-#### Refactoring Plan
-1. **Extract `karakuri-runtime`**:
-   - Headless engine controller independent of windowing surfaces (`winit` / `egui`).
-   - `SessionController`: Owns the 4-slot `Deck`, manages residency transitions, applies `Operation` / `Record` batches, and drives step execution.
-   - `HotSwapCoordinator`: Manages background compilation threads, staging queues, budget probe verification, and atomic commit on frame boundaries.
-   - `TransportClock`: Centralizes oscillator synchronization, audio tempo corrections, and latency offset adjustments.
-2. **Slim Down `karakuri-cli` to Pure Surface Scaffolding**:
-   - Reduce `karakuri-cli/src/main.rs` to a thin CLI wrapper (~500 lines) that parses CLI flags, instantiates `SessionController`, and runs a minimal event loop.
-3. **Harmonize GUI Application**:
-   - `karakuri` GUI directly embeds `SessionController`, eliminating duplicated state machines.
-
----
-
-### P23. Decompose `karakuri-environment` into Focused Crates
-
-#### Phenomenon
-`karakuri-environment` is a catch-all kitchen-sink crate containing I/O hardware, file formats, compilation, watchers, and mix record logic.
-
-#### Refactoring Plan
-1. **Split into Cohesive Packages**:
-   - `karakuri-io`: External hardware integration (Audio capture via `cpal`, MIDI input parsing, out-of-process tempo source IPC).
-   - `karakuri-format`: File format serialization and loading (`.kset`, `.kbset` Set files, `.ndjson` session logs).
-   - `karakuri-watch`: File system change monitoring (`notify`) and debouncing.
-2. **Enforce Clean Dependency Boundaries**:
-   - Ensure formats do not depend on hardware I/O or runtime state machines.
-
----
-
-### P24. Reactive Snapshot Architecture for GUI Bridge
-
-#### Phenomenon
-`engine_bridge.rs` (8,309 lines) and `readout.rs` (4,805 lines) procedurally pull and assemble mutable engine state into view models on every frame, creating massive glue code.
-
-#### Refactoring Plan
-1. **Introduce `EngineSnapshot`**:
-   - At the frame boundary, `SessionController` publishes an immutable, cheaply cloneable (via `Arc`) `EngineSnapshot` summarizing deck status, residency, slot metrics, transport state, and probe estimates.
-2. **Unidirectional UI Rendering**:
-   - `karakuri-console`'s `View::draw` consumes `&EngineSnapshot` directly.
-   - View interactions emit pure `Operation`s sent to the runtime's input channel.
-3. **Decompose `engine_bridge.rs`**:
-   - Split remaining surface-specific concerns into focused submodules:
-     - `bridge/sinks.rs`: `wgpu` presentation textures & `egui` texture registrations.
-     - `bridge/filesystem.rs`: Presets listing and folder scan utilities.
-
----
-
-### P25. Modular Subsystem Decomposition of `karakuri-mcp`
-
-#### Phenomenon
-`crates/karakuri-mcp/src/lib.rs` contains 10,888 lines in a single file, including ~1,700 lines of inline unit tests.
-
-#### Refactoring Plan
-1. **Submodule Breakdown**:
-   - `src/protocol.rs`: JSON-RPC 2.0 message parsing, serialization, and error codes (~500 lines).
-   - `src/server.rs`: TCP/STDIO listener loops, connection worker threads (~400 lines).
-   - `src/state.rs`: Client session state, permission gates, and slots registry (~300 lines).
-   - `src/tools/`: Dedicated module per MCP tool:
-     - `tools/mod.rs`: Tool registration, schema generation, and routing (~300 lines).
-     - `tools/procedure.rs`: `check_procedure` and `write_procedure` (~800 lines).
-     - `tools/wire.rs`: `wire_input` (~600 lines).
-     - `tools/set.rs`: `check_set_configuration` and slot inspection (~600 lines).
-2. **Test Suite Relocation**:
-   - Move inline `mod tests` (lines 9,195–10,888) to `tests/mcp_suite.rs`.
-
----
-
-### P26. Componentize Console UI & Shared Widgets
-
-#### Phenomenon
-`crates/karakuri-console/src/view/mod.rs` (7,493 lines) combines overall bay composition with shared interactive widget drawing and layout math.
+`crates/karakuri-console/src/view/mod.rs` (7,493 lines) bundles high-level layout coordination with low-level immediate-mode drawing logic for shared widgets.
 
 #### Refactoring Plan
 1. **Extract `crates/karakuri-console/src/view/widgets/`**:
-   - `head.rs`: Bay header bars, capsules, and bank buttons.
-   - `pills.rs`: Status indicators, MCP toggle pills, and sink chips.
-   - `fold_grip.rs`: Region collapse/expand handles and dividers.
-   - `outputs.rs`: Master output monitors and routing selectors.
-2. **Extract `src/view/layout.rs`**:
-   - Geometric placement helpers: `plan_into`, `track`, `held_inside`.
-3. **Retain `src/view/mod.rs` as a Clean Orchestrator**:
-   - Limit `mod.rs` to high-level bay dispatching and top-level view orchestration (~800 lines).
+   - `head.rs`: `Head`, `HeadWords`, `head_capsule`, `bank_capsules` (~750 lines).
+   - `pills.rs`: `McpPill`, `SinkChip`, status indicator capsules (~650 lines).
+   - `fold_grip.rs`: `FoldGrip`, `bay_grip`, divider drag targets (~500 lines).
+   - `outputs.rs`: `Outputs`, master level monitors, routing selectors (~500 lines).
+2. **Extract `crates/karakuri-console/src/view/layout.rs`**:
+   - Geometric placement helpers: `plan_into`, `track`, `held_inside`, `positive` (~400 lines).
+3. **Retain `src/view/mod.rs` as Clean Orchestrator**:
+   - Limit `mod.rs` to top-level view routing, bay assembly, and public re-exports (~800 lines).
 
 ---
 
-### P27. Declarative / Macro-Driven Operation System
+### P25. Subsystem Decomposition of `karakuri-mcp` [READY FOR EXECUTION]
 
 #### Phenomenon
-Adding or modifying an operation variant requires tedious, error-prone manual updates across 9 separate code and documentation sites.
+`crates/karakuri-mcp/src/lib.rs` (10,888 lines) houses server plumbing, 1,940 lines of `SPELLED` operation tables, 10 distinct tools, and 4,634 lines of test suites in one file.
 
 #### Refactoring Plan
-1. **Declarative Operation Specification**:
-   - Define operations using a central declarative macro or schema table (specifying identifier, doc summary, manual route category, record emission characteristics, and MCP gate permission).
-2. **Auto-Generate Repetitive Machinery**:
-   - Automatically derive:
-     - `Operation` enum definition.
-     - Default exhaustive match arms for Gate classification (`gate.rs`).
-     - Automated consistency test assertions against `operations.html`.
-3. **Preserve Mechanical Verification**:
-   - Maintain automated tests verifying that the manual, the code, and the surface routes never drift.
+1. **Relocate Test Suites to Dedicated Integration Test Files**:
+   - Move `mod wire_tests` (lines 6,255–9,194, 2,940 lines) to `crates/karakuri-mcp/tests/wire.rs`.
+   - Move `mod tests` (lines 9,195–10,888, 1,694 lines) to `crates/karakuri-mcp/tests/unit.rs`.
+   - *Immediate impact*: Reduces `lib.rs` from 10,888 lines to 6,254 lines with zero production code changes.
+2. **Decompose Production Architecture**:
+   - `src/lib.rs`: Public API (`serve`, `check_procedure`, `check_set_configuration`, `Reporter`, `Slots`) (~250 lines).
+   - `src/protocol.rs`: JSON-RPC 2.0 framing, error codes, HTTP header parsing (`read_capped`, `is_local_origin`, `respond`) (~500 lines).
+   - `src/server.rs`: TCP listener loop, thread handling, dispatch (~450 lines).
+   - `src/state.rs`: Session state, permission gating, audit verification (~400 lines).
+   - `src/spelled.rs`: `Spelled` struct, helper parsing combinators (`number_of`, `word_of`, etc.), and the 1,940-line `SPELLED` constant table.
+   - `src/tools/`: Implementation of the 10 MCP tools:
+     - `tools/mod.rs`: `call_tool` router and `tools()` schema catalog.
+     - `tools/procedure.rs`: `check_procedure`, `read_procedure`, `write_procedure`.
+     - `tools/set.rs`: `check_set`, `read_set`, `list_sets`, `save_set`.
+     - `tools/wire.rs`: `wire_input`.
+     - `tools/history.rs`: `walk_history`, `swap_outcome`.
+     - `tools/operate.rs`: `operate` bridge.
+   - `src/resources.rs`: `vocabulary` resource endpoint and checker reflection tables.
 
 ---
 
-## 4. Comprehensive Execution Matrix
+### P24. Decompose `engine_bridge.rs` by Concrete Responsibility [READY FOR EXECUTION]
 
-| Initiative | Target Area | Primary Deliverable | Risk / Verification |
-|---|---|---|---|
-| **P21** | `karakuri-types` | Unified canonical `Layer` & `NodeAddress`; eliminate 5+ conversion functions | **Low** (Compile-time verified; zero behavior change) |
-| **P22** | `karakuri-runtime` | Extract `SessionController` & `HotSwapCoordinator`; slim CLI to thin binary | **Medium** (Verified via existing integration suite) |
-| **P23** | `karakuri-environment` | Decompose into `karakuri-io`, `karakuri-format`, `karakuri-watch` | **Low** (Package boundary restructuring) |
-| **P24** | `engine_bridge` / `readout` | Unidirectional `EngineSnapshot` architecture; dissolve 8.3k-line bridge | **Medium** (Verified via GUI startup and rendering tests) |
-| **P25** | `karakuri-mcp` | Decompose 10.8k-line monolith into `protocol`, `tools/*`, `server`, and `tests/` | **Low** (Zero API change; verified via MCP suite) |
-| **P26** | `karakuri-console` | Extract `view/widgets/` and `view/layout.rs`; slim `mod.rs` to ~800 lines | **Low** (Zero rendering change; verified via console tests) |
-| **P27** | `karakuri-operation` | Declarative macro for operation definition; mitigate 9-site friction | **Medium** (Verified via operation vocabulary test suite) |
+#### Phenomenon
+`crates/karakuri/src/engine_bridge.rs` (8,309 lines) couples presentation sinks, engine lifecycle, filesystem scanning, and operation dispatch in a single monolithic file.
+
+#### Refactoring Plan
+Decompose into cohesive modules under `crates/karakuri/src/bridge/`:
+1. **`bridge/sinks.rs`**:
+   - `Presented` struct, `Sink` trait implementation, `Aiming`, texture format constants (`PICTURE_FORMAT`, `PICTURE_SAMPLED_FORMAT`), and egui user texture registrations (~900 lines).
+2. **`bridge/engine.rs`**:
+   - `Engine` struct, lifecycle initialization (`new`), frame advancement (`compose`), and HotSwap synchronization (~1,500 lines).
+3. **`bridge/filesystem.rs`**:
+   - `Taking` enum, `presets_listing`, `folder_files`, drag-and-drop directory scanning, and Set file resolution (~1,200 lines).
+4. **`bridge/handlers.rs`**:
+   - Transformation of panel UI events into `Operation` / `Record` batches and deck mutators (~1,500 lines).
+5. **`bridge/mod.rs`**:
+   - Facade re-exporting the bridge interface to `app.rs` and `main.rs`.
+
+---
+
+### P22. Extract Headless Runtime & Orchestrator (`karakuri-runtime`) [PLANNED]
+
+#### Phenomenon
+`karakuri-cli/src/main.rs` (12,300 lines) and `karakuri` GUI (`app.rs` + `engine_bridge.rs`) independently duplicate deck management, HotSwap compilation worker channels, session recording, and transport clock logic.
+
+#### Refactoring Plan
+1. **Extract `karakuri-runtime`**:
+   - Headless session controller: owns `Deck`, manages residency transitions, applies `Operation` batches, and drives step execution.
+   - `HotSwapCoordinator`: manages background compilation worker threads, staging queues, budget probe verification, and atomic commit.
+   - `TransportClock`: centralizes oscillator synchronisation, audio tempo corrections, and latency offset adjustments.
+2. **Slim Down `karakuri-cli`**:
+   - Transform `karakuri-cli` into a lightweight CLI harness (~800 lines) parsing CLI arguments, instantiating `SessionController`, and driving the event loop.
+
+---
+
+### P21. Consolidate Layer Conversions & Preserve Invariants [PLANNED]
+
+#### Phenomenon
+Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `karakuri-store::record`. Conversion functions are scattered across `meta.rs`, `engine_bridge.rs`, and `mcp/lib.rs`.
+
+#### Refactoring Constraints & Plan
+1. **Preserve Invariants**:
+   - `karakuri-operation::Layer` must remain **strictly zero-dependency** (`std` only). It cannot take dependencies on `serde` or other crates.
+   - `karakuri-store::record::Layer` must retain exact JSON serialization names (`L1`, `L2`, `L3`, `L4`, `Field`, `L5`) to avoid breaking existing session streams.
+2. **Refactoring Strategy**:
+   - Centralize conversion utilities between `ir::ast::Kind` and `operation::Layer` into `meta.rs` as the authoritative mapping module.
+   - Standardize string parsing via `FromStr` implementations rather than ad-hoc `kind_of` / `layer_named` functions.
+   - Add automated schema consistency tests ensuring `record::Layer` serialization matches `operation::Layer` string representations.
+
+---
+
+### P23. Rationalize `karakuri-environment` Module Boundaries [PLANNED]
+
+#### Phenomenon
+`karakuri-environment` holds 14 modules totaling 20,041 lines. Simply extracting an "I/O" crate risks confusing existing crates (`karakuri-audio`, `karakuri-midi`) which already handle low-level device I/O.
+
+#### Refactoring Plan
+1. **Full Accounting of All 14 Modules**:
+   - Adaptors: `audio.rs` (757 lines), `midi.rs` (2,072 lines), `tempo_source.rs` (626 lines)
+   - Formats: `setfile.rs` (5,156 lines), `session.rs` (1,234 lines), `meta.rs` (204 lines)
+   - Engine/Disk Integration: `mix.rs` (2,810 lines), `history.rs` (1,894 lines), `places.rs` (980 lines), `compile.rs` (606 lines), `scratch.rs` (501 lines), `render.rs` (456 lines), `clock.rs` (295 lines), `watch.rs` (2,450 lines)
+2. **Strategy**:
+   - Address internal circular couplings (`setfile` ↔ `compile` ↔ `meta`) before attempting any crate extraction.
+   - Re-evaluate whether `karakuri-environment` should remain a unified coordination crate with cleanly separated internal module hierarchies.
+
+---
+
+## 4. Execution Matrix & Next Steps
+
+| Initiative | Target Subsystem | Actionable Deliverable | Readiness |
+|---|---|---|:---:|
+| **P26** | `karakuri-console` | Extract `view/widgets/` (`head`, `pills`, `fold_grip`, `outputs`) & `view/layout.rs` | **READY** |
+| **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `tests/unit.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **READY** |
+| **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **READY** |
+| **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **PLANNED** |
+| **P21** | Type Conversions | Centralize layer conversions in `meta.rs`; establish serialization parity test | **PLANNED** |
+| **P23** | `karakuri-environment` | Untangle internal cyclic couplings; map destinations for all 14 modules | **PLANNED** |
