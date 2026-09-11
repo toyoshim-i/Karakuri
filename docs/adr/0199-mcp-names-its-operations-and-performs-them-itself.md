@@ -4,7 +4,7 @@ title: MCP names its operations and performs them itself, because all six are `S
 status: accepted
 date: 2026-08-27
 supersedes: []
-superseded_by: []
+superseded_by: [0334]
 principles: [0090, 0093]
 tags: [cli, mcp, vocabulary, surfaces]
 ---
