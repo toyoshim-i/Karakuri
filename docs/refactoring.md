@@ -310,4 +310,4 @@ During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to
 | **Phase 2B** | **P17** | **Structured AI Repair Loop** | Planned | Machine-readable diagnostics; visual degeneracy detector |
 | **Phase 2B** | **P18** | **Signal Bus Vectorization** | Planned | Typed vector signals; interned `SignalId` zero-cost dispatch |
 | **Phase 2B** | **P19** | **Zero-Allocation Stream Replay** | Planned | Mmap zero-copy ndjson/binary reader; stream versioning |
-| **Phase 2B** | **P20** | **Converge CLI & GUI Keyboards** | Planned | Migrate colliding CLI keys (`f g n p r s u z`); align on `operations.html` (ADR-0346) |
+| **Phase 2B** | **P20** | **Converge CLI & GUI Keyboards** | **DONE** | Migrate colliding CLI keys (`F G N R S U Z`); align on `operations.html` (ADR-0346) |

@@ -185,22 +185,22 @@ const DEMO_SCRIPT: &[(f32, char)] = &[
     // Four seconds of the material as it is, for a before.
     (4.0, 'y'), // beat sync — the picture does not move, deliberately
     // Two bars back, a quarter beat at a time, over about a second and a half.
-    (6.0, 'u'),
-    (6.1, 'u'),
-    (6.2, 'u'),
-    (6.3, 'u'),
-    (6.4, 'u'),
-    (6.5, 'u'),
-    (6.6, 'u'),
-    (6.7, 'u'),
-    (6.8, 'u'),
-    (6.9, 'u'),
-    (7.0, 'u'),
-    (7.1, 'u'),
-    (7.2, 'u'),
-    (7.3, 'u'),
-    (7.4, 'u'),
-    (7.5, 'u'),
+    (6.0, 'U'),
+    (6.1, 'U'),
+    (6.2, 'U'),
+    (6.3, 'U'),
+    (6.4, 'U'),
+    (6.5, 'U'),
+    (6.6, 'U'),
+    (6.7, 'U'),
+    (6.8, 'U'),
+    (6.9, 'U'),
+    (7.0, 'U'),
+    (7.1, 'U'),
+    (7.2, 'U'),
+    (7.3, 'U'),
+    (7.4, 'U'),
+    (7.5, 'U'),
     // Held there for three seconds: the slot is two bars behind the room and
     // still locked to it, so it moves at the room's rate from where it is.
     // Then forward again, past where it was.
@@ -231,8 +231,8 @@ const DEMO_SCRIPT: &[(f32, char)] = &[
     // — so what a watcher sees is the gesture as it ships rather than one
     // tuned to be visible. The gap between the press and the movement is the
     // quantum doing its job and is the thing worth watching for.
-    (17.5, 'f'),
-    (22.0, 'g'),
+    (17.5, 'F'),
+    (22.0, 'G'),
 ];
 
 /// How long one pass through [`DEMO_SCRIPT`] lasts before it starts over. Past
@@ -253,15 +253,15 @@ const DEMO_LOOP_SECONDS: f32 = 27.0;
 /// the one thing here that changed.** This script pressed `v` three times —
 /// the mix, each slot alone, the mix again — until ADR-0240 retired *Choose
 /// what the output shows*. The output is the mix now and always, so the way to
-/// see one slot without the other is to take the other out of the mix: `f` on
-/// the focused slot's fader, `g` to bring it back, with a digit before each to
+/// see one slot without the other is to take the other out of the mix: `F` on
+/// the focused slot's fader, `G` to bring it back, with a digit before each to
 /// say which slot. That is `Operation::FadeDeck` where it used to be
 /// `SetPreview`, and it isolates a **slot** exactly as the audition did.
 ///
 /// **What it costs is that a fade is scheduled and an audition was not.** A
 /// press lands on the current grid rather than in the frame it arrives, so the
 /// picture changes a beat or two after the entry that asked for it — which is
-/// the same gap [`DEMO_SCRIPT`]'s `f` and `g` already have and say is worth
+/// the same gap [`DEMO_SCRIPT`]'s `F` and `G` already have and say is worth
 /// watching for. The seconds below leave room for it.
 ///
 /// The mix comes first and last on purpose. Both slots composited is the state
@@ -278,13 +278,13 @@ const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
     // 1's fader out, leaving slot 0 alone — sprites *and* strokes, from one
     // simulation.
     (5.0, '1'),
-    (5.0, 'f'),
+    (5.0, 'F'),
     // Slot 1 back, slot 0 out: strokes alone, the same elements.
-    (10.0, 'g'),
+    (10.0, 'G'),
     (10.0, '0'),
-    (10.0, 'f'),
+    (10.0, 'F'),
     // And back to the mix.
-    (15.0, 'g'),
+    (15.0, 'G'),
 ];
 
 /// One pass through [`DEMO_LINES_SCRIPT`], with five seconds of the mix after
@@ -624,7 +624,7 @@ keys:
              the only control that silences a slot under every mode. Pull this
              one, not the gain, to get out of material that has gone bad: an
              `over` layer at zero gain is a black card and still covers
-  f g        fade the focused slot's fader out / in, over the current length,
+  F G        fade the focused slot's fader out / in, over the current length,
              starting on the current grid. Opacity rather than gain: opacity
              silences under every blend mode, where a gain of zero under
              `over` is a black card that still covers
@@ -637,10 +637,10 @@ keys:
              0 on the incoming slot, put on air under `over`, and one
              scheduled move carrying the front to 1. Nothing in the
              transition knows what a mask is and nothing in the mask knows
-             what a beat is; a wipe is the two of them. Needs a shape from `z`
-  z          cycle the wipe's shape: off, left to right, bottom to top, the
+             what a beat is; a wipe is the two of them. Needs a shape from `Z`
+  Z          cycle the wipe's shape: off, left to right, bottom to top, the
              two diagonals, an iris
-  r          cycle which renderer of the focused slot is live, landing on the
+  R          cycle which renderer of the focused slot is live, landing on the
              current grid. Needs the slot to composite — --merge, or a Set
              file that records one: overdrawn renderers share one target and
              there is nothing to silence. The ones not selected still draw,
@@ -648,7 +648,7 @@ keys:
              free of a frame. One way: there is no position that folds them
              all back together. What you choose is kept: `k` writes it into
              the Set file as the merge's `live`
-  n          cycle where a fade starts: the next bar, the next beat, now
+  N          cycle where a fade starts: the next bar, the next beat, now
   j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
   m          cycle the focused slot's blend mode: add, over, max. `over` is
              the only one in which a layer hides the ones under it, and what
@@ -664,7 +664,7 @@ keys:
              needs closed-form material, and tempo sync is refused on material
              that reads `beats`, which already follows the room. Engaging
              anchors the material at the current tempo, so nothing jumps
-  u i        scrub the focused slot back / forward, a quarter beat a press.
+  U i        scrub the focused slot back / forward, a quarter beat a press.
              Beat sync only: scrubbing moves a position and the other modes
              are rates
   b          tap the beat — three or more taps set the tempo as well, and a
@@ -697,7 +697,7 @@ keys:
              procedure. The store write happens on a thread of its own and the
              line saying where it went arrives when it lands. `--save-set` is
              the same file written before a run instead of during one
-  s          print the status line now
+  S          print the status line now
   h ?        print these bindings
   esc        quit
 ";
@@ -5922,25 +5922,25 @@ impl Live {
     ///   `Operation::Quit` are `Sayable::Operable`, and a key that nudges is
     ///   not a performer for an operation that names a value. See
     ///   [`Live::run_operations`].
-    /// - **The vocabulary does not name it at all.** `s` prints the status line
+    /// - **The vocabulary does not name it at all.** `S` prints the status line
     ///   and `h`/`?` print [`BINDINGS`]. Neither has a row on
     ///   `docs/manual/operations.html`, which is the specification for which
     ///   **operations** exist — so neither is an operation anybody has
     ///   specified. Left as found and reported, because a row invented here
     ///   would be a specification written from the implementation.
     ///
-    ///   *(This clause said that page is the specification for which keys
-    ///   exist, and that stopped being true of **this** keyboard on
-    ///   2026-08-29. Its `key` column is the instrument's keyboard — the keys
-    ///   `cargo run -p karakuri` binds — and these thirty-nine are the command
-    ///   line's own, which no column measures. The two collide on eight
-    ///   letters. See
-    ///   `docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md`.)*
+    ///   *(Under ADR-0346, superseding ADR-0220, the CLI and GUI keyboard
+    ///   mappings converge onto the unified specification in
+    ///   `docs/manual/operations.html`. The interim scaffolding divergence
+    ///   on single-letter keys is resolved by migrating the colliding CLI
+    ///   keys to uppercase keys `F`, `G`, `Z`, `R`, `N`, `U`, `S`, while `o`
+    ///   and `p` agree on both keyboards for audio latency offset. See
+    ///   `docs/adr/0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md`.)*
     fn key(&mut self, key: &Key) -> bool {
         match key.as_ref() {
             Key::Named(NamedKey::Escape) => return true,
             Key::Named(NamedKey::Space) => self.toggle_focused(),
-            Key::Character(s) => match s.chars().next().unwrap_or('\0').to_ascii_lowercase() {
+            Key::Character(s) => match s.chars().next().unwrap_or('\0') {
                 c @ '0'..='3' => self.focus_slot(c as usize - '0' as usize),
                 '[' => self.nudge_gain(-GAIN_STEP),
                 ']' => self.nudge_gain(GAIN_STEP),
@@ -5948,13 +5948,13 @@ impl Live {
                 ';' => self.nudge_opacity(-OPACITY_STEP),
                 '\'' => self.nudge_opacity(OPACITY_STEP),
                 'm' => self.cycle_blend(self.focus),
-                'f' => self.fade(0.0),
-                'g' => self.fade(1.0),
+                'F' => self.fade(0.0),
+                'G' => self.fade(1.0),
                 'x' => self.crossfade(),
                 'c' => self.wipe(),
-                'z' => self.cycle_mask(),
-                'r' => self.cycle_renderer(),
-                'n' => self.cycle_quantum(),
+                'Z' => self.cycle_mask(),
+                'R' => self.cycle_renderer(),
+                'N' => self.cycle_quantum(),
                 'j' => self.cycle_fade_beats(),
                 't' => self.cycle_tonemap(),
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
@@ -5962,7 +5962,7 @@ impl Live {
                 '`' => self.set_exposure(1.0),
                 'w' => self.toggle_priming(self.focus),
                 'y' => self.cycle_sync(),
-                'u' => self.scrub(-SCRUB_BEATS),
+                'U' => self.scrub(-SCRUB_BEATS),
                 'i' => self.scrub(SCRUB_BEATS),
                 'b' => self.tap(),
                 ',' => self.shift_octave(0.5),
@@ -5974,7 +5974,7 @@ impl Live {
                 // has one slot in front of it, cannot type a name, and is
                 // reading the terminal.
                 'k' => self.save_set(Asked::Operator, self.focus, None, None),
-                's' => self.print_status(),
+                'S' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
             },
@@ -8904,12 +8904,12 @@ proc points {
             "there has to be more than one slot for taking one away to show anything"
         );
         // **Three moments, one per slot plus the return to the mix**, and each
-        // moment is the keys it takes: a digit to focus the slot and `f` to
-        // fade it out, `g` to bring the previous one back. A deck of a
+        // moment is the keys it takes: a digit to focus the slot and `F` to
+        // fade it out, `G` to bring the previous one back. A deck of a
         // different size leaves the script out of phase, which is what this
         // counts.
-        let fades = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'f').count();
-        let restores = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'g').count();
+        let fades = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'F').count();
+        let restores = DEMO_LINES_SCRIPT.iter().filter(|(_, k)| *k == 'G').count();
         assert_eq!(
             (fades, restores),
             (args.sets.len(), args.sets.len()),
@@ -8924,7 +8924,7 @@ proc points {
         assert_eq!(
             focused,
             vec!['1', '0'],
-            "a fade acts on the focused slot, so every `f` needs the digit that says which"
+            "a fade acts on the focused slot, so every `F` needs the digit that says which"
         );
     }
 
