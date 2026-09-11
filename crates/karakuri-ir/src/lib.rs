@@ -32,6 +32,6 @@ pub use ast::{
     CapacityDecl, Derivation, Expr, Kind, Lit, Output, Param, Proc, SlotTy, Stmt, Topology, Ty,
     UnOp, UsesDecl, COMPONENTS, DEFAULT_CAPACITY,
 };
-pub use error::{IrError, IrResult, Stage};
+pub use error::{CheckError, Diagnostic, DiagnosticReport, IrError, IrResult, Stage};
 pub use parse::parse;
 pub use span::{LineCol, Span};

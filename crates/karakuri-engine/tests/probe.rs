@@ -177,3 +177,114 @@ mod gpu {
         assert!(measurement.ms.is_finite() && measurement.ms >= 0.0);
     }
 }
+
+#[test]
+fn degeneracy_detector_identifies_all_zero_alpha() {
+    use karakuri_engine::{check_degeneracy, Degeneracy};
+
+    // Rgba8Unorm with zero alpha
+    let data_rgba8 = vec![255, 128, 64, 0, 100, 200, 50, 0];
+    assert_eq!(
+        check_degeneracy(&data_rgba8, wgpu::TextureFormat::Rgba8Unorm),
+        Some(Degeneracy::AllZeroAlpha)
+    );
+
+    // Rgba16Float with zero alpha (1.0f in f16 is 0x3C00, 0.0f in f16 is 0x0000)
+    let mut data_f16 = Vec::new();
+    for _ in 0..4 {
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // R = 1.0
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // G = 1.0
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // B = 1.0
+        data_f16.extend_from_slice(&0x0000u16.to_le_bytes()); // A = 0.0
+    }
+    assert_eq!(
+        check_degeneracy(&data_f16, wgpu::TextureFormat::Rgba16Float),
+        Some(Degeneracy::AllZeroAlpha)
+    );
+}
+
+#[test]
+fn degeneracy_detector_identifies_pure_black() {
+    use karakuri_engine::{check_degeneracy, Degeneracy};
+
+    // Rgba8Unorm with RGB == 0 and Alpha == 255
+    let data_rgba8 = vec![0, 0, 0, 255, 0, 0, 0, 255];
+    assert_eq!(
+        check_degeneracy(&data_rgba8, wgpu::TextureFormat::Rgba8Unorm),
+        Some(Degeneracy::PureBlack)
+    );
+
+    // Rgba16Float with RGB == 0.0 and Alpha == 1.0
+    let mut data_f16 = Vec::new();
+    for _ in 0..4 {
+        data_f16.extend_from_slice(&0x0000u16.to_le_bytes()); // R = 0.0
+        data_f16.extend_from_slice(&0x0000u16.to_le_bytes()); // G = 0.0
+        data_f16.extend_from_slice(&0x0000u16.to_le_bytes()); // B = 0.0
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // A = 1.0
+    }
+    assert_eq!(
+        check_degeneracy(&data_f16, wgpu::TextureFormat::Rgba16Float),
+        Some(Degeneracy::PureBlack)
+    );
+}
+
+#[test]
+fn degeneracy_detector_identifies_nan_and_inf() {
+    use karakuri_engine::{check_degeneracy, Degeneracy};
+
+    // Half-float NaN: exponent all 1s (0x7C00), mantissa nonzero (e.g. 0x7E00)
+    let mut data_f16_nan = Vec::new();
+    data_f16_nan.extend_from_slice(&0x7E00u16.to_le_bytes()); // R = NaN
+    data_f16_nan.extend_from_slice(&0x3C00u16.to_le_bytes()); // G = 1.0
+    data_f16_nan.extend_from_slice(&0x3C00u16.to_le_bytes()); // B = 1.0
+    data_f16_nan.extend_from_slice(&0x3C00u16.to_le_bytes()); // A = 1.0
+    assert_eq!(
+        check_degeneracy(&data_f16_nan, wgpu::TextureFormat::Rgba16Float),
+        Some(Degeneracy::NaNDetected)
+    );
+
+    // Half-float Inf: exponent all 1s (0x7C00), mantissa zero (0x7C00)
+    let mut data_f16_inf = Vec::new();
+    data_f16_inf.extend_from_slice(&0x3C00u16.to_le_bytes()); // R = 1.0
+    data_f16_inf.extend_from_slice(&0x7C00u16.to_le_bytes()); // G = Inf
+    data_f16_inf.extend_from_slice(&0x3C00u16.to_le_bytes()); // B = 1.0
+    data_f16_inf.extend_from_slice(&0x3C00u16.to_le_bytes()); // A = 1.0
+    assert_eq!(
+        check_degeneracy(&data_f16_inf, wgpu::TextureFormat::Rgba16Float),
+        Some(Degeneracy::NaNDetected)
+    );
+
+    // Rgba32Float NaN
+    let mut data_f32 = Vec::new();
+    data_f32.extend_from_slice(&f32::NAN.to_le_bytes());
+    data_f32.extend_from_slice(&1.0f32.to_le_bytes());
+    data_f32.extend_from_slice(&1.0f32.to_le_bytes());
+    data_f32.extend_from_slice(&1.0f32.to_le_bytes());
+    assert_eq!(
+        check_degeneracy(&data_f32, wgpu::TextureFormat::Rgba32Float),
+        Some(Degeneracy::NaNDetected)
+    );
+}
+
+#[test]
+fn degeneracy_detector_healthy_frame_returns_none() {
+    use karakuri_engine::check_degeneracy;
+
+    let data_rgba8 = vec![255, 128, 64, 255, 100, 200, 50, 255];
+    assert_eq!(
+        check_degeneracy(&data_rgba8, wgpu::TextureFormat::Rgba8Unorm),
+        None
+    );
+
+    let mut data_f16 = Vec::new();
+    for _ in 0..4 {
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // R = 1.0
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // G = 1.0
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // B = 1.0
+        data_f16.extend_from_slice(&0x3C00u16.to_le_bytes()); // A = 1.0
+    }
+    assert_eq!(
+        check_degeneracy(&data_f16, wgpu::TextureFormat::Rgba16Float),
+        None
+    );
+}

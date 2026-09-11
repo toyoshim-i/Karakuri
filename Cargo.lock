@@ -1459,6 +1459,7 @@ dependencies = [
  "karakuri-store",
  "png",
  "pollster",
+ "serde",
  "thiserror 2.0.19",
  "wgpu",
  "winit",
@@ -1488,6 +1489,8 @@ dependencies = [
 name = "karakuri-ir"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "thiserror 2.0.19",
 ]
 

@@ -128,6 +128,72 @@ use karakuri_store::record::{Layer, Record};
 use karakuri_store::store::{Store, StoreError};
 use serde_json::{json, Value};
 
+pub use karakuri_ir::{Diagnostic, DiagnosticReport};
+
+/// Check a procedure source against the full IR pipeline (parse, type, contract, cost)
+/// and return a machine-readable `DiagnosticReport`.
+pub fn check_procedure(source: &str) -> DiagnosticReport {
+    let mut diagnostics = Vec::new();
+    match karakuri_ir::parse(source) {
+        Err(errs) => {
+            diagnostics.extend(errs.iter().map(|e| Diagnostic::from_ir_error(e, source)));
+        }
+        Ok(proc) => match karakuri_ir::check::check(&proc) {
+            Err(errs) => {
+                diagnostics.extend(errs.iter().map(|e| Diagnostic::from_ir_error(e, source)));
+            }
+            Ok(checked) => {
+                if let Err(errs) = karakuri_ir::cost::estimate(&checked) {
+                    diagnostics.extend(errs.iter().map(|e| Diagnostic::from_ir_error(e, source)));
+                }
+            }
+        },
+    }
+    let success = diagnostics.is_empty();
+    DiagnosticReport {
+        diagnostics,
+        success,
+    }
+}
+
+/// Verify a set configuration in the store and return a `DiagnosticReport`.
+pub fn check_set_configuration(store_path: &std::path::Path, id: &str) -> DiagnosticReport {
+    let store = match Store::open(store_path) {
+        Ok(s) => s,
+        Err(e) => {
+            return DiagnosticReport {
+                diagnostics: vec![Diagnostic {
+                    code: "KIR-E501-STORE-OPEN-FAILED".to_string(),
+                    message: format!("cannot open store at `{}`: {e}", store_path.display()),
+                    line: None,
+                    column: None,
+                    remedy: Some(
+                        "Verify the store directory path exists and has correct permissions."
+                            .to_string(),
+                    ),
+                }],
+                success: false,
+            };
+        }
+    };
+    match store.read_set(id) {
+        Ok(_) => DiagnosticReport::ok(),
+        Err(e) => DiagnosticReport {
+            diagnostics: vec![Diagnostic {
+                code: "KIR-E502-SET-READ-FAILED".to_string(),
+                message: format!("failed to read set `{id}`: {e}"),
+                line: None,
+                column: None,
+                remedy: Some(
+                    "Check that the set ID is correctly spelled and saved in the library."
+                        .to_string(),
+                ),
+            }],
+            success: false,
+        },
+    }
+}
+
 /// What the render loop tells the server about, over a channel.
 ///
 /// **A channel and not a shared lock**: the frame path may wait for nothing,
@@ -4633,6 +4699,33 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
         .ok_or("no tool name")?;
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
 
+    if name == "check_procedure" {
+        let source = args
+            .get("source")
+            .and_then(Value::as_str)
+            .ok_or("`source` is required")?;
+        let report = check_procedure(source);
+        let report_json = serde_json::to_string_pretty(&report).unwrap_or_default();
+        return Ok(Called::Answered(if report.success {
+            Ok(report_json)
+        } else {
+            Err(report_json)
+        }));
+    }
+    if name == "check_set" {
+        let id = args
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or("`id` is required")?;
+        let report = check_set_configuration(&state.store, id);
+        let report_json = serde_json::to_string_pretty(&report).unwrap_or_default();
+        return Ok(Called::Answered(if report.success {
+            Ok(report_json)
+        } else {
+            Err(report_json)
+        }));
+    }
+
     Ok(match asked(name, &args, &state.slots)? {
         // **The gate, and there is one of it.** Named, then audited, then done
         // — every tool crosses this seam because [`perform`] takes what
@@ -4681,8 +4774,20 @@ fn audited<'a>(operation: &'a Operation, state: &State) -> Result<Allowed<'a>, S
 /// of this shape would be two chances to disagree about `isError`.
 fn tool_result(outcome: Result<String, String>) -> Value {
     match outcome {
-        Ok(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": false }),
-        Err(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": true }),
+        Ok(text) => {
+            if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
+                json!({ "content": [{ "type": "text", "text": text }], "isError": false, "report": report })
+            } else {
+                json!({ "content": [{ "type": "text", "text": text }], "isError": false })
+            }
+        }
+        Err(text) => {
+            if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
+                json!({ "content": [{ "type": "text", "text": text }], "isError": true, "report": report })
+            } else {
+                json!({ "content": [{ "type": "text", "text": text }], "isError": true })
+            }
+        }
     }
 }
 
@@ -4758,7 +4863,23 @@ fn write_procedure(
     // **Checked before it is written, and the diagnostics are handed back.**
     // Writing first and letting the watcher report would put the compiler's
     // answer on a terminal the model cannot see.
-    let checked = karakuri_environment::compile::check(source)?;
+    let report = check_procedure(source);
+    if !report.success {
+        return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
+    }
+    let checked = karakuri_environment::compile::check(source).map_err(|e| {
+        let fallback = DiagnosticReport {
+            diagnostics: vec![Diagnostic {
+                code: "KIR-E100-COMPILE-FAILED".to_string(),
+                message: format!("compile: {e}"),
+                line: None,
+                column: None,
+                remedy: None,
+            }],
+            success: false,
+        };
+        serde_json::to_string_pretty(&fallback).unwrap_or(e)
+    })?;
     // **The address and the source have to agree**, and the comparison is now
     // between two `Kind`s rather than between a string and a guess. The guess
     // was `L1`, or `L4` for everything else, which made this refusal answer
@@ -4766,12 +4887,25 @@ fn write_procedure(
     // turned away for not being a renderer, which is a refusal about a mistake
     // the caller had not made.
     if checked.kind != layer {
-        return Err(format!(
-            "this is a {:?} procedure and it was addressed to slot {slot}'s {name} — \
-             the two layers are not interchangeable, and what a file is is the `kind` \
-             line inside it",
-            checked.kind
-        ));
+        let report = DiagnosticReport {
+            diagnostics: vec![Diagnostic {
+                code: "KIR-E300-LAYER-MISMATCH".to_string(),
+                message: format!(
+                    "this is a {:?} procedure and it was addressed to slot {slot}'s {name} — \
+                     the two layers are not interchangeable, and what a file is is the `kind` \
+                     line inside it",
+                    checked.kind
+                ),
+                line: None,
+                column: None,
+                remedy: Some(format!(
+                    "Change `kind {:?}` to match `{name}` or address the appropriate slot layer.",
+                    checked.kind
+                )),
+            }],
+            success: false,
+        };
+        return Err(serde_json::to_string_pretty(&report).unwrap_or_default());
     }
 
     // **What else this write reaches**, which is normally nothing now and is
@@ -9451,6 +9585,60 @@ mod tests {
             reply.get("error").is_none(),
             "a bad procedure must not look like a bad request"
         );
+        // Structured diagnostic report attached for AI agents
+        let report: DiagnosticReport =
+            serde_json::from_value(result["report"].clone()).expect("structured report");
+        assert!(!report.success);
+        assert!(!report.diagnostics.is_empty());
+        assert_eq!(report.diagnostics[0].code, "KIR-E100-PARSE");
+    }
+
+    #[test]
+    fn check_procedure_returns_structured_diagnostics() {
+        let (tx, rx) = mpsc::channel();
+        drop(tx);
+        let mut state = state(rx);
+
+        // 1. Valid procedure
+        let valid_src = include_str!("../../karakuri-ir/tests/fixtures/drift_shell.kir");
+        let req_valid = json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": "check_procedure",
+                "arguments": { "source": valid_src },
+            },
+        });
+        let reply_valid = dispatch(&req_valid, &mut state)
+            .settled()
+            .expect("answered");
+        let res_valid = reply_valid.get("result").expect("result");
+        assert_eq!(res_valid["isError"], json!(false));
+        let report_valid: DiagnosticReport =
+            serde_json::from_value(res_valid["report"].clone()).expect("report");
+        assert!(report_valid.success);
+        assert!(report_valid.diagnostics.is_empty());
+
+        // 2. Broken procedure with unknown kind
+        let broken_src = "proc broken {\n  kind L9\n}\n";
+        let req_broken = json!({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {
+                "name": "check_procedure",
+                "arguments": { "source": broken_src },
+            },
+        });
+        let reply_broken = dispatch(&req_broken, &mut state)
+            .settled()
+            .expect("answered");
+        let res_broken = reply_broken.get("result").expect("result");
+        assert_eq!(res_broken["isError"], json!(true));
+        let report_broken: DiagnosticReport =
+            serde_json::from_value(res_broken["report"].clone()).expect("report");
+        assert!(!report_broken.success);
+        assert_eq!(report_broken.diagnostics.len(), 1);
+        assert_eq!(report_broken.diagnostics[0].code, "KIR-E102-UNKNOWN-KIND");
+        assert_eq!(report_broken.diagnostics[0].line, Some(2));
+        assert!(report_broken.diagnostics[0].remedy.is_some());
     }
 
     /// **Every tool this server publishes names an operation the gate lets

@@ -137,6 +137,237 @@ use std::time::Instant;
 use crate::present::Present;
 use crate::video_source::VideoSource;
 
+/// Visual degeneracy detected from rendered texture readback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Degeneracy {
+    NaNDetected,
+    AllZeroAlpha,
+    PureBlack,
+}
+
+/// Helper to detect visual degeneracies (zero alpha, pure black screen, NaN/Inf) from texture pixel data.
+/// Returns `Some(Degeneracy)` if a visual degeneracy is detected, or `None` if the frame is healthy.
+pub fn check_degeneracy(texture_data: &[u8], format: wgpu::TextureFormat) -> Option<Degeneracy> {
+    if texture_data.is_empty() {
+        return None;
+    }
+
+    match format {
+        wgpu::TextureFormat::Rgba16Float => {
+            let pixel_size = 8;
+            if texture_data.len() < pixel_size {
+                return None;
+            }
+            let mut all_zero_alpha = true;
+            let mut all_zero_rgb = true;
+            let mut nan_detected = false;
+
+            for chunk in texture_data.chunks_exact(pixel_size) {
+                let r = u16::from_le_bytes([chunk[0], chunk[1]]);
+                let g = u16::from_le_bytes([chunk[2], chunk[3]]);
+                let b = u16::from_le_bytes([chunk[4], chunk[5]]);
+                let a = u16::from_le_bytes([chunk[6], chunk[7]]);
+
+                // In IEEE 754 half-float:
+                // (bits & 0x7C00) == 0x7C00 indicates NaN or Inf
+                if (r & 0x7C00) == 0x7C00
+                    || (g & 0x7C00) == 0x7C00
+                    || (b & 0x7C00) == 0x7C00
+                    || (a & 0x7C00) == 0x7C00
+                {
+                    nan_detected = true;
+                    break;
+                }
+
+                if (a & 0x7FFF) != 0 {
+                    all_zero_alpha = false;
+                }
+                if (r & 0x7FFF) != 0 || (g & 0x7FFF) != 0 || (b & 0x7FFF) != 0 {
+                    all_zero_rgb = false;
+                }
+            }
+
+            if nan_detected {
+                Some(Degeneracy::NaNDetected)
+            } else if all_zero_alpha {
+                Some(Degeneracy::AllZeroAlpha)
+            } else if all_zero_rgb {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        wgpu::TextureFormat::Rgba32Float => {
+            let pixel_size = 16;
+            if texture_data.len() < pixel_size {
+                return None;
+            }
+            let mut all_zero_alpha = true;
+            let mut all_zero_rgb = true;
+            let mut nan_detected = false;
+
+            for chunk in texture_data.chunks_exact(pixel_size) {
+                let r = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                let g = f32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]);
+                let b = f32::from_le_bytes([chunk[8], chunk[9], chunk[10], chunk[11]]);
+                let a = f32::from_le_bytes([chunk[12], chunk[13], chunk[14], chunk[15]]);
+
+                if r.is_nan()
+                    || r.is_infinite()
+                    || g.is_nan()
+                    || g.is_infinite()
+                    || b.is_nan()
+                    || b.is_infinite()
+                    || a.is_nan()
+                    || a.is_infinite()
+                {
+                    nan_detected = true;
+                    break;
+                }
+
+                if a != 0.0 {
+                    all_zero_alpha = false;
+                }
+                if r != 0.0 || g != 0.0 || b != 0.0 {
+                    all_zero_rgb = false;
+                }
+            }
+
+            if nan_detected {
+                Some(Degeneracy::NaNDetected)
+            } else if all_zero_alpha {
+                Some(Degeneracy::AllZeroAlpha)
+            } else if all_zero_rgb {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        wgpu::TextureFormat::R16Float => {
+            let pixel_size = 2;
+            if texture_data.len() < pixel_size {
+                return None;
+            }
+            let mut all_zero = true;
+            let mut nan_detected = false;
+
+            for chunk in texture_data.chunks_exact(pixel_size) {
+                let v = u16::from_le_bytes([chunk[0], chunk[1]]);
+                if (v & 0x7C00) == 0x7C00 {
+                    nan_detected = true;
+                    break;
+                }
+                if (v & 0x7FFF) != 0 {
+                    all_zero = false;
+                }
+            }
+
+            if nan_detected {
+                Some(Degeneracy::NaNDetected)
+            } else if all_zero {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        wgpu::TextureFormat::R32Float => {
+            let pixel_size = 4;
+            if texture_data.len() < pixel_size {
+                return None;
+            }
+            let mut all_zero = true;
+            let mut nan_detected = false;
+
+            for chunk in texture_data.chunks_exact(pixel_size) {
+                let v = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                if v.is_nan() || v.is_infinite() {
+                    nan_detected = true;
+                    break;
+                }
+                if v != 0.0 {
+                    all_zero = false;
+                }
+            }
+
+            if nan_detected {
+                Some(Degeneracy::NaNDetected)
+            } else if all_zero {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => {
+            let pixel_size = 4;
+            if texture_data.len() < pixel_size {
+                return None;
+            }
+            let mut all_zero_alpha = true;
+            let mut all_zero_rgb = true;
+
+            for chunk in texture_data.chunks_exact(pixel_size) {
+                let r = chunk[0];
+                let g = chunk[1];
+                let b = chunk[2];
+                let a = chunk[3];
+
+                if a != 0 {
+                    all_zero_alpha = false;
+                }
+                if r != 0 || g != 0 || b != 0 {
+                    all_zero_rgb = false;
+                }
+            }
+
+            if all_zero_alpha {
+                Some(Degeneracy::AllZeroAlpha)
+            } else if all_zero_rgb {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => {
+            let pixel_size = 4;
+            if texture_data.len() < pixel_size {
+                return None;
+            }
+            let mut all_zero_alpha = true;
+            let mut all_zero_rgb = true;
+
+            for chunk in texture_data.chunks_exact(pixel_size) {
+                let b = chunk[0];
+                let g = chunk[1];
+                let r = chunk[2];
+                let a = chunk[3];
+
+                if a != 0 {
+                    all_zero_alpha = false;
+                }
+                if r != 0 || g != 0 || b != 0 {
+                    all_zero_rgb = false;
+                }
+            }
+
+            if all_zero_alpha {
+                Some(Degeneracy::AllZeroAlpha)
+            } else if all_zero_rgb {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        wgpu::TextureFormat::R8Unorm => {
+            if texture_data.iter().all(|&b| b == 0) {
+                Some(Degeneracy::PureBlack)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 /// How a [`Measurement`]'s `ms` was obtained. Carried alongside the number
 /// because the two methods are not comparably trustworthy — see "Calibration"
 /// in the module doc.

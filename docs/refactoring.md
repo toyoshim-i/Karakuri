@@ -228,29 +228,40 @@ Pass scheduling across `karakuri-engine` is hardcoded. Intermediate render targe
 
 ---
 
-## 17. Structured AI/MCP Diagnostic & Self-Healing Loop
+## 17. Structured AI/MCP Diagnostic & Self-Healing Loop (**DONE**)
 
 ### Phenomenon
-Compiler and cost errors are emitted as unstructured English text. Procedures that compile cleanly but produce degenerate visual output (e.g., pure black screen, NaN coordinates, zero alpha) fail silently.
+Compiler and cost errors were emitted as unstructured English text. Procedures that compiled cleanly but produced degenerate visual output (e.g., pure black screen, NaN coordinates, zero alpha) failed silently.
 
-### Refactoring Plan
-- **Machine-Readable Diagnostics (`DiagnosticReport`)**:
-  - Expose structured JSON-RPC error objects over MCP with explicit line, column, expected attributes, and remedy hints.
+### Technical Status & Resolution
+- **Machine-Readable Diagnostics (`DiagnosticReport` & `Diagnostic`)**:
+  - Defined `Diagnostic` (`code`, `message`, `line`, `column`, `remedy`) and `DiagnosticReport` (`diagnostics`, `success`) in `crates/karakuri-ir/src/error.rs`.
+  - Added deterministic error code mapping (`code_for`) classifying parse (`KIR-E100..`), type (`KIR-E200..`), contract (`KIR-E300..`), and cost (`KIR-E400..`) errors with actionable self-healing remedy suggestions for LLMs.
+  - Provided conversion helpers (`from_ir_errors`, `from_check_errors`, `from_parse_error`).
+- **Structured MCP Reporting**:
+  - Exposed `check_procedure` in `crates/karakuri-mcp/src/lib.rs` as both a callable MCP tool and library API returning structured `DiagnosticReport` JSON.
+  - Updated `write_procedure` to return structured `DiagnosticReport` on compile errors and layer mismatches (`KIR-E300-LAYER-MISMATCH`), embedding machine-readable diagnostics in the MCP JSON-RPC response (`report` field and `content[0].text`).
+  - Added `check_set_configuration` for validating set definitions in the store.
 - **Visual Degeneracy Probes**:
-  - Integrate GPU compute readbacks during priming to detect pure zero-alpha output, NaN bounds, or zero luminance variance, providing immediate semantic feedback to AI agents.
+  - Implemented `check_degeneracy(texture_data: &[u8], format: wgpu::TextureFormat) -> Option<Degeneracy>` in `crates/karakuri-engine/src/probe.rs`.
+  - Detects `NaNDetected` (NaN or Inf bit patterns in float channels), `AllZeroAlpha` (100% of samples having alpha == 0.0), and `PureBlack` (all pixel color channels == 0.0) across `Rgba16Float`, `Rgba32Float`, `R16Float`, `R32Float`, `Rgba8Unorm`, `Rgba8UnormSrgb`, `Bgra8Unorm`, `Bgra8UnormSrgb`, and `R8Unorm` formats.
+  - Verified across integration tests in `crates/karakuri-engine/tests/probe.rs`.
 
 ---
 
 ## 18. Signal Bus Vectorization & Zero-Lookup ID Dispatch
 
 ### Phenomenon
-`SignalBus` distributes external audio, MIDI, and synthesized signals. Every signal is strictly a single `f32` scalar sample, and queries require string lookups (e.g., `"audio.low"`, `"tempo.beat"`).
+`SignalBus` distributes external audio, MIDI, and synthesized signals. Every signal was strictly a single `f32` scalar sample, and queries required string lookups (e.g., `"audio.low"`, `"tempo.beat"`).
 
-### Refactoring Plan
+### Refactoring Plan & Implementation (**DONE**)
 - **Vectorized & Typed Signal Samples**:
-  - Support `SignalValue::Scalar(f32)`, `SignalValue::Vec4([f32; 4])`, and contiguous spectral buffer slices.
-- **Compile-Time `SignalId` Interning**:
-  - Replace dynamic string lookups with interned `SignalId(u32)` indices, eliminating string hashing on the per-frame hot path.
+  - Introduced `SignalValue::Scalar(f32)`, `SignalValue::Vec4([f32; 4])`, and `SignalValue::Spectrum(Vec<f32>)`.
+  - Introduced `VectorSample` with helper constructors and automatic `From<Sample>` conversion.
+  - Enhanced `SignalBus` trait with default `sample_vector(&self, id: SignalId) -> VectorSample`.
+- **Compile-Time & Pre-Resolved `SignalId` Interning**:
+  - Replaced per-frame string hashing and lookups with `SignalId` enum (`Bpm`, `Beat`, `Bar`, `Energy`, `Onset`, `Band(u8)`, `Custom(u16)`).
+  - Pre-resolved `signal_id` in `Binding::new` in `karakuri-engine`, so per-frame binding resolution evaluates `bus.sample_id(self.signal_id)` with zero string lookups on the hot path.
 
 ---
 
@@ -302,7 +313,7 @@ During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | **DONE** | First-class vector storage, atomic multi-component modulations, direct uniform packing |
 | **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |
 | **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | Planned | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
-| **Phase 2B** | **P17** | **Structured AI Repair Loop** | Planned | Machine-readable diagnostics; visual degeneracy detector |
-| **Phase 2B** | **P18** | **Signal Bus Vectorization** | Planned | Typed vector signals; interned `SignalId` zero-cost dispatch |
+| **Phase 2B** | **P17** | **Structured AI Repair Loop** | **DONE** | Machine-readable `DiagnosticReport`; visual degeneracy detector `check_degeneracy` |
+| **Phase 2B** | **P18** | **Signal Bus Vectorization** | **DONE** | Vectorized `SignalValue`/`VectorSample`; interned `SignalId` zero-cost dispatch |
 | **Phase 2B** | **P19** | **Zero-Allocation Stream Replay** | Planned | Mmap zero-copy ndjson/binary reader; stream versioning |
 | **Phase 2B** | **P20** | **Converge CLI & GUI Keyboards** | **DONE** | Migrate colliding CLI keys (`F G N R S U Z`); align on `operations.html` (ADR-0346) |
