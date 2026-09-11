@@ -1886,7 +1886,7 @@ impl Readout {
                     self.view.transport,
                     self.view.audio.as_ref(),
                     self.view.tracker,
-                    None,
+                    self.view.map.as_ref(),
                     &self.view.arrangement,
                 );
                 let asked = pill
