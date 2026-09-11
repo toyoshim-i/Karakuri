@@ -33,6 +33,7 @@ use crate::record::{InputPort, Layer, NodeAddress, Record};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Key {
+    Header,
     Set,
     Slot(NodeAddress),
     Capacity(NodeAddress),
@@ -104,6 +105,7 @@ enum Key {
 /// arm, and `Record::vocabulary` is exhaustive for the same reason.
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
+        Record::Header { .. } => Some(Key::Header),
         Record::Set { .. } => Some(Key::Set),
         // Keyed by the node's **address and not by its name**: a `slot`
         // record says which node it is about with `(layer, index)`, and the

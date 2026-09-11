@@ -550,9 +550,19 @@ pub struct ChainSlot {
     pub params: std::collections::BTreeMap<String, f32>,
 }
 
+/// The current schema version for `.kbset` and session ndjson streams.
+///
+/// Files without an explicit header are detected as Version 1 (legacy unversioned).
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum Record {
+    /// File schema version header, placed at line 0 of versioned `.kbset` and session ndjson files.
+    #[serde(rename = "header")]
+    Header {
+        version: u32,
+    },
     Set {
         id: String,
         v: u32,
@@ -1911,7 +1921,8 @@ impl Record {
         match self {
             // Written to a Set file and read back out of one, and this is the
             // arm that grows when the Set vocabulary does.
-            Record::Set { .. }
+            Record::Header { .. }
+            | Record::Set { .. }
             | Record::Slot { .. }
             | Record::Capacity { .. }
             | Record::Param { .. }
@@ -3213,5 +3224,15 @@ mod tests {
 
         let col_serialized = serde_json::to_string(&col).unwrap();
         assert_eq!(col_serialized, "[0.1,0.2,0.3,1.0]");
+    }
+
+    #[test]
+    fn a_header_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"header","version":2}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(rec, Record::Header { version: 2 });
+        assert!(rec.is_set_state());
+        assert!(!rec.is_metadata());
+        assert!(!rec.is_authoring());
     }
 }
