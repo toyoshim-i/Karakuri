@@ -879,6 +879,10 @@ pub struct Set {
     /// (`docs/adr/0052-a-parameter-is-keyed-by-its-layer-and-a-collision-is-refused.md`),
     /// and the error is gone with it.
     params: Vec<HashMap<String, f32>>,
+    /// **Typed parameter values**, keyed by canonical declaration name.
+    /// Contiguous multi-component vectors (`Vec2`, `Vec3`, `Vec4`, `Color`)
+    /// and scalars are held atomically here.
+    param_values: Vec<HashMap<String, karakuri_store::record::Value>>,
     /// **Which of [`Set::params`]'s values somebody stated**, in the same node
     /// order — the keys, per node, that hold a number the `.kir` did not
     /// declare.
@@ -2863,6 +2867,23 @@ impl Set {
             // `--param Field:0:ball`, which is the name the file declares.
             .chain(fields.iter().map(|n| declared_defaults(n)))
             .collect();
+        let param_values = l1s
+            .iter()
+            .map(|(l1, _)| declared_default_values(l1))
+            .chain(l2s.iter().map(|n| declared_default_values(n)))
+            .chain(cameras.iter().map(|n| {
+                match n {
+                    Some(n) => declared_default_values(n),
+                    None => Orbit::default()
+                        .placement_values()
+                        .into_iter()
+                        .map(|(k, v)| (k, karakuri_store::record::Value::Scalar(v)))
+                        .collect(),
+                }
+            }))
+            .chain(l4s.iter().map(|n| declared_default_values(n)))
+            .chain(fields.iter().map(|n| declared_default_values(n)))
+            .collect();
         // The same walk, so a node's values and its ranges cannot end up at
         // different indices — the defect this file has already paid for twice.
         // Both sides are keyed by component, which is [`declared_ranges`].
@@ -2947,6 +2968,7 @@ impl Set {
                 || l4s.iter().any(|n| n.reads_beats),
             sources,
             params,
+            param_values,
             moved,
             ranges,
             // **One per L4 procedure, in `nodes_of(L4)`'s order**, which is
@@ -3733,6 +3755,22 @@ impl Set {
                 written += 1;
             }
         }
+        if written > 0 {
+            for (slot, node_values) in self.param_values.iter_mut().enumerate() {
+                if Some(slot) == addressed_only {
+                    continue;
+                }
+                if let Some((base, comp_idx)) = parse_component_key(name) {
+                    if let Some(vec_val) = node_values.get_mut(base) {
+                        update_value_component(vec_val, comp_idx, value);
+                    }
+                } else if let Some(karakuri_store::record::Value::Scalar(s)) =
+                    node_values.get_mut(name)
+                {
+                    *s = value;
+                }
+            }
+        }
         written
     }
 
@@ -3764,10 +3802,118 @@ impl Set {
                 // marked, so the set is a subset of the map's keys by
                 // construction — see [`Set::moved`].
                 self.moved[slot].insert(name.to_string());
+                if let Some((base, comp_idx)) = parse_component_key(name) {
+                    if let Some(vec_val) = self.param_values[slot].get_mut(base) {
+                        update_value_component(vec_val, comp_idx, value);
+                    }
+                } else if let Some(karakuri_store::record::Value::Scalar(s)) =
+                    self.param_values[slot].get_mut(name)
+                {
+                    *s = value;
+                }
                 true
             }
             None => false,
         }
+    }
+
+    /// **Set a parameter value atomically**, either addressed to a specific node or
+    /// wildcarded across all matching nodes.
+    ///
+    /// Setting a vector parameter under its bare name (`"glow"`, `Value::Vec3([0.4, 0.7, 1.0])`)
+    /// updates all components atomically in the parameter map, while single-component
+    /// updates (`"glow.x"`, `"glow.y"`, etc.) continue to be supported for backward compatibility.
+    pub fn set_param_value(
+        &mut self,
+        at: Option<karakuri_store::record::NodeAddress>,
+        key: &str,
+        value: karakuri_store::record::Value,
+    ) -> usize {
+        match at {
+            Some(addr) => {
+                let layer = kind_of_layer(addr.layer);
+                usize::from(self.set_param_value_at(layer, addr.index, key, value))
+            }
+            None => {
+                let mut written = 0;
+                let addressed_only = self.addressed_only();
+                let len = self.param_values.len();
+                for slot in 0..len {
+                    if Some(slot) == addressed_only {
+                        continue;
+                    }
+                    if self.set_param_value_in_slot(slot, key, value) {
+                        written += 1;
+                    }
+                }
+                written
+            }
+        }
+    }
+
+    /// **Set one node's declaration of `name` to `value` atomically.**
+    pub fn set_param_value_at(
+        &mut self,
+        layer: Kind,
+        index: u32,
+        name: &str,
+        value: karakuri_store::record::Value,
+    ) -> bool {
+        let Some(slot) = self.nodes_of(layer).nth(index as usize) else {
+            return false;
+        };
+        self.set_param_value_in_slot(slot, name, value)
+    }
+
+    fn set_param_value_in_slot(
+        &mut self,
+        slot: usize,
+        key: &str,
+        value: karakuri_store::record::Value,
+    ) -> bool {
+        // Case 1: `key` matches a declaration in `param_values[slot]`
+        if let Some(decl_val) = self
+            .param_values
+            .get(slot)
+            .and_then(|m| m.get(key).copied())
+        {
+            if decl_val.len() == value.len() {
+                self.param_values[slot].insert(key.to_string(), value);
+                if value.len() == 1 {
+                    if let Some(s) = value.get(0) {
+                        self.params[slot].insert(key.to_string(), s);
+                        self.moved[slot].insert(key.to_string());
+                    }
+                } else {
+                    for (i, v) in value.components().iter().enumerate() {
+                        let comp_key = karakuri_ir::component_key(key, i);
+                        self.params[slot].insert(comp_key.clone(), *v);
+                        self.moved[slot].insert(comp_key);
+                    }
+                    self.moved[slot].insert(key.to_string());
+                }
+                return true;
+            }
+            return false;
+        }
+
+        // Case 2: `key` is a single component key (e.g. "glow.y") and `value` is Scalar
+        if value.len() == 1 {
+            let scalar = value.get(0).unwrap();
+            if let Some(held) = self.params.get_mut(slot).and_then(|m| m.get_mut(key)) {
+                *held = scalar;
+                self.moved[slot].insert(key.to_string());
+
+                if let Some((base, comp_idx)) = parse_component_key(key) {
+                    if let Some(vec_val) = self.param_values[slot].get_mut(base) {
+                        update_value_component(vec_val, comp_idx, scalar);
+                    }
+                }
+                return true;
+            }
+        }
+
+        false
     }
 
     /// **Which node of the L3 layer the built-in orbit is**, counting from
@@ -3858,6 +4004,9 @@ impl Set {
         for (key, value) in orbit.placement_values() {
             if let Some(held) = self.params[slot].get_mut(&key) {
                 *held = value;
+            }
+            if let Some(held_val) = self.param_values[slot].get_mut(&key) {
+                *held_val = karakuri_store::record::Value::Scalar(value);
             }
         }
     }
@@ -4650,6 +4799,37 @@ impl Set {
         self.params.iter().find_map(|node| node.get(name).copied())
     }
 
+    /// What `name` currently holds as a typed [`karakuri_store::record::Value`],
+    /// from the first node that declares it.
+    pub fn param_value(&self, name: &str) -> Option<karakuri_store::record::Value> {
+        self.param_values
+            .iter()
+            .find_map(|node| node.get(name).copied())
+    }
+
+    /// What node `(layer, index)` holds for `name` as a typed [`karakuri_store::record::Value`].
+    pub fn param_value_at(
+        &self,
+        layer: Kind,
+        index: u32,
+        name: &str,
+    ) -> Option<karakuri_store::record::Value> {
+        let slot = self.nodes_of(layer).nth(index as usize)?;
+        self.param_values
+            .get(slot)
+            .and_then(|node| node.get(name).copied())
+    }
+
+    /// What node at `address` holds for `name` as a typed [`karakuri_store::record::Value`].
+    pub fn param_value_at_address(
+        &self,
+        address: karakuri_store::record::NodeAddress,
+        name: &str,
+    ) -> Option<karakuri_store::record::Value> {
+        let layer = kind_of_layer(address.layer);
+        self.param_value_at(layer, address.index, name)
+    }
+
     /// Every parameter value, addressed by the node that declares it: the
     /// layer, which node of that layer, the name, and the value.
     pub fn params(&self) -> impl Iterator<Item = (Kind, u32, &str, f32)> + '_ {
@@ -4847,6 +5027,7 @@ impl Set {
             let field_bound = &self.field_bound;
             let field_params = &self.field_params;
             let params = &self.params;
+            let param_values = &self.param_values;
             let source_bound = &self.source_bound;
             let source_salts = &self.source_salts;
 
@@ -4869,12 +5050,16 @@ impl Set {
                 {
                     let at = procedures[k];
                     let own = &params[at];
+                    let own_values = &param_values[at];
                     let param = |name: &str| effective(bindings, own, Kind::L1, at, name);
+                    let param_val =
+                        |name: &str| effective_vector(bindings, own_values, Kind::L1, at, name);
                     let tick = crate::node::Tick {
                         steps,
                         dt: self.dt,
                         instants,
                         param: &param,
+                        param_value: Some(&param_val),
                         field_params,
                         // **The procedure's node index**, which is `at` and not
                         // `k`: a bound geometry builds the far side first, so
@@ -4966,6 +5151,7 @@ impl Set {
             // caller.
             let stated = self.camera;
             let params = &self.params[first..];
+            let param_values = &self.param_values[first..];
             for (at, (camera, params)) in self.cameras.iter_mut().zip(params).enumerate() {
                 camera.write_canvas(queue, aspect);
                 // **The built-in's producer, built from that node's own
@@ -4992,6 +5178,9 @@ impl Set {
                     false => stated,
                 };
                 let fallback = orbit.state(t);
+                let own_values = &param_values[at];
+                let param_val =
+                    |name: &str| effective_vector(bindings, own_values, Kind::L3, at, name);
                 let view = crate::node::View {
                     t,
                     beats,
@@ -5003,6 +5192,7 @@ impl Set {
                     },
                     source_value: &no_sources,
                     param: &|name: &str| effective(bindings, params, Kind::L3, at, name),
+                    param_value: Some(&param_val),
                 };
                 camera.prepare(queue, &view, dt, &fallback);
             }
@@ -5030,12 +5220,16 @@ impl Set {
         // `L4:2:exposure` is written into every source's third one — which is
         // what makes one address mean one thing however many sources there are.
         let params = &self.params[first..];
+        let param_values = &self.param_values[first..];
         for source in &mut self.sources {
             // **The source's salt, not the Set's.** `docs/ir-spec.md` moves it
             // from per layer to per source so that two identical geometries
             // differ in colour by default rather than by being arranged to.
             let salt = source.salt;
             for (at, (renderer, params)) in source.renderers.iter_mut().zip(params).enumerate() {
+                let own_values = &param_values[at];
+                let param_val =
+                    |name: &str| effective_vector(bindings, own_values, Kind::L4, at, name);
                 let view = crate::node::View {
                     t,
                     beats,
@@ -5053,6 +5247,7 @@ impl Set {
                         source_value(source_bound, source_salts, first + at, key)
                     },
                     param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
+                    param_value: Some(&param_val),
                 };
                 renderer.write_uniforms(queue, &view);
             }
@@ -5092,10 +5287,14 @@ impl Set {
         // binding is keyed by: `at` below is the deformer's ordinal and the
         // binding names the node.
         let first = range.start;
-        let params = &self.params[range];
+        let params = &self.params[range.clone()];
+        let param_values = &self.param_values[range];
         for source in &mut self.sources {
             let salt = source.salt;
             for (at, (node, params)) in source.deforms.iter_mut().zip(params).enumerate() {
+                let own_values = &param_values[at];
+                let param_val =
+                    |name: &str| effective_vector(bindings, own_values, Kind::L2, at, name);
                 let view = crate::node::View {
                     t,
                     beats,
@@ -5109,6 +5308,7 @@ impl Set {
                         source_value(source_bound, source_salts, first + at, key)
                     },
                     param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
+                    param_value: Some(&param_val),
                 };
                 node.write_uniforms(queue, &view, dt, capacity);
             }
@@ -5237,6 +5437,28 @@ fn effective(
         // gives about the same map.
         None => params.get(name).copied(),
     }
+}
+
+/// What a vector param is written with when packing directly: its manual `Value`
+/// if no component has a binding, or `None` if any component is driven by a signal
+/// (in which case packing falls back to per-component evaluation through `effective`).
+fn effective_vector(
+    bindings: &[Binding],
+    param_values: &HashMap<String, karakuri_store::record::Value>,
+    layer: Kind,
+    index: usize,
+    name: &str,
+) -> Option<karakuri_store::record::Value> {
+    let has_binding = bindings.iter().any(|b| {
+        b.layer == layer
+            && b.covers(index)
+            && (b.key == name
+                || (b.key.starts_with(name) && b.key.as_bytes().get(name.len()) == Some(&b'.')))
+    });
+    if has_binding {
+        return None;
+    }
+    param_values.get(name).copied()
 }
 
 impl Set {
@@ -5576,6 +5798,71 @@ fn field_value(
 /// declaration. The node then has no value under those keys and
 /// `node::write_params` writes what a miss writes, which is `0.0` per
 /// component.
+fn declared_default_values(node: &Checked) -> HashMap<String, karakuri_store::record::Value> {
+    node.params
+        .iter()
+        .filter_map(|p| {
+            let comps = p.default_components()?;
+            let val = match comps.len() {
+                1 => karakuri_store::record::Value::Scalar(comps[0]),
+                2 => karakuri_store::record::Value::Vec2([comps[0], comps[1]]),
+                3 => karakuri_store::record::Value::Vec3([comps[0], comps[1], comps[2]]),
+                4 => karakuri_store::record::Value::Vec4([comps[0], comps[1], comps[2], comps[3]]),
+                _ => return None,
+            };
+            Some((p.name.clone(), val))
+        })
+        .collect()
+}
+
+fn kind_of_layer(layer: karakuri_store::record::Layer) -> Kind {
+    match layer {
+        karakuri_store::record::Layer::L1 => Kind::L1,
+        karakuri_store::record::Layer::L2 => Kind::L2,
+        karakuri_store::record::Layer::L3 => Kind::L3,
+        karakuri_store::record::Layer::L4 => Kind::L4,
+        karakuri_store::record::Layer::Field => Kind::Field,
+        karakuri_store::record::Layer::L5 => Kind::L5,
+    }
+}
+
+fn parse_component_key(key: &str) -> Option<(&str, usize)> {
+    let (base, comp) = key.rsplit_once('.')?;
+    let idx = match comp {
+        "x" | "r" => 0,
+        "y" | "g" => 1,
+        "z" | "b" => 2,
+        "w" | "a" => 3,
+        _ => return None,
+    };
+    Some((base, idx))
+}
+
+fn update_value_component(vec_val: &mut karakuri_store::record::Value, comp_idx: usize, val: f32) {
+    match vec_val {
+        karakuri_store::record::Value::Scalar(s) => {
+            if comp_idx == 0 {
+                *s = val;
+            }
+        }
+        karakuri_store::record::Value::Vec2(arr) => {
+            if comp_idx < 2 {
+                arr[comp_idx] = val;
+            }
+        }
+        karakuri_store::record::Value::Vec3(arr) => {
+            if comp_idx < 3 {
+                arr[comp_idx] = val;
+            }
+        }
+        karakuri_store::record::Value::Vec4(arr) | karakuri_store::record::Value::Color(arr) => {
+            if comp_idx < 4 {
+                arr[comp_idx] = val;
+            }
+        }
+    }
+}
+
 fn declared_defaults(node: &Checked) -> HashMap<String, f32> {
     node.params
         .iter()

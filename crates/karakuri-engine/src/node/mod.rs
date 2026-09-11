@@ -102,7 +102,9 @@ pub(crate) struct Geometry<'a> {
 ///
 /// **No camera.** `L4 : (Geometry, Camera) -> Texture` makes it an input *edge*
 /// rather than a property of the grouping, and it left this struct when it
-/// became one: a renderer names [`Camera`]'s bind group at build and reads it on
+pub(crate) type ParamValueLookup<'a> = &'a dyn Fn(&str) -> Option<karakuri_store::record::Value>;
+
+/// Became one: a renderer names [`Camera`]'s bind group at build and reads it on
 /// the GPU, so there is nothing about it for the host to pack. What is here is
 /// what genuinely is the grouping's — one clock, one canvas, one salt.
 pub(crate) struct View<'a> {
@@ -133,6 +135,9 @@ pub(crate) struct View<'a> {
     /// answer for it either way; it is merely a quieter wrong answer than the
     /// panic it replaced.
     pub param: &'a dyn Fn(&str) -> Option<f32>,
+    /// Optional typed vector parameter value lookup. When present, enables
+    /// direct packing of contiguous vector parameters without string formatting.
+    pub param_value: Option<ParamValueLookup<'a>>,
     /// **The spliced field's params, already under their WGSL names.**
     ///
     /// A field has no node, so nothing writes its uniform — every procedure
@@ -175,6 +180,8 @@ pub(crate) struct Tick<'a> {
     pub instants: [(f32, f32); MAX_STEPS as usize],
     /// This frame's parameter values, on the same terms as [`View::param`].
     pub param: &'a dyn Fn(&str) -> Option<f32>,
+    /// Optional typed vector parameter value lookup.
+    pub param_value: Option<ParamValueLookup<'a>>,
     /// **The spliced field's params, already under their WGSL names.**
     ///
     /// A field has no node, so nothing writes its uniform — every procedure
@@ -193,10 +200,12 @@ pub(crate) struct Tick<'a> {
     pub source_value: &'a dyn Fn(&str) -> Option<u32>,
 }
 
-/// The spliced field's params, for a node that has them.
+/// **Every spliced field param this node carries**, written into the uniform
+/// under its prefixed name.
 ///
-/// **Filtered by the layout rather than by the caller.** A Set hands every node
-/// the same list, and only the nodes that actually evaluate the field carry
+/// **Layout-driven**, because a field's params are the union over every binding
+/// and no one node carries all of them: a marcher's uniform may carry
+/// `field\u{1}0\u{1}ball` and not `field\u{1}1\u{1}wave`, where a deformed mesh carries
 /// those fields — so a node that does not must skip them, and the thing that
 /// knows is the layout in its hand. Writing them blind panics the packer with
 /// "uniform layout has no field", on the frame path.
@@ -211,7 +220,7 @@ pub(crate) fn write_field_params(
         .filter(|n| layout.fields.iter().any(|f| &f.name == *n))
         .cloned()
         .collect();
-    write_params(p, layout, &mine, value);
+    write_params(p, layout, &mine, value, None);
 }
 
 /// **Every Source slot this node declared**, found in the layout rather than
@@ -249,39 +258,16 @@ pub(crate) fn write_source_slots(
 /// or the declaration's default — and `0.0` when it has none, on the terms
 /// [`View::param`] states.
 ///
-/// **A vector param is asked for one component at a time**, under the keys
-/// `karakuri_ir::Param::keys` spells: a `vec3 glow` is packed from `glow.x`,
-/// `glow.y` and `glow.z`. That is the whole of
-/// [ADR-0268](../../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)
-/// arriving here — the value channel is still an `Option<f32>` and it does not
-/// have to carry three floats, because the address does the carrying. It used
-/// to write zeroes, because `Param::default_scalar` folded only a scalar so a
-/// vector never entered a node's value map at all.
-///
-/// **`names` is the *layout's* list and not the interface's**, and the two are
-/// different lists on purpose. This walks one `glow`, because the packer finds a
-/// uniform field by name and no layout has a field called `glow.x`; the
-/// interface walks `Set::declared_names`, which is each node's `param_keys`. A
-/// component key reaching this loop would miss every field and be packed as an
-/// `f32`, which trips the packer's type assertion on the render thread.
-///
-/// **A component with nothing driving it is `0.0`, on the same terms as a
-/// scalar with nothing driving it.** Every node used to pack *every* declared
-/// name as an `f32`, and the packer panics on a field its layout says is a
-/// `vec3<f32>` — so a `.kir` declaring one parsed, checked, costed, and then
-/// took the render thread down on the first `prepare`. That is not the swap
-/// worker, so it was not caught as a `SetError::Panicked` either. Skipping the
-/// field instead trips the packer's other assertion, which is the one that
-/// keeps a half-written uniform from reaching a shader: the layout declares the
-/// field, so something has to fill it.
-///
-/// One copy, called by all four nodes, so that a layer added later cannot
-/// reintroduce the panic by writing its own loop.
+/// **When a vector value is available**, it packs directly into the uniform buffer
+/// without string formatting or individual component lookups. If component
+/// modulation or binding overrides exist, it falls back to component lookup
+/// under `glow.x`, `glow.y`, `glow.z`.
 pub(crate) fn write_params(
     p: &mut crate::uniforms::UniformPacker<'_>,
     layout: &karakuri_codegen::layout::UniformLayout,
     names: &[String],
     value: &dyn Fn(&str) -> Option<f32>,
+    vector_value: Option<ParamValueLookup<'_>>,
 ) {
     // The component of `name` the Set holds a value under, or `0.0`.
     //
@@ -310,15 +296,52 @@ pub(crate) fn write_params(
             .unwrap_or("f32");
         match ty {
             "vec2<f32>" => {
+                if let Some(karakuri_store::record::Value::Vec2(arr)) =
+                    vector_value.and_then(|lookup| lookup(name))
+                {
+                    p.vec2(name, arr);
+                    continue;
+                }
                 p.vec2(name, [component(name, 0), component(name, 1)]);
             }
             "vec3<f32>" => {
+                if let Some(karakuri_store::record::Value::Vec3(arr)) =
+                    vector_value.and_then(|lookup| lookup(name))
+                {
+                    p.vec3(name, arr);
+                    continue;
+                }
                 p.vec3(
                     name,
                     [component(name, 0), component(name, 1), component(name, 2)],
                 );
             }
+            "vec4<f32>" => {
+                if let Some(
+                    karakuri_store::record::Value::Vec4(arr)
+                    | karakuri_store::record::Value::Color(arr),
+                ) = vector_value.and_then(|lookup| lookup(name))
+                {
+                    p.vec4(name, arr);
+                    continue;
+                }
+                p.vec4(
+                    name,
+                    [
+                        component(name, 0),
+                        component(name, 1),
+                        component(name, 2),
+                        component(name, 3),
+                    ],
+                );
+            }
             _ => {
+                if let Some(karakuri_store::record::Value::Scalar(s)) =
+                    vector_value.and_then(|lookup| lookup(name))
+                {
+                    p.f32(name, s);
+                    continue;
+                }
                 p.f32(name, value(name).unwrap_or(0.0));
             }
         }

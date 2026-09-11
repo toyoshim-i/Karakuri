@@ -187,23 +187,18 @@ Before advanced engine refactoring can proceed safely, the incomplete migrations
 
 ---
 
-## 14. Typed Parameter Storage & Vector Cohesion (ADR-0268 Debt)
+## 14. Typed Parameter Storage & Vector Cohesion (ADR-0268 Debt) [DONE]
 
-### Phenomenon
-The IR supports `vec2`, `vec3`, `vec4`, and `color`. However, at runtime in `karakuri-store` and `karakuri-engine`, vector parameters are dismantled into flattened scalar `f32` records with string suffix mangling (`"glow.x"`, `"glow.y"`, `"glow.z"`, [ADR-0268](adr/0268-a-vector-param-is-driven-one-component-at-a-time.md)).
-
-### Refactoring Plan
-- **Introduce first-class `ParamValue`**:
-  ```rust
-  pub enum ParamValue {
-      Float(f32),
-      Vec2([f32; 2]),
-      Vec3([f32; 3]),
-      Vec4([f32; 4]),
-  }
-  ```
-- **Unified Parameter Storage**: Store parameters under their canonical names (`"glow"`), keeping vectors contiguous in memory.
-- **Atomic Vector Modulations**: Allow MIDI, OSC, MCP, and internal modulation sources to drive multi-component vectors atomically.
+### Technical Status & Resolution
+- **Extended `Value` in `karakuri-store`**:
+  - Added `Value::Vec4([f32; 4])` and `Value::Color([f32; 4])` variants with untagged serialization and helper methods (`.components()`, `.as_slice()`, `.len()`, `.get()`).
+- **Atomic Vector Storage in `karakuri-engine`**:
+  - `Set` now stores canonical typed values in `param_values: Vec<HashMap<String, Value>>`.
+  - Added atomic methods (`set_param_value`, `set_param_value_at`, `param_value`, `param_value_at`), providing bi-directional synchronization with scalar component addressing (`glow.x`, `glow.y`, etc.).
+- **Direct Contiguous Uniform Packing**:
+  - `write_params` in `karakuri-engine/src/node/mod.rs` now checks `View::param_value` / `Tick::param_value` and packs contiguous `vec2`, `vec3`, and `vec4` slices directly (`p.vec2`, `p.vec3`, `p.vec4`), bypassing string formatting on the frame path while preserving component lookups when individual components are modulated.
+- **Verification**:
+  - Verified across all unit and GPU integration tests in `crates/karakuri-engine/tests/vector_param.rs`.
 
 ---
 
@@ -304,7 +299,7 @@ During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to
 | **Phase 2A** | **P11** | **Untangle Env Cycles & Revert CLI Noise** | **DONE** | Reverted noisy CLI stderr spam; resolved compile cycles via `meta.rs`; scheduled keymap convergence for Phase 2B (ADR-0346) |
 | **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Staged parity, delta, signals, transitions, selections ensure rollback on `mem::forget`; fixed parity type consistency |
 | **Phase 2A** | **P13** | **Image Pass Deduplication** | **DONE** | Deduplicated L5 passes via `ImagePass` & `RetentionManager` (saved 500+ lines in `master.rs`); polymorphic graph deferred to P15 |
-| **Phase 2B** | **P14** | **Typed Parameter Storage** | Planned | First-class `ParamValue`; eliminate `.x/.y/.z` string splitting |
+| **Phase 2B** | **P14** | **Typed Parameter Storage** | **DONE** | First-class vector storage, atomic multi-component modulations, direct uniform packing |
 | **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |
 | **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | Planned | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
 | **Phase 2B** | **P17** | **Structured AI Repair Loop** | Planned | Machine-readable diagnostics; visual degeneracy detector |

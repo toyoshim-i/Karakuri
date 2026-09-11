@@ -494,7 +494,13 @@ impl Producer {
             .f32("beats", view.beats)
             .f32("dt", dt)
             .u32("seed_salt", view.seed_salt);
-        super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
+        super::write_params(
+            &mut p,
+            &self.uniform_layout,
+            &self.param_names,
+            view.param,
+            view.param_value,
+        );
         // **The spliced field's params, written by every caller.** A field has
         // no node and therefore no uniform of its own; each procedure that
         // evaluates it carries them in its own and writes the same answer.
@@ -650,6 +656,7 @@ proc two {
                     seed_salt: 0,
                     viewport: [16.0, 9.0],
                     param: &|_| None,
+                    param_value: None,
                     field_params: &[],
                     field_value: &|_| None,
                     // A camera declares no Source slot — `uses … : Source` is
@@ -733,6 +740,7 @@ proc six {
                     seed_salt: 0,
                     viewport: [4.0, 3.0],
                     param: &|_| None,
+                    param_value: None,
                     field_params: &[],
                     field_value: &|_| None,
                     // A camera declares no Source slot — `uses … : Source` is

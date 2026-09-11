@@ -1100,8 +1100,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                     key: key.clone(),
                     value: *v,
                 }],
-                karakuri_store::record::Value::Vec2(v) => component_writes(at, key, v),
-                karakuri_store::record::Value::Vec3(v) => component_writes(at, key, v),
+                _ => component_writes(at, key, value.components()),
             };
             Ok(Some(Change::Ride { slot, writes }))
         }

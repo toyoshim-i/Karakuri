@@ -1456,6 +1456,7 @@ dependencies = [
  "karakuri-codegen",
  "karakuri-ir",
  "karakuri-signal",
+ "karakuri-store",
  "png",
  "pollster",
  "thiserror 2.0.19",

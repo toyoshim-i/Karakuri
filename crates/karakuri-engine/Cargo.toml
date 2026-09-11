@@ -10,6 +10,7 @@ bytemuck = "1.25.2"
 karakuri-codegen = { version = "0.1.0", path = "../karakuri-codegen" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
+karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 pollster = "1.0.1"
 thiserror.workspace = true
 wgpu = "30.0.1"
