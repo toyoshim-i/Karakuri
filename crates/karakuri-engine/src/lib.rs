@@ -78,7 +78,7 @@ pub use meter::{Level, Meters};
 pub use pass::{BoundImagePass, ImagePass, RenderPassNode, RetentionManager};
 pub use points::{Params, Points};
 pub use present::{letterbox, Present, TonemapOp};
-pub use probe::{Measurement, Probe};
+pub use probe::{check_degeneracy, Degeneracy, Measurement, Probe};
 pub use set::{Authority, Set, SetError};
 pub use swap::{measure, Event, HotSwap, Request, Source, DEFAULT_BUDGET_MS};
 pub use transition::{Control, Transition};
