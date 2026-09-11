@@ -215,16 +215,27 @@ Pass scheduling across `karakuri-engine` is hardcoded. Intermediate render targe
 
 ---
 
-## 16. WGSL Codegen Intermediate Representation & Pass Fusion
+## 16. WGSL Codegen Intermediate Representation & Pass Fusion (**DONE**)
 
 ### Phenomenon
 `karakuri-codegen` lowers `Checked` AST directly into raw WGSL text via string templating (`format!`). Fusing adjacent L2 (deformation) and L4 (rendering) nodes was deferred in M3 because text-level shader concatenation is brittle.
 
-### Refactoring Plan
-- **Introduce a Structured Codegen AST / Naga IR Builder**:
-  - Lower `Checked` IR directly into an intermediate shader representation or a `naga::Module`.
-  - Guarantee variable scoping, type safety, and syntax correctness by construction.
-- **Enable Pass Fusion**: Invalidate intermediate buffer ping-pongs by inlining L2 deformation functions directly into L4 vertex stages.
+### Technical Status & Resolution
+- **Structured Codegen AST (`crates/karakuri-codegen/src/ast.rs`)**:
+  - Implemented typed WGSL AST nodes:
+    - `ShaderModule` holding `structs`, `bindings`, `functions`, and `entry_points`.
+    - `StructDef`, `StructMember`, `BindingDef` (supporting `Uniform`, `StorageRead`, `StorageReadWrite` address spaces).
+    - `FunctionDef`, `FnParam`, `EntryPoint`, `Stage` (`Compute`, `Vertex`, `Fragment`).
+    - `Stmt` (`Let`, `Var`, `Assign`, `If`, `For`, `Return`, `Discard`, `Expr`, `Block`).
+    - `Expr` (`Lit`, `Ident`, `FieldAccess`, `Index`, `Binary`, `Unary`, `Call`, `Construct`).
+    - `WgslType` (`F32`, `U32`, `I32`, `Bool`, `Vec2`, `Vec3`, `Vec4`, `Mat4`, `Custom`, `Array`).
+  - Provides `Display` implementations and `.emit_wgsl(&self) -> String` generating cleanly formatted WGSL text verified by the Naga WGSL frontend.
+- **Pass Fusion (`crates/karakuri-codegen/src/fusion.rs`)**:
+  - Implemented `pub fn fuse_l2_into_l4(l2: &Checked, l4: &Checked, elements: &ElementLayout, fields: Bound<'_>) -> L4Shader`.
+  - Inlines L2 deformation logic as a local helper function `deform_element(in_elem: Element, seed: u32) -> Element` inside the generated L4 shader module, including mask evaluation and parameter modulation (`weight`).
+  - In the vertex entry point (`vs`), loads element from base buffer (`var elem = elements[elem_idx];`), executes `elem = deform_element(elem, seed);` in-place, and directly feeds deformed attributes to vertex processing and varying outputs without requiring an intermediate VRAM ping-pong element buffer.
+  - Merges and namespaces L2 (`param_l2_`) and L4 (`param_l4_`) uniforms to eliminate collision while guaranteeing trailing padding and 16-byte alignment via `UniformLayoutBuilder`.
+  - Validated with integration tests in `crates/karakuri-codegen/tests/fusion.rs` through `naga::front::wgsl::parse_str` and validator.
 
 ---
 
@@ -315,7 +326,7 @@ During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to
 | **Phase 2A** | **P13** | **Image Pass Deduplication** | **DONE** | Deduplicated L5 passes via `ImagePass` & `RetentionManager` (saved 500+ lines in `master.rs`); polymorphic graph deferred to P15 |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | **DONE** | First-class vector storage, atomic multi-component modulations, direct uniform packing |
 | **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |
-| **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | Planned | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
+| **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | **DONE** | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
 | **Phase 2B** | **P17** | **Structured AI Repair Loop** | **DONE** | Machine-readable `DiagnosticReport`; visual degeneracy detector `check_degeneracy` |
 | **Phase 2B** | **P18** | **Signal Bus Vectorization** | **DONE** | Vectorized `SignalValue`/`VectorSample`; interned `SignalId` zero-cost dispatch |
 | **Phase 2B** | **P19** | **Zero-Allocation Stream Replay** | **DONE** | Mmap zero-copy ndjson reader (`MmapStreamReader`), fast tick indexing, schema versioning (v2) & automated migration |

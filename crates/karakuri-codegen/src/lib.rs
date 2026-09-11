@@ -96,6 +96,8 @@ pub(crate) fn splices(
         })
         .collect()
 }
+pub mod ast;
+pub mod fusion;
 pub mod l1;
 pub mod l2;
 pub mod l3;
@@ -106,6 +108,7 @@ mod lower;
 mod prelude;
 mod ty;
 
+pub use fusion::{fuse_l2_into_l4, FusedShader};
 pub use l1::{generate_l1, L1Shader};
 pub use l2::{generate_l2, L2Shader};
 pub use l3::{generate_l3, L3Shader};
