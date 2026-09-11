@@ -71,7 +71,8 @@
 
 use karakuri_ir::Kind;
 use karakuri_signal::{
-    AudioFrame, MeasuredBus, NoiseConfig, Oscillator, Sample, SignalBus, SynthesizedBus,
+    AudioFrame, MeasuredBus, NoiseConfig, Oscillator, Sample, SignalBus, SignalId, SynthesizedBus,
+    VectorSample,
 };
 
 /// The tempo a session runs at until something corrects it. There is no tempo
@@ -289,6 +290,17 @@ impl Signals {
         self.seed
     }
 
+    /// Sample a signal by pre-resolved [`SignalId`]. Never fails, never returns an `Option`.
+    pub fn sample_id(&self, id: SignalId) -> Sample {
+        MeasuredBus::new(self.audio.as_ref(), SynthesizedBus::new(&self.oscillator)).sample_id(id)
+    }
+
+    /// Sample a vectorized signal by its ID.
+    pub fn sample_vector(&self, id: SignalId) -> VectorSample {
+        MeasuredBus::new(self.audio.as_ref(), SynthesizedBus::new(&self.oscillator))
+            .sample_vector(id)
+    }
+
     /// Sample a signal by name. Never fails, never returns an `Option`.
     ///
     /// The bus is constructed per call and holds the oscillator and the frame
@@ -303,7 +315,7 @@ impl Signals {
     /// `energy` is the same name, sampled by the same call, and only the
     /// confidence that comes back is different.
     pub fn sample(&self, name: &str) -> Sample {
-        MeasuredBus::new(self.audio.as_ref(), SynthesizedBus::new(&self.oscillator)).sample(name)
+        self.sample_id(SignalId::resolve(name))
     }
 
     /// Sample a generator the caller declares, mapped from the generator's
@@ -344,6 +356,8 @@ pub struct Binding {
     pub index: Option<u32>,
     pub key: String,
     pub signal: String,
+    /// Pre-resolved signal identifier for zero-lookup hot path sampling.
+    pub signal_id: SignalId,
     pub curve: Curve,
     pub range: [f32; 2],
     /// The generator, for a `signal` of [`NOISE_SIGNAL`]. `None` means the
@@ -402,11 +416,14 @@ impl Binding {
         curve: Curve,
         range: [f32; 2],
     ) -> Binding {
+        let signal = signal.into();
+        let signal_id = SignalId::resolve(&signal);
         Binding {
             layer,
             index: None,
             key: key.into(),
-            signal: signal.into(),
+            signal,
+            signal_id,
             curve,
             range,
             noise: None,
@@ -488,7 +505,7 @@ impl Binding {
         if self.signal == NOISE_SIGNAL {
             signals.noise(&self.noise.unwrap_or_default())
         } else {
-            signals.sample(&self.signal)
+            signals.sample_id(self.signal_id)
         }
     }
 }
@@ -946,5 +963,26 @@ mod tests {
         let signals = advanced(128.0, 0, 10);
         let mut b = binding("bpm", Curve::Lin, [0.0, 4.0]);
         assert_eq!(b.resolve(&signals, 1.0), 4.0);
+    }
+
+    #[test]
+    fn binding_pre_resolves_signal_id() {
+        let b_beat = binding("beat", Curve::Lin, [0.0, 1.0]);
+        assert_eq!(b_beat.signal_id, SignalId::Beat);
+
+        let b_energy = binding("energy", Curve::Lin, [0.0, 1.0]);
+        assert_eq!(b_energy.signal_id, SignalId::Energy);
+
+        let b_band3 = binding("band3", Curve::Lin, [0.0, 1.0]);
+        assert_eq!(b_band3.signal_id, SignalId::Band(3));
+
+        let b_custom = binding("custom_signal", Curve::Lin, [0.0, 1.0]);
+        assert_eq!(b_custom.signal_id, SignalId::resolve("custom_signal"));
+
+        let signals = advanced(120.0, 0, 15);
+        let mut b_test = binding("beat", Curve::Lin, [0.0, 1.0]);
+        let val = b_test.resolve(&signals, 0.0);
+        let expected_sample = signals.sample_id(SignalId::Beat);
+        assert_eq!(val, expected_sample.value);
     }
 }
