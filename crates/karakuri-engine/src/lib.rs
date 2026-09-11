@@ -49,6 +49,7 @@ mod node;
 /// Private: `blend weighted` is declared in a `.kir` and everything about how
 /// it is run belongs to [`node`]. Nothing outside chooses these targets.
 mod oit;
+pub mod pass;
 pub mod points;
 pub mod present;
 pub mod probe;
@@ -73,6 +74,7 @@ pub use governor::{Basis, Decision, Estimated, FloorRead, Governor, Reason, Repo
 pub use gpu::{Gpu, GpuError};
 pub use master::{Chain, Clock, Cut, Slot, SlotError, SlotSpec};
 pub use meter::{Level, Meters};
+pub use pass::{BoundImagePass, ImagePass, RenderPassNode, RetentionManager};
 pub use points::{Params, Points};
 pub use present::{letterbox, Present, TonemapOp};
 pub use probe::{Measurement, Probe};

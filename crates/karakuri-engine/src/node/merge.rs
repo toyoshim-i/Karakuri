@@ -97,6 +97,12 @@ impl Merge {
     }
 }
 
+impl crate::pass::RenderPassNode for Merge {
+    fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+        self.record(encoder, target);
+    }
+}
+
 fn allocate(
     device: &wgpu::Device,
     inputs: usize,
