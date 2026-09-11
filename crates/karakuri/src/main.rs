@@ -181,7 +181,7 @@
 //!   port and the map are still fixed for the run: the `map` pill is a
 //!   readout, and reaching a different map while running is not built.
 //! - **MCP, and this one is wired now.** The model's door — the whole reason
-//!   the instrument is AI-native — and `karakuri_environment::mcp` is the
+//!   the instrument is AI-native — and `karakuri_mcp` is the
 //!   server. `--mcp PORT` binds it before the window opens and hands it the
 //!   very [`Readout::opening`] the four `mcp` pills write, so what a hand
 //!   opens on the panel is what the server reads on its next call. **What is
@@ -368,9 +368,12 @@ use karakuri_engine::{
     Look, Mask, MaskKind, Present, Residency, Set, Sink, Skip, TonemapOp, WindowSink,
 };
 use karakuri_environment::clock::Clock;
-use karakuri_environment::{audio, history, mcp, midi, mix, setfile, watch, Asked, Opening};
+use karakuri_environment::{audio, history, midi, mix, setfile, watch, Asked, Opening};
+// The MCP server now lives in its own crate. Aliased to `mcp` so every
+// `mcp::` call site below is unchanged.
 use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Layout, NodeId, Point};
+use karakuri_mcp as mcp;
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
     BeatSource, BlendMode, GridScale, Operation, Output, SetTransfer, Undecided,
@@ -1754,7 +1757,7 @@ struct Readout {
     /// in this struct that is neither the panel's nor a reading of the engine.
     ///
     /// It is a handle rather than a value because the whole point of it is that
-    /// a *second* reader has it: `karakuri_environment::mcp::serve` takes a
+    /// a *second* reader has it: `karakuri_mcp::serve` takes a
     /// clone and reads it on every call, so an opening is live rather than a
     /// snapshot taken at startup. `View::opening` is this handle read once a
     /// frame; this is the model of record.
@@ -4275,7 +4278,7 @@ impl Readout {
     /// defect this function was repaired of, one paragraph along. See the
     /// paragraph below for what that repair cost to find.
     ///
-    /// `mcp_port` is the port `karakuri_environment::mcp::serve` actually bound
+    /// `mcp_port` is the port `karakuri_mcp::serve` actually bound
     /// — `Reporter::port` and not `--mcp`'s argument, so `--mcp 0` prints the
     /// ephemeral port it got — and `None` is a run that was not asked to serve.
     /// It is passed in for the same reason `presets` and `store` are: the
@@ -4831,7 +4834,7 @@ impl Readout {
             match mcp_port {
                 Some(port) => format!(
                     "this process IS serving MCP, on 127.0.0.1:{port}, and \
-                     `karakuri_environment::mcp::serve` holds the very handle these four pills \
+                     `karakuri_mcp::serve` holds the very handle these four pills \
                      write — not a copy of it — so a pill opened here is read by the server on \
                      the next call it answers, and one shut here refuses the next call in the \
                      class's own words. what they open is live for the length of this run."
@@ -6370,7 +6373,7 @@ struct Engine {
     edges: Vec<karakuri_engine::set::Edge>,
     /// **Where this deck says which files its slots are running**, for the
     /// readers that are not on this thread — see [`Aiming::pointing`], which is
-    /// a clone of this, and [`karakuri_environment::mcp::Slots`].
+    /// a clone of this, and [`karakuri_mcp::Slots`].
     ///
     /// **The engine keeps it so that the two readers ask one handle.** The MCP
     /// server was handed the launch working copies and the landing on a row of
@@ -6378,7 +6381,7 @@ struct Engine {
     /// (ADR-0308); the first went stale on the first library load and the
     /// second was the workaround for it. There is one now, this is it, and
     /// [`restored`] reads it rather than rebuilding one.
-    pointing: karakuri_environment::mcp::Slots,
+    pointing: karakuri_mcp::Slots,
     /// **Every node the run launched with**, in file order, with the bytes each
     /// one was compiled from — see [`karakuri_environment::compile::Placed`].
     ///
@@ -6435,7 +6438,7 @@ struct Aiming {
     at: watch::Aim,
     /// **Where that answer is published for the readers that are not on this
     /// thread**, which today are the MCP server and the landing on a row of
-    /// the edit history — see [`karakuri_environment::mcp::Slots`].
+    /// the edit history — see [`karakuri_mcp::Slots`].
     ///
     /// **A publication and not a second answer.** `at` above is the derivation
     /// ([`Aiming`]'s own head); this is a clone of the run's one handle, and
@@ -6447,7 +6450,7 @@ struct Aiming {
     /// and a node the loaded Set does hold refused for not existing
     /// (`docs/principles/0094-…`, and ADR-0308's *Doubted*, which recorded it
     /// and worked around it for the landing alone).
-    pointing: karakuri_environment::mcp::Slots,
+    pointing: karakuri_mcp::Slots,
     /// Which slot this is, so a publication lands on the row it is about. It is
     /// the index [`Engine::aimed`] is in, which is the deck letter.
     slot: usize,
@@ -6463,7 +6466,7 @@ impl Aiming {
     fn new(
         aim: std::sync::mpsc::Sender<watch::Aim>,
         at: watch::Aim,
-        pointing: karakuri_environment::mcp::Slots,
+        pointing: karakuri_mcp::Slots,
         slot: usize,
     ) -> Aiming {
         let aiming = Aiming {
@@ -7114,12 +7117,12 @@ impl Engine {
         snapshots: Option<history::Shared>,
         // **Where this deck says which files each of its slots is running**,
         // handed in rather than made here: [`main`] gives the same handle to
-        // [`karakuri_environment::mcp::serve`] and to this, so a model's
+        // [`karakuri_mcp::serve`] and to this, so a model's
         // address and the file a watcher is polling are one answer — which is
         // exactly the arrangement the opening already has. It is not
         // `Option` and does not depend on `--mcp`, because the landing on a row
         // of the edit history reads it too ([`restored`]).
-        pointing: karakuri_environment::mcp::Slots,
+        pointing: karakuri_mcp::Slots,
     ) -> Engine {
         assert!(
             slots.len() == SLOTS,
@@ -8201,7 +8204,7 @@ fn favourites(root: &std::path::Path) -> std::collections::BTreeSet<String> {
 ///
 /// # It is the same reading the MCP tool gives a model, through the same path
 ///
-/// `karakuri_environment::mcp::read_set` renders this for a model, and what it
+/// `karakuri_mcp::read_set` renders this for a model, and what it
 /// reads is the Set file's `slot` records and each artifact's metadata card —
 /// `Store::read_set`, then `Store::read_meta` per node, then the `param_decl`,
 /// `capacity_decl` and `emit` records on it. **This walks the same records**
@@ -11002,7 +11005,7 @@ fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
 
 /// **And back**, for the two things that want the compiler's own: spelling an
 /// address a press arrived with, and resolving one to the word the store files
-/// a version under. `karakuri_environment::mcp`'s `kind_of` is the other
+/// a version under. `karakuri_mcp`'s `kind_of` is the other
 /// instance and is private to that crate; this is [`asked_layer`]'s inverse
 /// and a match for its reason, so a sixth layer stops the build in both
 /// directions rather than in one.
@@ -13505,7 +13508,7 @@ fn asked_for(revision: &karakuri_operation::Revision) -> String {
 ///
 /// Everything it needs is an argument: the store to walk, the slot and its
 /// letter, the Set the slot is running, the revision that was asked for, and
-/// where that slot's nodes are ([`karakuri_environment::mcp::Slots`], the
+/// where that slot's nodes are ([`karakuri_mcp::Slots`], the
 /// run's one published layout, which the caller reads off [`Engine::pointing`]).
 /// The refusals here are the ones that are about **files** — a version that is
 /// not in the listing, a node with nothing behind the one it is playing, a
@@ -13543,7 +13546,7 @@ fn put_back(
     letter: &str,
     id: &str,
     revision: &karakuri_operation::Revision,
-    slots: &karakuri_environment::mcp::Slots,
+    slots: &karakuri_mcp::Slots,
 ) -> String {
     let asked = asked_for(revision);
     let found = match karakuri_environment::history::list(store, HISTORY_MOST) {
@@ -14963,14 +14966,14 @@ struct App {
     /// — see [`Aiming`] and [`watch::Aim::set`].
     snapshots: history::Shared,
     /// **The run's one published layout**, made in [`main`], handed to
-    /// [`karakuri_environment::mcp::serve`] there and to every [`Engine`] this
-    /// opens — see [`karakuri_environment::mcp::Slots`] and [`Aiming::pointing`].
+    /// [`karakuri_mcp::serve`] there and to every [`Engine`] this
+    /// opens — see [`karakuri_mcp::Slots`] and [`Aiming::pointing`].
     ///
     /// **Here rather than on [`Gfx`]**, for [`App::snapshots`]' reason exactly:
     /// the server is bound before the window and outlives every window this run
     /// remakes, so a handle rebuilt with the swapchain would leave the server
     /// reading one nothing writes.
-    pointing: karakuri_environment::mcp::Slots,
+    pointing: karakuri_mcp::Slots,
     /// **Everything a save and a rewiring need that is not the deck** — see
     /// [`Keeping`].
     keeping: Keeping,
@@ -15011,7 +15014,7 @@ struct App {
 impl App {
     /// **The opening is handed in rather than made here**, which is the whole of
     /// what pairing the four pills with a server took: [`main`] gives the same
-    /// handle to [`karakuri_environment::mcp::serve`] and to this, so a press on
+    /// handle to [`karakuri_mcp::serve`] and to this, so a press on
     /// a bay head and the class the server reads are one value. [`Readout::new`]
     /// makes one of its own — it is constructed from a size and nothing else —
     /// and this replaces it before the window opens, which is before anything
@@ -19408,7 +19411,7 @@ fn main() {
     // shut, which is the state ADR-0235 says a run starts in.
     let opening = Opening::closed();
     // **Which files each deck is running, and the one handle that answers it**
-    // — see [`karakuri_environment::mcp::Slots`], and [`Aiming::pointing`] for
+    // — see [`karakuri_mcp::Slots`], and [`Aiming::pointing`] for
     // what writes it. Made here beside the opening and for the same reason:
     // the MCP server binds before the window and reads through it on every
     // call, every watcher this run makes publishes its own slot into it, and a
@@ -20958,7 +20961,7 @@ mod tests {
         let rest = scratch.join("A1-soft_points.kir");
         std::fs::write(&head, "kind L1\n// what is playing\n").expect("the head");
         std::fs::write(&rest, "kind L4\n// what is playing\n").expect("the renderer");
-        let slots = karakuri_environment::mcp::Slots::of(vec![(head.clone(), vec![rest.clone()])]);
+        let slots = karakuri_mcp::Slots::of(vec![(head.clone(), vec![rest.clone()])]);
 
         version_file(
             &root,
@@ -21050,7 +21053,7 @@ mod tests {
         let rest = scratch.join("A1-soft_points.kir");
         std::fs::write(&head, "kind L1\n// what is playing\n").expect("the head");
         std::fs::write(&rest, "kind L4\n// the third\n").expect("the renderer");
-        let slots = karakuri_environment::mcp::Slots::of(vec![(head.clone(), vec![rest.clone()])]);
+        let slots = karakuri_mcp::Slots::of(vec![(head.clone(), vec![rest.clone()])]);
 
         // Oldest first here so the file reads in the order the operator wrote
         // them; `history::list` answers the other way round, which is the
@@ -22217,7 +22220,7 @@ mod tests {
             },
             // What this test asserts is the *aim*; where the layout is
             // published is `a_load_moves_what_the_mcp_server_resolves_against`.
-            karakuri_environment::mcp::Slots::unpointed(),
+            karakuri_mcp::Slots::unpointed(),
             ASKED_TO_PRIME,
         );
         let line = loading(
@@ -22405,7 +22408,7 @@ mod tests {
         let b_l1 = launch("B0-launch.kir", "L1");
         let b_l4 = launch("B1-launch.kir", "L4");
         let b_l4_second = launch("B2-launch.kir", "L4");
-        let pointing = karakuri_environment::mcp::Slots::of(vec![
+        let pointing = karakuri_mcp::Slots::of(vec![
             (a_l1.clone(), vec![a_l4.clone()]),
             (b_l1, vec![b_l4.clone(), b_l4_second.clone()]),
         ]);
@@ -26874,7 +26877,7 @@ mod tests {
                 // below about `restated` rather than about a default.
                 set: Some("night01".to_owned()),
             },
-            karakuri_environment::mcp::Slots::unpointed(),
+            karakuri_mcp::Slots::unpointed(),
             0,
         )];
         let mut edges = Vec::new();
@@ -27056,7 +27059,7 @@ mod tests {
                 authorities: Vec::new(),
                 set: Some("drift_night".to_owned()),
             },
-            karakuri_environment::mcp::Slots::unpointed(),
+            karakuri_mcp::Slots::unpointed(),
             0,
         );
 
@@ -27201,7 +27204,7 @@ mod tests {
                 authorities: Vec::new(),
                 set: Some("night01".to_owned()),
             },
-            karakuri_environment::mcp::Slots::unpointed(),
+            karakuri_mcp::Slots::unpointed(),
             0,
         )];
 

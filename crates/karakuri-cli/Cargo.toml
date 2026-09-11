@@ -14,6 +14,11 @@ karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 # surfaces that sit over it.
 karakuri-environment = { version = "0.1.0", path = "../karakuri-environment" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
+# **The MCP server.** Split out of `karakuri-environment` because it is the
+# crate's single largest, fastest-growing module and a one-directional
+# consumer of everything else in it — isolating it bounds how much of this
+# binary's compile is invalidated by an edit there.
+karakuri-mcp = { version = "0.1.0", path = "../karakuri-mcp" }
 karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 # **Where an operation becomes a record** — the one place a key press, a panel
 # fader and an MCP call meet (P-0090). It is a crate rather than a module here

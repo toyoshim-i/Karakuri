@@ -190,6 +190,17 @@ impl Reply {
     }
 }
 
+/// **The other half of [`karakuri_environment::accepted_save`]'s call**, so
+/// that crate can hand a save's acceptance back to whichever client is
+/// waiting on it without naming `Reply` — the dependency runs one way, from
+/// this crate into `karakuri-environment`, and this `impl` is what lets it
+/// stay that way.
+impl karakuri_environment::SaveReply for Reply {
+    fn accepted(&self, said: &str) {
+        Reply::accepted(self, said)
+    }
+}
+
 /// **An edge one client is asking the render loop to write.**
 ///
 /// **The second thing this server reaches the loop for, and it is the loop for
@@ -429,7 +440,7 @@ impl Slots {
     /// elsewhere cannot have left half of one; and the safe answer there — a
     /// closed class — has no counterpart here, because *the layout before the
     /// load* is exactly the wrong answer this type exists to stop giving.
-    pub fn re_point(&self, slot: usize, at: &crate::watch::Aim) {
+    pub fn re_point(&self, slot: usize, at: &karakuri_environment::watch::Aim) {
         let mut held = self.0.write().unwrap_or_else(|held| held.into_inner());
         if let Some(pair) = held.get_mut(slot) {
             *pair = (
@@ -499,7 +510,7 @@ impl Slots {
             // the panic unwinding out of the listener thread so that a process
             // which had announced a port was silently no longer on it. `serve`
             // refuses an empty deck now; this stays correct anyway.
-            .ok_or_else(|| crate::no_such_slot(slot, held.len()))?;
+            .ok_or_else(|| karakuri_environment::no_such_slot(slot, held.len()))?;
         // **The head's own `kind` line, and `L1` only where it has none.**
         // That fallback is `history::seed`'s, exactly: the first path of a
         // chain with no `kind` in it falls back to L1 and every later one to
@@ -507,7 +518,7 @@ impl Slots {
         // its snapshots are filed under there.
         let head = std::fs::read(&pair.0)
             .ok()
-            .and_then(|source| crate::history::declared_kind(&source))
+            .and_then(|source| karakuri_environment::history::declared_kind(&source))
             .and_then(layer_named)
             .unwrap_or(Kind::L1);
         let mut nodes = vec![(head, 0, pair.0.clone())];
@@ -518,7 +529,7 @@ impl Slots {
         for path in &pair.1 {
             let layer = std::fs::read(path)
                 .ok()
-                .and_then(|source| crate::history::declared_kind(&source))
+                .and_then(|source| karakuri_environment::history::declared_kind(&source))
                 .and_then(layer_named)
                 .unwrap_or(Kind::L4);
             let index = match next.iter_mut().find(|(held, _)| *held == layer) {
@@ -551,7 +562,7 @@ impl Slots {
         if slot < count {
             Ok(())
         } else {
-            Err(crate::no_such_slot(slot, count))
+            Err(karakuri_environment::no_such_slot(slot, count))
         }
     }
 
@@ -828,7 +839,7 @@ const ID_PATTERN: &str = "^[A-Za-z0-9_-]+$";
 /// the run's own bound it would give up on saves the run itself would still
 /// have finished, which is the one number this must not be below.
 const SAVE_REPLY: std::time::Duration =
-    std::time::Duration::from_secs(crate::SAVE_WAIT.as_secs() + 5);
+    std::time::Duration::from_secs(karakuri_environment::SAVE_WAIT.as_secs() + 5);
 
 /// **How long a `wire_input` call waits for the render loop to take its edge.**
 ///
@@ -868,7 +879,7 @@ pub fn serve(
     slots: Slots,
     store: std::path::PathBuf,
     watching: bool,
-    opening: crate::Opening,
+    opening: karakuri_environment::Opening,
 ) -> Result<Reporter, String> {
     if slots.count() == 0 {
         return Err("this run has no procedure files to serve — see `--load-set`".into());
@@ -961,7 +972,7 @@ struct State {
     /// `docs/principles/0090-a-surface-offers-it-never-decides.md`
     /// rules out. **Nor can a caller forget it**: it is positional, so a run
     /// that does not mention an opening does not compile.
-    opening: crate::Opening,
+    opening: karakuri_environment::Opening,
     events: mpsc::Receiver<Event>,
     /// Where a save a client asks for goes. **Bounded and never blocked on** —
     /// see [`ASKED`]: this is sent into from a connection thread, and a render
@@ -1853,7 +1864,7 @@ enum Asked {
 /// one it was told about before.
 fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
     slots.holds(slot)?;
-    u8::try_from(slot).map_err(|_| crate::no_such_slot(slot, slots.count()))
+    u8::try_from(slot).map_err(|_| karakuri_environment::no_such_slot(slot, slots.count()))
 }
 
 /// `read_procedure`'s arguments as the deck and node they name.
@@ -4747,7 +4758,7 @@ fn write_procedure(
     // **Checked before it is written, and the diagnostics are handed back.**
     // Writing first and letting the watcher report would put the compiler's
     // answer on a terminal the model cannot see.
-    let checked = crate::compile::check(source)?;
+    let checked = karakuri_environment::compile::check(source)?;
     // **The address and the source have to agree**, and the comparison is now
     // between two `Kind`s rather than between a string and a guess. The guess
     // was `L1`, or `L4` for everything else, which made this refusal answer
@@ -5141,10 +5152,10 @@ fn list_sets(
     let holds = holds.map(str::to_ascii_lowercase);
     // The vocabulary's layer into the record's, which is the third spelling of
     // this list and the one a Set file is written in — see [`layer_of`].
-    let layer = layer.map(|layer| crate::setfile::layer_of(kind_of(layer)));
+    let layer = layer.map(|layer| karakuri_environment::setfile::layer_of(kind_of(layer)));
     let opened = |e: StoreError| format!("the store at `{}`: {e}", state.store.display());
     let store = Store::open(&state.store).map_err(opened)?;
-    let mut sets = crate::setfile::summarise(&store).map_err(opened)?;
+    let mut sets = karakuri_environment::setfile::summarise(&store).map_err(opened)?;
     let held = sets.len();
     // **An empty store is an answer and not a failure**, and it is a different
     // answer from a filter that matched nothing: one sends a reader to
@@ -5215,8 +5226,8 @@ fn list_sets(
 }
 
 /// One Set as a line of a listing.
-fn set_line(set: &crate::setfile::SetSummary) -> String {
-    let written = crate::setfile::written_at(set.written);
+fn set_line(set: &karakuri_environment::setfile::SetSummary) -> String {
+    let written = karakuri_environment::setfile::written_at(set.written);
     // **A file in `sets/` that will not read is listed and named.** Dropping it
     // would answer "what have I kept" with something missing, and rendering it
     // as a set of no nodes would say it holds nothing.
@@ -5317,8 +5328,8 @@ fn walk_history(set: Option<&str>, state: &State) -> Result<String, String> {
                 .to_string(),
         );
     };
-    let found = crate::history::list(&state.store, WALKED)?;
-    let rows: Vec<&crate::history::Version> = found
+    let found = karakuri_environment::history::list(&state.store, WALKED)?;
+    let rows: Vec<&karakuri_environment::history::Version> = found
         .versions
         .iter()
         .filter(|version| version.set.as_deref() == Some(id))
@@ -5447,7 +5458,7 @@ fn element_storage_block(store: &Store, id: &str) -> String {
              own card and stands on its own.\n"
         )
     };
-    let loaded = match crate::setfile::load(store, id) {
+    let loaded = match karakuri_environment::setfile::load(store, id) {
         Ok(loaded) => loaded,
         Err(why) => return unavailable(&why),
     };
@@ -5596,7 +5607,8 @@ fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash:
     match store.read_meta(hash) {
         Ok(card) => {
             let (declared, body) = rendered_card(&card);
-            let called = crate::setfile::node_called(name, declared.as_deref(), hash);
+            let called =
+                karakuri_environment::setfile::node_called(name, declared.as_deref(), hash);
             // **What did not win, where something had to lose.** A Set's own
             // name for a node hides the name the procedure gives itself, and a
             // model choosing between saved material wants both: the one this
@@ -5641,13 +5653,13 @@ fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash:
             };
             // No card, so there is no declared name to weigh: the set's own
             // name if it has one, and the short hash otherwise.
-            let called = crate::setfile::node_called(name, None, hash);
+            let called = karakuri_environment::setfile::node_called(name, None, hash);
             format!("{}\n  {standing}.\n", head(&called))
         }
         // A card that is there and will not read is the one case that *is* a
         // damaged store, and it says so in different words for that reason.
         Err(e) => {
-            let called = crate::setfile::node_called(name, None, hash);
+            let called = karakuri_environment::setfile::node_called(name, None, hash);
             format!("{}\n  its card could not be read: {e}\n", head(&called))
         }
     }
@@ -5727,7 +5739,7 @@ fn layer_spelled(layer: Layer) -> &'static str {
     LAYERS
         .iter()
         .copied()
-        .find(|kind| crate::setfile::layer_of(*kind) == layer)
+        .find(|kind| karakuri_environment::setfile::layer_of(*kind) == layer)
         .map_or("unknown", layer_name)
 }
 
@@ -6139,8 +6151,8 @@ mod wire_tests {
     /// `the_seven_tools_still_work_with_every_class_closed` a property of the
     /// whole file rather than of one test: if the gate had caught any of the
     /// seven, this module would be red from end to end.
-    fn closed() -> crate::Opening {
-        crate::Opening::closed()
+    fn closed() -> karakuri_environment::Opening {
+        karakuri_environment::Opening::closed()
     }
 
     impl Server {
@@ -6563,9 +6575,9 @@ proc probe_knobs {
         let after_l4 = write("after.kir", PROBE_L4_B);
         slots.re_point(
             0,
-            &crate::watch::Aim {
-                head: crate::compile::Named::bare(&after_l1),
-                rest: vec![crate::compile::Named::bare(&after_l4)],
+            &karakuri_environment::watch::Aim {
+                head: karakuri_environment::compile::Named::bare(&after_l1),
+                rest: vec![karakuri_environment::compile::Named::bare(&after_l4)],
                 layering: karakuri_engine::set::Layering::Overdraw,
                 live: None,
                 capacity: None,
@@ -6641,9 +6653,11 @@ proc probe_knobs {
 
         slots.re_point(
             0,
-            &crate::watch::Aim {
-                head: crate::compile::Named::bare(dir.path().join("l1.kir")),
-                rest: vec![crate::compile::Named::bare(dir.path().join("sprites.kir"))],
+            &karakuri_environment::watch::Aim {
+                head: karakuri_environment::compile::Named::bare(dir.path().join("l1.kir")),
+                rest: vec![karakuri_environment::compile::Named::bare(
+                    dir.path().join("sprites.kir"),
+                )],
                 layering: karakuri_engine::set::Layering::Overdraw,
                 live: None,
                 capacity: None,
@@ -7201,13 +7215,17 @@ proc probe_knobs {
         let (server, reporter) = started(true);
         stand_in(reporter, |request| {
             let SaveRequest { slot, reply, .. } = request;
-            reply.settled(Err(crate::nothing_to_save(slot, Some("night01"), true)));
+            reply.settled(Err(karakuri_environment::nothing_to_save(
+                slot,
+                Some("night01"),
+                true,
+            )));
         });
         let (failed, said) = call(server.port, "save_set", json!({"slot":0}));
         assert!(failed, "a refusal came back as a success: {said}");
         assert_eq!(
             said,
-            crate::nothing_to_save(0, Some("night01"), true),
+            karakuri_environment::nothing_to_save(0, Some("night01"), true),
             "the refusal was rewritten on its way to the client"
         );
     }
@@ -7236,7 +7254,7 @@ proc probe_knobs {
         assert!(failed, "{said}");
         assert_eq!(
             said,
-            crate::no_such_slot(7, 1),
+            karakuri_environment::no_such_slot(7, 1),
             "a bad slot was not refused in the words every other surface refuses it in"
         );
         assert!(
@@ -7252,7 +7270,7 @@ proc probe_knobs {
             json!({"slot":7,"layer":"L1"}),
         );
         assert!(failed, "{said}");
-        assert_eq!(said, crate::no_such_slot(7, 1));
+        assert_eq!(said, karakuri_environment::no_such_slot(7, 1));
     }
 
     /// **`"id": null` is a caller saying nothing about the id**, not a caller
@@ -7387,9 +7405,10 @@ proc probe_knobs {
         let store = server.store();
         let hash = store.put_artifact(source.as_bytes()).expect("put");
         if card {
-            let checked = crate::compile::check(source).expect("the fixture compiles");
+            let checked =
+                karakuri_environment::compile::check(source).expect("the fixture compiles");
             store
-                .write_meta(&hash, &crate::meta::card(&hash, &checked))
+                .write_meta(&hash, &karakuri_environment::meta::card(&hash, &checked))
                 .expect("card");
         }
         hash
@@ -7518,7 +7537,7 @@ proc probe_knobs {
     fn a_walk_answers_one_sets_versions_and_never_a_row_filed_under_another() {
         let server = start(true);
         let root = store_root(&server.dir);
-        let mut snaps = crate::history::Snapshots::new(&root);
+        let mut snaps = karakuri_environment::history::Snapshots::new(&root);
         for (slot, layer, set, name, source) in [
             (0usize, "L4", Some("night01"), "beat_strokes", &b"one"[..]),
             (0, "L4", Some("night01"), "beat_strokes", &b"two"[..]),
@@ -7867,9 +7886,10 @@ proc probe_knobs {
         let store = server.store();
         let hash = store.put_artifact(source.as_bytes()).expect("put");
         if card {
-            let checked = crate::compile::check(source).expect("the fixture compiles");
+            let checked =
+                karakuri_environment::compile::check(source).expect("the fixture compiles");
             store
-                .write_meta(&hash, &crate::meta::card(&hash, &checked))
+                .write_meta(&hash, &karakuri_environment::meta::card(&hash, &checked))
                 .expect("card");
         }
         set_naming(server, id, hash);
@@ -8505,7 +8525,7 @@ proc probe_knobs {
         let path = dir.join(name);
         let source =
             std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        crate::compile::check(&source)
+        karakuri_environment::compile::check(&source)
             .unwrap_or_else(|e| panic!("{} does not check: {e}", path.display()))
     }
 
@@ -8854,7 +8874,7 @@ proc probe_knobs {
         let l4 = dir.path().join("l4.kir");
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
-        let opening = crate::Opening::closed();
+        let opening = karakuri_environment::Opening::closed();
         opening.set(
             karakuri_operation::gate::Class::ALL
                 .iter()
@@ -9057,7 +9077,7 @@ mod tests {
             watching: true,
             // **Closed, all four classes**, which is the state a run starts in
             // and the state every test in this module reasons under.
-            opening: crate::Opening::closed(),
+            opening: karakuri_environment::Opening::closed(),
             events,
             asked: mpsc::sync_channel(ASKED).0,
             wiring: mpsc::sync_channel(ASKED).0,
@@ -9233,7 +9253,7 @@ mod tests {
         let past_the_end = slots
             .path(2, Kind::L1, 0)
             .expect_err("slot 2 does not exist");
-        assert_eq!(past_the_end, crate::no_such_slot(2, 2));
+        assert_eq!(past_the_end, karakuri_environment::no_such_slot(2, 2));
         // And the cheap door to the same answer, which is what `save_set` asks
         // rather than reading every file of a slot to learn a length.
         assert_eq!(
@@ -9928,20 +9948,22 @@ mod tests {
         let reply = Reply(tx);
         // One node, because the sentence counts them and a fixture that agreed
         // with a hardcoded plural would be checking the fixture.
-        let sources = crate::setfile::Sources(vec![crate::setfile::SavedNode {
-            layer: "L1",
-            index: 0,
-            hash: karakuri_store::hash::Hash::of(b"kind L1"),
-            name: None,
-            source: None,
-            meta: None,
-        }]);
-        let id = crate::accepted_save(
+        let sources = karakuri_environment::setfile::Sources(vec![
+            karakuri_environment::setfile::SavedNode {
+                layer: "L1",
+                index: 0,
+                hash: karakuri_store::hash::Hash::of(b"kind L1"),
+                name: None,
+                source: None,
+                meta: None,
+            },
+        ]);
+        let id = karakuri_environment::accepted_save(
             1,
             // **A `Reply` exists only because a model asked**, so this is the
             // arm this test has always been about — see
             // `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`.
-            crate::Asked::Model,
+            karakuri_environment::Asked::Model,
             Some("keeper".to_string()),
             &sources,
             std::path::Path::new("/nowhere/store"),
@@ -9982,7 +10004,7 @@ mod tests {
         assert_eq!(checked_id("a_B_9"), Ok("a_B_9".to_string()));
         // What a save with no id is called, so a client can name one the same
         // way the run would have.
-        let stamp = crate::history::stamped_id();
+        let stamp = karakuri_environment::history::stamped_id();
         assert_eq!(checked_id(&stamp), Ok(stamp.clone()), "{stamp}");
 
         for bad in [

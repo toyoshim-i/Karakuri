@@ -114,7 +114,6 @@
 // - `clock` — real time, as the step count a frame writes into its `tick`.
 // - `compile` — a `.kir` off a disk, through the pipeline, with its bytes kept.
 // - `history` — the edit history: a directory per day, a chain per procedure.
-// - `mcp` — a socket, and the Model Context Protocol a model speaks over it.
 // - `meta` — an artifact's card: what a compile pass can say, and where it lands.
 // - `midi` — a port, and what the operator asked for through it.
 // - `mix` — the performance as records: faders, blends, residency, the look.
@@ -129,7 +128,6 @@ pub mod audio;
 pub mod clock;
 pub mod compile;
 pub mod history;
-pub mod mcp;
 pub mod meta;
 pub mod midi;
 pub mod mix;
@@ -359,6 +357,21 @@ pub fn nothing_to_save(slot: usize, loaded_set: Option<&str>, no_files: bool) ->
     }
 }
 
+/// **Told when [`accepted_save`] has said its sentence**, so that this crate
+/// can call back into a waiting client without naming what it is.
+///
+/// `karakuri-mcp`'s `Reply` is the one implementation there is — a model's
+/// call is the one caller of `accepted_save` with anyone waiting on the other
+/// end. The trait exists only so `accepted_save` can stay in this crate
+/// (`no_such_slot` and `nothing_to_save`'s neighbours, called from the same
+/// four surfaces) without this crate depending on `karakuri-mcp`, which
+/// depends on this crate for [`setfile`], [`compile`], [`meta`], [`history`]
+/// and [`watch`].
+pub trait SaveReply {
+    /// The sentence [`accepted_save`] said, verbatim.
+    fn accepted(&self, said: &str);
+}
+
 /// **A save has been taken and named**, said to the terminal and to whoever
 /// asked for it if that was not a hand. Returns the id it will be filed under.
 ///
@@ -396,7 +409,7 @@ pub fn accepted_save(
     id: Option<String>,
     sources: &setfile::Sources,
     root: &std::path::Path,
-    reply: Option<&mcp::Reply>,
+    reply: Option<&dyn SaveReply>,
 ) -> String {
     let id = filed_as(asked, id);
     let said = format!(

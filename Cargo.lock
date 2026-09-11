@@ -1385,6 +1385,7 @@ dependencies = [
  "karakuri-environment",
  "karakuri-ir",
  "karakuri-layout",
+ "karakuri-mcp",
  "karakuri-operation",
  "karakuri-operation-record",
  "karakuri-pattern",
@@ -1414,6 +1415,7 @@ dependencies = [
  "karakuri-engine",
  "karakuri-environment",
  "karakuri-ir",
+ "karakuri-mcp",
  "karakuri-operation",
  "karakuri-operation-record",
  "karakuri-signal",
@@ -1495,6 +1497,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "karakuri-mcp"
+version = "0.1.0"
+dependencies = [
+ "karakuri-engine",
+ "karakuri-environment",
+ "karakuri-ir",
+ "karakuri-operation",
+ "karakuri-operation-record",
+ "karakuri-store",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
