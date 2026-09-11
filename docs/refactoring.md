@@ -21,7 +21,7 @@ A codebase audit conducted on **2026-09-11** revealed that despite status report
 
 - **Phase 2 Restructuring**:
   - **Phase 2A: Liquidating Incomplete Phase 1 Debt (P8–P13)** — Must be resolved first to stabilize foundations.
-  - **Phase 2B: Core Engine Modernization & AI Autonomy (P14–P19)** — Advanced engine architecture, typed vectors, transient render graph, pass fusion, and machine-readable AI diagnostics.
+  - **Phase 2B: Core Engine Modernization & AI Autonomy (P14–P20)** — Advanced engine architecture, typed vectors, transient render graph, pass fusion, machine-readable AI diagnostics, and unified keymap convergence.
 
 ```mermaid
 graph TD
@@ -51,6 +51,7 @@ graph TD
         P17["P17: Structured AI Diagnostics & Degeneracy Detection"]
         P18["P18: Vectorized Signal Bus & Zero-Lookup ID"]
         P19["P19: Zero-Allocation Session Replay & Versioning"]
+        P20["P20: Converge CLI & GUI Keyboards (ADR-0346)"]
     end
 
     P1 -.->|Unfinished| P8
@@ -61,6 +62,7 @@ graph TD
     P7 -.->|Unfinished| P13
     P8 --> P9
     P9 --> P14
+    P11 -.->|Converge Keymaps (ADR-0346)| P20
     P12 --> P15
     P13 --> P15
     P13 --> P16
@@ -135,13 +137,14 @@ Before advanced engine refactoring can proceed safely, the incomplete migrations
 
 ---
 
-## 11. Untangle `karakuri-environment` Cycles & Reaffirm CLI Key Independence (Completing P5) [DONE]
+## 11. Untangle `karakuri-environment` Cycles & Revert CLI Noise (Completing P5) [DONE]
 
 ### Technical Status & Resolution
-- **Reaffirmation of ADR-0220 (GUI & CLI Key Independence)**:
-  - An earlier refactoring attempted to force 1:1 key parity between `karakuri-cli` and the GUI console by remapping colliding CLI keys (`f, g, n, p, r, s, u, z`) to Shift modifiers and issuing deprecation warnings on lowercase keys.
-  - Under [ADR-0220](adr/0220-gui-and-cli-keyboard-mappings-are-separate-programs-with-independent-keys.md), GUI and CLI keyboard mappings are separate programs with independent keys by design, each tailored to its own operational context.
-  - CLI key spam and deprecation warnings were reverted, restoring native ergonomic CLI single-key controls.
+- **Reversion of Premature CLI Warnings & Supersession of ADR-0220 ([ADR-0346](adr/0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md))**:
+  - An earlier refactoring attempted to force 1:1 key parity between `karakuri-cli` and the GUI console by remapping colliding CLI keys (`f, g, n, p, r, s, u, z`) to Shift modifiers and issuing runtime `eprintln!` deprecation warnings on lowercase keys.
+  - Emitting noisy terminal warnings during live performances violated [P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) and disrupted operation. These runtime printouts were completely reverted in Phase 2A.
+  - However, treating GUI and CLI keymaps as permanently independent programs ([ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)) was also recognized as a misinterpretation of what was fundamentally an interim developmental split during scaffolding.
+  - Under [ADR-0346](adr/0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md) (superseding ADR-0220), the keymap divergence is established as temporary scaffolding debt, and full convergence onto the unified [`docs/manual/operations.html`](manual/operations.html) keyboard specification is formally planned for Phase 2B ([P20](#20-converge-cli--gui-keyboard-mappings-on-unified-operations-adr-0346)).
 - **Clean Resolution of Compilation Cycles via `meta.rs`**:
   - Circular dependencies between `setfile.rs`, `compile.rs`, and `meta.rs` in `karakuri-environment` were cleanly resolved without premature `ProcedureCompiler` traits.
   - Extracted shared layer and kind metadata mapping functions (`layer_of`, `kind_of`, `kind_name`, `layer_named`) into pure `meta.rs`, depending strictly on `karakuri_ir` and `karakuri_store`.
@@ -269,6 +272,21 @@ During live recording and replay, every frame line is serialized/deserialized us
 
 ---
 
+## 20. Converge CLI & GUI Keyboard Mappings on Unified Operations (ADR-0346)
+
+### Phenomenon
+During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to immediate terminal conveniences (fade, quantum, latency offset, renderer switch, status dump, scrub, mask toggle) that collide with the GUI instrument's panel operations (fold, solo, unfold, reset, report) as specified in [`docs/manual/operations.html`](manual/operations.html). [ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) temporarily sanctioned this divergence by declaring CLI keys "its own", but having divergent keys fragments operator muscle memory and violates [P-0087](principles/0087-name-the-property-never-the-shape.md) and [P-0090](principles/0090-a-surface-offers-it-never-decides.md).
+
+### Refactoring Plan
+- **Supersede ADR-0220 with [ADR-0346](adr/0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md)**:
+  - Formally record that the divergence was an interim scaffolding state, and declare [`docs/manual/operations.html`](manual/operations.html) as the single canonical keymap specification for all programs.
+- **Unified Keymap Architecture & Shared Declarative Binding Table**:
+  - Share or mirror key definitions between `crates/karakuri/src/keymap.rs` and `crates/karakuri-cli/src/main.rs`.
+  - Migrate colliding CLI single-key commands (`f, g, n, p, r, s, u, z`) to non-colliding modifier chords or dedicated bindings agreed upon in the operations manual.
+  - Update in-terminal help (`BINDINGS`) and manual tables synchronously, eliminating discrepancies across CLI and GUI.
+
+---
+
 ## Comprehensive Execution Matrix
 
 | Phase | ID | Initiative | Status / Target | Primary Deliverable |
@@ -283,7 +301,7 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 2A** | **P8** | **Eradicate Source Scraping** | **DONE** | Source scraping eliminated; behavioral dispatch test implemented across all 38 probes in `PROBES` |
 | **Phase 2A** | **P9** | **Dismantle `main.rs` (32.8k lines)** | **DONE** | Monolith reduced from 32.5k to ~800 lines with 6 submodules and `src/tests/`; large submodules deferred to Phase 2B |
 | **Phase 2A** | **P10** | **Reaffirm ADR-0204 (`panel::Op`)** | **DONE** | Reaffirmed ADR-0204: root column and body row unnamed; `panel::Op` retained as internal handle; purged dead synthetic traits |
-| **Phase 2A** | **P11** | **Untangle Env Cycles & CLI Keys** | **DONE** | Reaffirmed ADR-0220: GUI/CLI keys independent by design; reverted CLI key spam; cycles resolved via `meta.rs` without traits |
+| **Phase 2A** | **P11** | **Untangle Env Cycles & Revert CLI Noise** | **DONE** | Reverted noisy CLI stderr spam; resolved compile cycles via `meta.rs`; scheduled keymap convergence for Phase 2B (ADR-0346) |
 | **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Staged parity, delta, signals, transitions, selections ensure rollback on `mem::forget`; fixed parity type consistency |
 | **Phase 2A** | **P13** | **Image Pass Deduplication** | **DONE** | Deduplicated L5 passes via `ImagePass` & `RetentionManager` (saved 500+ lines in `master.rs`); polymorphic graph deferred to P15 |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | Planned | First-class `ParamValue`; eliminate `.x/.y/.z` string splitting |
@@ -292,3 +310,4 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 2B** | **P17** | **Structured AI Repair Loop** | Planned | Machine-readable diagnostics; visual degeneracy detector |
 | **Phase 2B** | **P18** | **Signal Bus Vectorization** | Planned | Typed vector signals; interned `SignalId` zero-cost dispatch |
 | **Phase 2B** | **P19** | **Zero-Allocation Stream Replay** | Planned | Mmap zero-copy ndjson/binary reader; stream versioning |
+| **Phase 2B** | **P20** | **Converge CLI & GUI Keyboards** | Planned | Migrate colliding CLI keys (`f g n p r s u z`); align on `operations.html` (ADR-0346) |

@@ -1,15 +1,23 @@
 ---
 id: 0220
 title: The key column is the instrument's keyboard, and the CLI's keys are its own
-status: accepted
+status: superseded
 date: 2026-08-29
 supersedes: []
-superseded_by: []
+superseded_by: [0346]
 principles: [0087, 0093]
 tags: [docs, process, ui]
 ---
 
 # The key column is the instrument's keyboard, and the CLI's keys are its own
+
+> **Superseded 2026-09-11 by
+> [ADR-0346](0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md):
+> the CLI key divergence was an interim developmental split during scaffolding, not a permanent architecture.**
+> The GUI instrument (`crates/karakuri`) and terminal interface (`crates/karakuri-cli`) are planned to
+> completely converge on the unified keyboard specification in [`docs/manual/operations.html`](../manual/operations.html).
+> The colliding CLI keys (`f g n p r s u z`) will be re-aligned under Phase 2B (Task P20).
+
 
 ## Context
 
