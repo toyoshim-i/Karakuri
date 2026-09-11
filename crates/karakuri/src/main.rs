@@ -9104,6 +9104,42 @@ fn read_reading(view: &mut View, store: &std::path::Path) -> String {
     }
 }
 
+/// **The reading follows the cursor, on whichever surface moved it.**
+///
+/// `karakuri-console/src/view.rs` states the rule on `View::reading_open`:
+/// *"a move with one open is a read of the row it arrived at, and a move with
+/// nothing open is a pointer moving"*. **Two surfaces move that cursor**, the
+/// arrow keys through `View::walk` and a carry's press through
+/// `View::point_at`, and both owe it the same read — this is the one place
+/// that read is written, so there is one implementation of the rule for both
+/// to call rather than two copies that could answer it differently.
+///
+/// `moved` is each caller's own answer to *did this press move the cursor*:
+/// the arrow-key arm compares `View::cursor_row()` before and after the
+/// press, and the carry's arm is `matches!(acted, Acted::Pointed)`. Neither
+/// shape is repeated here, because *what counts as a move* is each surface's
+/// own question and this function's only question is what to do once one
+/// has happened.
+///
+/// # The defect this rule exists to prevent
+///
+/// Until ADR-0265, `Readout::took` discarded `View::point_at`'s `moved`. A
+/// carry taken in hand while a reading was open on a **different** row moved
+/// the cursor off it, `View::opened` answered `None` because the row under
+/// the cursor was no longer the Set the reading was of, and the block
+/// vanished with nothing on that route ever walking the cursor back — no
+/// panic, no diagnostic, a reading that stopped being drawn. The arrow keys
+/// never had the bug — they always re-read on `moved && reading_open()` — so
+/// the two call sites already agreed before this function existed; what it
+/// buys is that they cannot silently stop agreeing.
+///
+/// Returns the line to print rather than printing it, so a caller with
+/// nothing to print — the ordinary case, a press with no reading open — pays
+/// for no `println!` and a test can call this with no stdout to capture.
+fn reread_if_open(moved: bool, view: &mut View, store: &std::path::Path) -> Option<String> {
+    (moved && view.reading_open()).then(|| read_reading(view, store))
+}
+
 /// **The record's layer a vocabulary layer names.**
 ///
 /// A third spelling of a list that already has two conversions in
@@ -16510,9 +16546,10 @@ const KEY_BINDINGS: &[KeyBinding] = &[
     // operation. Hence `title: None`.
     //
     // **`egui` never gets a say.** `egui-winit` 0.36.1 reports `consumed`
-    // for every `Tab` whatever has focus, and `App::to_egui` reads `repaint`
-    // and nothing else — the invariant `event_response`'s test holds, and
-    // the reason this key is reachable at all.
+    // for every `Tab` whatever has focus, and `App::to_egui` destructures
+    // `EventResponse` down to `repaint` and nothing else — see that
+    // function's own doc for why that shape is what makes this key
+    // reachable at all.
     KeyBinding {
         key: BoundKey::Named(NamedKey::Tab),
         legend: "tab",
@@ -16740,9 +16777,41 @@ impl App {
     /// own answer for the event it was just given, and it is the reason
     /// `Change::Pointer(Claim::Egui)` asks for nothing: one answer per event,
     /// from whoever got it.
+    ///
+    /// **`repaint` is taken out of the `EventResponse` on this line and
+    /// nothing else survives it** (ADR-0259). `egui-winit` 0.36.1 hard-codes
+    /// `EventResponse::consumed` `true` for every `Tab` — *"When pressing the
+    /// Tab key, egui focuses the first focusable element, hence Tab always
+    /// consumes"* — whether or not anything in this program's `egui::Context`
+    /// has focus, so honouring it here would swallow the key that moves focus
+    /// between bays on its first press, with no panic and no diagnostic. This
+    /// program is told about a window event and never asks `egui` for
+    /// permission, so the destructure below is the whole of the fix: past
+    /// this line there is no `EventResponse` left in scope for a future
+    /// `if … .consumed` to be added to by mistake, only the one `bool` this
+    /// function was always allowed to read.
+    ///
+    /// **This used to be a text scan.** `event_response`'s former `#[test]`,
+    /// `the_only_field_read_off_an_event_response_is_repaint`, read this file
+    /// for the word `consumed` and for every `response.` field access above
+    /// the tests. Both questions are unnecessary now rather than merely
+    /// unlikely to trip: `on_window_event` is called nowhere else in this
+    /// program, and the only value this call site keeps a name for is a
+    /// `bool` with no `EventResponse` behind it to add a second field read to.
+    ///
+    /// **ADR-0259's second condition is still checked by nothing, as it was
+    /// before this line existed.** The claim above holds *because* the
+    /// console focuses no `egui` widget — no `Button`, `TextEdit`, `Slider`,
+    /// `DragValue`, `.interact(` or `.sense(` anywhere in
+    /// `karakuri-console/src`, so `Memory::focused()` is permanently `None`
+    /// and `consumed` would be reading a flag that means nothing on this
+    /// program's own widgets even where it is read. That was true on
+    /// 2026-09-05 and has not been re-checked since; it is written here
+    /// rather than left to look covered by a module that no longer exists.
     fn to_egui(gfx: &mut Gfx, costs: &mut Costs, event: &WindowEvent) {
-        let response = gfx.egui.on_window_event(&gfx.window, event);
-        if response.repaint {
+        let egui_winit::EventResponse { repaint, .. } =
+            gfx.egui.on_window_event(&gfx.window, event);
+        if repaint {
             costs.owes();
             gfx.window.request_redraw();
         }
@@ -18578,23 +18647,20 @@ impl ApplicationHandler for App {
                         .asked(&self.keeping, &gfx.engine, &self.store, recording);
                 }
                 // **And a press that moved the library cursor owes that same
-                // read**, because the rule is the cursor's and not the
-                // keyboard's: *"the reading follows the cursor: a move with
-                // one open is a read of the row it arrived at"*
-                // (`karakuri-console/src/view.rs`, `View::reading_open`).
-                // This is the arrow keys' own line one event along — the same
-                // two conditions and the same call — and it is here for the
-                // reason the two above it are: the store is the window's, a
-                // file read is not a thing to do on a frame (P-0091), and
+                // read** (ADR-0265): [`reread_if_open`] is the arrow keys'
+                // own call one event along, and it is here for the reason the
+                // two calls above it are — the store is the window's, a file
+                // read is not a thing to do on a frame (P-0091), and
                 // `karakuri-console` reaches no disk at all (ADR-0156).
                 //
-                // **The press still names no operation** (ADR-0265):
-                // `read_reading` emits none, and `Acted::Pointed` is not an
-                // `Acted::Emitted`. Without this line a carry taken while a
-                // reading was open on another row made that block disappear
-                // and nothing brought it back.
-                if matches!(acted, Acted::Pointed) && self.readout.view.reading_open() {
-                    println!("{}", read_reading(&mut self.readout.view, &self.store));
+                // **The press still names no operation.** `read_reading`
+                // emits none, and `Acted::Pointed` is not an `Acted::Emitted`.
+                if let Some(line) = reread_if_open(
+                    matches!(acted, Acted::Pointed),
+                    &mut self.readout.view,
+                    &self.store,
+                ) {
+                    println!("{line}");
                 }
                 // **A Set dropped out of `presets` is taken in before it is
                 // loaded**, which is the load's two-moment press arriving at the
@@ -18796,7 +18862,10 @@ impl ApplicationHandler for App {
                 // key that moves focus between bays here since 2026-09-09**
                 // (ADR-0259, ADR-0332), which is where that is the failure
                 // that looks like nothing at all; the invariant that record
-                // names is `event_response`'s test.
+                // names is `App::to_egui`'s own doc comment, and the shape of
+                // that function — nothing past its one destructure holds an
+                // `EventResponse` to read `consumed` off — is what enforces
+                // it now.
                 App::to_egui(gfx, &mut self.costs, &event);
                 let WindowEvent::KeyboardInput { event: key, .. } = &event else {
                     unreachable!("the arm this is in")
@@ -18968,8 +19037,13 @@ impl ApplicationHandler for App {
                             |deck| holding(&gfx.engine.deck, deck),
                         );
                         let moved = self.readout.view.cursor_row() != was;
-                        if moved && self.readout.view.reading_open() {
-                            println!("{}", read_reading(&mut self.readout.view, &self.store));
+                        // ADR-0265: the reading follows the cursor, on
+                        // whichever surface moved it — see [`reread_if_open`],
+                        // the pointer release's own call one arm up.
+                        if let Some(line) =
+                            reread_if_open(moved, &mut self.readout.view, &self.store)
+                        {
+                            println!("{line}");
                         }
                         match asked {
                             // **The Library head's scope**, and it is this
@@ -26104,6 +26178,76 @@ mod tests {
         std::fs::remove_dir_all(&root).expect("clean up");
     }
 
+    /// **[`reread_if_open`] re-reads on a move with a reading open, and does
+    /// nothing on any other press** — ADR-0265's rule, as a check on the one
+    /// function both `App::window_event` call sites share, rather than on the
+    /// two copies of it the window loop used to carry.
+    ///
+    /// Until 2026-09-11 the two call sites were two verbatim statements, held
+    /// equal to each other only by a text scan
+    /// (`reading_follows_the_cursor::both_surfaces_re_read_the_row_the_cursor_arrived_at`)
+    /// that read this file and matched each one whole. Now there is one
+    /// statement and not two to keep in step, and this presses it directly:
+    /// three presses, only the middle one of which is a move, and only the
+    /// third of which should read anything.
+    ///
+    /// A CPU test: a store is a directory and a `View` takes no device.
+    #[test]
+    fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
+        let root = scratch_dir("reread-if-open");
+        let store = Store::open(&root).expect("a store to read");
+        store.write_set("night01", &[]).expect("a Set to read");
+        store.write_set("morph01", &[]).expect("a Set to read");
+
+        let mut view = View::new(Room::Day);
+        view.scopes = Scope::ALL.to_vec();
+        view.library = vec!["night01".to_owned(), "morph01".to_owned()];
+
+        // **No reading is open**, so a move re-reads nothing — there is
+        // nothing for the rule to keep following.
+        assert!(
+            view.walk(1, 0..2),
+            "the cursor did not move off the first row"
+        );
+        assert_eq!(
+            reread_if_open(true, &mut view, &root),
+            None,
+            "a move with no reading open re-read something anyway"
+        );
+
+        // A reading opens on the row the cursor is on now (`morph01`).
+        let _ = read_reading(&mut view, &root);
+        assert!(view.reading_open());
+
+        // **A press that did not move the cursor**, with a reading open: the
+        // rule is the cursor's, so this is the one call `Readout::took` used
+        // to get wrong by discarding the `bool` `View::point_at` handed back.
+        assert_eq!(
+            reread_if_open(false, &mut view, &root),
+            None,
+            "a press that did not move the cursor re-read anyway"
+        );
+        assert_eq!(
+            view.opened().expect("still open").reading.id,
+            "morph01",
+            "a press that did not move the cursor changed which row is open"
+        );
+
+        // **A move, with the reading still open**: the row the cursor
+        // arrives at is the one that comes back, on whichever surface's
+        // `moved` said so.
+        assert!(view.walk(-1, 0..2), "the cursor did not move back to row 0");
+        let said = reread_if_open(true, &mut view, &root)
+            .expect("a reading was open and the cursor moved");
+        assert!(
+            said.contains("night01"),
+            "reread_if_open read the row the cursor left rather than the one it arrived at: {said}"
+        );
+        assert_eq!(view.opened().expect("still open").reading.id, "night01");
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
     /// **A press on the `params` chip asks for the Set under the cursor, and a
     /// second press puts the reading away.**
     ///
@@ -27300,8 +27444,11 @@ mod tests {
     /// **What it cannot see is that the window loop makes the call**, because
     /// `winit` cannot be asked for an `ActiveEventLoop` outside its own loop
     /// and an event handler is not something a test can drive —
-    /// `Readout::pointer`'s own doc. That wire is
-    /// [`super::reading_follows_the_cursor`], which reads it as text.
+    /// `Readout::pointer`'s own doc. `App::window_event`'s carry arm calls
+    /// [`reread_if_open`] with `matches!(acted, Acted::Pointed)`, the same
+    /// function [`reread_if_open_re_reads_only_on_a_move_with_a_reading_open`]
+    /// presses directly, below — this test is the two halves either side of
+    /// that call, and neither reaches the call itself.
     ///
     /// A CPU test: a store is a directory and a `Readout` takes no device.
     #[test]
@@ -30184,172 +30331,58 @@ mod key_column {
         kept
     }
 
-    /// **The grammar's mix answers act on the deck the address is on, and read
-    /// the value they step from off that deck.**
-    ///
-    /// This is the half `gpu::a_mix_key_moves_the_deck_the_operator_selected…`
-    /// cannot reach, and the reason is written there: the chain from an
-    /// operation to a slot needs a `Deck` and this needs none. **Neither alone
-    /// is the claim.**
-    ///
-    /// It is in this module because the machinery is: [`code`] already answers
-    /// *what does this file say* by reading it as text, for the reason written
-    /// at [`SRC`]. What is new is *what the answer functions do with what the
-    /// console handed them*, and it is three claims:
-    ///
-    /// - **The deck is the one the address named.** `karakuri_console::focus`
-    ///   resolves which strip a press landed on and hands the slot back in the
-    ///   answer, so the operation carries `*deck` and never a literal — an
-    ///   answer carrying one would move deck A from every press, correctly and
-    ///   on the wrong strip.
-    /// - **The reading is the deck's, not a strip's.** `view::Strip` is that
-    ///   same reading copied once a frame, so a step counted from it is a step
-    ///   counted from a number the deck may already have left behind. That is
-    ///   true of the two levels [`answered`] steps and of the three states
-    ///   [`holding`] hands the console to cycle from.
-    /// - **[`held`] guards every read.** `Deck::gain` indexes its slots and a
-    ///   panic reachable from an event handler takes this process with it
-    ///   rather than unwinding.
-    ///
-    /// **It reads two functions where it read three arms.** The three mix keys
-    /// were `\`, `'` and `m` until 2026-09-10, each an arm of the window loop's
-    /// `match`; the grammar reaches all five of a strip's controls through one
-    /// arm, and the two functions below are where the deck is met (ADR-0333).
-    ///
-    /// A CPU test, deliberately: it reads a file, and a machine with no
-    /// adapter still has an answer about what these two functions say.
-    #[test]
-    fn the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck() {
-        let code = code();
-
-        // **The floor**, and it is what keeps the rest honest: a `code()` that
-        // had stopped matching this file would satisfy every `contains` below
-        // by being empty, and every one of them is a `contains`.
-        for whole in [
-            "fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {",
-            "fn answered(",
-        ] {
-            assert!(
-                code.contains(whole),
-                "{SRC} no longer says `{whole}` — the two functions that meet the deck at a \
-                 grammar press are somewhere else now, and every assertion below is looking for \
-                 statements in a file that does not have them"
-            );
-        }
-
-        // **The two levels**: the deck the address named, the value read off
-        // that deck, and the guard between them.
-        for (reading, what) in [
-            ("gain_key(*step, gfx.engine.deck.gain(slot))", "the trim"),
-            (
-                "opacity_key(*step, gfx.engine.deck.opacity(slot))",
-                "the fader",
-            ),
-        ] {
-            assert!(
-                code.contains(reading),
-                "{what} is not stepped from `{reading}` — the level it counts from is not the one \
-                 the deck is holding, and `view::Strip` is that reading copied once a frame"
-            );
-        }
-        assert!(
-            code.contains("match held(&gfx.engine.deck, *deck)"),
-            "`answered` reads a slot without asking `held` for it first, or reads a deck the \
-             address did not name: `Deck::gain` indexes its slots and a panic in an event handler \
-             aborts this process rather than unwinding"
-        );
-        for named in [
-            "Operation::SetGain { deck: *deck",
-            "Operation::SetOpacity { deck: *deck",
-        ] {
-            assert!(
-                code.contains(named),
-                "`answered` does not build `{named}…` — the deck it names is not the one the \
-                 address is on"
-            );
-        }
-
-        // **The three states**, which the console cycles and this file reads.
-        assert!(
-            code.contains("let slot = held(deck, at)?;"),
-            "`holding` reads a slot without asking `held` for it first"
-        );
-        for (reading, what) in [
-            ("tally(deck.requested_residency(slot))", "the residency"),
-            ("blend_mode(deck.blend(slot))", "the blend"),
-            ("masked(deck.mask(slot).kind())", "the mask shape"),
-        ] {
-            assert!(
-                code.contains(reading),
-                "`holding` does not read {what} as `{reading}` — the state the console cycles \
-                 from is not the one the deck is holding"
-            );
-        }
-
-        // **The three levels the world holds beyond the deck's two**, added
-        // with the seven bays (ADR-0343). Each is read off the thing that has
-        // it — the same deck one pass along, the look, the audio session — and
-        // named here because the step and the clamp decide what the record
-        // says, which is `gain_key`'s argument on three more controls.
-        for (reading, what) in [
-            ("out_key(*step, gfx.engine.deck.out())", "the master out"),
-            (
-                "exposure_key(*step, gfx.engine.look.exposure)",
-                "the exposure",
-            ),
-            (
-                "offset_key(*step, open.latency_offset_ms())",
-                "the latency offset",
-            ),
-        ] {
-            assert!(
-                code.contains(reading),
-                "{what} is not stepped from `{reading}` — the level it counts from is not the one \
-                 the world is holding, and a step counted from anything else is a step from a \
-                 number nothing is standing on"
-            );
-        }
-
-        // **And the two answers that are not operations at all**: the fold
-        // `space` performs on a bay and the picture's on and off, which is one
-        // press asking for an operation and a fold. Both leave through the
-        // methods the pointer already goes through, so a key and a hand cannot
-        // fold two different things.
-        for (reading, what) in [
-            ("focus::Asked::Panel(op) => {", "the fold and the solo"),
-            (
-                "readout.sink(asked.clone(), *op)",
-                "the picture's on and off",
-            ),
-        ] {
-            assert!(
-                code.contains(reading),
-                "{what} does not go through `{reading}` — a move of the arrangement is not an \
-                 operation of the vocabulary, and the route it takes is the one the pointer takes"
-            );
-        }
-
-        // **And neither of them reaches for a strip**, which is the claim the
-        // three arms carried before them. `view::Strip` is named all over this
-        // file — `mixer` builds one per frame — so the scan is the two
-        // functions' own text rather than the whole of it.
-        //
-        // **Cut at the next function by name**, which is a boundary that fails
-        // loudly: a blank line between two functions flattens to *two* spaces,
-        // so a cut at `"} fn "` matched nothing and this test panicked on its
-        // own extraction the first time it ran.
-        let holding = code
-            .split("fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {")
-            .nth(1)
-            .and_then(|rest| rest.split_once("fn masked("))
-            .map(|(body, _)| body.to_owned())
-            .expect("`holding` has a body and `masked` follows it");
-        assert!(
-            !holding.to_lowercase().contains("strip"),
-            "`holding` reaches for a strip, which is the deck's reading copied once a frame: \
-             {holding}"
-        );
-    }
+    // **The grammar's mix answers act on the deck the address is on, and read
+    // the value they step from off that deck** — no longer checked here.
+    //
+    // Until 2026-09-11 this was a `#[test]`,
+    // `the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`,
+    // that read this file as text and looked for the statements below as
+    // literal substrings. It caught the same three claims a run of this
+    // program actually makes, at the cost every scan in this module pays:
+    // adding a comment that happened to contain one of these strings, or
+    // reformatting `holding` so a blank line no longer flattened the way the
+    // cut expected, failed the test for a reason that had nothing to do with
+    // any of the three claims.
+    //
+    // - **The deck is the one the address named**, and **the reading is the
+    //   deck's, not a strip's** — both of [`holding`]'s claims — are now
+    //   `gpu::holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it`,
+    //   which presses [`holding`] itself against a deck moved after a frame
+    //   had already copied its old state, and checks the *values* it hands
+    //   back rather than the syntax it is spelled with.
+    //   `gpu::a_mix_key_moves_the_deck_operator_selected_and_leaves_the_others_alone`
+    //   presses the same two claims for [`gain_key`] and [`opacity_key`], the
+    //   pair [`answered`] steps for the trim and the fader, the same way.
+    // - **Nothing here reaches for a strip because nothing here has one to
+    //   reach for**, which used to be the scan's fourth assertion and is now
+    //   a fact about the crate graph rather than about this file's text:
+    //   [`holding`]'s only parameters are `&Deck` and a slot, and
+    //   `karakuri-engine` does not depend on `karakuri-console` (ADR-0156),
+    //   so there is no `view::Strip` a function with that signature could
+    //   name even by mistake. A scan cannot make that claim stronger than the
+    //   crate graph already does, and does not need to try.
+    // - **[`held`] guards every read**, and **`answered` builds
+    //   `Operation::SetGain`/`SetOpacity` naming the addressed deck**, are
+    //   the two claims this file cannot re-derive behaviourally: [`answered`]
+    //   takes `&mut Gfx`, which bundles a live `winit::window::Window` and a
+    //   `wgpu::Surface`, and nothing in this workspace builds one off-screen
+    //   for a test the way [`Engine`] is built for [`Deck`]-only checks.
+    //   `gpu::a_mix_key_moves_the_deck_operator_selected_and_leaves_the_others_alone`
+    //   presses [`held`], [`gain_key`] and [`opacity_key`] by hand, in the
+    //   same order [`answered`]'s `Trim`/`Fader` arm calls them, and is the
+    //   nearest a test in this crate gets to entering [`answered`] itself —
+    //   its own doc says so. The master out, the exposure and the latency
+    //   offset arms, and the two arms that are not operations at all
+    //   (`focus::Asked::Panel` and `Routed`, which leave through
+    //   `Readout::op` and `Readout::sink`), are checked only by their own
+    //   pure functions' tests (`the_master_out_steps_…`,
+    //   `the_exposure_steps_…`, `the_offset_steps_…`) and by
+    //   `karakuri-console`'s own tests of what `Readout::op` and
+    //   `Readout::sink` do once called — not by anything that presses
+    //   [`answered`] and watches those five arms run. That gap predates this
+    //   change: the retired scan read the same five arms' text and could only
+    //   ever say they were *spelled*, never that they ran, so nothing here
+    //   is weaker for their sake than it was.
 
     /// **And every key the legend prints has its rows written down**, both
     /// ways round, which is what keeps [`ROWS`] from being a second list of
@@ -30670,15 +30703,18 @@ mod focus_keys {
     //! `Key::Named(NamedKey::…)` — cannot bound any more, since nothing marks
     //! where a function that is not a `match` arm ends. [`one`] cuts each at
     //! the next function's own name instead, the same way
-    //! `key_column::the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
-    //! already cut `holding` from `masked`.
+    //! `key_column`'s former text-scanning check of `holding` and `masked`
+    //! once cut one function's body from the next by name before that check
+    //! was retired for a behavioural one — see [`super::App::to_egui`]'s doc
+    //! for the same move made on a different check.
     //!
     //! # What it cannot see, and which way each one fails
     //!
     //! - **A press.** That the function is reached, that `egui` did not
     //!   swallow the key, and that the ring moves on a running panel are
-    //!   three claims this makes none of; the first is `event_response`'s,
-    //!   the second is the invariant that test holds, and the third is `mod
+    //!   three claims this makes none of; the first and second are
+    //!   [`super::App::to_egui`]'s doc comment's, which is what the
+    //!   destructure there enforces now, and the third is `mod
     //!   gpu`'s and is not asked. A *false negative*, and it is the boundary
     //!   [`super::key_column`]'s own documentation stops at.
     //! - **A quit reached by another route** — `std::process::exit`, a panic in
@@ -30703,9 +30739,8 @@ mod focus_keys {
     /// name, in the order `super::KEY_BINDINGS` declares them —
     /// `key_tab`, then `key_escape`, then `key_fold_enclosing`. Two
     /// standalone functions have no `arm`-shaped marker between them any
-    /// more, so this cuts at a name instead, exactly as
-    /// `key_column::the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
-    /// already does for `holding` and `masked`.
+    /// more, so this cuts at a name instead, the way `press_handler`'s
+    /// `body` cuts `Readout::pointer` from the function that follows it.
     const AFTER_TAB: &str = "fn key_escape(";
     const AFTER_ESC: &str = "fn key_fold_enclosing(";
 
@@ -31503,10 +31538,13 @@ mod press_handler {
     ///
     /// [`code`] does the reading and the flattening — including stopping at
     /// this file's first `#[cfg(test)]`, which is the whole point — and this
-    /// cuts one function out of it the same way `key_column`'s own
-    /// `the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
-    /// cuts `holding` from `masked`: from the head to the next `fn `, which is
-    /// the next method of the same `impl`.
+    /// cuts one function out of it the same way `focus_keys`'s own
+    /// `body` cuts `key_tab` and `key_escape` from their neighbours: from the
+    /// head to the next `fn `, which is the next method of the same `impl`.
+    /// `key_column` used to cut a function's body out of [`code`] the same
+    /// way, for `holding` and `masked`; it presses [`super::holding`]
+    /// directly now, so this module and `focus_keys` are the two places left
+    /// that still cut one out of text.
     ///
     /// **The one thing added is `" ."` → `"."`.** `rustfmt` breaks a long
     /// method chain *before* the dot, so `row .shape(at)` is what the flattened
@@ -31640,9 +31678,13 @@ mod press_handler {
     /// **It reads this file and no other, since 2026-09-07.** It read
     /// `karakuri-console/src` as well while this module scanned that crate for
     /// offers; the rows are a value now, so the only text either cut meets is
-    /// the one [`code`] flattens — which is also what [`super::key_column`] and
-    /// [`super::event_response`] read, so the refusal still stands under all
-    /// three.
+    /// the one [`code`] flattens — which is also what [`super::focus_keys`]
+    /// reads, so the refusal still stands under both. `key_column` and
+    /// `event_response`, [`code`]'s other two readers, retired their own
+    /// text-scanning checks for behavioural and structural ones (see
+    /// [`super::App::to_egui`]'s doc and
+    /// `gpu::holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it`),
+    /// so [`code`] now has two readers where it had four.
     #[test]
     fn the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet() {
         let path = workspace().join(SRC);
@@ -31694,248 +31736,6 @@ mod press_handler {
             }
         }
         quotes % 2 == 1
-    }
-}
-
-#[cfg(test)]
-mod event_response {
-    //! **`EventResponse` has exactly one field read in this workspace, and it
-    //! is `repaint`.**
-    //!
-    //! That sentence is the whole of why a key press reaches the `match` in
-    //! [`super::App::window_event`] at all, and it is not the reason that
-    //! arm's comment gave until 2026-09-05. `egui-winit` 0.36.1 hard-codes the
-    //! other field — *"When pressing the Tab key, egui focuses the first
-    //! focusable element, hence Tab always consumes"* — so
-    //! `EventResponse::consumed` is `true` for every `Tab` whether or not
-    //! anything has focus. Nothing here asks: [`super::App::to_egui`] takes
-    //! `repaint`, so `egui` is **told** about the key and never asked for
-    //! permission, and the delivery does not depend on the focus state at all.
-    //!
-    //! # Why it is worth a check
-    //!
-    //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-    //! makes `Tab` the key that moves focus between bays, and names this
-    //! invariant as the thing to watch. **The key is bound since 2026-09-09**
-    //! ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
-    //! so this is no longer a watch on something that has not arrived: it is
-    //! what keeps a key an operator presses reaching the arm that answers it. An `if response.consumed` added here
-    //! reads as an ordinary courtesy to the toolkit; what it does is swallow
-    //! `Tab` on the first press, which in that scheme is **the failure that
-    //! looks like nothing at all** — no panic, no diagnostic, a key that stops
-    //! doing anything. The comment that invited it said `egui` *"has no
-    //! focused widget in this pass and so consumes nothing"*, which is true of
-    //! `egui::Context` and false of the flag `egui-winit` returns.
-    //!
-    //! # How it is read
-    //!
-    //! [`super::key_column`]'s machinery, one question along: this file read
-    //! as text, cut at the first [`TESTS`], comments dropped and the lines
-    //! joined — [`code`], the same answer [`super::press_handler`] asks it
-    //! for. There is nothing to enumerate instead. A field read is a field
-    //! read, and no list in the program says which ones happen.
-    //!
-    //! Three assertions, and the first is the floor the other two stand on:
-    //!
-    //! - **The response is still produced, and still bound to `response`.**
-    //!   [`CALL`] is the whole statement rather than a name, which is
-    //!   [`super::press_handler`]'s `HANDLER` reason: a rename or a
-    //!   resignature fails here, rather than leaving the field scan below
-    //!   reading a haystack with no receiver in it and passing.
-    //! - **Every field read off that receiver is `repaint`.** The invariant as
-    //!   ADR-0259 states it, and the half that catches a second field `egui`
-    //!   has not shipped yet.
-    //! - **`consumed` is spelled nowhere above the tests.** The belt for the
-    //!   first: a destructure — `let EventResponse { consumed, .. } = …` — or
-    //!   a second call bound to another name would both slip past a scan keyed
-    //!   on the receiver, and both have to spell the field.
-    //!
-    //! # What it cannot see, and which way each one fails
-    //!
-    //! - **A read below the first [`TESTS`].** [`code`] stops there for
-    //!   [`super::key_column`]'s reason — a field spelled in a test is not one
-    //!   this program reads — and the window loop is above it. A *false
-    //!   negative*.
-    //! - **`/* … */`, and a `//` inside a string literal.** Neither cut in
-    //!   [`code`] handles either, unchanged from the two modules above;
-    //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
-    //!   is what fails the day one is written.
-    //! - **The second condition, which is a different claim.** ADR-0259 asks
-    //!   for two things, and this is only the first. That the console draws no
-    //!   focusable `egui` widget — no `Button`, `TextEdit`, `Slider`,
-    //!   `DragValue`, `.interact(` or `.sense(` in `karakuri-console/src`, so
-    //!   `Memory::focused()` is permanently `None` — was read once, on
-    //!   2026-09-05, and is **checked by nothing**. It is written here rather
-    //!   than left to look covered by the module it is not in.
-    //! - **Whether the key is then acted on.** That the arms exist is
-    //!   [`super::key_column`]'s; that a press reaches the deck is `mod gpu`'s.
-    //!   This file says one thing: `egui` is never asked for permission.
-
-    use std::collections::BTreeSet;
-
-    use super::key_column::{code, SRC, TESTS};
-
-    /// **The statement that produces the response**, whole rather than by
-    /// name, for [`super::press_handler`]'s `HANDLER` reason: `response` is a
-    /// common enough word that the receiver alone would be a bet on nothing
-    /// else in this file ever binding one, and a call that changes is a seam
-    /// that changes.
-    const CALL: &str = "let response = gfx.egui.on_window_event(&gfx.window, event);";
-
-    /// The receiver, with its dot, which is how a field read off it is spelled.
-    const READ: &str = "response.";
-
-    /// **The one field `repaint` is not**, spelled once so the message can
-    /// name it and so this module holds the only copy of the word.
-    const NEVER: &str = "consumed";
-
-    /// **`EventResponse` has exactly one field read in this workspace, and it
-    /// is `repaint`** — ADR-0259's sentence, as a check.
-    ///
-    /// A CPU test, deliberately, and for [`super::key_column`]'s reason: it
-    /// reads a file, so a machine with no adapter still has an answer about
-    /// what this file asks `egui` for.
-    #[test]
-    fn the_only_field_read_off_an_event_response_is_repaint() {
-        // **`" ." → "."`**, [`super::press_handler`]'s one addition to
-        // [`code`]: `rustfmt` breaks a long chain *before* the dot, and where
-        // a line was wrapped is a decision about width rather than about which
-        // field is being read.
-        let code = code().replace(" .", ".");
-
-        assert!(
-            code.contains(CALL),
-            "{SRC} no longer says `{CALL}` — the answer `egui` gives for a window event is \
-             produced somewhere else now, or bound to another name, and the scan below is \
-             looking for a receiver this file does not have"
-        );
-
-        let mut fields = BTreeSet::new();
-        for after in code.split(READ).skip(1) {
-            let end = after
-                .find(|c: char| !c.is_alphanumeric() && c != '_')
-                .unwrap_or(after.len());
-            fields.insert(after[..end].to_owned());
-        }
-        assert_eq!(
-            fields,
-            BTreeSet::from(["repaint".to_owned()]),
-            "`EventResponse` has exactly one field read in this workspace and it is `repaint` \
-             (ADR-0259); {SRC} reads {fields:?}. `egui-winit` 0.36.1 sets `consumed` for every \
-             `Tab` whether or not a widget has focus, so a second field honoured here swallows \
-             the key that moves focus between bays, on its first press and with no diagnostic"
-        );
-
-        assert!(
-            !code.contains(NEVER),
-            "`{NEVER}` is spelled in {SRC} somewhere above `{TESTS}`, and it is the one field \
-             of `EventResponse` this program must not read — whether it is reached through a \
-             destructure or off a receiver by another name. `egui-winit` 0.36.1 hard-codes it \
-             true for every `Tab`, so honouring it stops `Tab` reaching the `match` that moves \
-             focus between bays (ADR-0259), on the first press and in silence"
-        );
-    }
-}
-
-#[cfg(test)]
-mod reading_follows_the_cursor {
-    //! **The rule is the cursor's and not the keyboard's, and this file pays
-    //! it on both surfaces.**
-    //!
-    //! `karakuri-console/src/view.rs` states it on `View::reading_open`:
-    //! *"**the reading follows the cursor**: a move with one open is a read of
-    //! the row it arrived at, and a move with nothing open is a pointer
-    //! moving"*. `View::opened` is what makes it load-bearing — the block is
-    //! drawn only where the row under the cursor is still the Set it was read
-    //! of — and neither is a rule the console can keep by itself, because the
-    //! re-read is a file read and that crate reaches no disk at all
-    //! (ADR-0156). **Two surfaces move that cursor**: the arrow keys, through
-    //! `View::walk`, and a carry's press, through `View::point_at`.
-    //!
-    //! # Why it is worth a check
-    //!
-    //! For a while only one of them paid. `Readout::took` called `point_at`
-    //! and discarded the `bool` it answers, so a row taken in hand while a
-    //! reading was open on another row moved the cursor off it and the block
-    //! vanished with nothing to bring it back — no panic, no diagnostic, a
-    //! reading that stops being drawn. ADR-0265 left it undecided and now
-    //! decides it the cursor's way, which makes *both branches present* the
-    //! invariant that record names.
-    //!
-    //! # How it is read
-    //!
-    //! [`super::event_response`]'s machinery, one question along: this file
-    //! read as text, cut at the first [`TESTS`], comments dropped and the
-    //! lines joined — [`code`], the same answer [`super::press_handler`] asks
-    //! it for. There is nothing to enumerate instead: a branch in a `match`
-    //! arm is not something the program lists.
-    //!
-    //! Both statements are matched **whole** rather than by a name, which is
-    //! [`super::event_response`]'s `CALL` reason: `read_reading` is called on
-    //! three branches above the tests and two of them are somebody else's, so
-    //! a scan keyed on the callee alone would pass on a file where either of
-    //! these two had been deleted.
-    //!
-    //! # What it cannot see, and which way each one fails
-    //!
-    //! - **That either branch is reached.** It reads text; whether the arm it
-    //!   sits in runs is `mod gpu`'s question. A *false negative*.
-    //! - **That the read is the right one.** That `read_reading` opens the row
-    //!   under the cursor is
-    //!   `super::tests::a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on`,
-    //!   and that the press answers `Acted::Pointed` at all is
-    //!   `super::tests::a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`.
-    //!   This module asks one question: does the window loop act on that
-    //!   answer.
-    //! - **`/* … */`, and a `//` inside a string literal.** Neither cut in
-    //!   [`code`] handles either, unchanged from the modules above;
-    //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
-    //!   is what fails the day one is written.
-
-    use super::key_column::{code, SRC, TESTS};
-
-    /// **The arrow keys' half**, in [`code`]'s flattened spelling: `moved` is
-    /// `View::walk`'s answer, and the arm it is in is the one that binds it.
-    const WALKED: &str = concat!(
-        "if moved && self.readout.view.reading_open() { ",
-        "println!(\"{}\", read_reading(&mut self.readout.view, &self.store)); }"
-    );
-
-    /// **The carry's half**, and the same two conditions: `Acted::Pointed` is
-    /// `View::point_at`'s answer carried out of `Readout::took`, which is
-    /// where the press handler can put it and the store is not.
-    const POINTED: &str = concat!(
-        "if matches!(acted, Acted::Pointed) && self.readout.view.reading_open() { ",
-        "println!(\"{}\", read_reading(&mut self.readout.view, &self.store)); }"
-    );
-
-    /// **A move with a reading open is a read of the row it arrived at, on
-    /// whichever surface moved the cursor** — ADR-0265's decision, as a check.
-    ///
-    /// A CPU test, deliberately, and for [`super::key_column`]'s reason: it
-    /// reads a file, so a machine with no adapter still has an answer about
-    /// whether this program keeps the rule.
-    #[test]
-    fn both_surfaces_re_read_the_row_the_cursor_arrived_at() {
-        let code = code();
-
-        assert!(
-            code.contains(WALKED),
-            "{SRC} no longer re-reads the row an arrow key walked the cursor to. The statement \
-             this looks for is `{WALKED}`, above the first `{TESTS}`; without it a reading open \
-             on one row is drawn nowhere as soon as the cursor steps off it, because \
-             `View::opened` answers `None` for a row that is no longer the Set it was read of"
-        );
-
-        assert!(
-            code.contains(POINTED),
-            "{SRC} no longer re-reads the row a carry's press moved the cursor to. The statement \
-             this looks for is `{POINTED}`, above the first `{TESTS}`. The rule at \
-             `karakuri-console/src/view.rs` is the cursor's and not the keyboard's (ADR-0265), \
-             and the press is the surface that has to be reminded: `Readout::took` discarded \
-             `View::point_at`'s answer once already, and what that cost was a reading that \
-             disappeared when a row was picked up beside it and never came back"
-        );
     }
 }
 
@@ -33949,15 +33749,25 @@ mod gpu {
     ///
     /// # What this cannot reach, and what does
     ///
-    /// The three arms are inline in `App::window_event`, behind a `Window` and
-    /// an `ActiveEventLoop` that no test binary can build, so **nothing here
-    /// enters them**. What is asserted is the chain they are made of, in their
-    /// order, through their own functions.
-    /// `key_column::the_three_mix_arms_act_on_the_selected_deck_and_read_it_off_the_deck`
-    /// is the other half — it reads those arms out of this file's text and
-    /// holds them to this chain — and the claim is the two together. Neither
-    /// alone is it, and saying so is cheaper than a test that looks like it
-    /// covers the arm and does not.
+    /// **This doc named three arms inline in `App::window_event` until
+    /// 2026-09-10**, when ADR-0333 moved the trim and the fader's half of that
+    /// chain into two free functions, [`held`] and [`answered`], reached from
+    /// the grammar rather than from three letters. `answered` is not inline
+    /// in `window_event` any more, but it is still out of this test's reach
+    /// for a narrower reason: it takes `&mut Gfx`, which bundles a live
+    /// `winit::window::Window` and a `wgpu::Surface`, and nothing in this
+    /// workspace builds one off-screen for a test the way [`Engine`] is built
+    /// here for a bare `Deck`. So this presses [`held`], [`gain_key`] and
+    /// [`opacity_key`] by hand, in the order `answered`'s `Trim`/`Fader` arm
+    /// calls them, rather than calling `answered` itself.
+    /// `holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it`,
+    /// below, presses [`holding`] — `answered`'s neighbour and the other
+    /// function ADR-0333 named — directly, because [`holding`] takes only
+    /// `&Deck` and needs no window at all. Between the two, every function
+    /// the grammar's mix answers call on a deck is pressed by something; only
+    /// `answered`'s own dispatch — that it calls them in this order, on the
+    /// deck the address named — is still asserted by hand here rather than by
+    /// entering the function that actually does it.
     #[test]
     fn a_mix_key_moves_the_deck_the_operator_selected_and_leaves_the_others_alone() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -34213,6 +34023,125 @@ mod gpu {
             (engine.deck.gain(here) - off_the_strip).abs() > CLOSE,
             "the press landed where a step off the stale strip would have put it"
         );
+    }
+
+    /// **`holding` reads the addressed deck's own state, and never a strip
+    /// that predates it** — the two functions'
+    /// `the_grammars_mix_answers_act_on_the_addressed_deck_and_read_it_off_the_deck`
+    /// used to hold as a claim about this file's text, read as a claim about
+    /// what runs.
+    ///
+    /// [`holding`] hands the console the three states a mixer strip cycles —
+    /// [`tally`], [`blend_mode`] and [`masked`] applied to
+    /// `Deck::requested_residency`, `Deck::blend` and `Deck::mask` — plus the
+    /// angle carried through unchanged. A text scan can only say those calls
+    /// are *spelled somewhere above the tests*; this presses [`holding`]
+    /// itself and checks the *values* it hands back, against a slot moved
+    /// after a strip had already copied its old ones — the same staleness
+    /// `a_mix_key_moves_the_deck_operator_selected_and_leaves_the_others_alone`
+    /// presses [`gain_key`] against, above.
+    ///
+    /// **Nothing here reaches for a strip because nothing here has one to
+    /// reach for.** [`holding`]'s only parameters are `&Deck` and a slot
+    /// number, and `karakuri-engine` does not depend on `karakuri-console`
+    /// (ADR-0156): there is no `view::Strip` in scope for a function with
+    /// this signature to name, by accident or otherwise. That half of the old
+    /// claim is a fact about the crate graph, settled the day this file
+    /// stopped being allowed to import the engine's own compositor into the
+    /// console — not something either the old scan or this test has to hold
+    /// at runtime. What is worth pressing is the other half: that the values
+    /// [`holding`] reports are the ones on the deck **now**.
+    #[test]
+    fn holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer = egui_wgpu::Renderer::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            egui_wgpu::RendererOptions::default(),
+        );
+        let mut panel = Panel::new(1440.0, 900.0);
+        panel.solve();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &shipped_slots(),
+            panel.layout(),
+            1.0,
+            None,
+            None,
+            mcp::Slots::unpointed(),
+        );
+        let material = vec![shipped().material(); engine.deck.slot_count()];
+        /// Deck C — not the default and not the last, [`held`]'s own reason
+        /// for the mix key test above.
+        const AT: u8 = 2;
+        let slot = held(&engine.deck, AT).expect("this deck has a slot 2");
+
+        // A frame's worth of strips, read before anything below moves the
+        // deck — the copy `holding` must answer differently from once the
+        // deck has moved on.
+        let mut strips = Vec::new();
+        mixer(&engine.deck, &material, &mut strips);
+        let before = strips[usize::from(AT)].clone();
+
+        // Every state `holding` reports, moved to something the frame above
+        // never saw.
+        engine.deck.set_residency(slot, Residency::Priming);
+        engine.deck.set_blend(slot, Blend::Max);
+        engine
+            .deck
+            .set_mask(slot, Mask::new(MaskKind::Radial, 0.75, 0.0, 0.0));
+        assert_ne!(
+            tally(engine.deck.requested_residency(slot)),
+            before.requested,
+            "deck C's next residency is the one the frame above already drew, so the assertion \
+             below would pass on a read that never moved"
+        );
+        assert_ne!(
+            blend_mode(engine.deck.blend(slot)),
+            before.blend,
+            "deck C's next blend is the one the frame above already drew"
+        );
+        assert_ne!(
+            masked(engine.deck.mask(slot).kind()),
+            before.mask,
+            "deck C's next mask is the one the frame above already drew"
+        );
+        assert_ne!(
+            engine.deck.mask(slot).angle(),
+            before.mask_angle,
+            "deck C's next mask angle is the one the frame above already drew"
+        );
+
+        let now = holding(&engine.deck, AT).expect("this deck has a slot 2");
+        assert_eq!(
+            now.requested,
+            tally(engine.deck.requested_residency(slot)),
+            "`holding` answered a residency other than the one the deck holds now"
+        );
+        assert_eq!(
+            now.blend,
+            blend_mode(engine.deck.blend(slot)),
+            "`holding` answered a blend other than the one the deck holds now"
+        );
+        assert_eq!(
+            now.mask,
+            masked(engine.deck.mask(slot).kind()),
+            "`holding` answered a mask shape other than the one the deck holds now"
+        );
+        assert_eq!(
+            now.mask_angle,
+            engine.deck.mask(slot).angle(),
+            "`holding` answered a mask angle other than the one the deck holds now"
+        );
+
+        // And none of the three states agrees with the strip a frame drew
+        // before the move — the stale reading `holding` must not be
+        // answering from.
+        assert_ne!(now.requested, before.requested);
+        assert_ne!(now.blend, before.blend);
+        assert_ne!(now.mask, before.mask);
+        assert_ne!(now.mask_angle, before.mask_angle);
     }
 
     /// **Every slot is its own simulation of the one procedure**, which is
