@@ -202,16 +202,26 @@ Before advanced engine refactoring can proceed safely, the incomplete migrations
 
 ---
 
-## 15. Transient Render Graph & Declarative Pass Scheduling
+## 15. Transient Render Graph & Declarative Pass Scheduling (**DONE**)
 
 ### Phenomenon
 Pass scheduling across `karakuri-engine` is hardcoded. Intermediate render targets (`Rgba16Float` HDR buffers, OIT accumulation/revealage textures, feedback textures) are statically allocated per slot even when slots are idle or muted.
 
-### Refactoring Plan
-- **Implement a declarative Render Graph (DAG)**:
-  - Passes register resource dependencies (Buffers, Textures, Feedback cuts).
-  - Graph compilation performs topological sorting, culls non-contributing nodes (e.g., `gain == 0.0`), and schedules barrier insertions.
-- **Transient Memory Aliasing**: Automatically reuse VRAM pools across non-overlapping passes, reducing peak GPU memory usage by up to 40%.
+### Technical Status & Resolution
+- **Declarative Render Graph (`crates/karakuri-engine/src/graph.rs`)**:
+  - Implemented virtual resource management: `ResourceId`, `TextureDesc`, `BufferDesc`, and `GraphResource` (`TransientTexture`, `ImportedTexture`, `TransientBuffer`, `ImportedBuffer`).
+  - Implemented pass nodes and dependency scheduling:
+    - Directed acyclic graph with read/write dependencies (`PassNode`, `PassBuilder`).
+    - Topological sorting via Kahn's algorithm with deterministic tie-breaking for reproducible pass ordering.
+    - Cycle detection with informative error diagnostics (`GraphError::CycleDetected`).
+    - Dead pass culling via backward reachability starting from designated output targets and passes with side-effects; muted or unread dangling passes are automatically culled.
+- **Transient Memory Aliasing (`TransientMemoryPool`)**:
+  - Transient resource lifetime analysis computing exact execution interval ranges `[first_pass, last_pass]`.
+  - Automatic physical texture reuse for non-overlapping transient textures via greedy interval coloring, pooling physical allocations in `TransientMemoryPool`.
+  - Comprehensive metrics: `allocated_physical_textures`, `virtual_transient_textures`, `vram_saved_bytes`, `executed_passes`, and `culled_passes`.
+  - Supports both real GPU command encoding (`execute`) and headless mock mode (`execute_mock`).
+- **Verification**:
+  - Validated across comprehensive test suite in `crates/karakuri-engine/tests/render_graph.rs` covering topological ordering, cycle detection, dead pass culling, side-effect preservation, transient memory aliasing (mapping 3+ non-overlapping transient textures to 1 physical texture, distinct physical slots for overlapping textures, alternating lifetime packing), peak memory reduction calculations, mock execution, and real headless GPU command recording.
 
 ---
 
@@ -325,7 +335,7 @@ During early scaffolding, `karakuri-cli` mapped 8 letters (`f g n p r s u z`) to
 | **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Staged parity, delta, signals, transitions, selections ensure rollback on `mem::forget`; fixed parity type consistency |
 | **Phase 2A** | **P13** | **Image Pass Deduplication** | **DONE** | Deduplicated L5 passes via `ImagePass` & `RetentionManager` (saved 500+ lines in `master.rs`); polymorphic graph deferred to P15 |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | **DONE** | First-class vector storage, atomic multi-component modulations, direct uniform packing |
-| **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |
+| **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | **DONE** | Declarative pass graph; transient VRAM aliasing; auto-culling |
 | **Phase 2B** | **P16** | **Typed Codegen AST & Fusion** | **DONE** | Structured WGSL AST; direct Naga lowering; L2+L4 pass fusion |
 | **Phase 2B** | **P17** | **Structured AI Repair Loop** | **DONE** | Machine-readable `DiagnosticReport`; visual degeneracy detector `check_degeneracy` |
 | **Phase 2B** | **P18** | **Signal Bus Vectorization** | **DONE** | Vectorized `SignalValue`/`VectorSample`; interned `SignalId` zero-cost dispatch |
