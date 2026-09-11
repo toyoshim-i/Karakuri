@@ -75,7 +75,7 @@ This document records the architectural smells, structural friction, and design 
 
 ```mermaid
 graph TD
-    P26["<b>P26: Componentize Console UI & Extract 3 Bays</b><br/>Extract sequencer, staging, master, and widgets [READY]"]
+    P26["<b>P26: Componentize Console UI & Extract 3 Bays</b><br/>Extract sequencer, staging, master, and widgets [COMPLETED]"]
     P25["<b>P25: Decompose karakuri-mcp Monolith</b><br/>Separate server, spelled, tools, and test suites [READY]"]
     P24["<b>P24: Decompose engine_bridge.rs by Responsibility</b><br/>Split sinks, engine, filesystem, and handlers [READY]"]
     P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [PLANNED]"]
@@ -90,7 +90,7 @@ graph TD
 
 ---
 
-### P26. Componentize Console UI, Extract 3 Bays & Shared Widgets [READY FOR EXECUTION]
+### P26. Componentize Console UI, Extract 3 Bays & Shared Widgets [COMPLETED]
 
 #### Phenomenon
 `crates/karakuri-console/src/view/mod.rs` (7,493 lines) remains a massive bottleneck because three major bays (Sequencer, Staging, Master), shared interactive widgets, and layout placement math were never extracted.
@@ -211,7 +211,7 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
-| **P26** | `karakuri-console` | Extract 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **READY** |
+| **P26** | `karakuri-console` | Extract 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
 | **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `tests/unit.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **READY** |
 | **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **READY** |
 | **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **PLANNED** |
