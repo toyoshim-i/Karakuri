@@ -38,7 +38,7 @@
 
 use std::time::{Duration, Instant};
 
-use karakuri_engine::deck::{Deck, Residency};
+use karakuri_engine::deck::{Deck, DeckSlot, Residency};
 use karakuri_engine::swap::HotSwap;
 use karakuri_engine::{Gpu, Present, Set};
 use karakuri_ir::typed::Checked;
@@ -152,7 +152,7 @@ fn main() {
         );
         println!("  the clock it earned: {:?}", deck.clock());
         for slot in 0..SLOTS as usize {
-            match deck.slot(slot).measured_cost() {
+            match deck.slot(DeckSlot(slot as u8)).measured_cost() {
                 Some(cost) => println!(
                     "  slot {slot}: {:.3} ms at {}x{}, {:?}",
                     cost.ms, cost.resolution.0, cost.resolution.1, cost.method
@@ -168,10 +168,11 @@ fn main() {
         // the two sides of one comparison can be about two different frames.
         // This is that comparison, printed at each size.
         let estimated = deck.estimate_slots(&gpu.device, &gpu.queue);
-        deck.set_residency(1, Residency::Priming);
-        if let (Some(committed), Some(warming)) =
-            (deck.slot(0).measured_cost(), deck.slot(1).measured_cost())
-        {
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
+        if let (Some(committed), Some(warming)) = (
+            deck.slot(karakuri_engine::DeckSlot(0)).measured_cost(),
+            deck.slot(karakuri_engine::DeckSlot(1)).measured_cost(),
+        ) {
             deck.set_compute_budget_ms(committed.ms + warming.ms / 2.0);
         }
         println!("  {estimated} estimated at the deck's own size, and then:");

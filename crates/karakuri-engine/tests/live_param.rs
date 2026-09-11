@@ -208,11 +208,14 @@ proc glowing {
         close(b, 1.0, "glow.z before the write");
 
         assert_eq!(
-            deck.write_param(0, &ParamWrite::everywhere("glow.y", 2.5)),
+            deck.write_param(
+                karakuri_engine::DeckSlot(0),
+                &ParamWrite::everywhere("glow.y", 2.5)
+            ),
             Ok(1),
             "`glow.y` reached no declaration through the deck"
         );
-        let frames = deck.slot(0).frames_rendered();
+        let frames = deck.slot(karakuri_engine::DeckSlot(0)).frames_rendered();
 
         let [r, g, b, _] = texel(&gpu, &mut deck, &present);
         close(r, 0.4, "glow.x moved and nothing asked it to");
@@ -220,12 +223,14 @@ proc glowing {
         close(b, 1.0, "glow.z moved and nothing asked it to");
 
         assert_eq!(
-            deck.slot(0).frames_rendered(),
+            deck.slot(karakuri_engine::DeckSlot(0)).frames_rendered(),
             frames + 1,
             "one frame was drawn between the two readings, and the value moved in it"
         );
         assert!(
-            deck.slot(0).measured_cost().is_none(),
+            deck.slot(karakuri_engine::DeckSlot(0))
+                .measured_cost()
+                .is_none(),
             "a fixed slot has no worker: nothing here can have been built"
         );
     }
@@ -240,12 +245,18 @@ proc glowing {
         let mut deck = deck_of(&gpu, set_of(&gpu, DOTS));
 
         assert_eq!(
-            deck.write_param(0, &ParamWrite::at(Kind::L4, 0, "heat", 2.0)),
+            deck.write_param(
+                karakuri_engine::DeckSlot(0),
+                &ParamWrite::at(Kind::L4, 0, "heat", 2.0)
+            ),
             Ok(1),
             "`L4:0:heat` reached no declaration"
         );
         assert_eq!(
-            deck.write_param(0, &ParamWrite::at(Kind::L4, 1, "heat", 3.0)),
+            deck.write_param(
+                karakuri_engine::DeckSlot(0),
+                &ParamWrite::at(Kind::L4, 1, "heat", 3.0)
+            ),
             Ok(0),
             "there is no second renderer, and a write that landed on one would \
              be writing past the layer"
@@ -280,7 +291,10 @@ proc glowing {
         let mut deck = deck_of(&gpu, set);
 
         let refused = deck
-            .write_param(0, &ParamWrite::everywhere("heat", 3.0))
+            .write_param(
+                karakuri_engine::DeckSlot(0),
+                &ParamWrite::everywhere("heat", 3.0),
+            )
             .expect_err("`heat` is declared under two authorities and a bare name reaches both");
         assert_eq!(refused.key, "heat");
         assert!(
@@ -294,7 +308,10 @@ proc glowing {
         // The addressed form is never refused — it says which node it means —
         // so this is the way out the sentence above offers, taken.
         assert_eq!(
-            deck.write_param(0, &ParamWrite::at(Kind::L4, 0, "heat", 3.0)),
+            deck.write_param(
+                karakuri_engine::DeckSlot(0),
+                &ParamWrite::at(Kind::L4, 0, "heat", 3.0)
+            ),
             Ok(1),
             "an addressed write is not checked against authority and must land"
         );

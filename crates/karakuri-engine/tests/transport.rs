@@ -214,7 +214,7 @@ proc plain_points {
     }
 
     fn steps_taken(deck: &Deck) -> u64 {
-        (deck.slot(0).set().time() * 60.0).round() as u64
+        (deck.slot(karakuri_engine::DeckSlot(0)).set().time() * 60.0).round() as u64
     }
 
     // ---------------------------------------------------------------------------
@@ -227,7 +227,10 @@ proc plain_points {
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, RING);
-        assert_eq!(deck.transport(0).sync(), Sync::Free);
+        assert_eq!(
+            deck.transport(karakuri_engine::DeckSlot(0)).sync(),
+            Sync::Free
+        );
 
         for i in 1..=20 {
             frame(&gpu, &mut deck, &present);
@@ -266,7 +269,7 @@ proc plain_points {
         deck.set_signals(ahead);
         assert_eq!(steps_taken(&deck), 0, "the slot started somewhere else");
 
-        deck.set_transport(0, Sync::Beat, BPM, 0.0)
+        deck.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, 0.0)
             .expect("`ring` is closed form");
         frame(&gpu, &mut deck, &present);
         assert_eq!(
@@ -291,7 +294,7 @@ proc plain_points {
         let gpu = Gpu::headless().expect("no GPU available");
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, RING);
-        deck.set_transport(0, Sync::Beat, BPM, 0.0)
+        deck.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, 0.0)
             .expect("`ring` is closed form");
 
         // Every frame kept, so the assertion can name the step it expects rather
@@ -305,7 +308,7 @@ proc plain_points {
 
         // One beat at 120 bpm is half a second: thirty steps. The session advances
         // one more step on the frame below, so the slot lands at 61 - 30.
-        deck.set_transport(0, Sync::Beat, BPM, -1.0)
+        deck.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, -1.0)
             .expect("`ring` is closed form");
         let rewound = frame(&gpu, &mut deck, &present);
         let landed = steps_taken(&deck);
@@ -337,7 +340,7 @@ proc plain_points {
         // Anchored at half the session tempo, so the room is 2x and every frame is
         // two steps.
         let mut fast = deck_of(&gpu, RING);
-        fast.set_transport(0, Sync::Tempo, BPM / 2.0, 0.0)
+        fast.set_transport(karakuri_engine::DeckSlot(0), Sync::Tempo, BPM / 2.0, 0.0)
             .expect("`ring` takes tempo sync");
         let mut last = Vec::new();
         for i in 1..=20 {
@@ -376,13 +379,16 @@ proc plain_points {
 
         // Accumulating: a rate, but not a position.
         let mut creep = deck_of(&gpu, CREEP);
-        assert_eq!(creep.sync_allowed(0, Sync::Tempo), Ok(()));
         assert_eq!(
-            creep.set_transport(0, Sync::Beat, BPM, 0.0),
+            creep.sync_allowed(karakuri_engine::DeckSlot(0), Sync::Tempo),
+            Ok(())
+        );
+        assert_eq!(
+            creep.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, 0.0),
             Err(Refusal::NotClosedForm)
         );
         assert_eq!(
-            creep.transport(0).sync(),
+            creep.transport(karakuri_engine::DeckSlot(0)).sync(),
             Sync::Free,
             "a refused mode was applied anyway"
         );
@@ -391,14 +397,26 @@ proc plain_points {
         // it already follows the room, and scaling its clock would make it follow
         // twice.
         let mut grid = deck_of(&gpu, GRID_RING);
-        assert_eq!(grid.sync_allowed(0, Sync::Beat), Ok(()));
         assert_eq!(
-            grid.set_transport(0, Sync::Tempo, BPM, 0.0),
+            grid.sync_allowed(karakuri_engine::DeckSlot(0), Sync::Beat),
+            Ok(())
+        );
+        assert_eq!(
+            grid.set_transport(karakuri_engine::DeckSlot(0), Sync::Tempo, BPM, 0.0),
             Err(Refusal::AlreadyOnTheGrid)
         );
-        assert_eq!(grid.transport(0).sync(), Sync::Free);
+        assert_eq!(
+            grid.transport(karakuri_engine::DeckSlot(0)).sync(),
+            Sync::Free
+        );
         // And the mode it does take is applied.
-        assert_eq!(grid.set_transport(0, Sync::Beat, BPM, 0.0), Ok(()));
-        assert_eq!(grid.transport(0).sync(), Sync::Beat);
+        assert_eq!(
+            grid.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, 0.0),
+            Ok(())
+        );
+        assert_eq!(
+            grid.transport(karakuri_engine::DeckSlot(0)).sync(),
+            Sync::Beat
+        );
     }
 }

@@ -132,7 +132,7 @@ fn main() {
 
     let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
     deck.set_signals(Signals::new(BPM, u64::from(SEED)));
-    deck.set_transport(0, Sync::Beat, BPM, 0.0)
+    deck.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, 0.0)
         .expect("`beat_shell` is closed form");
 
     let present = Present::new(
@@ -164,7 +164,7 @@ fn main() {
     let mut seen: Vec<(u64, Vec<u8>)> = Vec::with_capacity(FORWARD);
     for _ in 0..FORWARD {
         let pixels = frame(&gpu, &mut deck, &present, &view, &target);
-        let step = (deck.slot(0).set().time() * 60.0).round() as u64;
+        let step = (deck.slot(karakuri_engine::DeckSlot(0)).set().time() * 60.0).round() as u64;
         seen.push((step, pixels));
     }
     let (last_step, last) = seen.last().cloned().expect("frames were rendered");
@@ -173,10 +173,10 @@ fn main() {
 
     // Scrub back. The session advances one more step on the frame below, so
     // the slot lands at `last_step + 1` minus whatever two beats are worth.
-    deck.set_transport(0, Sync::Beat, BPM, SCRUB)
+    deck.set_transport(karakuri_engine::DeckSlot(0), Sync::Beat, BPM, SCRUB)
         .expect("`beat_shell` is closed form");
     let rewound = frame(&gpu, &mut deck, &present, &view, &target);
-    let landed = (deck.slot(0).set().time() * 60.0).round() as u64;
+    let landed = (deck.slot(karakuri_engine::DeckSlot(0)).set().time() * 60.0).round() as u64;
     write_png(&out.join("b_rewound.png"), &rewound);
     println!("scrubbed {SCRUB} beats: slot at step {landed}");
 

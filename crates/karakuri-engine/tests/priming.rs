@@ -239,7 +239,7 @@ proc soft_points {
 
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-        deck.set_residency(1, Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
         assert_eq!(deck.live_slots(), 1);
         assert_eq!(deck.priming_slots(), 1);
 
@@ -249,13 +249,13 @@ proc soft_points {
         let mixed = readback(&gpu, present.hdr_texture());
 
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             FRAMES as u64,
             "a Priming slot did not advance its `t`; nothing is calling `prepare` on it \
          and it is Allocated under another name"
         );
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             FRAMES as u64,
             "the Live slot did not step normally alongside a priming one"
         );
@@ -288,14 +288,17 @@ proc soft_points {
         // The mix comparison above is what says that draw does not leak into
         // the room.
         assert!(
-            lit(&readback(&gpu, deck.slot_target(1))) > 100,
+            lit(&readback(
+                &gpu,
+                deck.slot_target(karakuri_engine::DeckSlot(1))
+            )) > 100,
             "a Priming slot drew nothing into its own target, so its console cell is \
          dark at exactly the moment an operator is deciding whether to bring it up"
         );
         // No level, and that is the residency and not the draw: a level is what
         // a fader is read against, a fader acts on what reaches the mix, and
         // this slot reaches none of it. See `Deck::level`.
-        assert!(deck.level(1).is_none());
+        assert!(deck.level(karakuri_engine::DeckSlot(1)).is_none());
     }
 
     /// **An off-air slot steps every frame, at the room's tempo, whatever its
@@ -321,25 +324,25 @@ proc soft_points {
 
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, &[SEED_A, SEED_B, SEED_A + 1]);
-        deck.set_residency(1, Residency::Priming);
-        deck.set_residency(2, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
+        deck.set_residency(karakuri_engine::DeckSlot(2), Residency::Allocated);
 
         for steps in TICKS {
             frame(&gpu, &mut deck, &present, steps);
         }
 
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             total,
             "the Live slot did not take the ticks it was given"
         );
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             total,
             "a Priming slot did not keep the room's tempo"
         );
         assert_eq!(
-            steps_taken(deck.slot(2).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(2)).set()),
             total,
             "an Allocated slot did not step; its cell is a still rather than a preview \
          of what putting it on air would look like"
@@ -347,7 +350,10 @@ proc soft_points {
         // And neither of them reached the mix, which is what residency still
         // decides.
         assert_eq!(deck.live_slots(), 1);
-        assert!(deck.level(1).is_none() && deck.level(2).is_none());
+        assert!(
+            deck.level(karakuri_engine::DeckSlot(1)).is_none()
+                && deck.level(karakuri_engine::DeckSlot(2)).is_none()
+        );
     }
 
     /// **An off-air slot's cell shows the material running, not the still it
@@ -375,9 +381,9 @@ proc soft_points {
         for _ in 0..WARM {
             frame(&gpu, &mut deck, &present, 1);
         }
-        deck.set_residency(1, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         frame(&gpu, &mut deck, &present, 1);
-        let went_off_air = readback(&gpu, deck.slot_target(1));
+        let went_off_air = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1)));
         assert!(
             lit(&went_off_air) > 100,
             "the slot's own target was dark when it went off air, so this comparison \
@@ -387,7 +393,7 @@ proc soft_points {
         for _ in 0..FRAMES {
             frame(&gpu, &mut deck, &present, 1);
         }
-        let later = readback(&gpu, deck.slot_target(1));
+        let later = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1)));
 
         assert_ne!(
             later, went_off_air,
@@ -450,17 +456,17 @@ proc soft_points {
         let run = |before: Residency, live_frames: usize| -> (Vec<u16>, u64) {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A]);
-            deck.set_residency(0, before);
+            deck.set_residency(karakuri_engine::DeckSlot(0), before);
             for _ in 0..WARM {
                 frame(&gpu, &mut deck, &present, 1);
             }
-            deck.set_residency(0, Residency::Live);
+            deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
             for _ in 0..live_frames {
                 frame(&gpu, &mut deck, &present, 1);
             }
             (
                 readback(&gpu, present.hdr_texture()),
-                steps_taken(deck.slot(0).set()),
+                steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             )
         };
 
@@ -475,7 +481,7 @@ proc soft_points {
             frame(&gpu, &mut deck, &present, 1);
             (
                 readback(&gpu, present.hdr_texture()),
-                steps_taken(deck.slot(0).set()),
+                steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             )
         };
 
@@ -544,13 +550,13 @@ proc soft_points {
         let run = || -> Vec<u16> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-            deck.set_residency(1, Residency::Priming);
+            deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
             for steps in TICKS {
                 frame(&gpu, &mut deck, &present, steps);
             }
             // On air part-way through, at whatever `t` it warmed to.
-            deck.set_residency(1, Residency::Live);
-            deck.set_gain(1, 0.75);
+            deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
+            deck.set_gain(karakuri_engine::DeckSlot(1), 0.75);
             for steps in TICKS {
                 frame(&gpu, &mut deck, &present, steps);
             }
@@ -629,13 +635,13 @@ proc soft_points {
                 signals.advance(1, DT);
             }
             deck.set_signals(signals);
-            deck.set_residency(0, Residency::Priming);
+            deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Priming);
 
             let mut seen = Vec::with_capacity(STEPS);
             let mut taken = 0;
             while taken < STEPS as u64 {
                 frame(&gpu, &mut deck, &present, 1);
-                let set = deck.slot(0).set();
+                let set = deck.slot(karakuri_engine::DeckSlot(0)).set();
                 if steps_taken(set) != taken {
                     taken = steps_taken(set);
                     seen.push(set.bound().next().expect("one binding").1);
@@ -700,12 +706,17 @@ proc soft_points {
                 .attached());
             let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
             deck.set_signals(Signals::new(120.0, u64::from(SEED_A)));
-            deck.set_residency(0, residency);
+            deck.set_residency(karakuri_engine::DeckSlot(0), residency);
 
             (0..STEPS)
                 .map(|_| {
                     frame(&gpu, &mut deck, &present, 1);
-                    deck.slot(0).set().bound().next().expect("one binding").1
+                    deck.slot(karakuri_engine::DeckSlot(0))
+                        .set()
+                        .bound()
+                        .next()
+                        .expect("one binding")
+                        .1
                 })
                 .collect()
         };

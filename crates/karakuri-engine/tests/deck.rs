@@ -593,7 +593,10 @@ proc wash {
             mixed, expected,
             "a deck of one slot at unity gain is not the bare Set it composites"
         );
-        assert_eq!(steps_taken(deck.slot(0).set()), 12);
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
+            12
+        );
     }
 
     /// **A slot faded to silence cannot take the mix with it, under any blend
@@ -635,10 +638,10 @@ proc wash {
                 WIDTH,
                 HEIGHT,
             );
-            deck.set_residency(1, silence);
-            deck.set_blend(1, blend);
-            deck.set_gain(1, gain);
-            deck.set_opacity(1, opacity);
+            deck.set_residency(karakuri_engine::DeckSlot(1), silence);
+            deck.set_blend(karakuri_engine::DeckSlot(1), blend);
+            deck.set_gain(karakuri_engine::DeckSlot(1), gain);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
@@ -646,7 +649,7 @@ proc wash {
                 // The faded slot is only interesting if its target really does
                 // hold a NaN. (Parked, it has never stepped, so what it draws is
                 // its zeroed element state and there is no NaN in it to check.)
-                let own = readback(&gpu, deck.slot_target(1));
+                let own = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1)));
                 assert!(
                     decode(&own).iter().any(|v| v.is_nan()),
                     "the NaN slot rendered no NaN, so this test is asserting nothing"
@@ -704,9 +707,9 @@ proc wash {
         let run = |mask: Option<Mask>, opacity: f32| -> Vec<u16> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, MASK_SIZE, MASK_SIZE);
             let mut deck = wash_deck(&gpu);
-            deck.set_opacity(1, opacity);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             if let Some(mask) = mask {
-                deck.set_mask(1, mask);
+                deck.set_mask(karakuri_engine::DeckSlot(1), mask);
             }
             for _ in 0..4 {
                 frame(&gpu, &mut deck, &present, 1);
@@ -771,16 +774,19 @@ proc wash {
                 WIDTH,
                 HEIGHT,
             );
-            deck.set_residency(1, silence);
-            deck.set_mask(1, mask);
+            deck.set_residency(karakuri_engine::DeckSlot(1), silence);
+            deck.set_mask(karakuri_engine::DeckSlot(1), mask);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
             if silence == Residency::Live {
                 assert!(
-                    decode(&readback(&gpu, deck.slot_target(1)))
-                        .iter()
-                        .any(|v| v.is_nan()),
+                    decode(&readback(
+                        &gpu,
+                        deck.slot_target(karakuri_engine::DeckSlot(1))
+                    ))
+                    .iter()
+                    .any(|v| v.is_nan()),
                     "the NaN slot rendered no NaN, so this test is asserting nothing"
                 );
             }
@@ -816,9 +822,9 @@ proc wash {
         let run = |mask: Option<Mask>, opacity: f32| -> Vec<f32> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, MASK_SIZE, MASK_SIZE);
             let mut deck = wash_deck(&gpu);
-            deck.set_opacity(1, opacity);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             if let Some(mask) = mask {
-                deck.set_mask(1, mask);
+                deck.set_mask(karakuri_engine::DeckSlot(1), mask);
             }
             for _ in 0..4 {
                 frame(&gpu, &mut deck, &present, 1);
@@ -894,8 +900,11 @@ proc wash {
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
         deck.set_signals(Signals::new(120.0, 1));
-        deck.set_blend(1, Blend::Over);
-        deck.set_mask(1, Mask::new(MaskKind::Linear, 0.0, 0.0, 0.02));
+        deck.set_blend(karakuri_engine::DeckSlot(1), Blend::Over);
+        deck.set_mask(
+            karakuri_engine::DeckSlot(1),
+            Mask::new(MaskKind::Linear, 0.0, 0.0, 0.02),
+        );
 
         let start = deck.signals().oscillator().beats();
         deck.schedule(Transition::new(
@@ -912,7 +921,7 @@ proc wash {
         for i in 0..121 {
             frame(&gpu, &mut deck, &present, 1);
             if i % 30 == 0 {
-                fronts.push(deck.mask(1).position());
+                fronts.push(deck.mask(karakuri_engine::DeckSlot(1)).position());
             }
         }
         // Monotone and strictly moving, which a jump would not be.
@@ -922,11 +931,18 @@ proc wash {
                 "the front went backwards or stood still: {fronts:?}"
             );
         }
-        assert_eq!(deck.mask(1).position(), 1.0, "the wipe did not finish");
+        assert_eq!(
+            deck.mask(karakuri_engine::DeckSlot(1)).position(),
+            1.0,
+            "the wipe did not finish"
+        );
         // The shape survived: a move carries the position and leaves the kind
         // alone, which is why `set_mask_shape` does not cancel a transition.
-        assert_eq!(deck.mask(1).kind(), MaskKind::Linear);
-        assert_eq!(deck.transitions_on(1).count(), 0);
+        assert_eq!(
+            deck.mask(karakuri_engine::DeckSlot(1)).kind(),
+            MaskKind::Linear
+        );
+        assert_eq!(deck.transitions_on(karakuri_engine::DeckSlot(1)).count(), 0);
     }
 
     /// **The operator wins on the position, and the shape is not a hand on
@@ -950,8 +966,8 @@ proc wash {
         let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
         deck.set_signals(Signals::new(120.0, 1));
         let wipe = |deck: &mut Deck| {
-            deck.set_mask_shape(1, MaskKind::Linear, 0.0);
-            deck.set_mask_position(1, 0.0);
+            deck.set_mask_shape(karakuri_engine::DeckSlot(1), MaskKind::Linear, 0.0);
+            deck.set_mask_position(karakuri_engine::DeckSlot(1), 0.0);
             let start = deck.signals().oscillator().beats();
             deck.schedule(Transition::new(
                 1,
@@ -965,9 +981,9 @@ proc wash {
         };
 
         wipe(&mut deck);
-        deck.set_mask_shape(1, MaskKind::Radial, 0.0);
+        deck.set_mask_shape(karakuri_engine::DeckSlot(1), MaskKind::Radial, 0.0);
         assert_eq!(
-            deck.transitions_on(1).count(),
+            deck.transitions_on(karakuri_engine::DeckSlot(1)).count(),
             1,
             "choosing a shape mid-wipe cancelled the move — a shape writes no position, \
              so it is not a hand on the control the transition is carrying, and a wipe \
@@ -975,21 +991,25 @@ proc wash {
              withdrew"
         );
         assert_eq!(
-            deck.mask(1).kind(),
+            deck.mask(karakuri_engine::DeckSlot(1)).kind(),
             MaskKind::Radial,
             "the shape did not land"
         );
 
         wipe(&mut deck);
-        deck.set_mask_position(1, 0.75);
+        deck.set_mask_position(karakuri_engine::DeckSlot(1), 0.75);
         assert_eq!(
-            deck.transitions_on(1).count(),
+            deck.transitions_on(karakuri_engine::DeckSlot(1)).count(),
             0,
             "a hand on the front left the move running — the transition writes that same \
              number every frame, so it would take the front straight back and the \
              operator would be holding a control that fights back"
         );
-        assert_eq!(deck.mask(1).position(), 0.75, "the front did not land");
+        assert_eq!(
+            deck.mask(karakuri_engine::DeckSlot(1)).position(),
+            0.75,
+            "the front did not land"
+        );
     }
 
     /// A Set drawn by two renderers over one simulation, composited.
@@ -1054,7 +1074,7 @@ proc wash {
         deck.schedule_selection(Selection::new(0, 1, start));
 
         let live = |deck: &Deck| -> Vec<usize> {
-            deck.slot(0)
+            deck.slot(karakuri_engine::DeckSlot(0))
                 .set()
                 .inputs()
                 .iter()
@@ -1072,7 +1092,11 @@ proc wash {
                 "the selection landed at {} beats, before the {start} it was given",
                 deck.signals().oscillator().beats()
             );
-            assert_eq!(deck.selections_on(0).count(), 1, "the selection is armed");
+            assert_eq!(
+                deck.selections_on(karakuri_engine::DeckSlot(0)).count(),
+                1,
+                "the selection is armed"
+            );
             frame(&gpu, &mut deck, &present, 1);
         }
 
@@ -1080,7 +1104,7 @@ proc wash {
         // it is the one that was asked for.
         assert_eq!(live(&deck), vec![1]);
         assert_eq!(
-            deck.selections_on(0).count(),
+            deck.selections_on(karakuri_engine::DeckSlot(0)).count(),
             0,
             "a selection that has landed is still queued, and would be applied \
              over whatever moves the edges next"
@@ -1119,16 +1143,16 @@ proc wash {
             let beats = deck.signals().oscillator().beats();
             let expected = 1.0 - (beats - start) as f32 / 4.0;
             assert!(
-                (deck.opacity(0) - expected).abs() < 1e-6,
+                (deck.opacity(karakuri_engine::DeckSlot(0)) - expected).abs() < 1e-6,
                 "frame {i} at {beats} beats: the fader is {} rather than {expected}",
-                deck.opacity(0)
+                deck.opacity(karakuri_engine::DeckSlot(0))
             );
             frame(&gpu, &mut deck, &present, 1);
         }
         // Exactly at silence, and the transition gone rather than still writing.
-        assert_eq!(deck.opacity(0), 0.0);
+        assert_eq!(deck.opacity(karakuri_engine::DeckSlot(0)), 0.0);
         assert_eq!(
-            deck.transitions_on(0).count(),
+            deck.transitions_on(karakuri_engine::DeckSlot(0)).count(),
             0,
             "a finished fade is still scheduled"
         );
@@ -1160,19 +1184,19 @@ proc wash {
         for _ in 0..30 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        let mid = deck.opacity(0);
+        let mid = deck.opacity(karakuri_engine::DeckSlot(0));
         assert!(mid > 0.0 && mid < 1.0, "the fade did not start: {mid}");
 
-        deck.set_opacity(0, 0.75);
+        deck.set_opacity(karakuri_engine::DeckSlot(0), 0.75);
         for _ in 0..60 {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            deck.opacity(0),
+            deck.opacity(karakuri_engine::DeckSlot(0)),
             0.75,
             "the fade kept writing after the fader was moved by hand"
         );
-        assert_eq!(deck.transitions_on(0).count(), 0);
+        assert_eq!(deck.transitions_on(karakuri_engine::DeckSlot(0)).count(), 0);
 
         // And the other control's transition is untouched by the wrong fader:
         // cancelling has to be per control, or a gain move would stop an opacity
@@ -1186,9 +1210,9 @@ proc wash {
             8.0,
             Curve::Lin,
         ));
-        deck.set_opacity(0, 0.5);
+        deck.set_opacity(karakuri_engine::DeckSlot(0), 0.5);
         assert_eq!(
-            deck.transitions_on(0).count(),
+            deck.transitions_on(karakuri_engine::DeckSlot(0)).count(),
             1,
             "the gain fade was cancelled too"
         );
@@ -1209,18 +1233,18 @@ proc wash {
         for _ in 0..30 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        let mid = deck.gain(0);
+        let mid = deck.gain(karakuri_engine::DeckSlot(0));
         assert!(mid > 0.0 && mid < 1.0, "the gain fade did not start: {mid}");
-        deck.set_gain(0, 2.0);
+        deck.set_gain(karakuri_engine::DeckSlot(0), 2.0);
         for _ in 0..60 {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            deck.gain(0),
+            deck.gain(karakuri_engine::DeckSlot(0)),
             2.0,
             "the gain fade kept writing after the level was moved by hand"
         );
-        assert_eq!(deck.transitions_on(0).count(), 0);
+        assert_eq!(deck.transitions_on(karakuri_engine::DeckSlot(0)).count(), 0);
     }
 
     /// **A move onto a slot the deck does not have is refused where it is asked
@@ -1270,7 +1294,7 @@ proc wash {
             for _ in 0..LEAD {
                 frame(&gpu, &mut deck, &present, 1);
             }
-            deck.set_opacity(1, 0.0);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), 0.0);
             frame(&gpu, &mut deck, &present, 1);
             readback(&gpu, present.hdr_texture())
         };
@@ -1299,7 +1323,7 @@ proc wash {
         let scheduled = readback(&gpu, present.hdr_texture());
 
         assert_eq!(
-            deck.opacity(1),
+            deck.opacity(karakuri_engine::DeckSlot(1)),
             0.0,
             "the cut did not land on the frame it was scheduled for"
         );
@@ -1345,8 +1369,16 @@ proc wash {
         ));
         frame(&gpu, &mut deck, &present, 1);
 
-        assert_eq!(deck.opacity(0), 1.0, "a scheduled fader passed 1.0");
-        assert_eq!(deck.gain(0), 0.0, "a scheduled level went negative");
+        assert_eq!(
+            deck.opacity(karakuri_engine::DeckSlot(0)),
+            1.0,
+            "a scheduled fader passed 1.0"
+        );
+        assert_eq!(
+            deck.gain(karakuri_engine::DeckSlot(0)),
+            0.0,
+            "a scheduled level went negative"
+        );
     }
 
     /// **A crossfade is two scheduled moves**, and what makes that a crossfade
@@ -1362,7 +1394,7 @@ proc wash {
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
         deck.set_signals(Signals::new(120.0, 1));
-        deck.set_opacity(1, 0.0);
+        deck.set_opacity(karakuri_engine::DeckSlot(1), 0.0);
         for _ in 0..12 {
             frame(&gpu, &mut deck, &present, 1);
         }
@@ -1391,8 +1423,8 @@ proc wash {
         for _ in 0..60 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        let a = deck.opacity(0);
-        let b = deck.opacity(1);
+        let a = deck.opacity(karakuri_engine::DeckSlot(0));
+        let b = deck.opacity(karakuri_engine::DeckSlot(1));
         assert!(a > 0.0 && a < 1.0 && b > 0.0 && b < 1.0, "{a} / {b}");
         assert!(
             (a + b - 1.0).abs() < 0.05,
@@ -1403,10 +1435,11 @@ proc wash {
         for _ in 0..60 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        assert_eq!(deck.opacity(0), 0.0);
-        assert_eq!(deck.opacity(1), 1.0);
+        assert_eq!(deck.opacity(karakuri_engine::DeckSlot(0)), 0.0);
+        assert_eq!(deck.opacity(karakuri_engine::DeckSlot(1)), 1.0);
         assert_eq!(
-            deck.transitions_on(0).count() + deck.transitions_on(1).count(),
+            deck.transitions_on(karakuri_engine::DeckSlot(0)).count()
+                + deck.transitions_on(karakuri_engine::DeckSlot(1)).count(),
             0
         );
     }
@@ -1442,13 +1475,16 @@ proc wash {
                 WIDTH,
                 HEIGHT,
             );
-            deck.set_blend(1, blend);
+            deck.set_blend(karakuri_engine::DeckSlot(1), blend);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
             (
                 decode(&readback(&gpu, present.hdr_texture())),
-                decode(&readback(&gpu, deck.slot_target(1))),
+                decode(&readback(
+                    &gpu,
+                    deck.slot_target(karakuri_engine::DeckSlot(1)),
+                )),
             )
         };
 
@@ -1514,9 +1550,9 @@ proc wash {
         let run = |blend: Blend, off_air: Option<usize>| -> Vec<f32> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-            deck.set_blend(1, blend);
+            deck.set_blend(karakuri_engine::DeckSlot(1), blend);
             if let Some(slot) = off_air {
-                deck.set_residency(slot, Residency::Allocated);
+                deck.set_residency(karakuri_engine::DeckSlot(slot as u8), Residency::Allocated);
             }
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
@@ -1592,12 +1628,12 @@ proc wash {
             (f32::NEG_INFINITY, 0.0),
             (f32::NAN, 0.0),
         ] {
-            deck.set_opacity(0, asked);
+            deck.set_opacity(karakuri_engine::DeckSlot(0), asked);
             assert_eq!(
-                deck.opacity(0),
+                deck.opacity(karakuri_engine::DeckSlot(0)),
                 expected,
                 "an opacity of {asked} reached the mix as {}",
-                deck.opacity(0)
+                deck.opacity(karakuri_engine::DeckSlot(0))
             );
         }
     }
@@ -1628,12 +1664,12 @@ proc wash {
             (f32::NEG_INFINITY, 0.0),
             (f32::NAN, 0.0),
         ] {
-            deck.set_gain(0, asked);
+            deck.set_gain(karakuri_engine::DeckSlot(0), asked);
             assert_eq!(
-                deck.gain(0),
+                deck.gain(karakuri_engine::DeckSlot(0)),
                 expected,
                 "a gain of {asked} reached the mix as {}",
-                deck.gain(0)
+                deck.gain(karakuri_engine::DeckSlot(0))
             );
         }
     }
@@ -1675,14 +1711,17 @@ proc wash {
                 WIDTH,
                 HEIGHT,
             );
-            deck.set_blend(1, Blend::Over);
+            deck.set_blend(karakuri_engine::DeckSlot(1), Blend::Over);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
 
             // The material has to actually be out of range, or this is a test of
             // ordinary coverage under a frightening name.
-            let own = decode(&readback(&gpu, deck.slot_target(1)));
+            let own = decode(&readback(
+                &gpu,
+                deck.slot_target(karakuri_engine::DeckSlot(1)),
+            ));
             let bad = own
                 .iter()
                 .skip(3)
@@ -1764,8 +1803,8 @@ proc wash {
         let add_run = |gain: f32, opacity: f32| -> Vec<f32> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-            deck.set_gain(1, gain);
-            deck.set_opacity(1, opacity);
+            deck.set_gain(karakuri_engine::DeckSlot(1), gain);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
@@ -1813,14 +1852,17 @@ proc wash {
                 WIDTH,
                 HEIGHT,
             );
-            deck.set_blend(1, blend);
-            deck.set_opacity(1, opacity);
+            deck.set_blend(karakuri_engine::DeckSlot(1), blend);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
             (
                 decode(&readback(&gpu, present.hdr_texture())),
-                decode(&readback(&gpu, deck.slot_target(1))),
+                decode(&readback(
+                    &gpu,
+                    deck.slot_target(karakuri_engine::DeckSlot(1)),
+                )),
             )
         };
         // `add` at full opacity is `A + 0`, which is `A`.
@@ -1859,10 +1901,10 @@ proc wash {
         let max_run = |blend: Blend, opacity: f32, off_air: Option<usize>| -> Vec<f32> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-            deck.set_blend(1, blend);
-            deck.set_opacity(1, opacity);
+            deck.set_blend(karakuri_engine::DeckSlot(1), blend);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             if let Some(slot) = off_air {
-                deck.set_residency(slot, Residency::Allocated);
+                deck.set_residency(karakuri_engine::DeckSlot(slot as u8), Residency::Allocated);
             }
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
@@ -1927,10 +1969,10 @@ proc wash {
                 WIDTH,
                 HEIGHT,
             );
-            deck.set_residency(1, residency);
-            deck.set_blend(1, blend);
-            deck.set_gain(1, gain);
-            deck.set_opacity(1, opacity);
+            deck.set_residency(karakuri_engine::DeckSlot(1), residency);
+            deck.set_blend(karakuri_engine::DeckSlot(1), blend);
+            deck.set_gain(karakuri_engine::DeckSlot(1), gain);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
             for _ in 0..12 {
                 frame(&gpu, &mut deck, &present, 1);
             }
@@ -1996,7 +2038,7 @@ proc wash {
 
         let both_present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut both = deck_of(&gpu, &[SEED_A, SEED_B]);
-        both.set_gain(1, 0.0);
+        both.set_gain(karakuri_engine::DeckSlot(1), 0.0);
         for _ in 0..12 {
             frame(&gpu, &mut both, &both_present, 1);
         }
@@ -2007,7 +2049,10 @@ proc wash {
             "a slot at zero gain reached the mix anyway"
         );
         // The silenced slot ran regardless: gain is not residency.
-        assert_eq!(steps_taken(both.slot(1).set()), 12);
+        assert_eq!(
+            steps_taken(both.slot(karakuri_engine::DeckSlot(1)).set()),
+            12
+        );
         assert_eq!(both.live_slots(), 2);
     }
 
@@ -2029,8 +2074,8 @@ proc wash {
         for _ in 0..12 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        let first = readback(&gpu, deck.slot_target(0));
-        let second = readback(&gpu, deck.slot_target(1));
+        let first = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(0)));
+        let second = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1)));
 
         assert!(
             lit(&first) > 100 && lit(&second) > 100,
@@ -2091,8 +2136,14 @@ proc wash {
             readback(&gpu, native_present.hdr_texture()),
             "a resized deck is not the deck it would have been at that size"
         );
-        assert_eq!(grown.slot_target(0).width(), WIDE);
-        assert_eq!(grown.slot_target(1).height(), TALL);
+        assert_eq!(
+            grown.slot_target(karakuri_engine::DeckSlot(0)).width(),
+            WIDE
+        );
+        assert_eq!(
+            grown.slot_target(karakuri_engine::DeckSlot(1)).height(),
+            TALL
+        );
     }
 
     /// **Gain is linear, and applied per slot before the sum rather than to the
@@ -2125,8 +2176,8 @@ proc wash {
         let run = |gains: [f32; 2]| -> Vec<f32> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-            deck.set_gain(0, gains[0]);
-            deck.set_gain(1, gains[1]);
+            deck.set_gain(karakuri_engine::DeckSlot(0), gains[0]);
+            deck.set_gain(karakuri_engine::DeckSlot(1), gains[1]);
             for _ in 0..STEPS {
                 frame(&gpu, &mut deck, &present, 1);
             }
@@ -2494,10 +2545,16 @@ proc wash {
         for _ in 0..10 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        assert_eq!(steps_taken(deck.slot(0).set()), 10);
-        assert_eq!(steps_taken(deck.slot(1).set()), 10);
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
+            10
+        );
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
+            10
+        );
 
-        deck.set_residency(1, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         assert_eq!(deck.live_slots(), 1);
         assert_eq!(deck.slot_count(), 2, "going off air does not free the slot");
 
@@ -2505,12 +2562,12 @@ proc wash {
             frame(&gpu, &mut deck, &present, 3);
         }
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             40,
             "the on-air slot did not step normally while the other was off air"
         );
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             40,
             "an off-air slot did not keep the room's tempo: nothing is calling \
              `prepare` on it, so its cell is a still rather than a preview"
@@ -2532,16 +2589,19 @@ proc wash {
             "an Allocated slot was still reaching the mix"
         );
 
-        deck.set_residency(1, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
         for _ in 0..5 {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             45,
             "the returning slot did not come back where the room is"
         );
-        assert_eq!(steps_taken(deck.slot(0).set()), 45);
+        assert_eq!(
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
+            45
+        );
         assert_eq!(deck.live_slots(), 2);
     }
 
@@ -2578,14 +2638,14 @@ proc wash {
         let run = |gain: f32, opacity: f32, mask: Mask| -> (Vec<u16>, Vec<u16>) {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
-            deck.set_gain(1, gain);
-            deck.set_opacity(1, opacity);
-            deck.set_mask(1, mask);
+            deck.set_gain(karakuri_engine::DeckSlot(1), gain);
+            deck.set_opacity(karakuri_engine::DeckSlot(1), opacity);
+            deck.set_mask(karakuri_engine::DeckSlot(1), mask);
             for _ in 0..8 {
                 frame(&gpu, &mut deck, &present, 1);
             }
             (
-                readback(&gpu, deck.slot_target(1)),
+                readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1))),
                 readback(&gpu, present.hdr_texture()),
             )
         };
@@ -2663,18 +2723,21 @@ proc wash {
             for _ in 0..8 {
                 frame(&gpu, &mut deck, &present, 1);
             }
-            deck.set_residency(1, residency);
+            deck.set_residency(karakuri_engine::DeckSlot(1), residency);
             for _ in 0..4 {
                 frame(&gpu, &mut deck, &present, 1);
             }
-            let off_air_at = steps_taken(deck.slot(1).set());
+            let off_air_at = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
 
             // **The target is thrown away and remade**, so nothing in it can be
             // left over from when the slot was Live.
             deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
             assert_eq!(
-                lit(&readback(&gpu, deck.slot_target(1))),
+                lit(&readback(
+                    &gpu,
+                    deck.slot_target(karakuri_engine::DeckSlot(1))
+                )),
                 0,
                 "the reallocated target came back with something in it, so the assertion \
                  below cannot tell a fresh draw from a stale one"
@@ -2682,7 +2745,10 @@ proc wash {
 
             frame(&gpu, &mut deck, &present, 1);
             assert!(
-                lit(&readback(&gpu, deck.slot_target(1))) > 100,
+                lit(&readback(
+                    &gpu,
+                    deck.slot_target(karakuri_engine::DeckSlot(1))
+                )) > 100,
                 "a slot at {residency:?} drew nothing into its own target on the frame \
                  after a resize, so its console cell is dark at exactly the moment an \
                  operator is deciding whether to bring the slot up (ADR-0258)"
@@ -2691,7 +2757,7 @@ proc wash {
             // And it advanced by the frame's steps and by no more: the draw is
             // not a second step on top of the residency's (P-0082).
             assert_eq!(
-                steps_taken(deck.slot(1).set()),
+                steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
                 off_air_at + 1,
                 "a slot at {residency:?} did not take exactly the one step the frame \
                  gave it — either it is standing still, which makes its cell a still \
@@ -2769,21 +2835,21 @@ proc wash {
         // --- the rejected build --------------------------------------------
         // Warm the slot first, so there is a picture for a rejection to leave
         // alone. Off air is enough: an off-air slot steps (ADR-0269).
-        deck.set_residency(1, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH / 2, HEIGHT / 2);
         for _ in 0..8 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        let warmed = steps_taken(deck.slot(1).set());
+        let warmed = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
         assert!(
             warmed > 0,
             "the slot did not warm, so there is nothing to keep"
         );
         frame(&gpu, &mut deck, &present, 1);
-        let before = readback(&gpu, deck.slot_target(1));
+        let before = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1)));
         assert!(lit(&before) > 100, "the warmed slot drew nothing");
-        let at_rejection_start = steps_taken(deck.slot(1).set());
+        let at_rejection_start = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
 
         // A capacity outside the L1's declared range: the worker builds it and
         // `Set::build` refuses, which is `Event::Rejected` and not a swap.
@@ -2819,7 +2885,7 @@ proc wash {
         while !rejected {
             frame(&gpu, &mut deck, &present, 1);
             waited += 1;
-            for event in deck.events(1) {
+            for event in deck.events(karakuri_engine::DeckSlot(1)) {
                 match event {
                     Event::Rejected { .. } => rejected = true,
                     other => panic!("the refused build did not come back as a rejection: {other}"),
@@ -2833,7 +2899,7 @@ proc wash {
         assert!(warmed > 0, "the slot never warmed");
 
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             at_rejection_start + waited,
             "the rejected build moved the running Set's clock by something other than \
              the frames that went past while it was being refused"
@@ -2844,7 +2910,10 @@ proc wash {
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         frame(&gpu, &mut deck, &present, 1);
         assert!(
-            lit(&readback(&gpu, deck.slot_target(1))) > 100,
+            lit(&readback(
+                &gpu,
+                deck.slot_target(karakuri_engine::DeckSlot(1))
+            )) > 100,
             "a slot whose build was refused went dark, so the cell says the material is \
              gone when nothing changed at all — the running Set is still running"
         );
@@ -2870,9 +2939,9 @@ proc wash {
         let run = || -> Vec<u16> {
             let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
             let mut deck = deck_of(&gpu, &[SEED_A, SEED_B, SEED_A + 1]);
-            deck.set_gain(0, 1.5);
-            deck.set_gain(1, 0.75);
-            deck.set_opacity(2, 0.5);
+            deck.set_gain(karakuri_engine::DeckSlot(0), 1.5);
+            deck.set_gain(karakuri_engine::DeckSlot(1), 0.75);
+            deck.set_opacity(karakuri_engine::DeckSlot(2), 0.5);
             for steps in TICKS {
                 frame(&gpu, &mut deck, &present, steps);
             }
@@ -2917,7 +2986,10 @@ proc wash {
             frame(&gpu, &mut deck, &present, 1);
             frames += 1;
         }
-        let neighbour_live_before = deck.slot(1).set().live_count(&gpu.device, &gpu.queue);
+        let neighbour_live_before = deck
+            .slot(karakuri_engine::DeckSlot(1))
+            .set()
+            .live_count(&gpu.device, &gpu.queue);
 
         tx.send(Request {
             names: karakuri_engine::swap::RequestNames::default(),
@@ -2946,7 +3018,9 @@ proc wash {
         while !swapped {
             frame(&gpu, &mut deck, &present, 1);
             frames += 1;
-            swapped = deck.events(0).any(|e| matches!(e, Event::Swapped { .. }));
+            swapped = deck
+                .events(karakuri_engine::DeckSlot(0))
+                .any(|e| matches!(e, Event::Swapped { .. }));
             assert!(
                 started.elapsed() < PATIENCE,
                 "waited {PATIENCE:?} for the swap and it never landed"
@@ -2962,30 +3036,32 @@ proc wash {
         );
 
         assert_eq!(
-            deck.slot(0).set().capacity(),
+            deck.slot(karakuri_engine::DeckSlot(0)).set().capacity(),
             SWAPPED,
             "the swap reported success but slot 0 is still the old Set"
         );
         // Cold, as every V1 swap is: a new procedure means new buffers. Warming
         // one out of sight is Priming, and it is not in this slice.
         assert_eq!(
-            steps_taken(deck.slot(0).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(0)).set()),
             1,
             "the swapped-in Set inherited a `t`"
         );
 
         assert_eq!(
-            deck.slot(1).set().capacity(),
+            deck.slot(karakuri_engine::DeckSlot(1)).set().capacity(),
             CAPACITY,
             "the swap reached the neighbouring slot"
         );
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             frames,
             "the neighbouring slot's clock did not advance normally across the swap"
         );
         assert_eq!(
-            deck.slot(1).set().live_count(&gpu.device, &gpu.queue),
+            deck.slot(karakuri_engine::DeckSlot(1))
+                .set()
+                .live_count(&gpu.device, &gpu.queue),
             neighbour_live_before,
             "the swap disturbed the neighbouring slot's element buffers"
         );
@@ -2995,7 +3071,7 @@ proc wash {
             "the swap changed which slots are live"
         );
         assert!(
-            deck.events(1).next().is_none(),
+            deck.events(karakuri_engine::DeckSlot(1)).next().is_none(),
             "the untouched slot reported an event"
         );
     }
@@ -3047,7 +3123,7 @@ proc wash {
             WIDTH,
             HEIGHT,
         );
-        deck.set_residency(1, Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
 
         tx.send(Request {
             names: karakuri_engine::swap::RequestNames::default(),
@@ -3072,16 +3148,17 @@ proc wash {
         .expect("worker alive");
 
         let verdict = |deck: &mut Deck| -> Option<String> {
-            deck.events(1).find_map(|e| match e {
-                Event::Accepted { label, cost_ms, .. } => Some(format!(
-                    "Accepted `{label}` at {:.3} ms",
-                    cost_ms.unwrap_or(f32::NAN)
-                )),
-                Event::Overloaded { label, cost_ms, .. } => {
-                    Some(format!("Overloaded `{label}` at {cost_ms:.3} ms"))
-                }
-                _ => None,
-            })
+            deck.events(karakuri_engine::DeckSlot(1))
+                .find_map(|e| match e {
+                    Event::Accepted { label, cost_ms, .. } => Some(format!(
+                        "Accepted `{label}` at {:.3} ms",
+                        cost_ms.unwrap_or(f32::NAN)
+                    )),
+                    Event::Overloaded { label, cost_ms, .. } => {
+                        Some(format!("Overloaded `{label}` at {cost_ms:.3} ms"))
+                    }
+                    _ => None,
+                })
         };
 
         // The build lands on the parked slot and is judged in the same frame, so
@@ -3095,7 +3172,8 @@ proc wash {
         // before the build landed on it.
         let mut stepped_off_air = 0u64;
         while seen.is_none() {
-            stepped_off_air = stepped_off_air.max(steps_taken(deck.slot(1).set()));
+            stepped_off_air =
+                stepped_off_air.max(steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()));
             frame(&gpu, &mut deck, &present, 1);
             frames += 1;
             seen = verdict(&mut deck);
@@ -3113,12 +3191,12 @@ proc wash {
         // **The candidate is in the slot, off air or not** (ADR-0316): `CAPACITY`
         // here would be the Set the build displaced, put back.
         assert_eq!(
-            deck.slot(1).set().capacity(),
+            deck.slot(karakuri_engine::DeckSlot(1)).set().capacity(),
             SWAPPED,
             "the verdict took the build out of a parked slot instead of stopping it"
         );
         assert!(
-            deck.overloaded(1),
+            deck.overloaded(karakuri_engine::DeckSlot(1)),
             "a parked slot over the budget was not marked stopped"
         );
         // **The whole point of the change, as a number.** The verdict arrives on
@@ -3131,7 +3209,7 @@ proc wash {
             "the verdict took {frames} frames, which is a window: it is waiting again"
         );
         assert_eq!(
-            deck.residency(1),
+            deck.residency(karakuri_engine::DeckSlot(1)),
             Residency::Allocated,
             "the slot went on air by itself, so this says nothing about a parked one"
         );
@@ -3148,7 +3226,7 @@ proc wash {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             0,
             "a stopped slot went on stepping off air"
         );
@@ -3227,7 +3305,7 @@ proc wash {
             HEIGHT,
         );
         deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
-        deck.set_residency(0, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Live);
 
         tx.send(candidate(1)).expect("worker alive");
 
@@ -3235,7 +3313,9 @@ proc wash {
         let mut verdict = None;
         while verdict.is_none() {
             slow_frame(&gpu, &mut deck, &present);
-            verdict = deck.events(1).find_map(said_verdict);
+            verdict = deck
+                .events(karakuri_engine::DeckSlot(1))
+                .find_map(said_verdict);
             assert!(
                 started.elapsed() < PATIENCE,
                 "waited {PATIENCE:?} for a verdict on the slow deck and none came"
@@ -3249,11 +3329,11 @@ proc wash {
             SLOW_FRAME
         );
         assert!(
-            !deck.overloaded(1),
+            !deck.overloaded(karakuri_engine::DeckSlot(1)),
             "the verdict was in the candidate's favour and the slot is marked stopped"
         );
         assert_eq!(
-            deck.slot(1).set().capacity(),
+            deck.slot(karakuri_engine::DeckSlot(1)).set().capacity(),
             SWAPPED,
             "the verdict said kept and the slot is not holding the candidate"
         );
@@ -3340,7 +3420,7 @@ proc wash {
             WIDTH,
             HEIGHT,
         );
-        deck.set_residency(1, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
 
         // Frames before the request, so the slot's own Set has drawn something
         // real into its target and the image this test says is *kept* is not an
@@ -3354,23 +3434,25 @@ proc wash {
         let mut verdict = None;
         while verdict.is_none() {
             frame(&gpu, &mut deck, &present, 1);
-            verdict = deck.events(1).find_map(said_verdict);
+            verdict = deck
+                .events(karakuri_engine::DeckSlot(1))
+                .find_map(said_verdict);
             assert!(started.elapsed() < PATIENCE, "no verdict on the candidate");
         }
         let (kept, _, _) = verdict.expect("just set");
         assert!(!kept, "a candidate held a budget of zero milliseconds");
         assert!(
-            deck.overloaded(1),
+            deck.overloaded(karakuri_engine::DeckSlot(1)),
             "the verdict was against and the slot is not marked stopped"
         );
         assert_eq!(
-            deck.slot(1).set().capacity(),
+            deck.slot(karakuri_engine::DeckSlot(1)).set().capacity(),
             SWAPPED,
             "the verdict took the candidate out of the slot"
         );
 
-        let steps = steps_taken(deck.slot(1).set());
-        let image = readback(&gpu, deck.slot_target(1));
+        let steps = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
+        let image = readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1)));
         assert!(
             image.iter().any(|&bits| bits != 0),
             "the slot's target is empty before this test starts, so *kept* is not \
@@ -3381,12 +3463,12 @@ proc wash {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             steps,
             "a stopped slot is still being stepped"
         );
         assert_eq!(
-            readback(&gpu, deck.slot_target(1)),
+            readback(&gpu, deck.slot_target(karakuri_engine::DeckSlot(1))),
             image,
             "a stopped slot's target changed, so something is still drawing into it"
         );
@@ -3400,7 +3482,10 @@ proc wash {
         let mut kept = None;
         while kept.is_none() {
             frame(&gpu, &mut deck, &present, 1);
-            kept = deck.events(1).find_map(said_verdict).map(|v| v.0);
+            kept = deck
+                .events(karakuri_engine::DeckSlot(1))
+                .find_map(said_verdict)
+                .map(|v| v.0);
             assert!(
                 started.elapsed() < PATIENCE,
                 "no verdict on the second build"
@@ -3412,14 +3497,14 @@ proc wash {
             "a generous budget stopped the slot anyway"
         );
         assert!(
-            !deck.overloaded(1),
+            !deck.overloaded(karakuri_engine::DeckSlot(1)),
             "a build that held the budget left the slot marked stopped"
         );
         for _ in 0..4 {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert!(
-            steps_taken(deck.slot(1).set()) > 0,
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()) > 0,
             "the slot is unmarked and still not stepping"
         );
     }
@@ -3456,8 +3541,8 @@ proc wash {
         );
         // The other slot stays off air, so what reaches the picture is this one
         // or nothing.
-        deck.set_residency(0, Residency::Allocated);
-        deck.set_residency(1, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(0), Residency::Allocated);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
 
         for _ in 0..4 {
             frame(&gpu, &mut deck, &present, 1);
@@ -3467,11 +3552,13 @@ proc wash {
         let mut verdict = None;
         while verdict.is_none() {
             frame(&gpu, &mut deck, &present, 1);
-            verdict = deck.events(1).find_map(said_verdict);
+            verdict = deck
+                .events(karakuri_engine::DeckSlot(1))
+                .find_map(said_verdict);
             assert!(started.elapsed() < PATIENCE, "no verdict on the candidate");
         }
         assert!(
-            deck.overloaded(1),
+            deck.overloaded(karakuri_engine::DeckSlot(1)),
             "the slot is not stopped, so this test is about an ordinary fader"
         );
 
@@ -3483,7 +3570,7 @@ proc wash {
              pulling it down proves nothing"
         );
 
-        deck.set_gain(1, 0.0);
+        deck.set_gain(karakuri_engine::DeckSlot(1), 0.0);
         frame(&gpu, &mut deck, &present, 1);
         let faded = readback(&gpu, present.hdr_texture());
         assert!(
@@ -3494,7 +3581,7 @@ proc wash {
         // operator took it out of the mix; nothing decided that ended the freeze
         // for them.
         assert!(
-            deck.overloaded(1),
+            deck.overloaded(karakuri_engine::DeckSlot(1)),
             "the fader cleared the freeze, which is a state changing by itself"
         );
 
@@ -3504,21 +3591,21 @@ proc wash {
         // residency moves and the freeze does not — and the slot takes no step
         // at either level, which is what the off-air branch of `Frame::render`
         // has to honour as well.
-        let steps = steps_taken(deck.slot(1).set());
-        deck.set_residency(1, Residency::Allocated);
+        let steps = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         for _ in 0..3 {
             frame(&gpu, &mut deck, &present, 1);
         }
-        deck.set_residency(1, Residency::Live);
+        deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Live);
         for _ in 0..3 {
             frame(&gpu, &mut deck, &present, 1);
         }
         assert!(
-            deck.overloaded(1),
+            deck.overloaded(karakuri_engine::DeckSlot(1)),
             "a stopped slot taken off air and put back came back running"
         );
         assert_eq!(
-            steps_taken(deck.slot(1).set()),
+            steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             steps,
             "a stopped slot stepped while it was off air"
         );
@@ -3572,7 +3659,7 @@ proc wash {
             );
             deck.set_frame_budget_ms(OVER_A_SLOW_FRAME_MS);
             for slot in [0, 2, 3].iter().take(live) {
-                deck.set_residency(*slot, Residency::Live);
+                deck.set_residency(karakuri_engine::DeckSlot(*slot), Residency::Live);
             }
             tx.send(candidate(1)).expect("worker alive");
 
@@ -3584,7 +3671,9 @@ proc wash {
                 } else {
                     frame(&gpu, &mut deck, &present, 1);
                 }
-                verdict = deck.events(1).find_map(said_verdict);
+                verdict = deck
+                    .events(karakuri_engine::DeckSlot(1))
+                    .find_map(said_verdict);
                 assert!(started.elapsed() < PATIENCE, "no verdict on this deck");
             }
             for _ in 0..PERIOD_WINDOW {
@@ -3804,7 +3893,7 @@ proc wash {
                 frame(&gpu, &mut deck, &present, 1);
             }
             for slot in 1..4 {
-                deck.set_residency(slot, Residency::Allocated);
+                deck.set_residency(karakuri_engine::DeckSlot(slot), Residency::Allocated);
             }
             let mut out = Vec::new();
             for i in 0..WARMUP + MEASURED {
@@ -3845,7 +3934,7 @@ proc wash {
             let mut deck = Deck::new(&gpu.device, swaps, W, H);
             // Off air before a frame has ever run, so nothing warmed them.
             for slot in 1..4 {
-                deck.set_residency(slot, Residency::Allocated);
+                deck.set_residency(karakuri_engine::DeckSlot(slot), Residency::Allocated);
             }
             let mut out = Vec::new();
             for i in 0..WARMUP + MEASURED {
