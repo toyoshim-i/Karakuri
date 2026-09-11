@@ -1,13 +1,18 @@
 //! Shared interactive widgets for the console view.
 
+pub mod fader;
 pub mod fold_grip;
 pub mod head;
 pub mod pills;
 
+#[allow(unused_imports)]
+pub use fader::*;
 pub use fold_grip::*;
 pub use head::*;
 pub use pills::*;
 
+#[allow(unused_imports)]
+pub(crate) use fader::*;
 pub(crate) use fold_grip::{grip_dots, pane_dividers};
 #[allow(unused_imports)]
 pub(crate) use head::*;
