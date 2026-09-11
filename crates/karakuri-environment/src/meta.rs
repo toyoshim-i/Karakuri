@@ -41,9 +41,62 @@
 //! [`crate::compile::Placed`], which is the caller and is in this package now.
 
 use karakuri_ir::typed::Checked;
+use karakuri_ir::Kind;
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
-use karakuri_store::record::Record;
+use karakuri_store::record::{Layer, Record};
+
+/// The engine [`Kind`] a record `Layer` names. The inverse of [`layer_of`], and
+/// total because every layer a record can name is a layer this engine has.
+pub fn kind_of(layer: Layer) -> Kind {
+    match layer {
+        Layer::L1 => Kind::L1,
+        Layer::L2 => Kind::L2,
+        Layer::L3 => Kind::L3,
+        Layer::L4 => Kind::L4,
+        Layer::Field => Kind::Field,
+        Layer::L5 => Kind::L5,
+    }
+}
+
+/// The record `Layer` an engine [`Kind`] names. The inverse of [`kind_of`], and
+/// total for the same reason: every layer a Set can hold is a layer a record
+/// can address.
+pub fn layer_of(kind: Kind) -> Layer {
+    match kind {
+        Kind::L1 => Layer::L1,
+        Kind::L2 => Layer::L2,
+        Kind::L3 => Layer::L3,
+        Kind::L4 => Layer::L4,
+        Kind::Field => Layer::Field,
+        Kind::L5 => Layer::L5,
+    }
+}
+
+/// The layer name as an operator writes it.
+pub fn kind_name(kind: Kind) -> &'static str {
+    match kind {
+        Kind::L1 => "L1",
+        Kind::L2 => "L2",
+        Kind::L3 => "L3",
+        Kind::L4 => "L4",
+        Kind::Field => "Field",
+        Kind::L5 => "L5",
+    }
+}
+
+/// Look up a layer by name as written in user input or Set files.
+pub fn layer_named(name: &str) -> Option<Kind> {
+    Some(match name {
+        "L1" => Kind::L1,
+        "L2" => Kind::L2,
+        "L3" => Kind::L3,
+        "L4" => Kind::L4,
+        "Field" => Kind::Field,
+        "L5" => Kind::L5,
+        _ => return None,
+    })
+}
 
 /// The metadata file format version this build writes, on the `meta` record —
 /// one number for the whole file, which is what `Record::Set`'s `v` is for a
@@ -71,7 +124,7 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
         // `Record::Slot`'s `name` — and one artifact loaded twice under two
         // names is still one artifact with one card.
         name: checked.name.clone(),
-        kind: crate::setfile::layer_of(checked.kind),
+        kind: layer_of(checked.kind),
         v: VERSION,
     })];
     // **Declaration order, which is the file's.** `Checked::params` is built by

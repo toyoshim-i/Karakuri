@@ -10,7 +10,86 @@ use std::path::{Path, PathBuf};
 use karakuri_ir::typed::Checked;
 
 use crate::meta::put_meta;
-use crate::setfile::{self, Names};
+
+/// A compiler or validator for procedure source strings.
+pub trait ProcedureCompiler {
+    fn check(&self, src: &str) -> Result<Checked, String>;
+}
+
+/// The default procedure compiler using the `karakuri-ir` validation pipeline.
+pub struct KirCompiler;
+
+impl ProcedureCompiler for KirCompiler {
+    fn check(&self, src: &str) -> Result<Checked, String> {
+        check(src)
+    }
+}
+
+impl<F> ProcedureCompiler for F
+where
+    F: Fn(&str) -> Result<Checked, String>,
+{
+    fn check(&self, src: &str) -> Result<Checked, String> {
+        self(src)
+    }
+}
+
+/// A name for every node of a slot, in the shape the procedures themselves are
+/// passed in.
+///
+/// **Per layer rather than one list in node order**, because the node order is
+/// the engine's — `slot_of` and `nodes_of` decide it — and a caller that
+/// reproduced it here would be a second place for a fact this project has
+/// already been bitten by twice.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Names {
+    pub l1s: Vec<Option<String>>,
+    pub l2s: Vec<Option<String>>,
+    /// **A list, like the renderers'.** A slot holds as many cameras as its
+    /// files declare, and the built-in orbit is a node beside them — one
+    /// nobody can name from the command line, since a name is written beside
+    /// a path and the built-in has none. It is called `orbit`; see
+    /// `karakuri_engine::set::BUILTIN_CAMERA`.
+    pub l3s: Vec<Option<String>>,
+    pub l4s: Vec<Option<String>>,
+    pub fields: Vec<Option<String>>,
+}
+
+impl Names {
+    /// Every name that was actually written, which is the only thing worth
+    /// checking for a collision: a derived one is disambiguated where it is
+    /// derived, in `Set::build_many`.
+    fn written(&self) -> impl Iterator<Item = &String> {
+        self.l1s
+            .iter()
+            .flatten()
+            .chain(self.l2s.iter().flatten())
+            .chain(self.l3s.iter().flatten())
+            .chain(self.l4s.iter().flatten())
+            .chain(self.fields.iter().flatten())
+    }
+
+    /// **Unique within a slot**, which is the scope a name resolves in: a Set is
+    /// what holds the nodes, so two slots may each have a `near` and neither is
+    /// ambiguous.
+    ///
+    /// Refused rather than disambiguated. A derived name is disambiguated
+    /// where it is derived — that is what `-2` is for — so a collision reaching
+    /// here is two *written* names, and picking one for the author would leave
+    /// a `--param` pointing at whichever the tie-break preferred.
+    pub fn check_unique(&self) -> Result<(), String> {
+        let mut seen: Vec<&str> = Vec::new();
+        for name in self.written() {
+            if seen.contains(&name.as_str()) {
+                return Err(format!(
+                    "two nodes are both called `{name}` — a name addresses one node in a slot"
+                ));
+            }
+            seen.push(name);
+        }
+        Ok(())
+    }
+}
 
 /// **The compiled procedure and the text it was compiled from**, together.
 ///
@@ -186,7 +265,7 @@ fn check_node_name(name: &str) -> Result<(), String> {
     // `--param L4:0:exposure=1` can never be the same sentence about different
     // things. The two forms are told apart by counting colons, and a node called
     // `L4` would make that count a lie.
-    if crate::setfile::layer_named(name).is_some() {
+    if crate::meta::layer_named(name).is_some() {
         return Err(format!(
             "`{name}` is a layer, so it cannot also be a node's name — a `--param` is told \
              which of the two it names by the shape of what follows"
@@ -307,17 +386,6 @@ impl Placed {
     /// anything here is bounded by.
     pub fn hash(&self) -> karakuri_store::hash::Hash {
         karakuri_store::hash::Hash::of(self.source.as_bytes())
-    }
-
-    /// This node as [`setfile::Node`]. **No store and no disk** — the address
-    /// comes off the bytes the compile read.
-    pub fn node(&self) -> setfile::Node {
-        setfile::Node {
-            hash: self.hash(),
-            layer: self.layer,
-            index: self.index,
-            name: self.named.name.clone(),
-        }
     }
 
     /// **Put this node's source in `store`**, so that a file or a record naming
