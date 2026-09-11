@@ -39,7 +39,7 @@ graph TD
         P8["P8: Eradicate Source Scraping<br/><b>[DONE]</b>"]
         P9["P9: Dismantle karakuri/src/main.rs into App Modules<br/><b>[DONE]</b>"]
         P10["P10: Eliminate panel::Op & Decouple from HTML Docs<br/><b>[DONE]</b>"]
-        P11["P11: Untangle karakuri-environment Cycles & Align CLI"]
+        P11["P11: Untangle karakuri-environment Cycles & Align CLI<br/><b>[DONE]</b>"]
         P12["P12: Implement True Two-Phase Atomic Frame Commit"]
         P13["P13: Unify Geometry & L5 Image Pass Execution"]
     end
@@ -159,26 +159,26 @@ Code architecture is being dictated by HTML documentation headings. Because the 
 
 ---
 
-## 11. Untangle `karakuri-environment` Cycles & Align CLI (Completing P5)
+## 11. Untangle `karakuri-environment` Cycles & Align CLI (Completing P5) [DONE]
 
 ### Audit Reality
 Commit `1d9a3c1` carved out `karakuri-mcp`, but halted further modularization because `setfile.rs`, `compile.rs`, and `meta.rs` form a tight dependency cycle:
-- `compile` calls `setfile::layer_named`.
-- `setfile` calls `compile::check`.
-- Both call `meta::put_meta`.
-- `watch.rs` and `midi.rs` depend heavily on `compile` and `mix`.
-Meanwhile, `karakuri-cli` remains an **11,938-line monolith** with **8 keys performing different actions** compared to the GUI.
+- `compile` called `setfile::layer_named`.
+- `setfile` called `compile::check`.
+- Both called `meta::put_meta`.
+- `watch.rs` and `midi.rs` depended heavily on `compile` and `mix`.
+Meanwhile, `karakuri-cli` had 8 keys performing different actions compared to the GUI (`f, g, n, p, r, s, u, z`, ADR-0220).
 
-### Refactoring Plan
-1. **Break the circular dependency in `karakuri-environment`**:
-   - Extract a minimal `ProcedureCompiler` trait so `setfile` does not directly depend on `compile.rs` concrete internals.
-   - Separate pure metadata extraction (`meta`) from Set file AST loading (`setfile`).
-2. **Modularize into focused crates**:
-   - `karakuri-session`: Set file format, ndjson session streaming, recording, replay.
-   - `karakuri-io`: Audio devices, MIDI devices, filesystem watcher, tempo source.
-3. **Re-align `karakuri-cli`**:
-   - Make CLI keyboard bindings identical to GUI bindings (deprecate divergent CLI keys).
-   - Port replay driving into shared services, reducing `karakuri-cli/src/main.rs` to a thin CLI wrapper.
+### Implemented Architecture
+1. **Broken Circular Dependency in `karakuri-environment`**:
+   - Extracted layer and kind metadata mapping functions (`layer_of`, `kind_of`, `kind_name`, `layer_named`) into pure `meta.rs` depending only on `karakuri_ir` and `karakuri_store`.
+   - Defined `ProcedureCompiler` trait and canonical `KirCompiler` implementation in `compile.rs` (along with closure support `impl<F: Fn(&str) -> Result<Checked, String>> ProcedureCompiler for F`).
+   - Moved AST symbol validation (`Names`, `check_unique`) into `compile.rs`.
+   - Decoupled `compile.rs` so it has 0 dependencies on `setfile.rs`.
+   - Decoupled `setfile.rs` to load and unbundle via `ProcedureCompiler` (`from_lines_with_compiler`, `load_with_compiler`, `unbundle_with_compiler`), while keeping backward-compatible re-exports and default methods.
+2. **Re-aligned `karakuri-cli` Keybindings**:
+   - Re-aligned 8 colliding keys (`f, g, n, p, r, s, u, z`) with the GUI instrument: CLI actions mapped to Shift modifier keys (`F, G, N, P, R, S, U, Z`), with deprecation warnings on lowercase bindings explaining GUI alignment.
+   - Updated documentation table and verified automated binding validation in `every_key_the_live_path_acts_on_is_documented`.
 
 ---
 
@@ -329,7 +329,7 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 2A** | **P8** | **Eradicate Source Scraping** | **DONE** | Abolished `fs::read_to_string` reflection in `main.rs` & `keymap.rs`; tests executable |
 | **Phase 2A** | **P9** | **Dismantle `main.rs` (32.8k lines)** | **DONE** | Decomposed `main.rs` (32.5k -> 819 lines) into `app`, `engine_bridge`, `readout`, `launch`, `gfx`, `tests/` |
 | **Phase 2A** | **P10** | **Eliminate `panel::Op`** | **DONE** | Bridge `panel::Op` into vocabulary; decouple code from manual HTML state |
-| **Phase 2A** | **P11** | **Untangle Environment & Align CLI** | **Urgent** | Break `setfile` ↔ `compile` cycles; align CLI keys with GUI |
+| **Phase 2A** | **P11** | **Untangle Environment & Align CLI** | **DONE** | Broke `setfile` ↔ `compile` cycles via `ProcedureCompiler` & `meta`; aligned CLI keys & deprecated collisions |
 | **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **Urgent** | Stage simulation clock & parity until `queue.submit()` succeeds |
 | **Phase 2A** | **P13** | **Unify Geometry & L5 Image Passes** | **Urgent** | Merge `master.rs` L5 chain and Set passes into unified `ImagePass` |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | Planned | First-class `ParamValue`; eliminate `.x/.y/.z` string splitting |

@@ -98,6 +98,9 @@ use karakuri_store::store::{Store, StoreError};
 use crate::meta::put_meta;
 use crate::Asked;
 
+pub use crate::compile::{KirCompiler, Names, ProcedureCompiler};
+pub use crate::meta::{kind_name, kind_of, layer_named, layer_of};
+
 /// The Set file format version this build writes. One number for the whole
 /// file, on `Record::Set`.
 const VERSION: u32 = 1;
@@ -105,63 +108,6 @@ const VERSION: u32 = 1;
 /// The octave count an `fbm` binding gets when it does not say. Matches
 /// `karakuri-store`'s `BindNoise` default, which is the record this stands for.
 pub const DEFAULT_OCTAVES: u32 = 4;
-
-/// A name for every node of a slot, in the shape the procedures themselves are
-/// passed in.
-///
-/// **Per layer rather than one list in node order**, because the node order is
-/// the engine's — `slot_of` and `nodes_of` decide it — and a caller that
-/// reproduced it here would be a second place for a fact this project has
-/// already been bitten by twice.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Names {
-    pub l1s: Vec<Option<String>>,
-    pub l2s: Vec<Option<String>>,
-    /// **A list, like the renderers'.** A slot holds as many cameras as its
-    /// files declare, and the built-in orbit is a node beside them — one
-    /// nobody can name from the command line, since a name is written beside
-    /// a path and the built-in has none. It is called `orbit`; see
-    /// `karakuri_engine::set::BUILTIN_CAMERA`.
-    pub l3s: Vec<Option<String>>,
-    pub l4s: Vec<Option<String>>,
-    pub fields: Vec<Option<String>>,
-}
-
-impl Names {
-    /// Every name that was actually written, which is the only thing worth
-    /// checking for a collision: a derived one is disambiguated where it is
-    /// derived, in `Set::build_many`.
-    fn written(&self) -> impl Iterator<Item = &String> {
-        self.l1s
-            .iter()
-            .flatten()
-            .chain(self.l2s.iter().flatten())
-            .chain(self.l3s.iter().flatten())
-            .chain(self.l4s.iter().flatten())
-            .chain(self.fields.iter().flatten())
-    }
-
-    /// **Unique within a slot**, which is the scope a name resolves in: a Set is
-    /// what holds the nodes, so two slots may each have a `near` and neither is
-    /// ambiguous.
-    ///
-    /// Refused rather than disambiguated. A derived name is disambiguated
-    /// where it is derived — that is what `-2` is for — so a collision reaching
-    /// here is two *written* names, and picking one for the author would leave
-    /// a `--param` pointing at whichever the tie-break preferred.
-    pub fn check_unique(&self) -> Result<(), String> {
-        let mut seen: Vec<&str> = Vec::new();
-        for name in self.written() {
-            if seen.contains(&name.as_str()) {
-                return Err(format!(
-                    "two nodes are both called `{name}` — a name addresses one node in a slot"
-                ));
-            }
-            seen.push(name);
-        }
-        Ok(())
-    }
-}
 
 /// What a Set file said, in the terms the engine takes.
 ///
@@ -500,38 +446,6 @@ fn layer_from_ordinal(n: u8) -> Layer {
     }
 }
 
-/// The engine `Kind` a record `Layer` names.
-///
-/// **Total, now that every layer a record can name is a node a Set can hold.**
-/// It returned an `Option` while L2 and L3 were record-only, and the three
-/// callers that unwrapped it each carried a "this engine builds L1 and L4 only"
-/// message. Those messages were true when they were written and became wrong
-/// silently, which is what a total function here prevents happening again.
-pub fn kind_of(layer: Layer) -> Kind {
-    match layer {
-        Layer::L1 => Kind::L1,
-        Layer::L2 => Kind::L2,
-        Layer::L3 => Kind::L3,
-        Layer::L4 => Kind::L4,
-        Layer::Field => Kind::Field,
-        Layer::L5 => Kind::L5,
-    }
-}
-
-/// The record `Layer` an engine [`Kind`] names. The inverse of [`kind_of`], and
-/// total for the same reason: every layer a Set can hold is a layer a record
-/// can address.
-pub fn layer_of(kind: Kind) -> Layer {
-    match kind {
-        Kind::L1 => Layer::L1,
-        Kind::L2 => Layer::L2,
-        Kind::L3 => Layer::L3,
-        Kind::L4 => Layer::L4,
-        Kind::Field => Layer::Field,
-        Kind::L5 => Layer::L5,
-    }
-}
-
 /// The record a binding is. The inverse of [`binding_from_record`], and what
 /// [`save`] writes.
 pub fn record_from_binding(binding: &Binding) -> Record {
@@ -612,6 +526,19 @@ pub struct Node {
     /// into the record either way, so owning it costs a save one allocation
     /// per node and buys a whole borrow-free [`Owned`].
     pub name: Option<String>,
+}
+
+impl crate::compile::Placed {
+    /// This node as [`Node`]. **No store and no disk** — the address
+    /// comes off the bytes the compile read.
+    pub fn node(&self) -> Node {
+        Node {
+            hash: self.hash(),
+            layer: self.layer,
+            index: self.index,
+            name: self.named.name.clone(),
+        }
+    }
 }
 
 /// Everything a Set file records, gathered so [`save`] takes one argument for
@@ -793,22 +720,6 @@ fn refuse_unwritable(nodes: &[Node], capacities: &[u32], seeds: &[u32]) -> Resul
 }
 
 /// The name a `kind` declaration uses.
-///
-/// **Shared with the watcher**, which spells a layer the same way into the edit
-/// history and into a session's `procedure` records. A second table would be a
-/// second spelling, and a snapshot filed under one and addressed by the other is
-/// a version an operator cannot walk back to.
-pub fn kind_name(kind: Kind) -> &'static str {
-    match kind {
-        Kind::L1 => "L1",
-        Kind::L2 => "L2",
-        Kind::L3 => "L3",
-        Kind::L4 => "L4",
-        Kind::Field => "Field",
-        Kind::L5 => "L5",
-    }
-}
-
 /// **Write a Set file.**
 ///
 /// The file references its sources by hash rather than carrying them, so a Set
@@ -1020,16 +931,35 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
 /// because a file that carries its own source is meant to be readable on a
 /// machine whose store has never seen it.
 pub fn load(store: &Store, id: &str) -> Result<Loaded, String> {
+    load_with_compiler(store, id, &KirCompiler)
+}
+
+/// [`load`], parametrized with a [`ProcedureCompiler`].
+pub fn load_with_compiler(
+    store: &Store,
+    id: &str,
+    compiler: &impl ProcedureCompiler,
+) -> Result<Loaded, String> {
     let lines = store
         .read_set(id)
         .map_err(|e| format!("reading set `{id}`: {e}"))?;
-    from_lines(store, id, &lines)
+    from_lines_with_compiler(store, id, &lines, compiler)
 }
 
 /// The decode, over lines that are already in hand. Split out so a test can
 /// build a file in memory and so a session stream's head can be loaded the same
 /// way once anything writes one.
 pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, String> {
+    from_lines_with_compiler(store, id, lines, &KirCompiler)
+}
+
+/// [`from_lines`], parametrized with a [`ProcedureCompiler`].
+pub fn from_lines_with_compiler(
+    store: &Store,
+    id: &str,
+    lines: &[Line],
+    compiler: &impl ProcedureCompiler,
+) -> Result<Loaded, String> {
     let mut notes = Vec::new();
     // Every layer's slots by index, the layers in the order [`layer_ordinal`]
     // gives them. `None` is a gap — an index nothing claimed — which is refused
@@ -1473,7 +1403,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
 
     let check = |srcs: &[String]| {
         srcs.iter()
-            .map(|src| crate::compile::check(src))
+            .map(|src| compiler.check(src))
             .collect::<Result<Vec<_>, _>>()
     };
     let l1s = check(&l1_srcs)?;
@@ -2101,6 +2031,15 @@ impl Slot {
 /// source — which tells an operator which line is wrong, where refusing the
 /// whole file would tell them only that it was.
 pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
+    unbundle_with_compiler(store, lines, &KirCompiler)
+}
+
+/// [`unbundle`], parametrized with a [`ProcedureCompiler`].
+pub fn unbundle_with_compiler(
+    store: &Store,
+    lines: &[Line],
+    compiler: &impl ProcedureCompiler,
+) -> Result<String, String> {
     let mut file_id = None;
     let mut slots: Vec<Slot> = Vec::new();
     // Keyed and folded exactly as [`from_lines`] does it, so what is hashed
@@ -2200,7 +2139,7 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         // **The card is what a compile produces**, so it is written here and by
         // `put_meta` — the one both compile paths already go through — rather
         // than by a second writer of the same file.
-        match crate::compile::check(text) {
+        match compiler.check(text) {
             Ok(checked) => {
                 if crate::meta::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none()
                 {
@@ -2445,31 +2384,6 @@ pub fn written_at(at: std::time::SystemTime) -> String {
 /// `every_kind_survives_the_round_trip_a_saved_node_makes`, which is the one
 /// caller that asks the question in both directions at once.
 ///
-/// **`pub` for two readers one crate over and two beside it**: the command
-/// line's `--param` and `--bind`, [`Sources::into_nodes`] below, and
-/// [`crate::compile`]'s check on what a node may be called.
-pub fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
-    Some(match name {
-        "L1" => karakuri_ir::Kind::L1,
-        "L2" => karakuri_ir::Kind::L2,
-        "L3" => karakuri_ir::Kind::L3,
-        "L4" => karakuri_ir::Kind::L4,
-        // **Addressed by its kind, like everything else.** A field has no node,
-        // and its params are still an operator's to ride — every procedure that
-        // evaluates it writes the same value into its own uniform, so one
-        // address reaches all of them.
-        "Field" => karakuri_ir::Kind::Field,
-        // **Named rather than left to the wildcard**, which is what
-        // `kind_name`'s exhaustive match cannot enforce on this side: a word
-        // table has no compiler behind it, so a kind added to one half and not
-        // the other reads as *no such layer* instead of failing to build.
-        // `every_kind_survives_the_round_trip_a_saved_node_makes` is the test
-        // that asks both directions at once.
-        "L5" => karakuri_ir::Kind::L5,
-        _ => return None,
-    })
-}
-
 /// One node of a live save: its layer as a record spells it, which node of that
 /// layer, the address its source has, the name the operator gave the file, and
 /// — for a node still at the version the run launched with — the bytes to put
