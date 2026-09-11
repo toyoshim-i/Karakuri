@@ -15,7 +15,7 @@
 //! [`Sample::confidence`](crate::Sample::confidence) instead.
 
 use crate::oscillator::Oscillator;
-use crate::{Sample, SignalBus};
+use crate::{Sample, SignalBus, SignalId};
 
 /// Oscillator-derived values (`bpm`, `beat`, `bar`) are the local oscillator's
 /// own ground truth — the single source of truth for phase and tempo —
@@ -57,25 +57,18 @@ impl<'a> SynthesizedBus<'a> {
 
 impl SignalBus for SynthesizedBus<'_> {
     fn sample(&self, name: &str) -> Sample {
-        match name {
-            "bpm" => oscillator_derived(self.oscillator.bpm()),
-            "beat" => oscillator_derived(pulse(self.oscillator.beat_phase())),
-            "bar" => oscillator_derived(pulse(self.oscillator.bar_phase())),
-            "energy" => low_confidence(energy(self.oscillator.t())),
-            // **No `"noise"` here, deliberately.** A noise generator has kind,
-            // rate, stream and octaves to say, and `sample` takes a name and
-            // nothing else — so noise is reached through [`NoiseConfig`], and
-            // a `bind` record whose `signal` is `"noise"` names the generator
-            // it declares. Answering the same name here too would give it two
-            // meanings, at two confidences, resolved by which consumer asked;
-            // `docs/ir-spec.md` requires two vocabularies that meet in one
-            // decoder to be "disjoint by name", not merely disjoint in
-            // practice. The bus stays complete either way: the arm below
-            // answers every name it does not know.
-            _ => match band_index(name) {
-                Some(index) => low_confidence(band(self.oscillator.t(), index)),
-                None => Sample::synthesized(0.0),
-            },
+        self.sample_id(SignalId::resolve(name))
+    }
+
+    fn sample_id(&self, id: SignalId) -> Sample {
+        match id {
+            SignalId::Bpm => oscillator_derived(self.oscillator.bpm()),
+            SignalId::Beat => oscillator_derived(pulse(self.oscillator.beat_phase())),
+            SignalId::Bar => oscillator_derived(pulse(self.oscillator.bar_phase())),
+            SignalId::Energy => low_confidence(energy(self.oscillator.t())),
+            SignalId::Onset => Sample::synthesized(0.0),
+            SignalId::Band(index) => low_confidence(band(self.oscillator.t(), index as u32)),
+            SignalId::Custom(_) => Sample::synthesized(0.0),
         }
     }
 }
@@ -121,21 +114,6 @@ fn band(t: f64, index: u32) -> f32 {
     let phase_offset = index as f64 * 1.9;
     let raw = (t * frequency + phase_offset).sin();
     raw as f32 * 0.5 + 0.5
-}
-
-/// Recognizes `"band"` (index 0) and `"band<N>"` for a decimal `N`. Anything
-/// else — including near-misses like `"banding"` — is not a band signal and
-/// falls through to the bus's unknown-name case, rather than guessing.
-///
-/// Shared with [`measured`](crate::measured) rather than copied into it: a
-/// measured `band3` and an invented one have to be the same name, or a binding
-/// would change which signal it means when a microphone appears.
-pub(crate) fn band_index(name: &str) -> Option<u32> {
-    let rest = name.strip_prefix("band")?;
-    if rest.is_empty() {
-        return Some(0);
-    }
-    rest.parse().ok()
 }
 
 #[cfg(test)]

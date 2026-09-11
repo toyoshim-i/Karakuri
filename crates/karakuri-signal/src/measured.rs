@@ -50,8 +50,8 @@
 //! parameter alone. Bind `beat` if a pulse with no microphone behind it is what
 //! is wanted.
 
-use crate::bus::{band_index, SynthesizedBus};
-use crate::{Sample, SignalBus};
+use crate::bus::SynthesizedBus;
+use crate::{Sample, SignalBus, SignalId};
 
 /// The signal name for a broadband level. Already a bus name.
 pub const ENERGY: &str = "energy";
@@ -138,6 +138,25 @@ impl AudioFrame {
         }
     }
 
+    /// Whether this frame is the one that answers `id`, and with what.
+    pub fn provides_id(&self, id: SignalId) -> Option<Sample> {
+        let value = match id {
+            SignalId::Energy => self.energy,
+            SignalId::Onset => self.onset,
+            SignalId::Band(index) => {
+                if usize::from(index) >= usize::from(self.band_count) {
+                    return None;
+                }
+                self.bands[usize::from(index)]
+            }
+            _ => return None,
+        };
+        Some(Sample {
+            value: clamp_unit(value),
+            confidence: clamp_unit(self.confidence),
+        })
+    }
+
     /// Whether this frame is the one that answers `name`, and with what.
     ///
     /// The `Option` is a **provider's** question — "is this one of mine?" — and
@@ -145,21 +164,7 @@ impl AudioFrame {
     /// the layer beneath, and that layer answers every name. The bus is still
     /// complete and still returns a `Sample` rather than an `Option`.
     pub fn provides(&self, name: &str) -> Option<Sample> {
-        let value = match name {
-            ENERGY => self.energy,
-            ONSET => self.onset,
-            _ => {
-                let index = band_index(name)? as usize;
-                if index >= usize::from(self.band_count) {
-                    return None;
-                }
-                self.bands[index]
-            }
-        };
-        Some(Sample {
-            value: clamp_unit(value),
-            confidence: clamp_unit(self.confidence),
-        })
+        self.provides_id(SignalId::resolve(name))
     }
 }
 
@@ -195,9 +200,13 @@ impl<'a> MeasuredBus<'a> {
 
 impl SignalBus for MeasuredBus<'_> {
     fn sample(&self, name: &str) -> Sample {
+        self.sample_id(SignalId::resolve(name))
+    }
+
+    fn sample_id(&self, id: SignalId) -> Sample {
         self.measured
-            .and_then(|frame| frame.provides(name))
-            .unwrap_or_else(|| self.beneath.sample(name))
+            .and_then(|frame| frame.provides_id(id))
+            .unwrap_or_else(|| self.beneath.sample_id(id))
     }
 }
 

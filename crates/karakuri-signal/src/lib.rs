@@ -17,11 +17,13 @@
 //! is what keeps every external coupling declarative.
 
 pub mod bus;
+pub mod id;
 pub mod measured;
 pub mod noise;
 pub mod oscillator;
 
 pub use bus::SynthesizedBus;
+pub use id::{SignalId, SignalValue, VectorSample};
 pub use measured::{AudioFrame, MeasuredBus, MAX_BANDS};
 pub use noise::{NoiseConfig, NoiseKind};
 pub use oscillator::Oscillator;
@@ -61,7 +63,23 @@ pub trait SignalBus {
     /// Sample a signal by name. An unknown name returns a synthesised value
     /// rather than an error, because the alternative is consumers that branch
     /// on existence.
-    fn sample(&self, name: &str) -> Sample;
+    fn sample(&self, name: &str) -> Sample {
+        self.sample_id(SignalId::resolve(name))
+    }
+
+    /// Sample a signal by its pre-resolved ID. Zero string hashing or comparisons
+    /// on the hot path.
+    fn sample_id(&self, id: SignalId) -> Sample;
+
+    /// Sample a vectorized signal by its ID. Defaults to wrapping the scalar
+    /// sample from [`sample_id`](SignalBus::sample_id).
+    fn sample_vector(&self, id: SignalId) -> VectorSample {
+        let s = self.sample_id(id);
+        VectorSample {
+            value: SignalValue::Scalar(s.value),
+            confidence: s.confidence,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -71,7 +89,7 @@ mod tests {
     struct Empty;
 
     impl SignalBus for Empty {
-        fn sample(&self, _name: &str) -> Sample {
+        fn sample_id(&self, _id: SignalId) -> Sample {
             Sample::synthesized(0.0)
         }
     }
@@ -83,5 +101,13 @@ mod tests {
         let s = Empty.sample("no_such_signal");
         assert_eq!(s.value, 0.0);
         assert_eq!(s.confidence, 0.0);
+
+        let s_id = Empty.sample_id(SignalId::Custom(1234));
+        assert_eq!(s_id.value, 0.0);
+        assert_eq!(s_id.confidence, 0.0);
+
+        let vs = Empty.sample_vector(SignalId::Custom(1234));
+        assert_eq!(vs.confidence, 0.0);
+        assert_eq!(vs.value, SignalValue::Scalar(0.0));
     }
 }
