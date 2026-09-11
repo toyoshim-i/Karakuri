@@ -247,7 +247,7 @@ number; new records continue from the end.
 | [ADR-0217](0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md) | The counting allocator ships, because a written number nothing checks goes stale | 2026-08-29 | accepted |
 | [ADR-0218](0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md) | Re-anchoring is `SetSync` naming the mode the deck is in, and a cycle cannot say it | 2026-08-29 | accepted |
 | [ADR-0219](0219-the-crossfader-spans-the-selection-and-the-one-after-it.md) | The crossfader spans the selection and the one after it | 2026-08-29 | superseded |
-| [ADR-0220](0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) | The key column is the instrument's keyboard, and the CLI's keys are its own | 2026-08-29 | accepted |
+| [ADR-0220](0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) | The key column is the instrument's keyboard, and the CLI's keys are its own | 2026-08-29 | **superseded by ADR-0346** |
 | [ADR-0221](0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md) | An arrangement is named by the operator and kept in a fourth place | 2026-08-29 | accepted |
 | [ADR-0222](0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md) | A sequencer lane is a fifth route and not a binding | 2026-08-29 | accepted |
 | [ADR-0223](0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md) | A wildcard write is refused where the nodes it lands on disagree | 2026-08-30 | accepted |
@@ -371,6 +371,7 @@ number; new records continue from the end.
 | [ADR-0343](0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md) | The grammar reaches all nine bays, and `space` on a bay is the fold | 2026-09-10 | accepted |
 | [ADR-0344](0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md) | `slot` is disambiguated into three types, and ADR-0049's wait is over | 2026-09-11 | accepted |
 | [ADR-0345](0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md) | A file that crosses 1000 lines gets a nudge, not a gate | 2026-09-11 | accepted |
+| [ADR-0346](0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md) | The GUI and CLI keymaps diverged in scaffolding and converge on the operations page | 2026-09-11 | accepted |
 
 ## Retired numbers
 
