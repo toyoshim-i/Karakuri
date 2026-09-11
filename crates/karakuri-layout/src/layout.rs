@@ -15,7 +15,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::spec::Spec;
-use crate::{Axis, Point, Rect, Sizing};
+use crate::{Axis, LayoutSplit, Point, Rect, Sizing};
 
 /// A handle into a [`Layout`]'s arena.
 ///
@@ -49,6 +49,8 @@ enum Kind {
         /// nobody addresses, and the ones that are — the console's left pane
         /// is one — are addressed by exactly the same name a view is.
         name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        split_identity: Option<LayoutSplit>,
         axis: Axis,
         divider: f32,
         children: Vec<NodeId>,
@@ -574,6 +576,86 @@ impl Layout {
     /// arrangement left unnamed.
     pub fn name(&self, id: NodeId) -> Option<&str> {
         self.node(id.0).name()
+    }
+
+    /// Resolve a typed layout split to its id.
+    pub fn find_split(&self, split: &LayoutSplit) -> Option<NodeId> {
+        match split {
+            LayoutSplit::RootColumn => {
+                if let Some(id) = self.arrangement.nodes.iter().position(|n| match &n.kind {
+                    Kind::Split {
+                        split_identity: Some(s),
+                        ..
+                    } => s == split,
+                    _ => false,
+                }) {
+                    return Some(NodeId(id));
+                }
+                if matches!(self.node(self.arrangement.root.0).kind, Kind::Split { .. }) {
+                    Some(self.arrangement.root)
+                } else {
+                    None
+                }
+            }
+            LayoutSplit::BodyRow => {
+                if let Some(id) = self.arrangement.nodes.iter().position(|n| match &n.kind {
+                    Kind::Split {
+                        split_identity: Some(s),
+                        ..
+                    } => s == split,
+                    _ => false,
+                }) {
+                    Some(NodeId(id))
+                } else {
+                    let root = self.arrangement.root;
+                    let children = self.children(root);
+                    if children.len() > 1
+                        && matches!(
+                            self.node(children[1].0).kind,
+                            Kind::Split {
+                                axis: Axis::Row,
+                                ..
+                            }
+                        )
+                    {
+                        Some(children[1])
+                    } else {
+                        None
+                    }
+                }
+            }
+            LayoutSplit::Named(name) => self
+                .arrangement
+                .nodes
+                .iter()
+                .position(|n| match &n.kind {
+                    Kind::Split {
+                        split_identity: Some(LayoutSplit::Named(n)),
+                        ..
+                    } => n == name,
+                    Kind::Split { name: Some(n), .. } => n == name,
+                    _ => false,
+                })
+                .map(NodeId),
+        }
+    }
+
+    /// Resolve a typed layout split to its id.
+    pub fn split(&self, split: LayoutSplit) -> Option<NodeId> {
+        self.find_split(&split)
+    }
+
+    /// The typed split identity of a node, if it is a split with one.
+    pub fn split_identity(&self, id: NodeId) -> Option<&LayoutSplit> {
+        match &self.node(id.0).kind {
+            Kind::Split { split_identity, .. } => split_identity.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Whether this node is a split.
+    pub fn is_split(&self, id: NodeId) -> bool {
+        matches!(self.node(id.0).kind, Kind::Split { .. })
     }
 
     /// A split's children in order, or an empty slice for a view. A child
@@ -1733,6 +1815,7 @@ fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
         ),
         Spec::Split {
             name,
+            split_identity,
             axis,
             divider,
             children,
@@ -1744,6 +1827,7 @@ fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
         } => (
             Kind::Split {
                 name,
+                split_identity,
                 axis,
                 divider,
                 children: Vec::new(),
