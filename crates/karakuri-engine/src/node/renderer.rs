@@ -345,7 +345,13 @@ impl Renderer {
         if !fullscreen {
             p.vec2("viewport", view.viewport);
         }
-        super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
+        super::write_params(
+            &mut p,
+            &self.uniform_layout,
+            &self.param_names,
+            view.param,
+            view.param_value,
+        );
         // **The spliced field's params, written by every caller.** A field has
         // no node and therefore no uniform of its own; each procedure that
         // evaluates it carries them in its own and writes the same answer.

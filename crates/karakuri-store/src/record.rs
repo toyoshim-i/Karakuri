@@ -164,6 +164,60 @@ pub enum Value {
     Scalar(f32),
     Vec2([f32; 2]),
     Vec3([f32; 3]),
+    Vec4([f32; 4]),
+    Color([f32; 4]),
+}
+
+impl Value {
+    pub fn components(&self) -> &[f32] {
+        match self {
+            Value::Scalar(v) => std::slice::from_ref(v),
+            Value::Vec2(v) => v.as_slice(),
+            Value::Vec3(v) => v.as_slice(),
+            Value::Vec4(v) => v.as_slice(),
+            Value::Color(v) => v.as_slice(),
+        }
+    }
+
+    pub fn as_slice(&self) -> &[f32] {
+        self.components()
+    }
+
+    pub fn len(&self) -> usize {
+        self.components().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
+    }
+
+    pub fn get(&self, index: usize) -> Option<f32> {
+        self.components().get(index).copied()
+    }
+}
+
+impl From<f32> for Value {
+    fn from(v: f32) -> Self {
+        Value::Scalar(v)
+    }
+}
+
+impl From<[f32; 2]> for Value {
+    fn from(v: [f32; 2]) -> Self {
+        Value::Vec2(v)
+    }
+}
+
+impl From<[f32; 3]> for Value {
+    fn from(v: [f32; 3]) -> Self {
+        Value::Vec3(v)
+    }
+}
+
+impl From<[f32; 4]> for Value {
+    fn from(v: [f32; 4]) -> Self {
+        Value::Vec4(v)
+    }
 }
 
 /// **One node of a Set, as a value rather than as two fields beside each
@@ -3115,5 +3169,49 @@ mod tests {
             v: 1
         }
         .is_set_state());
+    }
+
+    #[test]
+    fn value_helper_methods_and_variants() {
+        let s = Value::Scalar(1.5);
+        assert_eq!(s.len(), 1);
+        assert_eq!(s.components(), &[1.5]);
+        assert_eq!(s.as_slice(), &[1.5]);
+        assert_eq!(s.get(0), Some(1.5));
+        assert_eq!(s.get(1), None);
+        assert!(!s.is_empty());
+
+        let v2 = Value::Vec2([1.0, 2.0]);
+        assert_eq!(v2.len(), 2);
+        assert_eq!(v2.components(), &[1.0, 2.0]);
+        assert_eq!(v2.get(0), Some(1.0));
+        assert_eq!(v2.get(1), Some(2.0));
+        assert_eq!(v2.get(2), None);
+
+        let v3 = Value::Vec3([1.0, 2.0, 3.0]);
+        assert_eq!(v3.len(), 3);
+        assert_eq!(v3.components(), &[1.0, 2.0, 3.0]);
+        assert_eq!(v3.get(2), Some(3.0));
+        assert_eq!(v3.get(3), None);
+
+        let v4 = Value::Vec4([1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(v4.len(), 4);
+        assert_eq!(v4.components(), &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(v4.get(3), Some(4.0));
+        assert_eq!(v4.get(4), None);
+
+        let col = Value::Color([0.1, 0.2, 0.3, 1.0]);
+        assert_eq!(col.len(), 4);
+        assert_eq!(col.components(), &[0.1, 0.2, 0.3, 1.0]);
+        assert_eq!(col.get(0), Some(0.1));
+
+        // Serde round-trip
+        let serialized = serde_json::to_string(&v4).unwrap();
+        assert_eq!(serialized, "[1.0,2.0,3.0,4.0]");
+        let deserialized: Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, v4);
+
+        let col_serialized = serde_json::to_string(&col).unwrap();
+        assert_eq!(col_serialized, "[0.1,0.2,0.3,1.0]");
     }
 }

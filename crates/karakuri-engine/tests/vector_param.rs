@@ -24,7 +24,7 @@
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
 mod gpu {
-    use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
+    use karakuri_engine::{Gpu, Layer, NodeAddress, Present, Set, Signals, Value, VideoSource};
     use karakuri_ir::typed::Checked;
 
     const W: u32 = 64;
@@ -267,5 +267,113 @@ proc mixed {
             };
             assert_eq!(control.range, want, "{} has the wrong range", control.name);
         }
+    }
+
+    /// **Setting a vector parameter atomically updates the uniform buffer.**
+    ///
+    /// The bare name `"glow"` can be written atomically as a `Value::Vec3`,
+    /// updating the node's typed vector storage and syncing component parameters,
+    /// and packing directly into the uniform buffer with bit-exact results.
+    #[test]
+    fn setting_a_vector_param_atomically_updates_the_uniform_buffer() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut set = build(&gpu, GLOW);
+
+        let written = set.set_param_value(None, "glow", Value::Vec3([0.25, 0.5, 0.75]));
+        assert_eq!(written, 1, "setting `glow` as Vec3 should update 1 node");
+
+        assert_eq!(
+            set.param_value("glow"),
+            Some(Value::Vec3([0.25, 0.5, 0.75]))
+        );
+
+        assert_eq!(set.param("glow.x"), Some(0.25));
+        assert_eq!(set.param("glow.y"), Some(0.5));
+        assert_eq!(set.param("glow.z"), Some(0.75));
+
+        let [r, g, b, a] = texel(&gpu, &mut set);
+        assert_eq!([r, g, b, a], [0.25, 0.5, 0.75, 1.0]);
+    }
+
+    /// **Setting an addressed vector parameter atomically updates uniform.**
+    ///
+    /// Addressing a specific node with `NodeAddress { layer, index }` works for
+    /// vector parameters, correctly matching the layer and slot.
+    #[test]
+    fn setting_an_addressed_vector_param_atomically_updates_uniform() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut set = build(&gpu, GLOW);
+
+        let address = NodeAddress {
+            layer: Layer::L4,
+            index: 0,
+        };
+        let written = set.set_param_value(Some(address), "glow", Value::Vec3([1.0, 2.0, 3.5]));
+        assert_eq!(written, 1, "addressed write to L4:0 should succeed");
+
+        assert_eq!(
+            set.param_value_at_address(address, "glow"),
+            Some(Value::Vec3([1.0, 2.0, 3.5]))
+        );
+        assert_eq!(
+            set.param_value_at(karakuri_ir::Kind::L4, 0, "glow"),
+            Some(Value::Vec3([1.0, 2.0, 3.5]))
+        );
+
+        let [r, g, b, a] = texel(&gpu, &mut set);
+        assert_eq!([r, g, b, a], [1.0, 2.0, 3.5, 1.0]);
+
+        // Writing to a layer without this parameter refuses the write.
+        let wrong_address = NodeAddress {
+            layer: Layer::L2,
+            index: 0,
+        };
+        assert_eq!(
+            set.set_param_value(Some(wrong_address), "glow", Value::Vec3([0.0, 0.0, 0.0])),
+            0
+        );
+    }
+
+    /// **Atomic and component writes interoperate seamlessly.**
+    ///
+    /// Writing an atomic vector updates individual components. Subsequently
+    /// mutating a single component updates the vector representation, and vice versa.
+    /// Incompatible arities are safely refused without corrupting existing state.
+    #[test]
+    fn atomic_and_component_writes_interoperate_seamlessly() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut set = build(&gpu, GLOW);
+
+        // 1. Initial atomic write
+        set.set_param_value(None, "glow", Value::Vec3([0.25, 0.5, 0.75]));
+        assert_eq!(texel(&gpu, &mut set), [0.25, 0.5, 0.75, 1.0]);
+
+        // 2. Mutate single component via set_param("glow.y", 2.0)
+        assert_eq!(set.set_param("glow.y", 2.0), 1);
+        assert_eq!(
+            set.param_value("glow"),
+            Some(Value::Vec3([0.25, 2.0, 0.75])),
+            "param_value must reflect component mutation"
+        );
+        assert_eq!(texel(&gpu, &mut set), [0.25, 2.0, 0.75, 1.0]);
+
+        // 3. Mutate single component via set_param_value("glow.x", Value::Scalar(1.0))
+        assert_eq!(set.set_param_value(None, "glow.x", Value::Scalar(1.0)), 1);
+        assert_eq!(set.param_value("glow"), Some(Value::Vec3([1.0, 2.0, 0.75])));
+        assert_eq!(texel(&gpu, &mut set), [1.0, 2.0, 0.75, 1.0]);
+
+        // 4. Incompatible arity should be refused (return 0) and not corrupt existing values
+        assert_eq!(
+            set.set_param_value(None, "glow", Value::Vec2([0.1, 0.2])),
+            0,
+            "Vec2 write to Vec3 parameter must be refused"
+        );
+        assert_eq!(
+            set.set_param_value(None, "glow", Value::Scalar(5.0)),
+            0,
+            "Scalar write to Vec3 parameter must be refused"
+        );
+        assert_eq!(set.param_value("glow"), Some(Value::Vec3([1.0, 2.0, 0.75])));
+        assert_eq!(texel(&gpu, &mut set), [1.0, 2.0, 0.75, 1.0]);
     }
 }

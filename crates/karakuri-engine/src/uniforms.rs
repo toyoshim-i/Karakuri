@@ -133,6 +133,15 @@ impl<'a> UniformPacker<'a> {
         self
     }
 
+    pub fn vec4(&mut self, name: &str, v: [f32; 4]) -> &mut Self {
+        let mut b = [0u8; 16];
+        for (i, x) in v.iter().enumerate() {
+            b[i * 4..i * 4 + 4].copy_from_slice(&x.to_le_bytes());
+        }
+        self.write(name, "vec4<f32>", &b);
+        self
+    }
+
     pub fn mat4(&mut self, name: &str, m: [[f32; 4]; 4]) -> &mut Self {
         let mut b = [0u8; 64];
         for (c, col) in m.iter().enumerate() {

@@ -1446,11 +1446,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     };
     for (at, key, value) in param_records {
         let tys = declared_as(at, &key);
-        let components: Vec<f32> = match value {
-            Value::Scalar(v) => vec![v],
-            Value::Vec2(v) => v.to_vec(),
-            Value::Vec3(v) => v.to_vec(),
-        };
+        let components: Vec<f32> = value.components().to_vec();
         // The first declaration this write reaches that is a vector, if any —
         // which is only used to name the components in a refusal, so the first
         // is as good as any. A wildcard reaches every node declaring the name,

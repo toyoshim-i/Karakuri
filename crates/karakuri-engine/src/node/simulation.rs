@@ -578,7 +578,13 @@ impl Simulation {
             p.f32("dt", tick.dt)
                 .u32("capacity", self.capacity)
                 .u32("seed_salt", self.seed_salt);
-            super::write_params(&mut p, &self.uniform_layout, &self.param_names, tick.param);
+            super::write_params(
+                &mut p,
+                &self.uniform_layout,
+                &self.param_names,
+                tick.param,
+                tick.param_value,
+            );
             // See `View::field_params`: a field has no uniform of its own.
             super::write_field_params(
                 &mut p,

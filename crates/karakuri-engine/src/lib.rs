@@ -72,6 +72,7 @@ pub use estimate::{Estimate, Fit, Unfit, PREPARATION_RESOLUTION};
 pub use frame::{compose, Committed, Look, Outcome, Sink, Skip, WindowSink};
 pub use governor::{Basis, Decision, Estimated, FloorRead, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};
+pub use karakuri_store::record::{Layer, NodeAddress, Value};
 pub use master::{Chain, Clock, Cut, Slot, SlotError, SlotSpec};
 pub use meter::{Level, Meters};
 pub use pass::{BoundImagePass, ImagePass, RenderPassNode, RetentionManager};
