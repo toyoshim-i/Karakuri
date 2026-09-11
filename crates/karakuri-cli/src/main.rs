@@ -29,9 +29,12 @@
 /// *"`Clock` moves and `Live` does not"* — and this is the move.
 use clock::Clock;
 use karakuri_environment::{
-    audio, clock, compile, history, mcp, midi, mix, places, render, scratch, session, setfile,
+    audio, clock, compile, history, midi, mix, places, render, scratch, session, setfile,
     tempo_source, watch,
 };
+// The MCP server now lives in its own crate. Aliased to `mcp` so every
+// `mcp::` call site below is unchanged.
+use karakuri_mcp as mcp;
 // **Brought into scope rather than reached through their modules**, because
 // each was written here and every call site below is the one it already was.
 // `Names` crossed with `setfile` in the second slice; the rest crossed with the
@@ -6242,7 +6245,16 @@ impl Live {
         // of [`accepted_save`]'s doc lives: `playing_values` below is the one
         // read here that needs a `Deck`, and the accept has to be on the side
         // of it a test can reach.
-        let id = accepted_save(slot, asked, id, &sources, &self.store_root, reply.as_ref());
+        let id = accepted_save(
+            slot,
+            asked,
+            id,
+            &sources,
+            &self.store_root,
+            reply
+                .as_ref()
+                .map(|r| r as &dyn karakuri_environment::SaveReply),
+        );
         let values = playing_values(self.deck.slot(EngineSlot(slot as u8)).set(), &self.edges);
         let save = Save {
             slot,

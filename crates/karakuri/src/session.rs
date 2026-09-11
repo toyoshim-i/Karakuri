@@ -18,7 +18,10 @@ use crate::{
 use karakuri_console::view;
 use karakuri_engine::set::Layering;
 use karakuri_engine::{DeckSlot as EngineSlot, Gpu, HotSwap, Set, DEFAULT_BUDGET_MS};
-use karakuri_environment::{history, mcp, session, setfile, watch, Asked};
+use karakuri_environment::{history, session, setfile, watch, Asked};
+// The MCP server now lives in its own crate. Aliased to `mcp` so every
+// `mcp::` call site below is unchanged.
+use karakuri_mcp as mcp;
 use karakuri_store::store::Store;
 use std::time::Instant;
 
@@ -423,7 +426,7 @@ fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
 /// **Every edge a client asked for on one frame, applied to the run's wiring and
 /// answered.**
 ///
-/// This is `karakuri_environment::mcp::WireRequest`'s three points, and it is a
+/// This is `karakuri_mcp::WireRequest`'s three points, and it is a
 /// free function so that all three are checkable without a window, a GPU or a
 /// `Deck` — the wiring, the re-aim and the sentence are the whole of what this
 /// decides, and none of them needs one. `karakuri-cli`'s `rewired` is the same
@@ -631,7 +634,7 @@ pub(crate) fn watched(
     // **The run's one published layout**, made in [`main`] beside the opening
     // and for the same reason — see [`Aiming::pointing`]. This slot's row of it
     // is written here, at construction, and again on every re-point.
-    pointing: karakuri_environment::mcp::Slots,
+    pointing: karakuri_mcp::Slots,
     // **The run's one history**, seeded in [`main`] from the same files this
     // slot watches, and `None` for a harness with no store — the same
     // condition `stored` above is `None` under, and a separate argument
@@ -757,7 +760,7 @@ pub(crate) struct Keeping {
     /// whole of what a model reaches this program through.
     ///
     /// Told what the swap machinery said, handed what a client asked the render
-    /// loop for, and nothing else — see [`karakuri_environment::mcp`]. It is
+    /// loop for, and nothing else — see [`karakuri_mcp`]. It is
     /// bound in [`main`], before the window, for the reason the working copies
     /// are made there: `serve` binds a socket and can fail, and a failure has to
     /// be a sentence on a terminal rather than a panic inside a `winit`
@@ -975,13 +978,21 @@ impl Keeping {
         // a file name.
         if let Some(said) = id
             .as_deref()
-            .and_then(|id| karakuri_environment::mcp::checked_id(id).err())
+            .and_then(|id| karakuri_mcp::checked_id(id).err())
         {
             println!("keep: {said}");
             return refused(reply, said);
         }
-        let id =
-            karakuri_environment::accepted_save(slot, asked, id, &sources, root, reply.as_ref());
+        let id = karakuri_environment::accepted_save(
+            slot,
+            asked,
+            id,
+            &sources,
+            root,
+            reply
+                .as_ref()
+                .map(|r| r as &dyn karakuri_environment::SaveReply),
+        );
         let values = playing_values(
             engine.deck.slot(EngineSlot(slot as u8)).set(),
             &engine.edges,
@@ -1094,7 +1105,7 @@ impl Keeping {
         // the console emits what was typed including the empty string.
         if let Some(said) = id
             .as_deref()
-            .and_then(|id| karakuri_environment::mcp::checked_id(id).err())
+            .and_then(|id| karakuri_mcp::checked_id(id).err())
         {
             println!("keep: {said}");
             return refused(reply, said);

@@ -1,0 +1,47 @@
+[package]
+name = "karakuri-mcp"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# **The Model Context Protocol server, on its own.** Split out of
+# `karakuri-environment` because it was that crate's single largest and
+# fastest-growing file and, unlike the watcher/MIDI/mixer group ADR-0215
+# gathered there, a one-directional consumer of the rest of it: nothing in
+# `karakuri-environment` calls back into this file except through the
+# `SaveReply` trait below, which exists for exactly that reason.
+[dependencies]
+# **Everything this server reads or rewrites that is not itself.** A Set
+# file, a compile pass, an artifact's card, the edit history and a slot's
+# watcher are all still `karakuri-environment`'s — this crate only serves
+# them over a socket. The crate-root sentinels (`no_such_slot`,
+# `nothing_to_save`, `accepted_save`, `Opening`, `Asked`, `SAVE_WAIT`) are
+# reached the same way, because they are nobody's module there either.
+karakuri-environment = { version = "0.1.0", path = "../karakuri-environment" }
+# `Checked` and `Kind`: the compiler's own vocabulary, which a tool result
+# reads off a `Set` node and a `write_procedure` call checks a rewrite
+# against.
+karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
+# `Operation`, `NodeAddress`, `InputPort` and `gate`: the vocabulary this
+# server names its seven tools in, and the class a route is audited under.
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+# `Hash`, `Line`, `Layer`/`Record` and `Store`/`StoreError`: what a node's
+# artifact is addressed by, the wire a Set file and a walk are read and
+# written in, and the store both live in.
+karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
+# `karakuri_engine::set::{Edge, Layering, Wiring, SetError}` and
+# `camera::Orbit`: `read_set` validates a candidate Set the same way a launch
+# does, and `wire_input` states an edge in the engine's own vocabulary for it.
+karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
+# The wire format every tool call and every tool result is spoken in.
+serde_json.workspace = true
+
+[dev-dependencies]
+# `karakuri_operation_record::written` is asserted against in
+# `no_tool_writes_a_record_where_it_is_asked`, so that a new tool without a
+# `written` arm fails this crate's own suite rather than a caller's.
+karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
+# The wire-protocol and slot-resolution tests round-trip a Set through a real
+# store and a real history directory.
+tempfile = "3"

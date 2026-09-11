@@ -49,6 +49,12 @@ karakuri-environment = { version = "0.1.0", path = "../karakuri-environment" }
 # there is no shorter route to a `Checked`.
 karakuri-ir.workspace = true
 
+# **The MCP server.** Split out of `karakuri-environment` because it is the
+# crate's single largest, fastest-growing module and a one-directional
+# consumer of everything else in it — isolating it bounds how much of this
+# binary's compile is invalidated by an edit there.
+karakuri-mcp = { version = "0.1.0", path = "../karakuri-mcp" }
+
 # The arrangement's own vocabulary — a `Point`, a `NodeId`, an `Axis` — which
 # the panel speaks and this window has to speak back.
 karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
