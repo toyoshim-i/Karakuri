@@ -306,6 +306,7 @@ proc wide_points {
             set.render(&mut encoder, hdr, 1);
             let at_bottom = set.capacity();
             queue.submit([encoder.finish()]);
+            set.commit();
 
             self.frame_capacities.push((at_top, at_bottom));
             // See the module doc: standing in for vsync, and what makes the
@@ -1422,6 +1423,7 @@ proc fountain {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         set.render(&mut encoder, view, steps);
         gpu.queue.submit([encoder.finish()]);
+        set.commit();
         gpu.device
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("poll");

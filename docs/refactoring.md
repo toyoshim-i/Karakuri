@@ -40,7 +40,7 @@ graph TD
         P9["P9: Dismantle karakuri/src/main.rs into App Modules<br/><b>[DONE]</b>"]
         P10["P10: Eliminate panel::Op & Decouple from HTML Docs<br/><b>[DONE]</b>"]
         P11["P11: Untangle karakuri-environment Cycles & Align CLI<br/><b>[DONE]</b>"]
-        P12["P12: Implement True Two-Phase Atomic Frame Commit"]
+        P12["P12: Implement True Two-Phase Atomic Frame Commit<br/><b>[DONE]</b>"]
         P13["P13: Unify Geometry & L5 Image Pass Execution"]
     end
 
@@ -182,26 +182,21 @@ Meanwhile, `karakuri-cli` had 8 keys performing different actions compared to th
 
 ---
 
-## 12. True Atomic Frame Commit (Completing P6)
+## 12. True Atomic Frame Commit (Completing P6) [DONE]
 
 ### Audit Reality
-[`crates/karakuri-engine/src/deck.rs#L78-L90`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri-engine/src/deck.rs#L78-L90) still contains the known corruption hole:
-- During `Frame::render`, `self.deck.signals.advance` and `set.prepare` advance simulation clocks and buffer write queues immediately.
-- `set.render` flips `self.parity` on the CPU before the command buffer is even submitted to the GPU.
-- If the frame early-returns, panics, or drops the encoder unsubmitted (via `mem::forget`), host simulation state permanently desynchronizes from VRAM element buffers.
+[`crates/karakuri-engine/src/deck.rs#L78-L90`](file:///Users/toyoshim/Work/GitHub/Karakuri/Karakuri/crates/karakuri-engine/src/deck.rs#L78-L90) previously contained a known state corruption vulnerability:
+- During `Frame::render`, `self.deck.signals.advance` and `set.prepare` advanced simulation clocks and buffer write queues immediately on the CPU.
+- `set.render` flipped `self.parity` on the CPU before the command buffer was submitted to the GPU.
+- If the frame early-returned, panicked, or dropped the encoder unsubmitted (e.g. via `mem::forget`), host simulation state permanently desynchronized from VRAM element buffers.
 
-### Refactoring Plan
-- **Two-Phase Commit in `Set` and `Deck`**:
-  - `prepare` and `render` must record intended state transitions into a staged transaction:
-    ```rust
-    pub struct StagedCommit {
-        next_parity: bool,
-        steps_delta: u8,
-        clock_advance: (u64, f32),
-    }
-    ```
-  - Only when `Frame::submit()` executes and `queue.submit(...)` succeeds are the staged transitions committed to `Set` and `Deck`.
-  - An aborted or forgotten frame discards the staged transaction without corrupting the running Set.
+### Refactoring Implementation
+- **Two-Phase Commit across `VideoSource`, `Simulation`, `Set`, and `Deck`**:
+  - `VideoSource` trait: Added `fn commit(&mut self)` and `fn discard(&mut self)` lifecycle methods with default no-op implementations.
+  - `Simulation`: Staged parity (`staged_parity: Option<bool>`) and spawn fractional carry (`staged_spawn_carry: Option<f32>`). `Simulation::prepare` writes step arguments with prospective carry without mutating `spawn_carry`. `Simulation::record` executes ping-pong compute passes against prospective ping-pong indices and stages the final parity.
+  - `Set`: Staged step delta (`staged_delta: u64`). `Set::prepare_on` computes uniform timestamps (`t_at`) from staged advance without mutating host `steps_taken`. `Set::commit()` commits `steps_taken += staged_delta`, resets `staged_delta = 0`, and commits all underlying source simulations. `Set::discard()` rolls back staged state without altering committed state.
+  - `Deck` & `Frame`: `Frame::render` stages session signals advance (`staged_signals: Option<Signals>`) without mutating `deck.signals`. In `Frame::submit()` (invoked by `Frame::finish()` or on drop), after `queue.submit([encoder.finish()])` succeeds, staged signals are committed to `self.deck.signals` and all slot sets are committed. If `Frame::discard()` is called or if uncommitted state exists when `Deck::begin_frame` is called, all staged mutations are discarded.
+  - **Verification**: Added `forgetting_a_frame_does_not_corrupt_set_or_desync_parity_and_clock` in `crates/karakuri-engine/tests/deck.rs` explicitly verifying that dropping a frame via `std::mem::forget` leaves host clocks, parities, and signals uncommitted, and that subsequent frames render cleanly without desynchronization.
 
 ---
 
@@ -330,7 +325,7 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 2A** | **P9** | **Dismantle `main.rs` (32.8k lines)** | **DONE** | Decomposed `main.rs` (32.5k -> 819 lines) into `app`, `engine_bridge`, `readout`, `launch`, `gfx`, `tests/` |
 | **Phase 2A** | **P10** | **Eliminate `panel::Op`** | **DONE** | Bridge `panel::Op` into vocabulary; decouple code from manual HTML state |
 | **Phase 2A** | **P11** | **Untangle Environment & Align CLI** | **DONE** | Broke `setfile` ↔ `compile` cycles via `ProcedureCompiler` & `meta`; aligned CLI keys & deprecated collisions |
-| **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **Urgent** | Stage simulation clock & parity until `queue.submit()` succeeds |
+| **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **DONE** | Two-phase atomic frame commit across Simulation, Set, Deck, and VideoSource |
 | **Phase 2A** | **P13** | **Unify Geometry & L5 Image Passes** | **Urgent** | Merge `master.rs` L5 chain and Set passes into unified `ImagePass` |
 | **Phase 2B** | **P14** | **Typed Parameter Storage** | Planned | First-class `ParamValue`; eliminate `.x/.y/.z` string splitting |
 | **Phase 2B** | **P15** | **Transient Render Graph (DAG)** | Planned | Declarative pass graph; transient VRAM aliasing; auto-culling |

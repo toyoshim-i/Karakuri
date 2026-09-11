@@ -110,11 +110,13 @@ pub(crate) struct Simulation {
     /// an integer, so the fractional remainder carries into the next substep
     /// and the long-run rate comes out exact — ir-spec, "Spawn timing".
     spawn_carry: f32,
+    staged_spawn_carry: Option<f32>,
     /// This frame's per-substep spawn counts, as [`Simulation::prepare`]
     /// computed them. [`Simulation::record`] needs them to size the direct
     /// `spawn` dispatch; the shaders read the same numbers out of `step_args`.
     step_spawn_counts: [u32; MAX_STEPS as usize],
     parity: bool,
+    staged_parity: Option<bool>,
 
     element_layout: ElementLayout,
     element_buf: Pair,
@@ -459,8 +461,10 @@ impl Simulation {
             refused_by_device,
             seed_base: 0,
             spawn_carry: 0.0,
+            staged_spawn_carry: None,
             step_spawn_counts: [0; MAX_STEPS as usize],
             parity: false,
+            staged_parity: None,
             element_layout,
             element_buf,
             alive_buf,
@@ -553,6 +557,7 @@ impl Simulation {
     ///
     /// [`Set::rewind`]: crate::set::Set::rewind
     pub(crate) fn rewind(&mut self, queue: &wgpu::Queue) {
+        self.discard();
         self.seed_base = 0;
         self.spawn_carry = 0.0;
         self.step_spawn_counts = [0; MAX_STEPS as usize];
@@ -629,10 +634,11 @@ impl Simulation {
         // policies for one precondition is how the unguarded one gets found.
         let steps = tick.steps.min(MAX_STEPS);
         let mut bytes = [0u8; MAX_STEPS as usize * step_args::STRIDE as usize];
+        let mut carry = self.spawn_carry;
         for step in 0..usize::from(steps) {
-            self.spawn_carry += rate * tick.dt;
-            let whole = self.spawn_carry.floor();
-            self.spawn_carry -= whole;
+            carry += rate * tick.dt;
+            let whole = carry.floor();
+            carry -= whole;
             let count = whole.max(0.0) as u32;
             self.step_spawn_counts[step] = count;
 
@@ -655,6 +661,7 @@ impl Simulation {
             // identity. Gaps in the sequence cost nothing.
             self.seed_base = self.seed_base.wrapping_add(count);
         }
+        self.staged_spawn_carry = Some(carry);
         queue.write_buffer(&self.step_args, 0, &bytes);
     }
 
@@ -693,8 +700,8 @@ impl Simulation {
         // Steps 1, 3 and 4 do not run for a static procedure: its live set
         // cannot change, `range` stays at `capacity` from initialization,
         // and `element` writes in place.
+        let mut parity = self.staged_parity.unwrap_or(self.parity);
         for step in 0..usize::from(steps.min(MAX_STEPS)) {
-            let parity = self.parity;
             if let Some(compaction) = &self.compaction {
                 compaction.record(encoder, parity);
             }
@@ -736,13 +743,36 @@ impl Simulation {
             }
             // What this step wrote as "next" is the next step's "prev", and
             // after the last one it is what L4 reads.
-            self.parity = !self.parity;
+            parity = !parity;
         }
+        self.staged_parity = Some(parity);
     }
 
     /// Which half of [`Geometry`]'s arrays holds what was last written.
+    /// Returns the staged parity if a frame is open, or the committed parity.
     pub(crate) fn parity(&self) -> usize {
-        usize::from(self.parity)
+        usize::from(self.staged_parity.unwrap_or(self.parity))
+    }
+
+    /// The committed parity on the host, before any unsubmitted staged flips.
+    pub(crate) fn committed_parity(&self) -> bool {
+        self.parity
+    }
+
+    /// Commit staged parity and spawn carry upon command buffer submission.
+    pub(crate) fn commit(&mut self) {
+        if let Some(p) = self.staged_parity.take() {
+            self.parity = p;
+        }
+        if let Some(c) = self.staged_spawn_carry.take() {
+            self.spawn_carry = c;
+        }
+    }
+
+    /// Discard staged parity and spawn carry if an open frame is abandoned without submission.
+    pub(crate) fn discard(&mut self) {
+        self.staged_parity = None;
+        self.staged_spawn_carry = None;
     }
 
     /// The indirect draw arguments a reader dispatches from — the only place
