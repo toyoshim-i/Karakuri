@@ -61,9 +61,13 @@ This document records the architectural smells, structural friction, and design 
     - `mod wire_tests` (lines 6,255–9,194): Socket-level integration test suite (**2,940 lines**).
     - `mod tests` (lines 9,195–10,888): In-memory unit test suite (**1,694 lines**).
 
-### Smell 5: Entangled Console Bay Composition & Widget Drawing (`view/mod.rs`)
-- **Phenomenon**: `crates/karakuri-console/src/view/mod.rs` (7,493 lines) acts as both the top-level bay dispatcher and the implementation home of shared interactive UI widgets.
-  - Reusable controls (Capsules, Pills, Grips, Head bars, Output chips) and layout math (`plan_into`, `track`, `held_inside`) are inlined directly into `mod.rs`.
+### Smell 5: Console UI Procedural Spaghetti & Three Abandoned Bays (`view/mod.rs`)
+- **Phenomenon**: While `karakuri-console`'s underlying model layer (`Layout`, `Panel`, `Focus`, `Input`, `Hover`) is rigorously structured as toolkit-independent, deterministic state machines, its view presentation layer (`view/` totaling 26,000 lines) abandons componentization in favor of hundreds of procedural, low-level painter routines (`*_into(ui, pal, ...)`).
+- **The Critical Oversight in First-Pass Triage**: When `view.rs` (24.2k lines) was originally split, 5 bay files were extracted (`inspector`, `library`, `transport`, `mixer`, `program`), but **three entire bays were left abandoned inside `view/mod.rs`**:
+  1. **Sequencer Bay** (lines 3,130–4,134, **~1,000 lines**): `Sequencer`, `LaneCard`, `SeqRow`, `Choices`, `lane_card_into`, `sequencer_into`.
+  2. **Staging Bay** (lines 4,135–4,836, **~700 lines**): `Stage`, `Candidate`, `StagingBay`, `staging_into`.
+  3. **Master Bay** (lines 2,497–3,129, **~630 lines**): `MasterRow`, `FxRow`, `Chain`, `master_into`, `fx_into`.
+- **Shared Widget Inlining**: Reusable UI controls (Head bars, Capsules, McpPills, FoldGrips, Outputs, Fader/Meter primitives) and geometry solvers (`plan_into`, `track`, `held_inside`) remain inlined in `mod.rs` (lines 800–2,496, **~1,700 lines**), preventing modular testing and creating a 7,493-line bottleneck.
 
 ---
 
@@ -71,7 +75,7 @@ This document records the architectural smells, structural friction, and design 
 
 ```mermaid
 graph TD
-    P26["<b>P26: Componentize Console UI & Shared Widgets</b><br/>Extract view/widgets and view/layout.rs [READY]"]
+    P26["<b>P26: Componentize Console UI & Extract 3 Bays</b><br/>Extract sequencer, staging, master, and widgets [READY]"]
     P25["<b>P25: Decompose karakuri-mcp Monolith</b><br/>Separate server, spelled, tools, and test suites [READY]"]
     P24["<b>P24: Decompose engine_bridge.rs by Responsibility</b><br/>Split sinks, engine, filesystem, and handlers [READY]"]
     P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [PLANNED]"]
@@ -86,21 +90,26 @@ graph TD
 
 ---
 
-### P26. Componentize Console UI & Shared Widgets (`view/widgets`) [READY FOR EXECUTION]
+### P26. Componentize Console UI, Extract 3 Bays & Shared Widgets [READY FOR EXECUTION]
 
 #### Phenomenon
-`crates/karakuri-console/src/view/mod.rs` (7,493 lines) bundles high-level layout coordination with low-level immediate-mode drawing logic for shared widgets.
+`crates/karakuri-console/src/view/mod.rs` (7,493 lines) remains a massive bottleneck because three major bays (Sequencer, Staging, Master), shared interactive widgets, and layout placement math were never extracted.
 
 #### Refactoring Plan
-1. **Extract `crates/karakuri-console/src/view/widgets/`**:
+1. **Extract the 3 Abandoned Bays into Dedicated Modules**:
+   - `crates/karakuri-console/src/view/sequencer.rs`: `Sequencer`, `LaneCard`, `SeqRow`, `Choices`, `lane_card_into`, `sequencer_into` (~1,000 lines).
+   - `crates/karakuri-console/src/view/staging.rs`: `Stage`, `Candidate`, `StagingBay`, `staging_into`, `staging_box` (~700 lines).
+   - `crates/karakuri-console/src/view/master.rs`: `MasterRow`, `FxRow`, `Chain`, `master_into`, `fx_into` (~630 lines).
+2. **Extract Shared Interactive Widgets into `crates/karakuri-console/src/view/widgets/`**:
    - `head.rs`: `Head`, `HeadWords`, `head_capsule`, `bank_capsules` (~750 lines).
-   - `pills.rs`: `McpPill`, `SinkChip`, status indicator capsules (~650 lines).
-   - `fold_grip.rs`: `FoldGrip`, `bay_grip`, divider drag targets (~500 lines).
-   - `outputs.rs`: `Outputs`, master level monitors, routing selectors (~500 lines).
-2. **Extract `crates/karakuri-console/src/view/layout.rs`**:
-   - Geometric placement helpers: `plan_into`, `track`, `held_inside`, `positive` (~400 lines).
-3. **Retain `src/view/mod.rs` as Clean Orchestrator**:
-   - Limit `mod.rs` to top-level view routing, bay assembly, and public re-exports (~800 lines).
+   - `pills.rs`: `McpPill`, `SinkChip`, status indicators (`pill_into`, `pill_at`) (~650 lines).
+   - `fold_grip.rs`: `FoldGrip`, `bay_grip`, `grip_dots` (~500 lines).
+   - `outputs.rs`: `Outputs`, `OutputsRow`, master level monitors, routing selectors (~500 lines).
+   - `fader.rs`: Common fader / meter drawing primitives (`fader_into`, `meter_into`, `fader`, `grabbed`) (~400 lines).
+3. **Extract Geometry Placement into `crates/karakuri-console/src/view/layout.rs`**:
+   - Layout helpers: `plan_into`, `track`, `held_inside`, `positive`, `filled` (~400 lines).
+4. **Retain `src/view/mod.rs` as Clean Orchestrator**:
+   - Top-level bay dispatch, `View` struct definition, and public re-exports (~600–800 lines).
 
 ---
 
@@ -202,7 +211,7 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
-| **P26** | `karakuri-console` | Extract `view/widgets/` (`head`, `pills`, `fold_grip`, `outputs`) & `view/layout.rs` | **READY** |
+| **P26** | `karakuri-console` | Extract 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **READY** |
 | **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `tests/unit.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **READY** |
 | **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **READY** |
 | **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **PLANNED** |
