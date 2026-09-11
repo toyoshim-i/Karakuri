@@ -105,7 +105,6 @@ pub mod repaint;
 pub mod room;
 pub mod view;
 
-pub use karakuri_layout::LayoutSplit;
 /// The toolkit, re-exported, and **the version pairing is this crate's to
 /// state**.
 ///
@@ -255,7 +254,6 @@ pub fn arrangement() -> Spec {
             // than the height of its contents.
             Spec::view("transport").fixed(48.0).min(48.0).max(48.0),
             Spec::row(COLUMN_DIVIDER, vec![left_pane(), centre(), right_pane()])
-                .split_identity(LayoutSplit::BodyRow)
                 .flex(1.0)
                 // The body row's minimum height is the tallest of the
                 // three columns'. **It changed hands on 2026-08-29**: it was
@@ -282,7 +280,6 @@ pub fn arrangement() -> Spec {
             Spec::view("outputs").fixed(34.0).min(34.0).max(34.0),
         ],
     )
-    .split_identity(LayoutSplit::RootColumn)
 }
 
 /// The arrangement, built. Every caller wants the [`Layout`], not the
