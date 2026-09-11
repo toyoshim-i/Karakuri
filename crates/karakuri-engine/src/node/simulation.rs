@@ -755,8 +755,8 @@ impl Simulation {
     }
 
     /// The committed parity on the host, before any unsubmitted staged flips.
-    pub(crate) fn committed_parity(&self) -> bool {
-        self.parity
+    pub(crate) fn committed_parity(&self) -> usize {
+        usize::from(self.parity)
     }
 
     /// Commit staged parity and spawn carry upon command buffer submission.

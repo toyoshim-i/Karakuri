@@ -772,6 +772,7 @@ pub struct Set {
     steps_taken: u64,
     /// Uncommitted simulation steps staged for the current frame.
     staged_delta: u64,
+    staged_edges: Option<Vec<Input>>,
     dt: f32,
     /// The `beats` the last [`Set::prepare`] wrote into the L4 uniform block.
     ///
@@ -2917,6 +2918,7 @@ impl Set {
             declared_capacities,
             steps_taken: 0,
             staged_delta: 0,
+            staged_edges: None,
             dt: DT,
             last_beats: 0.0,
             viewport: [1.0, 1.0],
@@ -3050,11 +3052,6 @@ impl Set {
         self.steps_taken
     }
 
-    /// The simulation steps including any uncommitted staged steps for the current frame.
-    pub fn staged_steps_taken(&self) -> u64 {
-        self.steps_taken + self.staged_delta
-    }
-
     /// The uncommitted steps staged for the current frame.
     pub fn staged_delta(&self) -> u64 {
         self.staged_delta
@@ -3066,16 +3063,17 @@ impl Set {
     }
 
     /// The committed parity of the primary source on the host.
-    pub fn committed_parity(&self) -> bool {
-        self.sources
-            .first()
-            .is_some_and(|s| s.sim.committed_parity())
+    pub fn committed_parity(&self) -> usize {
+        self.sources.first().map_or(0, |s| s.sim.committed_parity())
     }
 
     /// Commit staged simulation clock advancement and ping-pong parities upon submission.
     pub fn commit(&mut self) {
         self.steps_taken += self.staged_delta;
         self.staged_delta = 0;
+        if let Some(edges) = self.staged_edges.take() {
+            self.edges = edges;
+        }
         for source in &mut self.sources {
             source.sim.commit();
             if let Some(other) = &mut source.paired {
@@ -3087,6 +3085,7 @@ impl Set {
     /// Discard staged simulation clock advancement and ping-pong parities.
     pub fn discard(&mut self) {
         self.staged_delta = 0;
+        self.staged_edges = None;
         for source in &mut self.sources {
             source.sim.discard();
             if let Some(other) = &mut source.paired {
@@ -4533,6 +4532,19 @@ impl Set {
         crate::mix::select(&mut self.edges, at)
     }
 
+    /// Stage selection of which renderer is the live one during an uncommitted frame.
+    pub fn stage_select_renderer(&mut self, at: usize) -> bool {
+        if self.staged_edges.is_none() {
+            self.staged_edges = Some(self.edges.clone());
+        }
+        crate::mix::select(self.staged_edges.as_mut().unwrap(), at)
+    }
+
+    /// The active or staged inputs to the merge pass.
+    pub fn edges(&self) -> &[Input] {
+        self.staged_edges.as_deref().unwrap_or(&self.edges)
+    }
+
     /// Whether this Set composites its renderers or overdraws them.
     /// **What this Set draws**, one entry per renderer, in draw order across
     /// every source.
@@ -4775,7 +4787,6 @@ impl Set {
     /// every respect but one" is structural rather than a claim two functions
     /// have to keep making about each other.
     fn prepare_on(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals, clock: Clock) {
-        self.discard();
         let steps = steps.min(MAX_STEPS);
         self.staged_delta = u64::from(steps);
         let next_steps_taken = self.steps_taken + self.staged_delta;
@@ -4918,7 +4929,7 @@ impl Set {
         // one's: a Set hands down the frame and the built-in's six numbers, and
         // an L3 uses the first while the orbit uses the second.
         if let Some(merge) = &self.merge {
-            merge.write_uniform(queue, &self.edges);
+            merge.write_uniform(queue, self.edges());
         }
         {
             // **Every camera, each against its own parameter map.** The index
