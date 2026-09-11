@@ -37,6 +37,7 @@ pub mod estimate;
 pub mod frame;
 pub mod governor;
 pub mod gpu;
+pub mod graph;
 /// The master chain: three fixed passes between the mix's write and the tone
 /// map. See [`master`] for what is fixed, what is chosen, and what each pass
 /// costs per pixel.
@@ -72,6 +73,11 @@ pub use estimate::{Estimate, Fit, Unfit, PREPARATION_RESOLUTION};
 pub use frame::{compose, Committed, Look, Outcome, Sink, Skip, WindowSink};
 pub use governor::{Basis, Decision, Estimated, FloorRead, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};
+pub use graph::{
+    BufferDesc, CompiledGraph, GpuPassFn, GraphError, GraphMetrics, GraphResource, MockPassFn,
+    PassBuilder, PassExecution, PassId, PassNode, RenderGraph, ResourceId, ResourceResolver,
+    TextureDesc, TransientMemoryPool,
+};
 pub use karakuri_store::record::{Layer, NodeAddress, Value};
 pub use master::{Chain, Clock, Cut, Slot, SlotError, SlotSpec};
 pub use meter::{Level, Meters};
