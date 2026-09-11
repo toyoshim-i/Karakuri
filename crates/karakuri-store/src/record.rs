@@ -26,9 +26,9 @@
 //! decoder would come back [`Record::Unknown`], and the format promises to pass
 //! over exactly that.
 //!
-//! **`slot` is three things in this vocabulary, and the third now has its own type.**
+//! **`slot` is three things in this vocabulary, and all three now have their own type.**
 //! [`Record::Slot`] is **a node of a Set** — a procedure at a `(layer, index)` address,
-//! optionally with a name. The `slot: u8` field on [`Record::Gain`], [`Record::Opacity`],
+//! optionally with a name. The `slot` field, [`DeckSlot`], on [`Record::Gain`], [`Record::Opacity`],
 //! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Authority`],
 //! [`Record::Ride`], [`Record::Source`], [`Record::Mask`],
 //! [`Record::Transition`], [`Record::Select`], [`Record::Transport`]
@@ -36,25 +36,17 @@
 //! about the Set in it. [`Record::Edge`]'s `slot` is [`InputPort`], the third: **an input a
 //! node declares**, which is what `uses far : Geometry` names.
 //!
-//! **The first two are not renamed; the third is, at the Rust identifier only.**
+//! **None of the three is renamed, at the Rust identifier or on the wire.**
 //! `docs/adr/0049-slot-means-two-things-and-the-clash-is-recorded.md` recorded the
 //! ambiguity rather than resolving it; `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`
-//! supersedes it and gives an input a node declares its own type first, because
-//! nothing about that sense was ever waiting on a GUI or a settled record
-//! format the way the other two were — a rename here costs one field, not the
-//! thirteen-record sweep the deck sense and the Set-node sense still owe. The
-//! wire key is unchanged: [`InputPort`] serialises as the bare string `slot`
-//! always was, on [`Record::Slot`]'s `proc_hash` precedent
-//! (`#[serde(rename = "proc")]`) of renaming the Rust side and pinning the
-//! wire side.
-//!
-//! The other two stay exactly as this section already described: `slot`
-//! is a field of thirteen record types across all three files for the deck
-//! sense alone, so no rename of it is a rename of one field. What the prose
-//! does for them is **never write the deck one bare**: it is *a deck slot*,
-//! everywhere, so
-//! `docs/contributing.md` §4's *"they have to be
-//! disjoint by name"* is met by the sentence where the field cannot yet meet it.
+//! supersedes it and gives each sense its own type instead — [`InputPort`]
+//! first, because nothing about that sense was ever waiting on a GUI or a
+//! settled record format the way the other two were, and [`DeckSlot`]
+//! second, on the deck sense alone: a member of the deck across thirteen
+//! record types. The field name stays `slot` everywhere: `docs/contributing.md`
+//! §4's *"they have to be disjoint by name"* was already met by the
+//! sentence, not the identifier, so a type change pays for the
+//! disambiguation without also paying for a thirteen-record rename.
 //!
 //! **A wire field can be renamed, and one has been.** [`Record::Transport`]'s scrub was
 //! spelled `offset_beats` and collided with the operator's latency offset; it is
@@ -282,6 +274,76 @@ mod node_or_every_node {
             layer: wire.layer,
             index,
         }))
+    }
+}
+
+/// **A member of the deck** — an index into the mixer, and nothing about the
+/// Set playing in it — carried by the `slot` field on [`Record::Gain`],
+/// [`Record::Opacity`], [`Record::Blend`], [`Record::Residency`],
+/// [`Record::Procedure`], [`Record::Authority`], [`Record::Ride`],
+/// [`Record::Source`], [`Record::Mask`], [`Record::Transition`],
+/// [`Record::Select`], [`Record::Transport`] and [`Record::Save`].
+///
+/// **Its own type for the same reason [`InputPort`] got one**: `slot` names
+/// three unrelated things in this module's vocabulary, and this is the
+/// second of them to stop being a bare primitive. See the module
+/// documentation and
+/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
+/// The field is not renamed — it already met `docs/contributing.md` §4's
+/// *"disjoint by name"* rule the way the module documentation describes, so
+/// this is a type change and not the thirteen-record rename that rule would
+/// otherwise ask for.
+///
+/// **On the wire it is unchanged: a bare JSON number.** `#[derive(Serialize,
+/// Deserialize)]` on a one-field tuple struct writes and reads the inner
+/// value directly — [`InputPort`]'s own mechanism, and
+/// `karakuri_layout::layout::NodeId`'s before it — so a `.kbset` file or a
+/// session stream sees no difference from the plain `u8` this replaces.
+///
+/// **Mirrors `karakuri_operation`'s own deck field rather than depending on
+/// it.** `Operation::deck` stays a bare `u8` on purpose — ADR-0344 names it
+/// disjointly already, and it is an operator's *ask*, made before a deck
+/// exists to check it against, where this is a record's *statement*, made
+/// after one does. The wrap from one to the other happens at
+/// `karakuri_operation_record::written`, which is the boundary where an
+/// operation becomes a record.
+///
+/// **A fallible constructor is the construction-time validation ADR-0344
+/// asks for.** [`DeckSlot::new`] is the one place "is this a valid deck
+/// position" is decided, so a range check written inline anywhere else in
+/// this workspace is a second answer to a question this type already
+/// answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DeckSlot(pub u8);
+
+impl DeckSlot {
+    /// **`slot` is in range for a deck of `count` members, or it is not — the
+    /// one place that question is answered.** `crates/karakuri-environment/src/mix.rs`'s
+    /// `mix::change`, `karakuri-cli`'s and `karakuri`'s own `slot_in_range`
+    /// all route their check through this rather than reimplementing `slot
+    /// < count`, which is what makes it one answer instead of four.
+    pub fn new(slot: u8, count: usize) -> Option<DeckSlot> {
+        if (slot as usize) < count {
+            Some(DeckSlot(slot))
+        } else {
+            None
+        }
+    }
+
+    pub fn index(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl std::fmt::Display for DeckSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u8> for DeckSlot {
+    fn from(slot: u8) -> DeckSlot {
+        DeckSlot(slot)
     }
 }
 
@@ -835,7 +897,7 @@ pub enum Record {
     /// in it. Moving a Set to another slot moves it under another fader,
     /// which is what a fader is.
     Gain {
-        slot: u8,
+        slot: DeckSlot,
         value: f32,
     },
     /// A deck slot's fader: how much of its blend lands in the mix, `[0, 1]`.
@@ -849,7 +911,7 @@ pub enum Record {
     /// replay a deck slot's layer that hides as one that dims.
     Opacity {
         /// The deck slot whose fader this is.
-        slot: u8,
+        slot: DeckSlot,
         value: f32,
     },
     /// How a deck slot's layer meets the ones under it: `add`, `over` or `max`.
@@ -863,7 +925,7 @@ pub enum Record {
     /// allowed to be is the engine's to say, and a stream from a newer build
     /// reaches the engine's diagnostic rather than the parser.
     Blend {
-        slot: u8,
+        slot: DeckSlot,
         mode: String,
     },
     /// What a deck slot is asked to do: `live`, `priming`, or `allocated`.
@@ -883,7 +945,7 @@ pub enum Record {
     /// out to be transitions rather than states:
     /// `docs/adr/0062-warming-and-cooling-are-transitions-not-states.md`.
     Residency {
-        slot: u8,
+        slot: DeckSlot,
         level: String,
     },
     /// The output look: tone map operator, exposure, and the operator's white
@@ -1029,7 +1091,7 @@ pub enum Record {
     /// runs at full rate material the performance had frozen. That is a gap in
     /// this vocabulary and is recorded as one rather than patched here.
     Procedure {
-        slot: u8,
+        slot: DeckSlot,
         /// **Which node the deck slot is playing this procedure on**, when it
         /// has more than one.
         ///
@@ -1086,7 +1148,7 @@ pub enum Record {
     /// see
     /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`.
     Authority {
-        slot: u8,
+        slot: DeckSlot,
         /// **Which node this authority is over.** `index` absent is 0 and 0
         /// is not written, on [`Record::Procedure`]'s terms. See
         /// [`NodeAddress`] for why the two are one field.
@@ -1146,7 +1208,7 @@ pub enum Record {
     Ride {
         /// The deck slot whose Set is being written — *a deck slot*, on
         /// [`Record::Procedure`]'s and [`Record::Authority`]'s terms.
-        slot: u8,
+        slot: DeckSlot,
         /// **Which node, or every node declaring `key`.** Absent is the
         /// wildcard; see [`NodeAddress`] for why the address is one field.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1199,7 +1261,7 @@ pub enum Record {
     Source {
         /// The deck slot whose Set is being written — on [`Record::Ride`]'s
         /// terms.
-        slot: u8,
+        slot: DeckSlot,
         /// Which layer declares the `param`, and it is read.
         layer: Layer,
         /// Which node of that layer, or every node declaring `key` — see
@@ -1243,7 +1305,7 @@ pub enum Record {
     /// a shape is allowed to be is the engine's to say. `angle` is in radians
     /// and is the linear front's alone.
     Mask {
-        slot: u8,
+        slot: DeckSlot,
         /// `none`, `linear` or `radial`.
         kind: String,
         /// Which way a linear front runs, in radians.
@@ -1280,7 +1342,7 @@ pub enum Record {
     /// `bind`: what a name is allowed to be is the engine's to say.
     Transition {
         /// The deck slot whose control is moving.
-        slot: u8,
+        slot: DeckSlot,
         /// `gain`, `opacity` or `mask` — the last being the `position` a
         /// `mask` record carries, which is what a wipe moves.
         control: String,
@@ -1333,7 +1395,7 @@ pub enum Record {
     /// slot".
     Select {
         /// The deck slot whose Set the selection is inside.
-        slot: u8,
+        slot: DeckSlot,
         /// Which renderer of that deck slot, in draw order — the same numbering
         /// `--param L4:1:name=value` and a `slot` record's `index` use.
         ///
@@ -1379,7 +1441,7 @@ pub enum Record {
     /// a deck slot moved back onto the grid returns to where the operator left it
     /// rather than to a default.
     Transport {
-        slot: u8,
+        slot: DeckSlot,
         sync: String,
         anchor_bpm: f32,
         scrub_beats: f64,
@@ -1407,7 +1469,7 @@ pub enum Record {
     /// disk went on to refuse. This is the same rule [`Record::Procedure`]
     /// follows — a record that describes a change already made.
     Save {
-        slot: u8,
+        slot: DeckSlot,
         /// What the Set file is called in the store: `sets/<id>.kbset`.
         /// A `String` because it is a name somebody chose, and the only thing
         /// in this record that can be looked up.
@@ -1909,7 +1971,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Transition {
-                slot: 0,
+                slot: DeckSlot(0),
                 control: "opacity".to_string(),
                 to: 0.0,
                 start: 64.0,
@@ -1937,7 +1999,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Select {
-                slot: 1,
+                slot: DeckSlot(1),
                 renderer: 2,
                 start: 64.0,
             }
@@ -1969,7 +2031,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Ride {
-                slot: 2,
+                slot: DeckSlot(2),
                 at: Some(NodeAddress {
                     layer: Layer::L4,
                     index: 1
@@ -1993,7 +2055,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Ride {
-                slot: 0,
+                slot: DeckSlot(0),
                 at: Some(NodeAddress {
                     layer: Layer::L1,
                     index: 0
@@ -2008,7 +2070,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Ride {
-                slot: 1,
+                slot: DeckSlot(1),
                 at: None,
                 key: "exposure".to_string(),
                 value: Value::Scalar(2.0),
@@ -2023,7 +2085,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Ride {
-                slot: 0,
+                slot: DeckSlot(0),
                 at: None,
                 key: "glow".to_string(),
                 value: Value::Vec3([0.4, 0.7, 1.0]),
@@ -2096,7 +2158,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Mask {
-                slot: 1,
+                slot: DeckSlot(1),
                 kind: "linear".to_string(),
                 angle: 0.0,
                 position: 0.5,
@@ -2139,7 +2201,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Save {
-                slot: 1,
+                slot: DeckSlot(1),
                 id: "20260816-143052-271".to_string(),
             }
         );
@@ -2167,7 +2229,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Transport {
-                slot: 0,
+                slot: DeckSlot(0),
                 sync: "beat".to_string(),
                 anchor_bpm: 126.0,
                 scrub_beats: -0.25,
@@ -2358,6 +2420,53 @@ mod tests {
         );
     }
 
+    /// **`Record::Gain`'s `slot` is `DeckSlot` in Rust and a bare number on
+    /// the wire**, which is the whole claim
+    /// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`
+    /// makes about the deck sense: the Rust identifier gets a type that
+    /// cannot be confused with a Set-node address or a declared input, and a
+    /// `.kbset` file or a session stream written before this change parses
+    /// exactly as it did — `round_trip_verbatim` is what catches `DeckSlot`
+    /// serialising as `{"0":2}` or any other shape a naive newtype wrapper
+    /// could produce instead of the plain `2` this asserts.
+    #[test]
+    fn a_gain_round_trips_with_slot_as_a_bare_number() {
+        let line = r#"{"t":"gain","slot":2,"value":0.8}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::Gain {
+                slot: DeckSlot(2),
+                value: 0.8,
+            }
+        );
+    }
+
+    /// **`Record::Procedure` carries two of `slot`'s three senses at once**
+    /// — its own `slot: DeckSlot` beside `at: NodeAddress` — which is the
+    /// case the module documentation's whole point rests on: two fields
+    /// named and typed for two unrelated addresses, on one record, and
+    /// neither reads as the other. `round_trip_verbatim` on
+    /// [`Record::Procedure`]'s own compatibility terms: an absent `index`
+    /// stays absent.
+    #[test]
+    fn a_procedure_round_trips_with_slot_as_a_bare_number_beside_a_node_address() {
+        let hash = "sha256:486779000000000000000000000000000000000000000000000000000000abcd";
+        let line = format!(r#"{{"t":"procedure","slot":3,"layer":"L1","proc":"{hash}"}}"#);
+        let rec = round_trip_verbatim(&line);
+        assert_eq!(
+            rec,
+            Record::Procedure {
+                slot: DeckSlot(3),
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
+                proc_hash: hash.parse().expect("a hash"),
+            }
+        );
+    }
+
     /// **`slot` and `part` are two tags and not one tag with two shapes**,
     /// which is what `docs/contributing.md` §4 asks of a name and what a
     /// decoder dispatching on
@@ -2404,7 +2513,7 @@ mod tests {
         };
         assert_eq!(
             (slot, at.index),
-            (0, 0),
+            (DeckSlot(0), 0),
             "an absent index is the first node"
         );
 
@@ -2413,7 +2522,11 @@ mod tests {
         let Record::Procedure { at, slot, .. } = round_trip_verbatim(&stacked) else {
             panic!("not a procedure");
         };
-        assert_eq!((slot, at.index), (2, 1), "the second renderer of slot 2");
+        assert_eq!(
+            (slot, at.index),
+            (DeckSlot(2), 1),
+            "the second renderer of slot 2"
+        );
     }
 
     /// **A `source` round-trips both ways round**, bytes and all — with an
@@ -2437,7 +2550,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Source {
-                slot: 0,
+                slot: DeckSlot(0),
                 layer: Layer::L1,
                 index: None,
                 key: "turbulence".to_string(),
@@ -2464,7 +2577,7 @@ mod tests {
         assert_eq!(
             round_trip_verbatim(taken),
             Record::Source {
-                slot: 2,
+                slot: DeckSlot(2),
                 layer: Layer::L4,
                 index: Some(1),
                 key: "exposure".to_string(),
@@ -2518,7 +2631,7 @@ mod tests {
         assert_eq!(
             rec,
             Record::Authority {
-                slot: 0,
+                slot: DeckSlot(0),
                 at: NodeAddress {
                     layer: Layer::L1,
                     index: 0,
@@ -2539,7 +2652,7 @@ mod tests {
         assert_eq!(
             round_trip_verbatim(second),
             Record::Authority {
-                slot: 2,
+                slot: DeckSlot(2),
                 at: NodeAddress {
                     layer: Layer::L4,
                     index: 1,
@@ -2556,7 +2669,7 @@ mod tests {
                 r#"{"t":"authority","slot":1,"layer":"Field","authority":"automatic"}"#
             ),
             Record::Authority {
-                slot: 1,
+                slot: DeckSlot(1),
                 at: NodeAddress {
                     layer: Layer::Field,
                     index: 0,

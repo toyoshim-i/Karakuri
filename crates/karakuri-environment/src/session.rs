@@ -399,7 +399,7 @@ pub fn split(lines: Vec<Line>) -> Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use karakuri_store::record::Value;
+    use karakuri_store::record::{DeckSlot, Value};
 
     fn set_line() -> Line {
         Line::new(Record::Set {
@@ -593,7 +593,7 @@ mod tests {
             set_line(),
             Line::new(Record::Tick { steps: 1 }),
             Line::new(Record::Gain {
-                slot: 0,
+                slot: DeckSlot(0),
                 value: 0.5,
             }),
         ]);

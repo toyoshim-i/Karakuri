@@ -172,7 +172,7 @@ use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::Look;
 use karakuri_signal::oscillator::Oscillator;
-use karakuri_store::record::Record;
+use karakuri_store::record::{DeckSlot, Record};
 
 /// What one mix record says, decoded into what the engine takes.
 ///
@@ -853,7 +853,7 @@ pub fn canvas_record(width: u32, height: u32) -> Record {
 /// A slot's transport, as the record that carries it.
 pub fn transport_record(slot: usize, transport: &Transport) -> Record {
     Record::Transport {
-        slot: slot as u8,
+        slot: DeckSlot(slot as u8),
         sync: transport.sync().name().to_string(),
         anchor_bpm: transport.anchor_bpm(),
         scrub_beats: transport.scrub_beats(),
@@ -930,13 +930,17 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
     // spelled again here. It was spelled again — `slot 9:` where every other
     // surface says `no slot 9:` — and a stream naming a slot this deck does not
     // hold is the same mistake as a hand or a model naming one.
-    let in_range = |slot: u8| -> Result<usize, String> {
-        let slot = usize::from(slot);
-        if slot < slot_count {
-            Ok(slot)
-        } else {
-            Err(crate::no_such_slot(slot, slot_count))
-        }
+    //
+    // **`DeckSlot::new` is the check, not a second copy of it.** A record's
+    // `DeckSlot` was constructed off the wire without a `slot_count` to check
+    // against — only here, where the deck it addresses is known, can *is
+    // this slot in range* be answered — so this closure hands the raw number
+    // back to the one place that answers it rather than comparing `slot_count`
+    // again itself.
+    let in_range = |slot: DeckSlot| -> Result<usize, String> {
+        DeckSlot::new(slot.0, slot_count)
+            .map(|slot| slot.index())
+            .ok_or_else(|| crate::no_such_slot(slot.index(), slot_count))
     };
     match record {
         Record::Gain { slot, value } => Ok(Some(Change::Gain {
@@ -1610,7 +1614,7 @@ mod tests {
                 opacity: 0.0,
             }),
             Record::Opacity {
-                slot: 2,
+                slot: DeckSlot(2),
                 value: 0.0,
             },
             "the silencing a crossfade writes is not what `mix::opacity_record` wrote"
@@ -1621,7 +1625,7 @@ mod tests {
                 opacity: 1.0,
             }),
             Record::Opacity {
-                slot: 1,
+                slot: DeckSlot(1),
                 value: 1.0,
             },
             "the opacity a wipe writes is not what `mix::opacity_record` wrote"
@@ -1632,7 +1636,7 @@ mod tests {
                 blend: blend_mode(Blend::Over),
             }),
             Record::Blend {
-                slot: 1,
+                slot: DeckSlot(1),
                 mode: "over".to_string(),
             },
             "the blend mode a wipe forces is not what `mix::blend_record` wrote"
@@ -1643,7 +1647,7 @@ mod tests {
                 residency: residency(Residency::Live),
             }),
             Record::Residency {
-                slot: 3,
+                slot: DeckSlot(3),
                 level: "live".to_string(),
             },
             "the put-on-air both gestures write is not what `mix::residency_record` wrote"
@@ -1906,7 +1910,7 @@ mod tests {
         assert_eq!(
             from_operation_reading(Operation::FadeDeck { deck: 2, to: 0.0 }, current.clone()),
             Record::Transition {
-                slot: 2,
+                slot: DeckSlot(2),
                 control: "opacity".to_string(),
                 to: 0.0,
                 start: 36.0,
@@ -1924,15 +1928,15 @@ mod tests {
             records,
             vec![
                 Record::Opacity {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     value: 0.0
                 },
                 Record::Residency {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     level: "live".to_string()
                 },
                 Record::Transition {
-                    slot: 0,
+                    slot: DeckSlot(0),
                     control: "opacity".to_string(),
                     to: 0.0,
                     start: 36.0,
@@ -1940,7 +1944,7 @@ mod tests {
                     curve: "smooth".to_string(),
                 },
                 Record::Transition {
-                    slot: 1,
+                    slot: DeckSlot(1),
                     control: "opacity".to_string(),
                     to: 1.0,
                     start: 36.0,
@@ -1961,7 +1965,7 @@ mod tests {
                 current
             ),
             Record::Select {
-                slot: 3,
+                slot: DeckSlot(3),
                 renderer: 1,
                 start: 36.0,
             },
@@ -1978,7 +1982,7 @@ mod tests {
         let cases = [
             (
                 Record::Gain {
-                    slot: 2,
+                    slot: DeckSlot(2),
                     value: 0.75,
                 },
                 Change::Gain {
@@ -2237,7 +2241,7 @@ mod tests {
         // its range for the whole run — which is the same sentence a Set file
         // and a `--bind` meet, in `setfile::binding_from_record`.
         let pinned = Record::Source {
-            slot: 0,
+            slot: DeckSlot(0),
             layer: karakuri_store::record::Layer::L1,
             index: None,
             key: "radius".to_string(),
@@ -2282,7 +2286,7 @@ mod tests {
         );
 
         let unknown = Record::Authority {
-            slot: 0,
+            slot: DeckSlot(0),
             at: karakuri_store::record::NodeAddress {
                 layer: karakuri_store::record::Layer::L1,
                 index: 0,
@@ -2403,7 +2407,7 @@ mod tests {
         for control in Control::ALL {
             for curve in karakuri_engine::binding::CURVES {
                 let record = Record::Transition {
-                    slot: 0,
+                    slot: DeckSlot(0),
                     control: control.name().to_string(),
                     to: 1.0,
                     start: 0.0,
@@ -2643,7 +2647,7 @@ mod tests {
     #[test]
     fn a_record_this_build_cannot_obey_says_so_rather_than_vanishing() {
         let unknown_level = Record::Residency {
-            slot: 0,
+            slot: DeckSlot(0),
             level: "cooling".to_string(),
         };
         let message = change(&unknown_level, 4).expect_err("`cooling` is not a level here");
@@ -2683,7 +2687,7 @@ mod tests {
             (0.0, 4.0, f32::NAN, "not a value"),
         ] {
             let record = Record::Transition {
-                slot: 0,
+                slot: DeckSlot(0),
                 control: "gain".to_string(),
                 to,
                 start,
@@ -2698,7 +2702,7 @@ mod tests {
         // nothing clears a queued move whose instant cannot arrive.
         for start in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             let record = Record::Select {
-                slot: 0,
+                slot: DeckSlot(0),
                 renderer: 0,
                 start,
             };
@@ -2707,7 +2711,7 @@ mod tests {
         }
 
         let unknown_shape = Record::Mask {
-            slot: 0,
+            slot: DeckSlot(0),
             kind: "diagonal".to_string(),
             angle: 0.0,
             position: 1.0,
@@ -2718,7 +2722,7 @@ mod tests {
         assert!(message.contains("radial"), "{message}");
 
         let unknown_control = Record::Transition {
-            slot: 0,
+            slot: DeckSlot(0),
             control: "residency".to_string(),
             to: 1.0,
             start: 0.0,
@@ -2730,7 +2734,7 @@ mod tests {
         assert!(message.contains("opacity"), "{message}");
 
         let unknown_curve = Record::Transition {
-            slot: 0,
+            slot: DeckSlot(0),
             control: "gain".to_string(),
             to: 1.0,
             start: 0.0,
@@ -2742,7 +2746,7 @@ mod tests {
         assert!(message.contains("smooth"), "{message}");
 
         let unknown_mode = Record::Blend {
-            slot: 0,
+            slot: DeckSlot(0),
             mode: "screen".to_string(),
         };
         let message = change(&unknown_mode, 4).expect_err("`screen` is not a mode here");
@@ -2762,7 +2766,7 @@ mod tests {
     fn a_slot_past_the_deck_is_refused_with_the_range_it_missed() {
         let message = change(
             &Record::Gain {
-                slot: 4,
+                slot: DeckSlot(4),
                 value: 1.0,
             },
             4,
@@ -2773,7 +2777,7 @@ mod tests {
         // this shares with the digit keys would live.
         assert!(change(
             &Record::Gain {
-                slot: 3,
+                slot: DeckSlot(3),
                 value: 1.0
             },
             4
@@ -2781,7 +2785,7 @@ mod tests {
         .is_ok());
         assert!(change(
             &Record::Gain {
-                slot: 0,
+                slot: DeckSlot(0),
                 value: 1.0
             },
             1
@@ -2789,7 +2793,7 @@ mod tests {
         .is_ok());
         assert!(change(
             &Record::Gain {
-                slot: 1,
+                slot: DeckSlot(1),
                 value: 1.0
             },
             1

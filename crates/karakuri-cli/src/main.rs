@@ -64,7 +64,7 @@ use karakuri_engine::{
 use karakuri_operation::Operation;
 use karakuri_operation_record::{Current, Written};
 use karakuri_signal::NoiseConfig;
-use karakuri_store::record::{BindNoise, Layer, Record};
+use karakuri_store::record::{BindNoise, DeckSlot, Layer, Record};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -1982,7 +1982,7 @@ fn salts_for(seed: u32, recorded: &[Option<u32>], geometries: usize) -> Vec<u32>
 /// requires that a replay say *which* effects outside the stream it skipped;
 /// what it does not require is that the answer depend on where in the stream
 /// the record sat.
-fn skipped_save(slot: u8, id: &str) -> String {
+fn skipped_save(slot: DeckSlot, id: &str) -> String {
     format!(
         "  a `save` of slot {slot} was skipped: a replay writes no Set files. \
          The material it named is set `{id}`"
@@ -2231,7 +2231,7 @@ fn replay_session(args: &Args, id: &str) {
                 } = record
                 {
                     let (layer, index) = (&at.layer, &at.index);
-                    let slot = usize::from(*slot);
+                    let slot = slot.index();
                     if slot >= playing.len() {
                         eprintln!(
                             "  a `procedure` for slot {slot} was skipped: this replay \
@@ -6128,7 +6128,7 @@ impl Live {
                 continue;
             };
             self.record_only(karakuri_store::record::Record::Procedure {
-                slot: slot as u8,
+                slot: DeckSlot(slot as u8),
                 at: karakuri_store::record::NodeAddress {
                     layer: record,
                     index: *index,
@@ -6332,7 +6332,7 @@ impl Live {
                 };
                 eprintln!("{said}");
                 self.record_only(karakuri_store::record::Record::Save {
-                    slot: slot as u8,
+                    slot: DeckSlot(slot as u8),
                     id,
                 });
                 Ok(said)
@@ -7849,8 +7849,19 @@ fn residency_name(residency: Residency, parked: bool) -> &'static str {
 /// digit keys used to have, where a digit equal to or past the slot count
 /// must be rejected rather than wrap or panic — is checkable without a
 /// window, a GPU, or a `Deck`.
+///
+/// **A digit key names no deck member yet**, so this takes the raw `usize`
+/// a press or an MCP argument is rather than a
+/// [`karakuri_store::record::DeckSlot`] — there is no address here to
+/// validate at construction, only a number to check before one can be made.
+/// It checks through [`karakuri_store::record::DeckSlot::new`] rather than
+/// `slot < slot_count` again, which is the same question
+/// `crates/karakuri-environment/src/mix.rs`'s `mix::change` answers for a
+/// stream's own `slot` field.
 fn slot_in_range(slot: usize, slot_count: usize) -> bool {
-    slot < slot_count
+    u8::try_from(slot)
+        .ok()
+        .is_some_and(|slot| DeckSlot::new(slot, slot_count).is_some())
 }
 
 #[cfg(test)]
@@ -9674,11 +9685,11 @@ proc points {
     fn a_trailing_save_is_named_and_not_only_counted() {
         let notes = trailing_notes(&[
             Record::Gain {
-                slot: 1,
+                slot: DeckSlot(1),
                 value: 0.5,
             },
             Record::Save {
-                slot: 2,
+                slot: DeckSlot(2),
                 id: "20260816-143052-271".to_string(),
             },
         ]);
@@ -9695,7 +9706,7 @@ proc points {
 
         // **The control.** Nothing to name and the count stands alone.
         let counted = trailing_notes(&[Record::Gain {
-            slot: 1,
+            slot: DeckSlot(1),
             value: 0.5,
         }]);
         assert_eq!(
@@ -12245,7 +12256,7 @@ mod wire_tests {
         assert_eq!(
             *written.lock().expect("what the loop wrote"),
             vec![Record::Gain {
-                slot: 0,
+                slot: DeckSlot(0),
                 value: 0.8
             }],
             "the client was answered `ok` and the loop wrote something else"

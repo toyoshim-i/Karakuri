@@ -537,7 +537,7 @@ fn save_session_as_set_keeps_a_merge_and_drops_a_selection() {
         Line::new(Record::Merge { live: None }),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(Record::Select {
-            slot: 0,
+            slot: karakuri_store::record::DeckSlot(0),
             renderer: 1,
             start: 8.0,
         }),
