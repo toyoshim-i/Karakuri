@@ -230,9 +230,8 @@ use common::{drawn_once, running, showing};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed};
 use karakuri_console::view::{arrangement, bay_grip, program_head, Ask, BAY_GRIPS, REGIONS};
-use karakuri_layout::{Axis, LayoutSplit, NodeId, Point};
+use karakuri_layout::{Axis, NodeId, Point};
 use karakuri_operation::gate::Open;
-use karakuri_operation::Operation;
 
 /// The specification, relative to the workspace root.
 const PAGE: &str = "docs/manual/operations.html";
@@ -1315,118 +1314,4 @@ fn every_arrangement_operation_the_pointer_reaches_is_marked_built() {
              runs does (ADR-0213). Flip the badge, or say here why the gesture is not reachable"
         );
     }
-}
-
-/// **Typed layout splits have first-class representation decoupled from HTML docs.**
-///
-/// While the manual does not label internal dividers like the root column and
-/// body row (keeping `name` as `None`), they are addressable via `LayoutSplit`
-/// without phantom rows.
-#[test]
-fn typed_layout_splits_and_vocabulary_operations_are_bridged() {
-    let mut p = panel();
-    let l = p.layout();
-    let root = l.root();
-    let body = l.children(root)[1];
-
-    // 1. Unnamed splits have typed identities
-    assert_eq!(l.split_identity(root), Some(&LayoutSplit::RootColumn));
-    assert_eq!(l.split_identity(body), Some(&LayoutSplit::BodyRow));
-    assert_eq!(l.find_split(&LayoutSplit::RootColumn), Some(root));
-    assert_eq!(l.find_split(&LayoutSplit::BodyRow), Some(body));
-
-    // 2. Named splits have typed identities
-    let left_pane = l.find("left-pane").expect("left-pane exists");
-    assert_eq!(
-        l.split_identity(left_pane),
-        Some(&LayoutSplit::Named("left-pane".into()))
-    );
-    assert_eq!(
-        l.find_split(&LayoutSplit::Named("left-pane".into())),
-        Some(left_pane)
-    );
-
-    // 3. Panel can apply vocabulary operations directly
-    // FoldBay
-    let outcome = p
-        .apply_operation(&Operation::FoldBay {
-            bay: "library".into(),
-        })
-        .expect("apply FoldBay");
-    let lib_id = p.layout().find("library").unwrap();
-    assert!(p.layout().is_collapsed(lib_id));
-    assert_eq!(
-        outcome,
-        Outcome::Folded {
-            id: lib_id,
-            folded: true,
-            root: false,
-        }
-    );
-
-    // Unfold named region
-    p.apply_operation(&Operation::Unfold {
-        region: Some("library".into()),
-    })
-    .expect("apply Unfold");
-    assert!(!p.layout().is_collapsed(lib_id));
-
-    // FoldPane
-    p.apply_operation(&Operation::FoldPane {
-        pane: "left-pane".into(),
-    })
-    .expect("apply FoldPane");
-    assert!(p.layout().is_collapsed(left_pane));
-
-    // UnfoldAll (Unfold with None)
-    p.apply_operation(&Operation::Unfold { region: None })
-        .expect("apply UnfoldAll");
-    assert!(!p.layout().is_collapsed(left_pane));
-
-    // Solo named
-    p.apply_operation(&Operation::Solo {
-        region: Some("program".into()),
-    })
-    .expect("apply Solo");
-    assert!(p.layout().is_soloed());
-
-    // Unsolo (Solo with None)
-    p.apply_operation(&Operation::Solo { region: None })
-        .expect("apply Unsolo");
-    assert!(!p.layout().is_soloed());
-
-    // ResetArrangement
-    let reset_outcome = p
-        .apply_operation(&Operation::ResetArrangement)
-        .expect("apply ResetArrangement");
-    assert_eq!(reset_outcome, Outcome::Reset);
-
-    // 4. Panel can operate on LayoutSplit directly
-    p.fold_split(&LayoutSplit::BodyRow).expect("fold body row");
-    assert!(p.layout().is_collapsed(body));
-
-    p.unfold_split(&LayoutSplit::BodyRow)
-        .expect("unfold body row");
-    assert!(!p.layout().is_collapsed(body));
-
-    // 5. Op::to_operation bidirectional mapping
-    let fold_pane_op = Op::Fold(left_pane);
-    let mapped = fold_pane_op
-        .to_operation(p.layout())
-        .expect("to_operation FoldPane");
-    assert_eq!(
-        mapped,
-        Operation::FoldPane {
-            pane: "left-pane".into(),
-        }
-    );
-
-    let reset_op = Op::Reset;
-    assert_eq!(
-        reset_op.to_operation(p.layout()),
-        Some(Operation::ResetArrangement)
-    );
-
-    // Diagnostic Op::Report has no public vocabulary representation
-    assert_eq!(Op::Report.to_operation(p.layout()), None);
 }

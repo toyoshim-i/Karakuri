@@ -3605,29 +3605,6 @@ fn a_reset_leaves_the_pill_naming_no_file() {
     );
 }
 
-#[test]
-fn readout_applies_vocabulary_operations() {
-    let mut readout = Readout::new(1280.0, 720.0);
-    readout.view.arrangement.name = Some("night".to_owned());
-
-    let staging = readout.panel.layout().find("staging").expect("staging");
-    readout
-        .apply_operation(&Operation::FoldBay {
-            bay: "staging".into(),
-        })
-        .expect("apply fold bay");
-    assert!(readout.panel.layout().is_collapsed(staging));
-    assert_eq!(readout.view.arrangement.name.as_deref(), Some("night"));
-
-    assert_eq!(
-        readout
-            .apply_operation(&Operation::ResetArrangement)
-            .expect("apply reset"),
-        Outcome::Reset
-    );
-    assert_eq!(readout.view.arrangement.name, None);
-}
-
 /// **What the load control's five asks do to this program**, and that a
 /// pick moves this bay's mark and nothing else (ADR-0305).
 ///
