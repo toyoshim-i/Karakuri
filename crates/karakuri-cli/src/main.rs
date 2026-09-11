@@ -624,11 +624,10 @@ keys:
              the only control that silences a slot under every mode. Pull this
              one, not the gain, to get out of material that has gone bad: an
              `over` layer at zero gain is a black card and still covers
-  F G f g    fade the focused slot's fader out (F, f) / in (G, g), over the current length,
+  f g        fade the focused slot's fader out / in, over the current length,
              starting on the current grid. Opacity rather than gain: opacity
              silences under every blend mode, where a gain of zero under
-             `over` is a black card that still covers.
-             (f/g are deprecated; in the GUI keyboard, g folds a pane)
+             `over` is a black card that still covers
   x          crossfade — the focused slot out and the next one in, together.
              Two scheduled moves sharing a start and a length rather than one
              crossfade object, which is what makes a fade-in, a fade-out and a
@@ -638,21 +637,18 @@ keys:
              0 on the incoming slot, put on air under `over`, and one
              scheduled move carrying the front to 1. Nothing in the
              transition knows what a mask is and nothing in the mask knows
-             what a beat is; a wipe is the two of them. Needs a shape from `Z` / `z`
-  Z z        cycle the wipe's shape: off, left to right, bottom to top, the
-             two diagonals, an iris.
-             (z is deprecated; in the GUI keyboard, z unfolds what is folded)
-  R r        cycle which renderer of the focused slot is live, landing on the
+             what a beat is; a wipe is the two of them. Needs a shape from `z`
+  z          cycle the wipe's shape: off, left to right, bottom to top, the
+             two diagonals, an iris
+  r          cycle which renderer of the focused slot is live, landing on the
              current grid. Needs the slot to composite — --merge, or a Set
              file that records one: overdrawn renderers share one target and
              there is nothing to silence. The ones not selected still draw,
              into targets of their own — the choice is free of a rebuild, not
              free of a frame. One way: there is no position that folds them
              all back together. What you choose is kept: `k` writes it into
-             the Set file as the merge's `live`.
-             (r is deprecated; in the GUI keyboard, r resets the arrangement)
-  N n        cycle where a fade starts: the next bar, the next beat, now.
-             (n is deprecated; in the GUI keyboard, n changes the room colours)
+             the Set file as the merge's `live`
+  n          cycle where a fade starts: the next bar, the next beat, now
   j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
   m          cycle the focused slot's blend mode: add, over, max. `over` is
              the only one in which a layer hides the ones under it, and what
@@ -668,9 +664,9 @@ keys:
              needs closed-form material, and tempo sync is refused on material
              that reads `beats`, which already follows the room. Engaging
              anchors the material at the current tempo, so nothing jumps
-  U u i      scrub the focused slot back (U, u) / forward (i), a quarter beat a press.
+  u i        scrub the focused slot back / forward, a quarter beat a press.
              Beat sync only: scrubbing moves a position and the other modes
-             are rates. (u is deprecated; collides with GUI keyboard)
+             are rates
   b          tap the beat — three or more taps set the tempo as well, and a
              tap always sets the phase. Needs --audio-in
   , .        halve / double the grid, and the octave the tracker looks in with
@@ -678,11 +674,10 @@ keys:
              so a set started an octave off stays an octave off until this key.
              `x2?` on the status line is the tracker saying it might be one.
              The phase does not move. Needs --audio-in
-  o P p      latency offset down (o) / up (P, p), 5 ms a press, and it goes negative.
+  o p        latency offset down / up, 5 ms a press, and it goes negative.
              Raise it if the picture reads late from where the audience is,
              lower it if the sound does. This is the only instrument that can
-             read the PA and the projector, so it is the one to trust.
-             (p is deprecated; in GUI offset is nudged via Transport arrows)
+             read the PA and the projector, so it is the one to trust
   a          size the window so the canvas lands in it one texel to one texel.
              The window is a preview and fits the canvas into itself, so it
              normally shows bars; press this when something downstream is
@@ -702,7 +697,7 @@ keys:
              procedure. The store write happens on a thread of its own and the
              line saying where it went arrives when it lands. `--save-set` is
              the same file written before a run instead of during one
-  S s        print the status line now. (s is deprecated; collides with GUI)
+  s          print the status line now
   h ?        print these bindings
   esc        quit
 ";
@@ -5945,97 +5940,44 @@ impl Live {
         match key.as_ref() {
             Key::Named(NamedKey::Escape) => return true,
             Key::Named(NamedKey::Space) => self.toggle_focused(),
-            Key::Character(s) => {
-                let c = s.chars().next().unwrap_or('\0');
-                match c {
-                    'F' => self.fade(0.0),
-                    'f' => {
-                        eprintln!(
-                            "  key 'f' is deprecated in CLI (collides with GUI; use 'F' to fade out)"
-                        );
-                        self.fade(0.0);
-                    }
-                    'G' => self.fade(1.0),
-                    'g' => {
-                        eprintln!(
-                            "  key 'g' is deprecated in CLI (GUI binds 'g' to fold pane; use 'G' to fade in)"
-                        );
-                        self.fade(1.0);
-                    }
-                    'Z' => self.cycle_mask(),
-                    'z' => {
-                        eprintln!(
-                            "  key 'z' is deprecated in CLI (GUI binds 'z' to unfold all; use 'Z' to cycle mask)"
-                        );
-                        self.cycle_mask();
-                    }
-                    'R' => self.cycle_renderer(),
-                    'r' => {
-                        eprintln!(
-                            "  key 'r' is deprecated in CLI (GUI binds 'r' to reset arrangement; use 'R' to cycle renderer)"
-                        );
-                        self.cycle_renderer();
-                    }
-                    'N' => self.cycle_quantum(),
-                    'n' => {
-                        eprintln!(
-                            "  key 'n' is deprecated in CLI (GUI binds 'n' to room colours; use 'N' to cycle quantum)"
-                        );
-                        self.cycle_quantum();
-                    }
-                    'U' => self.scrub(-SCRUB_BEATS),
-                    'u' => {
-                        eprintln!(
-                            "  key 'u' is deprecated in CLI (collides with GUI; use 'U' to scrub back)"
-                        );
-                        self.scrub(-SCRUB_BEATS);
-                    }
-                    'P' => self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS),
-                    'p' => {
-                        eprintln!(
-                            "  key 'p' is deprecated in CLI (GUI nudges offset via Transport arrows; use 'P' for +5ms)"
-                        );
-                        self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS);
-                    }
-                    'S' => self.print_status(),
-                    's' => {
-                        eprintln!(
-                            "  key 's' is deprecated in CLI (collides with GUI; use 'S' for status line)"
-                        );
-                        self.print_status();
-                    }
-                    _ => match c.to_ascii_lowercase() {
-                        c @ '0'..='3' => self.focus_slot(c as usize - '0' as usize),
-                        '[' => self.nudge_gain(-GAIN_STEP),
-                        ']' => self.nudge_gain(GAIN_STEP),
-                        '\\' => self.set_gain(self.focus, 1.0),
-                        ';' => self.nudge_opacity(-OPACITY_STEP),
-                        '\'' => self.nudge_opacity(OPACITY_STEP),
-                        'm' => self.cycle_blend(self.focus),
-                        'x' => self.crossfade(),
-                        'c' => self.wipe(),
-                        'j' => self.cycle_fade_beats(),
-                        't' => self.cycle_tonemap(),
-                        '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
-                        '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
-                        '`' => self.set_exposure(1.0),
-                        'w' => self.toggle_priming(self.focus),
-                        'y' => self.cycle_sync(),
-                        'i' => self.scrub(SCRUB_BEATS),
-                        'b' => self.tap(),
-                        ',' => self.shift_octave(0.5),
-                        '.' => self.shift_octave(2.0),
-                        'o' => self.nudge_latency_offset(-audio::LATENCY_OFFSET_STEP_MS),
-                        'a' => self.snap_to_canvas(),
-                        // The focused slot, a stamped name, and nobody waiting: a hand
-                        // has one slot in front of it, cannot type a name, and is
-                        // reading the terminal.
-                        'k' => self.save_set(Asked::Operator, self.focus, None, None),
-                        'h' | '?' => eprint!("{BINDINGS}"),
-                        _ => {}
-                    },
-                }
-            }
+            Key::Character(s) => match s.chars().next().unwrap_or('\0').to_ascii_lowercase() {
+                c @ '0'..='3' => self.focus_slot(c as usize - '0' as usize),
+                '[' => self.nudge_gain(-GAIN_STEP),
+                ']' => self.nudge_gain(GAIN_STEP),
+                '\\' => self.set_gain(self.focus, 1.0),
+                ';' => self.nudge_opacity(-OPACITY_STEP),
+                '\'' => self.nudge_opacity(OPACITY_STEP),
+                'm' => self.cycle_blend(self.focus),
+                'f' => self.fade(0.0),
+                'g' => self.fade(1.0),
+                'x' => self.crossfade(),
+                'c' => self.wipe(),
+                'z' => self.cycle_mask(),
+                'r' => self.cycle_renderer(),
+                'n' => self.cycle_quantum(),
+                'j' => self.cycle_fade_beats(),
+                't' => self.cycle_tonemap(),
+                '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
+                '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
+                '`' => self.set_exposure(1.0),
+                'w' => self.toggle_priming(self.focus),
+                'y' => self.cycle_sync(),
+                'u' => self.scrub(-SCRUB_BEATS),
+                'i' => self.scrub(SCRUB_BEATS),
+                'b' => self.tap(),
+                ',' => self.shift_octave(0.5),
+                '.' => self.shift_octave(2.0),
+                'o' => self.nudge_latency_offset(-audio::LATENCY_OFFSET_STEP_MS),
+                'p' => self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS),
+                'a' => self.snap_to_canvas(),
+                // The focused slot, a stamped name, and nobody waiting: a hand
+                // has one slot in front of it, cannot type a name, and is
+                // reading the terminal.
+                'k' => self.save_set(Asked::Operator, self.focus, None, None),
+                's' => self.print_status(),
+                'h' | '?' => eprint!("{BINDINGS}"),
+                _ => {}
+            },
             _ => {}
         }
         false

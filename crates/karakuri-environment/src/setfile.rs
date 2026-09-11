@@ -98,7 +98,7 @@ use karakuri_store::store::{Store, StoreError};
 use crate::meta::put_meta;
 use crate::Asked;
 
-pub use crate::compile::{KirCompiler, Names, ProcedureCompiler};
+pub use crate::compile::Names;
 pub use crate::meta::{kind_name, kind_of, layer_named, layer_of};
 
 /// The Set file format version this build writes. One number for the whole
@@ -931,35 +931,16 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
 /// because a file that carries its own source is meant to be readable on a
 /// machine whose store has never seen it.
 pub fn load(store: &Store, id: &str) -> Result<Loaded, String> {
-    load_with_compiler(store, id, &KirCompiler)
-}
-
-/// [`load`], parametrized with a [`ProcedureCompiler`].
-pub fn load_with_compiler(
-    store: &Store,
-    id: &str,
-    compiler: &impl ProcedureCompiler,
-) -> Result<Loaded, String> {
     let lines = store
         .read_set(id)
         .map_err(|e| format!("reading set `{id}`: {e}"))?;
-    from_lines_with_compiler(store, id, &lines, compiler)
+    from_lines(store, id, &lines)
 }
 
 /// The decode, over lines that are already in hand. Split out so a test can
 /// build a file in memory and so a session stream's head can be loaded the same
 /// way once anything writes one.
 pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, String> {
-    from_lines_with_compiler(store, id, lines, &KirCompiler)
-}
-
-/// [`from_lines`], parametrized with a [`ProcedureCompiler`].
-pub fn from_lines_with_compiler(
-    store: &Store,
-    id: &str,
-    lines: &[Line],
-    compiler: &impl ProcedureCompiler,
-) -> Result<Loaded, String> {
     let mut notes = Vec::new();
     // Every layer's slots by index, the layers in the order [`layer_ordinal`]
     // gives them. `None` is a gap — an index nothing claimed — which is refused
@@ -1403,7 +1384,7 @@ pub fn from_lines_with_compiler(
 
     let check = |srcs: &[String]| {
         srcs.iter()
-            .map(|src| compiler.check(src))
+            .map(|src| crate::compile::check(src))
             .collect::<Result<Vec<_>, _>>()
     };
     let l1s = check(&l1_srcs)?;
@@ -2031,15 +2012,6 @@ impl Slot {
 /// source — which tells an operator which line is wrong, where refusing the
 /// whole file would tell them only that it was.
 pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
-    unbundle_with_compiler(store, lines, &KirCompiler)
-}
-
-/// [`unbundle`], parametrized with a [`ProcedureCompiler`].
-pub fn unbundle_with_compiler(
-    store: &Store,
-    lines: &[Line],
-    compiler: &impl ProcedureCompiler,
-) -> Result<String, String> {
     let mut file_id = None;
     let mut slots: Vec<Slot> = Vec::new();
     // Keyed and folded exactly as [`from_lines`] does it, so what is hashed
@@ -2139,7 +2111,7 @@ pub fn unbundle_with_compiler(
         // **The card is what a compile produces**, so it is written here and by
         // `put_meta` — the one both compile paths already go through — rather
         // than by a second writer of the same file.
-        match compiler.check(text) {
+        match crate::compile::check(text) {
             Ok(checked) => {
                 if crate::meta::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none()
                 {

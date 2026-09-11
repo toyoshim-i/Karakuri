@@ -11,29 +11,6 @@ use karakuri_ir::typed::Checked;
 
 use crate::meta::put_meta;
 
-/// A compiler or validator for procedure source strings.
-pub trait ProcedureCompiler {
-    fn check(&self, src: &str) -> Result<Checked, String>;
-}
-
-/// The default procedure compiler using the `karakuri-ir` validation pipeline.
-pub struct KirCompiler;
-
-impl ProcedureCompiler for KirCompiler {
-    fn check(&self, src: &str) -> Result<Checked, String> {
-        check(src)
-    }
-}
-
-impl<F> ProcedureCompiler for F
-where
-    F: Fn(&str) -> Result<Checked, String>,
-{
-    fn check(&self, src: &str) -> Result<Checked, String> {
-        self(src)
-    }
-}
-
 /// A name for every node of a slot, in the shape the procedures themselves are
 /// passed in.
 ///
