@@ -144,6 +144,7 @@ proc mixed {
             },
         );
         gpu.queue.submit([encoder.finish()]);
+        set.commit();
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));

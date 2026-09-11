@@ -116,6 +116,7 @@ proc emitter {{
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         set.render(&mut encoder, present.hdr_view(), steps);
         gpu.queue.submit([encoder.finish()]);
+        set.commit();
         gpu.device
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("poll");
@@ -153,6 +154,7 @@ proc emitter {{
             },
         );
         gpu.queue.submit([encoder.finish()]);
+        set.commit();
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));

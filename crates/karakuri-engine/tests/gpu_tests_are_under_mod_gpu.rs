@@ -398,7 +398,8 @@ fn every_gpu_test_is_under_mod_gpu_and_nothing_else_is() {
         for f in fns.iter().filter(|f| f.is_test) {
             tests += 1;
             let reaches = reaches_a_device((&f.body, &f.raw), &by_name, &mut Vec::new());
-            let marked = f.module.split("::").any(|seg| seg == MARKER);
+            let marked = f.module.split("::").any(|seg| seg == MARKER)
+                || path.file_stem().is_some_and(|s| s == MARKER);
             let at = format!(
                 "{}::{}",
                 path.strip_prefix(&root)
@@ -455,18 +456,27 @@ fn every_gpu_test_is_under_mod_gpu_and_nothing_else_is() {
 /// would go back to reading as five CPU tests. So the claim is checked.
 #[test]
 fn gpu_binaries_still_take_a_device() {
+    fn walk(dir: &Path, found: &mut bool, checked: &mut usize) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                walk(&path, found, checked);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                *checked += 1;
+                *found |= fs::read_to_string(&path).expect("read").contains(DOOR);
+            }
+        }
+    }
+
     let root = workspace();
     for (bin, src) in GPU_BINARIES {
         let dir = root.join(src);
         let mut found = false;
         let mut checked = 0;
-        for entry in fs::read_dir(&dir).expect("the named crate source") {
-            let path = entry.expect("dir entry").path();
-            if path.extension().is_some_and(|e| e == "rs") {
-                checked += 1;
-                found |= fs::read_to_string(&path).expect("read").contains(DOOR);
-            }
-        }
+        walk(&dir, &mut found, &mut checked);
         // A floor of one, and it was two until ADR-0214's move: the guard is
         // against reading *nothing* — a renamed directory, or an extension
         // filter that stopped matching — and `karakuri-cli/src` legitimately

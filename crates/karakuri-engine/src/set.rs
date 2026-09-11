@@ -770,6 +770,8 @@ pub struct Set {
     /// in pairs. Two tick histories reaching the same elapsed time have to be
     /// the same point in the session, and a float sum is not that function.
     steps_taken: u64,
+    /// Uncommitted simulation steps staged for the current frame.
+    staged_delta: u64,
     dt: f32,
     /// The `beats` the last [`Set::prepare`] wrote into the L4 uniform block.
     ///
@@ -2914,6 +2916,7 @@ impl Set {
             source_salts,
             declared_capacities,
             steps_taken: 0,
+            staged_delta: 0,
             dt: DT,
             last_beats: 0.0,
             viewport: [1.0, 1.0],
@@ -3042,6 +3045,56 @@ impl Set {
         (self.viewport[0] as u32, self.viewport[1] as u32)
     }
 
+    /// The committed simulation steps this Set has taken.
+    pub fn steps_taken(&self) -> u64 {
+        self.steps_taken
+    }
+
+    /// The simulation steps including any uncommitted staged steps for the current frame.
+    pub fn staged_steps_taken(&self) -> u64 {
+        self.steps_taken + self.staged_delta
+    }
+
+    /// The uncommitted steps staged for the current frame.
+    pub fn staged_delta(&self) -> u64 {
+        self.staged_delta
+    }
+
+    /// Which half of the primary source geometry's buffer holds what was last written.
+    pub fn parity(&self) -> usize {
+        self.sources.first().map_or(0, |s| s.sim.parity())
+    }
+
+    /// The committed parity of the primary source on the host.
+    pub fn committed_parity(&self) -> bool {
+        self.sources
+            .first()
+            .is_some_and(|s| s.sim.committed_parity())
+    }
+
+    /// Commit staged simulation clock advancement and ping-pong parities upon submission.
+    pub fn commit(&mut self) {
+        self.steps_taken += self.staged_delta;
+        self.staged_delta = 0;
+        for source in &mut self.sources {
+            source.sim.commit();
+            if let Some(other) = &mut source.paired {
+                other.commit();
+            }
+        }
+    }
+
+    /// Discard staged simulation clock advancement and ping-pong parities.
+    pub fn discard(&mut self) {
+        self.staged_delta = 0;
+        for source in &mut self.sources {
+            source.sim.discard();
+            if let Some(other) = &mut source.paired {
+                other.discard();
+            }
+        }
+    }
+
     pub fn time(&self) -> f32 {
         self.t_at(self.steps_taken)
     }
@@ -3156,6 +3209,7 @@ impl Set {
     /// The element buffers are left alone. They hold the previous instant's
     /// values, which a closed-form `element` block does not read.
     pub fn seek(&mut self, steps_taken: u64) {
+        self.discard();
         self.steps_taken = steps_taken;
     }
 
@@ -3178,6 +3232,7 @@ impl Set {
     /// cheaper contract than one that has to find out whether this is the
     /// version that needs it.
     pub fn rewind(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.discard();
         self.steps_taken = 0;
         for source in &mut self.sources {
             source.sim.rewind(queue);
@@ -4720,8 +4775,10 @@ impl Set {
     /// every respect but one" is structural rather than a claim two functions
     /// have to keep making about each other.
     fn prepare_on(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals, clock: Clock) {
+        self.discard();
         let steps = steps.min(MAX_STEPS);
-        self.steps_taken += u64::from(steps);
+        self.staged_delta = u64::from(steps);
+        let next_steps_taken = self.steps_taken + self.staged_delta;
         // After the bump, so `Clock::Local` measures the lag as of *this*
         // frame's last substep — the instant `Clock::Session` reads, because
         // the deck advances the session's oscillator before it prepares
@@ -4747,7 +4804,7 @@ impl Set {
                 let lag = signals
                     .oscillator()
                     .steps_taken()
-                    .saturating_sub(self.steps_taken);
+                    .saturating_sub(next_steps_taken);
                 signals.behind(lag as f64 * f64::from(self.dt))
             }
         };
@@ -4765,7 +4822,7 @@ impl Set {
         // the session's — which would be the same number and a different claim.
         // See `Oscillator::at_time` for why "the same number" is a measured fact
         // here rather than a hopeful one.
-        let first = self.steps_taken - u64::from(steps) + 1;
+        let first = next_steps_taken - u64::from(steps) + 1;
         let mut instants = [(0.0f32, 0.0f32); MAX_STEPS as usize];
         for (k, slot) in instants.iter_mut().enumerate().take(usize::from(steps)) {
             let t = self.t_at(first + k as u64);
@@ -4828,10 +4885,9 @@ impl Set {
 
         // The grid at exactly this frame's `t`, on the same terms as the
         // per-substep `beats` above: one instant, named twice, derived once.
-        // Kept, because [`Set::prepare`] has to be able to rewrite this
-        // block without moving it.
-        self.last_beats = view.oscillator().at_time(f64::from(self.time())).beats() as f32;
-        self.write_l4_uniforms(queue);
+        let t = self.t_at(next_steps_taken);
+        self.last_beats = view.oscillator().at_time(f64::from(t)).beats() as f32;
+        self.write_l4_uniforms(queue, t);
     }
 
     /// The L4 node's uniform block, from state this does not change.
@@ -4850,11 +4906,8 @@ impl Set {
     /// number for all of them; `exposure` is the node's and is not. The camera
     /// is neither: it is written once here, into its own edge, and read by every
     /// renderer off the GPU.
-    fn write_l4_uniforms(&mut self, queue: &wgpu::Queue) {
-        self.write_l2_uniforms(queue);
-        // Read before the borrow: `time` takes `&self` and each node's packer
-        // takes `&mut` its own scratch, but `param` below borrows this Set.
-        let t = self.time();
+    fn write_l4_uniforms(&mut self, queue: &wgpu::Queue, t: f32) {
+        self.write_l2_uniforms(queue, t);
         // **The cameras' edges, not a renderer's field.** These go in here
         // rather than into each uniform because a camera has several readers;
         // the aspect ratio goes with them because a renderer no longer knows
@@ -5001,8 +5054,7 @@ impl Set {
     /// the point the simulation reached, which is the same instant a renderer
     /// draws at — so a node in the middle of a chain and the node that draws its
     /// output cannot disagree about when this frame is.
-    fn write_l2_uniforms(&mut self, queue: &wgpu::Queue) {
-        let t = self.time();
+    fn write_l2_uniforms(&mut self, queue: &wgpu::Queue, t: f32) {
         let field_range = self.nodes_of(Kind::Field);
         let (bindings, beats, viewport, dt, field_params, field_bound, field_maps) = (
             &self.bindings,
@@ -5412,6 +5464,14 @@ impl VideoSource for Set {
     ) {
         self.step(encoder, steps);
         self.draw(encoder, target);
+    }
+
+    fn commit(&mut self) {
+        self.commit();
+    }
+
+    fn discard(&mut self) {
+        self.discard();
     }
 }
 

@@ -75,19 +75,14 @@
 //! - [`HotSwap::begin_frame`] is still callable on its own, and is still a
 //!   convention when it is. `karakuri-cli` and `tests/hot_swap.rs` use it
 //!   directly; the guard is the deck's, not the swap's.
-//! - **`mem::forget` on a [`Frame`] corrupts a Set permanently**, and this is
-//!   the one entry here that is worse than losing a frame. Forgetting the
-//!   guard ends the `&mut Deck` borrow — so the next `begin_frame` opens
-//!   immediately — and drops the encoder unsubmitted. But the frame's effects
-//!   are already half applied: `Set::prepare` has bumped `steps_taken` and its
-//!   `queue.write_buffer`s went to the *queue*, not the encoder, so they land;
-//!   and `Set::render` has already flipped `self.parity` on the host while the
-//!   compute passes that were supposed to justify that flip are discarded.
-//!   From then on `t`, parity and the element buffers disagree and L4 reads
-//!   the wrong buffer every frame. Nothing closes this without moving the
-//!   parity flip and the clock to where the submission is acknowledged, which
-//!   is a redesign of `Set`, not of this guard. `mem::forget` is safe Rust and
-//!   this is a real hole; it is named rather than hidden.
+//! - **`mem::forget` on a [`Frame`] does not corrupt a Set**, because the deck
+//!   and its sets implement two-phase atomic frame commit. State transitions
+//!   (`steps_taken`, ping-pong `parity`, spawn carry, and session `signals`)
+//!   are staged during `prepare` and `render`, and only committed to the host
+//!   when `queue.submit([encoder.finish()])` executes in `submit`.
+//!   If the frame is forgotten or discarded without submission, the encoder
+//!   and staged transitions are dropped uncommitted, leaving host clocks,
+//!   parities, and VRAM element buffers in full synchronization for the next frame.
 //!
 //! ## Residency: requested and effective
 //!
@@ -1232,6 +1227,9 @@ impl Deck {
         device: &wgpu::Device,
         queue: &'a wgpu::Queue,
     ) -> Frame<'a> {
+        for slot in self.slots.iter_mut() {
+            slot.swap.live_mut().discard();
+        }
         for (i, slot) in self.slots.iter_mut().enumerate() {
             // Read before the boundary so that what it appends can be told
             // apart from what the caller has not drained yet. `pending_events`
@@ -1306,6 +1304,7 @@ impl Deck {
                 }),
             ),
             rendered: false,
+            staged_signals: None,
         }
     }
 
@@ -2347,6 +2346,7 @@ pub struct Frame<'a> {
     /// and [`Drop`] have to be able to do it, exactly once between them.
     encoder: Option<wgpu::CommandEncoder>,
     rendered: bool,
+    staged_signals: Option<Signals>,
 }
 
 impl Frame<'_> {
@@ -2373,16 +2373,12 @@ impl Frame<'_> {
         );
         self.rendered = true;
 
-        // The session clock, advanced once, here, by exactly what every Live
+        // The session clock, staged once, here, by exactly what every Live
         // slot is about to be advanced by — clamped the same way `Set::prepare`
-        // clamps it, or a frame the simulation was allowed to fall behind on
-        // would move the oscillator further than the material it drives. The
-        // `rendered` assert above is what makes "once" structural: a second
-        // `render` in one frame cannot reach this.
-        //
-        // Before the slots, so that a binding reads the phase at the instant of
-        // this frame's last substep — the same instant `Set::time` reports.
-        self.deck.signals.advance(steps.min(MAX_STEPS), DT);
+        // clamps it. Committed to `self.deck.signals` on `submit()`.
+        let mut signals = self.deck.signals;
+        signals.advance(steps.min(MAX_STEPS), DT);
+        self.staged_signals = Some(signals);
 
         // A view carries no dimensions, so the size comes alongside it and is
         // checked here. Silence is the reason: the composite reads its sources
@@ -2413,7 +2409,7 @@ impl Frame<'_> {
         // has to be evaluated at this frame's position rather than the last
         // one's — and it has to be written before the composite reads the
         // faders it moves. See `crate::transition`.
-        let beats = self.deck.signals.oscillator().beats();
+        let beats = signals.oscillator().beats();
         self.deck.advance_transitions(beats);
         // **Beside the transitions, and for the same reason**: a selection is
         // scheduled on the same grid and has to land before anything draws the
@@ -2421,7 +2417,6 @@ impl Frame<'_> {
         // slot's fader, so the two cannot collide.
         self.deck.advance_selections(beats);
 
-        let signals = &self.deck.signals;
         for (i, slot) in self.deck.slots.iter_mut().enumerate() {
             // The effective residency, and only ever that: what the frame does
             // is what the governor last allowed, not what was asked for.
@@ -2478,7 +2473,7 @@ impl Frame<'_> {
                             1
                         }
                     };
-                    set.prepare(self.queue, steps, signals);
+                    set.prepare(self.queue, steps, &signals);
                     set.render(encoder, view, steps);
                     // After the render pass, into the same encoder, so the
                     // measurement is of this frame's image. **Live slots only,
@@ -2538,7 +2533,7 @@ impl Frame<'_> {
                 Residency::Priming | Residency::Allocated => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();
-                    set.prepare_warming(self.queue, steps, signals);
+                    set.prepare_warming(self.queue, steps, &signals);
                     set.render(encoder, view, steps);
                 }
             }
@@ -2594,9 +2589,27 @@ impl Frame<'_> {
         self.submit();
     }
 
+    /// Discard the frame without submitting its command buffer or committing
+    /// staged simulation transitions to the deck or its sets.
+    pub fn discard(mut self) {
+        let _ = self.encoder.take();
+        self.staged_signals = None;
+        for slot in &mut self.deck.slots {
+            slot.swap.live_mut().discard();
+        }
+    }
+
     fn submit(&mut self) {
         if let Some(encoder) = self.encoder.take() {
             self.queue.submit([encoder.finish()]);
+            // Two-phase atomic frame commit: apply staged transitions
+            // to host state only now that GPU submission has succeeded.
+            if let Some(signals) = self.staged_signals.take() {
+                self.deck.signals = signals;
+            }
+            for slot in &mut self.deck.slots {
+                slot.swap.live_mut().commit();
+            }
             // Only now: `map_async` resolves against the submissions
             // outstanding when it is called, so arming a staging buffer before
             // the copy that fills it has been submitted would deliver whatever

@@ -337,6 +337,9 @@ proc dots {
             },
         );
         gpu.queue.submit([encoder.finish()]);
+        if step {
+            set.commit();
+        }
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));

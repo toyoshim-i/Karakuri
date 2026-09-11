@@ -17,6 +17,13 @@ pub trait VideoSource {
     /// keeps substepping compatible with deterministic reproduction.
     fn render(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, steps: u8);
 
+    /// Commit staged state transitions (such as simulation clock advancement
+    /// and ping-pong parity) after command buffer submission.
+    fn commit(&mut self) {}
+
+    /// Discard staged state transitions when an open frame is abandoned without submission.
+    fn discard(&mut self) {}
+
     /// The format every implementation renders into.
     fn format(&self) -> wgpu::TextureFormat {
         wgpu::TextureFormat::Rgba16Float

@@ -1289,6 +1289,11 @@ impl HotSwap {
         &mut self.live
     }
 
+    /// The currently live Set. Read-only inspection of the Set this slot is playing.
+    pub fn live(&self) -> &Set {
+        &self.live
+    }
+
     /// Frames begun since construction. What "a build does not block the
     /// render loop" is measured in: the count between a request going out and
     /// its [`Event::Swapped`] coming back is how many frames were produced

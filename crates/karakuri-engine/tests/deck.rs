@@ -434,6 +434,7 @@ proc wash {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         set.render(&mut encoder, present.hdr_view(), steps);
         gpu.queue.submit([encoder.finish()]);
+        set.commit();
         gpu.device
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("poll");
@@ -4462,5 +4463,63 @@ proc wash {
 
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
         frame.render(present.hdr_view(), present.size(), 1);
+    }
+
+    /// A frame that is forgotten (e.g. dropped without submitting via `std::mem::forget`)
+    /// leaves host simulation clocks, signals, and buffer ping-pong parity uncommitted and
+    /// completely uncorrupted. The subsequent frame can begin, render, and submit cleanly
+    /// without state desynchronization.
+    #[test]
+    fn forgetting_a_frame_does_not_corrupt_set_or_desync_parity_and_clock() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut deck = deck_of(&gpu, &[SEED_A]);
+        let present = Present::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            WIDTH,
+            HEIGHT,
+        );
+
+        let slot0 = karakuri_engine::DeckSlot(0);
+
+        // Verify initial state: 0 steps, initial oscillator phase
+        assert_eq!(deck.signals().oscillator().steps_taken(), 0);
+        assert_eq!(deck.slot(slot0).live().steps_taken(), 0);
+        assert_eq!(deck.slot(slot0).live().staged_delta(), 0);
+        assert!(!deck.slot(slot0).live().committed_parity());
+
+        // Phase 1: Begin a frame, render with 3 steps, but forget it before submitting.
+        let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
+        frame.render(present.hdr_view(), present.size(), 3);
+        std::mem::forget(frame);
+
+        // Host committed state must remain untouched: 0 steps taken, parity uncommitted.
+        assert_eq!(deck.signals().oscillator().steps_taken(), 0);
+        assert_eq!(deck.slot(slot0).live().steps_taken(), 0);
+        assert_eq!(deck.slot(slot0).live().staged_delta(), 3);
+        assert!(!deck.slot(slot0).live().committed_parity());
+
+        // Phase 2: Discard test - begin another frame (which discards the uncommitted staged delta),
+        // render with 4 steps, then call frame.discard().
+        let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
+        frame.render(present.hdr_view(), present.size(), 4);
+        frame.discard();
+
+        // Host state must still remain untouched and discard cleared staged state.
+        assert_eq!(deck.signals().oscillator().steps_taken(), 0);
+        assert_eq!(deck.slot(slot0).live().steps_taken(), 0);
+        assert_eq!(deck.slot(slot0).live().staged_delta(), 0);
+        assert!(!deck.slot(slot0).live().committed_parity());
+
+        // Phase 3: Now render a real frame with 1 step and submit it.
+        let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
+        frame.render(present.hdr_view(), present.size(), 1);
+        frame.finish();
+
+        // Host state must now reflect exactly 1 step committed.
+        assert_eq!(deck.signals().oscillator().steps_taken(), 1);
+        assert_eq!(deck.slot(slot0).live().steps_taken(), 1);
+        assert_eq!(deck.slot(slot0).live().staged_delta(), 0);
+        assert!(deck.slot(slot0).live().committed_parity());
     }
 }
