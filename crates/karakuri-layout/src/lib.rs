@@ -162,9 +162,11 @@
 
 mod layout;
 mod spec;
+mod split;
 
 pub use layout::{Hit, Layout, NodeId};
 pub use spec::Spec;
+pub use split::LayoutSplit;
 
 use serde::{Deserialize, Serialize};
 

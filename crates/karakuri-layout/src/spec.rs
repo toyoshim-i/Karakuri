@@ -11,7 +11,7 @@
 //! tree would be a second on-disk format for the same thing, and the two would
 //! disagree the first time one of them grew a field.
 
-use crate::{Axis, Sizing};
+use crate::{Axis, LayoutSplit, Sizing};
 
 /// One node of an arrangement, before it is built.
 ///
@@ -42,6 +42,7 @@ pub enum Spec {
     /// requirement.
     Split {
         name: Option<String>,
+        split_identity: Option<LayoutSplit>,
         axis: Axis,
         divider: f32,
         children: Vec<Spec>,
@@ -72,6 +73,7 @@ impl Spec {
     pub fn split(axis: Axis, divider: f32, children: Vec<Spec>) -> Spec {
         Spec::Split {
             name: None,
+            split_identity: None,
             axis,
             divider,
             children,
@@ -101,11 +103,36 @@ impl Spec {
     /// [`Layout::new`](crate::Layout::new) refuses one that is not.
     pub fn named(self, name: impl Into<String>) -> Spec {
         let mut spec = self;
+        let s = name.into();
         match &mut spec {
-            Spec::View { name: n, .. } => *n = name.into(),
-            Spec::Split { name: n, .. } => *n = Some(name.into()),
+            Spec::View { name: n, .. } => *n = s,
+            Spec::Split {
+                name: n,
+                split_identity,
+                ..
+            } => {
+                *n = Some(s.clone());
+                if split_identity.is_none() {
+                    *split_identity = Some(LayoutSplit::Named(s));
+                }
+            }
         }
         spec
+    }
+
+    /// Assign a typed split identity, allowing unnamed or named splits
+    /// to be referenced by [`LayoutSplit`].
+    pub fn split_identity(self, identity: LayoutSplit) -> Spec {
+        let mut spec = self;
+        if let Spec::Split { split_identity, .. } = &mut spec {
+            *split_identity = Some(identity);
+        }
+        spec
+    }
+
+    /// Name a split and assign a typed [`LayoutSplit::Named`] identity.
+    pub fn named_split(self, name: impl Into<String>) -> Spec {
+        self.named(name)
     }
 
     /// Claim `size` along the parent's axis and keep it when the viewport

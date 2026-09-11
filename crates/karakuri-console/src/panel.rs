@@ -80,8 +80,10 @@
 //! first, which on a frame where nothing moved is a flag test, and every
 //! operation leaves the layout clean behind it.
 
-use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
-use karakuri_operation::{Bloom, Cut, Feedback, Operation, ParamAt, ParamValue, RgbShift};
+use karakuri_layout::{Axis, Hit, Layout, LayoutSplit, NodeId, Point, Rect};
+use karakuri_operation::{
+    Bloom, Cut, Feedback, Operation, Operation as VocabOp, ParamAt, ParamValue, RgbShift,
+};
 
 /// How far either side of a boundary still grabs it. Wider than any divider
 /// the console draws, which is [`Layout::hit`]'s whole argument for taking a
@@ -655,6 +657,212 @@ pub enum Op {
     /// `docs/manual/operations.html` names it, which is permanent
     /// (ADR-0205) and is about the page rather than about a key.
     Report,
+}
+
+/// Error encountered when resolving or translating between public operations
+/// and internal layout panel operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OperationResolutionError {
+    /// A named target region was not found in the layout.
+    NotFound(String),
+    /// A typed layout split was not found in the layout.
+    SplitNotFound(LayoutSplit),
+    /// The specified operation is not an arrangement or layout operation.
+    UnsupportedOperation,
+    /// An internal layout operation has no representation in the public vocabulary.
+    UnrepresentableInVocabulary,
+}
+
+impl std::fmt::Display for OperationResolutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound(name) => write!(f, "target region '{name}' not found in layout"),
+            Self::SplitNotFound(split) => write!(f, "layout split '{split}' not found in layout"),
+            Self::UnsupportedOperation => {
+                write!(f, "operation cannot be applied to console layout")
+            }
+            Self::UnrepresentableInVocabulary => {
+                write!(
+                    f,
+                    "internal operation has no representation in public vocabulary"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for OperationResolutionError {}
+
+impl Op {
+    /// Resolve an operation from the public vocabulary [`Operation`] against
+    /// a [`Layout`].
+    pub fn from_operation(
+        op: &Operation,
+        layout: &Layout,
+    ) -> Result<Self, OperationResolutionError> {
+        match op {
+            VocabOp::FoldBay { bay } => {
+                let id = layout
+                    .find(bay)
+                    .ok_or_else(|| OperationResolutionError::NotFound(bay.clone()))?;
+                Ok(Op::Fold(id))
+            }
+            VocabOp::FoldPane { pane } => {
+                let id = layout
+                    .find_split(&LayoutSplit::Named(pane.clone()))
+                    .or_else(|| layout.find(pane))
+                    .ok_or_else(|| OperationResolutionError::NotFound(pane.clone()))?;
+                Ok(Op::Fold(id))
+            }
+            VocabOp::Unfold { region: None } => Ok(Op::UnfoldAll),
+            VocabOp::Unfold { region: Some(name) } => {
+                let id = layout
+                    .find(name)
+                    .ok_or_else(|| OperationResolutionError::NotFound(name.clone()))?;
+                Ok(Op::Unfold(id))
+            }
+            VocabOp::Solo { region: None } => Ok(Op::Unsolo),
+            VocabOp::Solo { region: Some(name) } => {
+                let id = layout
+                    .find(name)
+                    .ok_or_else(|| OperationResolutionError::NotFound(name.clone()))?;
+                Ok(Op::Solo(id))
+            }
+            VocabOp::ResetArrangement => Ok(Op::Reset),
+            _ => Err(OperationResolutionError::UnsupportedOperation),
+        }
+    }
+
+    /// Convert this [`Op`] to an [`Operation`] in the public vocabulary,
+    /// resolving node names using `layout`.
+    pub fn to_operation(&self, layout: &Layout) -> Option<Operation> {
+        match self {
+            Op::Fold(id) => {
+                let name = layout.name(*id)?;
+                if layout.is_split(*id) {
+                    Some(VocabOp::FoldPane {
+                        pane: name.to_string(),
+                    })
+                } else {
+                    Some(VocabOp::FoldBay {
+                        bay: name.to_string(),
+                    })
+                }
+            }
+            Op::FoldEnclosing(id) => {
+                let parent = layout.parent(*id)?;
+                let name = layout.name(parent)?;
+                Some(VocabOp::FoldPane {
+                    pane: name.to_string(),
+                })
+            }
+            Op::Unfold(id) => {
+                let name = layout.name(*id)?;
+                Some(VocabOp::Unfold {
+                    region: Some(name.to_string()),
+                })
+            }
+            Op::UnfoldAll => Some(VocabOp::Unfold { region: None }),
+            Op::Solo(id) => {
+                let name = layout.name(*id)?;
+                Some(VocabOp::Solo {
+                    region: Some(name.to_string()),
+                })
+            }
+            Op::Unsolo => Some(VocabOp::Solo { region: None }),
+            Op::Reset => Some(VocabOp::ResetArrangement),
+            Op::Report => None,
+        }
+    }
+
+    /// Construct a [`Op::Fold`] targeting a typed [`LayoutSplit`].
+    pub fn fold_split(
+        split: &LayoutSplit,
+        layout: &Layout,
+    ) -> Result<Self, OperationResolutionError> {
+        let id = layout
+            .find_split(split)
+            .ok_or_else(|| OperationResolutionError::SplitNotFound(split.clone()))?;
+        Ok(Op::Fold(id))
+    }
+
+    /// Construct a [`Op::Unfold`] targeting a typed [`LayoutSplit`].
+    pub fn unfold_split(
+        split: &LayoutSplit,
+        layout: &Layout,
+    ) -> Result<Self, OperationResolutionError> {
+        let id = layout
+            .find_split(split)
+            .ok_or_else(|| OperationResolutionError::SplitNotFound(split.clone()))?;
+        Ok(Op::Unfold(id))
+    }
+
+    /// Construct a [`Op::Solo`] targeting a typed [`LayoutSplit`].
+    pub fn solo_split(
+        split: &LayoutSplit,
+        layout: &Layout,
+    ) -> Result<Self, OperationResolutionError> {
+        let id = layout
+            .find_split(split)
+            .ok_or_else(|| OperationResolutionError::SplitNotFound(split.clone()))?;
+        Ok(Op::Solo(id))
+    }
+}
+
+/// A conversion trait for items that can be lowered into an internal [`Op`]
+/// when evaluated against a [`Layout`].
+pub trait IntoPanelOp {
+    fn into_panel_op(self, layout: &Layout) -> Result<Op, OperationResolutionError>;
+}
+
+impl IntoPanelOp for Op {
+    fn into_panel_op(self, _layout: &Layout) -> Result<Op, OperationResolutionError> {
+        Ok(self)
+    }
+}
+
+impl IntoPanelOp for &Operation {
+    fn into_panel_op(self, layout: &Layout) -> Result<Op, OperationResolutionError> {
+        Op::from_operation(self, layout)
+    }
+}
+
+impl IntoPanelOp for Operation {
+    fn into_panel_op(self, layout: &Layout) -> Result<Op, OperationResolutionError> {
+        Op::from_operation(&self, layout)
+    }
+}
+
+impl IntoPanelOp for &LayoutSplit {
+    fn into_panel_op(self, layout: &Layout) -> Result<Op, OperationResolutionError> {
+        Op::fold_split(self, layout)
+    }
+}
+
+impl IntoPanelOp for LayoutSplit {
+    fn into_panel_op(self, layout: &Layout) -> Result<Op, OperationResolutionError> {
+        Op::fold_split(&self, layout)
+    }
+}
+
+impl<'a> TryFrom<(&'a Operation, &'a Layout)> for Op {
+    type Error = OperationResolutionError;
+
+    fn try_from((op, layout): (&'a Operation, &'a Layout)) -> Result<Self, Self::Error> {
+        Op::from_operation(op, layout)
+    }
+}
+
+/// Trait for converting an internal layout operation or split into a public [`Operation`].
+pub trait ToOperation {
+    fn to_operation(&self, layout: &Layout) -> Result<Operation, OperationResolutionError>;
+}
+
+impl ToOperation for Op {
+    fn to_operation(&self, layout: &Layout) -> Result<Operation, OperationResolutionError> {
+        self.to_operation(layout)
+            .ok_or(OperationResolutionError::UnrepresentableInVocabulary)
+    }
 }
 
 /// What a press found under the pointer.
@@ -1567,6 +1775,40 @@ impl Panel {
         };
         self.solve();
         outcome
+    }
+
+    /// Apply an operation from the public vocabulary [`Operation`], resolving
+    /// target names against the arrangement layout.
+    pub fn apply_operation(&mut self, op: &Operation) -> Result<Outcome, OperationResolutionError> {
+        let panel_op = Op::from_operation(op, &self.layout)?;
+        Ok(self.op(panel_op))
+    }
+
+    /// Apply any operation or split that implements [`IntoPanelOp`].
+    pub fn operate<T: IntoPanelOp>(&mut self, op: T) -> Result<Outcome, OperationResolutionError> {
+        let panel_op = op.into_panel_op(&self.layout)?;
+        Ok(self.op(panel_op))
+    }
+
+    /// Fold a typed layout split.
+    pub fn fold_split(&mut self, split: &LayoutSplit) -> Result<Outcome, OperationResolutionError> {
+        let op = Op::fold_split(split, &self.layout)?;
+        Ok(self.op(op))
+    }
+
+    /// Unfold a typed layout split.
+    pub fn unfold_split(
+        &mut self,
+        split: &LayoutSplit,
+    ) -> Result<Outcome, OperationResolutionError> {
+        let op = Op::unfold_split(split, &self.layout)?;
+        Ok(self.op(op))
+    }
+
+    /// Solo a typed layout split.
+    pub fn solo_split(&mut self, split: &LayoutSplit) -> Result<Outcome, OperationResolutionError> {
+        let op = Op::solo_split(split, &self.layout)?;
+        Ok(self.op(op))
     }
 
     /// **Put a saved arrangement in**, at the viewport this window already

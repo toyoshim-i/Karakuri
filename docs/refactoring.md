@@ -38,7 +38,7 @@ graph TD
     subgraph Phase2A["Phase 2A: Liquidating Incomplete Phase 1 Debt"]
         P8["P8: Eradicate Source Scraping<br/><b>[DONE]</b>"]
         P9["P9: Dismantle karakuri/src/main.rs into App Modules<br/><b>[DONE]</b>"]
-        P10["P10: Eliminate panel::Op & Decouple from HTML Docs"]
+        P10["P10: Eliminate panel::Op & Decouple from HTML Docs<br/><b>[DONE]</b>"]
         P11["P11: Untangle karakuri-environment Cycles & Align CLI"]
         P12["P12: Implement True Two-Phase Atomic Frame Commit"]
         P13["P13: Unify Geometry & L5 Image Pass Execution"]
@@ -328,7 +328,7 @@ During live recording and replay, every frame line is serialized/deserialized us
 | **Phase 1** | **P7** | **L5 Image Pass Abstraction** | *Distorted* | M5.16 built via bespoke `master.rs`; pass abstraction skipped |
 | **Phase 2A** | **P8** | **Eradicate Source Scraping** | **DONE** | Abolished `fs::read_to_string` reflection in `main.rs` & `keymap.rs`; tests executable |
 | **Phase 2A** | **P9** | **Dismantle `main.rs` (32.8k lines)** | **DONE** | Decomposed `main.rs` (32.5k -> 819 lines) into `app`, `engine_bridge`, `readout`, `launch`, `gfx`, `tests/` |
-| **Phase 2A** | **P10** | **Eliminate `panel::Op`** | **Urgent** | Bridge `panel::Op` into vocabulary; decouple code from manual HTML state |
+| **Phase 2A** | **P10** | **Eliminate `panel::Op`** | **DONE** | Bridge `panel::Op` into vocabulary; decouple code from manual HTML state |
 | **Phase 2A** | **P11** | **Untangle Environment & Align CLI** | **Urgent** | Break `setfile` ↔ `compile` cycles; align CLI keys with GUI |
 | **Phase 2A** | **P12** | **Two-Phase Atomic Frame Commit** | **Urgent** | Stage simulation clock & parity until `queue.submit()` succeeds |
 | **Phase 2A** | **P13** | **Unify Geometry & L5 Image Passes** | **Urgent** | Merge `master.rs` L5 chain and Set passes into unified `ImagePass` |

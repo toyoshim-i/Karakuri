@@ -1657,6 +1657,17 @@ impl Readout {
         outcome
     }
 
+    /// Apply an operation from the public vocabulary [`Operation`], resolving
+    /// target names against the arrangement layout.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn apply_operation(
+        &mut self,
+        op: &Operation,
+    ) -> Result<Outcome, karakuri_console::panel::OperationResolutionError> {
+        let panel_op = Op::from_operation(op, self.panel.layout())?;
+        Ok(self.op(panel_op))
+    }
+
     /// What an operation did, in words. The model returns the facts; which
     /// English they take is the operation that was asked for, which is why
     /// this has both.
