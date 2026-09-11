@@ -109,6 +109,8 @@ pub(crate) enum KeyAction {
     /// Handles the whole press — asks for whatever frame it owes, if any —
     /// and the window loop returns immediately after calling it.
     Handled(fn(&mut KeyCtx, &mut Gfx)),
+    /// Moves focus between bays or within a bay and returns whether focus moved.
+    Focus(fn(&mut KeyCtx) -> bool),
 }
 
 /// **One row of the window loop's own keyboard**, checked against
@@ -173,7 +175,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         legend: "tab",
         bay: None,
         title: None,
-        action: KeyAction::Handled(key_tab),
+        action: KeyAction::Focus(key_tab),
     },
     // **`esc` goes up one level of the focused bay's address, and it does
     // not quit** (ADR-0259). Quitting follows the platform's own
@@ -197,7 +199,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         legend: "esc",
         bay: None,
         title: None,
-        action: KeyAction::Handled(key_escape),
+        action: KeyAction::Focus(key_escape),
     },
     // **The one letter left that names a region, and it takes it from the
     // focus rather than from the pointer** (ADR-0259, ADR-0343). `g` folds
@@ -299,21 +301,15 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
 // see [`KEY_BINDINGS`] for the doc comment that used to sit on the arm
 // itself.
 
-fn key_tab(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+pub(crate) fn key_tab(ctx: &mut KeyCtx) -> bool {
     let step = match ctx.shift {
         true => -1,
         false => 1,
     };
-    let moved = ctx.readout.view.tab(&ctx.readout.panel, step);
-    App::wants(
-        gfx,
-        ctx.egui_due,
-        ctx.costs,
-        Change::Pointed(moved).repaint(),
-    );
+    ctx.readout.view.tab(&ctx.readout.panel, step)
 }
 
-fn key_escape(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+pub(crate) fn key_escape(ctx: &mut KeyCtx) -> bool {
     let moved = ctx.readout.view.focus_up(&ctx.readout.panel);
     if !moved {
         println!(
@@ -326,12 +322,7 @@ fn key_escape(ctx: &mut KeyCtx, gfx: &mut Gfx) {
                 .map_or("focused", |bay| bay.name)
         );
     }
-    App::wants(
-        gfx,
-        ctx.egui_due,
-        ctx.costs,
-        Change::Pointed(moved).repaint(),
-    );
+    moved
 }
 
 fn key_fold_enclosing(ctx: &mut KeyCtx) -> Option<Op> {
@@ -564,19 +555,6 @@ pub(crate) mod key_column {
     /// The specification, relative to the workspace root.
     const PAGE: &str = "docs/manual/operations.html";
 
-    /// The keys, relative to the same root: this file, read as text. There is
-    /// no other way to ask *which keys does this program bind* from inside its
-    /// own test binary — the `match` is a `match`, not a table.
-    ///
-    /// **`pub(crate)` for `crate::focus_keys`**, which reads this same file —
-    /// `keymap.rs`, since 2026-09-11 — for `key_tab`'s and `key_escape`'s own
-    /// bodies, one question along, and would otherwise spell the path a
-    /// second time. **Not `press_handler`'s any more**: `Readout::pointer`
-    /// stayed in `main.rs` when this table and this test module moved out of
-    /// it, so that module kept its own copy of this trio, pointed at
-    /// `main.rs` still — `crate::source_scan`.
-    pub(crate) const SRC: &str = "crates/karakuri/src/keymap.rs";
-
     /// What marks a row on the page — the marker `panel_column.rs`,
     /// `vocabulary.rs` and `mcp.rs` all match, for the reason the first of them
     /// gives: sections are `<h2>` and a heading somebody adds for looks is
@@ -587,20 +565,6 @@ pub(crate) mod key_column {
     /// allowed to be this; a `has` badge is not, because it would claim an
     /// operator reaches the operation and decline to say what to press.
     const NOWHERE: &str = "&mdash;";
-
-    /// Where [`bound`] stops reading. Everything below the first of these in
-    /// this file is a test, and a key spelled in a test is not a key this
-    /// program binds — including the ones spelled in [`ROWS`] a few lines down
-    /// and in [`crate::KEYS`] above, which would otherwise make the scan agree
-    /// with itself.
-    ///
-    /// **`pub(crate)` for `crate::focus_keys`**, which stops at the same
-    /// marker for the same reason, one question along — its own text lives
-    /// in this file now, not `press_handler`'s: see [`SRC`]. It cut
-    /// `karakuri-console`'s own source at it too until 2026-09-07, while that
-    /// crate's controls were read out of its text rather than out of
-    /// `input::PROBES`.
-    pub(crate) const TESTS: &str = "#[cfg(test)]";
 
     /// **The digit, declared rather than scanned.**
     ///
@@ -999,10 +963,7 @@ pub(crate) mod key_column {
     ];
 
     /// Byte for byte what `karakuri-console/tests/panel_column.rs` does, and
-    /// both resolve [`PAGE`] and [`SRC`] from it. Private since 2026-09-11:
-    /// `press_handler` read this for its own [`SRC`] once, and now carries
-    /// an identical function under `crate::source_scan` instead, for
-    /// `main.rs`'s sake rather than this one's.
+    /// resolves [`PAGE`] from it.
     fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -1198,8 +1159,8 @@ pub(crate) mod key_column {
         );
         assert!(
             bound().len() >= 9,
-            "only {} keys found bound in {SRC} — the window loop's `match` has more arms than \
-             this, and a scan below it is a scan that has stopped matching code",
+            "only {} keys found bound — the window loop's `match` has more arms than \
+             this, and a check below it is a check that has stopped matching code",
             bound().len()
         );
     }
@@ -1291,117 +1252,6 @@ pub(crate) mod key_column {
                 binding.legend,
                 said(binding.bay),
                 found.2
-            );
-        }
-    }
-
-    /// **This file's code, down to the first test, as one line with its
-    /// comments cut** — [`bound`]'s two cuts, and then the newlines go too.
-    ///
-    /// The joining is the point: where `rustfmt` chose to wrap a call says
-    /// nothing about what the call is, and a check written against the wrapped
-    /// shape would fail the day a name got longer.
-    ///
-    /// **`pub(crate)` for `crate::focus_keys`**, which cuts `key_tab` and
-    /// `key_escape` out of the same flattened text since 2026-09-11 — see
-    /// [`SRC`]. `press_handler` cut `Readout::pointer` out of a copy of this
-    /// same function once; `main.rs` is not this file any more, so it now
-    /// carries its own, under `crate::source_scan`.
-    pub(crate) fn code() -> String {
-        let path = workspace().join(SRC);
-        let text = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{} holds the arms and is unreadable: {e}", path.display()));
-        let mut kept = String::new();
-        for line in text.lines() {
-            let line = line.trim();
-            if line == TESTS {
-                break;
-            }
-            if line.starts_with("//") {
-                continue;
-            }
-            let code = match line.find("//") {
-                Some(at) => &line[..at],
-                None => line,
-            };
-            kept.push_str(code.trim());
-            kept.push(' ');
-        }
-        kept
-    }
-
-    /// A line's code, `press_handler`'s own `cut` in `main.rs`: whatever
-    /// trails a `//` is gone.
-    fn cut(line: &str) -> &str {
-        match line.find("//") {
-            Some(at) => &line[..at],
-            None => line,
-        }
-    }
-
-    /// Whether the first `//` on a line of code is inside a string literal,
-    /// which is an odd number of unescaped `"` before it — byte for byte
-    /// `press_handler`'s own copy in `main.rs`.
-    fn slashes_in_a_string(line: &str) -> bool {
-        let Some(at) = line.find("//") else {
-            return false;
-        };
-        let mut quotes = 0usize;
-        let mut escaped = false;
-        for c in line[..at].chars() {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-            match c {
-                '\\' => escaped = true,
-                '"' => quotes += 1,
-                _ => {}
-            }
-        }
-        quotes % 2 == 1
-    }
-
-    /// **[`code`]'s one cut is the whole of the comment syntax it meets**, or
-    /// this says so and names the line.
-    ///
-    /// `crate::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
-    /// asks this question of `main.rs`, for `Readout::pointer`'s sake. Until
-    /// 2026-09-11 that one test stood for this file too, because `main.rs`
-    /// was this file — `KEY_BINDINGS`, `key_tab`, `key_escape` and
-    /// `key_column` itself were all read out of the same text `press_handler`
-    /// was refusing block comments and hidden `//`s in. Once they moved into
-    /// `keymap.rs` on their own, that refusal stopped covering the file
-    /// [`code`] actually reads, and nothing else had ever asked the
-    /// question of this one — so this asks it, the same way, of `SRC`
-    /// instead.
-    #[test]
-    fn the_cut_code_makes_is_the_whole_of_the_comment_syntax_it_meets() {
-        let path = workspace().join(SRC);
-        let text = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()));
-        for (at, raw) in text.lines().enumerate() {
-            let line = raw.trim();
-            if line == TESTS {
-                break;
-            }
-            if line.starts_with("//") {
-                continue;
-            }
-            assert!(
-                !cut(line).contains("/*"),
-                "{}:{} opens a block comment, and [`code`]'s cut does not understand one — a \
-                 statement inside it would read as flattened code it is not: {line}",
-                path.display(),
-                at + 1
-            );
-            assert!(
-                !slashes_in_a_string(line),
-                "{}:{} has a `//` inside a string literal, and [`code`]'s cut would take the \
-                 rest of the line with it — a statement on this line would vanish from what \
-                 `focus_keys` reads: {line}",
-                path.display(),
-                at + 1
             );
         }
     }

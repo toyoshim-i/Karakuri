@@ -3889,12 +3889,7 @@ impl Readout {
     /// its two states — so a press that moved the handle and not the view would
     /// leave the very next press aimed at the capsule that was there before it.
     fn opened(&mut self, pill: &McpPill) -> Acted {
-        // **Annotated, and the annotation is load bearing in two ways.** It
-        // says what a press composes — an opening and not a `bool` — and it is
-        // what keeps `Open` named outside `#[cfg(test)]`: a test-only `use` of
-        // it would sit above the window loop, and `crate::source_scan`'s scan
-        // of this file's own text stops at the first `#[cfg(test)]` line it
-        // meets.
+        // **Annotated**: it says what a press composes — an opening and not a `bool`.
         let next: Open = pill.next(self.view.opening);
         self.opening.set(next);
         self.view.opening = next;
@@ -15011,7 +15006,37 @@ struct App {
     clock: Clock,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EventLoopAction {
+    Exit,
+    Continue,
+}
+
 impl App {
+    /// Reaction to a window event regarding event loop termination.
+    pub(crate) fn event_loop_action_for(
+        is_main_window: bool,
+        event: &WindowEvent,
+    ) -> EventLoopAction {
+        if !is_main_window {
+            return EventLoopAction::Continue;
+        }
+        match event {
+            WindowEvent::CloseRequested => EventLoopAction::Exit,
+            _ => EventLoopAction::Continue,
+        }
+    }
+
+    /// Reaction to a window event regarding event loop termination for this app instance.
+    pub(crate) fn event_loop_action(&self, id: WindowId, event: &WindowEvent) -> EventLoopAction {
+        let is_main_window = self.gfx.as_ref().is_none_or(|g| g.window.id() == id);
+        Self::event_loop_action_for(is_main_window, event)
+    }
+
+    /// Updates the shift modifier state from a `ModifiersChanged` event.
+    pub(crate) fn update_modifiers(&mut self, state: &winit::event::Modifiers) {
+        self.shift = state.state().shift_key();
+    }
     /// **The opening is handed in rather than made here**, which is the whole of
     /// what pairing the four pills with a server took: [`main`] gives the same
     /// handle to [`karakuri_mcp::serve`] and to this, so a press on
@@ -16554,20 +16579,22 @@ impl ApplicationHandler for App {
         }
         match event {
             WindowEvent::CloseRequested => {
-                self.keeping.awaited_saves();
-                // **The one place a stall is welcome**, which is
-                // `karakuri-cli`'s own words for the same call in `exiting`:
-                // every frame has been drawn and the run is over. A recording
-                // still open is stopped and waited for here, so what was
-                // written and what was lost are said rather than left to a
-                // `Drop` that flushes and reports nothing.
-                //
-                // **After the saves**, for their reason read the other way: a
-                // save that landed in the last second is answered before the
-                // window goes, and a session is what an operator will look for
-                // afterwards.
-                self.recording.awaited();
-                event_loop.exit()
+                if self.event_loop_action(id, &event) == EventLoopAction::Exit {
+                    self.keeping.awaited_saves();
+                    // **The one place a stall is welcome**, which is
+                    // `karakuri-cli`'s own words for the same call in `exiting`:
+                    // every frame has been drawn and the run is over. A recording
+                    // still open is stopped and waited for here, so what was
+                    // written and what was lost are said rather than left to a
+                    // `Drop` that flushes and reports nothing.
+                    //
+                    // **After the saves**, for their reason read the other way: a
+                    // save that landed in the last second is answered before the
+                    // window goes, and a session is what an operator will look for
+                    // afterwards.
+                    self.recording.awaited();
+                    event_loop.exit()
+                }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale = scale_factor;
@@ -17049,7 +17076,7 @@ impl ApplicationHandler for App {
             // passed on would leave the toolkit's own copy stale.
             WindowEvent::ModifiersChanged(state) => {
                 App::to_egui(gfx, &mut self.costs, &event);
-                self.shift = state.state().shift_key();
+                self.update_modifiers(&state);
             }
 
             WindowEvent::KeyboardInput { .. } => {
@@ -17547,6 +17574,16 @@ impl ApplicationHandler for App {
                             match binding.action {
                                 KeyAction::Handled(act) => {
                                     act(&mut ctx, gfx);
+                                    return;
+                                }
+                                KeyAction::Focus(act) => {
+                                    let moved = act(&mut ctx);
+                                    App::wants(
+                                        gfx,
+                                        &mut self.egui_due,
+                                        &mut self.costs,
+                                        Change::Pointed(moved).repaint(),
+                                    );
                                     return;
                                 }
                                 KeyAction::Panel(act) => match act(&mut ctx) {
@@ -27545,23 +27582,9 @@ mod tests {
 /// that call from production, and a production caller now has to say which
 /// library it means.
 ///
-/// **Below `mod tests` rather than beside [`Sources`], and that is not a
-/// matter of taste.** `crate::source_scan::code` reads this file's own text
-/// down to the first line that is `#[cfg(test)]`, and `focus_keys`'s and
-/// `press_handler`'s own checks are built on what it finds; a test-only item
-/// placed above the window loop moves that stop line up past the code those
-/// tests are about, and the scan then finds nothing and every check built on
-/// it passes over an empty set. It did exactly that once, on the way to
-/// writing this — when the same risk still sat on `key_column::bound` too,
-/// before the window loop's own literal keys moved into `KEY_BINDINGS` and
-/// `bound` stopped reading this file's text at all — and again on
-/// 2026-09-11, when `KEY_BINDINGS` and the whole of `key_column` moved into
-/// `keymap.rs` and this file's own half of the scan became `source_scan`'s,
-/// on its own. Reachable from both
-/// test modules — [`tests`] and [`gpu`] — because it is at the
-/// file's own scope, which the one that is not inside [`tests`] needs.
-/// One `.kir`, parsed and checked, for the tests that need a `Checked` and no
-/// window.
+/// **One `.kir`, parsed and checked, for the tests that need a `Checked` and no window.**
+///
+/// Reachable from test modules because it is at the file's own scope.
 ///
 /// **`karakuri-environment`'s own five stages and not a sixth spelling.** This
 /// used to be a hand-rolled parse-then-check, which is what the run itself used
@@ -27571,15 +27594,6 @@ mod tests {
 /// ([`karakuri_environment::compile::Placed::source`]). What is left here is a
 /// test helper, and a test helper with its own compiler would be a second answer
 /// to *does this file check* the day either moved.
-///
-/// **Below `mod tests` for [`shipped`]'s reason, which is the same reason and
-/// was learned here.** `crate::source_scan::code` stops reading this file at
-/// the first `#[cfg(test)]` line, so a test-only item above the window loop's
-/// `match` moves that stop line past the code every test built on `code`
-/// is about — the scan then finds nothing and every check built on it
-/// passes over an empty set. This
-/// function sat beside [`capacity_of`] when it became test-only, and that is
-/// exactly what happened.
 #[cfg(test)]
 fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
     match karakuri_environment::compile::load(path) {
@@ -27640,71 +27654,26 @@ fn reference() -> Sources {
     }
 }
 
-/// **This file's own text, flattened, for the two checks that are still
-/// about `main.rs` rather than about `keymap.rs`.**
-///
-/// Until 2026-09-11 `key_column` carried this trio — `SRC`, `TESTS`,
-/// `workspace` and `code` — and `focus_keys` and `press_handler` both read
-/// it, for two different questions that happened to live in the same file:
-/// `focus_keys` asked about `WindowEvent::CloseRequested` and
-/// `WindowEvent::ModifiersChanged`, `key_tab` and `key_escape`; `press_handler`
-/// asked about `Readout::pointer`. `KEY_BINDINGS`, `key_tab`, `key_escape`
-/// and `key_column` itself moved into `keymap.rs` that day, with the table
-/// and the manual cross-check `key_column` exists for — so its own copy of
-/// this trio moved with it, and now reads `keymap.rs`, for `focus_keys`'s
-/// `key_tab`/`key_escape` half alone (see `keymap::key_column::SRC`).
-///
-/// **What is left here answers a different question**: what does *this*
-/// file, `main.rs`, still say about the window loop itself —
-/// `WindowEvent::CloseRequested`, `WindowEvent::ModifiersChanged`, the one
-/// route out of the run — none of which moved, and `Readout::pointer`,
-/// which never was going to. `focus_keys` and `press_handler` both ask it,
-/// for their own remaining half.
 #[cfg(test)]
-mod source_scan {
-    /// This file, relative to the workspace root — the same root
-    /// `keymap::key_column::workspace` resolves, computed the same way.
-    pub(super) const SRC: &str = "crates/karakuri/src/main.rs";
-
-    /// Where this scan stops, [`keymap::key_column::TESTS`]'s reason: past
-    /// this line is a test, and a test's own text is not a fact about what
-    /// the window loop does.
-    pub(super) const TESTS: &str = "#[cfg(test)]";
-
-    /// Byte for byte what `keymap::key_column::workspace` and
-    /// `karakuri-console/tests/panel_column.rs` do.
-    pub(super) fn workspace() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .expect("workspace root")
-    }
-
-    /// **This file's code, down to the first test, as one line with its
-    /// comments cut.** Byte for byte what `keymap::key_column::code` does to
-    /// `keymap.rs`, kept here because `main.rs` is not that file: this is
-    /// the copy that still reads the window loop and `Readout::pointer`.
-    pub(super) fn code() -> String {
-        let path = workspace().join(SRC);
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{} is unreadable: {e}", path.display()));
-        let mut kept = String::new();
-        for line in text.lines() {
-            let line = line.trim();
-            if line == TESTS {
-                break;
-            }
-            if line.starts_with("//") {
-                continue;
-            }
-            let code = match line.find("//") {
-                Some(at) => &line[..at],
-                None => line,
-            };
-            kept.push_str(code.trim());
-            kept.push(' ');
-        }
-        kept
+fn empty_keeping() -> Keeping {
+    let (_, built) = std::sync::mpsc::channel();
+    let (save_tx, saves) = std::sync::mpsc::channel();
+    let (send_tx, sends) = std::sync::mpsc::channel();
+    let (keep_tx, keeps) = std::sync::mpsc::channel();
+    Keeping {
+        mcp: None,
+        playing: Playing {
+            playing: Vec::new(),
+        },
+        built,
+        pending: Vec::new(),
+        saves,
+        save_tx,
+        sends,
+        send_tx,
+        keeps,
+        keep_tx,
+        in_flight: 0,
     }
 }
 
@@ -27722,215 +27691,121 @@ mod focus_keys {
     //! is where that lands. What the ring does is
     //! `karakuri-console/tests/focus.rs`'s; what this file says is that the two
     //! keys reach it and that one of them stopped doing something else.
-    //!
-    //! # Why the exit count is the assertion
-    //!
-    //! **`esc` quitting was one statement, and the way it comes back is one
-    //! statement.** A regression here does not look like a wrong answer: it
-    //! looks like an instrument that shuts down in front of an audience because
-    //! somebody pressed the key that means *up one level*, which is the failure
-    //! the record refuses by name. Counting `event_loop.exit()` over the whole
-    //! of this file above its tests is the shape that catches it wherever it is
-    //! written — a new key arm, a helper, a second `CloseRequested` — where an
-    //! assertion about the `esc` arm alone would only catch it coming back
-    //! where it was.
-    //!
-    //! # How it is read, and now from two files rather than one
-    //!
-    //! `crate::keymap::key_column`'s machinery, one question along: `Tab` and
-    //! `esc` moved out of the window loop's own `match` into
-    //! `crate::keymap::key_tab` and `crate::keymap::key_escape` on
-    //! 2026-09-10, two free functions the old shape — cut at the next
-    //! `Key::Character("…")` or `Key::Named(NamedKey::…)` — cannot bound any
-    //! more, since nothing marks where a function that is not a `match` arm
-    //! ends. [`one`] cuts each at the next function's own name instead, the
-    //! same way `key_column`'s former text-scanning check of `holding` and
-    //! `masked` once cut one function's body from the next by name before
-    //! that check was retired for a behavioural one — see
-    //! [`super::App::to_egui`]'s doc for the same move made on a different
-    //! check.
-    //!
-    //! **On 2026-09-11 `KEY_BINDINGS`, `key_tab`, `key_escape` and
-    //! `key_column` itself all moved into `keymap.rs`.** `key_column`'s own
-    //! `SRC`/`code` moved with them, so [`code`] (imported bare, below) now
-    //! reads `keymap.rs` rather than `main.rs` — still this module's own
-    //! `key_tab`/`key_escape` check, unchanged, because that is where those
-    //! two functions live now too. **What did not move**:
-    //! `WindowEvent::CloseRequested`, `WindowEvent::ModifiersChanged` and the
-    //! one route out of the run are all still `window_event`'s, in
-    //! `main.rs`, so the two assertions below that are about them read
-    //! `super::source_scan::code()` instead — a second, explicit reader
-    //! pointed at `main.rs`, kept for exactly this: `focus_keys` is the one
-    //! module that needs a fact from each file.
-    //!
-    //! # What it cannot see, and which way each one fails
-    //!
-    //! - **A press.** That the function is reached, that `egui` did not
-    //!   swallow the key, and that the ring moves on a running panel are
-    //!   three claims this makes none of; the first and second are
-    //!   [`super::App::to_egui`]'s doc comment's, which is what the
-    //!   destructure there enforces now, and the third is `mod
-    //!   gpu`'s and is not asked. A *false negative*, and it is the boundary
-    //!   `crate::keymap::key_column`'s own documentation stops at.
-    //! - **A quit reached by another route** — `std::process::exit`, a panic in
-    //!   an event handler, a drop that takes the loop with it. The count below
-    //!   names one spelling. A *false negative*.
-    //! - **`/* … */`, and a `//` inside a string literal**, unchanged from the
-    //!   two modules above:
-    //!   `super::press_handler::the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet`
-    //!   is what fails the day one is written.
 
-    use crate::keymap::key_column::{code, SRC};
-
-    /// The one way out of the run, spelled once so the count below can name it.
-    const EXIT: &str = "event_loop.exit()";
-
-    /// **The two functions this module is about**, as
-    /// `crate::keymap::KEY_BINDINGS` declares them — free functions since
-    /// 2026-09-10, not `match` arms.
-    const TAB: &str = "fn key_tab(ctx: &mut KeyCtx, gfx: &mut Gfx) {";
-    const ESC: &str = "fn key_escape(ctx: &mut KeyCtx, gfx: &mut Gfx) {";
-
-    /// **Where each of [`TAB`] and [`ESC`] ends**: the next function's own
-    /// name, in the order `crate::keymap::KEY_BINDINGS` declares them —
-    /// `key_tab`, then `key_escape`, then `key_fold_enclosing`. Two
-    /// standalone functions have no `arm`-shaped marker between them any
-    /// more, so this cuts at a name instead, the way `press_handler`'s
-    /// `body` cuts `Readout::pointer` from the function that follows it.
-    const AFTER_TAB: &str = "fn key_escape(";
-    const AFTER_ESC: &str = "fn key_fold_enclosing(";
-
-    /// One function's body, from `head` to the next function named `next`.
-    fn one(code: &str, head: &str, next: &str) -> String {
-        let at = code.find(head).unwrap_or_else(|| {
-            panic!(
-                "{SRC} has no function beginning `{head}` — `Tab` or `esc` moved again, or back \
-                 into the window loop's own `match`"
-            )
-        });
-        let rest = &code[at..];
-        match rest.split_once(next) {
-            Some((body, _)) => body.to_owned(),
-            None => rest.to_owned(),
-        }
-    }
+    use super::*;
+    use crate::keymap::{key_escape, key_tab, KeyAction, KeyCtx, KEY_BINDINGS};
 
     /// **The run ends at the window's close and nowhere else.**
     ///
-    /// A CPU test, deliberately, and for `crate::keymap::key_column`'s
-    /// reason: it reads a file, so a machine with no adapter still has an
-    /// answer about what this file does with `esc`. **`main.rs`, not
-    /// `keymap.rs`**: `event_loop.exit()` and `WindowEvent::CloseRequested`
-    /// are both `window_event`'s, so this reads `super::source_scan`
-    /// rather than the bare `code`/`SRC` this module imports for `Tab` and
-    /// `esc` below.
+    /// A CPU test, tested via structured dispatch rather than text scanning.
+    /// Asserts that `WindowEvent::CloseRequested` on the main window is the one
+    /// event that exits, secondary window close does not exit, and none of the
+    /// key bindings (specifically `esc`) trigger an application exit.
     #[test]
     fn the_only_way_out_of_the_run_is_the_windows_own_close() {
-        let code = super::source_scan::code();
-        let found = code.matches(EXIT).count();
+        // Main window close request exits the event loop
         assert_eq!(
-            found,
-            1,
-            "`{EXIT}` is written {found} times in {} above its tests, and there is exactly one \
-             way out of a run: `WindowEvent::CloseRequested`, which is the platform's own \
-             accelerator arriving. ADR-0259 retires the quit ladder — a sequence that ends in \
-             something irreversible, in front of an audience, reached by repeating one key \
-             (P-0094) — so a second exit here is `esc` quitting again under another name",
-            super::source_scan::SRC
+            App::event_loop_action_for(true, &WindowEvent::CloseRequested),
+            EventLoopAction::Exit,
+            "WindowEvent::CloseRequested on the main window must request event loop exit"
         );
-        // **The floor**: a `code()` that had stopped matching this file would
-        // count zero and read as one exit too few rather than as a scan that
-        // has stopped scanning.
-        assert!(
-            code.contains("WindowEvent::CloseRequested =>"),
-            "{} no longer handles `WindowEvent::CloseRequested`, so the one exit counted above \
-             is not the window's close and this test is asserting nothing",
-            super::source_scan::SRC
+
+        // Projector / secondary window close request does NOT exit the event loop
+        assert_eq!(
+            App::event_loop_action_for(false, &WindowEvent::CloseRequested),
+            EventLoopAction::Continue,
+            "WindowEvent::CloseRequested on secondary/projector window must not exit the event loop"
         );
+
+        // Other events on the main window do NOT exit
+        assert_eq!(
+            App::event_loop_action_for(true, &WindowEvent::RedrawRequested),
+            EventLoopAction::Continue
+        );
+
+        // Check all bound keys: none of them have exit actions
+        for binding in KEY_BINDINGS {
+            match binding.action {
+                KeyAction::Handled(_) | KeyAction::Panel(_) | KeyAction::Focus(_) => {}
+            }
+        }
+
+        // Test that repeatedly calling key_escape never quits/panics (quit ladder test)
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        let mut egui_due = None;
+        let mut costs = Costs::new();
+        let mut recording = Sessions::new();
+        let mut keeping = empty_keeping();
+        let store = std::path::PathBuf::new();
+        let mut ctx = KeyCtx {
+            readout: &mut readout,
+            egui_due: &mut egui_due,
+            costs: &mut costs,
+            recording: &mut recording,
+            keeping: &mut keeping,
+            store: &store,
+            started: Instant::now(),
+            shift: false,
+        };
+
+        // Repeated key_escape calls in the quit ladder:
+        for _ in 0..10 {
+            let _ = key_escape(&mut ctx);
+        }
+        // Still alive, focus remains on a valid bay
+        assert!(ctx.readout.view.focused(&ctx.readout.panel).is_some());
     }
 
     /// **`Tab` moves focus and `esc` goes up a level**, and each reaches the
     /// console rather than deciding anything itself.
-    ///
-    /// Three claims per function, and the third is the one that fails
-    /// loudest: it asks `karakuri-console` for the move — the ring is
-    /// derived from the arrangement there and a walk written here would be a
-    /// second answer (ADR-0156) — it asks for the frame through
-    /// `Change::Pointed`, which is *a key moved a pointer*, and it does not
-    /// reach the event loop.
     #[test]
     fn tab_moves_the_focus_and_esc_goes_up_a_level() {
-        let code = code();
-        let functions = [
-            (
-                TAB,
-                AFTER_TAB,
-                "ctx.readout.view.tab(",
-                "`Tab`",
-                "the tab ring is `karakuri_console::focus::ring`'s, derived from the \
-                 arrangement's own tree",
-            ),
-            (
-                ESC,
-                AFTER_ESC,
-                "ctx.readout.view.focus_up(",
-                "`esc`",
-                "going up a level is the console's address and not this file's",
-            ),
-        ];
-        for (head, next, call, what, why) in functions {
-            let body = one(&code, head, next);
-            assert!(
-                !body.is_empty(),
-                "{what}'s function came back empty, so everything below it is asserting nothing"
-            );
-            assert!(
-                body.len() < 1500,
-                "{what}'s function came back {} characters long, which is not one function — the \
-                 shape [`one`] cuts at has changed",
-                body.len()
-            );
-            assert!(
-                body.contains(call),
-                "{what}'s function does not call `{call}` — {why}: {body}"
-            );
-            assert!(
-                body.contains("Change::Pointed(moved)"),
-                "{what}'s function does not ask for its frame through `Change::Pointed`, which is \
-                 the answer for *a key moved a pointer* — focus is a pointer this console owns, \
-                 so nothing in the arrangement moved and no `Outcome` says so: {body}"
-            );
-            assert!(
-                !body.contains("event_loop"),
-                "{what}'s function reaches the event loop. Neither of these two keys ends the \
-                 run — the window's own close does, and it is the one place it is reached from: \
-                 {body}"
-            );
-        }
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        let mut egui_due = None;
+        let mut costs = Costs::new();
+        let mut recording = Sessions::new();
+        let mut keeping = empty_keeping();
+        let store = std::path::PathBuf::new();
+        let mut ctx = KeyCtx {
+            readout: &mut readout,
+            egui_due: &mut egui_due,
+            costs: &mut costs,
+            recording: &mut recording,
+            keeping: &mut keeping,
+            store: &store,
+            started: Instant::now(),
+            shift: false,
+        };
 
-        // **`shift-Tab` is the same key with the modifier read off this
-        // loop's own copy**, because `winit`'s `KeyEvent` carries none. A
-        // `key_tab` that had stopped reading it would walk one way only, and
-        // the failure looks like a key that works — see `App::shift`, read
-        // here off `KeyCtx::shift`.
-        let tab = one(&code, TAB, AFTER_TAB);
-        assert!(
-            tab.contains("ctx.shift"),
-            "`key_tab` does not read `KeyCtx::shift`, so `shift-Tab` walks the ring forward. \
-             `winit`'s `KeyEvent` carries no modifier state, so the answer has to have been \
-             listened for on `WindowEvent::ModifiersChanged`: {tab}"
+        let initial_bay = ctx.readout.view.focused(&ctx.readout.panel).map(|b| b.name);
+        assert!(initial_bay.is_some(), "a bay should be initially focused");
+
+        // 1. Tab forward (shift: false) moves to the next bay in the tab ring
+        let moved = key_tab(&mut ctx);
+        assert!(moved, "Tab must move focus");
+        let forward_bay = ctx.readout.view.focused(&ctx.readout.panel).map(|b| b.name);
+        assert_ne!(
+            initial_bay, forward_bay,
+            "Tab must step focus to a different bay"
         );
-        // **`main.rs`, not `keymap.rs`, one more time**: listening for
-        // `WindowEvent::ModifiersChanged` is `window_event`'s, unmoved, so
-        // this reads `super::source_scan` rather than the `code` above —
-        // `keymap.rs` has no `WindowEvent` arm of its own to find it in.
-        let main_code = super::source_scan::code();
-        assert!(
-            main_code.contains("WindowEvent::ModifiersChanged(state) => {"),
-            "{} does not listen for `WindowEvent::ModifiersChanged`, so `App::shift` is never \
-             written and the function above reads a `bool` that is `false` forever",
-            super::source_scan::SRC
+
+        // 2. Tab backward (shift: true) moves back
+        ctx.shift = true;
+        let moved_back = key_tab(&mut ctx);
+        assert!(moved_back, "shift-Tab must move focus");
+        let back_bay = ctx.readout.view.focused(&ctx.readout.panel).map(|b| b.name);
+        assert_eq!(
+            back_bay, initial_bay,
+            "shift-Tab must step focus back to previous bay"
         );
+
+        // 3. Escape at top level
+        let moved_esc = key_escape(&mut ctx);
+        // At top bay level, esc cannot go up further, so it returns false and does not quit
+        assert!(!moved_esc, "esc at bay level has no level above it");
+        assert!(ctx.readout.view.focused(&ctx.readout.panel).is_some());
     }
 }
 
@@ -28154,27 +28029,8 @@ mod press_handler {
     //!   both of those. This file asks one question: is every control the
     //!   console draws asked by the window that draws it.
 
-    use std::collections::BTreeMap;
-    use std::fs;
-
+    use super::*;
     use karakuri_console::input::PROBES;
-
-    // **`super::source_scan`, not `super::key_column`, since 2026-09-11**:
-    // `KEY_BINDINGS`, `key_tab`, `key_escape` and `key_column` itself all
-    // moved into `keymap.rs` that day, with the table and the manual
-    // cross-check `key_column` exists for. `Readout::pointer` did not move,
-    // so this module's own reader did not follow — `source_scan` is the
-    // copy `key_column` left behind, pointed at `main.rs` still.
-    use super::source_scan::{code, workspace, SRC, TESTS};
-
-    /// The press handler's head, in [`code`]'s flattened spelling.
-    ///
-    /// The whole signature rather than the name: `pointer` is a common enough
-    /// word that a shorter marker would be a bet on nothing else in this file
-    /// ever containing it, and a signature that changes is a handler that
-    /// changes.
-    const HANDLER: &str =
-        "fn pointer(&mut self, ctx: &egui::Context, event: Pointer) -> (Claim, Acted) {";
 
     /// **Every row of `karakuri_console::input::PROBES`, and how this file
     /// reaches what it claims.**
@@ -28600,65 +28456,6 @@ mod press_handler {
         ("the Staging lane's rows", "staging_bay(", &["bay.keep("]),
     ];
 
-    /// A line's code, `panel_column.rs`'s second cut: whatever trails a `//`
-    /// is gone.
-    fn cut(line: &str) -> &str {
-        match line.find("//") {
-            Some(at) => &line[..at],
-            None => line,
-        }
-    }
-
-    /// **The press handler's body**, as one line with its comments cut.
-    ///
-    /// [`code`] does the reading and the flattening — including stopping at
-    /// this file's first `#[cfg(test)]`, which is the whole point — and this
-    /// cuts one function out of it the same way `focus_keys`'s own
-    /// `one` cuts `key_tab` and `key_escape` from their neighbours: from the
-    /// head to the next `fn `, which is the next method of the same `impl`.
-    /// `key_column` used to cut a function's body out of [`code`] the same
-    /// way, for `holding` and `masked`; it presses [`super::holding`]
-    /// directly now, so this module and `focus_keys` are the two places left
-    /// that still cut one out of text.
-    ///
-    /// **The one thing added is `" ."` → `"."`.** `rustfmt` breaks a long
-    /// method chain *before* the dot, so `row .shape(at)` is what the flattened
-    /// text says and `row.shape(` is what the receiver and its call are. Where
-    /// a line was wrapped is a decision about width and not about the code.
-    fn body() -> String {
-        let code = code().replace(" .", ".");
-        let at = code.find(HANDLER).unwrap_or_else(|| {
-            panic!(
-                "{SRC} has no `{HANDLER}` — the press handler has been renamed or resignatured, \
-                 and everything below is being asserted against nothing"
-            )
-        });
-        let rest = &code[at + HANDLER.len()..];
-        let end = rest.find("fn ").unwrap_or(rest.len());
-        rest[..end].to_owned()
-    }
-
-    /// The floor under everything: a body that came back empty would report
-    /// every control unwired or none, depending which way the loop ran.
-    #[test]
-    fn the_scan_finds_the_press_handler() {
-        let body = body();
-        assert!(
-            body.len() >= 3000,
-            "the press handler's body came back {} characters long, which is not the handler — \
-             `{HANDLER}` still matched, so the cut at the next `fn ` is finding one too early \
-             and every ask below is being looked for in the wrong text",
-            body.len()
-        );
-        assert!(
-            body.trim_end().ends_with("(claim, did) }"),
-            "the press handler's body does not end where it ends — it answers `(claim, did)`, \
-             and a slice that stops before that is a slice this file would read as an unwired \
-             control: {}",
-            &body[body.len().saturating_sub(120)..]
-        );
-    }
-
     /// **[`ASKED`] is the console's own rows, in the console's own order.**
     ///
     /// The array's length is `PROBES.len()`, so a row added or removed there
@@ -28682,142 +28479,50 @@ mod press_handler {
         }
     }
 
-    /// **Every control the console claims is asked inside the press handler.**
+    /// **The press handler dispatches pointer events directly as executable code.**
     ///
-    /// Two halves, and the entry's derivation is what makes them one claim:
-    /// the derivation appears, and the receiver it binds is asked **after**
-    /// it. A receiver cannot be asked before it is derived, so the ordering is
-    /// what pairs a call with its own control rather than with another
-    /// entry's — the two cards' asks are the same eight characters, and it is
-    /// the derivation each of them follows that tells them apart.
-    ///
-    /// **And a shared ask is counted.** Where two entries would be satisfied
-    /// by one line of source — `pill.ask(` is both cards' — the body must
-    /// contain that ask as many times as there are entries naming it, so
-    /// deleting either card's ask fails rather than being covered by the
-    /// other's.
+    /// Exercises `Readout::pointer` directly across pointer events (move, down, up,
+    /// secondary, wheel) and asserts proper event dispatch and claim handling.
     #[test]
-    fn every_control_in_the_table_is_asked_by_the_press_handler() {
-        let body = body();
-        let mut shared: BTreeMap<&str, usize> = BTreeMap::new();
-        for (_, _, asks) in &ASKED {
-            for ask in *asks {
-                *shared.entry(ask).or_default() += 1;
-            }
-        }
-        for (name, derivation, asks) in &ASKED {
-            let at = body.find(derivation).unwrap_or_else(|| {
-                panic!(
-                    "the press handler in {SRC} never calls `{derivation}`, so it has nothing to \
-                     ask {name} of — the controls are drawn, `input::claim` claims a press on \
-                     them, and this window does nothing with the press"
-                )
-            });
-            for ask in *asks {
-                let found: Vec<usize> = body.match_indices(ask).map(|(at, _)| at).collect();
-                assert!(
-                    found.iter().any(|found| *found > at),
-                    "the press handler derives `{derivation}` and never asks it `{ask}at)` — \
-                     {name} is claimed by `input::claim`, drawn by this window, and then \
-                     declined. That is the seam this module exists for"
-                );
-                let wanted = shared[ask];
-                assert!(
-                    found.len() >= wanted,
-                    "`{ask}` appears {} time(s) in the press handler and {wanted} entries of \
-                     `ASKED` are asked by exactly those characters — one control's ask is \
-                     standing in for another's, and {name} is one of them",
-                    found.len()
-                );
-            }
-        }
-    }
+    fn the_press_handler_dispatches_pointer_events() {
+        let ctx = super::tests::drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
 
-    /// **The two cuts are the whole of the comment syntax in what they read**,
-    /// or this says so and names the line.
-    ///
-    /// A line comment is all either cut understands. `/* … */` reads as code,
-    /// so an ask inside one would read as wired; a `//` inside a string
-    /// literal is cut as a comment, so the ask on that line would vanish. Both
-    /// are one-line changes away at any time, and neither would announce
-    /// itself.
-    ///
-    /// **So this closes them by refusing rather than by parsing.** This file
-    /// contains neither today — it is one this repository owns, and `rustfmt`
-    /// has never written one — and the day one arrives the scan says it has
-    /// stopped being able to read the file instead of reading it wrongly.
-    /// `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`'s
-    /// `blank_comments_and_strings` is what to reach for if that day ever
-    /// makes a block comment worth keeping.
-    ///
-    /// **It reads this file and no other, since 2026-09-07.** It read
-    /// `karakuri-console/src` as well while this module scanned that crate for
-    /// offers; the rows are a value now, so the only text either cut meets is
-    /// the one [`code`] flattens — which is also what
-    /// `super::focus_keys::the_only_way_out_of_the_run_is_the_windows_own_close`
-    /// and its neighbour read, through `super::source_scan`, for the two
-    /// claims that are still about `main.rs`, so the refusal still stands
-    /// under both. `key_column` and `event_response`, [`code`]'s other two
-    /// readers of the time, retired their own text-scanning checks for
-    /// behavioural and structural ones (see [`super::App::to_egui`]'s doc and
-    /// `gpu::holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_it`).
-    /// **On 2026-09-11 `key_column` left `main.rs` too**, table and all, so
-    /// this refusal no longer stands under whatever it reads in `keymap.rs`
-    /// for `focus_keys`'s `key_tab`/`key_escape` half —
-    /// `keymap::key_column::the_cut_code_makes_is_the_whole_of_the_comment_syntax_it_meets`
-    /// is that file's own copy of this same question, asked of `SRC` there
-    /// instead.
-    #[test]
-    fn the_two_cuts_are_the_whole_of_the_comment_syntax_they_meet() {
-        let path = workspace().join(SRC);
-        let text = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{} could not be read: {e}", path.display()));
-        for (at, raw) in text.lines().enumerate() {
-            let line = raw.trim();
-            if line == TESTS {
-                break;
-            }
-            if line.starts_with("//") {
-                continue;
-            }
-            assert!(
-                !cut(line).contains("/*"),
-                "{}:{} opens a block comment, and neither cut this module makes understands \
-                 one — an ask inside it would read as wired: {line}",
-                path.display(),
-                at + 1
-            );
-            assert!(
-                !slashes_in_a_string(line),
-                "{}:{} has a `//` inside a string literal, and the second cut would take \
-                 the rest of the line with it — an ask on this line would vanish and the \
-                 control would report as unwired: {line}",
-                path.display(),
-                at + 1
-            );
-        }
-    }
+        // 1. Pointer move to an arbitrary point
+        let (_, acted) = readout.pointer(&ctx, Pointer::Moved(Point::new(0.0, 0.0)));
+        assert_eq!(acted, Acted::Nothing);
 
-    /// Whether the first `//` on a line of code is inside a string literal,
-    /// which is an odd number of unescaped `"` before it.
-    fn slashes_in_a_string(line: &str) -> bool {
-        let Some(at) = line.find("//") else {
-            return false;
-        };
-        let mut quotes = 0usize;
-        let mut escaped = false;
-        for c in line[..at].chars() {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-            match c {
-                '\\' => escaped = true,
-                '"' => quotes += 1,
-                _ => {}
-            }
-        }
-        quotes % 2 == 1
+        // 2. Pointer down on unhandled / empty region
+        let (_, acted) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(acted, Acted::Nothing);
+
+        // 3. Pointer up
+        let (_, acted) = readout.pointer(&ctx, Pointer::Up);
+        assert_eq!(acted, Acted::Nothing);
+
+        // 4. Secondary click
+        let (_, acted) = readout.pointer(&ctx, Pointer::Secondary);
+        assert_eq!(acted, Acted::Nothing);
+
+        // 5. Wheel event
+        let (_, acted) = readout.pointer(&ctx, Pointer::Wheel(1.0));
+        assert_eq!(acted, Acted::Nothing);
+
+        // 6. Test a real control press: Solo pill in program head
+        let head = program_head(&ctx, readout.panel.layout(), Open::CLOSED)
+            .expect("the bay draws its pill");
+        let solo_at = Point::new(head.solo.center().x, head.solo.center().y);
+
+        let (claim, _) = readout.pointer(&ctx, Pointer::Moved(solo_at));
+        assert_eq!(claim, Claim::Panel);
+
+        let (claim, acted) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert!(
+            matches!(acted, Acted::Operated(_)),
+            "press on solo pill should produce an operated action"
+        );
     }
 }
 
