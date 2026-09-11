@@ -1305,6 +1305,9 @@ impl Deck {
             ),
             rendered: false,
             staged_signals: None,
+            staged_transitions: None,
+            staged_selections: None,
+            staged_slot_controls: None,
         }
     }
 
@@ -2259,13 +2262,14 @@ impl Deck {
     /// writing anything, which is [`crate::mix::select`]'s answer rather than a
     /// decision taken twice: the Set in a slot can change under a hot swap
     /// between the schedule and the beat.
-    fn advance_selections(&mut self, beats: f64) {
-        for i in 0..self.selections.len() {
-            let s = self.selections[i];
+    /// Stage selections that are due at this beat position without mutating deck selections.
+    fn stage_selections(&mut self, beats: f64) -> Vec<Selection> {
+        let mut staged_selections = self.selections.clone();
+        for s in &staged_selections {
             if !s.due(beats) {
                 continue;
             }
-            // `live_mut` rather than a queue write of its own: the edges are the
+            // `stage_select_renderer` rather than an uncommitted write: the edges are the
             // Set's state, and the merge uniform is written from them wherever
             // the Set next writes its uniforms, which is `prepare` — on air and
             // off it alike, since every slot is prepared on every frame. A
@@ -2274,48 +2278,54 @@ impl Deck {
             self.slots[s.slot()]
                 .swap
                 .live_mut()
-                .select_renderer(s.renderer());
+                .stage_select_renderer(s.renderer());
         }
-        self.selections.retain(|s| !s.due(beats));
+        staged_selections.retain(|s| !s.due(beats));
+        staged_selections
     }
 
-    /// Every scheduled move applied at this musical position, and the finished
-    /// ones dropped.
-    ///
-    /// Writes the slot fields directly rather than going through
-    /// [`Deck::set_gain`] and [`Deck::set_opacity`], and it has to: those cancel
-    /// the transition, which is what makes a hand on the fader win. The clamps
-    /// they carry are applied here instead, so a scheduled move cannot reach a
-    /// value a manual one could not.
-    fn advance_transitions(&mut self, beats: f64) {
-        for i in 0..self.transitions.len() {
-            let t = self.transitions[i];
-            // `None` until it starts, which is "leave the control alone"
-            // rather than "hold it where it was": a fade armed for the next
-            // bar must not take a fader away from the operator for four beats
-            // before it is due. See `crate::transition`.
+    /// Calculate staged transitions for the given beat position without mutating slot fields.
+    fn stage_transitions(&self, beats: f64) -> (Vec<Transition>, Vec<StagedSlotControl>) {
+        let mut staged_transitions = self.transitions.clone();
+        let mut slot_controls: Vec<StagedSlotControl> = Vec::new();
+        for t in &staged_transitions {
             let Some(value) = t.value_at(beats) else {
                 continue;
             };
+            let (mut gain, mut opacity, mut mask) = slot_controls
+                .iter()
+                .find(|c| c.slot == t.slot())
+                .map(|c| (c.gain, c.opacity, c.mask))
+                .unwrap_or_else(|| {
+                    let slot = &self.slots[t.slot()];
+                    (slot.gain, slot.opacity, slot.mask)
+                });
             match t.control() {
                 Control::Gain => {
-                    self.slots[t.slot()].gain = clamp_gain(value);
+                    gain = clamp_gain(value);
                 }
                 Control::Opacity => {
-                    self.slots[t.slot()].opacity = clamp_opacity(value);
+                    opacity = clamp_opacity(value);
                 }
-                // The position and nothing else, which is why
-                // `set_mask_shape` does not cancel: changing the shape
-                // mid-wipe is a change to what is being wiped rather than a
-                // hand on the control that is moving. `set_mask_position`
-                // does cancel, and it is this number it writes.
                 Control::MaskPosition => {
-                    let mask = self.slots[t.slot()].mask;
-                    self.slots[t.slot()].mask = mask.at(value);
+                    mask = mask.at(value);
                 }
             }
+            if let Some(entry) = slot_controls.iter_mut().find(|c| c.slot == t.slot()) {
+                entry.gain = gain;
+                entry.opacity = opacity;
+                entry.mask = mask;
+            } else {
+                slot_controls.push(StagedSlotControl {
+                    slot: t.slot(),
+                    gain,
+                    opacity,
+                    mask,
+                });
+            }
         }
-        self.transitions.retain(|t| !t.finished(beats));
+        staged_transitions.retain(|t| !t.finished(beats));
+        (staged_transitions, slot_controls)
     }
 
     /// How this deck slot's layer meets the ones under it. See [`Blend`].
@@ -2330,6 +2340,15 @@ impl Deck {
     pub fn slot_target(&self, slot: DeckSlot) -> &wgpu::Texture {
         &self.slots[slot.index()].target
     }
+}
+
+/// A slot's uncommitted fader controls during frame rendering.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StagedSlotControl {
+    pub(crate) slot: usize,
+    pub(crate) gain: f32,
+    pub(crate) opacity: f32,
+    pub(crate) mask: Mask,
 }
 
 /// One open frame: the encoder, and exclusive access to the deck for as long
@@ -2347,6 +2366,9 @@ pub struct Frame<'a> {
     encoder: Option<wgpu::CommandEncoder>,
     rendered: bool,
     staged_signals: Option<Signals>,
+    staged_transitions: Option<Vec<Transition>>,
+    staged_selections: Option<Vec<Selection>>,
+    staged_slot_controls: Option<Vec<StagedSlotControl>>,
 }
 
 impl Frame<'_> {
@@ -2410,12 +2432,15 @@ impl Frame<'_> {
         // one's — and it has to be written before the composite reads the
         // faders it moves. See `crate::transition`.
         let beats = signals.oscillator().beats();
-        self.deck.advance_transitions(beats);
+        let (staged_transitions, staged_controls) = self.deck.stage_transitions(beats);
+        self.staged_transitions = Some(staged_transitions);
+        self.staged_slot_controls = Some(staged_controls);
         // **Beside the transitions, and for the same reason**: a selection is
         // scheduled on the same grid and has to land before anything draws the
         // renderers it chooses between. It writes a Set's edges rather than a
         // slot's fader, so the two cannot collide.
-        self.deck.advance_selections(beats);
+        let staged_selections = self.deck.stage_selections(beats);
+        self.staged_selections = Some(staged_selections);
 
         for (i, slot) in self.deck.slots.iter_mut().enumerate() {
             // The effective residency, and only ever that: what the frame does
@@ -2546,7 +2571,7 @@ impl Frame<'_> {
         // nested. `crate::mix` knows only the second list — see
         // `docs/ir-spec.md`, "L5".
         let mut edges: Vec<Input> = Vec::with_capacity(self.deck.slots.len());
-        for slot in &self.deck.slots {
+        for (i, slot) in self.deck.slots.iter().enumerate() {
             // **`live` is the effective residency and nothing else**, which is
             // the half of this pass that decides what the room sees. Every slot
             // was drawn above; a slot that is not Live is skipped here, so its
@@ -2557,9 +2582,17 @@ impl Frame<'_> {
             // an audition. ADR-0240 retired that and the branch is gone rather
             // than dormant — the picture is the master mix, and a slot on its
             // own is shown on a surface of its own. See the module doc.
+            let mut edge = slot.edge();
+            if let Some(controls) = &self.staged_slot_controls {
+                if let Some(c) = controls.iter().find(|c| c.slot == i) {
+                    edge.gain = c.gain;
+                    edge.opacity = c.opacity;
+                    edge.mask = c.mask;
+                }
+            }
             edges.push(Input {
                 live: slot.effective == Residency::Live,
-                ..slot.edge()
+                ..edge
             });
         }
         // **The master out is written with the edges and is not one of them.**
@@ -2594,6 +2627,9 @@ impl Frame<'_> {
     pub fn discard(mut self) {
         let _ = self.encoder.take();
         self.staged_signals = None;
+        self.staged_transitions = None;
+        self.staged_selections = None;
+        self.staged_slot_controls = None;
         for slot in &mut self.deck.slots {
             slot.swap.live_mut().discard();
         }
@@ -2606,6 +2642,19 @@ impl Frame<'_> {
             // to host state only now that GPU submission has succeeded.
             if let Some(signals) = self.staged_signals.take() {
                 self.deck.signals = signals;
+            }
+            if let Some(transitions) = self.staged_transitions.take() {
+                self.deck.transitions = transitions;
+            }
+            if let Some(selections) = self.staged_selections.take() {
+                self.deck.selections = selections;
+            }
+            if let Some(controls) = self.staged_slot_controls.take() {
+                for c in controls {
+                    self.deck.slots[c.slot].gain = c.gain;
+                    self.deck.slots[c.slot].opacity = c.opacity;
+                    self.deck.slots[c.slot].mask = c.mask;
+                }
             }
             for slot in &mut self.deck.slots {
                 slot.swap.live_mut().commit();

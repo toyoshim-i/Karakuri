@@ -4486,18 +4486,35 @@ proc wash {
         assert_eq!(deck.signals().oscillator().steps_taken(), 0);
         assert_eq!(deck.slot(slot0).live().steps_taken(), 0);
         assert_eq!(deck.slot(slot0).live().staged_delta(), 0);
-        assert!(!deck.slot(slot0).live().committed_parity());
+        assert_eq!(deck.slot(slot0).live().committed_parity(), 0);
+
+        let start = deck.signals().oscillator().beats();
+        deck.schedule(Transition::new(
+            0,
+            Control::Opacity,
+            1.0,
+            0.0,
+            start,
+            4.0,
+            Curve::Lin,
+        ));
+        deck.schedule_selection(Selection::new(0, 0, start));
+        assert_eq!(deck.transitions_on(slot0).count(), 1);
+        assert_eq!(deck.selections_on(slot0).count(), 1);
 
         // Phase 1: Begin a frame, render with 3 steps, but forget it before submitting.
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
         frame.render(present.hdr_view(), present.size(), 3);
         std::mem::forget(frame);
 
-        // Host committed state must remain untouched: 0 steps taken, parity uncommitted.
+        // Host committed state must remain untouched: 0 steps taken, parity uncommitted,
+        // and transitions/selections not yet committed.
         assert_eq!(deck.signals().oscillator().steps_taken(), 0);
         assert_eq!(deck.slot(slot0).live().steps_taken(), 0);
         assert_eq!(deck.slot(slot0).live().staged_delta(), 3);
-        assert!(!deck.slot(slot0).live().committed_parity());
+        assert_eq!(deck.slot(slot0).live().committed_parity(), 0);
+        assert_eq!(deck.transitions_on(slot0).count(), 1);
+        assert_eq!(deck.selections_on(slot0).count(), 1);
 
         // Phase 2: Discard test - begin another frame (which discards the uncommitted staged delta),
         // render with 4 steps, then call frame.discard().
@@ -4509,7 +4526,9 @@ proc wash {
         assert_eq!(deck.signals().oscillator().steps_taken(), 0);
         assert_eq!(deck.slot(slot0).live().steps_taken(), 0);
         assert_eq!(deck.slot(slot0).live().staged_delta(), 0);
-        assert!(!deck.slot(slot0).live().committed_parity());
+        assert_eq!(deck.slot(slot0).live().committed_parity(), 0);
+        assert_eq!(deck.transitions_on(slot0).count(), 1);
+        assert_eq!(deck.selections_on(slot0).count(), 1);
 
         // Phase 3: Now render a real frame with 1 step and submit it.
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
@@ -4520,6 +4539,7 @@ proc wash {
         assert_eq!(deck.signals().oscillator().steps_taken(), 1);
         assert_eq!(deck.slot(slot0).live().steps_taken(), 1);
         assert_eq!(deck.slot(slot0).live().staged_delta(), 0);
-        assert!(deck.slot(slot0).live().committed_parity());
+        assert_eq!(deck.slot(slot0).live().committed_parity(), 1);
+        assert_eq!(deck.selections_on(slot0).count(), 0);
     }
 }
