@@ -188,6 +188,50 @@ enum Shape {
     Ratio,
 }
 
+/// **A member of the deck** — which of the (up to) four positions a line
+/// names — carried as the `slot` field on the six of [`Target`]'s variants
+/// that address a deck.
+///
+/// **Its own type because ADR-0344 asks the bare `u8` deck-position to become
+/// one**, replacing the bare number this crate used to carry on these six
+/// variants — see
+/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
+/// This crate has no other sense of "slot" to collide with (no
+/// `master::Slot`, no `karakuri-pattern::SLOTS`), so the name is chosen for
+/// consistency with `karakuri_store::record::DeckSlot` and
+/// `karakuri_engine::deck::DeckSlot` rather than to avoid a clash here.
+///
+/// **Mirrors those two rather than depending on either.** This crate depends
+/// on `karakuri-operation` alone and nothing else, by charter (ADR-0180, this
+/// module's own documentation): a `DeckSlot` shared from `karakuri-store` or
+/// `karakuri-engine` would be a second dependency paid for one field. Every
+/// crossing back into a bare `u8` — this crate's own [`Control`] and
+/// [`Parameter`], and `karakuri_operation::Operation`'s `deck` fields — is a
+/// plain field copy (`slot.0`), on `karakuri_engine::deck::DeckSlot`'s own
+/// precedent for a boundary that does not take the newtype.
+///
+/// **No fallible constructor, unlike the store and engine copies.** Their
+/// `DeckSlot::new` checks a slot against a deck's own size; this crate reads
+/// nothing back and has no deck to size one against (this module's
+/// documentation, "Why this crate knows nothing about the engine") — a map
+/// line's slot number is checked against the deck it plays on wherever that
+/// deck is held, by `karakuri_engine::DeckSlot::new`
+/// (`karakuri_environment::midi`'s `Interface`/`Feedback` among its callers).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct DeckSlot(u8);
+
+impl std::fmt::Display for DeckSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u8> for DeckSlot {
+    fn from(slot: u8) -> DeckSlot {
+        DeckSlot(slot)
+    }
+}
+
 /// What a message is mapped to, before its value is known.
 ///
 /// **A press carries its destination and a fader carries its range**, which is
@@ -197,26 +241,26 @@ enum Shape {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Target {
     Gain {
-        slot: u8,
+        slot: DeckSlot,
         range: [f32; 2],
     },
     Opacity {
-        slot: u8,
+        slot: DeckSlot,
         range: [f32; 2],
     },
     Exposure {
         range: [f32; 2],
     },
     MaskPosition {
-        slot: u8,
+        slot: DeckSlot,
         range: [f32; 2],
     },
     Residency {
-        slot: u8,
+        slot: DeckSlot,
         residency: Residency,
     },
     Blend {
-        slot: u8,
+        slot: DeckSlot,
         blend: BlendMode,
     },
     Tap,
@@ -245,7 +289,7 @@ enum Target {
     /// the deck, and a range written on the line overrides it the way it does
     /// on a gain.
     Param {
-        slot: u8,
+        slot: DeckSlot,
         position: u16,
         range: Option<[f32; 2]>,
     },
@@ -535,18 +579,21 @@ impl Echo {
     /// value at.
     pub fn control(self) -> Control {
         match self.target {
-            Target::Gain { slot, .. } => Control::Gain { deck: slot },
-            Target::Opacity { slot, .. } => Control::Opacity { deck: slot },
+            Target::Gain { slot, .. } => Control::Gain { deck: slot.0 },
+            Target::Opacity { slot, .. } => Control::Opacity { deck: slot.0 },
             Target::Exposure { .. } => Control::Exposure,
-            Target::MaskPosition { slot, .. } => Control::MaskPosition { deck: slot },
+            Target::MaskPosition { slot, .. } => Control::MaskPosition { deck: slot.0 },
             Target::Residency { slot, residency } => Control::Residency {
-                deck: slot,
+                deck: slot.0,
                 residency,
             },
-            Target::Blend { slot, blend } => Control::Blend { deck: slot, blend },
+            Target::Blend { slot, blend } => Control::Blend {
+                deck: slot.0,
+                blend,
+            },
             Target::Tap => Control::Tap,
             Target::Param { slot, position, .. } => Control::Param {
-                deck: slot,
+                deck: slot.0,
                 position,
             },
         }
@@ -1104,27 +1151,28 @@ fn operating(target: Target, at: Option<f32>) -> Option<Operation> {
     {
         match (target, at) {
             (Target::Gain { slot, range }, Some(v)) => Some(Operation::SetGain {
-                deck: slot,
+                deck: slot.0,
                 gain: scale(v, range, shape),
             }),
             (Target::Opacity { slot, range }, Some(v)) => Some(Operation::SetOpacity {
-                deck: slot,
+                deck: slot.0,
                 opacity: scale(v, range, shape),
             }),
             (Target::Exposure { range }, Some(v)) => Some(Operation::SetExposure {
                 exposure: scale(v, range, shape),
             }),
             (Target::MaskPosition { slot, range }, Some(v)) => Some(Operation::SetMaskPosition {
-                deck: slot,
+                deck: slot.0,
                 position: scale(v, range, shape),
             }),
             (Target::Residency { slot, residency }, None) => Some(Operation::SetResidency {
-                deck: slot,
+                deck: slot.0,
                 residency,
             }),
-            (Target::Blend { slot, blend }, None) => {
-                Some(Operation::SetBlendMode { deck: slot, blend })
-            }
+            (Target::Blend { slot, blend }, None) => Some(Operation::SetBlendMode {
+                deck: slot.0,
+                blend,
+            }),
             (Target::Tap, None) => Some(Operation::TapBeat),
             // **The one target this cannot finish**, and it is answered by
             // [`Map::parameter`] instead. A published control is addressed by
@@ -1150,7 +1198,7 @@ fn parametered(target: Target, at: Option<f32>) -> Option<Parameter> {
         return None;
     };
     Some(Parameter {
-        deck: slot,
+        deck: slot.0,
         position,
         at: at?,
         range,
@@ -1303,11 +1351,12 @@ fn parse_target(to: &str) -> Result<Target, String> {
     let name = words
         .next()
         .ok_or_else(|| "expected a control after `->`".to_string())?;
-    let slot = |words: &mut std::str::SplitWhitespace| -> Result<u8, String> {
+    let slot = |words: &mut std::str::SplitWhitespace| -> Result<DeckSlot, String> {
         let n = words
             .next()
             .ok_or_else(|| format!("`{name}` needs a slot number"))?;
-        n.parse()
+        n.parse::<u8>()
+            .map(DeckSlot::from)
             .map_err(|_| format!("`{name} {n}`: expected a slot number"))
     };
     let target = match name {
