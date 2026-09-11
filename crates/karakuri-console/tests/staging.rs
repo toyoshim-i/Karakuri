@@ -127,7 +127,7 @@ fn at_node(
 ) -> Candidate {
     Candidate {
         deck,
-        at: Some(karakuri_operation::NodeAt { layer, index }),
+        at: Some(karakuri_operation::NodeAddress { layer, index }),
         addr: format!("{}:{index}", layer_word(layer)),
         name: name.to_owned(),
         stage,
@@ -927,7 +927,7 @@ fn a_press_on_a_candidate_row_asks_to_keep_it() {
         (0, karakuri_operation::Layer::L1, 0u32),
         (1, karakuri_operation::Layer::L4, 1u32),
     ]
-    .map(|(index, layer, at)| (index, karakuri_operation::NodeAt { layer, index: at }))
+    .map(|(index, layer, at)| (index, karakuri_operation::NodeAddress { layer, index: at }))
     {
         let row = lane.row(index);
         let p = Point::new(row.min.x + 2.0, row.center().y);
@@ -1024,7 +1024,7 @@ fn the_back_capsule_is_the_smaller_box_inside_the_row() {
         (
             0,
             2u8,
-            karakuri_operation::NodeAt {
+            karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L4,
                 index: 1,
             },
@@ -1032,7 +1032,7 @@ fn the_back_capsule_is_the_smaller_box_inside_the_row() {
         (
             1,
             3u8,
-            karakuri_operation::NodeAt {
+            karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L2,
                 index: 0,
             },

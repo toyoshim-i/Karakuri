@@ -677,7 +677,7 @@ fn param(name: &str, at: usize) -> karakuri_console::view::Param {
         value: 0.0,
         range: [0.25, 4.0],
         param: karakuri_operation::ParamAt {
-            node: Some(karakuri_operation::NodeAt {
+            node: Some(karakuri_operation::NodeAddress {
                 layer: karakuri_operation::Layer::L2,
                 index: 0,
             }),

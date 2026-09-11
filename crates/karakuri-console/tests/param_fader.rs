@@ -51,7 +51,7 @@ use karakuri_console::view::{
     inspector, InspectorPane, Node, NodeAuthority, Pane, Param, Renderer, View, PANES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Authority, Layer, NodeAt, ParamAt, Sync};
+use karakuri_operation::{Authority, Layer, NodeAddress, ParamAt, Sync};
 
 /// A row addressed at one node, over a published range, at a value.
 fn row(ord: usize, name: &str, at: Option<(Layer, u32)>, range: [f32; 2], value: f32) -> Param {
@@ -61,7 +61,7 @@ fn row(ord: usize, name: &str, at: Option<(Layer, u32)>, range: [f32; 2], value:
         value,
         range,
         param: ParamAt {
-            node: at.map(|(layer, index)| NodeAt { layer, index }),
+            node: at.map(|(layer, index)| NodeAddress { layer, index }),
             key: name.to_owned(),
         },
         bound: None,
@@ -97,7 +97,7 @@ fn mock() -> Pane {
                 addr: "L1:0".to_owned(),
                 name: "drift_shell".to_owned(),
                 authority: Some(NodeAuthority {
-                    at: NodeAt {
+                    at: NodeAddress {
                         layer: Layer::L1,
                         index: 0,
                     },
@@ -464,7 +464,7 @@ fn a_wildcard_row_writes_the_wildcard_and_not_the_group_it_was_drawn_in() {
     assert_eq!(
         grip.param.param,
         ParamAt {
-            node: Some(NodeAt {
+            node: Some(NodeAddress {
                 layer: Layer::L4,
                 index: 0,
             }),

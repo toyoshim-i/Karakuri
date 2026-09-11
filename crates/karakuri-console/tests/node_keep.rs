@@ -35,10 +35,10 @@ use karakuri_console::view::{
     auth_chips, inspector, node_keep, Node, NodeAuthority, Pane, View, AUTHORITIES, PANES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Authority, Layer, NodeAt, Operation, Sync};
+use karakuri_operation::{Authority, Layer, NodeAddress, Operation, Sync};
 
 /// A node group with a source behind it — every node but the built-in camera.
-fn kept(addr: &str, name: &str, at: NodeAt) -> Node {
+fn kept(addr: &str, name: &str, at: NodeAddress) -> Node {
     Node {
         addr: addr.to_owned(),
         name: name.to_owned(),
@@ -61,7 +61,7 @@ fn built_in_camera() -> Node {
         ..kept(
             "L3:0",
             "orbit",
-            NodeAt {
+            NodeAddress {
                 layer: Layer::L3,
                 index: 0,
             },
@@ -137,7 +137,7 @@ fn the_capsule_sits_inside_the_heads_right_hand_padding() {
     let pane = pane_of(vec![kept(
         "L1:0",
         "drift_shell",
-        NodeAt {
+        NodeAddress {
             layer: Layer::L1,
             index: 0,
         },
@@ -179,7 +179,7 @@ fn the_authority_chips_clear_the_capsule() {
     let node = kept(
         "L1:0",
         "drift_shell",
-        NodeAt {
+        NodeAddress {
             layer: Layer::L1,
             index: 0,
         },
@@ -230,7 +230,7 @@ fn the_authority_chips_clear_the_capsule() {
 #[test]
 fn a_press_on_the_capsule_keeps_that_node() {
     let (panel, ctx) = console(PLAUSIBLE);
-    let second = NodeAt {
+    let second = NodeAddress {
         layer: Layer::L2,
         index: 0,
     };
@@ -238,7 +238,7 @@ fn a_press_on_the_capsule_keeps_that_node() {
         kept(
             "L1:0",
             "drift_shell",
-            NodeAt {
+            NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             },
@@ -322,7 +322,7 @@ fn the_capsule_and_the_chips_do_not_overlap() {
     let node = kept(
         "L1:0",
         "drift_shell",
-        NodeAt {
+        NodeAddress {
             layer: Layer::L1,
             index: 0,
         },
@@ -356,7 +356,7 @@ fn a_console_that_has_not_drawn_has_no_capsule() {
     let pane = pane_of(vec![kept(
         "L1:0",
         "drift_shell",
-        NodeAt {
+        NodeAddress {
             layer: Layer::L1,
             index: 0,
         },
@@ -371,7 +371,7 @@ fn a_console_that_has_not_drawn_has_no_capsule() {
 #[test]
 fn the_second_pane_keeps_its_own_deck() {
     let (panel, ctx) = console(PLAUSIBLE);
-    let at_node = NodeAt {
+    let at_node = NodeAddress {
         layer: Layer::L1,
         index: 0,
     };

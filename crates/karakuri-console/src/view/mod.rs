@@ -283,7 +283,7 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
 use karakuri_operation::{
-    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, LibraryKinds, NodeAt,
+    Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, LibraryKinds, NodeAddress,
     Operation, Output, Recording, Residency, Revision, StepMode, Sync, Tonemap, TransitionSetting,
     Undecided, WipeKind,
 };
@@ -4274,7 +4274,7 @@ pub struct Candidate {
     /// candidate` settles this node and `Put a node's previous version back`
     /// steps it back one version; neither can be spelled without it, so a row
     /// where this is `None` offers neither.
-    pub at: Option<NodeAt>,
+    pub at: Option<NodeAddress>,
     /// **The mock's `.addr` — `L4:0`** — and empty on a row that names no
     /// node.
     ///

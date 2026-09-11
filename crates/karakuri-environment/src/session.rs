@@ -399,7 +399,7 @@ pub fn split(lines: Vec<Line>) -> Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use karakuri_store::record::{Layer, Value};
+    use karakuri_store::record::Value;
 
     fn set_line() -> Line {
         Line::new(Record::Set {
@@ -416,8 +416,7 @@ mod tests {
     fn state_after_the_first_tick_is_an_edit_and_not_the_head() {
         let param = |v: f32| {
             Line::new(Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(v),
             })

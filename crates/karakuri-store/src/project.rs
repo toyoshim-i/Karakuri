@@ -29,14 +29,14 @@ use std::collections::HashMap;
 
 use crate::hash::Hash;
 use crate::ndjson::Line;
-use crate::record::{InputPort, Layer, Record};
+use crate::record::{InputPort, Layer, NodeAddress, Record};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Key {
     Set,
-    Slot(Layer, u32),
-    Capacity(Layer, u32),
-    Param(Layer, Option<u32>, String),
+    Slot(NodeAddress),
+    Capacity(NodeAddress),
+    Param(Option<NodeAddress>, String),
     Bind(Layer, Option<u32>, String),
     Camera(u32),
     /// **No index beside it, because a Set holds exactly one L5.** Every other
@@ -111,19 +111,17 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // a node and then renamed it folds to one node with its later name,
         // where a fold keyed by the name would keep both lines and describe
         // two nodes that never existed.
-        Record::Slot { layer, index, .. } => Some(Key::Slot(*layer, *index)),
+        Record::Slot { at, .. } => Some(Key::Slot(*at)),
         // A node rather than a layer, so two geometries at two capacities
         // survive the fold as the two facts they are. Keyed by layer alone
         // they collapsed onto each other and the projection kept whichever
         // line came last — a Set file that resizes the wrong source.
-        Record::Capacity { layer, index, .. } => Some(Key::Capacity(*layer, *index)),
+        Record::Capacity { at, .. } => Some(Key::Capacity(*at)),
         // Folded by the **address**, so a wildcard write and a write addressed
         // at one node are two facts rather than one overwriting the other —
         // which is what they are: "the Set's exposure" and "renderer 1's
         // exposure" can both be true, and the engine resolves the overlap.
-        Record::Param {
-            layer, index, key, ..
-        } => Some(Key::Param(*layer, *index, key.clone())),
+        Record::Param { at, key, .. } => Some(Key::Param(*at, key.clone())),
         Record::Bind {
             layer, index, key, ..
         } => Some(Key::Bind(*layer, *index, key.clone())),
@@ -412,15 +410,13 @@ mod tests {
     fn last_write_wins_per_layer_and_key() {
         let session = vec![
             line(Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0),
             }),
             line(Record::Tick { steps: 1 }),
             line(Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.6),
             }),
@@ -431,8 +427,7 @@ mod tests {
         assert_eq!(
             set[0].record(),
             &Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.6)
             }
@@ -456,15 +451,17 @@ mod tests {
     fn a_ride_is_dropped_where_a_param_at_the_same_address_is_folded() {
         let session = vec![
             line(Record::Param {
-                layer: Layer::L1,
-                index: Some(0),
+                at: Some(NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                }),
                 key: "radius".into(),
                 value: Value::Scalar(2.0),
             }),
             line(Record::Tick { steps: 1 }),
             line(Record::Ride {
                 slot: 0,
-                at: Some(crate::record::NodeAt {
+                at: Some(crate::record::NodeAddress {
                     layer: Layer::L1,
                     index: 0,
                 }),
@@ -473,7 +470,7 @@ mod tests {
             }),
             line(Record::Ride {
                 slot: 3,
-                at: Some(crate::record::NodeAt {
+                at: Some(crate::record::NodeAddress {
                     layer: Layer::L1,
                     index: 0,
                 }),
@@ -492,8 +489,10 @@ mod tests {
         assert_eq!(
             set[0].record(),
             &Record::Param {
-                layer: Layer::L1,
-                index: Some(0),
+                at: Some(NodeAddress {
+                    layer: Layer::L1,
+                    index: 0
+                }),
                 key: "radius".into(),
                 value: Value::Scalar(2.0)
             },
@@ -501,24 +500,38 @@ mod tests {
         );
     }
 
+    /// **Distinct on any of three dimensions: the key, whether a node is
+    /// named at all, and which node.**
+    ///
+    /// The middle line used to differ from the first by `layer` alone —
+    /// `L4` beside `L1` — while both left `index` absent. That stopped being
+    /// a distinguishing dimension once `at`'s wildcard became `None`
+    /// structurally: a `layer` written beside no `index` is the placeholder
+    /// every writer puts there and nobody reads, on [`Record::Param`]'s own
+    /// documentation, so two such wildcards are one fact and not two
+    /// regardless of what placeholder they happened to carry. What still
+    /// belongs in this test is the dimension that placeholder was standing
+    /// in for by accident: an address that names a node at all, which is a
+    /// fact a bare wildcard can never be confused with — "the Set's radius"
+    /// and "L1:0's radius" can both be true at once.
     #[test]
     fn distinct_keys_stay_distinct() {
         let session = vec![
             line(Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0),
             }),
             line(Record::Param {
-                layer: Layer::L4,
-                index: None,
+                at: Some(NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                }),
                 key: "radius".into(),
                 value: Value::Scalar(0.5),
             }),
             line(Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "turbulence".into(),
                 value: Value::Scalar(0.8),
             }),
@@ -531,19 +544,22 @@ mod tests {
     fn first_occurrence_position_is_kept_on_update() {
         let session = vec![
             line(Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 value: 65536,
             }),
             line(Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0),
             }),
             line(Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 value: 524288,
             }),
         ];
@@ -553,16 +569,17 @@ mod tests {
         assert_eq!(
             set[0].record(),
             &Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0
+                },
                 value: 524288
             }
         );
         assert_eq!(
             set[1].record(),
             &Record::Param {
-                layer: Layer::L1,
-                index: None,
+                at: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0)
             }
@@ -578,21 +595,27 @@ mod tests {
     fn two_geometries_at_two_capacities_do_not_fold_together() {
         let session = vec![
             line(Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 value: 65536,
             }),
             line(Record::Capacity {
-                layer: Layer::L1,
-                index: 1,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 1,
+                },
                 value: 4096,
             }),
             line(Record::Tick { steps: 1 }),
             // The same node again, which *is* a correction — so the fold still
             // has something to do and this is not a test that folding stopped.
             line(Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 value: 524288,
             }),
         ];
@@ -606,16 +629,20 @@ mod tests {
         assert_eq!(
             set[0].record(),
             &Record::Capacity {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0
+                },
                 value: 524288
             }
         );
         assert_eq!(
             set[1].record(),
             &Record::Capacity {
-                layer: Layer::L1,
-                index: 1,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 1
+                },
                 value: 4096
             }
         );
@@ -685,23 +712,29 @@ mod tests {
         let proc_hash = Hash::of(b"proc p { kind L1 }");
         let session = vec![
             line(Record::Slot {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 name: Some("near".into()),
                 proc_hash,
             }),
             line(Record::Tick { steps: 1 }),
             line(Record::Slot {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0,
+                },
                 name: Some("veil".into()),
                 proc_hash,
             }),
             // A different node that was called what the first one used to be
             // called. Two nodes, and no name is shared at any one instant.
             line(Record::Slot {
-                layer: Layer::L1,
-                index: 1,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 1,
+                },
                 name: Some("near".into()),
                 proc_hash,
             }),
@@ -716,8 +749,10 @@ mod tests {
         assert_eq!(
             set[0].record(),
             &Record::Slot {
-                layer: Layer::L1,
-                index: 0,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 0
+                },
                 name: Some("veil".into()),
                 proc_hash
             }
@@ -725,8 +760,10 @@ mod tests {
         assert_eq!(
             set[1].record(),
             &Record::Slot {
-                layer: Layer::L1,
-                index: 1,
+                at: NodeAddress {
+                    layer: Layer::L1,
+                    index: 1
+                },
                 name: Some("near".into()),
                 proc_hash
             }

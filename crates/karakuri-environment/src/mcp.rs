@@ -121,7 +121,7 @@ use karakuri_ir::Kind;
 // pays on purpose, and this package is where two of them are checked against
 // each other.
 use karakuri_operation::gate::{self, Allowed};
-use karakuri_operation::{InputPort, NodeAt, Operation};
+use karakuri_operation::{InputPort, NodeAddress, Operation};
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
 use karakuri_store::record::{Layer, Record};
@@ -685,7 +685,7 @@ fn layer_name(layer: Kind) -> &'static str {
 /// `karakuri_operation::Layer` stops the build here until somebody has said
 /// what the other one calls it.
 ///
-/// **[`NodeAt`]'s first caller in this workspace is this surface**, and that is
+/// **[`NodeAddress`]'s first caller in this workspace is this surface**, and that is
 /// not an accident: the manual's own gap section says MIDI *"cannot express a
 /// node address, a parameter name or an id"*, a key press has nothing to say
 /// one with, and the panel does not reach inside a Set. A node address is the
@@ -1857,12 +1857,12 @@ fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
 }
 
 /// `read_procedure`'s arguments as the deck and node they name.
-fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAt), String> {
+fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), String> {
     let (slot, layer, index) = slot_layer_index(args)?;
     let deck = deck_named(slot, slots)?;
     Ok((
         deck,
-        NodeAt {
+        NodeAddress {
             layer: layer_of(layer),
             index: index as u32,
         },
@@ -1883,7 +1883,7 @@ fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
     let deck = deck_named(slot, slots)?;
     Ok(Operation::WriteProcedure {
         deck,
-        node: NodeAt {
+        node: NodeAddress {
             layer: layer_of(layer),
             index: index as u32,
         },
@@ -1893,12 +1893,12 @@ fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
 
 /// `wire_input`'s arguments as the operation they name.
 ///
-/// **Both ends are names and neither is a [`NodeAt`]**, which is the one place
+/// **Both ends are names and neither is a [`NodeAddress`]**, which is the one place
 /// this surface departs from the address the rest of it uses — and it is a
 /// decision made twice before this tool existed. `Record::Edge` states it: *a
 /// position moves when the list is reordered, and reordering silently changing
 /// which geometry a morph blends towards is the exact failure this record exists
-/// to end.* [`NodeAt`]'s own documentation states the other half: *so
+/// to end.* [`NodeAddress`]'s own documentation states the other half: *so
 /// `Operation::WireInput` takes names and everything else takes this, and the
 /// two are not interchangeable.* A tool here that took `{layer, index}` because
 /// its five neighbours do would be spelling an edge in the one address an edge
@@ -2521,7 +2521,7 @@ fn deck_of(with: &Value, key: &str, slots: &Slots) -> Result<u8, String> {
 
 /// A node of a deck's Set, as `read_procedure` addresses one: a layer, and an
 /// index into that layer that defaults to 0 for that tool's reason.
-fn node_of(with: &Value, key: &str) -> Result<NodeAt, String> {
+fn node_of(with: &Value, key: &str) -> Result<NodeAddress, String> {
     let at = with
         .get(key)
         .ok_or_else(|| format!("`with.{key}` is required and is a node: `layer`, and `index`"))?;
@@ -2535,7 +2535,7 @@ fn node_of(with: &Value, key: &str) -> Result<NodeAt, String> {
         None | Some(Value::Null) => 0,
         Some(_) => u32_of(at, "index")?,
     };
-    Ok(NodeAt {
+    Ok(NodeAddress {
         layer: layer_of(layer),
         index,
     })
@@ -3613,7 +3613,7 @@ const SPELLED: &[Spelled] = &[
                     deck: 0,
                     controls: vec![karakuri_operation::Control {
                         name: "glow".to_string(),
-                        node: Some(NodeAt {
+                        node: Some(NodeAddress {
                             layer: karakuri_operation::Layer::L4,
                             index: 0,
                         }),
@@ -3748,7 +3748,7 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::SetAuthority {
                     deck: 0,
-                    node: NodeAt {
+                    node: NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 0,
                     },
@@ -3786,7 +3786,7 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::KeepProcedure {
                     deck: 0,
-                    node: NodeAt {
+                    node: NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 0,
                     },
@@ -3991,7 +3991,7 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::ReadProcedure {
                     deck: 0,
-                    node: NodeAt {
+                    node: NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 0,
                     },
@@ -4007,7 +4007,7 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::WriteProcedure {
                     deck: 0,
-                    node: NodeAt {
+                    node: NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 0,
                     },
@@ -4041,7 +4041,7 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::KeepCandidate {
                     deck: 0,
-                    node: NodeAt {
+                    node: NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 0,
                     },
@@ -4057,7 +4057,7 @@ const SPELLED: &[Spelled] = &[
             (
                 Operation::RestoreProcedure {
                     deck: 0,
-                    revision: karakuri_operation::Revision::Previous(NodeAt {
+                    revision: karakuri_operation::Revision::Previous(NodeAddress {
                         layer: karakuri_operation::Layer::L4,
                         index: 0,
                     }),
@@ -4714,10 +4714,10 @@ fn slot_layer_index(args: &Value) -> Result<(usize, Kind, usize), String> {
 
 /// **[`Operation::ReadProcedure`], done**: the source of one node of one deck.
 ///
-/// The address arrives as the vocabulary's [`NodeAt`] and is turned back into
+/// The address arrives as the vocabulary's [`NodeAddress`] and is turned back into
 /// the compiler's own [`Kind`] here, at the one place that resolves a file —
 /// see [`kind_of`].
-fn read_procedure(deck: u8, node: NodeAt, state: &State) -> Result<String, String> {
+fn read_procedure(deck: u8, node: NodeAddress, state: &State) -> Result<String, String> {
     let path = state
         .slots
         .path(usize::from(deck), kind_of(node.layer), node.index as usize)?;
@@ -4732,7 +4732,12 @@ fn read_procedure(deck: u8, node: NodeAt, state: &State) -> Result<String, Strin
 /// record written at the ask would claim a swap the budget went on to roll
 /// back. It is written where the swap lands, which is the render loop, and this
 /// tool's answer says as much.
-fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Result<String, String> {
+fn write_procedure(
+    deck: u8,
+    node: NodeAddress,
+    source: &str,
+    state: &State,
+) -> Result<String, String> {
     let slot = usize::from(deck);
     let layer = kind_of(node.layer);
     let index = node.index as usize;
@@ -5049,11 +5054,10 @@ fn read_set(id: &str, state: &State) -> Result<String, String> {
         .iter()
         .filter_map(|line| match line.record() {
             Record::Slot {
-                layer,
-                index,
+                at,
                 name,
                 proc_hash,
-            } => Some((*layer, *index, name.clone(), *proc_hash)),
+            } => Some((at.layer, at.index, name.clone(), *proc_hash)),
             _ => None,
         })
         .collect();
@@ -7397,8 +7401,10 @@ proc probe_knobs {
             .iter()
             .map(|(layer, index, name, hash)| {
                 Line::new(Record::Slot {
-                    layer: *layer,
-                    index: *index,
+                    at: karakuri_store::record::NodeAddress {
+                        layer: *layer,
+                        index: *index,
+                    },
                     name: name.map(str::to_string),
                     proc_hash: *hash,
                 })
@@ -7883,14 +7889,18 @@ proc probe_knobs {
                 id,
                 &[
                     Line::new(Record::Slot {
-                        layer: Layer::L1,
-                        index: 0,
+                        at: karakuri_store::record::NodeAddress {
+                            layer: Layer::L1,
+                            index: 0,
+                        },
                         name: Some("shell".into()),
                         proc_hash: hash,
                     }),
                     Line::new(Record::Param {
-                        layer: Layer::L1,
-                        index: Some(0),
+                        at: Some(karakuri_store::record::NodeAddress {
+                            layer: Layer::L1,
+                            index: 0,
+                        }),
                         key: "radius".into(),
                         value: karakuri_store::record::Value::Scalar(2.5),
                     }),
@@ -8002,26 +8012,34 @@ proc probe_knobs {
                 "costed",
                 &[
                     Line::new(Record::Slot {
-                        layer: Layer::L1,
-                        index: 0,
+                        at: karakuri_store::record::NodeAddress {
+                            layer: Layer::L1,
+                            index: 0,
+                        },
                         name: Some("shell".into()),
                         proc_hash: l1,
                     }),
                     Line::new(Record::Slot {
-                        layer: Layer::L2,
-                        index: 0,
+                        at: karakuri_store::record::NodeAddress {
+                            layer: Layer::L2,
+                            index: 0,
+                        },
                         name: Some("warp".into()),
                         proc_hash: l2,
                     }),
                     Line::new(Record::Slot {
-                        layer: Layer::L4,
-                        index: 0,
+                        at: karakuri_store::record::NodeAddress {
+                            layer: Layer::L4,
+                            index: 0,
+                        },
                         name: Some("dots".into()),
                         proc_hash: l4,
                     }),
                     Line::new(Record::Capacity {
-                        layer: Layer::L1,
-                        index: 0,
+                        at: karakuri_store::record::NodeAddress {
+                            layer: Layer::L1,
+                            index: 0,
+                        },
                         value: 16,
                     }),
                 ],
@@ -8158,7 +8176,7 @@ proc probe_knobs {
     ///
     /// This is the one property the routing through
     /// [`karakuri_operation::Operation`] could quietly lose: the wire's `index`
-    /// becomes [`NodeAt::index`] and comes back out again to resolve a file, so
+    /// becomes [`NodeAddress::index`] and comes back out again to resolve a file, so
     /// an address that arrived correct and was carried wrong would still return
     /// *compiled and written* and change the wrong procedure. A slot with two
     /// renderers is what makes that visible: with one, every wrong index is the
@@ -10504,7 +10522,7 @@ mod tests {
     /// the asymmetry is deliberate: `Record::Edge`'s reason is that *a position
     /// moves when the list is reordered, and reordering silently changing which
     /// geometry a morph blends towards is the exact failure this record exists
-    /// to end*, and `NodeAt`'s own documentation says the two spellings are not
+    /// to end*, and `NodeAddress`'s own documentation says the two spellings are not
     /// interchangeable. A tool given a `layer` and an `index` here because its
     /// neighbours have them would be that failure with a schema in front of it,
     /// and it is the kind of tidying that looks like consistency — so it is

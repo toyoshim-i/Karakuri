@@ -2226,11 +2226,11 @@ fn replay_session(args: &Args, id: &str) {
             for record in &frame.before {
                 if let karakuri_store::record::Record::Procedure {
                     slot,
-                    layer,
-                    index,
+                    at,
                     proc_hash,
                 } = record
                 {
+                    let (layer, index) = (&at.layer, &at.index);
                     let slot = usize::from(*slot);
                     if slot >= playing.len() {
                         eprintln!(
@@ -6129,8 +6129,10 @@ impl Live {
             };
             self.record_only(karakuri_store::record::Record::Procedure {
                 slot: slot as u8,
-                layer: record,
-                index: *index,
+                at: karakuri_store::record::NodeAddress {
+                    layer: record,
+                    index: *index,
+                },
                 proc_hash: *hash,
             });
         }
@@ -7991,8 +7993,7 @@ mod tests {
         let hash = store.put_artifact(b"not compiled here").expect("put");
         let slot = |layer: Layer, index: u32, name: &str| {
             karakuri_store::ndjson::Line::new(Record::Slot {
-                layer,
-                index,
+                at: karakuri_store::record::NodeAddress { layer, index },
                 name: Some(name.to_string()),
                 proc_hash: hash,
             })

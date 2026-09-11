@@ -34,7 +34,7 @@ use karakuri_console::view::{
     inspector, InspectorPane, Node, Pane, Param, Uses, View, PANES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Control, Layer, NodeAt, Operation, ParamAt, Sync};
+use karakuri_operation::{Control, Layer, NodeAddress, Operation, ParamAt, Sync};
 
 /// A published row: a position in the interface, a name, an address and a
 /// range.
@@ -45,7 +45,7 @@ fn row(ord: usize, name: &str, at: Option<(Layer, u32)>) -> Param {
         value: 0.5,
         range: [0.0, 1.0],
         param: ParamAt {
-            node: at.map(|(layer, index)| NodeAt { layer, index }),
+            node: at.map(|(layer, index)| NodeAddress { layer, index }),
             key: name.to_owned(),
         },
         bound: None,
@@ -65,7 +65,7 @@ fn off(name: &str, at: Option<(Layer, u32)>) -> Param {
 fn control(name: &str, at: Option<(Layer, u32)>) -> Control {
     Control {
         name: name.to_owned(),
-        node: at.map(|(layer, index)| NodeAt { layer, index }),
+        node: at.map(|(layer, index)| NodeAddress { layer, index }),
         key: name.to_owned(),
         range: [0.0, 1.0],
     }

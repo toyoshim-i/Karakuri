@@ -50,7 +50,7 @@ use karakuri_console::view::{
 };
 use karakuri_operation::LaneTarget;
 use karakuri_operation::{
-    Authority, BlendMode, Curve, Layer, NodeAt, Operation, ParamAt, ParamValue, Residency,
+    Authority, BlendMode, Curve, Layer, NodeAddress, Operation, ParamAt, ParamValue, Residency,
     Revision, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
 };
 use karakuri_pattern::{Lane, Pattern};
@@ -87,7 +87,7 @@ fn param(ord: usize, name: &str, range: [f32; 2], value: f32) -> Param {
         value,
         range,
         param: ParamAt {
-            node: Some(NodeAt {
+            node: Some(NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             }),
@@ -106,7 +106,7 @@ fn node() -> Node {
         addr: "L1:0".to_owned(),
         name: "drift_shell".to_owned(),
         authority: Some(NodeAuthority {
-            at: NodeAt {
+            at: NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             },
@@ -184,7 +184,7 @@ fn console() -> (Panel, View) {
     view.staging = vec![
         Candidate {
             deck: 0,
-            at: Some(NodeAt {
+            at: Some(NodeAddress {
                 layer: Layer::L1,
                 index: 0,
             }),
@@ -195,7 +195,7 @@ fn console() -> (Panel, View) {
         },
         Candidate {
             deck: 1,
-            at: Some(NodeAt {
+            at: Some(NodeAddress {
                 layer: Layer::L2,
                 index: 0,
             }),
@@ -486,7 +486,7 @@ fn the_inspectors_address_is_three_rungs_deep() {
         Asked::Emitted(Operation::WriteParam {
             deck: 0,
             param: ParamAt {
-                node: Some(NodeAt {
+                node: Some(NodeAddress {
                     layer: Layer::L1,
                     index: 0
                 }),
@@ -960,7 +960,7 @@ fn space_in_the_inspector_cycles_the_four_chips() {
             &[2, 2, 1],
             Operation::SetAuthority {
                 deck: 1,
-                node: NodeAt {
+                node: NodeAddress {
                     layer: Layer::L1,
                     index: 0,
                 },
@@ -1127,7 +1127,7 @@ fn enter_on_a_library_row_is_the_load_and_on_its_params_chip_is_the_reading() {
 /// them**, which is ADR-0259's `n 1` and `n 2`.
 #[test]
 fn enter_on_a_staging_rows_two_controls_keeps_it_and_puts_the_previous_back() {
-    let node = NodeAt {
+    let node = NodeAddress {
         layer: Layer::L2,
         index: 0,
     };

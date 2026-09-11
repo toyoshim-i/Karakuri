@@ -325,7 +325,7 @@ pub struct Node {
     /// rather than two.** A press on a chip has to say which node it is
     /// about, and the two are absent together — a head with no one answer has
     /// no one node either — so a pair of `Option`s would be *present or absent
-    /// as a unit* held true by prose, which is `karakuri_store::record::NodeAt`'s
+    /// as a unit* held true by prose, which is `karakuri_store::record::NodeAddress`'s
     /// argument one crate along and `docs/contributing.md` §4's structural
     /// tier.
     pub authority: Option<NodeAuthority>,
@@ -352,7 +352,7 @@ pub struct Node {
     /// address would be *present or absent as a unit* held true by prose,
     /// which is [`NodeAuthority`]'s own argument, so the address and the
     /// having-one are one `Option`.
-    pub keep: Option<NodeAt>,
+    pub keep: Option<NodeAddress>,
     /// The mock's `.rend-row`: every renderer this Set has, and which of them
     /// is live. Empty on every group that is not the renderers'.
     pub renderers: Vec<Renderer>,
@@ -400,7 +400,7 @@ pub struct Uses {
 
 /// **Which node a group's head is, and who may move it.**
 ///
-/// The address is `karakuri_operation::NodeAt`, **carried over from whoever
+/// The address is `karakuri_operation::NodeAddress`, **carried over from whoever
 /// read the Set** and deliberately not parsed back out of [`Node::addr`]:
 /// that field is the mock's `L1:0`, a display string in the layer word
 /// `docs/ir-spec.md` owns, and reading an address back out of what is drawn is
@@ -408,7 +408,7 @@ pub struct Uses {
 /// ([ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeAuthority {
-    pub at: NodeAt,
+    pub at: NodeAddress,
     /// Who may move it — `manual` where nobody has spoken for it, which is
     /// what a node nobody has spoken for **is** rather than a placeholder.
     pub level: Authority,
@@ -4702,7 +4702,7 @@ mod tests {
                 addr: "L1:0".to_owned(),
                 name: "drift_shell".to_owned(),
                 authority: Some(NodeAuthority {
-                    at: NodeAt {
+                    at: NodeAddress {
                         layer: Layer::L1,
                         index: 0,
                     },
@@ -4711,7 +4711,7 @@ mod tests {
                 // **A node with a source**, which every node but the built-in
                 // camera has — and the capsule this draws is what the tests
                 // below measure the head's right-hand end against.
-                keep: Some(NodeAt {
+                keep: Some(NodeAddress {
                     layer: Layer::L1,
                     index: 0,
                 }),
