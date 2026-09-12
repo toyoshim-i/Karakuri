@@ -1,30 +1,18 @@
-//! What L5 consumes.
-//!
-//! A `Set` is the only implementation in V1. The interface exists now so that a
-//! second implementation is an addition rather than a change — the same move as
-//! declaring `blend additive` before there is a second blend mode.
+//! Trait for rendering linear HDR video frames.
 
-/// A source of one frame of linear HDR colour.
-///
-/// Implementations render into an `Rgba16Float` target. sRGB encoding happens
-/// once, at final output, and values above 1.0 are expected — they are what
-/// feeds bloom.
+/// Produces linear HDR color frames into an `Rgba16Float` render target.
 pub trait VideoSource {
-    /// Advance by `steps` simulation steps and render.
-    ///
-    /// `steps` comes from a `tick` record, never from a measurement: emitted
-    /// from real time when live, read back verbatim on replay. That is what
-    /// keeps substepping compatible with deterministic reproduction.
+    /// Advances simulation state by `steps` and records rendering commands into `encoder`.
     fn render(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, steps: u8);
 
-    /// Commit staged state transitions (such as simulation clock advancement
+    /// Commits staged state transitions (such as simulation clock advancement
     /// and ping-pong parity) after command buffer submission.
     fn commit(&mut self) {}
 
-    /// Discard staged state transitions when an open frame is abandoned without submission.
+    /// Discards staged state transitions when an open frame is abandoned without submission.
     fn discard(&mut self) {}
 
-    /// The format every implementation renders into.
+    /// Returns the render target texture format (defaults to `Rgba16Float`).
     fn format(&self) -> wgpu::TextureFormat {
         wgpu::TextureFormat::Rgba16Float
     }
