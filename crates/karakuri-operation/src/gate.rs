@@ -1,20 +1,21 @@
-//! **What may be asked, and by what.** The audit
+//! What may be asked, and by what. The audit
 //! [ADR-0235](../../../docs/adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md)
 //! decided: every operation is connected, and the ones that could stop a
-//! performance are **refused until the operator opens the class they are in**.
+//! performance are refused until the operator opens the class they are in.
 //!
 //! # It is one classification and one sentence, for every route
+//!
 //!
 //! [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
 //! is why it is not in the MCP server: *"a rule held by one surface binds one
 //! surface"*, and a sequencer lane is already decided as a fifth route
 //! (ADR-0222) which would arrive with a second copy of this table. The audit
-//! belongs to **the map** — the layer between a surface and the vocabulary —
-//! and that layer does not exist as a crate: `karakuri-midi` is its only built
+//! belongs to the map — the layer between a surface and the vocabulary — and
+//! that layer does not exist as a crate: `karakuri-midi` is its only built
 //! instance and ADR-0236 deliberately builds none of the rest of it.
 //!
-//! **So this sits in the leaf every surface already depends on, and that is a
-//! co-location rather than a claim that the audit is vocabulary.** ADR-0236 is
+//! So this sits in the leaf every surface already depends on, and that is a
+//! co-location rather than a claim that the audit is vocabulary. ADR-0236 is
 //! explicit that *the map is not the vocabulary*, and this module is not an
 //! [`Operation`]: it names none, it adds none, and `Operation::TITLES` is
 //! untouched by it. What it buys by being here is the thing ADR-0236 asks for —
@@ -22,60 +23,57 @@
 //! `karakuri-environment` all depend on this crate and on nothing in common
 //! besides, so the check and the sentence are written once and no future route
 //! needs a new dependency to reach them. The day the map layer is a crate this
-//! module moves into it whole.
-//! (`docs/contributing.md` §4:
-//! *every surface reaches the vocabulary through a map* is the shape being
-//! named, not the shape that exists.)
+//! module moves into it whole. (`docs/contributing.md` §4: *every surface
+//! reaches the vocabulary through a map* is the shape being named, not the
+//! shape that exists.)
 //!
 //! # The check is a type, not a call at the top of a function
 //!
-//! *"An audit skipped on one path is the whole mechanism gone."* So
-//! [`audit`] is the only constructor of [`Allowed`], [`Allowed`]'s field is
-//! private, and a performer takes an [`Allowed`] rather than an [`Operation`].
-//! A caller in another crate **cannot** reach the performer without having
-//! been through here; forgetting the check is a compile error rather than a
-//! review comment.
+//! *"An audit skipped on one path is the whole mechanism gone."* So [`audit`]
+//! is the only constructor of [`Allowed`], [`Allowed`]'s field is private, and
+//! a performer takes an [`Allowed`] rather than an [`Operation`]. A caller in
+//! another crate cannot reach the performer without having been through here;
+//! forgetting the check is a compile error rather than a review comment.
 //! (`docs/contributing.md` §4.)
 //!
 //! # Closed by default is the type's own default
 //!
 //! [`Open`]'s fields are private and every one of them is `false` to begin, so
 //! there is no literal anywhere that starts a class open: the only way to an
-//! open class is [`Open::with`], which names it. A caller that says nothing
-//! has closed all four.
+//! open class is [`Open::with`], which names it. A caller that says nothing has
+//! closed all four.
 //!
 //! # The classification is exhaustive over the vocabulary
 //!
-//! [`standing`] is a `match` with **no wildcard arm**, which is
+//! [`standing`] is a `match` with no wildcard arm, which is
 //! `karakuri_operation_record::written`'s discipline and its reason: *"an
 //! operation added to the vocabulary stops the build here until somebody says
 //! what it writes, so the classification cannot drift the way a wildcard arm
-//! would let it."* A sixty-fifth operation does not compile until somebody
-//! says which class it is in.
+//! would let it."* A sixty-fifth operation does not compile until somebody says
+//! which class it is in.
 
 use crate::Operation;
 
-/// **A class of operations the operator can open**, and the bay whose head
-/// opens it. ADR-0235 names four and each has a bay.
+/// A class of operations the operator can open, and the bay whose head opens
+/// it. ADR-0235 names four and each has a bay.
 ///
 /// The classes are drawn off P-0094's question — *what does this do at its
 /// worst, on the frame it goes wrong, while the operator's attention is on the
-/// room?* — and **not off the nouns**. That is why
-/// [`Operation::WriteProcedure`] is open although it rewrites what a live deck
-/// is drawing: it is priced before it is built, lands at a frame boundary and
-/// rolls back on its own, so it fails to be an *unpriced, immediate,
-/// irreversible* write on every count.
+/// room?* — and not off the nouns. That is why [`Operation::WriteProcedure`] is
+/// open although it rewrites what a live deck is drawing: it is priced before
+/// it is built, lands at a frame boundary and rolls back on its own, so it
+/// fails to be an *unpriced, immediate, irreversible* write on every count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
-    /// **What a deck that is live is drawing.** Opened at the head of the
-    /// **Program** bay, which is where what is on air lives.
+    /// What a deck that is live is drawing. Opened at the head of the Program bay,
+    /// which is where what is on air lives.
     LiveDeck,
-    /// **The mix faders.** Opened at the head of the **Mixer** bay.
+    /// The mix faders. Opened at the head of the Mixer bay.
     MixFaders,
-    /// **The master effects.** Opened at the head of the **Master** bay.
+    /// The master effects. Opened at the head of the Master bay.
     MasterEffects,
-    /// **Inputs and outputs, routed, enabled and disabled.** Opened at the head
-    /// of the **Outputs** row.
+    /// Inputs and outputs, routed, enabled and disabled. Opened at the head of the
+    /// Outputs row.
     InputsAndOutputs,
 }
 
@@ -88,8 +86,8 @@ impl Class {
         Class::InputsAndOutputs,
     ];
 
-    /// The class in the words ADR-0235 named it in, which is the words the
-    /// refusal says it in.
+    /// The class in the words ADR-0235 named it in, which is the words the refusal
+    /// says it in.
     pub fn title(self) -> &'static str {
         match self {
             Class::LiveDeck => "what a deck that is live is drawing",
@@ -99,8 +97,8 @@ impl Class {
         }
     }
 
-    /// **Where the operator opens it**, which the refusal has to say or the
-    /// model reports the instrument as incapable rather than as closed
+    /// Where the operator opens it, which the refusal has to say or the model
+    /// reports the instrument as incapable rather than as closed
     /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
     pub fn bay(self) -> &'static str {
         match self {
@@ -111,20 +109,20 @@ impl Class {
         }
     }
 
-    /// **Where the operator finds the pill**, in the words the refusal says it
-    /// in — and three of the four are *the head of the … bay* while one is not.
+    /// Where the operator finds the pill, in the words the refusal says it in — and
+    /// three of the four are *the head of the … bay* while one is not.
     ///
-    /// The Outputs row **has no head to put an indicator in**. `karakuri-console`
-    /// says so outright of `Kind::Outputs`: it is a label *"inside a row that has
-    /// no head at all (ADR-0159), so it is that typography and none of that
-    /// structure: no hairline under it, no pills or grip beside it."* So the
-    /// pill sits beside the word that stands in for a head, and
-    /// `docs/manual/console.html` specifies it there and says why.
+    /// The Outputs row has no head to put an indicator in. `karakuri-console` says
+    /// so outright of `Kind::Outputs`: it is a label *"inside a row that has no
+    /// head at all (ADR-0159), so it is that typography and none of that structure:
+    /// no hairline under it, no pills or grip beside it."* So the pill sits beside
+    /// the word that stands in for a head, and `docs/manual/console.html` specifies
+    /// it there and says why.
     ///
-    /// **A refusal naming a place that does not exist is worse than one naming
-    /// none**, because a model repeats it to the person sitting there and sends
-    /// them looking for a head. That is the whole reason this is a second
-    /// function rather than a format string over [`Class::bay`].
+    /// A refusal naming a place that does not exist is worse than one naming none,
+    /// because a model repeats it to the person sitting there and sends them
+    /// looking for a head. That is the whole reason this is a second function
+    /// rather than a format string over [`Class::bay`].
     pub fn opened_at(self) -> &'static str {
         match self {
             Class::LiveDeck => "the head of the Program bay",
@@ -135,39 +133,38 @@ impl Class {
     }
 }
 
-/// **Closed by ADR-0235's rule applied past the four classes, with no bay
-/// named.**
+/// Closed by ADR-0235's rule applied past the four classes, with no bay named.
 ///
 /// ADR-0235 closes fourteen rows that are in none of the four — *"His list is
-/// exemplary — 例えば — and the rule is the question, not the list"* — and says
-/// so of [`Unclassed::Quitting`] in as many words: *"the sharpest case in the
-/// vocabulary and **in none of the four classes**."* It names no bay for any of
+/// exemplary — 例えば — and the rule is the question, not the list"* — and says so
+/// of [`Unclassed::Quitting`] in as many words: *"the sharpest case in the
+/// vocabulary and in none of the four classes."* It names no bay for any of
 /// them, and its own *What this leaves undone* keeps them open: *"whether the
 /// clock, `Quit`, `SelectDeck` and the lane rows are closed as this record
 /// classes them … each is one line to move."*
 ///
-/// **So they are refused and nothing opens them**, which is the safe half of an
+/// So they are refused and nothing opens them, which is the safe half of an
 /// undecided question and is said out loud rather than smoothed over: an
 /// [`Open`] has no field for these, so a caller cannot open one by mistake and
 /// cannot open one on purpose either. Moving a group into a [`Class`] is one
 /// line here the day the maintainer says which bay it belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unclassed {
-    /// The clock. *"Unpriced, immediate, irreversible — a tap sets the phase
-    /// and there is no un-tapping it."*
+    /// The clock. *"Unpriced, immediate, irreversible — a tap sets the phase and
+    /// there is no un-tapping it."*
     Clock,
-    /// [`Operation::Quit`]. *"It does not risk stopping the performance, it
-    /// stops it."*
+    /// [`Operation::Quit`]. *"It does not risk stopping the performance, it stops
+    /// it."*
     Quitting,
-    /// [`Operation::SelectDeck`]. Closed by P-0094's second half: it decides
-    /// which deck the operator's *next key press* lands on.
+    /// [`Operation::SelectDeck`]. Closed by P-0094's second half: it decides which
+    /// deck the operator's *next key press* lands on.
     Selection,
-    /// The sequencer's lanes. A lane emits operations, so one pointed at a
-    /// fader and unmuted is a mix write on a delay.
+    /// The sequencer's lanes. A lane emits operations, so one pointed at a fader
+    /// and unmuted is a mix write on a delay.
     Lanes,
-    /// [`Operation::SetAuthority`]. **A permission an actor can grant itself is
-    /// not a permission**, and ADR-0235 recommends this one is never openable
-    /// while leaving that the maintainer's.
+    /// [`Operation::SetAuthority`]. A permission an actor can grant itself is not a
+    /// permission, and ADR-0235 recommends this one is never openable while leaving
+    /// that the maintainer's.
     Authority,
 }
 
@@ -194,7 +191,7 @@ pub enum Reading {
     Live,
 }
 
-/// **What the audit reads about the instrument**, for the rows whose class is a
+/// What the audit reads about the instrument, for the rows whose class is a
 /// predicate over an operation *and its target* rather than over the operation
 /// alone.
 ///
@@ -205,12 +202,12 @@ pub enum Reading {
 /// air.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Running<'a> {
-    /// **The decks whose slot is live**, as somebody read them from the engine.
+    /// The decks whose slot is live, as somebody read them from the engine.
     ///
     /// `None` is *nobody read it*, and a row that turns on it is then refused
-    /// rather than guessed — the reading is missing, the safe answer is the
-    /// closed one, and [`refusal`] says which reading was missing rather than
-    /// saying *closed* and leaving the caller nothing to act on.
+    /// rather than guessed — the reading is missing, the safe answer is the closed
+    /// one, and [`refusal`] says which reading was missing rather than saying
+    /// *closed* and leaving the caller nothing to act on.
     pub live: Option<&'a [u8]>,
 }
 
@@ -226,32 +223,31 @@ impl<'a> Running<'a> {
     }
 }
 
-/// **Where one operation stands with the audit**, before the operator's opening
-/// is consulted.
+/// Where one operation stands with the audit, before the operator's opening is
+/// consulted.
 ///
-/// [`standing`] answers this; [`audit`] is what turns it and an [`Open`] into
-/// a yes or a sentence.
+/// [`standing`] answers this; [`audit`] is what turns it and an [`Open`] into a
+/// yes or a sentence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standing {
-    /// **Open by default** — twenty-three rows. Nothing gates it and nothing
-    /// ever did.
+    /// Open by default — twenty-three rows. Nothing gates it and nothing ever did.
     Open,
-    /// **Closed by default**, and the operator opens this class at the head of
+    /// Closed by default, and the operator opens this class at the head of
     /// [`Class::bay`].
     Closed(Class),
-    /// **Closed by default**, and no bay opens it. See [`Unclassed`].
+    /// Closed by default, and no bay opens it. See [`Unclassed`].
     ClosedUnclassed(Unclassed),
-    /// **Closed**, because the reading its class turns on was not taken. See
+    /// Closed, because the reading its class turns on was not taken. See
     /// [`Running`].
     Unread(Reading),
 }
 
-/// **Which classes the operator has opened.**
+/// Which classes the operator has opened.
 ///
-/// The fields are private and every one is `false`, so **closed by default is
-/// the type's own `Default`**: there is no way to write down an `Open` that
-/// starts open, and the only route to one is [`Open::with`], which has to name
-/// the class.
+/// The fields are private and every one is `false`, so closed by default is the
+/// type's own `Default`: there is no way to write down an `Open` that starts
+/// open, and the only route to one is [`Open::with`], which has to name the
+/// class.
 ///
 /// [`Unclassed`] groups have no field here on purpose — see that type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -271,11 +267,11 @@ impl Open {
         inputs_and_outputs: false,
     };
 
-    /// This opening with one class set. **Names a state and never a
-    /// direction**, which is
+    /// This opening with one class set. Names a state and never a direction, which
+    /// is
     /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-    /// applied to a setting the vocabulary does not own: a bay-head pill can be
-    /// a toggle, and what it writes still says which state it means.
+    /// applied to a setting the vocabulary does not own: a bay-head pill can be a
+    /// toggle, and what it writes still says which state it means.
     pub fn with(self, class: Class, open: bool) -> Open {
         let mut next = self;
         match class {
@@ -298,8 +294,8 @@ impl Open {
     }
 }
 
-/// **An operation that has been through the audit**, and the only thing a
-/// performer will take.
+/// An operation that has been through the audit, and the only thing a performer
+/// will take.
 ///
 /// The field is private and [`audit`] is the only function that builds one, so
 /// a caller in another crate has no way to perform an operation that was not
@@ -309,19 +305,19 @@ impl Open {
 pub struct Allowed<'a>(&'a Operation);
 
 impl<'a> Allowed<'a> {
-    /// What was allowed. Borrowed rather than owned: the audit reads and
-    /// answers, it never rewrites what was asked for.
+    /// What was allowed. Borrowed rather than owned: the audit reads and answers,
+    /// it never rewrites what was asked for.
     pub fn operation(&self) -> &'a Operation {
         self.0
     }
 }
 
-/// **The gate.** One operation, the opening the operator has set, and what has
-/// been read of what is running — a yes, or the one sentence it is refused in.
+/// The gate. One operation, the opening the operator has set, and what has been
+/// read of what is running — a yes, or the one sentence it is refused in.
 ///
-/// Called once, over the operation, **after the call is named and before it
-/// acts**. In `karakuri_environment::mcp` that is between `asked` and
-/// `perform`, which is the only seam every tool crosses.
+/// Called once, over the operation, after the call is named and before it acts.
+/// In `karakuri_environment::mcp` that is between `asked` and `perform`, which
+/// is the only seam every tool crosses.
 pub fn audit<'a>(
     operation: &'a Operation,
     open: Open,
@@ -336,8 +332,8 @@ pub fn audit<'a>(
     }
 }
 
-/// **The one sentence a refused call is answered in**, and `None` where there
-/// is nothing to refuse.
+/// The one sentence a refused call is answered in, and `None` where there is
+/// nothing to refuse.
 ///
 /// A free function, because
 /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
@@ -348,16 +344,16 @@ pub fn audit<'a>(
 ///
 /// It says three things because
 /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
-/// asks for the constraint and not only the fact: **which operation**, **which
-/// class it is in**, and **that the operator can open that class, and where**.
-/// A model told only *no* reports the instrument as incapable; one told this
-/// can hand the person sitting there something to do.
+/// asks for the constraint and not only the fact: which operation, which class
+/// it is in, and that the operator can open that class, and where. A model told
+/// only *no* reports the instrument as incapable; one told this can hand the
+/// person sitting there something to do.
 ///
-/// **[`Operation::LoadSet`] names its deck**, because its class turns on the
-/// deck being live: two identical calls are answered differently a minute
-/// apart, and a refusal that only said *closed* would be unfixable by the model
-/// that got it. **[`Operation::LoadProcedure`] is the same class and names its
-/// deck for the same reason.**
+/// [`Operation::LoadSet`] names its deck, because its class turns on the deck
+/// being live: two identical calls are answered differently a minute apart, and
+/// a refusal that only said *closed* would be unfixable by the model that got
+/// it. [`Operation::LoadProcedure`] is the same class and names its deck for
+/// the same reason.
 pub fn refusal(operation: &Operation, standing: Standing) -> Option<String> {
     let title = operation.title();
     Some(match standing {
@@ -393,14 +389,14 @@ fn because(operation: &Operation, class: Class) -> String {
     }
 }
 
-/// **Where every operation in the vocabulary stands**, per operation and
+/// Where every operation in the vocabulary stands, per operation and
 /// exhaustively.
 ///
-/// **No wildcard arm.** See the module documentation: a sixty-fifth operation
-/// stops the build here until somebody says which class it is in, which is
+/// No wildcard arm. See the module documentation: a sixty-fifth operation stops
+/// the build here until somebody says which class it is in, which is
 /// `karakuri_operation_record::written`'s discipline and its reason.
 ///
-/// **The split ADR-0235 states is held by a test rather than restated here**:
+/// The split ADR-0235 states is held by a test rather than restated here:
 /// `the_classification_is_the_split_adr_0235_states` walks every operation
 /// through this match and asserts the closed, open and total counts, so the
 /// figures move when this match does and a sentence cannot go stale beside it.
@@ -611,8 +607,7 @@ mod tests {
         }
     }
 
-    /// The same parameter, as an attachment addresses one — see
-    /// [`crate::BindAt`].
+    /// The same parameter, as an attachment addresses one — see [`crate::BindAt`].
     fn bind_at() -> crate::BindAt {
         crate::BindAt {
             layer: Layer::L1,
@@ -621,12 +616,12 @@ mod tests {
         }
     }
 
-    /// **One of every operation in the vocabulary, in the manual's order.**
+    /// One of every operation in the vocabulary, in the manual's order.
     ///
     /// It is checked against [`Operation::TITLES`] rather than counted, so an
     /// operation added to the vocabulary and forgotten here is a failing test
-    /// rather than a fixture that is quietly one short — which is what would
-    /// let the split assertions below go on passing over a row nobody classed.
+    /// rather than a fixture that is quietly one short — which is what would let
+    /// the split assertions below go on passing over a row nobody classed.
     fn every_operation() -> Vec<Operation> {
         vec![
             Operation::TapBeat,
@@ -844,15 +839,15 @@ mod tests {
         ]
     }
 
-    /// **No deck is live**, which is the reading that puts `LoadSet` on the
-    /// open side. The fixture's decks are all 0, so this is a list that does
-    /// not hold it rather than an empty one — an empty list would pass against
-    /// a `contains` that had been inverted.
+    /// No deck is live, which is the reading that puts `LoadSet` on the open side.
+    /// The fixture's decks are all 0, so this is a list that does not hold it
+    /// rather than an empty one — an empty list would pass against a `contains`
+    /// that had been inverted.
     const NOTHING_LIVE: &[u8] = &[7];
     const DECK_0_IS_LIVE: &[u8] = &[0];
 
-    /// The fixture is the vocabulary, and nothing here is asserted about a
-    /// shorter list than the manual specifies.
+    /// The fixture is the vocabulary, and nothing here is asserted about a shorter
+    /// list than the manual specifies.
     #[test]
     fn the_fixture_holds_one_of_every_operation() {
         let titles: Vec<&str> = every_operation().iter().map(Operation::title).collect();
@@ -864,22 +859,22 @@ mod tests {
         );
     }
 
-    /// **A sixty-fifth operation cannot be added without somebody saying which
-    /// class it is in.**
+    /// A sixty-fifth operation cannot be added without somebody saying which class
+    /// it is in.
     ///
     /// The property itself is the compiler's: [`standing`] is a `match` over
-    /// `Operation` with no wildcard arm, so a new variant is a
-    /// `non-exhaustive patterns` error and this crate does not build. **A test
-    /// cannot assert that** — a test only runs on a build that succeeded, so a
-    /// green suite is evidence of nothing here. What a test can do is hold the
-    /// *shape* the compiler needs: the day somebody silences that error with
-    /// `_ => Standing::Open` the build goes green again and the mechanism is
-    /// gone silently, and this is what makes that loud.
+    /// `Operation` with no wildcard arm, so a new variant is a `non-exhaustive
+    /// patterns` error and this crate does not build. A test cannot assert that — a
+    /// test only runs on a build that succeeded, so a green suite is evidence of
+    /// nothing here. What a test can do is hold the *shape* the compiler needs: the
+    /// day somebody silences that error with `_ => Standing::Open` the build goes
+    /// green again and the mechanism is gone silently, and this is what makes that
+    /// loud.
     ///
     /// It reads this file's own text, which is
     /// `karakuri::key_column::the_keys_this_file_lists_are_the_keys_the_window_loop_binds`'s
-    /// method and its reason: the thing being checked is the source, so the
-    /// source is what is read.
+    /// method and its reason: the thing being checked is the source, so the source
+    /// is what is read.
     #[test]
     fn a_wildcard_arm_would_end_the_exhaustiveness() {
         let source = include_str!("gate.rs");
@@ -901,25 +896,24 @@ mod tests {
         }
     }
 
-    /// **41 closed, 27 open, 68 total** — ADR-0235's count less the one row
-    /// ADR-0240 retired, plus the one ADR-0299 added, plus ADR-0338's four. It
-    /// is still the one number that says the classification was applied to the
-    /// whole vocabulary rather than to the rows somebody remembered: the record
-    /// read 41, 23, 64, *Choose what the output shows* leaving the vocabulary
-    /// took one off the closed side and off the total, *Star a Set, or take the
-    /// star off* put one back on the open side and on the total, and ADR-0338
-    /// adds *Load a procedure over a layer* to the closed side and
-    /// *Filter the library by kind*, *Keep a node's procedure* and
-    /// *Point an Inspector pane at a deck* to the open one.
+    /// 41 closed, 27 open, 68 total — ADR-0235's count less the one row ADR-0240
+    /// retired, plus the one ADR-0299 added, plus ADR-0338's four. It is still the
+    /// one number that says the classification was applied to the whole vocabulary
+    /// rather than to the rows somebody remembered: the record read 41, 23, 64,
+    /// *Choose what the output shows* leaving the vocabulary took one off the
+    /// closed side and off the total, *Star a Set, or take the star off* put one
+    /// back on the open side and on the total, and ADR-0338 adds *Load a procedure
+    /// over a layer* to the closed side and *Filter the library by kind*, *Keep a
+    /// node's procedure* and *Point an Inspector pane at a deck* to the open one.
     ///
-    /// **Counted with the deck the two loads name live**, because that is how
-    /// the record counts it: `LoadSet`'s row is listed under *what a live deck
-    /// is drawing* and the closed count includes it, and `LoadProcedure` is the
-    /// same predicate over the same slot. Those two are the only rows whose
-    /// standing is not a function of the operation alone, so the split is a
-    /// split *given a reading* — and the reading that makes it 41 is the one
-    /// the class was drawn for. With nothing live it is 39 and 29, which is the
-    /// same classification and not a second one.
+    /// Counted with the deck the two loads name live, because that is how the
+    /// record counts it: `LoadSet`'s row is listed under *what a live deck is
+    /// drawing* and the closed count includes it, and `LoadProcedure` is the same
+    /// predicate over the same slot. Those two are the only rows whose standing is
+    /// not a function of the operation alone, so the split is a split *given a
+    /// reading* — and the reading that makes it 41 is the one the class was drawn
+    /// for. With nothing live it is 39 and 29, which is the same classification and
+    /// not a second one.
     #[test]
     fn the_classification_is_the_split_adr_0235_states() {
         let running = Running::live(DECK_0_IS_LIVE);
@@ -946,10 +940,10 @@ mod tests {
             .collect()
     }
 
-    /// **What a deck that is live is drawing is closed until the Program bay
-    /// opens it**, and the two loads are in it only while the deck they name is
-    /// live. *Load a procedure over a layer* is last because it is in *The
-    /// library* section of the page and this list is in the page's order.
+    /// What a deck that is live is drawing is closed until the Program bay opens
+    /// it, and the two loads are in it only while the deck they name is live. *Load
+    /// a procedure over a layer* is last because it is in *The library* section of
+    /// the page and this list is in the page's order.
     #[test]
     fn what_a_live_deck_is_drawing_is_closed_until_the_program_bay_opens_it() {
         assert_eq!(
@@ -970,9 +964,9 @@ mod tests {
         assert_eq!(Class::LiveDeck.bay(), "Program");
     }
 
-    /// **The mix faders are closed until the Mixer bay opens them**, and the
-    /// master out is filed with them rather than with the master effects
-    /// (ADR-0224: it is a level and not an effect).
+    /// The mix faders are closed until the Mixer bay opens them, and the master out
+    /// is filed with them rather than with the master effects (ADR-0224: it is a
+    /// level and not an effect).
     #[test]
     fn the_mix_faders_are_closed_until_the_mixer_bay_opens_them() {
         assert_eq!(
@@ -992,9 +986,9 @@ mod tests {
         assert_eq!(Class::MixFaders.bay(), "Mixer");
     }
 
-    /// **The master effects are closed until the Master bay opens them**,
-    /// including the three whose payload is `Undecided` — closed before they
-    /// are buildable, which is the correct order.
+    /// The master effects are closed until the Master bay opens them, including the
+    /// three whose payload is `Undecided` — closed before they are buildable, which
+    /// is the correct order.
     #[test]
     fn the_master_effects_are_closed_until_the_master_bay_opens_them() {
         assert_eq!(
@@ -1004,9 +998,8 @@ mod tests {
         assert_eq!(Class::MasterEffects.bay(), "Master");
     }
 
-    /// **Inputs and outputs are closed until the Outputs bay opens them** —
-    /// the show's plumbing rather than its picture, which is why they are easy
-    /// to forget.
+    /// Inputs and outputs are closed until the Outputs bay opens them — the show's
+    /// plumbing rather than its picture, which is why they are easy to forget.
     #[test]
     fn inputs_and_outputs_are_closed_until_the_outputs_bay_opens_them() {
         assert_eq!(
@@ -1020,9 +1013,9 @@ mod tests {
         assert_eq!(Class::InputsAndOutputs.bay(), "Outputs");
     }
 
-    /// **Closed by default, all four classes**, and it is the type's own
-    /// `Default` rather than a value a caller chose: there is no way to write
-    /// down an `Open` that starts open.
+    /// Closed by default, all four classes, and it is the type's own `Default`
+    /// rather than a value a caller chose: there is no way to write down an `Open`
+    /// that starts open.
     #[test]
     fn closed_by_default_is_the_types_own_default() {
         assert_eq!(Open::default(), Open::CLOSED);
@@ -1031,8 +1024,8 @@ mod tests {
         }
     }
 
-    /// **Opening one class opens no other**, which is the whole of what an
-    /// opening per class means.
+    /// Opening one class opens no other, which is the whole of what an opening per
+    /// class means.
     #[test]
     fn opening_one_class_opens_no_other() {
         for class in Class::ALL {
@@ -1050,11 +1043,11 @@ mod tests {
         }
     }
 
-    /// **A closed operation is refused in the one sentence**, asserted by
-    /// **The one class whose pill is not in a bay head says so**, because the
-    /// Outputs row has none — a refusal that sent an operator looking for a
-    /// head would be worse than one that named no place at all, since a model
-    /// repeats it to the person sitting there.
+    /// A closed operation is refused in the one sentence, asserted by The one class
+    /// whose pill is not in a bay head says so, because the Outputs row has none —
+    /// a refusal that sent an operator looking for a head would be worse than one
+    /// that named no place at all, since a model repeats it to the person sitting
+    /// there.
     #[test]
     fn the_class_with_no_bay_head_does_not_send_anyone_looking_for_one() {
         let operation = Operation::RecordSession {
@@ -1094,10 +1087,9 @@ mod tests {
         );
     }
 
-    /// **A refusal names the operation, its class and where the class is
-    /// opened** — P-0083, in the register it applies to a tool surface: a
-    /// model told only *no* reports the instrument as incapable rather than as
-    /// closed.
+    /// A refusal names the operation, its class and where the class is opened —
+    /// P-0083, in the register it applies to a tool surface: a model told only *no*
+    /// reports the instrument as incapable rather than as closed.
     #[test]
     fn a_refusal_names_the_operation_its_class_and_the_bay_that_opens_it() {
         for operation in every_operation() {
@@ -1112,10 +1104,10 @@ mod tests {
         }
     }
 
-    /// **An open operation is untouched by the gate**, with every class closed
-    /// — which is the state a run starts in. `write_procedure` is the case the
-    /// classes are drawn to keep open: it rewrites what a live deck is drawing
-    /// and its worst case is the picture it replaced, coming back.
+    /// An open operation is untouched by the gate, with every class closed — which
+    /// is the state a run starts in. `write_procedure` is the case the classes are
+    /// drawn to keep open: it rewrites what a live deck is drawing and its worst
+    /// case is the picture it replaced, coming back.
     #[test]
     fn an_open_operation_is_untouched_by_the_gate() {
         for operation in every_operation() {
@@ -1129,9 +1121,9 @@ mod tests {
         }
     }
 
-    /// **The seven tools that exist stay open**, which is ADR-0235's promise
-    /// that nothing closes on the day it is recorded. Held here over the
-    /// operations; `karakuri_environment::mcp` holds it over the wire.
+    /// The seven tools that exist stay open, which is ADR-0235's promise that
+    /// nothing closes on the day it is recorded. Held here over the operations;
+    /// `karakuri_environment::mcp` holds it over the wire.
     #[test]
     fn the_seven_tools_that_exist_are_all_on_the_open_side() {
         for operation in [
@@ -1167,7 +1159,7 @@ mod tests {
         }
     }
 
-    /// **Opening a class lets its operations through and no others.**
+    /// Opening a class lets its operations through and no others.
     #[test]
     fn an_opened_class_lets_its_own_operations_through_and_no_others() {
         let open = Open::CLOSED.with(Class::MixFaders, true);
@@ -1188,10 +1180,10 @@ mod tests {
         );
     }
 
-    /// **Loading a set into a deck that is not live touches nothing on air**,
-    /// so it is open; into one that is, it replaces the picture, so it is
-    /// closed — and the refusal names the deck and says it is live, or the
-    /// model that got it cannot act on it.
+    /// Loading a set into a deck that is not live touches nothing on air, so it is
+    /// open; into one that is, it replaces the picture, so it is closed — and the
+    /// refusal names the deck and says it is live, or the model that got it cannot
+    /// act on it.
     #[test]
     fn loading_a_set_is_closed_only_where_the_deck_it_names_is_live() {
         let operation = Operation::LoadSet {
@@ -1214,9 +1206,9 @@ mod tests {
         );
     }
 
-    /// **A reading nobody took closes the row it decides**, and the refusal
-    /// says which reading was missing rather than saying *closed* — a
-    /// diagnostic says why, not only what.
+    /// A reading nobody took closes the row it decides, and the refusal says which
+    /// reading was missing rather than saying *closed* — a diagnostic says why, not
+    /// only what.
     #[test]
     fn a_reading_nobody_took_closes_the_row_it_decides() {
         let operation = Operation::LoadSet {
@@ -1239,9 +1231,8 @@ mod tests {
         );
     }
 
-    /// **A group ADR-0235 closes past its four classes is refused and nothing
-    /// opens it**, and the refusal says that rather than naming a bay that
-    /// does not exist.
+    /// A group ADR-0235 closes past its four classes is refused and nothing opens
+    /// it, and the refusal says that rather than naming a bay that does not exist.
     #[test]
     fn a_group_with_no_bay_is_refused_and_no_opening_reaches_it() {
         let every = Open::CLOSED
