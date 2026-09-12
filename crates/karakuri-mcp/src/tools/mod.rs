@@ -386,43 +386,42 @@ pub(crate) enum Called {
         news: mpsc::Receiver<News>,
         note: String,
     },
-    /// An operation the loop has been asked to perform — see
-    /// [`OperateRequest`]. No note beside it: what this server knows about the
-    /// run that the loop will not say is the class the audit refused on, and a
-    /// refusal never reaches here.
+    /// An operation the loop has been asked to perform — see [`OperateRequest`]. No
+    /// note beside it: what this server knows about the run that the loop will not
+    /// say is the class the audit refused on, and a refusal never reaches here.
     Operating(mpsc::Receiver<News>),
 }
 
-/// **What one tool call names, in the vocabulary** — or the refusal its
-/// arguments earned.
+/// What one tool call names, in the vocabulary — or the refusal its arguments
+/// earned.
 ///
 /// A tool call is a request from outside the process naming a thing to do,
 /// which is a MIDI message's shape rather than a key press's, and
 /// [ADR-0196](../../../docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)
 /// is what that surface did with it: message becomes `Operation`, and something
-/// else performs it. **The second half of that does not exist here and cannot.**
+/// else performs it. The second half of that does not exist here and cannot.
 /// `karakuri_operation_record::written` answers `Silent` for all six of these —
 /// `Question` for the four that ask and `OnLanding` for the two whose record is
-/// written where the work lands — so `Live::operate` would print *no record* and
-/// do nothing, which is
+/// written where the work lands — so `Live::operate` would print *no record*
+/// and do nothing, which is
 /// [ADR-0198](../../../docs/adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md)'s
 /// finding about twelve keys, holding here for all six tools. There is also no
 /// `Live` on this thread to route into: this server reaches the render loop for
 /// exactly one thing, over the channel [`SaveRequest`] travels on.
 ///
-/// So what routes is the **naming**. The wire's own words — a tool name and a
-/// JSON object — become the operation the manual specifies, once, here; and
+/// So what routes is the naming. The wire's own words — a tool name and a JSON
+/// object — become the operation the manual specifies, once, here; and
 /// [`perform`] dispatches on that operation rather than on the string. A tool
 /// whose payload the vocabulary cannot say does not compile, and the row on
 /// `docs/manual/operations.html` that a tool claims is the row its operation's
 /// title names rather than one a second list asserts.
 ///
-/// **The order arguments are refused in is the order they were refused in
-/// before this routed**, deliberately: a change of route may not change what a
-/// tool answers, and the refusals here are the surface's product — a model that
-/// is told which mistake it made fixes its own call. So the slot is checked
-/// where each tool checked it, `checked_id` runs where each tool ran it, and
-/// nothing new is decided in front of anything old.
+/// The order arguments are refused in is the order they were refused in before
+/// this routed, deliberately: a change of route may not change what a tool
+/// answers, and the refusals here are the surface's product — a model that is
+/// told which mistake it made fixes its own call. So the slot is checked where
+/// each tool checked it, `checked_id` runs where each tool ran it, and nothing
+/// new is decided in front of anything old.
 pub(crate) fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, String> {
     Ok(match name {
         "read_procedure" => match address(args, slots) {
@@ -476,8 +475,8 @@ pub(crate) fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, St
 /// What [`asked`] made of one call: the operation, or what the caller is told
 /// instead.
 ///
-/// **The refusal is a tool result and not a protocol error**, which is why it
-/// is carried in the `Ok` half rather than returned — see [`tool_result`]. The
+/// The refusal is a tool result and not a protocol error, which is why it is
+/// carried in the `Ok` half rather than returned — see [`tool_result`]. The
 /// `Err` of [`asked`] is the one thing that really is a protocol mistake: a
 /// tool this server does not publish.
 pub(crate) enum Asked {
@@ -485,7 +484,7 @@ pub(crate) enum Asked {
     Refused(String),
 }
 
-/// **The deck one slot number names.**
+/// The deck one slot number names.
 ///
 /// `Operation` carries `deck: u8`, and every `slot` in
 /// `karakuri_store::record::Record` is a `u8` too, so a slot past 255 is not a
@@ -494,8 +493,8 @@ pub(crate) enum Asked {
 /// is the same mistake and an operator is told one story about it
 /// ([`crate::no_such_slot`]).
 ///
-/// **Called after every argument the tool used to parse before it reached the
-/// slot**, so that a call with two mistakes in it is still told about the same
+/// Called after every argument the tool used to parse before it reached the
+/// slot, so that a call with two mistakes in it is still told about the same
 /// one it was told about before.
 pub(crate) fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
     slots.holds(slot)?;
@@ -515,8 +514,8 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
     ))
 }
 
-/// **What this surface can say of one operation, and why it cannot where it
-/// cannot.**
+/// What this surface can say of one operation, and why it cannot where it
+/// cannot.
 ///
 /// The `operate` tool takes an operation of `karakuri-operation` by its own
 /// name — the heading `docs/manual/operations.html` specifies it under — and
@@ -525,7 +524,7 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
 /// rather than in four scattered refusals
 /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
 ///
-/// **No wildcard arm.** [`sayable`] is a `match` over every variant, which is
+/// No wildcard arm. [`sayable`] is a `match` over every variant, which is
 /// `karakuri_operation::gate::standing`'s discipline and its reason: a
 /// sixty-fifth operation does not compile until somebody has said whether this
 /// surface can name it, and the page's MCP column cannot quietly go stale
@@ -534,38 +533,36 @@ pub(crate) fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAddress), 
 pub(crate) enum Sayable {
     /// `operate` takes it. The audit still answers.
     Operable,
-    /// **This server publishes a tool of its own for it**, which does something
-    /// only the server can — a file, a store, a listing. A second spelling of a
-    /// tool is a second spelling
+    /// This server publishes a tool of its own for it, which does something only
+    /// the server can — a file, a store, a listing. A second spelling of a tool is
+    /// a second spelling
     /// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)),
     /// so `operate` refuses it and names the tool.
     Tool(&'static str),
-    /// **A model has no window.** The row's MCP badge is `gap` and the sentence
-    /// is
+    /// A model has no window. The row's MCP badge is `gap` and the sentence is
     /// [ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)'s,
     /// worded once here as it is worded once on the page.
     Window,
-    /// **This surface will not reach it, and the clause says why and where the
-    /// route that does is.** The row's MCP badge is `gap`, and what makes it
-    /// `gap` rather than `plan` is that **nothing is owed**: no performer
-    /// moving onto the drain's frame would change it, because what stops it is
-    /// the shape of this protocol rather than a gap in this program
+    /// This surface will not reach it, and the clause says why and where the route
+    /// that does is. The row's MCP badge is `gap`, and what makes it `gap` rather
+    /// than `plan` is that nothing is owed: no performer moving onto the drain's
+    /// frame would change it, because what stops it is the shape of this protocol
+    /// rather than a gap in this program
     /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)).
     ///
-    /// **There was a sixth answer beside this one until 2026-09-10** —
-    /// `Unperformed`, *the vocabulary names it and nothing on this frame
-    /// performs it yet*, which is what a `plan` badge in the MCP column meant.
-    /// It went when its last row did (ADR-0341): every operation this
-    /// vocabulary names either has a performer, has a tool, is a window's, is
-    /// unsettled, or is this. **A `plan` badge in that column is now only an
-    /// `Undecided` payload**, and the day a row is added that a surface can
-    /// say and the frame cannot perform, this `match` has no wildcard and
-    /// stops the build until somebody puts the answer back.
+    /// There was a sixth answer beside this one until 2026-09-10 — `Unperformed`,
+    /// *the vocabulary names it and nothing on this frame performs it yet*, which
+    /// is what a `plan` badge in the MCP column meant. It went when its last row
+    /// did (ADR-0341): every operation this vocabulary names either has a
+    /// performer, has a tool, is a window's, is unsettled, or is this. A `plan`
+    /// badge in that column is now only an `Undecided` payload, and the day a row
+    /// is added that a surface can say and the frame cannot perform, this `match`
+    /// has no wildcard and stops the build until somebody puts the answer back.
     Never(&'static str),
 }
 
-/// **Whether `operate` names this operation, and what it says where it does
-/// not.** Exhaustive, with no wildcard arm — see [`Sayable`].
+/// Whether `operate` names this operation, and what it says where it does not.
+/// Exhaustive, with no wildcard arm — see [`Sayable`].
 pub(crate) fn sayable(operation: &Operation) -> Sayable {
     match operation {
         // ----- the thirty `operate` takes ----------------------------------
@@ -758,23 +755,23 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
     }
 }
 
-/// **One named operation, done.**
+/// One named operation, done.
 ///
-/// **It takes an [`Allowed`] and not an [`Operation`], which is the audit made
-/// structural.** `karakuri_operation::gate::audit` is the only thing that
-/// builds one and its field is private to that crate, so there is no way to
-/// reach this function with an operation nobody checked — a path that skipped
-/// the gate does not compile rather than passing review.
+/// It takes an [`Allowed`] and not an [`Operation`], which is the audit made
+/// structural. `karakuri_operation::gate::audit` is the only thing that builds
+/// one and its field is private to that crate, so there is no way to reach this
+/// function with an operation nobody checked — a path that skipped the gate
+/// does not compile rather than passing review.
 /// [ADR-0235](../../../docs/adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md):
 /// *"an audit skipped on one path is the whole mechanism gone."*
 ///
 /// The dispatch is over the vocabulary rather than over the tool's name, which
 /// is the whole of what routing buys this surface: the arm that reads a
-/// procedure is chosen by [`Operation::ReadProcedure`], so a tool renamed on the
-/// wire goes on doing what its operation says, and a tool that named a different
-/// operation would visibly do something else.
+/// procedure is chosen by [`Operation::ReadProcedure`], so a tool renamed on
+/// the wire goes on doing what its operation says, and a tool that named a
+/// different operation would visibly do something else.
 ///
-/// **The last arm cannot happen** — [`asked`] builds seven operations and this
+/// The last arm cannot happen — [`asked`] builds seven operations and this
 /// matches those seven. It is written out rather than left to a wildcard for
 /// [`absent`]'s reason: the arm that cannot happen is the one that stops saying
 /// so quietly when the shape around it changes, and if an eighth tool ever
@@ -893,7 +890,7 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
     })
 }
 
-/// **This surface's one call into the audit.**
+/// This surface's one call into the audit.
 ///
 /// The classification, the four classes and the refusal sentence are
 /// `karakuri_operation::gate`'s and not this module's, which is
@@ -901,10 +898,10 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
 /// refusing to let one surface hold the rule: *"a rule held by one surface
 /// binds one surface"*, and a sequencer lane is already decided as a fifth
 /// route that would otherwise arrive with a second copy of the table. What is
-/// this module's is the two things only it can supply — **the opening the run
-/// was handed** and **what it has read of what is running**.
+/// this module's is the two things only it can supply — the opening the run was
+/// handed and what it has read of what is running.
 ///
-/// **And it has read nothing, which is said rather than defaulted.**
+/// And it has read nothing, which is said rather than defaulted.
 /// `Running::unread()` is honest: this server holds `Slots`, a store root and a
 /// watch flag, and no residency at all. Exactly one row turns on that reading —
 /// `Operation::LoadSet`, whose class is *a deck in live mode* — and this
@@ -920,9 +917,9 @@ pub(crate) fn audited<'a>(operation: &'a Operation, state: &State) -> Result<All
 
 /// One tool call's answer, in the shape the protocol gives a tool.
 ///
-/// **A tool failure is a result, not a protocol error.** A model that is told
-/// "the call was malformed" learns nothing; one handed the checker's
-/// diagnostics can fix its own source, which is the whole loop.
+/// A tool failure is a result, not a protocol error. A model that is told "the
+/// call was malformed" learns nothing; one handed the checker's diagnostics can
+/// fix its own source, which is the whole loop.
 ///
 /// A function rather than a `json!` at each call site, because `save_set`'s
 /// answer is built after the lock is gone — see [`Pending`] — and two spellings
@@ -946,22 +943,22 @@ pub(crate) fn tool_result(outcome: Result<String, String>) -> Value {
     }
 }
 
-/// **`index` is optional and defaults to 0**, unlike the wildcard an absent
-/// `index` means on a `param` record. The difference is the same one that runs
-/// through the whole address: this names *a procedure to read or rewrite*, and
-/// there is no such thing as rewriting every renderer at once with one source
-/// — where a `param` addresses a *value*, and one value reaching every
-/// declaration is both meaningful and the useful default.
+/// `index` is optional and defaults to 0, unlike the wildcard an absent `index`
+/// means on a `param` record. The difference is the same one that runs through
+/// the whole address: this names *a procedure to read or rewrite*, and there is
+/// no such thing as rewriting every renderer at once with one source — where a
+/// `param` addresses a *value*, and one value reaching every declaration is
+/// both meaningful and the useful default.
 ///
 /// It defaults because the first node of a layer is what a client that says
 /// nothing means, on every layer: a slot holding one camera and one shape has
 /// nothing else `index` could name, and one holding two has an order its files
 /// were given in.
 ///
-/// **The layer is parsed here into the compiler's own `Kind`** and travels as
-/// one from here on, so the layer this resolves a file for and the layer a
-/// written source is checked against are the same value rather than two
-/// readings of one string.
+/// The layer is parsed here into the compiler's own `Kind` and travels as one
+/// from here on, so the layer this resolves a file for and the layer a written
+/// source is checked against are the same value rather than two readings of one
+/// string.
 pub(crate) fn slot_layer_index(args: &Value) -> Result<(usize, Kind, usize), String> {
     let slot = args
         .get("slot")
@@ -985,44 +982,44 @@ pub(crate) fn slot_layer_index(args: &Value) -> Result<(usize, Kind, usize), Str
 
 /// A Set id a client may name, or why not.
 ///
-/// **A Set id is one path component.** [`crate::history::stamped_id`] says so
-/// where it explains why the date is spelled `20260816` rather than
-/// `2026/08/16`, and the store spells the file `<dir>/<id>.kbset`
-/// without checking that what it was handed is one. That is the operator's own
-/// business on `--save-set`, where the id came out of their own shell. It is not
-/// a model's: this is the same rule [`Slots`] exists for — **paths never cross
-/// the protocol** — and `../../../somewhere/else` is a path.
+/// A Set id is one path component. [`crate::history::stamped_id`] says so where
+/// it explains why the date is spelled `20260816` rather than `2026/08/16`, and
+/// the store spells the file `<dir>/<id>.kbset` without checking that what it
+/// was handed is one. That is the operator's own business on `--save-set`,
+/// where the id came out of their own shell. It is not a model's: this is the
+/// same rule [`Slots`] exists for — paths never cross the protocol — and
+/// `../../../somewhere/else` is a path.
 ///
 /// Letters, digits, `-` and `_`, which is what a stamp is made of and what a
-/// name anybody would type is made of. **Refused rather than sanitised**: a set
-/// filed under a name its caller did not ask for is a worse answer than one that
-/// is told to pick another.
+/// name anybody would type is made of. Refused rather than sanitised: a set
+/// filed under a name its caller did not ask for is a worse answer than one
+/// that is told to pick another.
 ///
-/// **A name a client picks twice no longer overwrites, and the reason it once
-/// did no longer holds.** This paragraph said the opposite until 2026-09-05, and
-/// the argument it made was sound on its own premise: a name a caller typed is
-/// an instruction, `--save-set ID` has always obeyed it by overwriting, and
+/// A name a client picks twice no longer overwrites, and the reason it once did
+/// no longer holds. This paragraph said the opposite until 2026-09-05, and the
+/// argument it made was sound on its own premise: a name a caller typed is an
+/// instruction, `--save-set ID` has always obeyed it by overwriting, and
 /// `save_set` did what `--save-set` did. What changed is where a model's save
 /// lands. It writes `<store>/sandbox/` rather than the operator's library
 /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)),
 /// and nothing in that directory is an id an operator typed — it is a session's
 /// edit history, and a snapshot a later snapshot can replace is not one. So
-/// `crate::filed_as` puts the stamp in front of whatever name a client chose and
-/// the accept names what was written; the renaming this paragraph refused is
-/// still refused **here**, because refusing a bad id and naming a good file are
+/// `crate::filed_as` puts the stamp in front of whatever name a client chose
+/// and the accept names what was written; the renaming this paragraph refused
+/// is still refused here, because refusing a bad id and naming a good file are
 /// two different jobs and this one is still the first. What remains true
 /// unchanged is that the behaviour is documented — in the tool description a
 /// model reads and in `docs/manual.md`. Undocumented was the thing that was not
 /// allowed.
 ///
-/// **No `con`, `nul`, `aux`, `com1` check.** They are reserved device names on
+/// No `con`, `nul`, `aux`, `com1` check. They are reserved device names on
 /// Windows and would be a file that is not a file. There is no Windows target
-/// today and no `cfg` for one here; this sentence is the record that the case is
-/// known, so that whoever ports this finds it written down rather than finds it
-/// on a projector.
+/// today and no `cfg` for one here; this sentence is the record that the case
+/// is known, so that whoever ports this finds it written down rather than finds
+/// it on a projector.
 ///
-/// **Public since 2026-09-08**, because it stopped being the model's wall
-/// alone: the Inspector pane head's name is an operator typing an id, which
+/// Public since 2026-09-08, because it stopped being the model's wall alone:
+/// the Inspector pane head's name is an operator typing an id, which
 /// `crate::filed_as` passes straight through for `Asked::Operator` (ADR-0292).
 /// One wall, so a `/` cannot become a path on either route.
 pub fn checked_id(id: &str) -> Result<String, String> {
@@ -1056,28 +1053,27 @@ pub fn checked_id(id: &str) -> Result<String, String> {
     Ok(id.to_string())
 }
 
-/// **Wait for one save's outcome, and say something true when it does not
-/// come.**
+/// Wait for one save's outcome, and say something true when it does not come.
 ///
 /// A free function over the channel rather than a loop inside [`Pending`], for
-/// the reason `main.rs`'s `drained_saves` is one: the bound is the whole of what
-/// makes waiting here safe, and it has to be checkable without a render loop, a
-/// window or a disk.
+/// the reason `main.rs`'s `drained_saves` is one: the bound is the whole of
+/// what makes waiting here safe, and it has to be checkable without a render
+/// loop, a window or a disk.
 ///
-/// **It waits, rather than returning on acceptance, and that was the decision
-/// worth arguing.** Answering the moment the loop has the request would make
-/// this tool cheap and its answer worthless: a model told "saved" before the
-/// disk has spoken will tell its user the set is kept, and the cases where that
-/// is a lie — a full store, a network mount that stopped answering, a slot whose
+/// It waits, rather than returning on acceptance, and that was the decision
+/// worth arguing. Answering the moment the loop has the request would make this
+/// tool cheap and its answer worthless: a model told "saved" before the disk
+/// has spoken will tell its user the set is kept, and the cases where that is a
+/// lie — a full store, a network mount that stopped answering, a slot whose
 /// sources are not savable — are precisely the ones anybody would want to hear
 /// about. The other three tools already work this way: `write_procedure` hands
 /// back the checker's verdict and not "it is being checked".
 ///
-/// **A timeout is neither success nor failure, and the text says so.** The
-/// protocol has one boolean and it cannot carry a third state, so `isError` is
-/// set — a model reading `isError: false` reports the set as kept, which is the
-/// one thing that must not happen here, while a model reading `true` looks
-/// again. What the flag cannot carry, the sentence does.
+/// A timeout is neither success nor failure, and the text says so. The protocol
+/// has one boolean and it cannot carry a third state, so `isError` is set — a
+/// model reading `isError: false` reports the set as kept, which is the one
+/// thing that must not happen here, while a model reading `true` looks again.
+/// What the flag cannot carry, the sentence does.
 pub(crate) fn awaited(
     news: &mpsc::Receiver<News>,
     wait: std::time::Duration,
@@ -1121,21 +1117,21 @@ pub(crate) fn awaited(
     })
 }
 
-/// **Wait for one edge to be applied, and say something true when it is not.**
+/// Wait for one edge to be applied, and say something true when it is not.
 ///
-/// **Not [`awaited`], because a save and an edge are not waiting for the same
-/// kind of thing.** A save's third state is real and unavoidable — the loop took
+/// Not [`awaited`], because a save and an edge are not waiting for the same
+/// kind of thing. A save's third state is real and unavoidable — the loop took
 /// it, the disk has not answered, and *neither a success nor a failure* is the
 /// only honest report. An edge has no such state by construction: the loop
 /// applies it at the frame it takes it and answers there, and everything slow
 /// about it — the compile, the swap, the thirty judged frames — happens after
 /// the answer and is `swap_outcome`'s to report. So the two sentences a timeout
 /// can produce here are *it was not taken* and *it was taken and then the loop
-/// went quiet*, and the second one is a loop at odds with what
-/// [`WireRequest`] says it owes rather than an ordinary outcome.
+/// went quiet*, and the second one is a loop at odds with what [`WireRequest`]
+/// says it owes rather than an ordinary outcome.
 ///
-/// **A run whose loop does not drain [`Reporter::wires`] at all ends up in the
-/// first of those**, which is the point: a tool that reported success into a
+/// A run whose loop does not drain [`Reporter::wires`] at all ends up in the
+/// first of those, which is the point: a tool that reported success into a
 /// channel nobody empties would be this surface claiming work that never
 /// happened.
 pub(crate) fn applied(

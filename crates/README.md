@@ -85,7 +85,7 @@ graph TD
 | **2** | [`karakuri-operation-record`](karakuri-operation-record/README.md) | Serialization and deserialization of operations for session recording | `karakuri-operation`, `karakuri-store` | Refactored & Documented |
 | **3** | [`karakuri-engine`](karakuri-engine/README.md) | Real-time GPU execution runtime (`wgpu 30`): Decks, Sets, HotSwap, Governor | `karakuri-codegen`, `ir`, `signal`, `store` | Refactored & Documented |
 | **4** | [`karakuri-environment`](karakuri-environment/README.md) | System coordination: Setfile packaging (`.kset`), live mix transitions, presets | `engine`, `audio`, `midi`, `store`, `ir` | Pending |
-| **4** | [`karakuri-mcp`](karakuri-mcp/README.md) | Model Context Protocol JSON-RPC server exposing AI pair-programming tools | `karakuri-environment` | Pending |
+| **4** | [`karakuri-mcp`](karakuri-mcp/README.md) | Model Context Protocol JSON-RPC server exposing AI pair-programming tools | `karakuri-environment` | Refactored & Documented |
 | **5** | [`karakuri-console`](karakuri-console/README.md) | VJ performance console UI (egui): Program, Staging, Master, Sequencer, Library | `karakuri-layout`, `operation` | Pending |
 | **5** | [`karakuri-cli`](karakuri-cli/README.md) | Headless session player, offscreen batch PNG renderer, and benchmarks | `engine`, `environment`, `audio` | Pending |
 | **5** | [`karakuri`](karakuri/README.md) | Primary desktop GUI application: winit windowing and bridge coordination | `console`, `engine`, `environment` | Pending |

@@ -2,35 +2,36 @@ use serde_json::{json, Value};
 
 use super::*;
 
-/// **One operation of the vocabulary as this surface spells it.**
+/// One operation of the vocabulary as this surface spells it.
 ///
-/// **The title is not written here.** It comes back from `Operation::title`
-/// through [`Spelled::sample`], so the name a client types and the heading
+/// The title is not written here. It comes back from `Operation::title` through
+/// [`Spelled::sample`], so the name a client types and the heading
 /// `docs/manual/operations.html` specifies the row under are one string and
 /// cannot drift — which is what `karakuri-operation` exists for and what a
-/// hand-written table of names beside it would give up
-/// (`docs/contributing.md` §4, *Generated*).
-/// **One payload, read as the operation it names** — or the refusal its
-/// arguments earned, in the words the seven tools refuse the same mistakes in.
+/// hand-written table of names beside it would give up (`docs/contributing.md`
+/// §4, *Generated*). One payload, read as the operation it names — or the
+/// refusal its arguments earned, in the words the seven tools refuse the same
+/// mistakes in.
 ///
 /// A name of its own because it is one shape written thirty-one times, and
 /// because [`Spelled::make`] reads better for having it.
 pub(crate) type Make = fn(&Value, &Slots) -> Result<Operation, String>;
 
 pub(crate) struct Spelled {
-    /// One instance of this operation, and the smallest `operate` call that
-    /// names it where this surface takes one — `Value::Null` where it does not.
+    /// One instance of this operation, and the smallest `operate` call that names
+    /// it where this surface takes one — `Value::Null` where it does not.
     ///
-    /// **The pair is here rather than in a test** because the schema is built
-    /// from it and the round trip is checked against it: `make` applied to the
-    /// call has to come back equal to the operation, for every row, which is
-    /// what makes this one statement rather than two.
+    /// The pair is here rather than in a test because the schema is built from it
+    /// and the round trip is checked against it: `make` applied to the call has to
+    /// come back equal to the operation, for every row, which is what makes this
+    /// one statement rather than two.
     pub(crate) sample: fn() -> (Operation, Value),
     /// The call's `with` object as the operation it names, or `None` where
     /// [`sayable`] says this surface cannot name it.
     pub(crate) make: Option<Make>,
-    /// The JSON Schema of that `with` object, for the curriculum a client is
-    /// handed before it calls ([ADR-0092](../../../docs/adr/0092-a-resource-listing-is-a-curriculum.md)).
+    /// The JSON Schema of that `with` object, for the curriculum a client is handed
+    /// before it calls
+    /// ([ADR-0092](../../../docs/adr/0092-a-resource-listing-is-a-curriculum.md)).
     pub(crate) shape: Option<fn() -> Value>,
 }
 
@@ -44,9 +45,9 @@ impl Spelled {
 /// The closed lists this surface spells on the wire, and the word for each
 /// value is the vocabulary's own `name`.
 ///
-/// **Where the vocabulary publishes an `ALL`, that is what is used**; where it
-/// does not, the values are written out here and the words still are not. That
-/// is [`layer_named`]'s arrangement one type along, and it carries
+/// Where the vocabulary publishes an `ALL`, that is what is used; where it does
+/// not, the values are written out here and the words still are not. That is
+/// [`layer_named`]'s arrangement one type along, and it carries
 /// [`layer_named`]'s cost: a fourth `Sync` would have to be added here as well.
 /// `the_wire_spells_every_value_of_every_closed_list` is what says so.
 pub(crate) const SYNCS: [karakuri_operation::Sync; 3] = [
@@ -75,9 +76,9 @@ pub(crate) const AUTHORITIES: [karakuri_operation::Authority; 3] = [
     karakuri_operation::Authority::Automatic,
 ];
 
-/// **The word for a grid scale**, which is the one value list in this file
-/// whose vocabulary type publishes no `name` of its own. Halving and doubling
-/// are the two directions and the words are the manual's heading read aloud.
+/// The word for a grid scale, which is the one value list in this file whose
+/// vocabulary type publishes no `name` of its own. Halving and doubling are the
+/// two directions and the words are the manual's heading read aloud.
 pub(crate) fn grid_word(scale: karakuri_operation::GridScale) -> &'static str {
     match scale {
         karakuri_operation::GridScale::Halve => "halve",
@@ -126,11 +127,11 @@ pub(crate) fn text_of<'a>(with: &'a Value, key: &str) -> Result<&'a str, String>
         .ok_or_else(|| format!("`with.{key}` is required and is a string"))
 }
 
-/// **A name and never a path.** Paths never cross this protocol — see
-/// [`Slots`] — and every free string a payload of this table carries is a
-/// *name* something in this run produced: a signal on the bus, a parameter a
-/// procedure declares, a control an operator published. So a separator is
-/// refused here rather than resolved anywhere, in one sentence for all of them
+/// A name and never a path. Paths never cross this protocol — see [`Slots`] —
+/// and every free string a payload of this table carries is a *name* something
+/// in this run produced: a signal on the bus, a parameter a procedure declares,
+/// a control an operator published. So a separator is refused here rather than
+/// resolved anywhere, in one sentence for all of them
 /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 ///
 /// [`checked_id`] is the same rule for a *Set id*, and it is narrower because a
@@ -174,8 +175,8 @@ pub(crate) fn word_of<T: Copy>(
         })
 }
 
-/// **The deck a payload names**, checked against what this run holds before it
-/// is sent anywhere, in the sentence every other tool refuses an absent slot in
+/// The deck a payload names, checked against what this run holds before it is
+/// sent anywhere, in the sentence every other tool refuses an absent slot in
 /// ([`deck_named`]).
 pub(crate) fn deck_of(with: &Value, key: &str, slots: &Slots) -> Result<u8, String> {
     let slot = with
@@ -208,8 +209,8 @@ pub(crate) fn node_of(with: &Value, key: &str) -> Result<NodeAddress, String> {
     })
 }
 
-/// **Which parameter a value lands on**, on `Record::Param`'s terms: a key, and
-/// a node it is addressed to or every node of the Set that declares it.
+/// Which parameter a value lands on, on `Record::Param`'s terms: a key, and a
+/// node it is addressed to or every node of the Set that declares it.
 pub(crate) fn param_of(with: &Value, key: &str) -> Result<karakuri_operation::ParamAt, String> {
     let at = with
         .get(key)
@@ -223,10 +224,10 @@ pub(crate) fn param_of(with: &Value, key: &str) -> Result<karakuri_operation::Pa
     })
 }
 
-/// **Which parameter an attachment lands on**, which is not [`param_of`]'s
-/// address and the difference is a fact about a binding: a binding is resolved
-/// through the nodes of one layer, so the layer is always said and the index is
-/// what may be left out.
+/// Which parameter an attachment lands on, which is not [`param_of`]'s address
+/// and the difference is a fact about a binding: a binding is resolved through
+/// the nodes of one layer, so the layer is always said and the index is what
+/// may be left out.
 pub(crate) fn bind_of(with: &Value, key: &str) -> Result<karakuri_operation::BindAt, String> {
     let at = with.get(key).ok_or_else(|| {
         format!("`with.{key}` is required and is a binding address: `layer`, `key`, and `index`")
@@ -294,14 +295,14 @@ pub(crate) fn range_of(with: &Value, key: &str) -> Result<[f32; 2], String> {
     }
 }
 
-/// **Which version a put-back puts back**, and the two arms are the two things
-/// a surface can say rather than two features
+/// Which version a put-back puts back, and the two arms are the two things a
+/// surface can say rather than two features
 /// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
 ///
-/// **Neither arm is a path.** `previous` names a node, and `picked` names a
-/// version by the name the store filed it under — which is what
-/// `write_procedure` already hands back about the version it replaced, so a
-/// model spells one it was given rather than one it built.
+/// Neither arm is a path. `previous` names a node, and `picked` names a version
+/// by the name the store filed it under — which is what `write_procedure`
+/// already hands back about the version it replaced, so a model spells one it
+/// was given rather than one it built.
 pub(crate) fn revision_of(with: &Value, key: &str) -> Result<karakuri_operation::Revision, String> {
     let at = with.get(key).ok_or_else(|| {
         format!(
@@ -328,7 +329,7 @@ pub(crate) fn revision_of(with: &Value, key: &str) -> Result<karakuri_operation:
     }
 }
 
-/// **A beat source, and one of its two arms does not cross this protocol.**
+/// A beat source, and one of its two arms does not cross this protocol.
 ///
 /// `AudioInput` names a device the host is offering and is a name like any
 /// other. `Process` is a command line for this machine to run, which is a path
@@ -354,9 +355,9 @@ pub(crate) fn source_of(with: &Value, key: &str) -> Result<karakuri_operation::B
     )?))
 }
 
-/// One payload's schema. **Closed**: a key this table does not name is a
-/// mistake a caller had no way to see, and saying so is cheaper than performing
-/// half of what was asked.
+/// One payload's schema. Closed: a key this table does not name is a mistake a
+/// caller had no way to see, and saying so is cheaper than performing half of
+/// what was asked.
 pub(crate) fn shaped(properties: Value, required: &[&str]) -> Value {
     json!({
         "type": "object",
@@ -409,8 +410,8 @@ pub(crate) fn p_node(about: &str) -> Value {
     })
 }
 
-/// **Every operation of the vocabulary, and how this surface spells the ones it
-/// takes.**
+/// Every operation of the vocabulary, and how this surface spells the ones it
+/// takes.
 ///
 /// Sixty-four rows, one per `<h3>` of `docs/manual/operations.html`, in that
 /// page's order. `every_operation_of_the_vocabulary_is_spelled_here` walks
@@ -1974,7 +1975,8 @@ pub(crate) fn spelled_named(title: &str) -> Option<&'static Spelled> {
     SPELLED.iter().find(|row| row.title() == title)
 }
 
-/// **The heading nearest to a name this vocabulary does not carry.**
+/// The heading nearest to a name this vocabulary does not carry.
+///
 ///
 /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
 /// a model that misremembers a heading by one word gets the heading back rather
@@ -1983,7 +1985,7 @@ pub(crate) fn spelled_named(title: &str) -> Option<&'static Spelled> {
 /// deliberately not an edit distance: the mistakes here are whole words rather
 /// than letters.
 ///
-/// **The joining words are dropped, and matching whole words is the point.**
+/// The joining words are dropped, and matching whole words is the point.
 /// Matched as substrings, *set the gain* comes back as *Reset the arrangement*
 /// — `the` is in both and `set` is inside `Reset` — which is a confident wrong
 /// answer of exactly the kind
@@ -2015,7 +2017,7 @@ pub(crate) fn nearest(said: &str) -> &'static str {
     best.0
 }
 
-/// **One `operate` call as the operation it names, or the refusal it earned.**
+/// One `operate` call as the operation it names, or the refusal it earned.
 ///
 /// The two halves are a name and a payload, and they are refused in that order
 /// for [`asked`]'s reason: a call with two mistakes in it is told about the one
@@ -2063,14 +2065,14 @@ pub(crate) fn operated(args: &Value, slots: &Slots) -> Result<Operation, String>
     make(&payload(args), slots)
 }
 
-/// **The `operate` tool, generated from [`SPELLED`].**
+/// The `operate` tool, generated from [`SPELLED`].
 ///
 /// The `operation` list is every heading this surface takes, in the manual's
 /// order, and the payloads are described under it rather than as one `oneOf`:
 /// what a client needs before it calls is *which names there are* and *what
-/// each one takes*, and a schema that expressed the second as a union of
-/// thirty objects would be read by nothing and understood by no one. The shapes
-/// go to `karakuri://operations`, which is the same table rendered
+/// each one takes*, and a schema that expressed the second as a union of thirty
+/// objects would be read by nothing and understood by no one. The shapes go to
+/// `karakuri://operations`, which is the same table rendered
 /// ([ADR-0092](../../../docs/adr/0092-a-resource-listing-is-a-curriculum.md)).
 pub(crate) fn operate_tool() -> Value {
     let names: Vec<&'static str> = operable().iter().map(|row| row.title()).collect();
@@ -2111,7 +2113,7 @@ pub(crate) fn operate_tool() -> Value {
     })
 }
 
-/// **Every operation this surface takes, with its payload's shape** — the
+/// Every operation this surface takes, with its payload's shape — the
 /// curriculum a client reads before it calls, generated from [`SPELLED`] rather
 /// than written down beside it.
 pub(crate) fn operations() -> String {
