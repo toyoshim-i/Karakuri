@@ -76,7 +76,7 @@ This document records the architectural smells, structural friction, and design 
 ```mermaid
 graph TD
     P26["<b>P26: Componentize Console UI & Extract 3 Bays</b><br/>Extract sequencer, staging, master, and widgets [COMPLETED]"]
-    P25["<b>P25: Decompose karakuri-mcp Monolith</b><br/>Separate server, spelled, tools, and test suites [READY]"]
+    P25["<b>P25: Decompose karakuri-mcp Monolith</b><br/>Separate server, spelled, tools, and test suites [COMPLETED]"]
     P24["<b>P24: Decompose engine_bridge.rs by Responsibility</b><br/>Split sinks, engine, filesystem, and handlers [READY]"]
     P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [PLANNED]"]
     P21["<b>P21: Consolidate Layer Conversions & Contracts</b><br/>Centralize mappings; preserve zero-dep & serde compatibility [PLANNED]"]
@@ -113,7 +113,7 @@ graph TD
 
 ---
 
-### P25. Subsystem Decomposition of `karakuri-mcp` [READY FOR EXECUTION]
+### P25. Subsystem Decomposition of `karakuri-mcp` [COMPLETED]
 
 #### Phenomenon
 `crates/karakuri-mcp/src/lib.rs` (10,888 lines) houses server plumbing, 1,940 lines of `SPELLED` operation tables, 10 distinct tools, and 4,634 lines of test suites in one file.
@@ -212,7 +212,7 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
 | **P26** | `karakuri-console` | Extract 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
-| **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `tests/unit.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **READY** |
+| **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `src/tests.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
 | **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **READY** |
 | **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **PLANNED** |
 | **P21** | Type Conversions | Centralize layer conversions in `meta.rs`; establish serialization parity test | **PLANNED** |
