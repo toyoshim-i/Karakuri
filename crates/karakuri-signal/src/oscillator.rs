@@ -1,43 +1,14 @@
 //! The local oscillator: the single source of truth for phase and tempo.
 //!
-//! Rendering reads this and never an external clock. External tempo input is a
-//! correction applied here — so a dropped or jittering source degrades the
-//! correction rather than the clock.
+//! Advances strictly by simulation steps, never by reading external clocks.
+//! External tempo or MIDI sources apply corrections via [`Oscillator::correct`],
+//! adjusting tempo and phase shifts without mutating historical beat positions.
 //!
-//! **The oscillator advances by simulation steps, never by wall clock.**
-//! [`Oscillator::advance`] takes exactly the two quantities a `tick` record
-//! carries — a step count and a fixed `dt` — and nothing else. There is no
-//! clock read anywhere in this module; see `tests/no_clock_access.rs` for a
-//! standing check of that. [`Oscillator::correct`] is the same shape: it takes
-//! a tempo and a phase shift that were *decided* elsewhere, and a `tempo`
-//! record carries them, so a corrected session replays from the record stream
-//! without anything estimating anything a second time.
+//! ## Musical Position and Elapsed Beats
 //!
-//! ## Two beat counts, and why
-//!
-//! Musical position is an accumulator (`beats`) rather than the product
-//! `t * bpm / 60`, because a tempo correction has to change the *rate* from now
-//! on without moving where the beat already was — a product would slide every
-//! beat that has already happened. Both are anchored: with no correction ever
-//! applied the accumulator reduces to exactly that product, bit for bit, which
-//! is what keeps an uncorrected session identical to one from before this
-//! existed.
-//!
-//! There are two of them, and the difference is the answer to what a noise
-//! `bind`'s cycles-per-beat rate does once tempo is corrected — see
-//! `docs/adr/0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md`:
-//!
-//! - [`Oscillator::beats`] is musical position. It takes phase shifts, because
-//!   a phase shift is the beat grid being realigned with the room.
-//! - [`Oscillator::elapsed_beats`] takes tempo corrections and **not** phase
-//!   shifts. Noise reads this one. A noise binding therefore still runs in
-//!   cycles per beat and still follows a tempo change — a rate is a rate, and
-//!   it stays continuous because both are accumulators — but a beat-grid
-//!   realignment does not re-hash it. The alternative was a seconds-relative
-//!   rate, which would have made two kinds of noise and left every existing
-//!   `bind` record ambiguous; this keeps one kind and gives up only the claim
-//!   that a noise lattice point coincides with a beat instant after a
-//!   correction, which nothing depends on.
+//! - [`Oscillator::beats`]: Musical position including phase corrections.
+//! - [`Oscillator::elapsed_beats`]: Accumulated tempo scaling excluding phase shifts,
+//!   preventing noise generator lattice discontinuities during phase realignment.
 
 /// Beats per bar. v0.2 of the IR spec has no time-signature concept anywhere
 /// (no `bind` field, no Set-file record), so this is a fixed assumption of
@@ -70,8 +41,7 @@ pub struct Oscillator {
     anchor_t: f64,
     /// Musical position at `anchor_t`, phase shifts included.
     anchor_beats: f64,
-    /// Musical position at `anchor_t`, phase shifts **excluded** — what noise
-    /// reads. See the module doc.
+    /// Musical position at `anchor_t`, excluding phase shifts (read by noise generators).
     anchor_elapsed: f64,
     /// Steps advanced so far. `t` is the f64 sum those steps produced and this
     /// is the count they came in as; the two are not interchangeable, which is
@@ -111,32 +81,10 @@ impl Oscillator {
         self.steps_taken += u64::from(steps);
     }
 
-    /// **The same grid, read `seconds` earlier.** A copy with `t` moved back,
-    /// leaving the tempo and both anchors alone.
+    /// Returns a copy of the oscillator with elapsed time shifted back by `seconds`.
     ///
-    /// **A lag rather than a position, and that is the whole of the design.**
-    /// A caller reading a clock that is behind the session's knows how far
-    /// behind it is — an integer step count, exactly — and does not know its own
-    /// `t` to the last bit, because deriving one costs a rounding the session's
-    /// accumulated `t` never took. Handing that derived position in would make
-    /// `behind(0)` *nearly* the caller's own oscillator, and "nearly" is not a
-    /// property anything can rest on. `seconds == 0.0` returns `self` bit for
-    /// bit, so a caller that is not behind reads exactly what it would have
-    /// read without asking.
-    ///
-    /// This is the grid **as it stands now**, extrapolated backwards — not the
-    /// grid as it was then. The two differ by every correction applied since: a
-    /// correction moves the anchor and nothing remembers where it was, so
-    /// reaching back past one gives the current tempo run backwards from the
-    /// current anchor rather than the tempo that was actually running. That is
-    /// the property `Checked::closed_form`'s documentation says the oscillator
-    /// does not have, stated from this side.
-    ///
-    /// It is the right answer for a caller reading a *different clock now*, and
-    /// the wrong one for a caller reading *the past*. The first is what a slot
-    /// warming behind the session wants: one grid, one tempo, every slot on it,
-    /// each at its own position along it. The second would need a correction
-    /// history, and nothing keeps one.
+    /// Extrapolates the current tempo grid backwards without altering anchor points.
+    /// Used for warming off-air slots running behind the live session.
     pub fn behind(self, seconds: f64) -> Oscillator {
         Oscillator {
             t: self.t - seconds,
@@ -144,62 +92,21 @@ impl Oscillator {
         }
     }
 
-    /// **The same grid, read at the absolute time `t`.**
-    ///
-    /// The companion to [`Oscillator::behind`], and the choice between them is
-    /// **a choice of contract rather than of numbers**. A caller that knows how
-    /// far behind it is wants `behind`, because the gap is an exact integer and
-    /// its own `t` is not. A caller that *has* a `t` and wants the grid at
-    /// exactly that instant wants this one — `Ambient::Beats` is that case: it
-    /// is defined as the grid at the instant `Ambient::T` names, so it is
-    /// derived from that `t` and from nothing else.
-    ///
-    /// **The two agree in practice and the difference was measured rather than
-    /// assumed.** A session oscillator's `t` is an f64 running sum and a Set's
-    /// is an f32 product of a step count; they diverge by around 1e-7 of their
-    /// value, which is f32 precision, so once a beat count is narrowed to f32
-    /// the two derivations produce identical bits — over 400,000 steps, nearly
-    /// two hours, they never once differ. A test written to catch the wrong
-    /// choice would therefore pass against both, and was deleted for saying it
-    /// had checked something it could not. What is left is the contract, which
-    /// is worth stating for its own sake.
-    ///
-    /// The same caveat as `behind`: this is the grid **as it stands**, not as
-    /// it was, and the two differ by every correction applied since.
+    /// Returns a copy of the oscillator evaluated at the specified absolute simulation time `t`.
     pub fn at_time(self, t: f64) -> Oscillator {
         Oscillator { t, ..self }
     }
 
-    /// Steps this oscillator has been advanced by, summed over every
-    /// [`advance`](Oscillator::advance).
-    ///
-    /// The **integer** the f64 `t` was accumulated from, kept so that a caller
-    /// whose own clock is also a step count can express the gap between them
-    /// exactly. Two derived `t`s subtracted would not be exact and the answer
-    /// would not be zero when the clocks agree, which is the one case that has
-    /// to be exact — see [`Oscillator::behind`].
+    /// Returns the total simulation steps this oscillator has advanced.
     pub fn steps_taken(&self) -> u64 {
         self.steps_taken
     }
 
-    /// Apply a correction: a new tempo, and a phase shift in beats.
+    /// Applies a tempo and phase shift correction.
     ///
-    /// **This is not an external clock and rendering still does not read one.**
-    /// Both arguments are decided outside — by a tracker watching audio, by a
-    /// performer tapping, or by a `tempo` record on replay — and arrive here as
-    /// numbers, the same way `steps` does. What the oscillator guarantees is
-    /// that applying them is continuous: the tempo takes effect from now on and
-    /// does not move a beat that has already happened, and the shift moves the
-    /// beat grid by exactly what it says.
-    ///
-    /// A positive `shift_beats` moves the grid **forward** — the next beat
-    /// arrives sooner. That is the direction a correction takes when the
-    /// oscillator is running late, which is the direction it is nearly always
-    /// running when a measurement is involved, since a measurement is old by
-    /// the time it exists.
-    ///
-    /// The shift does not reach [`Oscillator::elapsed_beats`]; see the module
-    /// doc for why noise is deliberately deaf to it.
+    /// Updates the tempo and shifts the beat grid continuously without moving
+    /// historical beats. The phase shift applies to [`Oscillator::beats`] but
+    /// does not alter [`Oscillator::elapsed_beats`].
     pub fn correct(&mut self, bpm: f32, shift_beats: f32) {
         let shift = if shift_beats.is_finite() {
             shift_beats as f64
