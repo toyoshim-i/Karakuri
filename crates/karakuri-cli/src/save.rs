@@ -1,7 +1,7 @@
 use super::*;
 
-/// **The material a session carries at its head**, so that a replay can build
-/// what the run was playing.
+/// The material a session carries at its head, so that a replay can build what
+/// the run was playing.
 ///
 /// This used to be the `--load-set` file or nothing, and "or nothing" was a
 /// hole in the invariant the whole record stream exists for: recording without
@@ -9,20 +9,20 @@ use super::*;
 /// `--replay` refused it with "has no L1 slot" long after the set was over.
 /// Nothing said so at the time.
 ///
-/// So the head is written from **what the run is actually playing**. Without a
-/// Set file there is one to make: the `.kir` pair, the capacity, the params,
-/// the bindings and the seed are exactly what `--save-set` writes, and putting
-/// the sources in the store is what makes the head's hashes resolve on the way
+/// So the head is written from what the run is actually playing. Without a Set
+/// file there is one to make: the `.kir` pair, the capacity, the params, the
+/// bindings and the seed are exactly what `--save-set` writes, and putting the
+/// sources in the store is what makes the head's hashes resolve on the way
 /// back. The Set file it leaves behind is named after the session, so a
 /// recording is also a saved Set and neither had to be asked for twice.
 ///
-/// **Only slot 0's material, and it says so**, which is the limitation
-/// underneath rather than a choice made here: a Set file describes one Set and
-/// a session stream has no way to say what a *deck* held. Everything else about
-/// the performance is recorded per slot — gain, blend, residency, preview — so
-/// a multi-slot session replays those against a deck of one and reports the
-/// rest. Closing it is a format change, and it is named in `docs/ir-spec.md`
-/// where the records are.
+/// Only slot 0's material, and it says so, which is the limitation underneath
+/// rather than a choice made here: a Set file describes one Set and a session
+/// stream has no way to say what a *deck* held. Everything else about the
+/// performance is recorded per slot — gain, blend, residency, preview — so a
+/// multi-slot session replays those against a deck of one and reports the rest.
+/// Closing it is a format change, and it is named in `docs/ir-spec.md` where
+/// the records are.
 pub(crate) fn session_head(
     args: &Args,
     placed: &[Vec<Placed>],
@@ -112,24 +112,24 @@ pub(crate) fn session_head(
     }
 }
 
-/// **Every slot's launch sources into the store, because this run records one.**
+/// Every slot's launch sources into the store, because this run records one.
 ///
 /// A `procedure` record naming a slot's launch hashes is resolved by a replay
 /// reading the artifact back, and a record naming bytes nobody kept is the same
 /// silence as no record at all, so a recorded run owes the store those bytes
 /// before the first frame.
 ///
-/// **What used to name them is gone, and this is left standing rather than
-/// removed here** (ADR-0316). The reader was a rollback onto the launch
-/// version: the engine put a previous Set back and the stream had to say so, in
-/// records naming hashes only this seeding had put anywhere. Nothing puts a
-/// version back now — a version over the budget stays in the slot, stopped —
-/// so no record names a launch hash that a save has not also stored. Whether a
+/// What used to name them is gone, and this is left standing rather than
+/// removed here (ADR-0316). The reader was a rollback onto the launch version:
+/// the engine put a previous Set back and the stream had to say so, in records
+/// naming hashes only this seeding had put anywhere. Nothing puts a version
+/// back now — a version over the budget stays in the slot, stopped — so no
+/// record names a launch hash that a save has not also stored. Whether a
 /// recorded run still owes these bytes is a decision about the record
 /// vocabulary and is the maintainer's; taking them away on this function's own
 /// authority would be a replay that resolves nothing, discovered later.
 ///
-/// **And only a recorded run owes them**, which is the judgement this function
+/// And only a recorded run owes them, which is the judgement this function
 /// exists to hold. The seeding used to happen for every windowed run on exactly
 /// this reasoning, and the reasoning does not reach that far: a run with no
 /// recorder names no hash anywhere outside itself, and a save that does name
@@ -142,8 +142,8 @@ pub(crate) fn session_head(
 /// the other slots, which a session head cannot describe but a `procedure`
 /// record can still name.
 ///
-/// **Reported and not fatal.** The recorder itself is fatal on failure because
-/// a run that continued would be a performance nobody can replay with nothing
+/// Reported and not fatal. The recorder itself is fatal on failure because a
+/// run that continued would be a performance nobody can replay with nothing
 /// saying so; this is narrower — one slot's launch material would be
 /// unresolvable — and the sentence is the saying.
 pub(crate) fn seed_store_for_replay(store: &karakuri_store::store::Store, placed: &[Vec<Placed>]) {
@@ -159,30 +159,30 @@ pub(crate) fn seed_store_for_replay(store: &karakuri_store::store::Store, placed
     }
 }
 
-/// **Where one slot's sources come from at save time**: the hashes of what it is
+/// Where one slot's sources come from at save time: the hashes of what it is
 /// running, and nothing else.
 ///
 /// A slot is running a version whose bytes need not be on disk under any name.
 /// An edit that fails to compile stays on disk untouched, and a run without
 /// `--watch` never picks a file up at all — so the path and the picture can
 /// disagree in ordinary ways, and in each of them a save that re-read the path
-/// would write down a version nobody had seen. The hash is what still
-/// points at what is on screen, which is why it is the *only* thing this reads
-/// and why every slot has one from launch — see [`Running::at_launch`]. The
-/// bytes behind a launch hash travel with it, because on a run that has saved
-/// nothing they exist nowhere else; see [`SavedNode::source`].
+/// would write down a version nobody had seen. The hash is what still points at
+/// what is on screen, which is why it is the *only* thing this reads and why
+/// every slot has one from launch — see [`Running::at_launch`]. The bytes
+/// behind a launch hash travel with it, because on a run that has saved nothing
+/// they exist nowhere else; see [`SavedNode::source`].
 ///
-/// `None` is a slot with no address to name: one filled straight from a Set file
-/// with nothing to watch it, or one that has just taken a build whose sources
-/// could not be stored and said so at the time. It saves nothing rather than
-/// guessing, and `Live::save_set` says which it was.
+/// `None` is a slot with no address to name: one filled straight from a Set
+/// file with nothing to watch it, or one that has just taken a build whose
+/// sources could not be stored and said so at the time. It saves nothing rather
+/// than guessing, and `Live::save_set` says which it was.
 ///
-/// **The operator's names are zipped on by position.** Both lists are in the
-/// order the files were spelled — `sort_slot` keeps that deliberately and the
-/// watcher zips its hashes onto the same list — so entry `n` of one is entry
-/// `n` of the other. A name cannot come from the hashes: it belongs to the
-/// *use* rather than to the procedure, so nothing a `procedure` record carries
-/// could hold it.
+/// The operator's names are zipped on by position. Both lists are in the order
+/// the files were spelled — `sort_slot` keeps that deliberately and the watcher
+/// zips its hashes onto the same list — so entry `n` of one is entry `n` of the
+/// other. A name cannot come from the hashes: it belongs to the *use* rather
+/// than to the procedure, so nothing a `procedure` record carries could hold
+/// it.
 ///
 /// A free function rather than a method, so that the choice — which is the
 /// whole of what a live save gets right or wrong about what is on screen — can
@@ -245,8 +245,8 @@ pub(crate) fn saving_nodes(
         .collect()
 }
 
-/// What a saved Set says each of its geometries runs at: **what the run was
-/// actually drawing**.
+/// What a saved Set says each of its geometries runs at: what the run was
+/// actually drawing.
 ///
 /// This wrote `args.capacity` — the flag's number, or its default when no flag
 /// was given — where the run itself asks [`capacity_for`], which prefers the
@@ -254,11 +254,12 @@ pub(crate) fn saving_nodes(
 /// and the run that saved it drew 32768, and loading the file back gave a
 /// visibly different picture: a larger, smeared lattice.
 ///
-/// **That falsified the one promise the format makes** — a run driven by the
-/// file renders the same frame as the run whose flags wrote it
-/// (`docs/adr/0066-a-flag-becomes-a-record-writer.md`). It was invisible while a Set was a pair, because the number was wrong in
-/// the file and wrong again on the way back in; `--load-set` learning to honour
-/// a recorded capacity is what made the two disagree out loud.
+/// That falsified the one promise the format makes — a run driven by the file
+/// renders the same frame as the run whose flags wrote it
+/// (`docs/adr/0066-a-flag-becomes-a-record-writer.md`). It was invisible while
+/// a Set was a pair, because the number was wrong in the file and wrong again
+/// on the way back in; `--load-set` learning to honour a recorded capacity is
+/// what made the two disagree out loud.
 ///
 /// It changes the bytes of Set files saved by older builds of this program.
 /// Those files still load — a `capacity` record has always meant what it says —
@@ -268,27 +269,27 @@ pub(crate) fn saving_capacities(args: &Args, l1s: &[karakuri_ir::typed::Checked]
     l1s.iter().map(|l1| capacity_for(args, l1)).collect()
 }
 
-/// What a saved Set says each of its geometries is salted with: **what the run
-/// it describes will be salted with**, one number per geometry.
+/// What a saved Set says each of its geometries is salted with: what the run it
+/// describes will be salted with, one number per geometry.
 ///
 /// The same function the run itself asks, for the reason [`saving_capacities`]
 /// exists — a writer with its own copy of the rule records numbers the run was
 /// not using, and the file then describes a picture nobody has seen. Slot 0's,
 /// because a Set file describes one Set and slot 0 is the one that gets saved.
 ///
-/// **Derived today and recorded from here on.** Nothing on the command line
-/// assigns a salt, so these are the ordinals — and writing them down is exactly
-/// what stops them being ordinals: `docs/ir-spec.md` says *where it came from
-/// stops mattering once it is recorded*, and from this line onward the file is
-/// where the value lives. Reordering the paths in `--set` moves the colours of
-/// a Set that was never saved and no longer moves the colours of one that was.
+/// Derived today and recorded from here on. Nothing on the command line assigns
+/// a salt, so these are the ordinals — and writing them down is exactly what
+/// stops them being ordinals: `docs/ir-spec.md` says *where it came from stops
+/// mattering once it is recorded*, and from this line onward the file is where
+/// the value lives. Reordering the paths in `--set` moves the colours of a Set
+/// that was never saved and no longer moves the colours of one that was.
 pub(crate) fn saving_seeds(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
     salts_for(seed_for(0), recorded_salts(args, 0), l1s.len())
 }
 
 /// Write the material as a Set file, and say where it went.
 ///
-/// The first `--set` pair only. A Set file describes **one Set**, and a deck of
+/// The first `--set` pair only. A Set file describes one Set, and a deck of
 /// four is a session's arrangement rather than a Set's — that is the same line
 /// `Record::is_set_state` draws, seen from the writing side.
 pub(crate) fn save_set(
@@ -372,7 +373,7 @@ pub(crate) fn save_set(
 /// Read a Set file and fold what it says back into the arguments, so everything
 /// downstream is driven the way the flags drive it.
 ///
-/// **Every note is printed.** A Set file this build cannot honour in full still
+/// Every note is printed. A Set file this build cannot honour in full still
 /// loads, and the alternative — succeeding quietly — is the material being
 /// subtly not what was saved with nothing anywhere saying so.
 pub(crate) fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
@@ -439,13 +440,13 @@ pub(crate) fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     loaded
 }
 
-/// **Every save still in flight, collected until they are all in or `deadline`
-/// passes.**
+/// Every save still in flight, collected until they are all in or `deadline`
+/// passes.
 ///
 /// A free function over the channel rather than a loop inside
-/// [`Live::awaited_saves`], so that the bound — which is the whole of what makes
-/// waiting at the end of a run safe rather than a way to hang on a bad disk —
-/// can be checked without a window and a GPU. That is the same reason
+/// [`Live::awaited_saves`], so that the bound — which is the whole of what
+/// makes waiting at the end of a run safe rather than a way to hang on a bad
+/// disk — can be checked without a window and a GPU. That is the same reason
 /// [`live_sources`] is a free function.
 pub(crate) fn drained_saves(
     rx: &std::sync::mpsc::Receiver<Saved>,
@@ -467,34 +468,33 @@ pub(crate) fn drained_saves(
     landed
 }
 
-/// **One live save, from the frame that asked for it to the file on disk.**
+/// One live save, from the frame that asked for it to the file on disk.
 pub(crate) struct Save {
     pub(crate) slot: usize,
-    /// **Whose act this save is**, which decides the directory it lands in and
-    /// is decided at the call site — see [`Live::save_set`] and
+    /// Whose act this save is, which decides the directory it lands in and is
+    /// decided at the call site — see [`Live::save_set`] and
     /// [`karakuri_environment::Asked`].
     pub(crate) asked: Asked,
     pub(crate) id: String,
-    /// The store root, not an open store: opening it creates directories, which
-    /// is I/O, which belongs on the thread below rather than on a frame.
+    /// The store root, not an open store: opening it creates directories, which is
+    /// I/O, which belongs on the thread below rather than on a frame.
     pub(crate) root: PathBuf,
     pub(crate) sources: Sources,
-    /// **What the file will say, with `nodes` still empty.** The nodes are the
-    /// one part of a Set file that needs a store — a hash per source — so they
-    /// are filled in where one is opened and never here.
+    /// What the file will say, with `nodes` still empty. The nodes are the one part
+    /// of a Set file that needs a store — a hash per source — so they are filled in
+    /// where one is opened and never here.
     ///
-    /// A half-built value crossing a thread boundary is worth a sentence,
-    /// because the alternative was considered and is worse: a second struct
-    /// holding "the other six fields" is a type whose whole content is which
-    /// field it is missing, and it would have to be kept in step with
-    /// `setfile::Owned` by hand forever.
+    /// A half-built value crossing a thread boundary is worth a sentence, because
+    /// the alternative was considered and is worse: a second struct holding "the
+    /// other six fields" is a type whose whole content is which field it is
+    /// missing, and it would have to be kept in step with `setfile::Owned` by hand
+    /// forever.
     pub(crate) values: setfile::Owned,
 }
 
 impl Save {
-    /// Write it. **Everything here is off the render thread**: opening a store
-    /// creates directories, and the Set file itself is written and renamed into
-    /// place.
+    /// Write it. Everything here is off the render thread: opening a store creates
+    /// directories, and the Set file itself is written and renamed into place.
     pub(crate) fn run(self) -> Result<(), String> {
         let Save {
             asked,
@@ -518,33 +518,32 @@ impl Save {
 /// What a live save came back with, at the frame it arrives.
 pub(crate) struct Saved {
     pub(crate) slot: usize,
-    /// Carried through so the sentence at the end names the right directory:
-    /// the library's line tells an operator how to load it back, and the
-    /// sandbox's cannot, because nothing loads one.
+    /// Carried through so the sentence at the end names the right directory: the
+    /// library's line tells an operator how to load it back, and the sandbox's
+    /// cannot, because nothing loads one.
     pub(crate) asked: Asked,
     pub(crate) id: String,
-    /// `Ok` and the file is on disk under `id`. **A failure is printed and no
-    /// record is written**: a stream saying a save happened when the disk
-    /// refused is exactly the shape of lie this codebase spends its comments
-    /// refusing.
+    /// `Ok` and the file is on disk under `id`. A failure is printed and no record
+    /// is written: a stream saying a save happened when the disk refused is exactly
+    /// the shape of lie this codebase spends its comments refusing.
     pub(crate) outcome: Result<(), String>,
-    /// Where a client that asked for this save is waiting, and `None` when a
-    /// hand pressed `k`.
+    /// Where a client that asked for this save is waiting, and `None` when a hand
+    /// pressed `k`.
     ///
-    /// **It rides the save rather than being looked up when the outcome lands.**
-    /// A map from an id to whoever asked would be a second place that knows
-    /// which save is which, and the outcome already carries everything needed to
-    /// find its way home.
+    /// It rides the save rather than being looked up when the outcome lands. A map
+    /// from an id to whoever asked would be a second place that knows which save is
+    /// which, and the outcome already carries everything needed to find its way
+    /// home.
     pub(crate) reply: Option<mcp::Reply>,
 }
 
 /// A save that will not happen, to the terminal and to whoever asked if it was
 /// not a hand.
 ///
-/// **One sentence and one home.** Every refusal here reaches two audiences now,
-/// and the way that goes wrong is a copy of the words for the second one — which
-/// is free to be right on the day it is written and wrong at the next
-/// correction. The wording of the refusal below has already needed one.
+/// One sentence and one home. Every refusal here reaches two audiences now, and
+/// the way that goes wrong is a copy of the words for the second one — which is
+/// free to be right on the day it is written and wrong at the next correction.
+/// The wording of the refusal below has already needed one.
 pub(crate) fn refused(reply: Option<mcp::Reply>, said: String) {
     eprintln!("{said}");
     if let Some(reply) = reply {

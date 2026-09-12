@@ -22,7 +22,7 @@
 // ADR-0214 and ADR-0215, and they are reached here by name so that every call
 // site below reads exactly as it did. What is left in this file is the window,
 // the arguments, the key handler and `Live` — a surface over them.
-/// **The step count this run's frames advance by**, and it is
+/// The step count this run's frames advance by, and it is
 /// `karakuri-environment`'s rather than this file's since ADR-0297: a frame's
 /// step count is the live half of P-0092 and there is one derivation of it, now
 /// that two programs make it. ADR-0215 had already decided the placement —
@@ -101,7 +101,7 @@ pub(crate) const SEED: u32 = 19_274;
 /// accepts — `Set::build_many` takes `(procedure, capacity)` pairs precisely
 /// because each source declares its own range.
 ///
-/// **It was asked once and answered for everybody.** The build resolved
+/// It was asked once and answered for everybody. The build resolved
 /// `capacity_for(args, &l1[0])` and handed that one number to every source, so
 /// a second geometry ran at the first one's count with nothing printed: a grid
 /// written for 512 x 256 samples and declared at 131072 drew 32768 of them
@@ -110,9 +110,9 @@ pub(crate) const SEED: u32 = 19_274;
 /// range of the procedure it was applied to.
 ///
 /// `recorded` is what a Set file said, per geometry, and it wins where it said
-/// anything: **the file is where that geometry's count was decided**, and a
-/// Set that came back at a different size is a Set that was not saved. Empty
-/// for a slot no file filled, which is every slot but slot 0.
+/// anything: the file is where that geometry's count was decided, and a Set
+/// that came back at a different size is a Set that was not saved. Empty for a
+/// slot no file filled, which is every slot but slot 0.
 fn capacities_for(
     args: &Args,
     l1s: &[karakuri_ir::typed::Checked],
@@ -130,9 +130,9 @@ fn capacities_for(
         .collect()
 }
 
-/// **Whether anything in this run can write a `.kir`.** `--watch` and `--mcp`
-/// are the two things that edit a procedure; a render or a replay opens every
-/// file read-only.
+/// Whether anything in this run can write a `.kir`. `--watch` and `--mcp` are
+/// the two things that edit a procedure; a render or a replay opens every file
+/// read-only.
 ///
 /// A function rather than a `let`, because three things turn on it and they
 /// have to turn on the same one: what gets copied into the scratch, what gets
@@ -380,7 +380,7 @@ fn main() {
     }
 }
 
-/// The element live count of every slot. **A stall per slot** — it copies four
+/// The element live count of every slot. A stall per slot — it copies four
 /// bytes off the GPU and blocks until the queue drains — which is why this is
 /// called once, after the last frame, and never from the status line. See
 /// `Set::live_count`, which says so at the definition.

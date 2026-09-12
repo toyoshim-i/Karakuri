@@ -1,62 +1,61 @@
 use super::*;
 
-/// **What every slot is running.**
+/// What every slot is running.
 ///
-/// One representation of "what bytes is this node running", held per slot as the
-/// addresses a `procedure` record names — so a slot holding a chain and two
+/// One representation of "what bytes is this node running", held per slot as
+/// the addresses a `procedure` record names — so a slot holding a chain and two
 /// geometries has a line for each rather than an L1 and some renderers.
 ///
-/// **It is seeded before the first frame**, which is the property [`Sources`]
-/// leans on: every slot with files behind it has a hash from the outset. It was
+/// It is seeded before the first frame, which is the property [`Sources`] leans
+/// on: every slot with files behind it has a hash from the outset. It was
 /// previously seeded from nothing and filled in only by the watcher, so a slot
 /// nothing had rebuilt had no hash anywhere and the live saver reached for the
 /// *paths* instead. That gave the question two answers, and they disagree in
 /// every state where something has rewritten a file the run is not drawing
-/// from. A slot that is still `None` here is one with no files behind it at
-/// all — see [`Running::at_launch`] — and it saves nothing rather than guessing.
+/// from. A slot that is still `None` here is one with no files behind it at all
+/// — see [`Running::at_launch`] — and it saves nothing rather than guessing.
 ///
-/// **A type of its own rather than a field on `Live`**, because what a slot is
+/// A type of its own rather than a field on `Live`, because what a slot is
 /// running is one fact with one transition: a build lands and it moves. It is
 /// also what lets that transition be tested — the whole of it happens without a
 /// window, a GPU or a governor.
 ///
-/// **It held a second list until ADR-0316** — what a rollback would bring back
-/// — because a rollback was the only thing that could name what it restored.
+/// It held a second list until ADR-0316 — what a rollback would bring back —
+/// because a rollback was the only thing that could name what it restored.
 /// Nothing restores anything now: a version over the budget stays in the slot
 /// with the slot stopped, and putting an earlier one back is a build like any
 /// other, which lands here through [`Running::landed`] and is recorded like any
 /// other.
 ///
-/// **And the whole rule is in here**, which is a repair rather than a
-/// restatement: the caller used to decide that a build it could not name was
-/// not a swap at all, so it skipped the one half and took the other, and the
-/// pair came apart in exactly the way this paragraph says it cannot. See
-/// [`Running::landed`].
+/// And the whole rule is in here, which is a repair rather than a restatement:
+/// the caller used to decide that a build it could not name was not a swap at
+/// all, so it skipped the one half and took the other, and the pair came apart
+/// in exactly the way this paragraph says it cannot. See [`Running::landed`].
 pub(crate) struct Running {
     pub(crate) playing: Vec<Option<Nodes>>,
 }
 
 impl Running {
-    /// **Seed every slot from the material the run compiled**, addressed by the
-    /// bytes that compile read.
+    /// Seed every slot from the material the run compiled, addressed by the bytes
+    /// that compile read.
     ///
-    /// **At launch and for every windowed run**, not on `editable()`. A run with
+    /// At launch and for every windowed run, not on `editable()`. A run with
     /// neither `--watch` nor `--mcp` is exactly the run where nothing will ever
-    /// pick an edit up, so it is the run whose disk is most free to drift away
-    /// from its picture — gating on `editable()` would leave that hole open.
+    /// pick an edit up, so it is the run whose disk is most free to drift away from
+    /// its picture — gating on `editable()` would leave that hole open.
     ///
-    /// **No store, no disk, and nothing that can fail.** This used to open the
-    /// store and write one artifact per node, which cost a plain windowed run a
-    /// `.karakuri` directory it had never asked for — `docs/manual.md` says such
-    /// a run "copies nothing and creates no directory", and it did until this
-    /// function existed. The reason given for writing at launch was that a
-    /// replay must resolve every hash a `procedure` record names; that is
-    /// true, and it is true only of a run with a recorder. So the bytes go in where a recorder is opened
-    /// (see `App::resumed`) and where a save actually happens (see
+    /// No store, no disk, and nothing that can fail. This used to open the store
+    /// and write one artifact per node, which cost a plain windowed run a
+    /// `.karakuri` directory it had never asked for — `docs/manual.md` says such a
+    /// run "copies nothing and creates no directory", and it did until this
+    /// function existed. The reason given for writing at launch was that a replay
+    /// must resolve every hash a `procedure` record names; that is true, and it is
+    /// true only of a run with a recorder. So the bytes go in where a recorder is
+    /// opened (see `App::resumed`) and where a save actually happens (see
     /// [`Sources::into_nodes`]), and a run that does neither writes nothing.
     ///
-    /// It also used to *re-read* each `.kir` here, seconds after the compile
-    /// that produced the deck. [`Placed::source`] is why it no longer can.
+    /// It also used to *re-read* each `.kir` here, seconds after the compile that
+    /// produced the deck. [`Placed::source`] is why it no longer can.
     pub(crate) fn at_launch(placed: &[Vec<Placed>], slots: usize) -> Running {
         let mut playing: Vec<Option<Nodes>> = vec![None; slots];
         for (slot, nodes) in placed.iter().enumerate().take(slots) {
@@ -74,30 +73,30 @@ impl Running {
         self.playing.get(slot).and_then(Option::as_ref)
     }
 
-    /// **A build landed.** What the slot is now running, for the stream to say.
+    /// A build landed. What the slot is now running, for the stream to say.
     ///
-    /// `nodes` is `None` when that build's sources never reached the store —
-    /// the watcher says so at the time, and the addresses it would have named
-    /// do not exist. **That is still a swap**, and taking it as one is the
-    /// whole of what this argument is for: the slot is on something new, and it
-    /// has no address until the next build lands. `None` comes back and no
-    /// `procedure` record is written, because there is nothing to name.
+    /// `nodes` is `None` when that build's sources never reached the store — the
+    /// watcher says so at the time, and the addresses it would have named do not
+    /// exist. That is still a swap, and taking it as one is the whole of what this
+    /// argument is for: the slot is on something new, and it has no address until
+    /// the next build lands. `None` comes back and no `procedure` record is
+    /// written, because there is nothing to name.
     ///
-    /// **It is still a swap when the budget's verdict goes against it**, too: a
-    /// version that costs more than one frame may is in the slot with the slot
-    /// stopped (ADR-0316), so it is what a save of that slot writes down and
-    /// what a record names. What is not true of it is that the slot is running,
-    /// which the status line says and this list does not.
+    /// It is still a swap when the budget's verdict goes against it, too: a version
+    /// that costs more than one frame may is in the slot with the slot stopped
+    /// (ADR-0316), so it is what a save of that slot writes down and what a record
+    /// names. What is not true of it is that the slot is running, which the status
+    /// line says and this list does not.
     ///
-    /// **The decision used to live in the caller**, which returned early on a
-    /// build it could not name and so applied half a transition rule: the swap
-    /// was skipped here and the matching rollback was not, and after one such
-    /// pair the slot was recorded as running the version *before* the one on
-    /// screen. `k` then wrote that version down and a recorded run put
-    /// `procedure` records naming it into the stream — the picture and the file
-    /// disagreeing, silently, which is the failure this whole type exists to
-    /// make impossible. There is no rollback left for that pair to come apart
-    /// across, and this is still where the transition happens.
+    /// The decision used to live in the caller, which returned early on a build it
+    /// could not name and so applied half a transition rule: the swap was skipped
+    /// here and the matching rollback was not, and after one such pair the slot was
+    /// recorded as running the version *before* the one on screen. `k` then wrote
+    /// that version down and a recorded run put `procedure` records naming it into
+    /// the stream — the picture and the file disagreeing, silently, which is the
+    /// failure this whole type exists to make impossible. There is no rollback left
+    /// for that pair to come apart across, and this is still where the transition
+    /// happens.
     pub(crate) fn landed(&mut self, slot: usize, nodes: Option<Nodes>) -> Option<Nodes> {
         self.playing[slot] = nodes;
         self.playing[slot].clone()
@@ -114,12 +113,12 @@ pub(crate) fn stored_nodes(nodes: Vec<setfile::Node>) -> Nodes {
         .collect()
 }
 
-/// **What a Set file says about the Set that is playing**, read off that Set.
+/// What a Set file says about the Set that is playing, read off that Set.
 ///
 /// Everything except the nodes, which are the one part a store has to be
 /// involved in — see [`Save`].
 ///
-/// **Seven of the eight are read from the Set and not from `Args`**, and the
+/// Seven of the eight are read from the Set and not from `Args`, and the
 /// eighth is the exception that has to earn itself — which is the decision this
 /// function exists to hold. The reason is [`saving_capacities`]'s,
 /// stated once and true of all of them: a writer with its own copy of the rule
@@ -129,30 +128,30 @@ pub(crate) fn stored_nodes(nodes: Vec<setfile::Node>) -> Nodes {
 /// edited `.kir` can change its own declared capacity underneath the flag that
 /// was never given.
 ///
-/// - **capacities** come per geometry from [`Set::source_capacities`] and not
+/// - capacities come per geometry from [`Set::source_capacities`] and not
 ///   from `Set::capacity`, which is the sum. One number for a two-geometry Set
 ///   is neither geometry's, and the writer refuses it.
-/// - **params** are written *addressed*, every declaration of every node,
+/// - params are written *addressed*, every declaration of every node,
 ///   where `--save-set` writes only the `--param`s it was given. That is more
 ///   lines and it is the right ones: the Set holds a value per node whether an
 ///   operator wrote it or a `.kir` declared it, and a file that recorded only
 ///   the overrides would come back different the day the declaration changed.
-/// - **bindings** come back with the ranges and curves they are riding at.
-/// - **edges** are the run's — see `Live::edges` for why this one is not the
+/// - bindings come back with the ranges and curves they are riding at.
+/// - edges are the run's — see `Live::edges` for why this one is not the
 ///   Set's, and why that is a copy of a value rather than of a rule.
-/// - **camera** is the built-in orbit's six numbers, which a `camera` record
+/// - camera is the built-in orbit's six numbers, which a `camera` record
 ///   and a Set file both set from outside.
-/// - **layering** is [`Set::layering`] and emphatically *not* `--merge`. This
-///   is the surface `k` and the MCP tool reach, and both exist to write **what
-///   is on screen**: the slot may have been filled by `--load-set` from a file
+/// - layering is [`Set::layering`] and emphatically *not* `--merge`. This
+///   is the surface `k` and the MCP tool reach, and both exist to write what
+///   is on screen: the slot may have been filled by `--load-set` from a file
 ///   that recorded a `merge` the flags never mentioned, and it may have been
 ///   hot-swapped since. Asking the flag would write a file describing a Set
 ///   nobody was watching, which is [`saving_capacities`]' failure exactly.
-/// - **live** is read off [`Set::inputs`] by [`selected_renderer`], for the
+/// - live is read off [`Set::inputs`] by [`selected_renderer`], for the
 ///   same reason and a louder one: nothing but the run can know it. There is no
 ///   flag that selects a renderer — `r` does, mid-performance — so the Set is
 ///   not merely the better source here, it is the only one.
-/// - **seeds** are [`Set::source_salts`], one per geometry: what it *is* salted
+/// - seeds are [`Set::source_salts`], one per geometry: what it *is* salted
 ///   with rather than what a position in `--set` would derive.
 pub(crate) fn playing_values(
     set: &karakuri_engine::Set,
@@ -181,18 +180,17 @@ pub(crate) fn playing_values(
     }
 }
 
-/// **Which renderer a Set is folded to**, as a `merge` record spells it:
-/// `Some(i)` where exactly one input is live, and `None` where every one of
-/// them is.
+/// Which renderer a Set is folded to, as a `merge` record spells it: `Some(i)`
+/// where exactly one input is live, and `None` where every one of them is.
 ///
-/// **Every-live is checked first, and that decides the one-renderer case.** A
+/// Every-live is checked first, and that decides the one-renderer case. A
 /// composited Set holding a single renderer has one live input, which is both
 /// "all of them" and "exactly one" — and it is the first, because such a Set is
 /// one nobody has selected in. Writing `live 0` for it would record a choice
 /// that was never made, and `Record::Merge` is explicit that absent means every
 /// input live rather than node 0.
 ///
-/// **Anything else is `None` too, and the anything else has no producer.**
+/// Anything else is `None` too, and the anything else has no producer.
 /// `mix::select` is the only thing that clears a `live` flag and it always
 /// leaves exactly one set, so a fold with two of five live cannot be reached
 /// from any surface this program has. If one ever is, `None` records the Set as
@@ -209,48 +207,49 @@ pub(crate) fn selected_renderer(inputs: &[karakuri_engine::mix::Input]) -> Optio
     }
 }
 
-/// **One slot's watcher, and the aim it is pointed at.**
+/// One slot's watcher, and the aim it is pointed at.
 ///
-/// **The run holds this so that a rewiring can reach the build worker.** The
-/// wiring a slot rebuilds with is not on disk anywhere — `Args::edges` at
-/// launch, `watch::Watch::edges` on every rebuild, [`Live::edges`] at a save —
-/// so an edge written during a show has to be *handed* to the watcher, and
+/// The run holds this so that a rewiring can reach the build worker. The wiring
+/// a slot rebuilds with is not on disk anywhere — `Args::edges` at launch,
+/// `watch::Watch::edges` on every rebuild, [`Live::edges`] at a save — so an
+/// edge written during a show has to be *handed* to the watcher, and
 /// `watch::Watch::aimed_by` is the one way in. It is deliberately not an
 /// install: `Deck::install` would put a Set on air that nothing measured, and
 /// an aim instead says *look at this instead* and lets go, after which
 /// everything is the path an edit already takes — compiled on the worker,
-/// swapped at a frame boundary, judged against the budget, and left in the
-/// slot with the slot stopped if it costs too much. That is [`mcp::WireRequest`]'s second point,
-/// and reaching it this way is why there is no second route into a slot.
+/// swapped at a frame boundary, judged against the budget, and left in the slot
+/// with the slot stopped if it costs too much. That is [`mcp::WireRequest`]'s
+/// second point, and reaching it this way is why there is no second route into
+/// a slot.
 ///
-/// **The aim is kept and not only the sender**, because an `Aim` is every field
-/// of the slot's identity and *anything left out comes back as the outgoing
+/// The aim is kept and not only the sender, because an `Aim` is every field of
+/// the slot's identity and *anything left out comes back as the outgoing
 /// slot's* — a fold silently un-selected, a camera back at `Orbit::default()`,
 /// salts that repaint every element. A rewiring changes one field of thirteen,
 /// so the other twelve have to be restated from somewhere, and this is that
 /// somewhere: what the watcher was started at, moved forward by every aim sent
 /// since.
 pub(crate) struct Aiming {
-    /// The other end of `watch::Watch::aimed_by`'s channel, for this slot's
-    /// watcher and no other. A watcher re-pointed through somebody else's
-    /// sender would rebuild a deck nobody named.
+    /// The other end of `watch::Watch::aimed_by`'s channel, for this slot's watcher
+    /// and no other. A watcher re-pointed through somebody else's sender would
+    /// rebuild a deck nobody named.
     pub(crate) aim: std::sync::mpsc::Sender<watch::Aim>,
-    /// **Where that watcher is pointed**, kept in step with what has been sent:
-    /// the values it was constructed with until the first aim, and the last aim
-    /// after that. A copy that stopped being updated would restate a stale
-    /// wiring on the *second* rewiring of a run, which is the hardest version
-    /// of this mistake to see.
+    /// Where that watcher is pointed, kept in step with what has been sent: the
+    /// values it was constructed with until the first aim, and the last aim after
+    /// that. A copy that stopped being updated would restate a stale wiring on the
+    /// *second* rewiring of a run, which is the hardest version of this mistake to
+    /// see.
     pub(crate) at: watch::Aim,
 }
 
 impl Aiming {
-    /// **Point the watcher at the same material with `edges` instead**, and
-    /// answer whether it is still there to be pointed.
+    /// Point the watcher at the same material with `edges` instead, and answer
+    /// whether it is still there to be pointed.
     ///
-    /// `Err` is a build worker that has ended — the receiver is gone — which is
-    /// a run shutting down. It is reported rather than swallowed: the edge is
-    /// in the run's wiring either way, and *nothing will rebuild* is a
-    /// different fact from *the slot is recompiling*.
+    /// `Err` is a build worker that has ended — the receiver is gone — which is a
+    /// run shutting down. It is reported rather than swallowed: the edge is in the
+    /// run's wiring either way, and *nothing will rebuild* is a different fact from
+    /// *the slot is recompiling*.
     pub(crate) fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
         self.at.edges = edges;
         self.aim.send(restated(&self.at)).map_err(|_| ())
@@ -260,12 +259,12 @@ impl Aiming {
 /// One aim, said again — because `watch::Aim` is not `Clone` and a re-point
 /// restates every field of it.
 ///
-/// **No `..` on either side of this**, which is `Watch::repointed`'s own rule
-/// met from the sending end: it destructures with no `..` so that a field
-/// added to `Aim` cannot be left behind, and a *sender* that filled the new
-/// field with a default would defeat that from here. The compiler names every
-/// one of them, so the day another arrives this stops compiling rather than
-/// quietly re-aiming a slot at it.
+/// No `..` on either side of this, which is `Watch::repointed`'s own rule met
+/// from the sending end: it destructures with no `..` so that a field added to
+/// `Aim` cannot be left behind, and a *sender* that filled the new field with a
+/// default would defeat that from here. The compiler names every one of them,
+/// so the day another arrives this stops compiling rather than quietly
+/// re-aiming a slot at it.
 pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
     let watch::Aim {
         head,
@@ -305,8 +304,8 @@ pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
     }
 }
 
-/// **Every edge a client asked for on one frame, applied to the run's wiring
-/// and answered.**
+/// Every edge a client asked for on one frame, applied to the run's wiring and
+/// answered.
 ///
 /// This is [`mcp::WireRequest`]'s three points, and it is a free function so
 /// that all three are checkable without a window, a GPU or a `Deck` — the
@@ -323,9 +322,9 @@ pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
 /// Set is built, so an append would make the *second* call on an input a
 /// refusal and leave a model unable to change its mind.
 ///
-/// **The key does not include the deck slot, because the run's wiring does
-/// not.** `Live::edges` is one list for the whole run and an edge naming a node
-/// a Set has not got is passed over where the Set is built — see
+/// The key does not include the deck slot, because the run's wiring does not.
+/// `Live::edges` is one list for the whole run and an edge naming a node a Set
+/// has not got is passed over where the Set is built — see
 /// `karakuri_engine::set::Wiring::edges`. So a request names a deck slot to say
 /// *which slot rebuilds*, and two slots holding a node of the same name share
 /// one entry in this list, exactly as they do when `--edge` is typed on the
@@ -333,15 +332,15 @@ pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
 ///
 /// # A slot this deck does not hold
 ///
-/// **Refused, in [`no_such_slot`]'s words, and nothing is rewired** — the
-/// decision [`Live::save_set`] already makes for a save and for its reason: a
-/// key press cannot name a slot the deck has not got and a tool call can, and
-/// this is the guard that does not depend on the surface that asked having one.
-/// The MCP server checks the number against `mcp::Slots` before it sends, so a
-/// model meets its refusal there; the deck's own count is a thing only the run
-/// knows, and this is where it is known.
+/// Refused, in [`no_such_slot`]'s words, and nothing is rewired — the decision
+/// [`Live::save_set`] already makes for a save and for its reason: a key press
+/// cannot name a slot the deck has not got and a tool call can, and this is the
+/// guard that does not depend on the surface that asked having one. The MCP
+/// server checks the number against `mcp::Slots` before it sends, so a model
+/// meets its refusal there; the deck's own count is a thing only the run knows,
+/// and this is where it is known.
 ///
-/// **Residency is deliberately not consulted.** An off-air slot is wired and
+/// Residency is deliberately not consulted. An off-air slot is wired and
 /// rebuilt like any other: a slot is prepared while it is dark and put on air
 /// afterwards, so refusing an edge on an allocated slot would forbid the one
 /// order an operator actually works in. What a rebuild of a dark slot costs is
@@ -349,14 +348,14 @@ pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
 ///
 /// # The same input wired twice on one frame
 ///
-/// **Every request is applied, in the order it arrived, and the last one is
-/// what the run is wired with** — a rewiring is a model changing its mind, and
-/// the frame a change of mind lands on is not something a client controls. One
-/// aim per slot goes out after all of them are in the list, so the rebuild
-/// carries the settled wiring rather than an intermediate one, and
-/// `Watch::repointed` takes only the newest aim anyway.
+/// Every request is applied, in the order it arrived, and the last one is what
+/// the run is wired with — a rewiring is a model changing its mind, and the
+/// frame a change of mind lands on is not something a client controls. One aim
+/// per slot goes out after all of them are in the list, so the rebuild carries
+/// the settled wiring rather than an intermediate one, and `Watch::repointed`
+/// takes only the newest aim anyway.
 ///
-/// **A request the same frame overwrote is told so**, which is the only part of
+/// A request the same frame overwrote is told so, which is the only part of
 /// this that costs anything: its edge *was* written and then replaced, and a
 /// reply saying only "wired" would be a true sentence about a state the run no
 /// longer holds by the end of the frame it was sent on.
@@ -461,8 +460,8 @@ pub(crate) fn rewired(
     said.into_iter().map(Option::unwrap).collect()
 }
 
-/// `meters` is false for the offscreen paths: a `--render` has nobody to show
-/// a level to, and a meter that nothing reads is a compute pass and a staging
+/// `meters` is false for the offscreen paths: a `--render` has nobody to show a
+/// level to, and a meter that nothing reads is a compute pass and a staging
 /// ring per frame for no reason. That is the whole point of it being opt-in.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_deck(
@@ -731,8 +730,8 @@ pub(crate) fn build_deck(
     (deck, aims)
 }
 
-/// One binding, in a line, ending with what it will do rather than only what
-/// it says.
+/// One binding, in a line, ending with what it will do rather than only what it
+/// says.
 fn describe(binding: &Binding, signals: &Signals) -> String {
     // **A published control is not on the bus**, and asking the bus about it
     // gets the answer for a name nothing measures — zero, which reads as a

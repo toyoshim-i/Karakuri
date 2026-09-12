@@ -397,9 +397,9 @@ impl ApplicationHandler for App {
         }
     }
 
-    /// The one place a stall is welcome: every frame has been rendered and the
-    /// run is over, which is exactly the case `Set::live_count` is documented
-    /// to be for.
+    /// The one place a stall is welcome: every frame has been rendered and the run
+    /// is over, which is exactly the case `Set::live_count` is documented to be
+    /// for.
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(live) = &mut self.live {
             // Before the counts, because it ends a thread and flushes a file

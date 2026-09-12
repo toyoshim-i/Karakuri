@@ -1,9 +1,9 @@
 use super::*;
 
-/// What a replay renders at: the stream's, or the flag's, or a refusal — plus
-/// a line to print when the answer is not simply what was performed.
+/// What a replay renders at: the stream's, or the flag's, or a refusal — plus a
+/// line to print when the answer is not simply what was performed.
 ///
-/// **A function rather than four arms inside `replay_session`** for the reason
+/// A function rather than four arms inside `replay_session` for the reason
 /// every decoder in this program is one: the decision needs a stream, a store
 /// and a GPU to reach otherwise, and a decision nothing can test is a decision
 /// that drifts. It is also the shape the refusal has to have — it cannot live
@@ -48,13 +48,13 @@ pub(crate) fn replay_canvas(
 /// How many elements a Set gets: what was asked for, or what the procedure asks
 /// for itself.
 ///
-/// **A `.kir` declares `capacity [min, max] = default` and the default was never
-/// used.** The range was enforced and the default silently lost to
-/// `--capacity`'s own, so a procedure written for 131072 elements ran at 262144
-/// unless somebody knew to say so — and an example whose point is visible only
-/// at the count it was written for did not show its point. The same shape as
-/// `--size` overriding a canvas: a general flag with a default beating a
-/// specific declaration that meant it.
+/// A `.kir` declares `capacity [min, max] = default` and the default was never
+/// used. The range was enforced and the default silently lost to `--capacity`'s
+/// own, so a procedure written for 131072 elements ran at 262144 unless
+/// somebody knew to say so — and an example whose point is visible only at the
+/// count it was written for did not show its point. The same shape as `--size`
+/// overriding a canvas: a general flag with a default beating a specific
+/// declaration that meant it.
 pub(crate) fn capacity_for(args: &Args, l1: &karakuri_ir::typed::Checked) -> u32 {
     if args.capacity_given {
         return args.capacity;
@@ -63,7 +63,7 @@ pub(crate) fn capacity_for(args: &Args, l1: &karakuri_ir::typed::Checked) -> u32
         .map_or(args.capacity, |declared| declared.default)
 }
 
-/// **What a replay says about a `save` it passed over**, in one place.
+/// What a replay says about a `save` it passed over, in one place.
 ///
 /// A save reaches a replay two ways — inside a frame, and after the last tick —
 /// and each used to spell this sentence for itself. Two literals of one
@@ -80,20 +80,20 @@ fn skipped_save(slot: DeckSlot, id: &str) -> String {
     )
 }
 
-/// **What to say about the records after the last tick.**
+/// What to say about the records after the last tick.
 ///
 /// Said rather than dropped, on the same terms as everything else here: a
 /// session that ended between frames recorded what the operator last did, and
 /// nothing renders it because there is no frame it belongs to.
 ///
-/// **A `save` among them is named**, which counting alone did not do. The rule
-/// in `docs/ir-spec.md` is that a replay says *which* effects outside the stream
-/// it skipped, and this path was obeying half of it: a `save` inside a frame was
-/// named and a `save` after the last tick was folded into a number. That is the
-/// wrong half to lose, because the last thing an operator does before quitting
-/// is press `k` — a save at the end of a set lands here rather than inside a
-/// frame, so the same key press was reported two different ways depending on
-/// whether another frame followed it.
+/// A `save` among them is named, which counting alone did not do. The rule in
+/// `docs/ir-spec.md` is that a replay says *which* effects outside the stream
+/// it skipped, and this path was obeying half of it: a `save` inside a frame
+/// was named and a `save` after the last tick was folded into a number. That is
+/// the wrong half to lose, because the last thing an operator does before
+/// quitting is press `k` — a save at the end of a set lands here rather than
+/// inside a frame, so the same key press was reported two different ways
+/// depending on whether another frame followed it.
 pub(crate) fn trailing_notes(trailing: &[Record]) -> Vec<String> {
     if trailing.is_empty() {
         return Vec::new();
@@ -110,7 +110,7 @@ pub(crate) fn trailing_notes(trailing: &[Record]) -> Vec<String> {
     notes
 }
 
-/// **Render a recorded session.** The material comes from the stream's head and
+/// Render a recorded session. The material comes from the stream's head and
 /// every frame advances by the `tick` that was recorded, so nothing here reads
 /// a clock — which is the whole claim: a replay and the run it came from are
 /// the same sequence of frames.
@@ -427,15 +427,15 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
 
 /// Build the Set a slot's `procedure` records name.
 ///
-/// **Every node or nothing.** A `procedure` record names one node, and a Set is
+/// Every node or nothing. A `procedure` record names one node, and a Set is
 /// built from all of them — so until the L1 and every renderer have been seen
 /// there is nothing to build, and a slot whose stream only ever names some of
-/// them keeps what the head gave it. That is not a corner case: the writer emits
-/// the whole stack, but a stream from a future version might name only what
-/// changed.
+/// them keeps what the head gave it. That is not a corner case: the writer
+/// emits the whole stack, but a stream from a future version might name only
+/// what changed.
 ///
-/// A **gap** in the renderer list is refused on the same terms rather than
-/// closed up: index 2 without index 1 describes a stack with a hole in it, and
+/// A gap in the renderer list is refused on the same terms rather than closed
+/// up: index 2 without index 1 describes a stack with a hole in it, and
 /// silently shifting the third renderer into second place would change draw
 /// order.
 fn rebuild(
@@ -522,7 +522,7 @@ fn rebuild(
 /// what drove the engine live and what drives it on replay are the same
 /// function, so they cannot come apart.
 ///
-/// **`look` and `chain` are carried out rather than applied here**, and for one
+/// `look` and `chain` are carried out rather than applied here, and for one
 /// reason each: the look is the present pass's and this function has no
 /// `Present`, and the chain is the same one pass earlier. Both are what the
 /// driver returns per frame — `render::replay`'s own paragraph is why — so a
@@ -697,7 +697,7 @@ fn apply_replayed(
 }
 
 /// Build a scheduled move out of a decoded record and the value the control is
-/// at **now**.
+/// at now.
 ///
 /// The `from` end is read here rather than carried in the record, which is the
 /// whole of why this function exists and is shared by the live path and the

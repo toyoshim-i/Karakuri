@@ -1,8 +1,8 @@
 use super::*;
 
 /// How often the status line is printed. Not every frame: at 120 Hz that is a
-/// line of stderr per 8 ms, which is unreadable and is I/O on the render
-/// thread that nobody asked for.
+/// line of stderr per 8 ms, which is unreadable and is I/O on the render thread
+/// that nobody asked for.
 pub(crate) const STATUS_INTERVAL: Duration = Duration::from_millis(500);
 
 /// One press of a gain key. Linear and additive, because a fader is: the
@@ -10,7 +10,7 @@ pub(crate) const STATUS_INTERVAL: Duration = Duration::from_millis(500);
 /// not a proportion of wherever the slot happens to be.
 pub(crate) const GAIN_STEP: f32 = 0.1;
 
-/// Where a scheduled fade starts, and what to call it. **A bar is four beats**
+/// Where a scheduled fade starts, and what to call it. A bar is four beats
 /// here, which is an assumption rather than a measurement: nothing in the
 /// signal bus knows a time signature, and four is what the `bar` signal already
 /// means. A set in three would want this to be a dial, and would say so by
@@ -62,35 +62,36 @@ pub(crate) const OPACITY_STEP: f32 = 0.1;
 /// invisible at 8.0. This is a quarter of a stop, near enough.
 pub(crate) const EXPOSURE_STEP: f32 = 1.189_207;
 
-/// **The interactive bounds, and only the interactive ones.** `-` and `=` nudge
+/// The interactive bounds, and only the interactive ones. `-` and `=` nudge
 /// inside them, because a key that steps has to stop somewhere and a stop it
-/// cannot see is worse than one it can. `--exposure` is **not** held to them,
-/// which is deliberate and is `exposure_positive_is_accepted_unclamped`'s own
+/// cannot see is worse than one it can. `--exposure` is not held to them, which
+/// is deliberate and is `exposure_positive_is_accepted_unclamped`'s own
 /// sentence: a batch render asks for something extreme on purpose, and a flag
 /// is read once by somebody who typed it rather than nudged into a corner. What
 /// the flag refuses is what has no meaning at all — see [`clamp_exposure`] for
 /// why zero and negative are neither clamped nor accepted anywhere.
 ///
-/// **This comment said the two shared a range and they never have.** It was
-/// written beside a constant pair pulled out so the bound would not drift, and
-/// the drift was the sentence rather than the numbers.
+/// This comment said the two shared a range and they never have. It was written
+/// beside a constant pair pulled out so the bound would not drift, and the
+/// drift was the sentence rather than the numbers.
 pub(crate) const EXPOSURE_MIN: f32 = 1.0 / 64.0;
 pub(crate) const EXPOSURE_MAX: f32 = 64.0;
 
 /// Exposure is a multiplier before the tone map; zero is degenerate (always
-/// black) and negative inverts an otherwise-positive HDR value into one no
-/// tone mapper is specified for. Pulled out as a pure function so the bound is
-/// one piece of logic instead of two copies that could drift, and so it is
-/// testable without a `Live` or a GPU.
+/// black) and negative inverts an otherwise-positive HDR value into one no tone
+/// mapper is specified for. Pulled out as a pure function so the bound is one
+/// piece of logic instead of two copies that could drift, and so it is testable
+/// without a `Live` or a GPU.
 pub(crate) fn clamp_exposure(exposure: f32) -> f32 {
     exposure.clamp(EXPOSURE_MIN, EXPOSURE_MAX)
 }
 
-/// **A demonstration that drives itself**, as a list of `(seconds, key)`.
+/// A demonstration that drives itself, as a list of `(seconds, key)`.
 ///
-/// Every entry goes through [`Live::key`], the same function a keyboard reaches,
-/// so what a watcher sees is what pressing those keys does and not a second
-/// path that resembles it. Nothing here can do anything a person could not.
+/// Every entry goes through [`Live::key`], the same function a keyboard
+/// reaches, so what a watcher sees is what pressing those keys does and not a
+/// second path that resembles it. Nothing here can do anything a person could
+/// not.
 ///
 /// It exists because a window is the only honest demonstration of a transport —
 /// the scrub is a motion, and a still frame of it is a still frame — and
@@ -159,38 +160,38 @@ pub(crate) const DEMO_SCRIPT: &[(f32, char)] = &[
 /// than as something new.
 pub(crate) const DEMO_LOOP_SECONDS: f32 = 27.0;
 
-/// **The two topologies, over geometry that does not change**, as a list of
+/// The two topologies, over geometry that does not change, as a list of
 /// `(seconds, key)` on the same terms as [`DEMO_SCRIPT`].
 ///
 /// The deck holds one L1 file paired with a sprite renderer in slot 0 and a
-/// stroke renderer in slot 1, so **showing each slot without the other is the
-/// demonstration**. What a watcher sees is the same cloud, in the same places,
-/// at the same instant, drawn two ways.
+/// stroke renderer in slot 1, so showing each slot without the other is the
+/// demonstration. What a watcher sees is the same cloud, in the same places, at
+/// the same instant, drawn two ways.
 ///
-/// **It fades a slot out rather than auditioning the other one, and that is
-/// the one thing here that changed.** This script pressed `v` three times —
-/// the mix, each slot alone, the mix again — until ADR-0240 retired *Choose
-/// what the output shows*. The output is the mix now and always, so the way to
-/// see one slot without the other is to take the other out of the mix: `F` on
-/// the focused slot's fader, `G` to bring it back, with a digit before each to
-/// say which slot. That is `Operation::FadeDeck` where it used to be
-/// `SetPreview`, and it isolates a **slot** exactly as the audition did.
+/// It fades a slot out rather than auditioning the other one, and that is the
+/// one thing here that changed. This script pressed `v` three times — the mix,
+/// each slot alone, the mix again — until ADR-0240 retired *Choose what the
+/// output shows*. The output is the mix now and always, so the way to see one
+/// slot without the other is to take the other out of the mix: `F` on the
+/// focused slot's fader, `G` to bring it back, with a digit before each to say
+/// which slot. That is `Operation::FadeDeck` where it used to be `SetPreview`,
+/// and it isolates a slot exactly as the audition did.
 ///
-/// **What it costs is that a fade is scheduled and an audition was not.** A
-/// press lands on the current grid rather than in the frame it arrives, so the
+/// What it costs is that a fade is scheduled and an audition was not. A press
+/// lands on the current grid rather than in the frame it arrives, so the
 /// picture changes a beat or two after the entry that asked for it — which is
 /// the same gap [`DEMO_SCRIPT`]'s `F` and `G` already have and say is worth
 /// watching for. The seconds below leave room for it.
 ///
 /// The mix comes first and last on purpose. Both slots composited is the state
-/// that shows they are the same geometry — the strokes lie along the dots —
-/// and each slot alone is what shows how different the two look when the other
-/// is not there to anchor it.
+/// that shows they are the same geometry — the strokes lie along the dots — and
+/// each slot alone is what shows how different the two look when the other is
+/// not there to anchor it.
 ///
-/// **Nothing here presses a key that only means something to someone who was
-/// told what to expect.** Each fade produces a visibly different frame on its
-/// own, which is the property [`DEMO_SCRIPT`]'s first entry deliberately does
-/// not have and has to say so.
+/// Nothing here presses a key that only means something to someone who was told
+/// what to expect. Each fade produces a visibly different frame on its own,
+/// which is the property [`DEMO_SCRIPT`]'s first entry deliberately does not
+/// have and has to say so.
 pub(crate) const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
     // Five seconds of the mix: strokes and sprites over each other. Then slot
     // 1's fader out, leaving slot 0 alone — sprites *and* strokes, from one
@@ -249,11 +250,11 @@ impl Demo {
 
     /// The deck this demonstration needs, for a run that named no material.
     ///
-    /// **A demonstration that requires the operator to assemble the scene is
-    /// not one.** `--demo lines` is about two renderers over one geometry, and
-    /// a watcher handed a one-slot deck sees the script fade the only thing in
-    /// the mix out and back. Overridden the moment any `--set` is given, so
-    /// this supplies a scene rather than imposing one.
+    /// A demonstration that requires the operator to assemble the scene is not one.
+    /// `--demo lines` is about two renderers over one geometry, and a watcher
+    /// handed a one-slot deck sees the script fade the only thing in the mix out
+    /// and back. Overridden the moment any `--set` is given, so this supplies a
+    /// scene rather than imposing one.
     pub(crate) fn deck(self) -> Vec<(Named, Vec<Named>)> {
         match self {
             Demo::Transport => Vec::new(),
@@ -299,11 +300,11 @@ pub(crate) const SCRUB_BEATS: f64 = 0.25;
 
 /// A level floor: a negative gain would subtract one slot's light from
 /// another's, which is a blend mode rather than a level. Not ceilinged — the
-/// pipeline is HDR and values above 1.0 are expected. Pure for the same
-/// reason as [`clamp_exposure`].
+/// pipeline is HDR and values above 1.0 are expected. Pure for the same reason
+/// as [`clamp_exposure`].
 ///
 /// `Deck::set_gain` floors too, and the two are not a duplicate. This one
-/// decides **what the record says**, so a session replays the value that took
+/// decides what the record says, so a session replays the value that took
 /// effect rather than one the engine quietly corrected; that one guards the
 /// engine against every record it did not write, which is the whole of a
 /// replay. Deleting either leaves a real hole.
@@ -324,20 +325,20 @@ pub(crate) fn next_tonemap(op: TonemapOp) -> TonemapOp {
 
 /// Put the session's grid where the tempo source says the shared grid is.
 ///
-/// **The subtraction happens here and not in the source**, for the reason
+/// The subtraction happens here and not in the source, for the reason
 /// `schedule_from` reads a transition's `from` end here: the two numbers — the
 /// shared beat and this session's beat — are only both in hand at this moment.
 /// A source that sent a shift would be sending a difference from a grid it
 /// cannot see.
 ///
 /// That subtraction is the whole of what a shared grid adds. A beat tracker can
-/// find how fast beats go and where they are, and **cannot find which one is
-/// beat one**; a number every peer agrees on can, and putting `beats()` onto
-/// that number is what makes `bar` the room's bar rather than one counted from
+/// find how fast beats go and where they are, and cannot find which one is beat
+/// one; a number every peer agrees on can, and putting `beats()` onto that
+/// number is what makes `bar` the room's bar rather than one counted from
 /// whenever this program started.
 ///
-/// **How far it is allowed to move is [`tempo_source::Source::correction`]'s**,
-/// and that bound is not optional: the source is another program, from another
+/// How far it is allowed to move is [`tempo_source::Source::correction`]'s, and
+/// that bound is not optional: the source is another program, from another
 /// repository, released on its own schedule. This used to apply whatever
 /// arrived, whole and instantly, which made a helper with a wrong clock able to
 /// throw the grid thousands of beats.
@@ -397,8 +398,8 @@ pub(crate) fn follow_tempo_source(
 
 /// This frame's measurement, and what it does to the session.
 ///
-/// **Before the frame is rendered and never inside it.** The measured frame and
-/// the tempo correction are latched here, exactly where `steps` is measured, so
+/// Before the frame is rendered and never inside it. The measured frame and the
+/// tempo correction are latched here, exactly where `steps` is measured, so
 /// that everything drawn this frame reads one set of values — two bindings
 /// sampling `energy` in one frame have to get one answer, or the record saying
 /// what this frame saw is a record of neither.
@@ -408,8 +409,8 @@ pub(crate) fn follow_tempo_source(
 /// is not the "restart the session clock" that `Deck::set_signals` warns about
 /// — it is the same clock with one frame's input attached.
 ///
-/// **A free function rather than a method on `Live`**, for the reason [`Clock`]
-/// is its own type: it is called from inside the closure that commits a frame,
+/// A free function rather than a method on `Live`, for the reason [`Clock`] is
+/// its own type: it is called from inside the closure that commits a frame,
 /// which already holds the deck, so a `&mut self` here would borrow the whole
 /// of `Live` a second time. Taking the three pieces it actually touches is also
 /// a fair description of what it touches.
@@ -457,7 +458,7 @@ pub(crate) fn measure_audio(
 
 /// What a governor pass decided, said out loud.
 ///
-/// **One function because there is one thing to say.** A replay governs too —
+/// One function because there is one thing to say. A replay governs too —
 /// `Record::Residency` carries the request and never the effective level,
 /// precisely so that the machine replaying re-derives it — and the first
 /// version of that had its own smaller copy of these three loops, printing the
@@ -473,8 +474,8 @@ pub(crate) fn report_governing(report: &karakuri_engine::governor::Report, why: 
     }
 }
 
-/// **What this program does with an operation: the records it writes, or the
-/// sentence saying it did nothing.**
+/// What this program does with an operation: the records it writes, or the
+/// sentence saying it did nothing.
 ///
 /// [`Live::performed`] takes the readings and this decides, so that the answer
 /// a model is handed and the line a terminal is given are one string built
@@ -482,23 +483,23 @@ pub(crate) fn report_governing(report: &karakuri_engine::governor::Report, why: 
 /// [`rewired`] is: it needs no `Live`, and a test can hold it against a real
 /// call over the socket without a window or a GPU.
 ///
-/// **An operation that writes no record writes nothing here.** This surface
+/// An operation that writes no record writes nothing here. This surface
 /// performs an operation by converting it to records and reading them back —
 /// there is no second arm — so `Written::Silent` and `Written::Owed` both mean
-/// **nothing on this run changed**, and a caller that reported success for one
+/// nothing on this run changed, and a caller that reported success for one
 /// would be reporting a change it did not make
 /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
 /// a silently wrong answer loses to a loud failure). That is the whole of why
 /// this is a `Result`: `Live::operate`'s printed line reaches an operator who
 /// is at the terminal, and a model on `--mcp` is not.
 ///
-/// **The refusal names the operation and where it is answered**
+/// The refusal names the operation and where it is answered
 /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
 /// and it is the performer's rather than the gate's — which is
 /// [ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)'s
 /// *a route that answers is a built route* read on the surface that has no
-/// performer instead of the one that has one. `Silent::why` and `Owed::why`
-/// are the reasons in the words the crate that decided them says them in, so
+/// performer instead of the one that has one. `Silent::why` and `Owed::why` are
+/// the reasons in the words the crate that decided them says them in, so
 /// nothing is written down twice.
 pub(crate) fn answered(operation: &Operation, current: &Current) -> Result<Vec<Record>, String> {
     match karakuri_operation_record::written(operation, current) {
@@ -524,7 +525,7 @@ pub(crate) fn answered(operation: &Operation, current: &Current) -> Result<Vec<R
     }
 }
 
-/// **The answer an operation that was performed goes back with.**
+/// The answer an operation that was performed goes back with.
 ///
 /// One string, so that [`Live::run_operations`] and the test that drives it
 /// over a socket say the same thing — and so that the sentence which says
@@ -552,153 +553,145 @@ pub(crate) fn renderer_in_range(slot: usize, at: usize, count: usize) -> Result<
 pub(crate) struct Live {
     pub(crate) window: Arc<Window>,
     pub(crate) gpu: Gpu,
-    /// Where a composed frame goes. The window is **a** sink rather than *the*
-    /// output — see `docs/plugins.md`, where the others hang.
+    /// Where a composed frame goes. The window is a sink rather than *the* output —
+    /// see `docs/plugins.md`, where the others hang.
     pub(crate) sink: frame::WindowSink,
     pub(crate) present: Present,
     /// Every Set, whatever is being built to replace any of them, and the mix.
-    /// Without `--watch` every slot is a `HotSwap::fixed` and there is no
-    /// worker at all, so the frame loop below is the same code either way.
+    /// Without `--watch` every slot is a `HotSwap::fixed` and there is no worker at
+    /// all, so the frame loop below is the same code either way.
     pub(crate) deck: Deck,
     pub(crate) look: Look,
-    /// The slot the gain keys act on. There is no on-screen UI, so this is
-    /// printed on every change and marked in the status line.
+    /// The slot the gain keys act on. There is no on-screen UI, so this is printed
+    /// on every change and marked in the status line.
     pub(crate) focus: usize,
     pub(crate) clock: Clock,
-    /// The audio input, the beat lock, and the operator's latency offset.
-    /// `None` without `--audio-in`, and then nothing in the frame path below
-    /// changes at all — which is the property the whole slice is about.
+    /// The audio input, the beat lock, and the operator's latency offset. `None`
+    /// without `--audio-in`, and then nothing in the frame path below changes at
+    /// all — which is the property the whole slice is about.
     pub(crate) audio: Option<audio::Audio>,
     /// The control surface, when `--midi-in` asked for one. Every operation it
-    /// produces ends in the same record a key press ends in — see
-    /// [`crate::midi`] — so nothing in the frame path below changes at all when
-    /// this is `None`.
+    /// produces ends in the same record a key press ends in — see [`crate::midi`] —
+    /// so nothing in the frame path below changes at all when this is `None`.
     pub(crate) midi: Option<midi::Surface>,
-    /// The tempo source, when `--tempo-source` asked for one. `None` and
-    /// nothing in the frame path below changes at all — the grid comes from
-    /// `--bpm`, the tracker and the tap keys, exactly as it did before this
-    /// existed. That is the same property `audio` and `midi` have and it is
-    /// the one worth keeping.
+    /// The tempo source, when `--tempo-source` asked for one. `None` and nothing in
+    /// the frame path below changes at all — the grid comes from `--bpm`, the
+    /// tracker and the tap keys, exactly as it did before this existed. That is the
+    /// same property `audio` and `midi` have and it is the one worth keeping.
     pub(crate) tempo_source: Option<tempo_source::Source>,
     /// What each slot's watcher built, by build id, until the swap that build
-    /// produced lands. **Not a log**: an entry is taken when its build lands or
-    /// dropped when a newer one supersedes it.
+    /// produced lands. Not a log: an entry is taken when its build lands or dropped
+    /// when a newer one supersedes it.
     pub(crate) rebuilds: Option<std::sync::mpsc::Receiver<watch::Built>>,
     pub(crate) pending_builds: std::collections::HashMap<u64, watch::Built>,
-    /// **What each slot is running.** Seeded before the first frame from the
-    /// text the compile read, so there is exactly one way to answer the
-    /// question a live save asks — see [`Running`].
+    /// What each slot is running. Seeded before the first frame from the text the
+    /// compile read, so there is exactly one way to answer the question a live save
+    /// asks — see [`Running`].
     pub(crate) running: Running,
-    /// **Where each slot's files were at launch**, one entry per node, in the
-    /// order they were spelled.
+    /// Where each slot's files were at launch, one entry per node, in the order
+    /// they were spelled.
     ///
-    /// **The names, and the bytes each node was compiled from.** A name belongs
-    /// to the use rather than to the procedure, so `--set veil=shell.kir` is a
-    /// fact about the command line that no rebuild restates and no hash
-    /// carries, and `Live::save_set` zips these onto the hashes by position.
+    /// The names, and the bytes each node was compiled from. A name belongs to the
+    /// use rather than to the procedure, so `--set veil=shell.kir` is a fact about
+    /// the command line that no rebuild restates and no hash carries, and
+    /// `Live::save_set` zips these onto the hashes by position.
     ///
-    /// **Not the paths, which is the distinction that matters.** This used to
-    /// answer "what is this slot running" by re-reading `named.path`, and that
-    /// was a second answer to a question [`Running`] already held. What is here
-    /// now is [`Placed::source`] — the text the compile read — and it is not a
-    /// second answer but the *first*: every hash in `Running` was derived from
-    /// it, and a save hands the same buffer to the store so the file it writes
-    /// resolves. There is one derivation, and this is where its input lives.
+    /// Not the paths, which is the distinction that matters. This used to answer
+    /// "what is this slot running" by re-reading `named.path`, and that was a
+    /// second answer to a question [`Running`] already held. What is here now is
+    /// [`Placed::source`] — the text the compile read — and it is not a second
+    /// answer but the *first*: every hash in `Running` was derived from it, and a
+    /// save hands the same buffer to the store so the file it writes resolves.
+    /// There is one derivation, and this is where its input lives.
     ///
     /// Empty for a slot filled straight from a Set file without `--watch` or
-    /// `--mcp`, which has no files behind it at all — see where `placed` is
-    /// built.
+    /// `--mcp`, which has no files behind it at all — see where `placed` is built.
     pub(crate) startup: Vec<Vec<Placed>>,
-    /// The Set file this run was loaded from, for the one refusal that has to
-    /// name it: a slot filled from a file with nothing watching it has no
-    /// sources to save, and an operator asking why is owed the id and the flag
-    /// that would change the answer.
+    /// The Set file this run was loaded from, for the one refusal that has to name
+    /// it: a slot filled from a file with nothing watching it has no sources to
+    /// save, and an operator asking why is owed the id and the flag that would
+    /// change the answer.
     pub(crate) loaded_set: Option<String>,
-    /// **Which node fills each declared input slot**, for the whole run.
+    /// Which node fills each declared input slot, for the whole run.
     ///
     /// Read from the arguments rather than from the live Set, which is the one
-    /// place `Live::save_set` does that and needs its reason. An edge is
-    /// consumed where a Set is *built* and is not kept on it, so there is
-    /// nothing to read back. So this is a copy of a value, not a second copy
-    /// of a rule, which is the distinction `saving_capacities` was fixed over.
+    /// place `Live::save_set` does that and needs its reason. An edge is consumed
+    /// where a Set is *built* and is not kept on it, so there is nothing to read
+    /// back. So this is a copy of a value, not a second copy of a rule, which is
+    /// the distinction `saving_capacities` was fixed over.
     ///
-    /// **It moves during a run, and this is where it moves.** That sentence
-    /// used to read *no key and no MCP tool rewires a `uses` slot*; `wire_input`
-    /// does, and [`rewired`] is what it reaches. There is still no second
-    /// answer to what the run is wired with — this list is the one, a rewiring
-    /// replaces one entry of it and hands the whole of it to the slot's watcher
-    /// through [`Aiming`], so the list a rebuild restates and the list a save
-    /// records stay one list.
+    /// It moves during a run, and this is where it moves. That sentence used to
+    /// read *no key and no MCP tool rewires a `uses` slot*; `wire_input` does, and
+    /// [`rewired`] is what it reaches. There is still no second answer to what the
+    /// run is wired with — this list is the one, a rewiring replaces one entry of
+    /// it and hands the whole of it to the slot's watcher through [`Aiming`], so
+    /// the list a rebuild restates and the list a save records stay one list.
     ///
-    /// **One list for the run and not one per slot**, which is what makes the
-    /// key `(node, slot)` and not `(deck, node, slot)` — see [`rewired`], and
-    /// `Wiring::edges` for why an edge naming a node a Set has not got is
-    /// simply passed over.
+    /// One list for the run and not one per slot, which is what makes the key
+    /// `(node, slot)` and not `(deck, node, slot)` — see [`rewired`], and
+    /// `Wiring::edges` for why an edge naming a node a Set has not got is simply
+    /// passed over.
     ///
-    /// **A limit worth naming**: a rewiring re-aims only the slot the request
-    /// named, so any *other* watcher goes on restating the list it was last
-    /// aimed with until it is itself re-aimed. That is invisible unless two
-    /// slots hold nodes of the same name, which is also the only case where one
-    /// entry in this list was ever about two Sets. Re-aiming every watcher
-    /// instead would recompile the whole deck for one edge, which is a far
-    /// louder wrong answer.
+    /// A limit worth naming: a rewiring re-aims only the slot the request named, so
+    /// any *other* watcher goes on restating the list it was last aimed with until
+    /// it is itself re-aimed. That is invisible unless two slots hold nodes of the
+    /// same name, which is also the only case where one entry in this list was ever
+    /// about two Sets. Re-aiming every watcher instead would recompile the whole
+    /// deck for one edge, which is a far louder wrong answer.
     pub(crate) edges: Vec<karakuri_engine::set::Edge>,
-    /// **Where each slot's watcher can be re-pointed**, one entry per slot and
-    /// `None` for a slot with no watcher — a run without `--watch`, and every
+    /// Where each slot's watcher can be re-pointed, one entry per slot and `None`
+    /// for a slot with no watcher — a run without `--watch`, and every
     /// `HotSwap::fixed`. See [`Aiming`]: this is how an edge written over MCP
     /// reaches the thing that rebuilds with it.
     pub(crate) aims: Vec<Option<Aiming>>,
-    /// The store root a live save writes into. The *root* and not an open
-    /// store: every part of a save that touches a disk happens on the thread
-    /// that does it — see [`Save::run`].
+    /// The store root a live save writes into. The *root* and not an open store:
+    /// every part of a save that touches a disk happens on the thread that does it
+    /// — see [`Save::run`].
     pub(crate) store_root: PathBuf,
-    /// **Where a save reports back.** One thread per save writes into the
-    /// sender's clone; the frame loop drains the receiver, which is the shape
-    /// `rebuilds` already has and for the same reason: an outcome arrives when
-    /// it arrives, and a frame must not wait for it.
+    /// Where a save reports back. One thread per save writes into the sender's
+    /// clone; the frame loop drains the receiver, which is the shape `rebuilds`
+    /// already has and for the same reason: an outcome arrives when it arrives, and
+    /// a frame must not wait for it.
     pub(crate) save_tx: std::sync::mpsc::Sender<Saved>,
     pub(crate) saves: std::sync::mpsc::Receiver<Saved>,
-    /// **How many saves have been started and not yet reported back.** The
-    /// threads are detached, so this is the only thing that knows a file is
-    /// still being written — see [`Live::awaited_saves`], which is why anything
-    /// counts them at all.
+    /// How many saves have been started and not yet reported back. The threads are
+    /// detached, so this is the only thing that knows a file is still being written
+    /// — see [`Live::awaited_saves`], which is why anything counts them at all.
     pub(crate) saves_in_flight: usize,
-    /// The MCP server's half of the channel, when `--mcp` asked for one. Told
-    /// what the swap machinery said, and nothing else — see [`crate::mcp`].
+    /// The MCP server's half of the channel, when `--mcp` asked for one. Told what
+    /// the swap machinery said, and nothing else — see [`crate::mcp`].
     pub(crate) mcp: Option<mcp::Reporter>,
     /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
     /// nothing. Empty on every frame nothing was touched.
     ///
-    /// Nothing a map line can name carries a heap payload — every one of them
-    /// is scalars — so a fader sweep reuses this buffer and touches no
-    /// allocator, which is what the render-thread rule asks of it.
+    /// Nothing a map line can name carries a heap payload — every one of them is
+    /// scalars — so a fader sweep reuses this buffer and touches no allocator,
+    /// which is what the render-thread rule asks of it.
     pub(crate) operations: Vec<Operation>,
-    /// The musical grid a scheduled fade starts on — see [`QUANTA`]. State on
-    /// the operator rather than in the record: what reaches the stream is the
-    /// resolved beat count, so this is a setting for the hand and not for the
-    /// timeline.
+    /// The musical grid a scheduled fade starts on — see [`QUANTA`]. State on the
+    /// operator rather than in the record: what reaches the stream is the resolved
+    /// beat count, so this is a setting for the hand and not for the timeline.
     pub(crate) quantum: f64,
     /// How long a scheduled fade lasts, in beats. Same reasoning.
     pub(crate) fade_beats: f64,
-    /// The shape the next wipe uses, and which way it runs. Not a slot's mask:
-    /// this is what `c` will *give* a slot, where the slot's own is deck state
-    /// and travels in the record stream.
+    /// The shape the next wipe uses, and which way it runs. Not a slot's mask: this
+    /// is what `c` will *give* a slot, where the slot's own is deck state and
+    /// travels in the record stream.
     pub(crate) mask_kind: MaskKind,
     pub(crate) mask_angle: f32,
     /// When the session started, so a tap has an origin to be measured from.
     pub(crate) started: Instant,
     pub(crate) status_at: Instant,
     pub(crate) frames_since_status: u32,
-    /// Writes the timeline, when `--record-session` asked for one. The frame
-    /// path pushes into it and never blocks or allocates — see
-    /// [`crate::session`].
+    /// Writes the timeline, when `--record-session` asked for one. The frame path
+    /// pushes into it and never blocks or allocates — see [`crate::session`].
     pub(crate) recorder: Option<session::Recorder>,
-    /// Which demonstration is running and how far into its script, or `None`
-    /// when `--demo` was not given and nothing drives itself.
+    /// Which demonstration is running and how far into its script, or `None` when
+    /// `--demo` was not given and nothing drives itself.
     pub(crate) demo: Option<(Demo, usize)>,
-    /// When the current pass through [`DEMO_SCRIPT`] started. The script loops,
-    /// so this is not [`Live::started`]: that one is the session's origin and a
-    /// tap is measured from it.
+    /// When the current pass through [`DEMO_SCRIPT`] started. The script loops, so
+    /// this is not [`Live::started`]: that one is the session's origin and a tap is
+    /// measured from it.
     pub(crate) demo_started: Instant,
     /// Reused by the status line. Printing at all on this thread means locking
     /// stderr, but there is no reason for it to mean a fresh allocation twice a
@@ -707,41 +700,38 @@ pub(crate) struct Live {
 }
 
 impl Live {
-    /// The **window** changed size. Nothing that is rendered changes.
+    /// The window changed size. Nothing that is rendered changes.
     ///
-    /// This used to resize the HDR target and every deck slot as well, because
-    /// the window's size *was* the canvas. Two things came of that, and both
-    /// are gone with it: dragging a window reallocated every slot's target once
-    /// per frame of the drag — a GPU allocation on the render thread, which is
-    /// the one thing this engine's frame path forbids — and what a run rendered
-    /// depended on how big its window happened to be, so the same session
-    /// replayed at a different size with nothing saying which was the
-    /// performance. All that is left here is the swapchain, which has to follow
-    /// the window because it *is* the window.
+    /// This used to resize the HDR target and every deck slot as well, because the
+    /// window's size *was* the canvas. Two things came of that, and both are gone
+    /// with it: dragging a window reallocated every slot's target once per frame of
+    /// the drag — a GPU allocation on the render thread, which is the one thing
+    /// this engine's frame path forbids — and what a run rendered depended on how
+    /// big its window happened to be, so the same session replayed at a different
+    /// size with nothing saying which was the performance. All that is left here is
+    /// the swapchain, which has to follow the window because it *is* the window.
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
         self.sink.resize(&self.gpu.device, width, height);
     }
 
     /// Resize the window so the canvas lands in it one texel to one texel.
     ///
-    /// The preview is fitted, so an OBS window capture of it would otherwise
-    /// pick up the bars and a scale — and a capture that is neither the canvas
-    /// nor a clean crop of it is worse than useless downstream. After this the
-    /// window contains the canvas exactly, and `letterbox` becomes the identity.
+    /// The preview is fitted, so an OBS window capture of it would otherwise pick
+    /// up the bars and a scale — and a capture that is neither the canvas nor a
+    /// clean crop of it is worse than useless downstream. After this the window
+    /// contains the canvas exactly, and `letterbox` becomes the identity.
     ///
-    /// **A request, not a guarantee, and the difference is printed.** A 1080-tall
-    /// canvas cannot get a 1080-tall content window on a 1080-tall display —
-    /// there is a menu bar or a taskbar in the way — so the manager clamps it,
-    /// and an operator setting up a capture has to be told that rather than
-    /// told "1:1".
+    /// A request, not a guarantee, and the difference is printed. A 1080-tall
+    /// canvas cannot get a 1080-tall content window on a 1080-tall display — there
+    /// is a menu bar or a taskbar in the way — so the manager clamps it, and an
+    /// operator setting up a capture has to be told that rather than told "1:1".
     ///
-    /// `request_inner_size` returns the granted size **immediately** on the
-    /// platforms where the manager decides and `None` where a `Resized` event
-    /// will follow. Taking the returned value matters on the first kind: no
-    /// event arrives, so nothing else would ever reconfigure the swapchain, and
-    /// a swapchain that disagrees with its window does not fail — `set_viewport`
-    /// is not validated against the attachment — it just draws the wrong
-    /// picture, silently.
+    /// `request_inner_size` returns the granted size immediately on the platforms
+    /// where the manager decides and `None` where a `Resized` event will follow.
+    /// Taking the returned value matters on the first kind: no event arrives, so
+    /// nothing else would ever reconfigure the swapchain, and a swapchain that
+    /// disagrees with its window does not fail — `set_viewport` is not validated
+    /// against the attachment — it just draws the wrong picture, silently.
     fn snap_to_canvas(&mut self) {
         let (w, h) = self.present.size();
         match self
@@ -767,12 +757,11 @@ impl Live {
 
     /// Press whatever [`DEMO_SCRIPT`] is due, if this run is driving itself.
     ///
-    /// Wall clock rather than frame count, because what is being demonstrated
-    /// is a performance and a performance happens in seconds. That makes the
-    /// demo *not* reproducible frame for frame, which is fine and is worth
-    /// saying: it is a thing to look at, not a thing to diff. Everything it
-    /// presses goes through [`Live::key`], so it can do nothing a person at the
-    /// keyboard could not.
+    /// Wall clock rather than frame count, because what is being demonstrated is a
+    /// performance and a performance happens in seconds. That makes the demo *not*
+    /// reproducible frame for frame, which is fine and is worth saying: it is a
+    /// thing to look at, not a thing to diff. Everything it presses goes through
+    /// [`Live::key`], so it can do nothing a person at the keyboard could not.
     fn run_demo(&mut self) {
         let Some((demo, next)) = self.demo else {
             return;
@@ -799,41 +788,40 @@ impl Live {
         self.demo = Some((demo, at));
     }
 
-    /// **Whatever the control surface did since the last frame**, as the same
+    /// Whatever the control surface did since the last frame, as the same
     /// operations a key press and a console fader name.
     ///
-    /// The whole of the MIDI connection, and there is almost nothing in it:
-    /// a mapped message *is* an [`Operation`], so this hands each one to
-    /// [`Live::operate`] and that is the connection. A surface can do nothing
-    /// a key cannot because both end in the same record, and a session
-    /// recorded from one replays with neither attached.
+    /// The whole of the MIDI connection, and there is almost nothing in it: a
+    /// mapped message *is* an [`Operation`], so this hands each one to
+    /// [`Live::operate`] and that is the connection. A surface can do nothing a key
+    /// cannot because both end in the same record, and a session recorded from one
+    /// replays with neither attached.
     ///
-    /// **This used to be a match over eight `Action`s claiming that a control
-    /// added to one and not the other does not compile.** Against a
-    /// fifty-variant vocabulary that claim would be false — a router arm
-    /// nobody wrote is a wildcard nobody notices. The guarantee is now where
-    /// it is true: `karakuri_operation_record::written` is one exhaustive
-    /// match over all fifty, so an operation nobody has said what to do
-    /// with stops the build there.
+    /// This used to be a match over eight `Action`s claiming that a control added
+    /// to one and not the other does not compile. Against a fifty-variant
+    /// vocabulary that claim would be false — a router arm nobody wrote is a
+    /// wildcard nobody notices. The guarantee is now where it is true:
+    /// `karakuri_operation_record::written` is one exhaustive match over all fifty,
+    /// so an operation nobody has said what to do with stops the build there.
     ///
-    /// **[`Operation::TapBeat`] is handled here and it is the only one**, for
-    /// a reason that is visible rather than incidental: a tap moves the beat
-    /// tracker rather than writing a value, `written` answers
-    /// `Owed::NotSettled` for it, and `Live::operate` would print that gap
-    /// instead of tapping. `Live::tap` is what owns the tracker and what the
-    /// `b` key reaches, so `note -> tap` goes on doing exactly what it did.
-    /// The day the record a tap owes is settled, this arm is what goes.
+    /// [`Operation::TapBeat`] is handled here and it is the only one, for a reason
+    /// that is visible rather than incidental: a tap moves the beat tracker rather
+    /// than writing a value, `written` answers `Owed::NotSettled` for it, and
+    /// `Live::operate` would print that gap instead of tapping. `Live::tap` is what
+    /// owns the tracker and what the `b` key reaches, so `note -> tap` goes on
+    /// doing exactly what it did. The day the record a tap owes is settled, this
+    /// arm is what goes.
     ///
-    /// **Nothing here prints.** The old arms ended in `set_gain` and its
-    /// neighbours, each of which reports what it did — which on a fader sweep
-    /// is an `eprintln!` per MIDI message inside a frame, several hundred a
-    /// second, and is the blocking write per message `crate::midi`'s own
-    /// "once per control" rule exists to prevent. What a surface moved is read
-    /// back from the deck (`s`), not narrated per message.
+    /// Nothing here prints. The old arms ended in `set_gain` and its neighbours,
+    /// each of which reports what it did — which on a fader sweep is an `eprintln!`
+    /// per MIDI message inside a frame, several hundred a second, and is the
+    /// blocking write per message `crate::midi`'s own "once per control" rule
+    /// exists to prevent. What a surface moved is read back from the deck (`s`),
+    /// not narrated per message.
     ///
-    /// Before the tick, so a fader move lands on the frame it arrived for
-    /// rather than the one after — the same placement `run_demo` has, and for
-    /// the same reason.
+    /// Before the tick, so a fader move lands on the frame it arrived for rather
+    /// than the one after — the same placement `run_demo` has, and for the same
+    /// reason.
     fn run_surface(&mut self) {
         let Some(surface) = &mut self.midi else {
             return;
@@ -885,29 +873,29 @@ impl Live {
         }
     }
 
-    /// **What a model has asked for since the last frame.**
+    /// What a model has asked for since the last frame.
     ///
-    /// Beside [`Live::run_surface`] and on the same terms: a surface is polled
-    /// at the top of a frame and every request it produces ends in the method a
-    /// key press ends in. That is what makes `--mcp` a third pair of hands
-    /// rather than a second way to do anything.
+    /// Beside [`Live::run_surface`] and on the same terms: a surface is polled at
+    /// the top of a frame and every request it produces ends in the method a key
+    /// press ends in. That is what makes `--mcp` a third pair of hands rather than
+    /// a second way to do anything.
     ///
-    /// **Collected out of the borrow before any of it is acted on**, exactly as
-    /// the MIDI operations are, because every arm below takes `&mut self`. Nothing
-    /// is allocated on a frame that was asked for nothing: collecting an empty
+    /// Collected out of the borrow before any of it is acted on, exactly as the
+    /// MIDI operations are, because every arm below takes `&mut self`. Nothing is
+    /// allocated on a frame that was asked for nothing: collecting an empty
     /// iterator makes no allocation.
     ///
-    /// Here rather than beside the swap drain below `frame::compose`, which was
-    /// the other candidate: a client asking to keep what is playing should not
-    /// be waiting on a swapchain, and nothing a request reaches needs the GPU.
-    /// When that was written a frame with no surface returned before the drain,
-    /// so it *was* waiting on one; a frame no longer returns early at all, and
-    /// being above `frame::compose` is what the argument was always about.
+    /// Here rather than beside the swap drain below `frame::compose`, which was the
+    /// other candidate: a client asking to keep what is playing should not be
+    /// waiting on a swapchain, and nothing a request reaches needs the GPU. When
+    /// that was written a frame with no surface returned before the drain, so it
+    /// *was* waiting on one; a frame no longer returns early at all, and being
+    /// above `frame::compose` is what the argument was always about.
     ///
-    /// **[`Live::finished_saves`] is here for the same reason and used to be
-    /// down there**, which meant this argument was made and then half applied:
-    /// the request was taken above the early returns and its *answer* was
-    /// withheld below them. See the comment at the head of [`Live::frame`].
+    /// [`Live::finished_saves`] is here for the same reason and used to be down
+    /// there, which meant this argument was made and then half applied: the request
+    /// was taken above the early returns and its *answer* was withheld below them.
+    /// See the comment at the head of [`Live::frame`].
     fn run_requests(&mut self) {
         let Some(mcp) = &self.mcp else {
             return;
@@ -933,46 +921,45 @@ impl Live {
         self.run_operations(operations);
     }
 
-    /// **Every operation a model named since the last frame, performed where a
-    /// mapped control's operation is performed.**
+    /// Every operation a model named since the last frame, performed where a mapped
+    /// control's operation is performed.
     ///
-    /// [`Live::run_surface`]'s own two lines, and they are two lines rather than
-    /// a call into it because a map has a surface to poll and this has a channel
-    /// to drain. What is shared is what matters: [`Live::operate`] is where a
-    /// key press and a MIDI message end, and it is where this ends, so a model's
+    /// [`Live::run_surface`]'s own two lines, and they are two lines rather than a
+    /// call into it because a map has a surface to poll and this has a channel to
+    /// drain. What is shared is what matters: [`Live::operate`] is where a key
+    /// press and a MIDI message end, and it is where this ends, so a model's
     /// `SetGain` on this program is the same write as a knob's
     /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
     ///
-    /// **Already audited.** `karakuri_operation::gate` ran on the server's own
-    /// thread — the one call ADR-0235 puts the mechanism on — so nothing is
-    /// judged again here.
+    /// Already audited. `karakuri_operation::gate` ran on the server's own thread —
+    /// the one call ADR-0235 puts the mechanism on — so nothing is judged again
+    /// here.
     ///
-    /// **Answered once, at the frame it was performed on**, which is
+    /// Answered once, at the frame it was performed on, which is
     /// [`mcp::WireRequest`]'s third point one route along: what a rebuild or a
-    /// scheduled move started here comes to is reported where it lands, and a
-    /// tool that waited for it would hold a connection open across a transition.
+    /// scheduled move started here comes to is reported where it lands, and a tool
+    /// that waited for it would hold a connection open across a transition.
     ///
-    /// **An operation this program cannot perform is refused rather than
-    /// answered `ok`.** `operate` is the panel's tool as much as this one's,
-    /// and the two surfaces do not perform the same set: `crates/karakuri`'s
-    /// `App::operated` calls the window's own press arms for a star, a
-    /// projector, a recording and a kept procedure
+    /// An operation this program cannot perform is refused rather than answered
+    /// `ok`. `operate` is the panel's tool as much as this one's, and the two
+    /// surfaces do not perform the same set: `crates/karakuri`'s `App::operated`
+    /// calls the window's own press arms for a star, a projector, a recording and a
+    /// kept procedure
     /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)),
-    /// and **this program has none of them** — it has keys, a MIDI map and the
-    /// records they write. So every operation whose conversion writes no
-    /// record does nothing here, and [`answered`] hands back the sentence that
-    /// says so, which goes to the client as the call's error and to the
-    /// terminal through [`refused`]. Reporting *performed* for it is the
-    /// plausible wrong answer
+    /// and this program has none of them — it has keys, a MIDI map and the records
+    /// they write. So every operation whose conversion writes no record does
+    /// nothing here, and [`answered`] hands back the sentence that says so, which
+    /// goes to the client as the call's error and to the terminal through
+    /// [`refused`]. Reporting *performed* for it is the plausible wrong answer
     /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// is written against, and ADR-0334 refused it in as many words for the
-    /// panel — *"a call answered `ok` for work that did not happen"* — one
-    /// surface before it was this one's turn.
+    /// is written against, and ADR-0334 refused it in as many words for the panel —
+    /// *"a call answered `ok` for work that did not happen"* — one surface before
+    /// it was this one's turn.
     ///
-    /// **[`Operation::TapBeat`] is the one arm that is not a conversion**, and
-    /// it is here for [`Live::run_surface`]'s reason: a tap moves the beat
-    /// tracker, `written` answers `Owed::NotSettled` for it, and [`Live::tap`]
-    /// is the performer this surface does have.
+    /// [`Operation::TapBeat`] is the one arm that is not a conversion, and it is
+    /// here for [`Live::run_surface`]'s reason: a tap moves the beat tracker,
+    /// `written` answers `Owed::NotSettled` for it, and [`Live::tap`] is the
+    /// performer this surface does have.
     fn run_operations(&mut self, asked: Vec<mcp::OperateRequest>) {
         for mcp::OperateRequest { operation, reply } in asked {
             let title = operation.title();
@@ -990,24 +977,24 @@ impl Live {
         }
     }
 
-    /// **Every edge asked for since the last frame, written and answered here,
-    /// on this frame.**
+    /// Every edge asked for since the last frame, written and answered here, on
+    /// this frame.
     ///
-    /// The decisions are [`rewired`]'s and are written there, because none of
-    /// them needs a `Live`. What is here is the two things that do: the deck's
-    /// own slot count, which is the only thing that knows how many slots there
-    /// are, and the answer going back to whoever asked.
+    /// The decisions are [`rewired`]'s and are written there, because none of them
+    /// needs a `Live`. What is here is the two things that do: the deck's own slot
+    /// count, which is the only thing that knows how many slots there are, and the
+    /// answer going back to whoever asked.
     ///
-    /// **Answered once, at the frame it was applied on**, which is
-    /// [`mcp::WireRequest`]'s third point. Not at the swap: what the *build*
-    /// made of the edge is `swap_outcome`'s answer, as it is for every other
-    /// rebuild, and a tool that waited for thirty judged frames would hold a
-    /// connection open across a transition.
+    /// Answered once, at the frame it was applied on, which is
+    /// [`mcp::WireRequest`]'s third point. Not at the swap: what the *build* made
+    /// of the edge is `swap_outcome`'s answer, as it is for every other rebuild,
+    /// and a tool that waited for thirty judged frames would hold a connection open
+    /// across a transition.
     ///
-    /// **One sentence for both audiences**, which is [`refused`]'s rule: what
-    /// the terminal is told and what the client is handed are the same words,
-    /// so the second cannot be right on the day it is written and wrong at the
-    /// next correction.
+    /// One sentence for both audiences, which is [`refused`]'s rule: what the
+    /// terminal is told and what the client is handed are the same words, so the
+    /// second cannot be right on the day it is written and wrong at the next
+    /// correction.
     fn rewire(&mut self, asked: Vec<mcp::WireRequest>) {
         if asked.is_empty() {
             return;
@@ -1043,24 +1030,24 @@ impl Live {
     ///
     /// [`Live::run_surface`] takes a mapped message straight to
     /// [`Live::operate`], because every operation a map line can produce is one
-    /// `karakuri_operation_record::written` converts. **A keyboard is not that
-    /// shape**, and this is the survey rather than an intention: of the
+    /// `karakuri_operation_record::written` converts. A keyboard is not that
+    /// shape, and this is the survey rather than an intention: of the
     /// thirty-nine keys below, twenty-one name an operation whose record
     /// converts, three name one whose record is owed, twelve name one that
     /// writes no record at all, and three name nothing in the vocabulary.
     ///
-    /// - **Its record converts, so it goes through [`Live::operate`].**
+    /// - Its record converts, so it goes through [`Live::operate`].
     ///   `space` and `w` (`SetResidency`), `[`, `]` and `\` (`SetGain`),
     ///   `;` and `'` (`SetOpacity`), `m` (`SetBlendMode`),
     ///   `t` (`SetTonemap`), `-`, `=` and the backquote (`SetExposure`), `u`
     ///   and `i` (`ScrubDeck`), `y` (`SetSync`), `f` and `g` (`FadeDeck`),
     ///   `x` (`Crossfade`), `r` (`SelectRenderer`), `c` (`Wipe`). A key and a
-    ///   mapped pad reach the deck by **one
-    ///   derivation**, which is the whole of why the two surfaces cannot drift.
+    ///   mapped pad reach the deck by one
+    ///   derivation, which is the whole of why the two surfaces cannot drift.
     ///   Which way to step is still the keyboard's — a cycle and a nudge are
     ///   translations a surface makes, never operations
     ///   (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
-    /// - **Its record is owed, so it keeps its present path** — each with the
+    /// - Its record is owed, so it keeps its present path — each with the
     ///   reason written at the function it ends in: `b` ([`Live::tap`]), `,`
     ///   and `.` ([`Live::shift_octave`]). All three
     ///   operations answer `Owed::NotSettled`, and the day one is settled its
@@ -1069,46 +1056,46 @@ impl Live {
     ///   gap where the gesture used to happen, which is the one thing a change
     ///   of route may not do.
     ///
-    ///   **It was eight, and the five that left are what the promise looks
-    ///   like kept three times.** `Operation::SetSync` was owed for the
+    ///   It was eight, and the five that left are what the promise looks
+    ///   like kept three times. `Operation::SetSync` was owed for the
     ///   engine's anchor clamp; the clamp turned out to be the identity on
     ///   every tempo an oscillator can report, the conversion took a session
     ///   tempo as a reading, and [`Live::cycle_sync`] moved to `operate` with
     ///   its record-building deleted rather than kept in step. `FadeDeck`,
     ///   `Crossfade` and `SelectRenderer` went the same way and took a whole
     ///   function with them: the quantum and the length `n` and `j` cycle are
-    ///   **this surface's**, `Current::transition` is where they are handed
+    ///   this surface's, `Current::transition` is where they are handed
     ///   over, and `Live::fade_slot` is gone rather than kept beside the
-    ///   conversion. **`c` was the one that stayed and is the fifth to go**,
+    ///   conversion. `c` was the one that stayed and is the fifth to go,
     ///   because what a wipe carried beyond a fade turned out to be unassigned
     ///   rather than missing too: the shape its front takes is the third of
     ///   the settings `z`, `n` and `j` write and travels with the other two,
     ///   and the soft edge is read off the mask on the deck being wiped in.
     ///   [`Live::wipe`] keeps only the two refusals and the line it prints.
     ///
-    ///   **What is left is the beat tracker, and it is a different shape.** A
+    ///   What is left is the beat tracker, and it is a different shape. A
     ///   tap and an octave shift do not want a reading nobody hands over; they
     ///   want the beat lock's answer, which no value a surface holds
     ///   determines — see [`Live::tap`].
-    /// - **It writes no record, and this surface is what has to perform it.**
+    /// - It writes no record, and this surface is what has to perform it.
     ///   `0`–`3` (`SelectDeck`), `z`, `n` and `j` (`SetTransition`), `a`
     ///   (`SizeWindow`), `k` (`SaveSet`), `o` and `p` (`SetLatencyOffset`),
-    ///   `esc` (`Quit`). **These cannot route through `operate` either, and
-    ///   that is a fact about `Silent` rather than an omission**: `operate`
+    ///   `esc` (`Quit`). These cannot route through `operate` either, and
+    ///   that is a fact about `Silent` rather than an omission: `operate`
     ///   turns an operation into the records it writes and applies those, so an
     ///   operation that writes none would print [`answered`]'s refusal and the
     ///   key would do nothing. What most of them change is a surface's own
     ///   state, and this surface is the only thing holding it.
     ///
-    ///   **Two of them are reachable over `--mcp` and are refused there**, in
+    ///   Two of them are reachable over `--mcp` and are refused there, in
     ///   that same sentence: `Operation::SetLatencyOffset` and
     ///   `Operation::Quit` are `Sayable::Operable`, and a key that nudges is
     ///   not a performer for an operation that names a value. See
     ///   [`Live::run_operations`].
-    /// - **The vocabulary does not name it at all.** `S` prints the status line
+    /// - The vocabulary does not name it at all. `S` prints the status line
     ///   and `h`/`?` print [`BINDINGS`]. Neither has a row on
     ///   `docs/manual/operations.html`, which is the specification for which
-    ///   **operations** exist — so neither is an operation anybody has
+    ///   operations exist — so neither is an operation anybody has
     ///   specified. Left as found and reported, because a row invented here
     ///   would be a specification written from the implementation.
     ///
@@ -1181,22 +1168,23 @@ impl Live {
         );
     }
 
-    /// On air and off again. `Allocated` frees nothing and resets nothing, so
-    /// the `t` printed on the way out is the `t` printed on the way back in —
-    /// which is the whole property, and printing both ends is the only way to
-    /// see it without a debugger.
+    /// On air and off again. `Allocated` frees nothing and resets nothing, so the
+    /// `t` printed on the way out is the `t` printed on the way back in — which is
+    /// the whole property, and printing both ends is the only way to see it without
+    /// a debugger.
     fn toggle_focused(&mut self) {
         self.toggle_on_air(self.focus);
     }
 
     /// On air and off again, for a named slot.
     ///
-    /// **The toggle is the key's affordance and not an operation**, which is
-    /// why the slot is a parameter and the focus is filled in by the caller:
-    /// what reaches the deck is `SetResidency` naming one of three
-    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). A control surface says which state it wants
-    /// on the line and does not come through here at all — it used to, and the
-    /// state it landed in was this function's to decide.
+    /// The toggle is the key's affordance and not an operation, which is why the
+    /// slot is a parameter and the focus is filled in by the caller: what reaches
+    /// the deck is `SetResidency` naming one of three
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). A control
+    /// surface says which state it wants on the line and does not come through here
+    /// at all — it used to, and the state it landed in was this function's to
+    /// decide.
     fn toggle_on_air(&mut self, slot: usize) {
         let addr = EngineSlot(slot as u8);
         let t = self.deck.slot(addr).set().time();
@@ -1223,15 +1211,14 @@ impl Live {
 
     /// Ask the focused slot to warm out of sight, or withdraw the request.
     ///
-    /// **A request, not a command** — the governor decides whether it is
-    /// granted, and the report printed here says which. Whether it takes effect
-    /// is exactly the thing the operator cannot otherwise see: a refused
-    /// request leaves the slot at Allocated, which is what an untouched slot
-    /// looks like too.
+    /// A request, not a command — the governor decides whether it is granted, and
+    /// the report printed here says which. Whether it takes effect is exactly the
+    /// thing the operator cannot otherwise see: a refused request leaves the slot
+    /// at Allocated, which is what an untouched slot looks like too.
     ///
-    /// Live slots are left alone. Priming is off-air warming, so asking a slot
-    /// on air to prime could only mean taking it off air, and that is what
-    /// space is for.
+    /// Live slots are left alone. Priming is off-air warming, so asking a slot on
+    /// air to prime could only mean taking it off air, and that is what space is
+    /// for.
     fn toggle_priming(&mut self, slot: usize) {
         let addr = EngineSlot(slot as u8);
         if self.deck.residency(addr) == Residency::Live {
@@ -1261,22 +1248,21 @@ impl Live {
         });
     }
 
-    /// **Take up what a slot is now playing**, and say so in the stream if a
-    /// session is being recorded.
+    /// Take up what a slot is now playing, and say so in the stream if a session is
+    /// being recorded.
     ///
-    /// `landed` is the id of the build that went in, and there is no other
-    /// case: a swap is the only event that changes what a slot holds
-    /// (ADR-0316). It used to take an `Option`, whose `None` was a rollback,
-    /// and the version that came back had to have been remembered because the
-    /// stream would never name it again.
+    /// `landed` is the id of the build that went in, and there is no other case: a
+    /// swap is the only event that changes what a slot holds (ADR-0316). It used to
+    /// take an `Option`, whose `None` was a rollback, and the version that came
+    /// back had to have been remembered because the stream would never name it
+    /// again.
     ///
-    /// **The bookkeeping is unconditional and the record is not**, and the two
-    /// used to be one function that began by returning when there was no
-    /// recorder. What a slot is playing was therefore a fact only a recorded run
-    /// had — and `Live::save_set` needs exactly that fact in the ordinary
-    /// `--watch` case, where nothing is being recorded. Splitting it is the
-    /// whole of what widening `watch::Watch::stored` is for on this side of the
-    /// channel.
+    /// The bookkeeping is unconditional and the record is not, and the two used to
+    /// be one function that began by returning when there was no recorder. What a
+    /// slot is playing was therefore a fact only a recorded run had — and
+    /// `Live::save_set` needs exactly that fact in the ordinary `--watch` case,
+    /// where nothing is being recorded. Splitting it is the whole of what widening
+    /// `watch::Watch::stored` is for on this side of the channel.
     fn took_up(&mut self, slot: usize, landed: u64) {
         // Drained here rather than per frame: the channel only has anything in
         // it when a build has just been requested, and this runs when one has
@@ -1306,13 +1292,13 @@ impl Live {
 
     /// Say what a slot is playing, now that it changed.
     ///
-    /// **One thing these records cannot carry**, and ADR-0316 moved which
-    /// thing that is. A swap *in* is documented to start cold, so a replay
-    /// meeting these records builds afresh and replays exactly. What no record
-    /// says is that a slot was **stopped**: a version over the budget is
-    /// recorded like any other, because it is what the slot holds, and a replay
-    /// judges nothing — so it runs material the performance had frozen. That is
-    /// a gap in the record vocabulary rather than in this function.
+    /// One thing these records cannot carry, and ADR-0316 moved which thing that
+    /// is. A swap *in* is documented to start cold, so a replay meeting these
+    /// records builds afresh and replays exactly. What no record says is that a
+    /// slot was stopped: a version over the budget is recorded like any other,
+    /// because it is what the slot holds, and a replay judges nothing — so it runs
+    /// material the performance had frozen. That is a gap in the record vocabulary
+    /// rather than in this function.
     fn record_procedure(&mut self, slot: usize, nodes: &Nodes) {
         if self.recorder.is_none() {
             return;
@@ -1338,68 +1324,66 @@ impl Live {
 
     /// Push a record without applying it.
     ///
-    /// **Two records are right here, and they are right for one reason**: each
-    /// *describes* a change that has already happened rather than asking for
-    /// one. A `procedure` says what a slot became when a swap landed, and a
-    /// `save` says a file exists — applying either would mean doing the thing a
-    /// second time. Everything else goes through `Live::record`, which applies
-    /// what it wrote.
+    /// Two records are right here, and they are right for one reason: each
+    /// *describes* a change that has already happened rather than asking for one. A
+    /// `procedure` says what a slot became when a swap landed, and a `save` says a
+    /// file exists — applying either would mean doing the thing a second time.
+    /// Everything else goes through `Live::record`, which applies what it wrote.
     fn record_only(&mut self, record: karakuri_store::record::Record) {
         if let Some(recorder) = &mut self.recorder {
             recorder.push(record);
         }
     }
 
-    /// **Write what this run is playing as a Set file.**
+    /// Write what this run is playing as a Set file.
     ///
-    /// The control that closes an open gap: `--save-set`
-    /// writes what the *flags* say and exits, so the loop that lets an operator
-    /// load a preset, edit it and watch it had no way to keep the result. This
-    /// is the render-loop half of closing that — see
-    /// `docs/adr/0122-a-save-writes-the-bytes-that-are-on-screen.md`. Every surface ends here — the
-    /// key below, the MCP tool, and whatever surface arrives next — for the
-    /// same reason every mix control ends in one method. **This is the only save path**,
-    /// which is what makes a refusal and an outcome one sentence each rather
-    /// than one sentence per surface.
+    /// The control that closes an open gap: `--save-set` writes what the *flags*
+    /// say and exits, so the loop that lets an operator load a preset, edit it and
+    /// watch it had no way to keep the result. This is the render-loop half of
+    /// closing that — see
+    /// `docs/adr/0122-a-save-writes-the-bytes-that-are-on-screen.md`. Every surface
+    /// ends here — the key below, the MCP tool, and whatever surface arrives next —
+    /// for the same reason every mix control ends in one method. This is the only
+    /// save path, which is what makes a refusal and an outcome one sentence each
+    /// rather than one sentence per surface.
     ///
-    /// **The slot is an argument and the key passes its focus in.** A Set file
-    /// describes one Set and a deck holds four; the one an *operator* means is
-    /// the one their hands are already on, which is what focus is — and a model
-    /// has no hands and no focus, so it names the slot as it names one to read
-    /// a procedure. This is `toggle_on_air`'s split, for its reason.
+    /// The slot is an argument and the key passes its focus in. A Set file
+    /// describes one Set and a deck holds four; the one an *operator* means is the
+    /// one their hands are already on, which is what focus is — and a model has no
+    /// hands and no focus, so it names the slot as it names one to read a
+    /// procedure. This is `toggle_on_air`'s split, for its reason.
     ///
-    /// **`id` is what the caller wanted it called, or a stamp.** A key press
-    /// cannot type a name, so it passes `None`; see `history::stamped_id`,
-    /// whose convention that is and whose reason it borrows — an operator looks
-    /// for the time they saved it. A caller that *can* type one is not made to
-    /// take a timestamp.
+    /// `id` is what the caller wanted it called, or a stamp. A key press cannot
+    /// type a name, so it passes `None`; see `history::stamped_id`, whose
+    /// convention that is and whose reason it borrows — an operator looks for the
+    /// time they saved it. A caller that *can* type one is not made to take a
+    /// timestamp.
     ///
-    /// **`reply` is whoever is waiting who is not at the terminal.** Every
-    /// sentence below goes to both, and each of them is written once: a refusal
-    /// that reached a model in different words than it reaches the terminal
-    /// would be two refusals to keep in step, and the wording of this one has
-    /// already had to be corrected once.
+    /// `reply` is whoever is waiting who is not at the terminal. Every sentence
+    /// below goes to both, and each of them is written once: a refusal that reached
+    /// a model in different words than it reaches the terminal would be two
+    /// refusals to keep in step, and the wording of this one has already had to be
+    /// corrected once.
     ///
-    /// **Read off the live Set, not off `Args`.** `saving_seeds` states the
-    /// hazard from the other side: a writer with its own copy of the rule
-    /// records numbers the run was not using. Every number a Set file carries
-    /// can have moved since the flags were parsed — a param through a record, a
-    /// capacity or a salt through a rebuilt Set file — so the only reading that
-    /// cannot be stale is the Set's own.
+    /// Read off the live Set, not off `Args`. `saving_seeds` states the hazard from
+    /// the other side: a writer with its own copy of the rule records numbers the
+    /// run was not using. Every number a Set file carries can have moved since the
+    /// flags were parsed — a param through a record, a capacity or a salt through a
+    /// rebuilt Set file — so the only reading that cannot be stale is the Set's
+    /// own.
     ///
-    /// **Refused, accepted, gathered, written — and only the third of those
-    /// needs a `Deck`.** The three sentences a save can produce before the disk
-    /// speaks are [`no_such_slot`], [`nothing_to_save`] and [`accepted_save`],
-    /// all free functions, so what a client is told is checkable without a
-    /// window. `playing_values` is the line that is not, and everything above it
-    /// here is above it deliberately.
+    /// Refused, accepted, gathered, written — and only the third of those needs a
+    /// `Deck`. The three sentences a save can produce before the disk speaks are
+    /// [`no_such_slot`], [`nothing_to_save`] and [`accepted_save`], all free
+    /// functions, so what a client is told is checkable without a window.
+    /// `playing_values` is the line that is not, and everything above it here is
+    /// above it deliberately.
     ///
-    /// **Gathered here, written elsewhere.** Everything below this line is a
-    /// read off values already in memory; the store I/O goes to a thread of its
-    /// own — one per save, since saves are rare and a pool would be machinery
-    /// for a rate of a few an hour. The outcome comes back over `saves` and the
-    /// record is written at the frame it arrives, not at this key press. See
-    /// `Live::finished_saves`.
+    /// Gathered here, written elsewhere. Everything below this line is a read off
+    /// values already in memory; the store I/O goes to a thread of its own — one
+    /// per save, since saves are rare and a pool would be machinery for a rate of a
+    /// few an hour. The outcome comes back over `saves` and the record is written
+    /// at the frame it arrives, not at this key press. See `Live::finished_saves`.
     fn save_set(
         &mut self,
         asked: Asked,
@@ -1470,25 +1454,25 @@ impl Live {
         });
     }
 
-    /// **Every save that has landed since the last frame, said and recorded.**
+    /// Every save that has landed since the last frame, said and recorded.
     ///
-    /// Drained and never waited on: a frame owes the display a picture and owes
-    /// a disk nothing.
+    /// Drained and never waited on: a frame owes the display a picture and owes a
+    /// disk nothing.
     ///
-    /// **Called at the top of the frame, beside [`Live::run_requests`] and
-    /// above `frame::compose` and everything downstream of it** — not beside
-    /// the swap-event drain, which is where it used to be, below the early
-    /// returns a frame no longer has. See the comment at the head of [`Live::frame`]: a
-    /// window that has faulted still has saves finishing behind it, and a run
-    /// that told nobody about them until it quit was withholding the one answer
-    /// a waiting client cannot get anywhere else. The swap drain stays below
-    /// because a swap *is* about what was drawn; a save is not.
+    /// Called at the top of the frame, beside [`Live::run_requests`] and above
+    /// `frame::compose` and everything downstream of it — not beside the swap-event
+    /// drain, which is where it used to be, below the early returns a frame no
+    /// longer has. See the comment at the head of [`Live::frame`]: a window that
+    /// has faulted still has saves finishing behind it, and a run that told nobody
+    /// about them until it quit was withholding the one answer a waiting client
+    /// cannot get anywhere else. The swap drain stays below because a swap *is*
+    /// about what was drawn; a save is not.
     ///
-    /// **The record is written here, at the frame the outcome arrived**, which
-    /// is the pattern `record_procedure` already follows — a record that
-    /// describes a change already made. Writing one at the key press would be a
-    /// stream claiming a file that the disk then refused, which is the failure
-    /// this whole codebase is arranged against.
+    /// The record is written here, at the frame the outcome arrived, which is the
+    /// pattern `record_procedure` already follows — a record that describes a
+    /// change already made. Writing one at the key press would be a stream claiming
+    /// a file that the disk then refused, which is the failure this whole codebase
+    /// is arranged against.
     fn finished_saves(&mut self) {
         let mut landed: Vec<Saved> = Vec::new();
         while let Ok(saved) = self.saves.try_recv() {
@@ -1501,11 +1485,11 @@ impl Live {
 
     /// One save's outcome, said, recorded, and answered.
     ///
-    /// **One sentence for all three.** What the terminal is told, what the
-    /// stream records and what a waiting client is handed are the same fact, so
-    /// the words are formed once here and the client gets the ones the operator
-    /// got. The `Ok`/`Err` split is what a tool call's `isError` is built from —
-    /// see [`mcp::Reply::settled`].
+    /// One sentence for all three. What the terminal is told, what the stream
+    /// records and what a waiting client is handed are the same fact, so the words
+    /// are formed once here and the client gets the ones the operator got. The
+    /// `Ok`/`Err` split is what a tool call's `isError` is built from — see
+    /// [`mcp::Reply::settled`].
     fn took_save(&mut self, saved: Saved) {
         let Saved {
             slot,
@@ -1556,28 +1540,27 @@ impl Live {
         }
     }
 
-    /// **Every save still being written, waited for — up to [`SAVE_WAIT`].**
+    /// Every save still being written, waited for — up to [`SAVE_WAIT`].
     ///
     /// A frame owes the disk nothing, which is why [`finished_saves`] drains and
-    /// never blocks. The end of the run is the one moment where that is the
-    /// wrong trade: a save pressed in the last second reached the disk under an
-    /// id nothing in the stream ever named, so the claim that a `save`
-    /// record exists for every live save that reached the disk
-    /// (`docs/adr/0120-a-record-may-reach-outside-the-stream.md`)
-    /// was false in
-    /// exactly the window an operator is most likely to be in — press `k`, see
-    /// it took, quit.
+    /// never blocks. The end of the run is the one moment where that is the wrong
+    /// trade: a save pressed in the last second reached the disk under an id
+    /// nothing in the stream ever named, so the claim that a `save` record exists
+    /// for every live save that reached the disk
+    /// (`docs/adr/0120-a-record-may-reach-outside-the-stream.md`) was false in
+    /// exactly the window an operator is most likely to be in — press `k`, see it
+    /// took, quit.
     ///
-    /// **Bounded, because a disk can hang and quitting must not depend on one.**
-    /// The alternative was joining the threads, which is unbounded by
-    /// construction: a store on a network mount that stops answering would take
-    /// the window with it. Past the bound the run says how many saves it left
-    /// behind and exits, which is the same trade the recorder makes when it
-    /// counts the batches it lost rather than waiting for them.
+    /// Bounded, because a disk can hang and quitting must not depend on one. The
+    /// alternative was joining the threads, which is unbounded by construction: a
+    /// store on a network mount that stops answering would take the window with it.
+    /// Past the bound the run says how many saves it left behind and exits, which
+    /// is the same trade the recorder makes when it counts the batches it lost
+    /// rather than waiting for them.
     ///
-    /// The wait is only ever paid by a run that pressed `k` and quit within a
-    /// few frames; the count is zero for every other run and this returns
-    /// without blocking.
+    /// The wait is only ever paid by a run that pressed `k` and quit within a few
+    /// frames; the count is zero for every other run and this returns without
+    /// blocking.
     pub(crate) fn awaited_saves(&mut self) {
         self.finished_saves();
         if self.saves_in_flight == 0 {
@@ -1606,42 +1589,40 @@ impl Live {
 
     /// One governor pass and what it decided, printed.
     ///
-    /// Called when something the decision depends on moved — a residency
-    /// request, a build landing — and never per frame: it allocates, and the
-    /// answer cannot change between those events.
+    /// Called when something the decision depends on moved — a residency request, a
+    /// build landing — and never per frame: it allocates, and the answer cannot
+    /// change between those events.
     ///
-    /// The parked slots are named individually rather than counted, because
-    /// each one is waiting on something different and the reasons call for
-    /// different actions: `NoHeadroom` waits for a slot to come off air,
-    /// `CommittedUnknown` for a measurement, and `NoPrimingNeeded` for nothing
-    /// at all — that Set is closed form and can go straight on air.
+    /// The parked slots are named individually rather than counted, because each
+    /// one is waiting on something different and the reasons call for different
+    /// actions: `NoHeadroom` waits for a slot to come off air, `CommittedUnknown`
+    /// for a measurement, and `NoPrimingNeeded` for nothing at all — that Set is
+    /// closed form and can go straight on air.
     fn govern(&mut self, why: &str) {
         report_governing(&self.deck.govern(), why);
     }
 
-    /// **Cycle the focused slot's sync mode**, skipping the modes its material
-    /// cannot take and saying why.
+    /// Cycle the focused slot's sync mode, skipping the modes its material cannot
+    /// take and saying why.
     ///
-    /// This is the CLI's form of a control greyed out: there is no widget to
-    /// dim, so the unavailable modes are stepped over and the reason is printed
-    /// with the result. Silently skipping would leave an operator pressing a
-    /// key and watching two of three modes never arrive; printing on every
-    /// press without skipping would make the key refuse to do anything at all
-    /// on material that only allows one mode.
+    /// This is the CLI's form of a control greyed out: there is no widget to dim,
+    /// so the unavailable modes are stepped over and the reason is printed with the
+    /// result. Silently skipping would leave an operator pressing a key and
+    /// watching two of three modes never arrive; printing on every press without
+    /// skipping would make the key refuse to do anything at all on material that
+    /// only allows one mode.
     ///
-    /// **Its record goes through [`Live::operate`] like every other settled
-    /// key's**, and it used to be built here. What kept it out was
-    /// `Owed::NotSettled` on [`Operation::SetSync`]: `Transport::engaged`
-    /// clamps the anchor against the session tempo, so whether the record
-    /// carried the tempo that was asked for or the one the engine settled on
-    /// read as a decision about the bytes on disk. The two are the same number
-    /// — the clamp holds the anchor inside
+    /// Its record goes through [`Live::operate`] like every other settled key's,
+    /// and it used to be built here. What kept it out was `Owed::NotSettled` on
+    /// [`Operation::SetSync`]: `Transport::engaged` clamps the anchor against the
+    /// session tempo, so whether the record carried the tempo that was asked for or
+    /// the one the engine settled on read as a decision about the bytes on disk.
+    /// The two are the same number — the clamp holds the anchor inside
     /// `karakuri_signal::oscillator::BPM_RANGE` and an oscillator's tempo is
-    /// already inside it — so what was missing was never a decision but a
-    /// reading, and `Current::tempo` is it. A cycle is still this surface's
-    /// own: `Sync::ALL`, the skipping and the refusals are translations a
-    /// keyboard makes, and what comes out of them is a destination
-    /// (P-0090).
+    /// already inside it — so what was missing was never a decision but a reading,
+    /// and `Current::tempo` is it. A cycle is still this surface's own:
+    /// `Sync::ALL`, the skipping and the refusals are translations a keyboard
+    /// makes, and what comes out of them is a destination (P-0090).
     fn cycle_sync(&mut self) {
         let slot = self.focus;
         let addr = EngineSlot(slot as u8);
@@ -1720,16 +1701,15 @@ impl Live {
         );
     }
 
-    /// A tap on the beat. Authoritative — a performer tapping is stating where
-    /// the beat is, not offering evidence — and it goes onto the oscillator
-    /// through the same `tempo` record a tracked correction does.
+    /// A tap on the beat. Authoritative — a performer tapping is stating where the
+    /// beat is, not offering evidence — and it goes onto the oscillator through the
+    /// same `tempo` record a tracked correction does.
     ///
-    /// **Not through [`Live::operate`].** [`Operation::TapBeat`] is
-    /// `Owed::NotSettled` — what a tap writes is the tracker's answer rather
-    /// than a value, and the tracker may refuse — so this is also the one arm
-    /// [`Live::run_surface`] keeps for itself. `b` and `note -> tap` are the
-    /// same function for that reason, and both move the day the record is
-    /// settled.
+    /// Not through [`Live::operate`]. [`Operation::TapBeat`] is `Owed::NotSettled`
+    /// — what a tap writes is the tracker's answer rather than a value, and the
+    /// tracker may refuse — so this is also the one arm [`Live::run_surface`] keeps
+    /// for itself. `b` and `note -> tap` are the same function for that reason, and
+    /// both move the day the record is settled.
     fn tap(&mut self) {
         let started = self.started;
         let mut signals = *self.deck.signals();
@@ -1752,18 +1732,18 @@ impl Live {
         );
     }
 
-    /// Halve or double the grid — **the operator's last word on the octave**.
+    /// Halve or double the grid — the operator's last word on the octave.
     ///
-    /// The tracker folds every candidate tempo into a one-octave window centred
-    /// on the grid, so an octave error is stable rather than self-correcting:
-    /// a set started at 87 for a track that is 174 will track 87 all night. This
-    /// moves the grid and the window together, and the picture keeps its phase
-    /// — doubling subdivides the beats already there.
+    /// The tracker folds every candidate tempo into a one-octave window centred on
+    /// the grid, so an octave error is stable rather than self-correcting: a set
+    /// started at 87 for a track that is 174 will track 87 all night. This moves
+    /// the grid and the window together, and the picture keeps its phase — doubling
+    /// subdivides the beats already there.
     ///
-    /// **Not through [`Live::operate`]**, for [`Live::tap`]'s reason:
-    /// [`Operation::ScaleGrid`] is `Owed::NotSettled` because moving the grid
-    /// needs the beat tracker rather than a value, and the refusal below is the
-    /// tracker's to give.
+    /// Not through [`Live::operate`], for [`Live::tap`]'s reason:
+    /// [`Operation::ScaleGrid`] is `Owed::NotSettled` because moving the grid needs
+    /// the beat tracker rather than a value, and the refusal below is the tracker's
+    /// to give.
     fn shift_octave(&mut self, factor: f32) {
         let mut signals = *self.deck.signals();
         let Some(audio) = self.audio.as_mut() else {
@@ -1791,8 +1771,8 @@ impl Live {
     }
 
     /// The offset for everything past the two outputs, which nothing here can
-    /// measure. Found from where the audience stands, not from this machine —
-    /// see `karakuri-audio`'s crate doc.
+    /// measure. Found from where the audience stands, not from this machine — see
+    /// `karakuri-audio`'s crate doc.
     fn nudge_latency_offset(&mut self, delta_ms: f32) {
         match self.audio.as_mut() {
             Some(audio) => {
@@ -1831,13 +1811,13 @@ impl Live {
         );
     }
 
-    /// **The fader**, and the one control that silences a slot under every
-    /// blend mode — which makes it the way out of material that has gone NaN.
-    /// `[` and `]` move the *level*, and under `over` a level of zero is a
-    /// black card that still covers what is beneath it.
+    /// The fader, and the one control that silences a slot under every blend mode —
+    /// which makes it the way out of material that has gone NaN. `[` and `]` move
+    /// the *level*, and under `over` a level of zero is a black card that still
+    /// covers what is beneath it.
     ///
-    /// The mode is printed with the number because what the number does
-    /// depends on it: under `add` opacity and gain are the same dial twice.
+    /// The mode is printed with the number because what the number does depends on
+    /// it: under `add` opacity and gain are the same dial twice.
     fn nudge_opacity(&mut self, delta: f32) {
         let slot = self.focus;
         self.set_opacity(slot, self.deck.opacity(EngineSlot(slot as u8)) + delta);
@@ -1857,23 +1837,22 @@ impl Live {
         );
     }
 
-    /// **Fade the focused slot's fader to `to`**, over the current length,
-    /// starting on the current quantum.
+    /// Fade the focused slot's fader to `to`, over the current length, starting on
+    /// the current quantum.
     ///
-    /// Opacity rather than gain, because opacity is the fader: it silences a
-    /// slot under every blend mode, where a gain of zero under `over` is a
-    /// black card that still covers. A gain fade is reachable through the
-    /// record and deliberately has no key — two keys that look alike and differ
-    /// only under one blend mode is how an operator ends up fading the wrong
-    /// one in the dark. `Operation::FadeDeck` says the same thing at its own
-    /// definition, which is why the choice is not repeated in the record this
-    /// writes.
+    /// Opacity rather than gain, because opacity is the fader: it silences a slot
+    /// under every blend mode, where a gain of zero under `over` is a black card
+    /// that still covers. A gain fade is reachable through the record and
+    /// deliberately has no key — two keys that look alike and differ only under one
+    /// blend mode is how an operator ends up fading the wrong one in the dark.
+    /// `Operation::FadeDeck` says the same thing at its own definition, which is
+    /// why the choice is not repeated in the record this writes.
     ///
-    /// **One `operate` call, and [`Live::fade_slot`] is gone.** This built its
-    /// record where it stood while the quantum and the length had no owner;
-    /// they are the surface's, they are handed over as
-    /// `karakuri_operation_record::Current::transition`, and what this key
-    /// writes is `written`'s answer like every other settled key's.
+    /// One `operate` call, and [`Live::fade_slot`] is gone. This built its record
+    /// where it stood while the quantum and the length had no owner; they are the
+    /// surface's, they are handed over as
+    /// `karakuri_operation_record::Current::transition`, and what this key writes
+    /// is `written`'s answer like every other settled key's.
     fn fade(&mut self, to: f32) {
         let slot = self.focus;
         self.operate(&Operation::FadeDeck {
@@ -1888,7 +1867,7 @@ impl Live {
         );
     }
 
-    /// **A crossfade: the focused slot out and the next one in, together.**
+    /// A crossfade: the focused slot out and the next one in, together.
     ///
     /// Two scheduled moves rather than a `Crossfade` object, which is the whole
     /// argument of `karakuri_engine::transition` seen from the keyboard — the
@@ -1896,37 +1875,36 @@ impl Live {
     /// those. They share a start and a length, so they are one gesture without
     /// being one type.
     ///
-    /// **The incoming slot is put at silence and then on air**, in that order,
-    /// and both halves of that are load-bearing. A slot comes up at full
-    /// opacity and going off air does not lower it, so putting one on air
-    /// without silencing it first shows it at full immediately — up to a bar
-    /// before the fade it is supposed to arrive on, which is a cut with a
-    /// decorative fade attached. And a fade to something that is not being
-    /// composited is a fade to black, so it does have to go on air.
+    /// The incoming slot is put at silence and then on air, in that order, and both
+    /// halves of that are load-bearing. A slot comes up at full opacity and going
+    /// off air does not lower it, so putting one on air without silencing it first
+    /// shows it at full immediately — up to a bar before the fade it is supposed to
+    /// arrive on, which is a cut with a decorative fade attached. And a fade to
+    /// something that is not being composited is a fade to black, so it does have
+    /// to go on air.
     ///
-    /// The silencing is a `opacity` record like any other, so it cancels
-    /// nothing the operator wanted and replays like anything else.
+    /// The silencing is a `opacity` record like any other, so it cancels nothing
+    /// the operator wanted and replays like anything else.
     ///
-    /// **All four of its records are one operation now, and this function is
-    /// one `operate` call** — which is the sentence that used to be here as a
-    /// promise. It read *"the day that is settled this function is one
-    /// `operate` call"*, and the day was the one the quantum and the length
-    /// got an owner: they are the surface's,
-    /// `karakuri_operation_record::Current::transition` is where this program
-    /// hands them over, and `written` answers `Operation::Crossfade` with the
-    /// four records in the order above.
+    /// All four of its records are one operation now, and this function is one
+    /// `operate` call — which is the sentence that used to be here as a promise. It
+    /// read *"the day that is settled this function is one `operate` call"*, and
+    /// the day was the one the quantum and the length got an owner: they are the
+    /// surface's, `karakuri_operation_record::Current::transition` is where this
+    /// program hands them over, and `written` answers `Operation::Crossfade` with
+    /// the four records in the order above.
     ///
-    /// **The two remaining lines are the keyboard's translation and not the
-    /// gesture.** *The next deck* is what `x` means here and the operation
-    /// names both decks, so working out which one and refusing a deck with
-    /// nowhere to go stays; everything past that is the conversion's.
+    /// The two remaining lines are the keyboard's translation and not the gesture.
+    /// *The next deck* is what `x` means here and the operation names both decks,
+    /// so working out which one and refusing a deck with nowhere to go stays;
+    /// everything past that is the conversion's.
     ///
-    /// **The put-on-air is written even where the slot is already live**,
-    /// which is the one thing this changed about the stream. It used to be
-    /// conditional on `Deck::residency`, and the conversion has no deck to
-    /// ask: `Operation::Crossfade` says four records at its own definition,
-    /// and a `residency` record for a slot that is already live decodes to a
-    /// state it is already in.
+    /// The put-on-air is written even where the slot is already live, which is the
+    /// one thing this changed about the stream. It used to be conditional on
+    /// `Deck::residency`, and the conversion has no deck to ask:
+    /// `Operation::Crossfade` says four records at its own definition, and a
+    /// `residency` record for a slot that is already live decodes to a state it is
+    /// already in.
     fn crossfade(&mut self) {
         let from = self.focus;
         let to = (from + 1) % self.deck.slot_count();
@@ -1946,63 +1924,60 @@ impl Live {
         );
     }
 
-    /// **Wipe the next slot in over the focused one.**
+    /// Wipe the next slot in over the focused one.
     ///
     /// A mask and one scheduled move, and that is the whole of it: the incoming
-    /// slot is given the current shape at position 0 — revealing nothing — put
-    /// on air under `over` so that what it reveals *hides* what is beneath, and
-    /// then one transition carries the front from 0 to 1. Nothing in the
-    /// transition system knows what a mask is and nothing in the mask knows
-    /// what a beat is.
+    /// slot is given the current shape at position 0 — revealing nothing — put on
+    /// air under `over` so that what it reveals *hides* what is beneath, and then
+    /// one transition carries the front from 0 to 1. Nothing in the transition
+    /// system knows what a mask is and nothing in the mask knows what a beat is.
     ///
-    /// **All six of its records are one operation now, and this function is
-    /// one `operate` call** — six where nothing is already where the wipe is
-    /// putting it, and four or five where something is — which is
-    /// [`Live::crossfade`]'s paragraph one gesture along and the last of them
-    /// to be written. It built five of the
-    /// six out of five separate operations and the sixth by hand, while what a
-    /// wipe owed had no owner: the *shape* its front takes and the soft edge.
-    /// Both have one. The shape is `Operation::SetTransition`'s third setting
-    /// — the one this program holds in `mask_kind` and `mask_angle` and the
-    /// `z` key writes — so it goes over with the quantum and the length inside
-    /// `karakuri_operation_record::Current::transition`, which is where its
-    /// two neighbours already were. The soft edge is read off the mask on the
-    /// deck being wiped in, which is `mix::current_mask` and was already the
-    /// reading `Operation::SetMaskShape` takes.
+    /// All six of its records are one operation now, and this function is one
+    /// `operate` call — six where nothing is already where the wipe is putting it,
+    /// and four or five where something is — which is [`Live::crossfade`]'s
+    /// paragraph one gesture along and the last of them to be written. It built
+    /// five of the six out of five separate operations and the sixth by hand, while
+    /// what a wipe owed had no owner: the *shape* its front takes and the soft
+    /// edge. Both have one. The shape is `Operation::SetTransition`'s third setting
+    /// — the one this program holds in `mask_kind` and `mask_angle` and the `z` key
+    /// writes — so it goes over with the quantum and the length inside
+    /// `karakuri_operation_record::Current::transition`, which is where its two
+    /// neighbours already were. The soft edge is read off the mask on the deck
+    /// being wiped in, which is `mix::current_mask` and was already the reading
+    /// `Operation::SetMaskShape` takes.
     ///
-    /// **The two lines that are left are the keyboard's translation and not
-    /// the gesture.** *The next slot* is what `c` means here and the operation
-    /// names both decks, so working out which one and refusing a deck with
-    /// nowhere to go stays. So does the refusal with no shape chosen:
-    /// `Operation::Wipe` says *"Refused with no shape chosen"* at its own
-    /// definition, `written` has no answer that is a refusal, and the shape is
-    /// this surface's own setting — so this is the only place that can turn a
-    /// wipe with nothing to move away, and it does it before it asks.
+    /// The two lines that are left are the keyboard's translation and not the
+    /// gesture. *The next slot* is what `c` means here and the operation names both
+    /// decks, so working out which one and refusing a deck with nowhere to go
+    /// stays. So does the refusal with no shape chosen: `Operation::Wipe` says
+    /// *"Refused with no shape chosen"* at its own definition, `written` has no
+    /// answer that is a refusal, and the shape is this surface's own setting — so
+    /// this is the only place that can turn a wipe with nothing to move away, and
+    /// it does it before it asks.
     ///
-    /// **The one decision this function used to make is made in the
-    /// conversion now, and it is not a record.** Under `add` the same gesture
-    /// is a wipe *on* rather than a wipe *over*, which is a different picture
-    /// and a legitimate one — so the mode is left wherever the operator had it
-    /// and `over` is written only where the slot is still at the mode a slot
-    /// starts in, which is what makes `m` in front of `c` mean something. The
-    /// put-on-air is written only where the slot is not already live, on the
-    /// same terms. Those were two `if`s here and they are the `Wipe` arm's
-    /// now, because the sentence belongs beside the records it governs rather
-    /// than on one of the surfaces that can reach them
+    /// The one decision this function used to make is made in the conversion now,
+    /// and it is not a record. Under `add` the same gesture is a wipe *on* rather
+    /// than a wipe *over*, which is a different picture and a legitimate one — so
+    /// the mode is left wherever the operator had it and `over` is written only
+    /// where the slot is still at the mode a slot starts in, which is what makes
+    /// `m` in front of `c` mean something. The put-on-air is written only where the
+    /// slot is not already live, on the same terms. Those were two `if`s here and
+    /// they are the `Wipe` arm's now, because the sentence belongs beside the
+    /// records it governs rather than on one of the surfaces that can reach them
     /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
     /// — a rule held in one surface binds none of the other three). What the
-    /// conversion needed to keep it is a reading, which is the third this
-    /// gesture takes: `karakuri_operation_record::Current::mix`, handed over
-    /// by [`Live::operate`] out of the deck this function no longer touches.
+    /// conversion needed to keep it is a reading, which is the third this gesture
+    /// takes: `karakuri_operation_record::Current::mix`, handed over by
+    /// [`Live::operate`] out of the deck this function no longer touches.
     ///
-    /// **Six records where it once wrote five**, and the extra one is what
-    /// routing the mask honestly costs rather than an accident: the shape and
-    /// the front are two operations
+    /// Six records where it once wrote five, and the extra one is what routing the
+    /// mask honestly costs rather than an accident: the shape and the front are two
+    /// operations
     /// (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`)
     /// and each of them writes a whole `Record::Mask`, because the record is a
-    /// state and not an ask. The pair lands in that order, so the front is at
-    /// 0 when the move is scheduled — which is the same picture the one
-    /// hand-built record made.
+    /// state and not an ask. The pair lands in that order, so the front is at 0
+    /// when the move is scheduled — which is the same picture the one hand-built
+    /// record made.
     fn wipe(&mut self) {
         let under = self.focus;
         let over = (under + 1) % self.deck.slot_count();
@@ -2032,8 +2007,8 @@ impl Live {
     ///
     /// One key for both, because the shapes and the angles an operator actually
     /// reaches for are a short list rather than two dials: across, up, the two
-    /// diagonals, and an iris. A continuous dial for the angle is not built:
-    /// there is nowhere on this surface to see one.
+    /// diagonals, and an iris. A continuous dial for the angle is not built: there
+    /// is nowhere on this surface to see one.
     fn cycle_mask(&mut self) {
         let at = MASK_SHAPES
             .iter()
@@ -2045,51 +2020,49 @@ impl Live {
         eprintln!("wipes are {name}");
     }
 
-    /// **Choose which renderer of the focused slot is the live one**, on the
-    /// grid.
+    /// Choose which renderer of the focused slot is the live one, on the grid.
     ///
-    /// The first half of a variant pool, and the half that is true today:
-    /// several renderers over *one* simulation, in one Set, one of them folded
-    /// into the picture at a time. A pool spanning deck slots that differ at a
-    /// layer slot was the alternative and is rejected — see
-    /// `docs/adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md` —
-    /// and the rest of it — an alternative that
-    /// differs at L1, priming it off air, sharing the geometry between them —
-    /// is not built. See the manual, "Selecting one renderer of a slot".
+    /// The first half of a variant pool, and the half that is true today: several
+    /// renderers over *one* simulation, in one Set, one of them folded into the
+    /// picture at a time. A pool spanning deck slots that differ at a layer slot
+    /// was the alternative and is rejected — see
+    /// `docs/adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md` — and
+    /// the rest of it — an alternative that differs at L1, priming it off air,
+    /// sharing the geometry between them — is not built. See the manual, "Selecting
+    /// one renderer of a slot".
     ///
-    /// **What it does not save.** The renderers that are not selected go on
-    /// drawing, each into a target of its own: at 1280x720 that is 7.03 MB and
-    /// a render pass apiece, every frame, whether or not anybody is looking at
-    /// them. That is what makes the selection a uniform write and a cut on the
-    /// beat rather than a build — cheap, and not free. The line printed says
-    /// how many are still drawing for exactly that reason.
+    /// What it does not save. The renderers that are not selected go on drawing,
+    /// each into a target of its own: at 1280x720 that is 7.03 MB and a render pass
+    /// apiece, every frame, whether or not anybody is looking at them. That is what
+    /// makes the selection a uniform write and a cut on the beat rather than a
+    /// build — cheap, and not free. The line printed says how many are still
+    /// drawing for exactly that reason.
     ///
-    /// **Cycling from the selection that is armed, not from the one on
-    /// screen.** A press lands up to a bar later, so two presses inside a bar
-    /// read the same live edge and would both choose the same renderer — the
-    /// second press would do nothing and say it had. `Deck::selections_on` is
-    /// what makes the second press mean "the one after that".
+    /// Cycling from the selection that is armed, not from the one on screen. A
+    /// press lands up to a bar later, so two presses inside a bar read the same
+    /// live edge and would both choose the same renderer — the second press would
+    /// do nothing and say it had. `Deck::selections_on` is what makes the second
+    /// press mean "the one after that".
     ///
-    /// **One way, and it is stated rather than discovered**: there is no
-    /// position in the cycle that puts every renderer back. A Set comes up with
-    /// all of them folded — or folded to the one its Set file's `merge` record
-    /// named, which is the other way to start — and the first press leaves that
-    /// state for good, which is what "makes one live and the rest not" costs
-    /// when the record names one renderer. Restoring the fold is a different
-    /// statement and wants its own vocabulary — an `Option` carrying `null`
-    /// for "all of them" is the shape it would take, which is the shape the
-    /// retired `preview` record had.
+    /// One way, and it is stated rather than discovered: there is no position in
+    /// the cycle that puts every renderer back. A Set comes up with all of them
+    /// folded — or folded to the one its Set file's `merge` record named, which is
+    /// the other way to start — and the first press leaves that state for good,
+    /// which is what "makes one live and the rest not" costs when the record names
+    /// one renderer. Restoring the fold is a different statement and wants its own
+    /// vocabulary — an `Option` carrying `null` for "all of them" is the shape it
+    /// would take, which is the shape the retired `preview` record had.
     ///
-    /// **What it chooses is kept.** A live save reads the fold off the Set —
-    /// see `playing_values` — so `k` after a press writes `{"t":"merge",
-    /// "live":N}` and loading that file back comes up on renderer N.
+    /// What it chooses is kept. A live save reads the fold off the Set — see
+    /// `playing_values` — so `k` after a press writes `{"t":"merge", "live":N}` and
+    /// loading that file back comes up on renderer N.
     ///
-    /// **Its record comes out of [`Live::operate`]**, which it did not while
-    /// the instant a selection lands on had nobody to supply it: the quantum
-    /// is this program's setting, `mix::current_transition` is where it
-    /// becomes an instant, and `written` writes the `select` record from it.
-    /// Which renderer to move to is the keyboard's own translation and stays
-    /// here, which is the whole of what is left of this function's arithmetic.
+    /// Its record comes out of [`Live::operate`], which it did not while the
+    /// instant a selection lands on had nobody to supply it: the quantum is this
+    /// program's setting, `mix::current_transition` is where it becomes an instant,
+    /// and `written` writes the `select` record from it. Which renderer to move to
+    /// is the keyboard's own translation and stays here, which is the whole of what
+    /// is left of this function's arithmetic.
     fn cycle_renderer(&mut self) {
         let slot = self.focus;
         let addr = EngineSlot(slot as u8);
@@ -2185,9 +2158,9 @@ impl Live {
             .unwrap_or("now")
     }
 
-    /// Cycle the focused slot's blend mode. No refusals here — unlike sync,
-    /// every mode is available to every slot, because a blend mode is a
-    /// question about pixels and not about what the material can do.
+    /// Cycle the focused slot's blend mode. No refusals here — unlike sync, every
+    /// mode is available to every slot, because a blend mode is a question about
+    /// pixels and not about what the material can do.
     fn cycle_blend(&mut self, slot: usize) {
         let addr = EngineSlot(slot as u8);
         let current = self.deck.blend(addr);
@@ -2227,76 +2200,73 @@ impl Live {
         );
     }
 
-    /// **Every mix change goes through here, and here goes through a record.**
+    /// Every mix change goes through here, and here goes through a record.
     ///
-    /// Built, decoded, and only then applied — so what drives the deck is what
-    /// a replay would decode from a session stream, rather than a second path
-    /// that happens to agree with it today. `karakuri-environment`'s `audio.rs`
-    /// does the same thing with the two records it emits; see the program's
-    /// `mix.rs` for the
+    /// Built, decoded, and only then applied — so what drives the deck is what a
+    /// replay would decode from a session stream, rather than a second path that
+    /// happens to agree with it today. `karakuri-environment`'s `audio.rs` does the
+    /// same thing with the two records it emits; see the program's `mix.rs` for the
     /// whole argument.
     ///
     /// A record this build cannot obey is printed and nothing moves. It cannot
-    /// happen from a key press — every caller here built the record a moment
-    /// ago out of the engine's own types — and it is handled rather than
-    /// unwrapped because the replay driver will hand this same function lines
-    /// off a file, and a file is where an unobeyable record comes from.
-    /// A tempo correction into the stream.
+    /// happen from a key press — every caller here built the record a moment ago
+    /// out of the engine's own types — and it is handled rather than unwrapped
+    /// because the replay driver will hand this same function lines off a file, and
+    /// a file is where an unobeyable record comes from. A tempo correction into the
+    /// stream.
     ///
     /// Separate from [`Live::record`] because a `tempo` is applied where it is
     /// decided rather than read back — the oscillator is moved by the code that
-    /// worked out how far, and `apply_replayed` is what re-applies it on the
-    /// way back. What this owes is the *writing*, and it is one function so
-    /// that a third thing moving the grid cannot forget it: two already had.
+    /// worked out how far, and `apply_replayed` is what re-applies it on the way
+    /// back. What this owes is the *writing*, and it is one function so that a
+    /// third thing moving the grid cannot forget it: two already had.
     ///
-    /// Scalars only, so pushing it allocates nothing, which is what lets the
-    /// frame path call it as well as the two keys.
+    /// Scalars only, so pushing it allocates nothing, which is what lets the frame
+    /// path call it as well as the two keys.
     fn push_tempo(&mut self, record: karakuri_store::record::Record) {
         if let Some(recorder) = &mut self.recorder {
             recorder.push(record);
         }
     }
 
-    /// **A surface's operation, as the records it writes — and then written.**
+    /// A surface's operation, as the records it writes — and then written.
     ///
     /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-    /// puts every control at the same record, and this is where a key
-    /// press ends: the operation is named, `karakuri-operation-record` says
-    /// what it writes, and [`Live::record`] writes it and reads it back the way
-    /// every other record here is read back. A console fader and a mapped MIDI
-    /// control are the same thing exactly because they arrive at this function
-    /// carrying the same name.
+    /// puts every control at the same record, and this is where a key press ends:
+    /// the operation is named, `karakuri-operation-record` says what it writes, and
+    /// [`Live::record`] writes it and reads it back the way every other record here
+    /// is read back. A console fader and a mapped MIDI control are the same thing
+    /// exactly because they arrive at this function carrying the same name.
     ///
-    /// **The reading is taken here and nowhere else.** The conversion is not
-    /// pure — `SetExposure` becomes a `look` record carrying the operator and
-    /// the white point too — so what is running has to be read back and handed
-    /// over, and this is the only place in this program that knows both what
-    /// was asked for and what is on screen.
+    /// The reading is taken here and nowhere else. The conversion is not pure —
+    /// `SetExposure` becomes a `look` record carrying the operator and the white
+    /// point too — so what is running has to be read back and handed over, and this
+    /// is the only place in this program that knows both what was asked for and
+    /// what is on screen.
     ///
-    /// The two answers that are not records are **printed rather than
-    /// swallowed**, which is what this wrapper is: a key press and a mapped
-    /// control have nobody waiting on an answer, and an operator pressing a
-    /// key that does nothing deserves the sentence.
+    /// The two answers that are not records are printed rather than swallowed,
+    /// which is what this wrapper is: a key press and a mapped control have nobody
+    /// waiting on an answer, and an operator pressing a key that does nothing
+    /// deserves the sentence.
     ///
-    /// **A model does have somebody waiting**, so [`Live::run_operations`]
-    /// calls [`Live::performed`] instead and hands the same sentence back as
-    /// the call's error. The words are one string built in one place
-    /// ([`answered`]), which is [`refused`]'s rule: a copy of them for the
-    /// second audience is free to be right on the day it is written and wrong
-    /// at the next correction.
+    /// A model does have somebody waiting, so [`Live::run_operations`] calls
+    /// [`Live::performed`] instead and hands the same sentence back as the call's
+    /// error. The words are one string built in one place ([`answered`]), which is
+    /// [`refused`]'s rule: a copy of them for the second audience is free to be
+    /// right on the day it is written and wrong at the next correction.
     fn operate(&mut self, operation: &Operation) {
         if let Err(said) = self.performed(operation) {
             eprintln!("{said}");
         }
     }
 
-    /// **[`Live::operate`], with the answer handed back rather than printed.**
+    /// [`Live::operate`], with the answer handed back rather than printed.
     ///
     /// `Ok` means the records were written and read back, which is the whole of
     /// what performing an operation is on this surface. `Err` is the sentence
-    /// [`answered`] built, and it means **nothing on this run changed** — see
-    /// there for why that is a refusal rather than a line on a terminal
-    /// somebody may not be reading.
+    /// [`answered`] built, and it means nothing on this run changed — see there for
+    /// why that is a refusal rather than a line on a terminal somebody may not be
+    /// reading.
     fn performed(&mut self, operation: &Operation) -> Result<(), String> {
         let transport = match operation {
             Operation::ScrubDeck { deck, .. } => EngineSlot::new(*deck, self.deck.slot_count())
@@ -2785,13 +2755,13 @@ impl Live {
         }
     }
 
-    /// What the operator needs and nothing that costs a stall to know: which
-    /// slots are on air, what they are faded to, where their simulation clocks
-    /// are, the output look, and whether frames are still arriving on time.
+    /// What the operator needs and nothing that costs a stall to know: which slots
+    /// are on air, what they are faded to, where their simulation clocks are, the
+    /// output look, and whether frames are still arriving on time.
     ///
-    /// Element live counts are deliberately absent — `Set::live_count` blocks
-    /// until the queue drains, so a status line carrying it would put a GPU
-    /// sync on the render thread twice a second. It is printed once, at exit.
+    /// Element live counts are deliberately absent — `Set::live_count` blocks until
+    /// the queue drains, so a status line carrying it would put a GPU sync on the
+    /// render thread twice a second. It is printed once, at exit.
     fn print_status(&mut self) {
         let elapsed = self.status_at.elapsed().as_secs_f32();
         let fps = if elapsed > 0.0 {
@@ -3005,8 +2975,8 @@ impl Live {
     }
 }
 
-/// **What the status line says about a slot the watchdog stopped**, and the
-/// empty string for every other slot.
+/// What the status line says about a slot the watchdog stopped, and the empty
+/// string for every other slot.
 ///
 /// The version in that slot costs more than one frame may, so the engine skips
 /// its step and its draw and it holds the frame it last drew (ADR-0316). What
@@ -3014,11 +2984,11 @@ impl Live {
 /// moving, which is exactly the reading the maintainer called *"nothing but a
 /// bug"*.
 ///
-/// **The whole word, and not a four-letter column beside the residency.** It is
-/// not a residency: a stopped slot that is Live is still mixed, and taking it
-/// off air and putting it back leaves it stopped. Printed only while it is
-/// true, on the same terms as the transport and the fader — a run in which no
-/// slot is stopped prints the line it always printed.
+/// The whole word, and not a four-letter column beside the residency. It is not
+/// a residency: a stopped slot that is Live is still mixed, and taking it off
+/// air and putting it back leaves it stopped. Printed only while it is true, on
+/// the same terms as the transport and the fader — a run in which no slot is
+/// stopped prints the line it always printed.
 ///
 /// Pulled out beside [`residency_tag`] for its reason: the distinction it
 /// carries is the one thing about it that can be wrong, and checking it should
@@ -3064,18 +3034,17 @@ pub(crate) fn residency_name(residency: Residency, parked: bool) -> &'static str
 
 /// Whether `slot` names one this deck actually has. Pulled out of
 /// [`Live::focus_slot`] so the boundary — the neighbour of the off-by-one the
-/// digit keys used to have, where a digit equal to or past the slot count
-/// must be rejected rather than wrap or panic — is checkable without a
-/// window, a GPU, or a `Deck`.
+/// digit keys used to have, where a digit equal to or past the slot count must
+/// be rejected rather than wrap or panic — is checkable without a window, a
+/// GPU, or a `Deck`.
 ///
-/// **A digit key names no deck member yet**, so this takes the raw `usize`
-/// a press or an MCP argument is rather than a
-/// [`karakuri_store::record::DeckSlot`] — there is no address here to
-/// validate at construction, only a number to check before one can be made.
-/// It checks through [`karakuri_store::record::DeckSlot::new`] rather than
-/// `slot < slot_count` again, which is the same question
-/// `crates/karakuri-environment/src/mix.rs`'s `mix::change` answers for a
-/// stream's own `slot` field.
+/// A digit key names no deck member yet, so this takes the raw `usize` a press
+/// or an MCP argument is rather than a [`karakuri_store::record::DeckSlot`] —
+/// there is no address here to validate at construction, only a number to check
+/// before one can be made. It checks through
+/// [`karakuri_store::record::DeckSlot::new`] rather than `slot < slot_count`
+/// again, which is the same question `crates/karakuri-environment/src/mix.rs`'s
+/// `mix::change` answers for a stream's own `slot` field.
 pub(crate) fn slot_in_range(slot: usize, slot_count: usize) -> bool {
     u8::try_from(slot)
         .ok()
