@@ -3764,24 +3764,7 @@ pub(super) fn filters_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters
         let Some(box_) = bay.field(field) else {
             continue;
         };
-        painter.rect_stroke(
-            box_,
-            // `border-radius: 999px` on a box this short is a capsule, drawn
-            // as half its own height — [`pill_at`]'s reason.
-            CornerRadius::same((box_.height() * 0.5) as u8),
-            Stroke::new(size::HAIRLINE, pal.line),
-            StrokeKind::Inside,
-        );
-        let painter = painter.with_clip_rect(box_);
-        let galley = painter.layout_job(span_at(at.word(field), size::BASE, pal.faint));
-        painter.galley(
-            Pos2::new(
-                box_.min.x + size::FIELD_PAD_X,
-                box_.center().y - galley.size().y * 0.5,
-            ),
-            galley,
-            pal.faint,
-        );
+        filter_field(&painter, pal, box_, at.word(field));
     }
 
     // `border-bottom: 1px solid var(--c-hair)` — the row's own bottom pixel,
