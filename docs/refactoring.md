@@ -20,6 +20,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P25** | `karakuri-mcp` | Extracted test suites to `tests/`; decomposed `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
 | **P26** | `karakuri-console` | Extracted 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
 | **P30** | `karakuri-console::view::widgets` | Componentized `card`, `chip`, `track`, `field` in `view/widgets/` | **COMPLETED** |
+| **P31** | `karakuri-console::view` | Decomposed bay monoliths into subdirectories (`mixer/`, `transport/`, `library/`, `inspector/`) | **COMPLETED** |
 
 ---
 
@@ -97,31 +98,12 @@ Extracted recurring visual and interactive elements out of bay modules into `vie
 3. `track.rs`: `slider_track_into` continuous slider tracks.
 4. `field.rs`: `filter_field`, `editable_text_field`, `CARET`.
 
-#### P31. Modularize Bay Monoliths into Subdirectories
-Decompose bay files exceeding 2,500 lines into focused submodules:
-1. `view/inspector/` (from `inspector.rs`, 4,955 lines):
-   - `mod.rs`: Bay container and layout
-   - `header.rs`: Node header, residency chips, fold state
-   - `params.rs`: Parameter row listing and value faders
-   - `curves.rs`: Modulation curve graph painter
-   - `wiring.rs`: Node connection input/output edges
-2. `view/library/` (from `library.rs`, 4,593 lines):
-   - `mod.rs`: Bay container and layout
-   - `scopes.rs`: Scope tabs (Presets, Sets, History)
-   - `search.rs`: Filter input and query matching
-   - `rows.rs`: File and version rows, star actions
-   - `menu.rs`: Context actions and row menus
-3. `view/transport/` (from `transport.rs`, 4,130 lines):
-   - `mod.rs`: Bay container and layout
-   - `tempo.rs`: Tempo figure and BPM nudging
-   - `grid.rs`: Beat light dots and quantization display
-   - `audio.rs`: Audio input monitoring pill and popup card
-   - `readouts.rs`: Budget and system health status capsules
-4. `view/mixer/` (from `mixer.rs`, 2,907 lines):
-   - `mod.rs`: Bay container and layout
-   - `strip.rs`: Per-deck channel strip layout
-   - `crossfader.rs`: Transition slider and master blend
-   - `tally.rs`: Residency indicators and controls
+#### P31. Modularize Bay Monoliths into Subdirectories — **COMPLETED**
+Decomposed all four massive bay files into cohesive modular subdirectories:
+1. `view/mixer/`: `strip.rs`, `transition.rs`, `mod.rs`
+2. `view/transport/`: `tempo.rs`, `audio_in.rs`, `tracker.rs`, `arrangement.rs`, `look.rs`, `mod.rs`
+3. `view/library/`: `scopes.rs`, `filters.rs`, `listing.rs`, `mod.rs`
+4. `view/inspector/`: `header.rs`, `params.rs`, `wiring.rs`, `mod.rs`
 
 #### P32. Unified Control Descriptor & Declarative Registry
 Establish a single source of truth for interactive controls:
