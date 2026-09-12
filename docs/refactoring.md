@@ -78,9 +78,9 @@ graph TD
     P26["<b>P26: Componentize Console UI & Extract 3 Bays</b><br/>Extract sequencer, staging, master, and widgets [COMPLETED]"]
     P25["<b>P25: Decompose karakuri-mcp Monolith</b><br/>Separate server, spelled, tools, and test suites [COMPLETED]"]
     P24["<b>P24: Decompose engine_bridge.rs by Responsibility</b><br/>Split sinks, engine, filesystem, and handlers [COMPLETED]"]
-    P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [READY]"]
+    P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [COMPLETED]"]
     P21["<b>P21: Consolidate Layer Conversions & Contracts</b><br/>Centralize mappings; preserve zero-dep & serde compatibility [COMPLETED]"]
-    P23["<b>P23: Rationalize karakuri-environment Boundaries</b><br/>Map all 14 modules; resolve circular coupling [PLANNED]"]
+    P23["<b>P23: Rationalize karakuri-environment Boundaries</b><br/>Map all 14 modules; resolve circular coupling [READY]"]
 
     P26 --> P24
     P25 --> P21
@@ -160,7 +160,7 @@ Decompose into cohesive modules under `crates/karakuri/src/bridge/`:
 
 ---
 
-### P22. Extract Headless Runtime & Orchestrator (`karakuri-runtime`) [PLANNED]
+### P22. Extract Headless Runtime & Orchestrator (`karakuri-runtime`) [COMPLETED]
 
 #### Phenomenon
 `karakuri-cli/src/main.rs` (12,300 lines) and `karakuri` GUI (`app.rs` + `engine_bridge.rs`) independently duplicate deck management, HotSwap compilation worker channels, session recording, and transport clock logic.
@@ -214,6 +214,6 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 | **P26** | `karakuri-console` | Extract 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
 | **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `src/tests.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
 | **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **COMPLETED** |
-| **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **READY** |
+| **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **COMPLETED** |
 | **P21** | Type Conversions | Centralize layer conversions in `meta.rs`; establish serialization parity test | **COMPLETED** |
-| **P23** | `karakuri-environment` | Untangle internal cyclic couplings; map destinations for all 14 modules | **PLANNED** |
+| **P23** | `karakuri-environment` | Untangle internal cyclic couplings; map destinations for all 14 modules | **READY** |
