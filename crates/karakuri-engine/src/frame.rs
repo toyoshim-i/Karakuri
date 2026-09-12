@@ -1,87 +1,8 @@
-//! One frame, and the one place it is composed.
+//! Single-frame composition and presentation coordination.
 //!
-//! There were two frame loops, both in `karakuri-cli`: its `Live::frame` drove
-//! the window and its `render::sequence_driven` drove a PNG, and the only
-//! difference that was ever *meant* to exist between them is where the step
-//! count comes from — a live run measures it from a clock, a replay reads it
-//! from a `tick`. Everything else about drawing a frame is the same, and
-//! `render`'s own documentation said so.
-//!
-//! It was not the same. The seam that was meant to be one line had become five,
-//! and **the extra four are where this project's replay defects came from**:
-//!
-//! - The **look** was applied per frame live and once before the loop
-//!   offscreen, so a session in which the operator changed the tone mapper or
-//!   the exposure replayed entirely under whatever it started with.
-//! - The **governor** ran live and had never run on the offscreen path, so a
-//!   replay granted every residency request where `Record::Residency`'s own
-//!   documentation says the effective level must be re-derived per machine.
-//! - The **present pass** ran every frame live and only on kept frames
-//!   offscreen.
-//! - The **events drain and the status line** are the live path's alone, which
-//!   is correct and is the one difference that stayed.
-//!
-//! **Two of those were already fixed, one at a time, in the commit before this
-//! one** — and that is the argument for this module rather than against it.
-//! Each was found by a review reading two functions side by side and noticing
-//! they disagreed; neither was found by a test, because no test could see the
-//! difference between two loops. Fixing them left the two loops in place to
-//! drift again. This makes the seam the one line it was supposed to be, so
-//! there is nothing left to drift.
-//!
-//! ## The ordering is structural, not stated
-//!
-//! **A frame commits before it draws, and there is no path between the two.**
-//! [`compose`] takes the committing work as a closure and calls it in exactly
-//! one place — after every sink has been asked for a target, immediately before
-//! the deck is rendered — so the order is the shape of the call rather than two
-//! statements a reader has to keep in the right sequence. That was the point of
-//! this module and it still is: the same move `Deck::begin_frame` makes with
-//! its guard, one level up.
-//!
-//! **What changed is what the closure is conditional on: nothing.** This module
-//! was written around the opposite rule, and the rule is worth keeping on the
-//! page rather than quietly deleting — *"a frame must acquire somewhere to draw
-//! before it records anything about itself, because a `tick` is a promise that
-//! the deck advanced and a frame that is abandoned did not."* The defect behind
-//! it was real, and is
-//! `docs/adr/0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md`:
-//! the loop read the clock, wrote a `tick` claiming those steps, and only then
-//! found the swapchain had nothing — and `Outdated` arrives on every resize,
-//! so resizing during a recording made the replay diverge from the
-//! performance by however many frames the window had abandoned. So `compose`
-//! withheld the closure until [`Sink::acquire`] had returned a target, and an
-//! abandoned frame committed nothing at all.
-//!
-//! **That rule could not survive a second sink.** With one sink, "the frame was
-//! abandoned" and "the sink had no target" are the same sentence. With a
-//! projector beside the window they are not: a frame that reached the projector
-//! and missed the window did not *not happen*, and there is no answer to "did
-//! this frame advance the deck?" that is right for both of them. Nor was it
-//! right with one sink as a steady state — an operator who turns every output
-//! off stops publishing the instrument, and stopping the instrument is a
-//! different thing that nobody asked for.
-//!
-//! **The guarantee it was protecting is stronger now, not abandoned.** The deck
-//! advances on every frame `compose` composes, so a `tick` is an honest promise
-//! *unconditionally* rather than on the frames that happened to find a target:
-//! the question the old rule answered by refusing to commit — can a `tick`
-//! claim steps the deck never took? — is now answered by the commit and the
-//! render being adjacent, with no acquire, no sink and no early return between
-//! them. Acquiring moved out from under it: every sink is asked first, each
-//! answers for itself, and what an answer decides is whether that sink is drawn
-//! into and presented. Publishing is what a sink gates; the instrument runs.
-//!
-//! ## Why it is in the engine
-//!
-//! It was written in `karakuri-cli`, which is scaffolding rather than the
-//! destination, and that crate has no library target — so the application
-//! could not reach it, and `karakuri-console`'s example hand-rolled a second
-//! frame loop instead. That is the two-loops-that-drift failure this module was
-//! written to end, one crate over. Nothing here needed the CLI: a frame is a
-//! deck, a `Present` and somewhere to put the result, and all three are the
-//! engine's. What stayed behind is what genuinely belongs to a program rather
-//! than to a frame — the clock, the recorder, the PNG writer.
+//! Orchestrates the frame lifecycle across sinks: acquires render targets, evaluates
+//! committed simulation steps and look settings, executes deck rendering, and presents
+//! to active sinks.
 
 use crate::deck::Deck;
 #[cfg(test)]
@@ -89,202 +10,65 @@ use crate::deck::DeckSlot;
 use crate::gpu::Gpu;
 use crate::present::{Present, TonemapOp};
 
-/// The output look: everything the tone mapper is told, in one value, so the
-/// window and an offscreen render can be given the same thing and agree.
-///
-/// Exactly [`Present::set_tonemap`]'s arguments, which is why it is here rather
-/// than with whoever puts an operator on a key: a look is what a frame is drawn
-/// under, and every sink is drawn under the same one.
-///
-/// **The master out is deliberately not here.** It is a level too, and at 1.0
-/// it does what `exposure` at 1.0 does — but it is applied at the entry to the
-/// master chain, where the mix writes the composited frame, and this struct is
-/// what the *tone mapper* is told at the other end of that chain. It lives on
-/// the deck, as [`Deck::set_out`], because that is what owns the fold. See
-/// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
+/// Output color grading and tone-mapping configuration.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Look {
+    /// Active tonemapping operator.
     pub op: TonemapOp,
-    /// The level going into the transfer, applied by the present pass. Not the
-    /// master out; see this struct's own documentation.
+    /// Exposure adjustment applied during tonemapping.
     pub exposure: f32,
-    /// Reinhard's only, ignored by the other three. Not on a key: it is one
-    /// operator's parameter rather than a control the mix needs.
+    /// White point parameter for Reinhard tonemapping.
     pub white_point: f32,
 }
 
-/// Why a frame is not reaching **one sink**.
-///
-/// Not an error: a sink that has no target right now is an ordinary event —
-/// a window between swapchain configurations, a display coming back, an output
-/// the operator has switched off. It says nothing about the frame, which is
-/// composed and committed either way: what a refusal decides is that this sink
-/// is not drawn into and not presented, and [`compose`] hands it to the
-/// caller's reporting closure so that something can be said about a window that
-/// has stopped taking frames.
+/// Reason a frame was not rendered to a specific sink.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Skip {
-    /// Ask again next frame; there is nothing worth saying about it. Ordinary
-    /// jitter, and a message here would be sixty messages a second.
+    /// Transient acquisition failure (e.g., surface reconfiguration or minimized window).
     Transient,
-    /// Worth naming, and **produced at most once for as long as the condition
-    /// lasts** — the sink latches it, because the sink is the only thing that
-    /// knows whether this is the same fault as last frame.
-    ///
-    /// The latch has to be here rather than in the caller. A caller that
-    /// formatted the message and then decided not to print it would allocate
-    /// on the frame path sixty times a second for as long as a wedged window
-    /// stayed wedged, which is the one thing this crate's frame path may
-    /// never do.
+    /// Persistent or diagnosed surface fault with a descriptive message.
     Fault(String),
 }
 
-/// What a frame decided about itself, produced by the closure [`compose`] calls
-/// once it has somewhere to draw.
+/// Frame execution parameters determined by the commit closure.
 pub struct Committed {
-    /// How many simulation steps this frame advances by. The **one** thing that
-    /// legitimately differs between a live run and a replay: measured from a
-    /// clock there, read from a `tick` here.
+    /// Simulation steps to advance this frame.
     pub steps: u8,
-    /// The output look this frame is under. Carried per frame rather than
-    /// fixed before the loop because a `look` record moves it mid-session, and
-    /// a loop that took it as a parameter had no way to hear about that.
+    /// Output look applied to this frame.
     pub look: Look,
 }
 
-/// Where a composited frame goes.
-///
-/// Two implementations exist in this workspace — [`WindowSink`] below and
-/// `karakuri-cli`'s PNG writer — and that is the point: an abstraction with one
-/// implementation is a guess, and with two it is an extraction. A third, in the
-/// tests, is what finally lets the frame loop be driven without a display.
-///
-/// **Everything here is called exactly once per frame per sink, in this
-/// order:** `acquire`, then `view` and `size`, then `after_draw`, then
-/// `present`. A sink that returns `Err` from `acquire` has **none of the rest
-/// called on it** — and the frame still happens, into whichever other sinks
-/// took it, and into none of them if that is all of them. Each sink answers for
-/// itself and hears nothing about what the others answered.
-///
-/// **[`compose`]'s `finally` sits between the last `after_draw` and the first
-/// `present`**, and it is not part of this contract: it is the caller's own
-/// work in the frame's encoder, downstream of every sink. See [`compose`].
+/// Destination sink for composited frames.
 pub trait Sink {
-    /// Take hold of this frame's attachment.
-    ///
-    /// Called on every sink **before anything about the frame is recorded or
-    /// measured**, so a sink is never asked to answer for work already done and
-    /// an `Err` costs nothing but this sink's copy of the frame. It does not
-    /// cost the frame: the deck advances whatever every sink answers.
+    /// Acquires the render target for the upcoming frame.
     fn acquire(&mut self, gpu: &Gpu) -> Result<(), Skip>;
 
-    /// The attachment acquired above.
+    /// Returns a view to the acquired render target texture.
     fn view(&self) -> &wgpu::TextureView;
 
-    /// Its size in texels, which **need not be the canvas's** — a window is a
-    /// preview and the canvas is fitted into it. See `Present::draw`.
+    /// Returns the target texture dimensions in pixels `(width, height)`.
     fn size(&self) -> (u32, u32);
 
-    /// Recorded into the frame's own encoder, immediately after the present
-    /// pass has drawn into [`Sink::view`].
-    ///
-    /// The default is nothing, which is what a window wants: it has only to be
-    /// presented. A PNG writer puts its texture-to-buffer copy here so that the
-    /// copy belongs to the frame that produced it rather than to an encoder of
-    /// its own.
+    /// Records post-draw commands into the frame command encoder.
     fn after_draw(&mut self, _encoder: &mut wgpu::CommandEncoder) {}
 
-    /// After the frame's encoder has been submitted.
-    ///
-    /// A window presents; a PNG writer maps its readback and writes the file.
-    /// An `Err` here is a real failure rather than a skip — the frame happened,
-    /// and it happened for the other sinks too, so [`compose`] presents all of
-    /// them before it returns the first error.
+    /// Presents or finalizes the drawn frame after submission.
     fn present(&mut self, gpu: &Gpu) -> Result<(), String>;
 }
 
-/// Where a composed frame went, counted.
-///
-/// **Not whether it happened** — it happened; [`compose`] commits and renders
-/// unconditionally. A summary rather than a per-sink report because a `Vec` of
-/// outcomes would allocate on the frame path once per frame forever, for
-/// something every caller so far reduces to a number: *which* sink refused and
-/// why goes to the reporting closure instead, at the moment it refuses, and
-/// `Skip::Fault` already latches so that costs nothing per frame.
-///
-/// `reached + missed` is how many sinks were asked, and **both being zero is an
-/// ordinary state**: every output off is a frame that ran and published
-/// nowhere, which is what setting up before doors looks like.
+/// Summary outcome of a composed frame across all candidate sinks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Outcome {
-    /// How many sinks were drawn into and presented.
+    /// Number of sinks successfully rendered and presented.
     pub reached: usize,
-    /// How many were asked and had no target for this frame.
+    /// Number of sinks that skipped or failed target acquisition.
     pub missed: usize,
 }
 
-/// Compose one frame for `sinks`: ask every sink, commit, render, draw into the
-/// ones that answered, present them.
+/// Composes one frame across the provided sinks.
 ///
-/// `commit` is where everything a frame decides about itself happens —
-/// measuring the clock, applying whatever the stream says belongs before this
-/// frame, writing the records. **It is called once, whatever the sinks
-/// answered**, and being a closure is what keeps it adjacent to the render with
-/// nothing between them.
-///
-/// `sinks` is a borrowed slice rather than anything owned because this is the
-/// frame path and the frame path allocates nothing; `refused` is called once
-/// per sink that had no target, with that sink's index in the slice.
-///
-/// ## `finally`, and why it is not a hook looking for a user
-///
-/// `finally` is recorded into the frame's own encoder **after every sink that
-/// took the frame has been drawn into and had [`Sink::after_draw`] called, and
-/// before the encoder is submitted**. It runs on every frame, including one
-/// that no sink took at all.
-///
-/// It is there because **a frame's submission is not only its sinks.**
-/// `karakuri-console` draws its whole panel — the `egui` pass — into the same
-/// command buffer the deck's frame is recorded in, because the picture is a
-/// colour attachment in the deck's pass and a sampled texture in the panel's,
-/// and two submissions over one texture is a race whose order is the queue's
-/// business rather than the caller's. That is
-/// `docs/adr/0166-the-engines-frame-and-the-panels-are-one-submission.md`. And
-/// it is **not a sink**: the panel does not receive the composited frame, it
-/// receives the panel, and it happens to sample what a sink produced.
-///
-/// **Rejected, and it is the one that will be re-proposed:** make the panel a
-/// [`Sink`] whose recording work is the `egui` pass rather than the canvas —
-/// no new parameter, and the panel goes in the slice beside the picture. It
-/// loses on two things.
-///
-/// - **It changes what [`Sink`] means**, from *where a composited frame goes*
-///   to *anything that wants a slot in this encoder*, and it puts a consumer
-///   in a list of producers: the panel is downstream of the picture rather
-///   than its peer, and it is the only thing in the slice that would be
-///   handed a target it does not want the present pass drawn into.
-/// - **It makes [`Outcome::reached`] count two different things at once.**
-///   With the picture turned off from Outputs the panel is still in the slice,
-///   so a frame that reached *no output at all* would report `reached: 1` —
-///   and *every output may be off*, which the manual promises and
-///   `docs/adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md`
-///   made representable, stops being something the number can say.
-///
-/// A caller with nothing to add passes `|_| {}`, which is both of
-/// `karakuri-cli`'s call sites.
-///
-/// **[`compose`] may reorder `sinks`.** The sinks that acquired are moved to
-/// the front, keeping their order among themselves, which is how the draw loop
-/// knows who answered without a `Vec<bool>` to hold it. Indices handed to
-/// `refused` are the caller's, taken before anything moves.
-///
-/// An `Err` is one sink's [`Sink::present`] failing, reported after **every**
-/// acquired sink has been presented: the frame reached them and a projector
-/// failing is no reason for the window to miss a frame it had in hand. The
-/// first error is the one returned.
-///
-/// Note what is *not* here: no clock, no recorder, no window. The frame loop
-/// does not know whether it is live. That is what makes it one loop.
+/// Acquires render targets from all sinks, invokes the commit closure, renders the deck,
+/// draws to acquired sinks, executes optional final commands, and presents results.
 pub fn compose(
     gpu: &Gpu,
     deck: &mut Deck,
@@ -294,17 +78,9 @@ pub fn compose(
     commit: impl FnOnce(&mut Deck) -> Committed,
     finally: impl FnOnce(&mut wgpu::CommandEncoder),
 ) -> Result<Outcome, String> {
-    // **Every sink is asked before anything is committed**, which is the half of
-    // the old ordering that is still load-bearing: a sink is never asked to
-    // answer for a frame that has already been recorded.
     let mut reached = 0;
     for at in 0..sinks.len() {
         match sinks[at].acquire(gpu) {
-            // Moved down beside the ones that already answered, which costs a
-            // rotate of at most the length of the slice and saves the
-            // allocation a per-sink answer would otherwise live in. `at` is
-            // still this sink's own index: rotations only ever touch positions
-            // at or below the one being visited.
             Ok(()) => {
                 sinks[reached..=at].rotate_right(1);
                 reached += 1;
@@ -317,59 +93,20 @@ pub fn compose(
 
     let Committed { steps, look } = commit(deck);
 
-    // Per frame and unconditionally: one `queue.write_buffer` into storage
-    // sized at construction, which is the claim `Present`'s module doc makes
-    // about switching operators mid-set being free. Tracking whether it changed
-    // would buy nothing and cost a way to go stale.
     present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
 
-    // The guard owns the encoder, so everything recorded here is one generation
-    // of Sets: builds are installed inside `begin_frame`, before the encoder
-    // exists, and there is no way to reach a second generation while this one
-    // is open.
     {
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
-        // **`mix_target` and not `hdr_view`**, which are the same view until
-        // the master chain has a slot in it: with one, the mix writes into the
-        // chain's entry and the chain's last slot writes into the target the
-        // present pass reads. See `crate::master`.
         frame.render(present.mix_target(), present.size(), steps);
-        // **Between the fold and every sink**, in linear HDR and upstream of
-        // the one tone map. Nothing is recorded for an empty chain, which is
-        // the default one.
         present.draw_chain(frame.encoder());
-        // **Drawn every frame, even by a sink that will not keep it.** A
-        // sequence writing one frame in a hundred used to skip the present pass
-        // on the other ninety-nine, which meant one more thing that happened on
-        // one path and not the other. The pass is a fullscreen triangle; the
-        // expensive half is the readback, and that is still conditional — a
-        // sink keeps that decision to itself, in `after_draw`.
-        //
-        // **Once per sink that took the frame, and no times at all when none
-        // did** — a frame with every output off is drawn nowhere and still
-        // rendered above. Every sink is handed the same canvas and fits it into
-        // whatever size it has: `Present::draw` letterboxes per target, so a
-        // window and a projector of different shapes need one `Present` between
-        // them rather than one each.
         for sink in drawn.iter_mut() {
             present.draw(frame.encoder(), sink.view(), sink.size());
             sink.after_draw(frame.encoder());
         }
-        // **Last, and into the same encoder.** Everything a sink is owed has
-        // been recorded, so a caller adding work here is adding it downstream
-        // of every sink that took the frame — which is what the console's
-        // panel pass is: it samples the picture a sink was drawn into, in the
-        // one command buffer, so the barrier between the two is `wgpu`'s
-        // rather than the queue's guess. See this function's own
-        // documentation for why it is not a sink.
         finally(frame.encoder());
         frame.finish();
     }
 
-    // **Every sink is presented before any error is reported.** Returning at
-    // the first one would let a wedged output cost every sink below it a frame
-    // it had already been drawn into, which is the window waiting on a plugin —
-    // the one thing `docs/plugins.md` says never happens.
     let mut failed = None;
     for sink in drawn.iter_mut() {
         if let Err(e) = sink.present(gpu) {
@@ -382,25 +119,16 @@ pub fn compose(
     }
 }
 
-/// The default sink: the window on the operator's desk.
-///
-/// It owns the surface and its configuration because it is the only thing that
-/// should touch them — a swapchain follows the window, and nothing about a
-/// window reaches what is drawn. `karakuri-cli`'s `Live` used to hold both and
-/// reconfigure them from three places.
+/// Standard presentation sink targeting a display window surface.
 pub struct WindowSink {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
-    /// The acquired texture and a view of it, held from `acquire` to `present`.
-    /// `None` between frames, and `view` is only reachable in between.
     current: Option<(wgpu::SurfaceTexture, wgpu::TextureView)>,
-    /// Whether a fault has already been reported. See [`Skip::Fault`]: the
-    /// message is built once and never again, so a window that stays broken
-    /// costs nothing per frame.
     faulted: bool,
 }
 
 impl WindowSink {
+    /// Creates a new WindowSink for the given surface and configuration.
     pub fn new(surface: wgpu::Surface<'static>, config: wgpu::SurfaceConfiguration) -> WindowSink {
         WindowSink {
             surface,
@@ -410,9 +138,7 @@ impl WindowSink {
         }
     }
 
-    /// The window changed size. **Nothing that is rendered changes** — see
-    /// `Record::Canvas`. All that follows a window is the swapchain, because
-    /// the swapchain *is* the window.
+    /// Updates window dimensions and reconfigures the surface.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -426,32 +152,15 @@ impl WindowSink {
 impl Sink for WindowSink {
     fn acquire(&mut self, gpu: &Gpu) -> Result<(), Skip> {
         let texture = match self.surface.get_current_texture() {
-            // `Suboptimal` is a texture like any other — it draws correctly and
-            // asks to be reconfigured for performance, which the next resize
-            // does anyway. Skipping the frame to reconfigure would drop a frame
-            // that was in hand.
             wgpu::CurrentSurfaceTexture::Success(texture)
             | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
-            // The swapchain needs remaking, which is what these two mean.
-            // Reconfigured here and retried next frame rather than in a loop:
-            // a frame is cheap and a spin is not.
             wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&gpu.device, &self.config);
                 return Err(Skip::Transient);
             }
-            // Genuinely transient and self-describing. Naming them would be
-            // naming ordinary jitter — or, for `Occluded`, naming a minimised
-            // window. Neither is a fault: the frame is dropped and the next one
-            // is asked for.
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
                 return Err(Skip::Transient)
             }
-            // Not self-correcting the way `Timeout` is — one is fatal and the
-            // other is a generic failure the caller cannot act on. Returning
-            // silently left a frozen window with no reason for it anywhere;
-            // saying it every frame would bury it under sixty copies a second
-            // of itself, and formatting it every frame would allocate on the
-            // frame path. So it is built exactly once.
             wgpu::CurrentSurfaceTexture::Validation => {
                 if self.faulted {
                     return Err(Skip::Transient);
@@ -464,8 +173,6 @@ impl Sink for WindowSink {
                 ));
             }
         };
-        // A frame arrived, so whatever went wrong is over and the next fault
-        // is worth naming again.
         self.faulted = false;
         let view = texture.texture.create_view(&Default::default());
         self.current = Some((texture, view));
