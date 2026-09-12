@@ -3243,26 +3243,8 @@ pub(super) fn library_into(
             true => (pal.line, pal.dim),
             false => (pal.hair, pal.faint),
         };
-        for (badge, box_) in bay.badges(ui.ctx(), index, &rows.badges(index)) {
-            painter.rect_stroke(
-                box_,
-                CornerRadius::same(size::BADGE_RADIUS as u8),
-                Stroke::new(size::HAIRLINE, ring),
-                StrokeKind::Inside,
-            );
-            let galley = painter.layout_no_wrap(
-                badge.to_owned(),
-                FontId::new(size::BADGE_SIZE, FontFamily::Proportional),
-                word,
-            );
-            painter.galley(
-                Pos2::new(
-                    box_.center().x - galley.size().x * 0.5,
-                    box_.center().y - galley.size().y * 0.5,
-                ),
-                galley,
-                word,
-            );
+        for (badge_text, box_) in bay.badges(ui.ctx(), index, &rows.badges(index)) {
+            badge(&painter, box_, badge_text, ring, word);
         }
     }
 
@@ -3668,34 +3650,7 @@ pub(super) fn scopes_into(
     let painter = ui.painter().with_clip_rect(row);
     for (at, (kind, chip)) in bay.chips(ui.ctx(), scopes).enumerate() {
         let marked = at == scope;
-        let ink = match marked {
-            true => pal.lav,
-            false => pal.faint,
-        };
-        // **The wash is the whole of the mark**, exactly as it is on the row
-        // under the library cursor: `.scope` sets no border, no rule and no
-        // dot, so a chip that is not marked draws nothing but its word.
-        if marked {
-            painter.rect_filled(
-                chip,
-                // `border-radius: 999px` on a box this short is a capsule.
-                CornerRadius::same((size::SCOPE_H * 0.5) as u8),
-                tint(pal.lav, 15),
-            );
-        }
-        let galley = painter.layout_no_wrap(
-            kind.name().to_owned(),
-            FontId::new(size::BASE, FontFamily::Proportional),
-            ink,
-        );
-        painter.galley(
-            Pos2::new(
-                chip.min.x + size::SCOPE_PAD_X,
-                chip.center().y - galley.size().y * 0.5,
-            ),
-            galley,
-            ink,
-        );
+        scope_tab(&painter, chip, marked, kind.name(), pal);
     }
 
     // `border-bottom: 1px solid var(--c-hair)` — the row's own bottom pixel,
@@ -3872,35 +3827,14 @@ pub(super) fn kinds_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Filters<'
     let painter = ui.painter().with_clip_rect(row);
     for (chip, box_) in bay.kind_chips(ui.ctx()) {
         let on = chip.on(at.kinds);
-        let ink = match on {
-            true => pal.mint,
-            false => pal.faint,
-        };
-        match on {
-            true => painter.rect_filled(
-                box_,
-                CornerRadius::same((size::KIND_H * 0.5) as u8),
-                tint(pal.mint, 15),
-            ),
-            false => painter.rect_stroke(
-                box_,
-                CornerRadius::same((size::KIND_H * 0.5) as u8),
-                Stroke::new(size::HAIRLINE, pal.line),
-                StrokeKind::Inside,
-            ),
-        };
-        let galley = painter.layout_no_wrap(
-            chip.word().to_owned(),
-            FontId::new(size::KIND_SIZE, FontFamily::Proportional),
-            ink,
-        );
-        painter.galley(
-            Pos2::new(
-                box_.center().x - galley.size().x * 0.5,
-                box_.center().y - galley.size().y * 0.5,
-            ),
-            galley,
-            ink,
+        toggle_chip(
+            &painter,
+            box_,
+            on,
+            chip.word(),
+            size::KIND_SIZE,
+            pal,
+            pal.mint,
         );
     }
 

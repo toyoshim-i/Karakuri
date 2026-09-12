@@ -323,7 +323,7 @@ mod mixer;
 /// path for it.
 pub use mixer::{
     after, mixer, roll_at, roll_moves_in, transition, Fader, Go, Level, Mask, Meter, Mixer, Phase,
-    Reach, Strip, StripBox, Tally, TransitionRow, TransitionSettings, ROLL_PERIOD, ROLL_REACH,
+    Reach, Strip, StripBox, TransitionRow, TransitionSettings, ROLL_PERIOD, ROLL_REACH,
     ROLL_STALENESS, ROLL_TRAVEL,
 };
 pub(crate) use mixer::{next, next_shape, residency, wipe_kind};
@@ -442,6 +442,7 @@ pub mod widgets;
 /// already writes `view::FoldGrip` or `view::bay_grip` has to learn a second
 /// path for it.
 pub use widgets::card::{bay_card, popup_card};
+pub use widgets::chip::Tally;
 pub use widgets::*;
 #[allow(unused_imports)]
 pub(crate) use widgets::*;
