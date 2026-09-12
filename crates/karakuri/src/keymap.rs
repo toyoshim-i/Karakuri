@@ -1244,6 +1244,19 @@ pub(crate) mod key_column {
         }
     }
 
+    /// Every hotkey in [`super::KEY_BINDINGS`] aligned with `ControlDescriptor` in
+    /// `karakuri_console::control`.
+    #[test]
+    fn every_bound_hotkey_aligns_with_control_descriptors() {
+        for binding in super::KEY_BINDINGS {
+            if let Some(desc) = karakuri_console::control::descriptor_for_hotkey(binding.legend) {
+                if let (Some(title), Some(op_title)) = (binding.title, desc.operation_title) {
+                    assert_eq!(title, op_title);
+                }
+            }
+        }
+    }
+
     // **The grammar's mix answers act on the deck the address is on, and read
     // the value they step from off that deck** — no longer checked here.
     //
