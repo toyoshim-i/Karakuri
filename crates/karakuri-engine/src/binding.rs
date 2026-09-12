@@ -1,11 +1,12 @@
 //! Signal binding evaluation and parameter mapping.
 //!
-//! Evaluates mappings between continuous signals (such as oscillator phase, audio features,
-//! or procedural noise generators) and shader/simulation parameters.
+//! Evaluates mappings between continuous signals (such as oscillator phase,
+//! audio features, or procedural noise generators) and shader/simulation
+//! parameters.
 //!
-//! Each binding samples a signal, applies a shaping [`Curve`], maps the normalized value
-//! to a target range, and blends against any manual parameter setting according to
-//! the signal's confidence value.
+//! Each binding samples a signal, applies a shaping [`Curve`], maps the
+//! normalized value to a target range, and blends against any manual parameter
+//! setting according to the signal's confidence value.
 
 use karakuri_ir::Kind;
 use karakuri_signal::{
@@ -16,13 +17,16 @@ use karakuri_signal::{
 /// Default tempo in beats per minute for new sessions.
 pub const DEFAULT_BPM: f32 = 120.0;
 
-/// Special signal name designating the procedural noise generator declared by the binding.
+/// Special signal name designating the procedural noise generator declared by
+/// the binding.
 pub const NOISE_SIGNAL: &str = "noise";
 
-/// Prefix designating a published set macro control (for example, `"control:twist"`).
+/// Prefix designating a published set macro control (for example,
+/// `"control:twist"`).
 pub const CONTROL_PREFIX: &str = "control:";
 
-/// Transfer function applied to normalized signal samples prior to range mapping.
+/// Transfer function applied to normalized signal samples prior to range
+/// mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Curve {
     /// Linear identity function.
@@ -88,15 +92,14 @@ impl Signals {
         }
     }
 
-    /// Install this frame's measured signals, or `None` for "nothing is
-    /// measuring".
+    /// Install this frame's measured signals, or `None` for "nothing is measuring".
     ///
-    /// **Once per frame, before the frame is rendered**, from the same place
-    /// `steps` comes from — a measurement live, a record on replay. A frame's
-    /// worth of measurement is latched here and does not change while the frame
-    /// is drawn, for the same reason `steps` does not: two bindings sampling
-    /// `energy` in one frame have to get one answer, or the record that says
-    /// what this frame saw is a record of neither.
+    /// Once per frame, before the frame is rendered, from the same place `steps`
+    /// comes from — a measurement live, a record on replay. A frame's worth of
+    /// measurement is latched here and does not change while the frame is drawn,
+    /// for the same reason `steps` does not: two bindings sampling `energy` in one
+    /// frame have to get one answer, or the record that says what this frame saw is
+    /// a record of neither.
     pub fn set_audio(&mut self, audio: Option<AudioFrame>) {
         self.audio = audio;
     }
@@ -106,18 +109,18 @@ impl Signals {
         self.audio.as_ref()
     }
 
-    /// Advance the session clock. `steps` comes from a `tick` record and `dt`
-    /// is the fixed simulation step — the same two quantities every Live slot
-    /// is advanced by, so the phase a binding reads is the phase at the
-    /// instant of the frame's last substep.
+    /// Advance the session clock. `steps` comes from a `tick` record and `dt` is
+    /// the fixed simulation step — the same two quantities every Live slot is
+    /// advanced by, so the phase a binding reads is the phase at the instant of the
+    /// frame's last substep.
     pub fn advance(&mut self, steps: u8, dt: f32) {
         self.oscillator.advance(steps, dt);
     }
 
-    /// **The same signals, with the oscillator read `seconds` earlier.** For a
-    /// caller whose clock is behind the session's; `0.0` returns `self`
-    /// unchanged, bit for bit. See [`Oscillator::behind`].
-    /// Returns signals with the local oscillator evaluated `seconds` in the past.
+    /// The same signals, with the oscillator read `seconds` earlier. For a caller
+    /// whose clock is behind the session's; `0.0` returns `self` unchanged, bit for
+    /// bit. See [`Oscillator::behind`]. Returns signals with the local oscillator
+    /// evaluated `seconds` in the past.
     pub fn behind(self, seconds: f64) -> Signals {
         Signals {
             oscillator: self.oscillator.behind(seconds),
@@ -182,7 +185,8 @@ pub struct Binding {
 /// Manual parameter override targeted at a specific node or layer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamWrite {
-    /// Target node address `(layer, index)`, or `None` to target all nodes declaring `key`.
+    /// Target node address `(layer, index)`, or `None` to target all nodes
+    /// declaring `key`.
     pub at: Option<(Kind, u32)>,
     pub key: String,
     pub value: f32,
@@ -286,7 +290,8 @@ impl Binding {
     }
 }
 
-/// Linearly blends between `manual` and `mapped` according to `confidence` clamped to [0, 1].
+/// Linearly blends between `manual` and `mapped` according to `confidence`
+/// clamped to [0, 1].
 pub fn blend(manual: f32, mapped: f32, confidence: f32) -> f32 {
     let c = if confidence.is_nan() {
         0.0
@@ -335,9 +340,9 @@ mod tests {
         }
     }
 
-    /// The claim each curve is named for: `pow2` sits below the diagonal (the
-    /// floor is flattened, the peak is what moves), `sqrt` above it (the floor
-    /// is what moves), `smooth` crosses at the middle and is flat at both ends.
+    /// The claim each curve is named for: `pow2` sits below the diagonal (the floor
+    /// is flattened, the peak is what moves), `sqrt` above it (the floor is what
+    /// moves), `smooth` crosses at the middle and is flat at both ends.
     #[test]
     fn each_curve_bends_the_way_its_name_says() {
         let low = 0.25_f32;
