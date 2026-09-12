@@ -132,10 +132,7 @@ impl Resolver for L1Resolver {
         if self.derived.contains(&attr) {
             return match attr.derivation() {
                 Some(karakuri_ir::Derivation::SinceBirth) => {
-                    // **`step_args.t`, not `u.t`** — an L1 is substepped, and a
-                    // block that reads its own clock per substep has to read
-                    // this one, or an age would jump by a whole frame inside a
-                    // frame of several steps.
+                    // Uses `step_args.t` instead of `u.t` because L1 operates on substeps.
                     format!("(step_args.t - prev[{}].birth_t)", self.read_idx)
                 }
                 other => unreachable!("{other:?} is not synthesised at the read site"),
@@ -157,11 +154,7 @@ impl Resolver for L1Resolver {
                 unreachable!("`copy` is not available in an L1: nothing has amplified yet")
             }
             Ambient::Capacity => "u.capacity".to_string(),
-            // **`source` is the salt, and the salt is already here.**
-            // `docs/ir-spec.md` settles that the value identifying a geometry
-            // *is* its salt rather than a dense index beside it, and
-            // `Set::prepare` has been writing it into this field all along —
-            // so the read is one arm and no new plumbing.
+            // Geometry source identity is represented by its seed salt.
             Ambient::Source => "u.seed_salt".to_string(),
             Ambient::T => "step_args.t".to_string(),
             // Per substep alongside `t`, and for the same reason: a frame of
@@ -311,32 +304,18 @@ fn write_element_bindings(out: &mut String, layout: &ElementLayout) {
     ));
 }
 
-/// `spawn` writes into the head of the free range, which begins where the
-/// survivors end. `counts.survivors` is the scan's answer for *this* step,
-/// written by `finalize` and not yet rolled into `counts.range` — `advance`
-/// does that afterwards, because `element` still needs the pre-scan range.
-/// The engine-written slots a derivation rule needs, at spawn.
+/// Emits engine-written attribute derivations for newly spawned elements.
 ///
-/// **After the body**, like `seed` and `birth_frac` and for the same reason: a
-/// `spawn` block writes the attributes it declares, and these are read off what
-/// it wrote.
+/// Written after the spawn body executes so that derived properties can reference
+/// initial user-defined attribute values.
 fn spawn_derivations(derived: &[Attr]) -> String {
     let mut out = String::new();
     if derived.contains(&Attr::Age) {
-        // **The instant, not a duration.** `age` is `t` minus this wherever it
-        // is read, which is exact at any clock and needs nothing per frame.
+        // Records birth timestamp; age is evaluated as current time minus birth timestamp.
         out.push_str("    next[slot].birth_t = step_args.t;\n");
     }
     if derived.contains(&Attr::Velocity) {
-        // **Zero, because a new element has no previous frame to differ from.**
-        // The alternative — leaving it — is last frame's value for whichever
-        // element held this slot before, which is a spawn that inherits the
-        // motion of something that died.
-        //
-        // `velocity_lived` is the *lived a step* flag and stays 0 here; see
-        // `element_derivations`. A zeroed buffer says the same thing, which is
-        // what makes a procedure with no `spawn` block get the same treatment
-        // without anything writing it.
+        // Zero initial velocity for newly spawned elements.
         out.push_str("    next[slot].velocity = vec3<f32>(0.0);\n");
         out.push_str("    next[slot].velocity_lived = 0.0;\n");
     }
@@ -355,24 +334,7 @@ fn element_derivations(derived: &[Attr]) -> String {
         out.push_str("    next[out].birth_t = prev[i].birth_t;\n");
     }
     if derived.contains(&Attr::Velocity) {
-        // **Zero until the element has lived a whole step**, and `w` is how
-        // that is known. Two situations need it and neither is exotic:
-        //
-        // A **spawned** element's first `element` pass runs over a fraction of
-        // a step, and `_dt` is scaled to that fraction — correct for a body
-        // that integrates, since the numerator is scaled by the same amount,
-        // and badly wrong for one that computes position from `t`, which jumps
-        // a whole step's worth regardless. The quotient is then inflated by
-        // `1/birth_frac`, which is up to twice the batch size: measured at 20x
-        // for a batch of ten, and it scales with `spawn_rate`.
-        //
-        // An element of a procedure with **no `spawn` block** starts at the
-        // origin, because that is what an unwritten buffer holds, and its first
-        // pass moves it to wherever the body puts it. That displacement is not
-        // motion; it is the difference between nothing and the initial state.
-        //
-        // Both are the same sentence — a difference against a state the element
-        // was never in — so both get the same answer.
+        // Velocity requires having lived at least one full step to difference against valid prior position.
         out.push_str(
             "    let _lived = prev[i].velocity_lived > 0.5;\n\
              \x20   next[out].velocity = select(\n\
@@ -453,17 +415,8 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>
         "generate_l1 called on a non-L1 procedure"
     );
 
-    // **`Synthetic::NONE`, and it is a statement rather than a default.** `copy`
-    // records something that happened to an element on its way down a chain, and
-    // nothing has happened to an element an L1 is in the act of making. A
-    // derivation's source slot is not like that: it is written *here* precisely
-    // because here is where the element is made.
-    // **Nothing emitted can also be derived**, and the assertion is here rather
-    // than left implicit because getting it wrong is two slots of one name in a
-    // WGSL struct plus an engine write on top of the procedure's own. The Set
-    // decides `derived` by asking what is *missing*, so this holds by
-    // construction — which is exactly the kind of invariant that stops holding
-    // when a second caller appears.
+    // Newly spawned L1 elements have no synthetic copy attributes.
+    // Asserts that emitted and derived attribute sets are strictly disjoint.
     debug_assert!(
         derived.iter().all(|a| !checked.emit.contains(a)),
         "`{}` both emits and derives {:?}",
@@ -481,26 +434,14 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>
     b.field("dt", "f32");
     b.field("capacity", "u32");
     b.field("seed_salt", "u32");
-    // **One `u32` per declared Source slot**, holding the identity of the
-    // geometry an edge bound to it. A comparison against `source` is then two
-    // uniform loads — the same value in every lane, which is the branch a GPU
-    // costs least.
+    // Allocates one u32 per declared Source slot to hold bound geometry identity.
     for slot in checked.source_slots() {
         b.source_slot_field(slot);
     }
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
-    // **A spliced field's params live here**, under a prefix of their own so
-    // that this procedure and the field it evaluates may both declare
-    // `exposure` — see `layout::mangle_field_param`.
-    //
-    // **One set per slot, and only for the slots the procedure evaluates.** The
-    // field used to be spliced into every module in the Set, so a renderer that
-    // never mentions one still carried its params and still failed to compile
-    // if the field's body did — a `.kir` taking down shaders that have nothing
-    // to do with it. The slot is in the name because two fields in one caller
-    // are two independent sets of values.
+    // Spliced field parameters are scoped under a slot prefix to prevent collisions.
     let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
@@ -533,10 +474,7 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>
             read_idx: "slot",
             write_idx: "slot",
             block: BlockKind::Spawn,
-            // **Empty in a `spawn` block.** An element being allocated has no
-            // previous frame and no birth instant yet — the slot holding it is
-            // written after this body runs. Reading `age` there would be
-            // reading the value of whatever last occupied the slot.
+            // Spawn blocks have no previous frame state or valid birth timestamps.
             derived: Vec::new(),
         };
         let mut out = String::new();
@@ -557,11 +495,7 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>
     src.push('\n');
     write_element_bindings(&mut src, &element_layout);
     src.push('\n');
-    // **The field's helpers before its body, and its body before every entry
-    // point.** A spliced field lives in this module, so this module's prelude
-    // has to carry what it calls — the prelude is demand-driven, and a field
-    // calling `sd_torus` in a caller that does not would otherwise produce a
-    // call to a function nothing emitted, in a shader that checked clean.
+    // Field helper requirements must precede entry points.
     for f in &splices {
         req.absorb(&f.requirements);
     }

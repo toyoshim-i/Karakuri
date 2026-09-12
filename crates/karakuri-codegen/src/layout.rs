@@ -137,14 +137,7 @@ pub mod binding {
     /// [`group::PREV`](super::group::PREV): the **far** geometry, for an L2
     /// that declares `uses <name> : Geometry` — `array<ElementFar>`, read-only.
     ///
-    /// In the input group beside the near side, because that is what it is: a
-    /// second input edge, read and never written. It has its own struct rather
-    /// than sharing `ElementIn`, since two sources need not emit the same
-    /// attributes and each addresses its own buffer.
-    ///
-    /// **One, not one per declared slot.** A node takes one second geometry —
-    /// the checker refuses a second `uses` — so this is a constant rather than
-    /// a base an index is added to.
+    /// Binding index for far geometry input storage buffer in an L2 node.
     pub const FAR: u32 = 2;
 
     /// A uniform buffer: `Uniforms` in [`group::UNIFORMS`], `StepArgs` in
@@ -211,33 +204,19 @@ struct Counts {
 ";
 }
 
-/// The camera edge, in the two shapes it has on the GPU.
+/// GPU camera representations on the GPU.
 ///
-/// **`CameraState` is the edge and `Camera` is what an L4 reads.** The six
-/// numbers a camera *is* cross between the producer and the derivation;
-/// `view_proj`, the ray basis and `depth_range` cross between the derivation and
-/// every renderer. Both declarations are emitted verbatim into the engine's
-/// `camera.wgsl` and into every generated L4, so a producer, the derivation and
-/// a reader cannot disagree about the bytes — the same argument
-/// [`counts::WGSL`] is here for.
-///
-/// **The state is a storage buffer and the derived form is a uniform**, which
-/// is why only one of them is padded to a 16-byte multiple by hand. The state
-/// packs its three scalars into the padding after its three `vec3`s, which is
-/// the whole of why it is 48 bytes rather than 64.
+/// `CameraState` represents producer input (48 bytes, storage buffer).
+/// `Camera` represents derived camera matrices/vectors for renderers (144 bytes, uniform buffer).
 pub mod camera {
     /// Byte size of `CameraState`.
     pub const STATE_SIZE: u64 = 48;
     /// Byte size of `Camera`.
     pub const SIZE: u64 = 144;
 
-    /// What a producer writes: the host, from a `camera` record, or an L3's
-    /// compute pass. **Read-only everywhere else** — a renderer never sees it.
+    /// Host or compute shader camera output representation.
     ///
-    /// **`look_at` is `target` under another name**, because `target` is a
-    /// reserved word in WGSL. Everything outside a shader — the IR, the host
-    /// struct, this document — calls it `target`; renaming it here is cheaper
-    /// than renaming it everywhere for one grammar's sake.
+    /// Named `look_at` in WGSL because `target` is a reserved keyword in WGSL.
     pub const STATE_WGSL: &str = "\
 struct CameraState {
     eye: vec3<f32>,
@@ -387,40 +366,16 @@ pub fn mangle_param(name: &str) -> String {
     format!("param_{name}")
 }
 
-/// The WGSL spelling of a **field's** `param`, in a caller's uniform, under the
-/// slot that reached it.
+/// Returns the mangled WGSL field identifier for a spliced field's parameter.
 ///
-/// **A different prefix, and that is what makes a collision impossible.** A
-/// field's body is spliced into its caller's shader and reads its params out of
-/// the caller's uniform, so the two sets of names share one struct — and a
-/// renderer declaring `exposure` beside a field declaring `exposure` would
-/// otherwise be one field with two meanings. Prefixing them apart costs
-/// nothing and removes the refusal that would otherwise have to exist, which
-/// is the better of the two: `--param Field:0:exposure` and
-/// `--param L4:0:exposure` name different things and both work.
-///
-/// **The slot is in the prefix as well**, so that two fields in one caller are
-/// two sets of values rather than one — a shape's `radius` and a cutter's
-/// `radius` are different numbers, and a caller holding one name for both would
-/// drive them together with no way to say so.
+/// Prefixes with `field_{slot}_{name}` to avoid collisions with caller uniform struct fields.
 pub fn mangle_field_param(slot: &str, name: &str) -> String {
     format!("field_{slot}_{name}")
 }
 
-/// The **semantic** name of a field's `param`, which is what the engine looks a
-/// uniform field up by.
+/// Returns the semantic lookup key for a field parameter used in host uniform packing.
 ///
-/// **Not the WGSL spelling**, and the difference is a defect this had. A caller
-/// declaring `param field_radius` beside a field declaring `param radius` gave
-/// two uniform fields with the semantic name `field_radius`; the packer finds by
-/// name and takes the first, so the second was never written and its assertion
-/// took the render thread down. The prefix makes the *WGSL* namespace safe and
-/// says nothing about this one.
-///
-/// The separator is a character no `.kir` identifier can contain, so this name
-/// cannot collide with any declared one however it is spelled — and it
-/// separates the slot from the param for the same reason, so that the engine
-/// can take a key apart again without guessing where one name ends.
+/// Uses `\u{1}` control character as separator to prevent collisions with user-defined identifiers.
 pub fn field_param_key(slot: &str, name: &str) -> String {
     format!("field\u{1}{slot}\u{1}{name}")
 }
@@ -465,28 +420,10 @@ pub struct UniformLayout {
     pub total_size: u32,
 }
 
-/// WGSL uniform-address-space `(align, size)` for the scalar/vector/matrix
-/// types the uniform structs this crate emits ever use. Not a general WGSL
-/// layout function — only the types [`crate::l1`] and [`crate::l4`] put in a
-/// uniform struct appear here.
+/// Returns WGSL uniform-address-space `(align, size)` for supported type strings.
 ///
-/// **A second function beside [`karakuri_ir::layout::StorageElemTy`], but not a
-/// second table.** What justifies the function is its key and its coverage: a
-/// uniform field's type arrives here already spelled as a `&str` — from
-/// [`crate::ty::wgsl_ty`] or from a literal this crate chose — and three of the
-/// types it must place (`i32`, `vec4<f32>`, `mat4x4<f32>`) are ones no element
-/// ever holds, so that enum has no variant for them. Everything it *does* have
-/// a variant for is asked of it rather than restated: WGSL's `AlignOf` and
-/// `SizeOf` for scalars and vectors do not vary by address space, so a `vec3`
-/// is the same 16/12 here that it is in an element, and a copy of that row
-/// could only ever be a chance to disagree with it — the drift shape that
-/// moving the element rules into `karakuri-ir` existed to end.
-///
-/// What the uniform address space genuinely adds is a rule about *structs and
-/// arrays*, not about scalars: align 16, size a multiple of 16. That rule is
-/// not in this function at all — it is [`UniformLayoutBuilder::finish`]'s
-/// `align_up(_, 16)`, and the rounding it uses is [`align_up`] from the same
-/// module below, imported rather than kept as a private twin here.
+/// Defers to [`StorageElemTy`] for types shared with storage elements, and defines
+/// alignments for uniform-only types (`i32`, `vec4<f32>`, `mat4x4<f32>`).
 pub fn align_size(wgsl_ty: &str) -> (u32, u32) {
     if let Some(elem) = StorageElemTy::from_wgsl_name(wgsl_ty) {
         return (elem.align(), elem.size());
@@ -686,15 +623,7 @@ mod tests {
         }
     }
 
-    /// **One table, asked twice.** Every type [`StorageElemTy`] has a variant
-    /// for must place identically in a uniform struct and in an element,
-    /// because WGSL's `AlignOf`/`SizeOf` for scalars and vectors do not depend
-    /// on the address space — so a row of [`align_size`] that answered
-    /// differently from the element table would not be a second address
-    /// space's rule, it would be one of the two being wrong. This asserts the
-    /// delegation is still in place: a row copied back into the match below
-    /// with a number of its own fails here, which is the only place such a
-    /// copy is visible at all.
+    /// Verifies that uniform alignment and size match storage element alignment rules.
     #[test]
     fn align_size_defers_to_the_element_table_for_every_type_it_knows() {
         for elem in StorageElemTy::ALL {
