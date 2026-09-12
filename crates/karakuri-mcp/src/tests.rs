@@ -6,12 +6,12 @@ use serde_json::{json, Value};
 use super::server::*;
 use super::*;
 
-/// A state with the loop's half of both channels missing, for the tests
-/// that are about what one method answers rather than about a render loop.
+/// A state with the loop's half of both channels missing, for the tests that
+/// are about what one method answers rather than about a render loop.
 ///
-/// The save channel's receiver is dropped on the way out, which is exactly
-/// the "the loop is gone" case: anything that tried to ask for a save here
-/// would be told so rather than wait.
+/// The save channel's receiver is dropped on the way out, which is exactly the
+/// "the loop is gone" case: anything that tried to ask for a save here would be
+/// told so rather than wait.
 fn state(events: mpsc::Receiver<Event>) -> State {
     State {
         slots: slots(),
@@ -32,14 +32,13 @@ fn state(events: mpsc::Receiver<Event>) -> State {
     }
 }
 
-/// Two slots of a head and one more file, and **none of these paths
-/// exists**.
+/// Two slots of a head and one more file, and none of these paths exists.
 ///
-/// That is deliberate rather than lazy. A layer is read off a file's own
-/// `kind` line, and a file that cannot be read counts as a renderer — the
-/// fallback [`Slots::nodes`] shares with `history::seed`, asserted in
-/// [`an_unreadable_file_is_counted_as_a_renderer`] and relied on here, so
-/// these two slots are the L1-and-one-renderer pair they read as.
+/// That is deliberate rather than lazy. A layer is read off a file's own `kind`
+/// line, and a file that cannot be read counts as a renderer — the fallback
+/// [`Slots::nodes`] shares with `history::seed`, asserted in
+/// [`an_unreadable_file_is_counted_as_a_renderer`] and relied on here, so these
+/// two slots are the L1-and-one-renderer pair they read as.
 fn slots() -> Slots {
     Slots::of(vec![
         ("a/l1.kir".into(), vec!["a/l4.kir".into()]),
@@ -47,12 +46,11 @@ fn slots() -> Slots {
     ])
 }
 
-/// Writes `name` declaring `kind`, and **nothing that would compile**.
+/// Writes `name` declaring `kind`, and nothing that would compile.
 ///
-/// A layer is scanned out of the text rather than parsed, so that this
-/// surface works on a file the checker would refuse — which is the file a
-/// model most needs to be able to read. A fixture that compiled would not
-/// say so.
+/// A layer is scanned out of the text rather than parsed, so that this surface
+/// works on a file the checker would refuse — which is the file a model most
+/// needs to be able to read. A fixture that compiled would not say so.
 fn declaring(dir: &std::path::Path, name: &str, kind: &str) -> std::path::PathBuf {
     let path = dir.join(name);
     std::fs::write(&path, format!("kind {kind}\nnot a procedure at all\n")).expect("fixture");
@@ -61,11 +59,10 @@ fn declaring(dir: &std::path::Path, name: &str, kind: &str) -> std::path::PathBu
 
 /// The text under one `# ` heading of the rendered vocabulary.
 ///
-/// The two halves of the test below ask opposite questions of one section
-/// each, and mixing sections silently weakens both — the "nothing
-/// invented" half went looking for `clip` in `Builtin::from_name` the
-/// moment stage outputs were added to the page, which is the failure
-/// working rather than a nuisance.
+/// The two halves of the test below ask opposite questions of one section each,
+/// and mixing sections silently weakens both — the "nothing invented" half went
+/// looking for `clip` in `Builtin::from_name` the moment stage outputs were
+/// added to the page, which is the failure working rather than a nuisance.
 fn section<'a>(rendered: &'a str, heading: &str) -> &'a str {
     let start = rendered
         .find(heading)
@@ -77,10 +74,10 @@ fn section<'a>(rendered: &'a str, heading: &str) -> &'a str {
     }
 }
 
-/// **The vocabulary is generated, so it cannot say a function exists that
-/// does not.** That is the whole reason it is served beside the prose spec:
-/// `docs/ir-spec.md` describes this language in English and English goes
-/// stale, where this list is the one the checker matches against.
+/// The vocabulary is generated, so it cannot say a function exists that does
+/// not. That is the whole reason it is served beside the prose spec:
+/// `docs/ir-spec.md` describes this language in English and English goes stale,
+/// where this list is the one the checker matches against.
 #[test]
 fn the_vocabulary_is_the_checkers_own_table() {
     let rendered = vocabulary();
@@ -109,12 +106,11 @@ fn the_vocabulary_is_the_checkers_own_table() {
 /// The same claim about the two other closed vocabularies a procedure is
 /// written against — the topologies and the stage outputs.
 ///
-/// A model that is told the wrong set here writes a file the checker
-/// refuses, which is the cheap failure; one that is told *too few* never
-/// discovers a whole rendering mode, which is not cheap at all. `clip_b`
-/// is the case in point: it is the only way to draw a segment, and a page
-/// that omitted it would leave the language looking exactly as it did
-/// before lines existed.
+/// A model that is told the wrong set here writes a file the checker refuses,
+/// which is the cheap failure; one that is told *too few* never discovers a
+/// whole rendering mode, which is not cheap at all. `clip_b` is the case in
+/// point: it is the only way to draw a segment, and a page that omitted it
+/// would leave the language looking exactly as it did before lines existed.
 #[test]
 fn the_vocabulary_lists_every_topology_every_blend_and_every_stage_output() {
     let rendered = vocabulary();
@@ -179,10 +175,10 @@ fn the_vocabulary_lists_every_topology_every_blend_and_every_stage_output() {
     }
 }
 
-/// A slot is a number and a layer is one of five. **No path crosses the
-/// protocol**: a client may be on another machine through an `ssh -L`,
-/// where a path means nothing — and a tool that took one would invite a
-/// model to write anywhere on the render machine's disk.
+/// A slot is a number and a layer is one of five. No path crosses the protocol:
+/// a client may be on another machine through an `ssh -L`, where a path means
+/// nothing — and a tool that took one would invite a model to write anywhere on
+/// the render machine's disk.
 #[test]
 fn a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused() {
     let slots = slots();
@@ -218,15 +214,14 @@ fn a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused() {
     assert!(none_held.contains("optional"), "{none_held}");
 }
 
-/// **The index counts within a layer, keeping file order** — the rule
+/// The index counts within a layer, keeping file order — the rule
 /// `history::seed` files a snapshot under, so an address that reaches the
 /// second renderer here reaches the second renderer's versions there.
 ///
-/// The fixture interleaves the layers on purpose. Counting a file's
-/// position in the slot instead would hand back a real procedure at every
-/// address and the wrong one at most of them, which is the failure that
-/// reads as the language being confusing rather than as a resolver being
-/// wrong.
+/// The fixture interleaves the layers on purpose. Counting a file's position in
+/// the slot instead would hand back a real procedure at every address and the
+/// wrong one at most of them, which is the failure that reads as the language
+/// being confusing rather than as a resolver being wrong.
 #[test]
 fn a_node_is_indexed_within_its_own_layer() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -287,10 +282,10 @@ fn a_node_is_indexed_within_its_own_layer() {
     assert!(two_cameras.contains("one L3"), "{two_cameras}");
 }
 
-/// **A file that cannot be read is counted as a renderer**, which is what
-/// `history::seed` makes of one and what the compile is about to refuse it
-/// as. Guessing nothing at all would make a slot's whole chain
-/// unaddressable the moment one file in it went missing.
+/// A file that cannot be read is counted as a renderer, which is what
+/// `history::seed` makes of one and what the compile is about to refuse it as.
+/// Guessing nothing at all would make a slot's whole chain unaddressable the
+/// moment one file in it went missing.
 #[test]
 fn an_unreadable_file_is_counted_as_a_renderer() {
     let missing = Slots::of(vec![(
@@ -303,10 +298,10 @@ fn an_unreadable_file_is_counted_as_a_renderer() {
     );
 }
 
-/// **A layer is parsed once, and a name this language does not have comes
-/// back with the ones it does.** A model that is told which five there are
-/// can fix its own call, which is the same reason the checker's
-/// diagnostics come back through this surface at all.
+/// A layer is parsed once, and a name this language does not have comes back
+/// with the ones it does. A model that is told which five there are can fix its
+/// own call, which is the same reason the checker's diagnostics come back
+/// through this surface at all.
 #[test]
 fn a_layer_this_language_does_not_have_is_refused_with_the_list() {
     let refused =
@@ -325,16 +320,15 @@ fn a_layer_this_language_does_not_have_is_refused_with_the_list() {
     );
 }
 
-/// **A renderer is addressed by index, and an index past the stack is
-/// refused rather than folded to the first.**
+/// A renderer is addressed by index, and an index past the stack is refused
+/// rather than folded to the first.
 ///
 /// This surface used to hand back renderer 0 for any `L4` and say so in a
-/// comment, which was honest and useless: a model told to rewrite the
-/// streaks of a slot that draws sprites *and* streaks would have rewritten
-/// the sprites. The refusal names the range, because a model that can read
-/// the range can fix its own call — the same reason the checker's
-/// diagnostics come back through this surface rather than going to a
-/// terminal nobody is watching.
+/// comment, which was honest and useless: a model told to rewrite the streaks
+/// of a slot that draws sprites *and* streaks would have rewritten the sprites.
+/// The refusal names the range, because a model that can read the range can fix
+/// its own call — the same reason the checker's diagnostics come back through
+/// this surface rather than going to a terminal nobody is watching.
 #[test]
 fn a_renderer_is_addressed_by_index_and_a_bad_one_names_the_range() {
     let stacked = Slots::of(vec![(
@@ -368,10 +362,10 @@ fn a_renderer_is_addressed_by_index_and_a_bad_one_names_the_range() {
     assert!(l1_indexed.contains("one L1"), "{l1_indexed}");
 }
 
-/// **A tool failure comes back as a result, not as a protocol error.**
-/// A model told "your call was malformed" learns nothing; one handed the
-/// checker's diagnostics can fix its own source, which is the entire loop
-/// this surface exists for.
+/// A tool failure comes back as a result, not as a protocol error. A model told
+/// "your call was malformed" learns nothing; one handed the checker's
+/// diagnostics can fix its own source, which is the entire loop this surface
+/// exists for.
 #[test]
 fn a_refused_write_returns_the_diagnostics_as_content() {
     let (tx, rx) = mpsc::channel();
@@ -452,17 +446,16 @@ fn check_procedure_returns_structured_diagnostics() {
     assert!(report_broken.diagnostics[0].remedy.is_some());
 }
 
-/// **Every tool this server publishes names an operation the gate lets
-/// through**, which is ADR-0235's promise that nothing closes on the day it
-/// is recorded: *"the seven tools that exist are unaffected. Nothing closes
-/// today and no model loses a call it could make yesterday."*
+/// Every tool this server publishes names an operation the gate lets through,
+/// which is ADR-0235's promise that nothing closes on the day it is recorded:
+/// *"the seven tools that exist are unaffected. Nothing closes today and no
+/// model loses a call it could make yesterday."*
 ///
-/// **The names come from [`tools`] rather than from a list written here**,
-/// so an eighth tool that named a closed operation would fail this rather
-/// than slip past a fixture that had not heard of it. The arguments are the
-/// smallest each tool accepts — what is asserted is that [`asked`] names an
-/// operation and that [`audited`] lets it by, not what the tool then does
-/// with it.
+/// The names come from [`tools`] rather than from a list written here, so an
+/// eighth tool that named a closed operation would fail this rather than slip
+/// past a fixture that had not heard of it. The arguments are the smallest each
+/// tool accepts — what is asserted is that [`asked`] names an operation and
+/// that [`audited`] lets it by, not what the tool then does with it.
 #[test]
 fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
     let (_tx, rx) = mpsc::channel();
@@ -529,12 +522,12 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
     }
 }
 
-/// **Every operation of the vocabulary is spelled here, once**, and this is
-/// the test that stops a sixty-fifth arriving without an answer.
+/// Every operation of the vocabulary is spelled here, once, and this is the
+/// test that stops a sixty-fifth arriving without an answer.
 ///
-/// [`sayable`] already stops the build, so this catches the other half: a
-/// row of [`SPELLED`] whose heading no longer exists, and a heading with two
-/// rows. Both directions, because they are two different mistakes.
+/// [`sayable`] already stops the build, so this catches the other half: a row
+/// of [`SPELLED`] whose heading no longer exists, and a heading with two rows.
+/// Both directions, because they are two different mistakes.
 #[test]
 fn every_operation_of_the_vocabulary_is_spelled_here() {
     let spelled: Vec<&'static str> = SPELLED.iter().map(Spelled::title).collect();
@@ -558,13 +551,13 @@ fn every_operation_of_the_vocabulary_is_spelled_here() {
     assert_eq!(spelled, Operation::TITLES.to_vec());
 }
 
-/// **The table and the classification agree**: a row has a spelling exactly
-/// where [`sayable`] says this surface can name the operation.
+/// The table and the classification agree: a row has a spelling exactly where
+/// [`sayable`] says this surface can name the operation.
 ///
 /// Two lists that could disagree are what this crate exists to abolish, and
 /// these two genuinely can: `make` is written per row and [`sayable`] is
-/// written per variant. So they are checked against each other rather than
-/// kept in step by hand.
+/// written per variant. So they are checked against each other rather than kept
+/// in step by hand.
 #[test]
 fn the_table_and_the_classification_agree() {
     for row in SPELLED {
@@ -600,16 +593,16 @@ fn the_table_and_the_classification_agree() {
     }
 }
 
-/// **Every operation `operate` takes round-trips through the spelling.**
+/// Every operation `operate` takes round-trips through the spelling.
 ///
 /// A table test over [`SPELLED`], which is what makes the sample beside each
 /// `make` one statement rather than two: the call written there has to come
 /// back as the operation written beside it, for all thirty, or the shape a
 /// client is told and the shape the server reads have come apart.
 ///
-/// **Watched to fail**: with `deck_of` reading `"deck"` where
-/// `Operation::Crossfade` says `from`, six rows come back with the wrong
-/// deck and this names each of them.
+/// Watched to fail: with `deck_of` reading `"deck"` where
+/// `Operation::Crossfade` says `from`, six rows come back with the wrong deck
+/// and this names each of them.
 #[test]
 fn every_operation_operate_takes_round_trips_through_the_wire() {
     let slots = slots();
@@ -642,8 +635,8 @@ fn every_operation_operate_takes_round_trips_through_the_wire() {
     );
 }
 
-/// **The tool's `operation` list is every name the spelling accepts**, in
-/// the manual's order, so a client is told exactly what it may ask for.
+/// The tool's `operation` list is every name the spelling accepts, in the
+/// manual's order, so a client is told exactly what it may ask for.
 #[test]
 fn the_schema_lists_every_operation_the_spelling_accepts() {
     let tools = tools();
@@ -676,9 +669,9 @@ fn the_schema_lists_every_operation_the_spelling_accepts() {
     }
 }
 
-/// **An `operate` on a closed class is refused with the gate's own
-/// sentence**, by equality and not by a `contains` — P-0090's *one refusal,
-/// one sentence*, and the sentence is `karakuri_operation::gate`'s.
+/// An `operate` on a closed class is refused with the gate's own sentence, by
+/// equality and not by a `contains` — P-0090's *one refusal, one sentence*, and
+/// the sentence is `karakuri_operation::gate`'s.
 #[test]
 fn an_operate_on_a_closed_class_is_refused_with_the_gates_sentence() {
     use karakuri_operation::gate::{Class, Standing};
@@ -709,16 +702,15 @@ fn an_operate_on_a_closed_class_is_refused_with_the_gates_sentence() {
     );
 }
 
-/// **A name this vocabulary does not carry is refused naming the nearest**,
-/// which is
+/// A name this vocabulary does not carry is refused naming the nearest, which
+/// is
 /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
-/// the mistake a model makes here is a paraphrase, and the next attempt
-/// needs the heading rather than a list of sixty-four.
+/// the mistake a model makes here is a paraphrase, and the next attempt needs
+/// the heading rather than a list of sixty-four.
 ///
-/// **And a name it does carry but this surface will not take is refused with
-/// its own reason**, which is the other half: a model told only *no* about
-/// `Read one node's source` would go looking for a tool that is sitting
-/// right there.
+/// And a name it does carry but this surface will not take is refused with its
+/// own reason, which is the other half: a model told only *no* about `Read one
+/// node's source` would go looking for a tool that is sitting right there.
 #[test]
 fn a_name_the_vocabulary_does_not_carry_is_refused_naming_the_nearest() {
     let slots = slots();
@@ -783,15 +775,14 @@ fn a_name_the_vocabulary_does_not_carry_is_refused_naming_the_nearest() {
     );
 }
 
-/// **A closed operation is refused at the seam every tool crosses, in the
-/// one sentence.**
+/// A closed operation is refused at the seam every tool crosses, in the one
+/// sentence.
 ///
-/// Driven through [`audited`] rather than over the wire because **no tool
-/// names a closed operation today** — ADR-0235 puts all seven in the open
-/// set — so the seam is the only place this is reachable until the
-/// floodgate opens. Asserted by equality against
-/// `karakuri_operation::gate::refusal`, which is P-0090: one refusal, one
-/// sentence, and no second spelling of it in this crate.
+/// Driven through [`audited`] rather than over the wire because no tool names a
+/// closed operation today — ADR-0235 puts all seven in the open set — so the
+/// seam is the only place this is reachable until the floodgate opens. Asserted
+/// by equality against `karakuri_operation::gate::refusal`, which is P-0090:
+/// one refusal, one sentence, and no second spelling of it in this crate.
 #[test]
 fn a_closed_operation_is_refused_at_the_seam_every_tool_crosses() {
     use karakuri_operation::gate::{Class, Standing};
@@ -807,10 +798,10 @@ fn a_closed_operation_is_refused_at_the_seam_every_tool_crosses() {
     );
 }
 
-/// **A class the operator opens is open on the very next call**, which is
-/// what the run holding a handle rather than a snapshot buys: an opening
-/// set between two numbers has to be true of the call after it, and one
-/// closed again has to be false of the call after that.
+/// A class the operator opens is open on the very next call, which is what the
+/// run holding a handle rather than a snapshot buys: an opening set between two
+/// numbers has to be true of the call after it, and one closed again has to be
+/// false of the call after that.
 #[test]
 fn a_class_the_operator_opens_is_open_on_the_next_call() {
     use karakuri_operation::gate::{Class, Open};
@@ -833,8 +824,8 @@ fn a_class_the_operator_opens_is_open_on_the_next_call() {
     assert!(audited(&operation, &state).is_err());
 }
 
-/// A notification has no `id` and is never answered — the one shape of
-/// message that must produce no reply at all.
+/// A notification has no `id` and is never answered — the one shape of message
+/// that must produce no reply at all.
 #[test]
 fn a_notification_is_acted_on_and_not_answered() {
     let (_tx, rx) = mpsc::channel();
@@ -868,13 +859,12 @@ fn the_swap_history_does_not_grow_without_end() {
     assert!(!said.contains("event 0"), "the oldest event was kept");
 }
 
-/// **A save the render loop does not answer ends, and says something true.**
+/// A save the render loop does not answer ends, and says something true.
 ///
-/// Three ways a model can be left waiting, and none of them may end in a
-/// call that never returns or in a claim nobody can support. Over the
-/// channel rather than over a socket for the reason `drained_saves` is
-/// tested that way: the bound is the whole point and a render loop is not
-/// needed to see it.
+/// Three ways a model can be left waiting, and none of them may end in a call
+/// that never returns or in a claim nobody can support. Over the channel rather
+/// than over a socket for the reason `drained_saves` is tested that way: the
+/// bound is the whole point and a render loop is not needed to see it.
 #[test]
 fn a_save_the_loop_does_not_answer_ends_and_says_something_true() {
     // Never taken. Nothing was saved and saying so is safe.
@@ -926,21 +916,21 @@ fn a_save_the_loop_does_not_answer_ends_and_says_something_true() {
     assert!(said.contains("`keeper`"), "{said}");
 }
 
-/// **The render loop's own accept reaches a client that times out**, and
-/// names the id it will find the set under.
+/// The render loop's own accept reaches a client that times out, and names the
+/// id it will find the set under.
 ///
 /// The two halves of a truthful timeout meeting for the first time:
-/// [`crate::accepted_save`] is what the loop says at the frame it takes a
-/// save, and [`awaited`] is what this server does with it. Every other test
-/// that reaches a save drives a stand-in loop which sends `accepted`
-/// *itself* — so deleting `reply.accepted` from the real loop left the whole
-/// suite green, while a client whose deadline passed was told **"Nothing was
-/// saved, and asking again is safe"** about a save that was running and
-/// would land. That is a false claim to a model about a disk, and preventing
-/// exactly it is why [`Reply`] carries two messages rather than one.
+/// [`crate::accepted_save`] is what the loop says at the frame it takes a save,
+/// and [`awaited`] is what this server does with it. Every other test that
+/// reaches a save drives a stand-in loop which sends `accepted` *itself* — so
+/// deleting `reply.accepted` from the real loop left the whole suite green,
+/// while a client whose deadline passed was told "Nothing was saved, and asking
+/// again is safe" about a save that was running and would land. That is a false
+/// claim to a model about a disk, and preventing exactly it is why [`Reply`]
+/// carries two messages rather than one.
 ///
-/// The reply is deliberately still alive at the deadline: this is a slow
-/// save, not a dead loop, and the two have different answers.
+/// The reply is deliberately still alive at the deadline: this is a slow save,
+/// not a dead loop, and the two have different answers.
 #[test]
 fn a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out() {
     let (tx, news) = mpsc::channel();
@@ -994,7 +984,7 @@ fn a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out() {
     drop(reply);
 }
 
-/// **An id from a client is one path component**, which is what a Set id is
+/// An id from a client is one path component, which is what a Set id is
 /// everywhere else in this program.
 #[test]
 fn a_set_id_from_a_client_is_one_path_component() {
@@ -1038,14 +1028,13 @@ fn a_set_id_from_a_client_is_one_path_component() {
 
 /// The specification, relative to the workspace root — the same page
 /// `karakuri-operation`'s `the_manual_and_the_vocabulary_agree.rs` and
-/// `karakuri-console`'s `tests/vocabulary.rs` read, and this is that check
-/// for the third surface.
+/// `karakuri-console`'s `tests/vocabulary.rs` read, and this is that check for
+/// the third surface.
 const PAGE: &str = "docs/manual/operations.html";
 
-/// **What marks an operation on that page.** Every row opens with this div
-/// and nothing else on the page uses it; sections are `<h2>` and the legend
-/// is neither. The same marker both other tests match, for their
-/// reason.
+/// What marks an operation on that page. Every row opens with this div and
+/// nothing else on the page uses it; sections are `<h2>` and the legend is
+/// neither. The same marker both other tests match, for their reason.
 const ROW: &str = r#"<div class="op-head">"#;
 
 fn page() -> String {
@@ -1060,12 +1049,12 @@ fn page() -> String {
     })
 }
 
-/// **Every row's title and its MCP badge**, in page order: the badge's
-/// class — `has`, `plan` or `gap` — and the text it names the route with.
+/// Every row's title and its MCP badge, in page order: the badge's class —
+/// `has`, `plan` or `gap` — and the text it names the route with.
 ///
-/// Read verbatim and never decoded, exactly as the vocabulary's own test
-/// reads a heading: a `gap` badge says `&mdash;`, and a tool name that
-/// needed decoding to match would be a tool nobody could type.
+/// Read verbatim and never decoded, exactly as the vocabulary's own test reads
+/// a heading: a `gap` badge says `&mdash;`, and a tool name that needed
+/// decoding to match would be a tool nobody could type.
 fn mcp_routes() -> Vec<(String, String, String)> {
     let html = page();
     let mut found = Vec::new();
@@ -1108,8 +1097,8 @@ fn mcp_routes() -> Vec<(String, String, String)> {
     found
 }
 
-/// **Arguments each published tool accepts**, and the only thing this file
-/// says about a tool that the code does not.
+/// Arguments each published tool accepts, and the only thing this file says
+/// about a tool that the code does not.
 ///
 /// Not a second list of titles: what a tool *is* comes back from [`asked`],
 /// which is the path a real call takes. This is the smallest call that gets
@@ -1171,17 +1160,17 @@ fn published() -> Vec<(String, Operation)> {
         .collect()
 }
 
-/// **A tool with no row is an operation nobody specified.**
+/// A tool with no row is an operation nobody specified.
 ///
 /// The page is the specification for which operations exist — that is what
 /// `karakuri-operation`'s own manual test is built on — so a tool reaching
 /// something the page does not name would be this surface inventing an
 /// operation, with no prose and no other three routes.
 ///
-/// The row is matched on the operation's title, which comes from
-/// [`asked`] rather than from a table here, **and** on the badge's own text,
-/// which has to name the tool: a row marked `has` that named a different
-/// tool would be a route the page describes and nobody can call.
+/// The row is matched on the operation's title, which comes from [`asked`]
+/// rather than from a table here, and on the badge's own text, which has to
+/// name the tool: a row marked `has` that named a different tool would be a
+/// route the page describes and nobody can call.
 #[test]
 fn every_tool_this_server_publishes_has_a_route_on_the_page() {
     let routes = mcp_routes();
@@ -1226,12 +1215,12 @@ fn every_tool_this_server_publishes_has_a_route_on_the_page() {
     }
 }
 
-/// The other direction: **a `has` badge with no tool is the page claiming a
-/// route that does not exist.**
+/// The other direction: a `has` badge with no tool is the page claiming a route
+/// that does not exist.
 ///
-/// It fails apart from the test above because it is a different failure:
-/// that one says the surface reached past the specification, this one says
-/// the specification promises a model something it cannot do.
+/// It fails apart from the test above because it is a different failure: that
+/// one says the surface reached past the specification, this one says the
+/// specification promises a model something it cannot do.
 #[test]
 fn every_mcp_route_the_page_claims_is_a_tool_this_server_publishes() {
     let routes = mcp_routes();
@@ -1288,13 +1277,13 @@ fn every_mcp_route_the_page_claims_is_a_tool_this_server_publishes() {
     }
 }
 
-/// **Every operation the spelling takes has a row marked `has operate`, and
-/// every row that is not marked so is one the spelling refuses.**
+/// Every operation the spelling takes has a row marked `has operate`, and every
+/// row that is not marked so is one the spelling refuses.
 ///
-/// The other direction of the test above, and the one that catches the
-/// silent half: a row `operate` reaches whose badge still reads `plan` is a
-/// route a model can take and the page does not describe, which nothing else
-/// here would notice.
+/// The other direction of the test above, and the one that catches the silent
+/// half: a row `operate` reaches whose badge still reads `plan` is a route a
+/// model can take and the page does not describe, which nothing else here would
+/// notice.
 #[test]
 fn every_operation_operate_takes_stands_where_the_page_says_it_does() {
     let routes = mcp_routes();
@@ -1332,24 +1321,23 @@ fn every_operation_operate_takes_stands_where_the_page_says_it_does() {
     }
 }
 
-/// **Not one of the seven writes a record where it is asked**, which is why
-/// none of them routes through `Live::operate` and why this module performs
-/// its own.
+/// Not one of the seven writes a record where it is asked, which is why none of
+/// them routes through `Live::operate` and why this module performs its own.
 ///
-/// **And one of them writes no record at all, which is a hole this test
-/// pins rather than blesses.** `wire_input` answers `NoRecord` because
-/// `Record::Edge` is a Set file's record with no `slot` to carry the deck
-/// `WireInput` names — so a rewiring during a set is the one thing a model
-/// can do on this surface that a replay does not reconstruct. It is asserted
-/// here so that the day `Record::Edge` grows a `slot` and `written` answers
-/// with it, this fails and names the tool whose answer has changed.
+/// And one of them writes no record at all, which is a hole this test pins
+/// rather than blesses. `wire_input` answers `NoRecord` because `Record::Edge`
+/// is a Set file's record with no `slot` to carry the deck `WireInput` names —
+/// so a rewiring during a set is the one thing a model can do on this surface
+/// that a replay does not reconstruct. It is asserted here so that the day
+/// `Record::Edge` grows a `slot` and `written` answers with it, this fails and
+/// names the tool whose answer has changed.
 ///
-/// Asserted against `karakuri-operation-record` rather than against this
-/// file, in the shape ADR-0198 gave the key handler's owed list: the day one
-/// of these conversions changes — a `read_set` that logged, a `save_set`
-/// whose record moved off the landing frame — the failure names the tool
-/// that is due to move rather than leaving this surface performing something
-/// the record layer has since taken over.
+/// Asserted against `karakuri-operation-record` rather than against this file,
+/// in the shape ADR-0198 gave the key handler's owed list: the day one of these
+/// conversions changes — a `read_set` that logged, a `save_set` whose record
+/// moved off the landing frame — the failure names the tool that is due to move
+/// rather than leaving this surface performing something the record layer has
+/// since taken over.
 #[test]
 fn no_tool_writes_a_record_where_it_is_asked() {
     use karakuri_operation_record::{Current, Silent, Written};
@@ -1414,15 +1402,15 @@ fn description(name: &str) -> String {
         .to_string()
 }
 
-/// **What a clean write does not promise**, said where a model reads it.
+/// What a clean write does not promise, said where a model reads it.
 ///
 /// The description said a clean return meant the material compiled and so a
 /// non-compiling change never reached the screen. `compile::check` sees one
 /// procedure; everything between nodes is `Set::validate`, and one of the
-/// things it refuses — a `uses` slot nothing binds — is a state this
-/// surface can create and has no tool to undo. See
-/// [`super::wire_tests::a_write_that_needs_an_edge_still_returns_cleanly`]
-/// for the write that proves it.
+/// things it refuses — a `uses` slot nothing binds — is a state this surface
+/// can create and has no tool to undo. See
+/// [`super::wire_tests::a_write_that_needs_an_edge_still_returns_cleanly`] for
+/// the write that proves it.
 #[test]
 fn write_procedure_says_what_a_clean_write_does_not_promise() {
     let described = description("write_procedure");
@@ -1451,14 +1439,14 @@ fn write_procedure_says_what_a_clean_write_does_not_promise() {
     );
 }
 
-/// **A schema states the constraints its tool enforces.**
+/// A schema states the constraints its tool enforces.
 ///
-/// `slot: -1` was refused with "`slot` is required and is a number", which
-/// is a sentence about the wrong mistake — the same class of refusal
-/// [`kept`] argues about for `"id": null`, and one a client could have been
-/// told to avoid before it called. The bounds a schema *can* carry belong
-/// in it; the deck's upper bound cannot be one, because how many slots this
-/// run holds is not known when `tools/list` is answered.
+/// `slot: -1` was refused with "`slot` is required and is a number", which is a
+/// sentence about the wrong mistake — the same class of refusal [`kept`] argues
+/// about for `"id": null`, and one a client could have been told to avoid
+/// before it called. The bounds a schema *can* carry belong in it; the deck's
+/// upper bound cannot be one, because how many slots this run holds is not
+/// known when `tools/list` is answered.
 #[test]
 fn a_schema_states_the_constraints_its_tool_enforces() {
     for tool in tools().as_array().expect("tools() is an array") {
@@ -1506,13 +1494,13 @@ fn a_schema_states_the_constraints_its_tool_enforces() {
     assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());
 }
 
-/// **`save_set` names everything it writes.**
+/// `save_set` names everything it writes.
 ///
-/// It described the file as the hashes, the parameters, the capacities and
-/// the salts, and `setfile::save` writes the edges, the merge, the camera
-/// and the seeds as well — so a model was told a Set file carries less of
-/// its slot than it does, and the operations page's own row for this
-/// operation had already said otherwise.
+/// It described the file as the hashes, the parameters, the capacities and the
+/// salts, and `setfile::save` writes the edges, the merge, the camera and the
+/// seeds as well — so a model was told a Set file carries less of its slot than
+/// it does, and the operations page's own row for this operation had already
+/// said otherwise.
 #[test]
 fn save_set_names_everything_it_writes() {
     let described = description("save_set");
@@ -1536,17 +1524,17 @@ fn save_set_names_everything_it_writes() {
 
 // -- the edge ----------------------------------------------------------
 
-/// **An edge is named at both ends and never addressed by a position.**
+/// An edge is named at both ends and never addressed by a position.
 ///
-/// This is the one tool whose arguments are not `{slot, layer, index}`, and
-/// the asymmetry is deliberate: `Record::Edge`'s reason is that *a position
-/// moves when the list is reordered, and reordering silently changing which
-/// geometry a morph blends towards is the exact failure this record exists
-/// to end*, and `NodeAddress`'s own documentation says the two spellings are not
+/// This is the one tool whose arguments are not `{slot, layer, index}`, and the
+/// asymmetry is deliberate: `Record::Edge`'s reason is that *a position moves
+/// when the list is reordered, and reordering silently changing which geometry
+/// a morph blends towards is the exact failure this record exists to end*, and
+/// `NodeAddress`'s own documentation says the two spellings are not
 /// interchangeable. A tool given a `layer` and an `index` here because its
-/// neighbours have them would be that failure with a schema in front of it,
-/// and it is the kind of tidying that looks like consistency — so it is
-/// asserted against rather than left to a comment.
+/// neighbours have them would be that failure with a schema in front of it, and
+/// it is the kind of tidying that looks like consistency — so it is asserted
+/// against rather than left to a comment.
 #[test]
 fn an_edge_is_named_at_both_ends_and_never_addressed_by_a_position() {
     let properties = tools()
@@ -1599,16 +1587,16 @@ fn an_edge_is_named_at_both_ends_and_never_addressed_by_a_position() {
     assert_eq!(to, "sphere_shell");
 }
 
-/// **`wire_input` says what it replaces and what it cannot take back.**
+/// `wire_input` says what it replaces and what it cannot take back.
 ///
-/// Two facts a model cannot find out by calling it, and each is a way to
-/// wedge a slot. A second edge on a bound input would be
-/// `SetError::SlotBoundTwice` if it were appended rather than replaced, so
-/// *changing your mind is one call* has to be said or a model will not try;
-/// and an edge outlives the `uses` that needed it, so a procedure rewritten
-/// without that `uses` leaves an edge naming a slot nothing declares — a
-/// state this surface still cannot get out of, and the reason the missing
-/// half is named in the description rather than discovered.
+/// Two facts a model cannot find out by calling it, and each is a way to wedge
+/// a slot. A second edge on a bound input would be `SetError::SlotBoundTwice`
+/// if it were appended rather than replaced, so *changing your mind is one
+/// call* has to be said or a model will not try; and an edge outlives the
+/// `uses` that needed it, so a procedure rewritten without that `uses` leaves
+/// an edge naming a slot nothing declares — a state this surface still cannot
+/// get out of, and the reason the missing half is named in the description
+/// rather than discovered.
 #[test]
 fn wire_input_says_what_it_replaces_and_what_it_cannot_take_back() {
     let described = description("wire_input");
@@ -1634,13 +1622,13 @@ fn wire_input_says_what_it_replaces_and_what_it_cannot_take_back() {
     );
 }
 
-/// **An edge the render loop does not take ends, and says something true.**
+/// An edge the render loop does not take ends, and says something true.
 ///
 /// [`awaited`]'s three cases, for the wait that is not a save's — see
-/// [`applied`]. The first of them is the one that matters most here and is
-/// not hypothetical: a run whose loop never drains [`Reporter::wires`]
-/// reaches it on every call, and *nothing was rewired* is what such a run
-/// has to answer rather than a claim about a rebuild nobody started.
+/// [`applied`]. The first of them is the one that matters most here and is not
+/// hypothetical: a run whose loop never drains [`Reporter::wires`] reaches it
+/// on every call, and *nothing was rewired* is what such a run has to answer
+/// rather than a claim about a rebuild nobody started.
 #[test]
 fn an_edge_the_loop_does_not_take_ends_and_says_something_true() {
     // Never taken. Nothing was rewired and saying so is safe.

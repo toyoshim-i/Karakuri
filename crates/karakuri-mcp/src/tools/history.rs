@@ -33,16 +33,15 @@ pub(crate) fn swap_outcome(state: &mut State) -> Result<String, String> {
 
 /// `walk_history`'s arguments as the operation they name.
 ///
-/// **`set` is required where the payload's own field is an `Option`**, and the
-/// two do not disagree: `None` there is *a walk that names no Set*, which is
-/// the panel's answer for a deck running the pair the run launched with — those
+/// `set` is required where the payload's own field is an `Option`, and the two
+/// do not disagree: `None` there is *a walk that names no Set*, which is the
+/// panel's answer for a deck running the pair the run launched with — those
 /// versions are filed under no Set and a narrowing matches none of them
 /// (ADR-0276). A model asking for that would be asking for a listing that is
 /// empty by construction, so this surface does not offer it and says so.
 ///
-/// **[`checked_id`] for [`named_set`]'s reason**: a Set id is one path
-/// component, and the walk matches it against what the store filed a version
-/// under.
+/// [`checked_id`] for [`named_set`]'s reason: a Set id is one path component,
+/// and the walk matches it against what the store filed a version under.
 pub(crate) fn walked_history(args: &Value) -> Result<Operation, String> {
     let set = args.get("set").and_then(Value::as_str).ok_or(
         "`set` is required and is a string: which Set's versions to walk. A walk is \
@@ -55,40 +54,39 @@ pub(crate) fn walked_history(args: &Value) -> Result<Operation, String> {
     })
 }
 
-/// **How many rows the walk asks for before the narrowing**, and it is a
-/// number this surface chooses rather than one `history::list` has.
+/// How many rows the walk asks for before the narrowing, and it is a number
+/// this surface chooses rather than one `history::list` has.
 ///
-/// `list`'s cap is on **days opened** and the narrowing to one Set happens
-/// after it, so a store whose day directories hold several Sets' versions
-/// yields fewer of each — asking for two hundred is asking for the last two
-/// hundred versions *this store* wrote, of which some are the Set that was
-/// asked about. Larger than the twenty a reply renders, so an ordinary Set's
-/// recent history survives the narrowing whole; small enough that the walk
-/// stops after a handful of day directories, which is the whole of what it
-/// costs
+/// `list`'s cap is on days opened and the narrowing to one Set happens after
+/// it, so a store whose day directories hold several Sets' versions yields
+/// fewer of each — asking for two hundred is asking for the last two hundred
+/// versions *this store* wrote, of which some are the Set that was asked about.
+/// Larger than the twenty a reply renders, so an ordinary Set's recent history
+/// survives the narrowing whole; small enough that the walk stops after a
+/// handful of day directories, which is the whole of what it costs
 /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
 /// What lies past it is not counted — counting it is the cost the cap exists
 /// not to pay — and `Listing::stopped_short` is what says the walk stopped.
 pub(crate) const WALKED: usize = 200;
 
-/// **Every version of one Set that compiled**, most recent first, as rows a
-/// landing can name back.
+/// Every version of one Set that compiled, most recent first, as rows a landing
+/// can name back.
 ///
-/// **A read, answered on this thread**, which is why the row is a tool beside
+/// A read, answered on this thread, which is why the row is a tool beside
 /// `read_set` and `list_sets` rather than a name `operate` takes: it walks
 /// `<store>/history/` and opens no file at all, and a directory walk handed to
 /// the render loop is a directory walk on the path that must not wait
 /// (`docs/adr/0342-…`, ADR-0199).
 ///
-/// **Narrowed to one Set here rather than in `history::list`**, which is that
+/// Narrowed to one Set here rather than in `history::list`, which is that
 /// module's own rule — *"which rows an operator is looking at is a question the
 /// surface asks"* — and the same division `list_sets`' two filters are applied
-/// under. **A row filed under no Set matches no id** and is never folded in:
-/// those versions were written where the slot was running the pair a run
-/// launched with, and a filter that let them through would be inventing a
-/// history for whichever Set was asked about (ADR-0276, ADR-0308).
+/// under. A row filed under no Set matches no id and is never folded in: those
+/// versions were written where the slot was running the pair a run launched
+/// with, and a filter that let them through would be inventing a history for
+/// whichever Set was asked about (ADR-0276, ADR-0308).
 ///
-/// **The three things a walk has to say beside its rows** are said: the walk
+/// The three things a walk has to say beside its rows are said: the walk
 /// stopping short, the entries under `history/` the layout does not claim, and
 /// a rendering shorter than what matched. Each of the three is a way for a
 /// listing to read as the whole of something it is not.
@@ -194,33 +192,33 @@ pub(crate) fn plural(n: usize) -> &'static str {
     }
 }
 
-/// **What this Set will allocate to hold its elements**, node by node and in
-/// total — computed from the Set file and a compile pass, with nothing built,
-/// no adapter opened and no GPU touched.
+/// What this Set will allocate to hold its elements, node by node and in total
+/// — computed from the Set file and a compile pass, with nothing built, no
+/// adapter opened and no GPU touched.
 ///
-/// **A figure with a producer and no reader is how the last wrong number in
-/// this program got published.** `Set::element_storage` has reported this per
-/// node since the buffers existed and no binary in this tree printed it; the
-/// figure that *was* printed, at stage 4, was a second arithmetic over one
-/// procedure's `emit` list — it claimed 96 bytes per element where 312 were
-/// allocated, and it was withdrawn rather than corrected — see
-/// `docs/adr/0116-stage-four-stops-claiming-the-byte-figure.md`.
-/// So this one is not a second arithmetic: `Plan::element_storage` calls
-/// the same sizing the allocation calls, over the same walk a build makes, and
-/// a test in `karakuri-engine` asserts the two answers about one Set are equal.
+/// A figure with a producer and no reader is how the last wrong number in this
+/// program got published. `Set::element_storage` has reported this per node
+/// since the buffers existed and no binary in this tree printed it; the figure
+/// that *was* printed, at stage 4, was a second arithmetic over one procedure's
+/// `emit` list — it claimed 96 bytes per element where 312 were allocated, and
+/// it was withdrawn rather than corrected — see
+/// `docs/adr/0116-stage-four-stops-claiming-the-byte-figure.md`. So this one is
+/// not a second arithmetic: `Plan::element_storage` calls the same sizing the
+/// allocation calls, over the same walk a build makes, and a test in
+/// `karakuri-engine` asserts the two answers about one Set are equal.
 ///
-/// **Every number needs the whole Set and not one card**, which is why this is
-/// a block of its own rather than a line inside [`node_block`]. What a node
+/// Every number needs the whole Set and not one card, which is why this is a
+/// block of its own rather than a line inside [`node_block`]. What a node
 /// allocates depends on what *reaches* it: an L2 writes everything upstream
 /// emitted as well as its own `emit`, an `amplify` above a node multiplies the
 /// element count for everything below it, and an L1 that can `kill()` pays for
 /// a buffer its text never mentions. A per-node figure read off a card would be
 /// wrong in exactly the three ways the withdrawn one was.
 ///
-/// **Not computed at all, rather than computed from a guess**, wherever the
-/// Set does not check out: a Set naming an artifact this store has not got, or
-/// one whose nodes do not compose, has no figure — and being told which is more
-/// use than a number that assumed its way past the problem.
+/// Not computed at all, rather than computed from a guess, wherever the Set
+/// does not check out: a Set naming an artifact this store has not got, or one
+/// whose nodes do not compose, has no figure — and being told which is more use
+/// than a number that assumed its way past the problem.
 pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
     // **The same shape as the "no card" branch of [`node_block`]**: a Set this
     // cannot cost is an ordinary thing to meet in a working store rather than a
@@ -356,8 +354,8 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
 
 /// One node of a Set: its address in the Set, its artifact, and its card.
 ///
-/// **What it is called is [`crate::setfile::node_called`]'s answer**, and this
-/// is the function that used to decide it. `list_sets` names the same node in a
+/// What it is called is [`crate::setfile::node_called`]'s answer, and this is
+/// the function that used to decide it. `list_sets` names the same node in a
 /// listing and a model has to find, when it reads the Set, the node the listing
 /// told it about — so the three candidates are weighed in one place and read
 /// here rather than weighed a second time.
@@ -450,11 +448,11 @@ pub(crate) fn node_block(
 /// A card's four records as prose: what the procedure calls itself, and the
 /// lines describing what it declares.
 ///
-/// **Only the four a card can carry today.** `origin`, `parent`, `perf`, `tag`
-/// and `thumbnail` are specified and nothing writes one — see
+/// Only the four a card can carry today. `origin`, `parent`, `perf`, `tag` and
+/// `thumbnail` are specified and nothing writes one — see
 /// [`crate::meta::card`], which says why each is absent rather than empty — so
-/// they fall through the catch-all, which is also what makes this reader survive
-/// meeting a card written by a build that has more of them.
+/// they fall through the catch-all, which is also what makes this reader
+/// survive meeting a card written by a build that has more of them.
 pub(crate) fn rendered_card(card: &[Line]) -> (Option<String>, String) {
     let mut declared = None;
     let mut body = String::new();
@@ -509,13 +507,13 @@ pub(crate) fn rendered_card(card: &[Line]) -> (Option<String>, String) {
 
 /// A record [`Layer`] under the name this protocol already spells it with.
 ///
-/// **Found through [`crate::setfile::layer_of`] rather than matched again.**
-/// The mapping between a record's `Layer` and the compiler's `Kind` exists once,
-/// is total, and is the one `--load-set` reads a Set through; a second match
-/// here would be a second answer to which layer a stored node is on, and the
-/// name a model is given for a node has to be the name it addresses one by. The
-/// fallback cannot be reached while that mapping stays total — and it renders as
-/// a word rather than panicking, because a layer added on one side only is a
+/// Found through [`crate::setfile::layer_of`] rather than matched again. The
+/// mapping between a record's `Layer` and the compiler's `Kind` exists once, is
+/// total, and is the one `--load-set` reads a Set through; a second match here
+/// would be a second answer to which layer a stored node is on, and the name a
+/// model is given for a node has to be the name it addresses one by. The
+/// fallback cannot be reached while that mapping stays total — and it renders
+/// as a word rather than panicking, because a layer added on one side only is a
 /// thing to see in an answer, not a thread to take down.
 pub(crate) fn layer_spelled(layer: Layer) -> &'static str {
     LAYERS

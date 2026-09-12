@@ -61,7 +61,7 @@ pub(crate) fn read_resource(request: &Value) -> Result<Value, String> {
 
 /// The built-ins, rendered from [`karakuri_ir::builtin::Builtin::ALL`].
 ///
-/// **Generated, and that is the whole point.** `docs/ir-spec.md` describes this
+/// Generated, and that is the whole point. `docs/ir-spec.md` describes this
 /// language in prose and prose goes stale; this list is the one the checker
 /// matches against, so it cannot say a function exists that does not, or miss
 /// one that does.

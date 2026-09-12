@@ -5,8 +5,8 @@ use serde_json::Value;
 use super::super::*;
 use super::*;
 
-/// Check a procedure source against the full IR pipeline (parse, type, contract, cost)
-/// and return a machine-readable `DiagnosticReport`.
+/// Check a procedure source against the full IR pipeline (parse, type,
+/// contract, cost) and return a machine-readable `DiagnosticReport`.
 pub fn check_procedure(source: &str) -> DiagnosticReport {
     let mut diagnostics = Vec::new();
     match karakuri_ir::parse(source) {
@@ -33,9 +33,9 @@ pub fn check_procedure(source: &str) -> DiagnosticReport {
 
 /// `write_procedure`'s arguments as the operation they name.
 ///
-/// **`source` is parsed before the slot is checked**, which is the order this
-/// tool has always refused in: a call with no `source` at all is told that
-/// first, whatever slot it named.
+/// `source` is parsed before the slot is checked, which is the order this tool
+/// has always refused in: a call with no `source` at all is told that first,
+/// whatever slot it named.
 pub(crate) fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
     let (slot, layer, index) = slot_layer_index(args)?;
     let source = args
@@ -53,11 +53,11 @@ pub(crate) fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation
     })
 }
 
-/// **[`Operation::ReadProcedure`], done**: the source of one node of one deck.
+/// [`Operation::ReadProcedure`], done: the source of one node of one deck.
 ///
-/// The address arrives as the vocabulary's [`NodeAddress`] and is turned back into
-/// the compiler's own [`Kind`] here, at the one place that resolves a file —
-/// see [`kind_of`].
+/// The address arrives as the vocabulary's [`NodeAddress`] and is turned back
+/// into the compiler's own [`Kind`] here, at the one place that resolves a file
+/// — see [`kind_of`].
 pub(crate) fn read_procedure(deck: u8, node: NodeAddress, state: &State) -> Result<String, String> {
     let path = state
         .slots
@@ -65,8 +65,8 @@ pub(crate) fn read_procedure(deck: u8, node: NodeAddress, state: &State) -> Resu
     std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// **[`Operation::WriteProcedure`], done**: check a procedure and, if it
-/// compiles, write it.
+/// [`Operation::WriteProcedure`], done: check a procedure and, if it compiles,
+/// write it.
 ///
 /// The record this owes is `Record::Procedure` and it is not written here —
 /// `karakuri_operation_record::written` answers `Silent(OnLanding)`, because a

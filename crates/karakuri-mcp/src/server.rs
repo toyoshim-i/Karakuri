@@ -11,14 +11,14 @@ use crate::*;
 /// behind it live on threads of their own; nothing here is ever called from a
 /// frame.
 ///
-/// **`store` is a root and not an open [`Store`]**, which is the same decision
+/// `store` is a root and not an open [`Store`], which is the same decision
 /// [`Slots`] makes about a path and for a milder version of the same reason.
 /// Opening here would fail a whole run for a library nothing has asked for yet,
 /// and would hold one answer to "where is the store" against a directory the
 /// operator is free to move; opening per call is four `create_dir_all`s off a
 /// frame path, on a surface where the expensive thing is already a compile.
 ///
-/// **`slots` is a live handle and is *shared* rather than moved**, exactly as
+/// `slots` is a live handle and is *shared* rather than moved, exactly as
 /// `opening` beside it is: the host goes on writing it every time it re-points
 /// a slot, and this server resolves through it on every call. A run that hands
 /// this a layout taken at launch and then loads a Set onto a deck answers a
@@ -104,14 +104,14 @@ pub fn serve(
 
 /// One connection: read requests, answer them, keep it open.
 ///
-/// **Hand-rolled, and what that costs is worth stating rather than assuming.**
-/// The first version argued it was fine because this is "loopback, from one
+/// Hand-rolled, and what that costs is worth stating rather than assuming. The
+/// first version argued it was fine because this is "loopback, from one
 /// client". Loopback is not a boundary — any process on the machine reaches it,
 /// and so does a `fetch()` from any web page the operator happens to have open,
-/// because a POST with a plain content type needs no preflight. "One client" was
-/// an assumption about the *good* client and nothing enforced it. What enforces
-/// anything now: an `Origin` check, a body cap before any allocation, a read
-/// timeout, and a thread per connection.
+/// because a POST with a plain content type needs no preflight. "One client"
+/// was an assumption about the *good* client and nothing enforced it. What
+/// enforces anything now: an `Origin` check, a body cap before any allocation,
+/// a read timeout, and a thread per connection.
 fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Result<(), String> {
     stream.set_nodelay(true).ok();
     stream.set_read_timeout(Some(IDLE)).ok();
@@ -267,18 +267,18 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
 
 // -- the protocol ----------------------------------------------------------
 
-/// **A reply, or the one step of a reply that must happen with [`State`]
-/// unlocked.**
+/// A reply, or the one step of a reply that must happen with [`State`]
+/// unlocked.
 ///
 /// This type is the whole of the concurrency design, so it is worth stating
-/// plainly what it buys. `handle` locks the state around [`dispatch`], and there
-/// is a thread per connection: anything waited for under that lock is waited for
-/// by every other client too. Five of the six tools are a file read or a file
-/// write and finish under it — `list_sets` is the widest of them, a directory
-/// read plus a set file each and a card for each node those files left unnamed,
-/// which is a bounded count of reads off the store rather than a wait on
-/// anybody else's thread, and is why it is capped and why it compiles nothing;
-/// `read_set` is the same shape over one set. `save_set` waits for a
+/// plainly what it buys. `handle` locks the state around [`dispatch`], and
+/// there is a thread per connection: anything waited for under that lock is
+/// waited for by every other client too. Five of the six tools are a file read
+/// or a file write and finish under it — `list_sets` is the widest of them, a
+/// directory read plus a set file each and a card for each node those files
+/// left unnamed, which is a bounded count of reads off the store rather than a
+/// wait on anybody else's thread, and is why it is capped and why it compiles
+/// nothing; `read_set` is the same shape over one set. `save_set` waits for a
 /// render loop and then for a disk, which is unbounded in the only sense that
 /// matters — it depends on somebody else's frame rate.
 ///
@@ -287,12 +287,12 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
 /// smallest thing that makes the boundary visible: a comment saying "do not
 /// wait here" would be a comment.
 ///
-/// **`wire_input` is the second thing that waits**, and it waits for a frame
-/// rather than for a disk — which is shorter and is still somebody else's
-/// thread, so it belongs out here for exactly the same reason.
+/// `wire_input` is the second thing that waits, and it waits for a frame rather
+/// than for a disk — which is shorter and is still somebody else's thread, so
+/// it belongs out here for exactly the same reason.
 pub(crate) enum Pending {
-    /// Nothing left to do. `None` is a notification, which is answered with no
-    /// body at all.
+    /// Nothing left to do. `None` is a notification, which is answered with no body
+    /// at all.
     Done(Option<Value>),
     /// A save the render loop has been asked for, and the JSON-RPC id it is
     /// answered under.
@@ -302,16 +302,16 @@ pub(crate) enum Pending {
     },
     /// An edge the render loop has been asked to write.
     ///
-    /// **A variant of its own rather than a second `Saving`**, because the two
-    /// wait different lengths for differently shaped news — see [`WIRE_REPLY`]
-    /// against [`SAVE_REPLY`], and [`applied`] against [`awaited`].
-    /// An operation the render loop has been asked to perform.
+    /// A variant of its own rather than a second `Saving`, because the two wait
+    /// different lengths for differently shaped news — see [`WIRE_REPLY`] against
+    /// [`SAVE_REPLY`], and [`applied`] against [`awaited`]. An operation the render
+    /// loop has been asked to perform.
     ///
-    /// **[`Pending::Wiring`]'s shape with no note**, and it waits with
-    /// [`applied`] for that variant's reason: the loop performs it at the frame
-    /// it takes it and answers there, and everything slow that an operation
-    /// starts — a rebuild, a transition, a save — happens after the answer and
-    /// is reported where it lands.
+    /// [`Pending::Wiring`]'s shape with no note, and it waits with [`applied`] for
+    /// that variant's reason: the loop performs it at the frame it takes it and
+    /// answers there, and everything slow that an operation starts — a rebuild, a
+    /// transition, a save — happens after the answer and is reported where it
+    /// lands.
     Operating {
         id: Value,
         news: mpsc::Receiver<News>,
@@ -319,11 +319,10 @@ pub(crate) enum Pending {
     Wiring {
         id: Value,
         news: mpsc::Receiver<News>,
-        /// What this server knows about the run that the loop's own sentence
-        /// will not say — today, that a run without `--watch` has no watcher to
-        /// rebuild the slot. Built under the lock, where [`State`] is; appended
-        /// to an answer the loop wrote, because it is a fact about the run
-        /// rather than about the edge.
+        /// What this server knows about the run that the loop's own sentence will not
+        /// say — today, that a run without `--watch` has no watcher to rebuild the
+        /// slot. Built under the lock, where [`State`] is; appended to an answer the
+        /// loop wrote, because it is a fact about the run rather than about the edge.
         note: String,
     },
 }
@@ -331,8 +330,8 @@ pub(crate) enum Pending {
 impl Pending {
     /// The reply, waiting for the render loop if that is what is left.
     ///
-    /// **Called with the state unlocked**, which is the entire reason this type
-    /// exists — see above.
+    /// Called with the state unlocked, which is the entire reason this type exists
+    /// — see above.
     pub(crate) fn settled(self) -> Option<Value> {
         match self {
             Pending::Done(reply) => reply,
