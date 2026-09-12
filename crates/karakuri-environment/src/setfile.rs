@@ -98,8 +98,10 @@ use karakuri_store::store::{Store, StoreError};
 use crate::meta::put_meta;
 use crate::Asked;
 
+// Canonical definitions of compile and metadata types live in their respective modules.
+// Re-exported here for backwards compatibility.
 pub use crate::compile::Names;
-pub use crate::meta::{kind_name, kind_of, layer_named, layer_of};
+pub use crate::meta::{kind_name, kind_of, layer_name, layer_named, layer_of};
 
 /// The Set file format version this build writes. One number for the whole
 /// file, on `Record::Set`.
@@ -470,21 +472,6 @@ pub fn record_from_binding(binding: &Binding) -> Record {
                 _ => DEFAULT_OCTAVES,
             },
         }),
-    }
-}
-
-/// A record [`Layer`] spelled the way every surface spells it. Public because
-/// `--list-sets` names a node's layer in a line, and a second table in the
-/// command line would be a second spelling of an address an operator then
-/// types.
-pub fn layer_name(layer: Layer) -> &'static str {
-    match layer {
-        Layer::L1 => "L1",
-        Layer::L2 => "L2",
-        Layer::L3 => "L3",
-        Layer::L4 => "L4",
-        Layer::Field => "Field",
-        Layer::L5 => "L5",
     }
 }
 

@@ -113,6 +113,11 @@ pub fn kind_name(kind: Kind) -> &'static str {
     kind.name()
 }
 
+/// The record layer name as serialized in store records.
+pub fn layer_name(layer: Layer) -> &'static str {
+    layer.name()
+}
+
 /// Look up a layer by name as written in user input or Set files.
 pub fn layer_named(name: &str) -> Option<Kind> {
     name.parse().ok()
