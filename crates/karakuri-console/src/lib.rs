@@ -96,6 +96,7 @@
 //! rather than a default nobody got round to changing.
 
 pub mod budget;
+pub mod control;
 pub mod focus;
 pub mod hover;
 pub mod input;
@@ -103,6 +104,8 @@ pub mod panel;
 pub mod repaint;
 pub mod room;
 pub mod view;
+
+pub use control::*;
 
 /// The toolkit, re-exported, and the version pairing is this crate's to state.
 ///
