@@ -1,28 +1,28 @@
-//! **The four deck preview cells: where they are, and that they are the
-//! panel's.**
+//! The four deck preview cells: where they are, and that they are the
+//! panel's.
 //!
-//! **A press on a cell asks for nothing, and there is no test here that it
-//! does.** The cells were this console's route into *Choose what the output
+//! A press on a cell asks for nothing, and there is no test here that it
+//! does. The cells were this console's route into *Choose what the output
 //! shows*; ADR-0240 retired that operation, deleted its row from
 //! `docs/manual/operations.html`, and left the picture as the master mix and
 //! every cell as its own deck's continuous monitor. Two tests went with it —
 //! one for a press naming its cell's deck and one for a second press naming
 //! the mix — because their whole subject was the operation.
 //!
-//! **What is left is the half that never depended on it**: a cell is a
+//! What is left is the half that never depended on it: a cell is a
 //! rectangle, an operator drags the boundary above it, and the panel has to
 //! get the press either way. That is the geometry below, and it is the reason
 //! the cells stay controls with nothing to ask for.
 //!
 //! # What this file is for
 //!
-//! - **Which cell a point is on**, over four rectangles the bay derived once.
-//! - **The cells are the ones the bay drew**, in both of its arrangements, so
+//! - Which cell a point is on, over four rectangles the bay derived once.
+//! - The cells are the ones the bay drew, in both of its arrangements, so
 //!   a press lands on the cell an operator is looking at whichever way round
 //!   the Program bay put itself (ADR-0182).
-//! - **A row that is not laid out has no cell**, which is `mask.rs`'s sentence
+//! - A row that is not laid out has no cell, which is `mask.rs`'s sentence
 //!   in another bay.
-//! - **What a boundary keeps of a cell**, which is the whole of
+//! - What a boundary keeps of a cell, which is the whole of
 //!   [`what_a_boundary_keeps_of_a_cell_is_the_arrangement_it_is_in`] and is
 //!   the second half of the finding `solo_pill.rs` states for the pill.
 
@@ -53,9 +53,9 @@ fn cells(panel: &Panel) -> (Placement, [egui::Rect; DECKS]) {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **Which cell a point is on is the cell at its own rectangle**, and never
-/// the deck the pointer happens to have selected: a cell is the one thing on
-/// this console that carries a letter, so what it answers for is its own.
+/// Which cell a point is on is the cell at its own rectangle, and never the
+/// deck the pointer happens to have selected: a cell is the one thing on this
+/// console that carries a letter, so what it answers for is its own.
 #[test]
 fn a_cell_is_the_cell_at_its_own_rectangle() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -73,9 +73,9 @@ fn a_cell_is_the_cell_at_its_own_rectangle() {
     }
 }
 
-/// **A press between two cells asks for nothing and is not claimed** — a
-/// control claims what it acts on and no more, and the ground between the
-/// cells is the bay's card showing through.
+/// A press between two cells asks for nothing and is not claimed — a control
+/// claims what it acts on and no more, and the ground between the cells is the
+/// bay's card showing through.
 #[test]
 fn a_press_between_two_cells_asks_for_nothing_and_is_not_claimed() {
     let (mut panel, ctx) = console(SMALLEST);
@@ -108,12 +108,12 @@ fn a_press_between_two_cells_asks_for_nothing_and_is_not_claimed() {
 // Both arrangements
 // ---------------------------------------------------------------------------
 
-/// **Every cell is a control in both of the bay's arrangements**, which is
-/// what makes the press land on the cell an operator is looking at: the row
-/// under the picture at a narrow window, and two columns down the sides at a
-/// wide one (ADR-0182). A control derived from the `deck-previews` region
-/// alone would answer for one of the two only, because beside the picture that
-/// region is set aside and has no extent at all.
+/// Every cell is a control in both of the bay's arrangements, which is what
+/// makes the press land on the cell an operator is looking at: the row under
+/// the picture at a narrow window, and two columns down the sides at a wide one
+/// (ADR-0182). A control derived from the `deck-previews` region alone would
+/// answer for one of the two only, because beside the picture that region is
+/// set aside and has no extent at all.
 #[test]
 fn every_cell_is_a_control_in_both_arrangements() {
     let mut seen = Vec::new();
@@ -137,7 +137,7 @@ fn every_cell_is_a_control_in_both_arrangements() {
     );
 }
 
-/// **A folded preview row has no cell to press**, and the picture beside it is
+/// A folded preview row has no cell to press, and the picture beside it is
 /// untouched — the two regions fold apart, which is what the manual promises
 /// and what the arrangement is a split for.
 #[test]
@@ -178,11 +178,11 @@ fn a_folded_preview_row_has_no_cell_to_press() {
 // The boundary gets first refusal
 // ---------------------------------------------------------------------------
 
-/// **What a boundary keeps of a cell is decided by which arrangement the bay
-/// is in**, and one of the two costs a cell six pixels of its top edge.
+/// What a boundary keeps of a cell is decided by which arrangement the bay is
+/// in, and one of the two costs a cell six pixels of its top edge.
 ///
-/// Under the picture, the row of cells **is** the `deck-previews` region less
-/// its padding, and the padding is under the cells rather than over them — the
+/// Under the picture, the row of cells is the `deck-previews` region less its
+/// padding, and the padding is under the cells rather than over them — the
 /// arrangement writes the region as *"63 + 9"*, the row and the padding under
 /// it. So a cell's top edge is the region's own, and the boundary between the
 /// picture and the row grabs [`GRAB`] = 6 past it.
@@ -191,12 +191,12 @@ fn a_folded_preview_row_has_no_cell_to_press() {
 /// the cells sit in the bay's body inside `PROGRAM_BODY_PAD` = 9 of padding,
 /// and 9 beats 6 on every side.
 ///
-/// **So this asserts the overlap where there is one and its absence where
-/// there is not**, in both directions — the top edge of a cell in the row
-/// arrangement is the boundary's and everything below the sliver is the
-/// control's. `input`'s rule 3 decides it the same way every time, so there is
-/// no case where two things think they are dragging; what is lost is the
-/// sliver, out of a cell that is [`size::PREVIEW_ROW_H`] tall.
+/// So this asserts the overlap where there is one and its absence where there
+/// is not, in both directions — the top edge of a cell in the row arrangement
+/// is the boundary's and everything below the sliver is the control's.
+/// `input`'s rule 3 decides it the same way every time, so there is no case
+/// where two things think they are dragging; what is lost is the sliver, out of
+/// a cell that is [`size::PREVIEW_ROW_H`] tall.
 ///
 /// It fails if the sliver grows, which is what it is for: a taller `GRAB`, a
 /// shorter row or padding moved above the cells each make more of the control

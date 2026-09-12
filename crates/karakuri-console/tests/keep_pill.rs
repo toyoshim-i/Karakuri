@@ -1,33 +1,31 @@
-//! **The `keep` capsule in an Inspector pane's head: the one control this bay
-//! has that performs rather than sets.**
+//! The `keep` capsule in an Inspector pane's head: the one control this bay has
+//! that performs rather than sets.
 //!
-//! Six things, and the first two are why this is its own file rather than a
-//! few more assertions in `deck_head.rs`:
+//! Six things, and the first two are why this is its own file rather than a few
+//! more assertions in `deck_head.rs`:
 //!
 //! 1. Where the capsule sits, as `.half-head`'s flex row lays it out — hard
-//!    against the right-hand padding, one padding down from the top rather
-//!    than centred in a row whose rule is inside it.
-//! 2. **That it clears every boundary's grab**, which is the deck head's
-//!    arithmetic one row up, measured here against the pane divider and the
-//!    bay's own edges.
-//! 3. That a press asks to keep **this pane's** deck — not the selection,
-//!    which is what the key `k` keeps.
-//! 4. That it files under no name, which is
-//!    [ADR-0287](../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md).
+//! against the right-hand padding, one padding down from the top rather than
+//! centred in a row whose rule is inside it. 2. That it clears every boundary's
+//! grab, which is the deck head's arithmetic one row up, measured here against
+//! the pane divider and the bay's own edges. 3. That a press asks to keep this
+//! pane's deck — not the selection, which is what the key `k` keeps. 4. That it
+//! files under no name, which is
+//! [ADR-0287](../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md).
 //! 5. That a head with no room for the capsule draws none rather than half of
-//!    one — `deck_head`'s rule, on a control that is one capsule.
-//! 6. That a press off the capsule asks for nothing at all.
-//! 7. **That the wash says the deck this pane is showing is on air**, which
-//!    is what `docs/manual/console.html` now says the mock's lit capsule is
-//!    reading, and is asserted off the paint pass rather than off a flag.
+//! one — `deck_head`'s rule, on a control that is one capsule. 6. That a press
+//! off the capsule asks for nothing at all. 7. That the wash says the deck this
+//! pane is showing is on air, which is what `docs/manual/console.html` now says
+//! the mock's lit capsule is reading, and is asserted off the paint pass rather
+//! than off a flag.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a capsule is as wide as the word in it — see `common::drawn_once`.
 //!
-//! **What is not here and cannot be**: that `input::claim` gives the panel a
-//! press on this capsule. That is a row in `input::PROBES` and it is the
-//! registration half of this control, which lives in files this test's author
-//! does not own; until it lands a press here reaches `egui`.
+//! What is not here and cannot be: that `input::claim` gives the panel a press
+//! on this capsule. That is a row in `input::PROBES` and it is the registration
+//! half of this control, which lives in files this test's author does not own;
+//! until it lands a press here reaches `egui`.
 
 mod common;
 
@@ -44,9 +42,9 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{BlendMode, Operation, Sync};
 
-/// **The mock's own deck A**, which is the pane the mock draws this capsule
-/// lit in. What the wash reads is on the page now — the deck this pane is
-/// showing is on air — and the last test in this file is where that is held.
+/// The mock's own deck A, which is the pane the mock draws this capsule lit in.
+/// What the wash reads is on the page now — the deck this pane is showing is on
+/// air — and the last test in this file is where that is held.
 fn mock() -> Pane {
     Pane {
         deck: 0,
@@ -81,10 +79,10 @@ fn at(p: egui::Pos2) -> Point {
     Point::new(p.x, p.y)
 }
 
-/// **How wide the word in the capsule is**, asked of the same fonts the paint
-/// asks. The formula is `.pill`'s own — `padding: 0 8px` around text at
-/// `BASE` — and it is written here rather than imported so that a change to
-/// `pill_width` has to be made twice before it can pass unnoticed.
+/// How wide the word in the capsule is, asked of the same fonts the paint asks.
+/// The formula is `.pill`'s own — `padding: 0 8px` around text at `BASE` — and
+/// it is written here rather than imported so that a change to `pill_width` has
+/// to be made twice before it can pass unnoticed.
 fn word(ctx: &egui::Context) -> f32 {
     ctx.fonts_mut(|f| {
         f.layout_no_wrap(
@@ -101,11 +99,11 @@ fn word(ctx: &egui::Context) -> f32 {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// **`.sep`'s `flex: 1` puts it hard against the head's right-hand padding**,
-/// and `align-items: center` puts it in the middle of the head's *content*
-/// box — which is one `.half-head` padding down from the top, not the row's
-/// own middle: the `border-bottom` is inside the row, so the two differ by
-/// half a pixel and the scope row one bay along already says which is right.
+/// `.sep`'s `flex: 1` puts it hard against the head's right-hand padding, and
+/// `align-items: center` puts it in the middle of the head's *content* box —
+/// which is one `.half-head` padding down from the top, not the row's own
+/// middle: the `border-bottom` is inside the row, so the two differ by half a
+/// pixel and the scope row one bay along already says which is right.
 #[test]
 fn the_capsule_is_hard_against_the_heads_right_hand_padding() {
     let pane = mock();
@@ -150,9 +148,9 @@ fn the_capsule_is_hard_against_the_heads_right_hand_padding() {
     }
 }
 
-/// **A head with no room for the capsule draws none**, which is `deck_head`'s
-/// rule one row down: a control that does not fit in the row it is drawn in is
-/// no control at all, rather than half of one.
+/// A head with no room for the capsule draws none, which is `deck_head`'s rule
+/// one row down: a control that does not fit in the row it is drawn in is no
+/// control at all, rather than half of one.
 ///
 /// The narrow head is built here rather than solved for, because the panel's
 /// own minimum is far wider than this — the same reason `deck_head.rs` builds
@@ -183,9 +181,9 @@ fn a_head_too_narrow_for_the_capsule_draws_none() {
     );
 }
 
-/// **Before the first frame there is nothing here to press.** `Context::fonts`
-/// is not valid until a pass has run, and a capsule is as wide as the word in
-/// it — the same guard `deck_head` and every other measured control carry.
+/// Before the first frame there is nothing here to press. `Context::fonts` is
+/// not valid until a pass has run, and a capsule is as wide as the word in it —
+/// the same guard `deck_head` and every other measured control carry.
 #[test]
 fn a_console_that_has_not_drawn_has_no_capsule() {
     let pane = mock();
@@ -198,11 +196,10 @@ fn a_console_that_has_not_drawn_has_no_capsule() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// **The capsule clears every boundary's grab**, measured off its own
-/// rectangle: the nearest boundary is the pane divider, and what it has to
-/// clear sideways is `.half-head`'s right-hand padding of 10 against a `GRAB`
-/// of 6. Down the head it is the bay head above it and the whole of the pane
-/// below.
+/// The capsule clears every boundary's grab, measured off its own rectangle:
+/// the nearest boundary is the pane divider, and what it has to clear sideways
+/// is `.half-head`'s right-hand padding of 10 against a `GRAB` of 6. Down the
+/// head it is the bay head above it and the whole of the pane below.
 #[test]
 fn the_capsule_clears_every_boundarys_grab() {
     let pane = mock();
@@ -257,9 +254,9 @@ fn the_capsule_clears_every_boundarys_grab() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press keeps the deck this pane is showing, and files it under no
-/// name** — the same call the key `k` makes, and the deck the pill was
-/// measured for rather than the one the selection is on (ADR-0287).
+/// A press keeps the deck this pane is showing, and files it under no name —
+/// the same call the key `k` makes, and the deck the pill was measured for
+/// rather than the one the selection is on (ADR-0287).
 #[test]
 fn a_press_keeps_this_panes_deck_under_no_name() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -278,9 +275,9 @@ fn a_press_keeps_this_panes_deck_under_no_name() {
     }
 }
 
-/// **Two panes keep two decks**, which is the whole of what a per-pane control
-/// is: the key `k` keeps the selection because a bare press cannot say which,
-/// and a capsule drawn inside a pane can.
+/// Two panes keep two decks, which is the whole of what a per-pane control is:
+/// the key `k` keeps the selection because a bare press cannot say which, and a
+/// capsule drawn inside a pane can.
 #[test]
 fn two_panes_keep_the_two_decks_they_are_showing() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -305,9 +302,9 @@ fn two_panes_keep_the_two_decks_they_are_showing() {
     );
 }
 
-/// **A press off the capsule asks for nothing**, which is *a control claims
-/// what it acts on and no more* — the words to the left of it are a readout,
-/// and the head around it is not a target.
+/// A press off the capsule asks for nothing, which is *a control claims what it
+/// acts on and no more* — the words to the left of it are a readout, and the
+/// head around it is not a target.
 #[test]
 fn a_press_off_the_capsule_asks_for_nothing() {
     let pane = mock();
@@ -337,11 +334,11 @@ fn a_press_off_the_capsule_asks_for_nothing() {
 // The wash
 // ---------------------------------------------------------------------------
 
-/// Every shape the console paints **wholly inside** `rect`, on one frame.
+/// Every shape the console paints wholly inside `rect`, on one frame.
 ///
 /// `transport.rs`'s helper, written again here for the reason that one gives:
-/// `egui` tessellates on the CPU and the device only ever sees the result, so
-/// a whole frame through `Context::run_ui` is all a treatment takes to read.
+/// `egui` tessellates on the CPU and the device only ever sees the result, so a
+/// whole frame through `Context::run_ui` is all a treatment takes to read.
 /// Containment rather than intersection, so the card behind the pane is not
 /// counted as a thing drawn in the capsule.
 fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<egui::Shape> {
@@ -385,9 +382,9 @@ fn showing_two(tallies: [Tally; 2]) -> View {
     view
 }
 
-/// **The wash is the deck's residency and not the pane's position**, which is
-/// what `docs/manual/console.html` says it reads: *the deck this pane is
-/// showing is on air, in the same pink a tally on air is drawn in*.
+/// The wash is the deck's residency and not the pane's position, which is what
+/// `docs/manual/console.html` says it reads: *the deck this pane is showing is
+/// on air, in the same pink a tally on air is drawn in*.
 ///
 /// Asserted by painting, because the treatment is the whole of the claim: a
 /// `.pill.on` is `--c-pink` over a pink wash with a halo, and a plain `.pill`
@@ -395,7 +392,7 @@ fn showing_two(tallies: [Tally; 2]) -> View {
 /// the word's galley is pink in one treatment and `--c-dim` in the other, and
 /// the wash behind it is a pink mix in one and nothing in the other.
 ///
-/// **Both directions**, and the second is the one that would catch a console
+/// Both directions, and the second is the one that would catch a console
 /// lighting the first pane because it is first: deck 1 live and deck 0 parked
 /// puts the wash on the *second* capsule.
 #[test]

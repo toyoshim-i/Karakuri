@@ -1,63 +1,57 @@
-//! **The two ways the console's own shape folds from the panel: the grip in a
-//! bay head, and a pane's own boundary dragged out through its edge.**
+//! The two ways the console's own shape folds from the panel: the grip in a bay
+//! head, and a pane's own boundary dragged out through its edge.
 //!
-//! `docs/manual/operations.html` gives *Fold a bay away* the **bay head** and
-//! *Fold a pane away* the **pane edge**, and until these landed the console
-//! painted the first of them and hit-tested neither — so the only route into
-//! either row was `f` and `g`.
+//! `docs/manual/operations.html` gives *Fold a bay away* the bay head and *Fold
+//! a pane away* the pane edge, and until these landed the console painted the
+//! first of them and hit-tested neither — so the only route into either row was
+//! `f` and `g`.
 //!
-//! **The two halves are no longer the same shape, and that is
-//! [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md).**
-//! The bay's fold is a **rectangle**: `view::bay_grip` answers a
-//! `view::FoldGrip` over the mark the head already draws, and a press on it
-//! asks for `Op::Fold`. The pane's is a **gesture**: its boundary dragged out
-//! past the pane's own minimum closes it, and the divider the closed pane
-//! keeps at the window's edge is what brings it back. ADR-0295 gave the pane a
-//! rectangle too — a band on its outer edge — and that band lay over the outer
-//! three pixels of every Library row, which is why it was never registered.
-//! There is no band now: while the pane is open there is nothing at the
-//! window's edge at all.
+//! The two halves are no longer the same shape, and that is
+//! [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md).
+//! The bay's fold is a rectangle: `view::bay_grip` answers a `view::FoldGrip`
+//! over the mark the head already draws, and a press on it asks for `Op::Fold`.
+//! The pane's is a gesture: its boundary dragged out past the pane's own
+//! minimum closes it, and the divider the closed pane keeps at the window's
+//! edge is what brings it back. ADR-0295 gave the pane a rectangle too — a band
+//! on its outer edge — and that band lay over the outer three pixels of every
+//! Library row, which is why it was never registered. There is no band now:
+//! while the pane is open there is nothing at the window's edge at all.
 //!
 //! Eight things:
 //!
 //! 1. Where the grip's target is, as the head's own units put it — the strip
-//!    `head_pills` reserves for the mark, `GRIP_W + PILL_GAP` wide and hard
-//!    against `HEAD_PAD_X`, grown to `PILL_H` about the head's mid-line.
-//! 2. **That exactly the heads the mock draws a grip in have one**, counted
-//!    off the console's own table rather than listed here.
-//! 3. That it abuts the capsule beside it in the same head and never overlaps
-//!    it, so a press on `solo` is `solo`'s and a press on the grip is the
-//!    fold's.
-//! 4. **What it costs against a boundary's grab**, measured by asking
-//!    `Layout::hit` at the target's own corners and stepping down its top edge
-//!    — never by doing `view::bay_grip`'s arithmetic a second time. The answer
-//!    is `program_head`'s 0.75 of a pixel, which is the same capsule box in
-//!    the same head.
-//! 5. **Which regions fold to their edge**, read off the arrangement — the two
-//!    panes the page names and nothing else, the centre included: *"folding it
-//!    is not a thing anybody wants, and solo is."*
-//! 6. **That a closed pane keeps a boundary at the window's edge**, and that
-//!    while it is open there is none — which is the whole of why this control
-//!    can exist where ADR-0295's band could not.
-//! 7. **That a drag closes the pane and a drag brings it back**, through
-//!    `Panel::press`, `moved` and `released`, with the reopened pane at its
-//!    declared minimum and `z` still holding the width it had.
-//! 8. That a press on the grip performs the fold it names, read back off the
-//!    layout rather than off the operation.
+//! `head_pills` reserves for the mark, `GRIP_W + PILL_GAP` wide and hard
+//! against `HEAD_PAD_X`, grown to `PILL_H` about the head's mid-line. 2. That
+//! exactly the heads the mock draws a grip in have one, counted off the
+//! console's own table rather than listed here. 3. That it abuts the capsule
+//! beside it in the same head and never overlaps it, so a press on `solo` is
+//! `solo`'s and a press on the grip is the fold's. 4. What it costs against a
+//! boundary's grab, measured by asking `Layout::hit` at the target's own
+//! corners and stepping down its top edge — never by doing `view::bay_grip`'s
+//! arithmetic a second time. The answer is `program_head`'s 0.75 of a pixel,
+//! which is the same capsule box in the same head. 5. Which regions fold to
+//! their edge, read off the arrangement — the two panes the page names and
+//! nothing else, the centre included: *"folding it is not a thing anybody
+//! wants, and solo is."* 6. That a closed pane keeps a boundary at the window's
+//! edge, and that while it is open there is none — which is the whole of why
+//! this control can exist where ADR-0295's band could not. 7. That a drag
+//! closes the pane and a drag brings it back, through `Panel::press`, `moved`
+//! and `released`, with the reopened pane at its declared minimum and `z` still
+//! holding the width it had. 8. That a press on the grip performs the fold it
+//! names, read back off the layout rather than off the operation.
 //!
 //! None of it needs a window, a device, a disk or `egui`: neither route is as
-//! wide as a word, which is the one thing that separates these from every
-//! other capsule on this console.
+//! wide as a word, which is the one thing that separates these from every other
+//! capsule on this console.
 //!
-//! **What is not here and cannot be**: that `input::claim` gives the panel a
-//! press on the **grip**. That is a row in `input::PROBES` and it is the
-//! registration half of that control, which lives in files this test's author
-//! does not own; until it lands, a press there reaches `egui` and *Fold a bay
-//! away*'s panel badge is not yet earned. `tests/keep_pill.rs` says the same
-//! sentence about the capsule one bay over, and for the same reason. **The
-//! pane's half owes nothing**: a boundary is claimed by `input`'s rule 3
-//! before any control is asked, and the window loop already routes a boundary
-//! drag into `Panel`.
+//! What is not here and cannot be: that `input::claim` gives the panel a press
+//! on the grip. That is a row in `input::PROBES` and it is the registration
+//! half of that control, which lives in files this test's author does not own;
+//! until it lands, a press there reaches `egui` and *Fold a bay away*'s panel
+//! badge is not yet earned. `tests/keep_pill.rs` says the same sentence about
+//! the capsule one bay over, and for the same reason. The pane's half owes
+//! nothing: a boundary is claimed by `input`'s rule 3 before any control is
+//! asked, and the window loop already routes a boundary drag into `Panel`.
 
 mod common;
 
@@ -85,10 +79,10 @@ fn on_a_boundary(panel: &Panel, p: egui::Pos2) -> bool {
     matches!(panel.layout().hit(at(p), GRAB), Hit::Divider { .. })
 }
 
-/// **Every region whose fold leaves its edge behind**, walked off the
-/// arrangement rather than listed here — `karakuri_console::arrangement` is
-/// the one statement of which, and a third pane declaring it arrives in this
-/// list without anybody editing it.
+/// Every region whose fold leaves its edge behind, walked off the arrangement
+/// rather than listed here — `karakuri_console::arrangement` is the one
+/// statement of which, and a third pane declaring it arrives in this list
+/// without anybody editing it.
 fn folds_to_its_edge(panel: &Panel) -> Vec<String> {
     let layout = panel.layout();
     panel
@@ -104,9 +98,9 @@ fn folds_to_its_edge(panel: &Panel) -> Vec<String> {
         .collect()
 }
 
-/// **Every bay head the console draws a grip in**, read off the console's own
-/// table rather than written out here — `head_of` is what says which, and a
-/// grip drawn in a fifth head arrives in this list without anybody editing it.
+/// Every bay head the console draws a grip in, read off the console's own table
+/// rather than written out here — `head_of` is what says which, and a grip
+/// drawn in a fifth head arrives in this list without anybody editing it.
 fn gripped() -> Vec<&'static str> {
     REGIONS
         .iter()
@@ -119,8 +113,8 @@ fn gripped() -> Vec<&'static str> {
 // Where the grip is
 // ---------------------------------------------------------------------------
 
-/// **The target is the strip the head reserves for the mark, grown to a line's
-/// height.**
+/// The target is the strip the head reserves for the mark, grown to a line's
+/// height.
 ///
 /// Four numbers and every one of them is the head's own: `HEAD_PAD_X` from the
 /// right of the bay, `GRIP_W + PILL_GAP` wide — what `head_pills` steps back
@@ -175,8 +169,8 @@ fn the_target_is_the_strip_the_head_reserves_for_the_mark() {
     }
 }
 
-/// **The heads with a target are the heads the mock draws a mark in**, both
-/// ways round, and there are `BAY_GRIPS` of them.
+/// The heads with a target are the heads the mock draws a mark in, both ways
+/// round, and there are `BAY_GRIPS` of them.
 ///
 /// The count is asserted against the console's own `const` rather than against
 /// a four, because that `const` is what `input::PROBES` says this control
@@ -225,9 +219,9 @@ fn exactly_the_marked_heads_have_a_target() {
     }
 }
 
-/// **A name the arrangement draws no head for has no target**, which is the
-/// heads the mock leaves unmarked said from the other side: the two headless
-/// rows, the picture, the preview row and the panes.
+/// A name the arrangement draws no head for has no target, which is the heads
+/// the mock leaves unmarked said from the other side: the two headless rows,
+/// the picture, the preview row and the panes.
 #[test]
 fn nothing_without_a_head_has_a_target() {
     let panel = console(PLAUSIBLE);
@@ -248,7 +242,7 @@ fn nothing_without_a_head_has_a_target() {
     }
 }
 
-/// **The target abuts the capsule beside it and never overlaps it.**
+/// The target abuts the capsule beside it and never overlaps it.
 ///
 /// The Program bay is the case: `solo` and the class pill are laid out right to
 /// left from the same padding this target is measured off, and a target padded
@@ -286,9 +280,9 @@ fn the_target_abuts_the_capsule_beside_it() {
 // What the grip costs against a boundary's grab
 // ---------------------------------------------------------------------------
 
-/// **The target clears every boundary but the one above the bay, and that one
-/// takes 0.75 of a pixel** — `program_head`'s number, arrived at again because
-/// it is the same capsule box in the same head.
+/// The target clears every boundary but the one above the bay, and that one
+/// takes 0.75 of a pixel — `program_head`'s number, arrived at again because it
+/// is the same capsule box in the same head.
 ///
 /// Measured by asking `Layout::hit` at the target's own corners and stepping
 /// down its top edge until the boundary lets go, rather than by doing
@@ -296,9 +290,9 @@ fn the_target_abuts_the_capsule_beside_it() {
 /// boundary loses nothing at all, and nothing here assumes which is which.
 #[test]
 fn the_target_gives_a_boundary_the_top_three_quarters_of_a_pixel_and_no_more() {
-    /// The most of the target's own height any boundary is allowed to reach,
-    /// and it is `program_head`'s: a `HEAD_H` of 27 holding a `PILL_H` of 16.5
-    /// leaves 5.25 above it, against a `GRAB` of 6.
+    /// The most of the target's own height any boundary is allowed to reach, and it
+    /// is `program_head`'s: a `HEAD_H` of 27 holding a `PILL_H` of 16.5 leaves 5.25
+    /// above it, against a `GRAB` of 6.
     const SLIVER: f32 = 0.75;
     for viewport in [SMALLEST, PLAUSIBLE] {
         let panel = console(viewport);
@@ -363,9 +357,8 @@ fn the_target_gives_a_boundary_the_top_three_quarters_of_a_pixel_and_no_more() {
 // What a press on the grip does
 // ---------------------------------------------------------------------------
 
-/// **A press folds the bay the grip is in**, performed and read back off the
-/// layout — and the control goes with it, which is why there is no unfold on
-/// it.
+/// A press folds the bay the grip is in, performed and read back off the layout
+/// — and the control goes with it, which is why there is no unfold on it.
 #[test]
 fn a_press_on_the_grip_folds_that_bay_and_takes_the_control_with_it() {
     for name in gripped() {
@@ -396,9 +389,9 @@ fn a_press_on_the_grip_folds_that_bay_and_takes_the_control_with_it() {
     }
 }
 
-/// **A head with no room for the target draws none rather than half of one**,
-/// which is `deck_head`'s rule and `head_capsule`'s guard, stated on a control
-/// that is one rectangle.
+/// A head with no room for the target draws none rather than half of one, which
+/// is `deck_head`'s rule and `head_capsule`'s guard, stated on a control that
+/// is one rectangle.
 ///
 /// The viewport is driven under the console's own minimum on purpose: below it
 /// the solve stops honouring minima and scales everything down together
@@ -466,8 +459,8 @@ fn edge_of(panel: &Panel, name: &str) -> (NodeId, usize, bool) {
     panic!("`{name}` has no boundary beside it, and every pane in this row does")
 }
 
-/// Take hold of a boundary in the middle of its own gap, half way down the
-/// pane beside it.
+/// Take hold of a boundary in the middle of its own gap, half way down the pane
+/// beside it.
 fn take_hold(panel: &mut Panel, split: NodeId, index: usize) -> Point {
     panel.solve();
     let gap = panel
@@ -482,15 +475,15 @@ fn take_hold(panel: &mut Panel, split: NodeId, index: usize) -> Point {
     at
 }
 
-/// **Exactly the two panes the page names fold to their edge**, read off the
+/// Exactly the two panes the page names fold to their edge, read off the
 /// arrangement.
 ///
-/// `docs/manual/console.html`: *"a **left pane** and a **right pane**, which
-/// fold away to give room, and the **centre**, which is what they give it to
-/// … The middle one is not a third pane on purpose: folding it is not a thing
-/// anybody wants, and solo is."* The centre is the case that matters: fold the
-/// left pane and the centre inherits the window's edge, so a rule reading the
-/// edge alone would hand an operator the fold the page has just refused.
+/// `docs/manual/console.html`: *"a left pane and a right pane, which fold away
+/// to give room, and the centre, which is what they give it to … The middle one
+/// is not a third pane on purpose: folding it is not a thing anybody wants, and
+/// solo is."* The centre is the case that matters: fold the left pane and the
+/// centre inherits the window's edge, so a rule reading the edge alone would
+/// hand an operator the fold the page has just refused.
 #[test]
 fn only_the_two_panes_the_page_names_fold_to_their_edge() {
     let panel = console(PLAUSIBLE);
@@ -501,14 +494,14 @@ fn only_the_two_panes_the_page_names_fold_to_their_edge() {
     );
 }
 
-/// **An open pane has no boundary at the window's edge, and a closed one
-/// does** — which is the whole of why this control can exist where ADR-0295's
-/// band could not.
+/// An open pane has no boundary at the window's edge, and a closed one does —
+/// which is the whole of why this control can exist where ADR-0295's band could
+/// not.
 ///
 /// The band that record chose was `GRAB` deep on the pane's outer edge *while
 /// the pane was open*, so it lay over the outer three pixels of every Library
-/// row (`.lib-list`'s padding is 3). Here there is nothing at the window's
-/// edge until the pane is folded, and by then the pane draws nothing at all.
+/// row (`.lib-list`'s padding is 3). Here there is nothing at the window's edge
+/// until the pane is folded, and by then the pane draws nothing at all.
 #[test]
 fn the_window_edge_is_a_boundary_only_while_the_pane_is_closed() {
     for name in ["left-pane", "right-pane"] {
@@ -557,8 +550,8 @@ fn the_window_edge_is_a_boundary_only_while_the_pane_is_closed() {
     }
 }
 
-/// **A closed pane gives its width to the centre and keeps the divider it
-/// costs**, and the width it was storing survives the fold.
+/// A closed pane gives its width to the centre and keeps the divider it costs,
+/// and the width it was storing survives the fold.
 #[test]
 fn a_closed_pane_gives_its_width_to_the_centre_and_keeps_its_divider() {
     for name in ["left-pane", "right-pane"] {
@@ -597,9 +590,9 @@ fn a_closed_pane_gives_its_width_to_the_centre_and_keeps_its_divider() {
     }
 }
 
-/// **A drag out through the pane's own edge closes it, and a drag back in
-/// opens it at the pane's declared minimum** — through `Panel::press`, `moved`
-/// and `released`, which is the window loop's own route.
+/// A drag out through the pane's own edge closes it, and a drag back in opens
+/// it at the pane's declared minimum — through `Panel::press`, `moved` and
+/// `released`, which is the window loop's own route.
 #[test]
 fn a_drag_out_closes_the_pane_and_a_drag_in_brings_it_back_at_its_minimum() {
     for name in ["left-pane", "right-pane"] {
@@ -667,7 +660,7 @@ fn a_drag_out_closes_the_pane_and_a_drag_in_brings_it_back_at_its_minimum() {
     }
 }
 
-/// **One gesture asks for one of them**, and this is the flicker that would be
+/// One gesture asks for one of them, and this is the flicker that would be
 /// there without it: a pane closed by a drag puts its own edge under a pointer
 /// that is already further than the distance which opens it.
 #[test]
@@ -702,10 +695,10 @@ fn one_drag_closes_or_opens_once_and_then_does_neither() {
     }
 }
 
-/// **A drag past a stop folds nothing that does not keep its edge**, however
-/// far past it goes: every other boundary on the console is dragged to both
-/// ends and the arrangement comes back folded exactly as much as it was, which
-/// is not at all.
+/// A drag past a stop folds nothing that does not keep its edge, however far
+/// past it goes: every other boundary on the console is dragged to both ends
+/// and the arrangement comes back folded exactly as much as it was, which is
+/// not at all.
 #[test]
 fn a_drag_past_a_stop_folds_nothing_that_does_not_keep_its_edge() {
     let probe = console(PLAUSIBLE);

@@ -1,32 +1,30 @@
-//! **The transport row's look controls: the console's seventh and eighth, and
-//! its first that a press sets outright.**
+//! The transport row's look controls: the console's seventh and eighth, and its
+//! first that a press sets outright.
 //!
 //! Seven things, and the first two are why this is its own file rather than a
 //! few more assertions in `arrangement_pill.rs`:
 //!
-//! 1. Where the two controls are, derived from the pill's own right edge.
-//! 2. **That both clear every boundary's grab**, which is
-//!    `tests/arrangement_pill.rs`'s arithmetic over two more controls and is
-//!    never inherited from it: the row is 48, both targets are 16.5, so the
-//!    clearance is 15.75 against a `GRAB` of 6 — measured here, and the
-//!    exposure control's target is the *track grown to a line's height*
-//!    rather than the 5px track, which is the number that matters.
-//! 3. **That the capsule does not move under the word it names**, which is
-//!    what stops the exposure track walking away as the tone map is cycled.
-//! 4. That the capsule cycles all four operators and comes back, once each.
-//! 5. **What a press on the track asks for**: the value at the point it
-//!    landed, exactly at both ends and exactly 1.00 in the middle.
-//! 6. That one pixel of that track is one press of an exposure key, which is
-//!    the whole of why it is 48 wide.
-//! 7. **The route a window loop actually takes** — `claim`, then the
-//!    derivation that drew the control, then the operation — which is
-//!    `tests/vocabulary.rs`'s third pass over these two controls.
+//! 1. Where the two controls are, derived from the pill's own right edge. 2.
+//! That both clear every boundary's grab, which is
+//! `tests/arrangement_pill.rs`'s arithmetic over two more controls and is never
+//! inherited from it: the row is 48, both targets are 16.5, so the clearance is
+//! 15.75 against a `GRAB` of 6 — measured here, and the exposure control's
+//! target is the *track grown to a line's height* rather than the 5px track,
+//! which is the number that matters. 3. That the capsule does not move under
+//! the word it names, which is what stops the exposure track walking away as
+//! the tone map is cycled. 4. That the capsule cycles all four operators and
+//! comes back, once each. 5. What a press on the track asks for: the value at
+//! the point it landed, exactly at both ends and exactly 1.00 in the middle. 6.
+//! That one pixel of that track is one press of an exposure key, which is the
+//! whole of why it is 48 wide. 7. The route a window loop actually takes —
+//! `claim`, then the derivation that drew the control, then the operation —
+//! which is `tests/vocabulary.rs`'s third pass over these two controls.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the capsule is as wide as the widest name it can hold — see
-//! `common::drawn_once` — a `Transport`, because the group is measured from
-//! the arrangement pill and the pill from the bar, and a `Look`, because a
-//! console with no engine behind it draws no look at all.
+//! `common::drawn_once` — a `Transport`, because the group is measured from the
+//! arrangement pill and the pill from the bar, and a `Look`, because a console
+//! with no engine behind it draws no look at all.
 
 mod common;
 
@@ -41,15 +39,15 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Tonemap};
 
-/// **The mock's own transport, as numbers** — `transport.rs`'s, which is where
-/// the argument for each of them is. The look group is measured from the
+/// The mock's own transport, as numbers — `transport.rs`'s, which is where the
+/// argument for each of them is. The look group is measured from the
 /// arrangement pill and the pill from the bar, so a row is needed to have
 /// either.
 fn mock() -> Transport {
     common::mock_transport()
 }
 
-/// **The mock's own look**: `tone · aces` at `exp 1.00`, which is what
+/// The mock's own look: `tone · aces` at `exp 1.00`, which is what
 /// `docs/manual/console.html`'s transport draws and what
 /// `crates/karakuri/src/main.rs`'s `LOOK` opens a window under.
 fn mock_look() -> Look {
@@ -69,8 +67,8 @@ fn view(at: Look) -> View {
     view
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair every test here starts from, and `arrangement_pill.rs`'s own opening.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// every test here starts from, and `arrangement_pill.rs`'s own opening.
 fn console(viewport: Rect) -> (Panel, egui::Context) {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
@@ -98,9 +96,9 @@ fn at(p: egui::Pos2) -> Point {
 }
 
 /// Every operator, which is what this file walks the cycle against. The order
-/// is deliberately **not** the cycle's: what is asserted below is that the
-/// cycle visits each of these once, and a list written in the cycle's own
-/// order could not tell that from a cycle that had lost one.
+/// is deliberately not the cycle's: what is asserted below is that the cycle
+/// visits each of these once, and a list written in the cycle's own order could
+/// not tell that from a cycle that had lost one.
 const EVERY: [Tonemap; 4] = [
     Tonemap::AgX,
     Tonemap::Clamp,
@@ -112,12 +110,12 @@ const EVERY: [Tonemap; 4] = [
 // Where the controls are
 // ---------------------------------------------------------------------------
 
-/// **The group is the row's own geometry**, laid out from the arrangement
-/// pill's right edge — which is the mock's flex row with the six controls it
-/// does not draw taken out.
+/// The group is the row's own geometry, laid out from the arrangement pill's
+/// right edge — which is the mock's flex row with the six controls it does not
+/// draw taken out.
 ///
-/// `.transport`'s `gap` is 14 between the row's items, and the exposure
-/// label, its track and its figure are one item at `.trim`'s own 5.
+/// `.transport`'s `gap` is 14 between the row's items, and the exposure label,
+/// its track and its figure are one item at `.trim`'s own 5.
 #[test]
 fn the_look_group_is_the_rows_own_geometry() {
     let (panel, ctx) = console(SMALLEST);
@@ -181,9 +179,9 @@ fn the_look_group_is_the_rows_own_geometry() {
     );
 }
 
-/// **The fill is where the value is**, from the left, and at 1.00 it is
-/// exactly half the track — which is what *1.0 at the middle* means and is the
-/// only reading under which both halves of the range are usable.
+/// The fill is where the value is, from the left, and at 1.00 it is exactly
+/// half the track — which is what *1.0 at the middle* means and is the only
+/// reading under which both halves of the range are usable.
 #[test]
 fn the_fill_is_the_level_and_unity_is_the_middle() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -209,10 +207,10 @@ fn at_exposure(exposure: f32) -> Look {
     }
 }
 
-/// **The capsule is the widest of the four whatever word is in it**, which is
-/// the tally chip's rule and not the blend chip's: a target sized to the word
-/// it shows moves under the hand pressing it, and here it would take the
-/// exposure track with it.
+/// The capsule is the widest of the four whatever word is in it, which is the
+/// tally chip's rule and not the blend chip's: a target sized to the word it
+/// shows moves under the hand pressing it, and here it would take the exposure
+/// track with it.
 #[test]
 fn the_capsule_does_not_move_under_the_word_it_names() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -251,8 +249,8 @@ fn the_capsule_does_not_move_under_the_word_it_names() {
     }
 }
 
-/// **The figure is after the track and it is the one thing here that moves**,
-/// which is why it is last: only the `.sep` is behind it.
+/// The figure is after the track and it is the one thing here that moves, which
+/// is why it is last: only the `.sep` is behind it.
 #[test]
 fn only_the_figure_moves_with_the_value() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -272,23 +270,22 @@ fn only_the_figure_moves_with_the_value() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// **Both controls clear every boundary's grab**, measured here and never
-/// inherited from the arrangement pill three items to their left.
+/// Both controls clear every boundary's grab, measured here and never inherited
+/// from the arrangement pill three items to their left.
 ///
 /// The row is 48. The tone map's capsule is a `.pill` at 16.5, centred, so
-/// there is (48 - 16.5) / 2 = **15.75** of row above it and 15.75 below. The
+/// there is (48 - 16.5) / 2 = 15.75 of row above it and 15.75 below. The
 /// exposure track is 5 tall, which is not a target a hand finds, so what a
 /// press is tested against is that track grown to a line's height — 16.5, and
-/// therefore **15.75** as well. Both against a `GRAB` of **6**.
+/// therefore 15.75 as well. Both against a `GRAB` of 6.
 ///
-/// **That the two numbers agree is a fact about two boxes being one height**,
-/// not a number either of them inherited: this asserts each off its own
-/// rectangle, so a change to either box fails here rather than being covered
-/// by the other.
+/// That the two numbers agree is a fact about two boxes being one height, not a
+/// number either of them inherited: this asserts each off its own rectangle, so
+/// a change to either box fails here rather than being covered by the other.
 ///
-/// **So it fails if either control moves, if the row gets shorter, or if
-/// `GRAB` widens past 15.75** — and the last is the point: the fix then is to
-/// change the rule in `input`, deliberately.
+/// So it fails if either control moves, if the row gets shorter, or if `GRAB`
+/// widens past 15.75 — and the last is the point: the fix then is to change the
+/// rule in `input`, deliberately.
 #[test]
 fn both_controls_clear_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -352,9 +349,9 @@ fn both_controls_clear_every_boundarys_grab() {
     }
 }
 
-/// **A control claims what it acts on and no more.** The gap between the
-/// capsule and the track, the `exp` label and the figure are not controls, and
-/// a press on any of them is `egui`'s.
+/// A control claims what it acts on and no more. The gap between the capsule
+/// and the track, the `exp` label and the figure are not controls, and a press
+/// on any of them is `egui`'s.
 #[test]
 fn nothing_beside_the_two_controls_is_claimed() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -396,10 +393,10 @@ fn nothing_beside_the_two_controls_is_claimed() {
     }
 }
 
-/// **Before anything has been drawn there is no control**, and neither is
-/// there without an engine or without a look: a capsule is as wide as the
-/// names it can hold, and the group's place is measured from a row that a
-/// console with no tempo does not draw.
+/// Before anything has been drawn there is no control, and neither is there
+/// without an engine or without a look: a capsule is as wide as the names it
+/// can hold, and the group's place is measured from a row that a console with
+/// no tempo does not draw.
 #[test]
 fn a_control_that_has_not_been_drawn_is_not_there() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -456,14 +453,14 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **The capsule cycles all four and comes back, once each** — which is
+/// The capsule cycles all four and comes back, once each — which is
 /// `tests/blend.rs`'s measurement over four values instead of three, and is
 /// what keeps `next_tonemap`'s order and the list it is a copy of from
 /// drifting.
 ///
-/// The step is asserted **as an operation**, so what is checked is the thing a
-/// map or a model would be offered: `SetTonemap` naming the destination, never
-/// a step.
+/// The step is asserted as an operation, so what is checked is the thing a map
+/// or a model would be offered: `SetTonemap` naming the destination, never a
+/// step.
 #[test]
 fn the_capsule_cycles_every_operator_once_and_wraps() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -508,9 +505,9 @@ fn the_capsule_cycles_every_operator_once_and_wraps() {
     }
 }
 
-/// **A press on the track names where it landed**, exactly at both ends and
-/// exactly 1.00 in the middle — which is what makes the two halves of the
-/// range readable and is the whole of *click to set it outright*.
+/// A press on the track names where it landed, exactly at both ends and exactly
+/// 1.00 in the middle — which is what makes the two halves of the range
+/// readable and is the whole of *click to set it outright*.
 #[test]
 fn a_press_on_the_track_asks_for_the_value_under_it() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -549,8 +546,8 @@ fn a_press_on_the_track_asks_for_the_value_under_it() {
     }
 }
 
-/// **One pixel of track is one press of an exposure key**, which is the whole
-/// of why the track is 48 wide: a hand pointing at it can ask for exactly the
+/// One pixel of track is one press of an exposure key, which is the whole of
+/// why the track is 48 wide: a hand pointing at it can ask for exactly the
 /// values a keyboard stepping a quarter stop at a time can ask for.
 ///
 /// `karakuri-cli`'s `EXPOSURE_STEP` is `1.189_207`, which is a quarter stop,
@@ -582,8 +579,8 @@ fn one_pixel_of_track_is_one_press_of_an_exposure_key() {
     }
 }
 
-/// **The two controls do not overlap**, so a press is one question or the
-/// other and never both.
+/// The two controls do not overlap, so a press is one question or the other and
+/// never both.
 #[test]
 fn a_press_is_one_control_or_the_other() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -605,8 +602,8 @@ fn a_press_is_one_control_or_the_other() {
 // The value and the track are one derivation
 // ---------------------------------------------------------------------------
 
-/// **A point on the track and a value on it are inverses**, so what a press
-/// asks for and where the fill is drawn cannot come apart.
+/// A point on the track and a value on it are inverses, so what a press asks
+/// for and where the fill is drawn cannot come apart.
 #[test]
 fn the_track_and_the_value_are_inverses() {
     for step in 0..=48 {
@@ -623,11 +620,11 @@ fn the_track_and_the_value_are_inverses() {
     assert_eq!(exposure_at(0.5), 1.0);
 }
 
-/// **A value past either end is drawn at that end**, which is what a
-/// `--exposure 200` reaches the panel as: the flag is deliberately not held to
-/// the interactive bounds, and a fill that ran off the track would be a
-/// picture of a value nobody can point at. The figure beside it is what says
-/// the number then.
+/// A value past either end is drawn at that end, which is what a `--exposure
+/// 200` reaches the panel as: the flag is deliberately not held to the
+/// interactive bounds, and a fill that ran off the track would be a picture of
+/// a value nobody can point at. The figure beside it is what says the number
+/// then.
 #[test]
 fn a_level_past_the_ends_is_drawn_at_the_end_and_said_in_the_figure() {
     assert_eq!(unit_of(EXPOSURE_MAX * 4.0), 1.0);
@@ -649,7 +646,7 @@ fn a_level_past_the_ends_is_drawn_at_the_end_and_said_in_the_figure() {
 // The route a window loop takes
 // ---------------------------------------------------------------------------
 
-/// **The whole route, as the window loop drives it**: `claim` first, then the
+/// The whole route, as the window loop drives it: `claim` first, then the
 /// derivation that drew the control asked a second time, then the operation.
 ///
 /// This is `tests/vocabulary.rs`'s third pass over these two controls, and it
@@ -658,9 +655,9 @@ fn a_level_past_the_ends_is_drawn_at_the_end_and_said_in_the_figure() {
 /// is what reads their badges and this is what demonstrates that a press
 /// reaches them.
 ///
-/// **It does not claim reachability.** Whether a claimed press becomes one of
-/// these operations is `crates/karakuri/src/main.rs`'s, which this crate
-/// cannot depend on (ADR-0156); the sufficient half is a test in that binary.
+/// It does not claim reachability. Whether a claimed press becomes one of these
+/// operations is `crates/karakuri/src/main.rs`'s, which this crate cannot
+/// depend on (ADR-0156); the sufficient half is a test in that binary.
 #[test]
 fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
     let (mut panel, ctx) = console(PLAUSIBLE);

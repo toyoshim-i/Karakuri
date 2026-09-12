@@ -6,16 +6,15 @@ mod common;
 use common::{assert_sane, assert_within_bounds, id_of, near, rect_of, rects, solved, PLAUSIBLE};
 
 /// *"Fold the left pane away"* — the operation `karakuri-layout` names — and
-/// the region that grows is the centre, because the centre is the only
-/// flexible track in `.body-grid` (`minmax(340px, 1fr)`) and the mock's two
-/// side tracks are fixed pixel widths.
+/// the region that grows is the centre, because the centre is the only flexible
+/// track in `.body-grid` (`minmax(340px, 1fr)`) and the mock's two side tracks
+/// are fixed pixel widths.
 ///
-/// **The centre takes the pane's width and not the divider beside it**, which
-/// is what ADR-0300 changed and what it buys: a pane keeps its edge when it
-/// folds, so the gap stays where the pane was, at the window's own edge, and
-/// a hand can take hold of it and pull the pane back in. A fold that took the
-/// divider too would leave nothing there at all, and `z` would be the only way
-/// back.
+/// The centre takes the pane's width and not the divider beside it, which is
+/// what ADR-0300 changed and what it buys: a pane keeps its edge when it folds,
+/// so the gap stays where the pane was, at the window's own edge, and a hand
+/// can take hold of it and pull the pane back in. A fold that took the divider
+/// too would leave nothing there at all, and `z` would be the only way back.
 #[test]
 fn folding_the_left_pane_gives_its_width_to_the_centre() {
     let mut layout = solved(PLAUSIBLE);
@@ -65,10 +64,10 @@ fn folding_the_right_pane_gives_its_width_to_the_centre() {
 /// which is also how you capture this window."*
 ///
 /// So the program's rectangle is the window's, exactly. ADR-0157 says what
-/// would spoil it: a maximum is honoured and the leftover is trailing space,
-/// so a maximum anywhere on the path — on `program`, on `centre`, or on the
-/// body row — would leave a margin the operator cannot get rid of, in a
-/// window they are about to record.
+/// would spoil it: a maximum is honoured and the leftover is trailing space, so
+/// a maximum anywhere on the path — on `program`, on `centre`, or on the body
+/// row — would leave a margin the operator cannot get rid of, in a window they
+/// are about to record.
 #[test]
 fn solo_on_the_program_leaves_the_program_holding_the_window() {
     let mut layout = solved(PLAUSIBLE);
@@ -98,10 +97,10 @@ fn solo_on_the_program_leaves_the_program_holding_the_window() {
     assert_eq!(rects(&layout), rects(&solved(PLAUSIBLE)));
 }
 
-/// *"Every divider drags, because a preview's size is a machine's answer
-/// rather than a layout's."* The one that matters most is the program's
-/// height, so it is asserted from both ends: it goes down to its minimum and
-/// up to most of the window, on the same arrangement.
+/// *"Every divider drags, because a preview's size is a machine's answer rather
+/// than a layout's."* The one that matters most is the program's height, so it
+/// is asserted from both ends: it goes down to its minimum and up to most of
+/// the window, on the same arrangement.
 #[test]
 fn the_program_height_drags_from_small_to_large() {
     let mut layout = solved(PLAUSIBLE);

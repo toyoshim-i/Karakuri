@@ -1,26 +1,23 @@
-//! **A node's declared input, and the mark that publishes a parameter row** —
-//! the two controls ADR-0329 gave the Inspector, and the two rows that were the
+//! A node's declared input, and the mark that publishes a parameter row — the
+//! two controls ADR-0329 gave the Inspector, and the two rows that were the
 //! last entries of *Rows the manual has not given a home*.
 //!
 //! Eight things:
 //!
 //! 1. Where a `uses` line sits — under the node head and above that node's
-//!    rows, which is the offset every row below it has to carry.
-//! 2. That the capsule is claimed and the card is not down until it is pressed.
-//! 3. That a pick names the deck, the node, the procedure's own word for the
-//!    input, and the node that was picked.
-//! 4. **That a line with nothing to offer opens no card**, which is the inert
-//!    scrub's arrangement two rows up: a deck holding one node of the kind an
-//!    input takes has no candidate, because the node already wired is not in
-//!    its own list.
-//! 5. That the publish mark is the row's leftmost cell in both of its states.
-//! 6. **That a press on a published row asks for the interface less that
-//!    control, in interface order** — the order being the point, since a
-//!    wildcard row is drawn in one group and numbered somewhere else entirely.
-//! 7. That a press on an unpublished row asks for the interface with it on the
-//!    end.
-//! 8. **That an unpublished row draws no fader**, which is what publishing
-//!    decides: the row is a mark and a name.
+//! rows, which is the offset every row below it has to carry. 2. That the
+//! capsule is claimed and the card is not down until it is pressed. 3. That a
+//! pick names the deck, the node, the procedure's own word for the input, and
+//! the node that was picked. 4. That a line with nothing to offer opens no
+//! card, which is the inert scrub's arrangement two rows up: a deck holding one
+//! node of the kind an input takes has no candidate, because the node already
+//! wired is not in its own list. 5. That the publish mark is the row's leftmost
+//! cell in both of its states. 6. That a press on a published row asks for the
+//! interface less that control, in interface order — the order being the point,
+//! since a wildcard row is drawn in one group and numbered somewhere else
+//! entirely. 7. That a press on an unpublished row asks for the interface with
+//! it on the end. 8. That an unpublished row draws no fader, which is what
+//! publishing decides: the row is a mark and a name.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a `uses` capsule is as wide as the node name in it.
@@ -71,13 +68,13 @@ fn control(name: &str, at: Option<(Layer, u32)>) -> Control {
     }
 }
 
-/// **A deck with an input to wire and an interface somebody has narrowed.**
+/// A deck with an input to wire and an interface somebody has narrowed.
 ///
 /// `swirl_warp` declares `uses far : Geometry` and is wired to `sphere_shell`,
 /// which is ADR-0152's own example. Two geometries and two candidates, so the
 /// card has exactly one row: the node already wired is not offered.
 ///
-/// **The numbers are deliberately not the order the rows are drawn in.** The
+/// The numbers are deliberately not the order the rows are drawn in. The
 /// wildcard `exposure` is numbered 1 and drawn last, and `amount` is numbered 3
 /// and drawn first — because a press has to rebuild the list in *interface*
 /// order, and a pane whose two orders agreed could not tell the two walks
@@ -160,10 +157,10 @@ fn at(p: egui::Pos2) -> Point {
 // Where the line is
 // ---------------------------------------------------------------------------
 
-/// **A `uses` line sits under the node head and above that node's rows**, and
-/// the rows below it carry the offset — which is the whole of what a line
-/// costs the group's arithmetic. A row resolved against a group that had not
-/// counted it is a fader drawn where a hand cannot reach it.
+/// A `uses` line sits under the node head and above that node's rows, and the
+/// rows below it carry the offset — which is the whole of what a line costs the
+/// group's arithmetic. A row resolved against a group that had not counted it
+/// is a fader drawn where a hand cannot reach it.
 #[test]
 fn a_uses_line_sits_between_the_head_and_the_rows() {
     let pane = mock();
@@ -236,8 +233,8 @@ fn a_uses_line_sits_between_the_head_and_the_rows() {
     );
 }
 
-/// **The card is not down until the capsule is pressed**, and while it is down
-/// it offers exactly the candidates the line was handed — one here, because the
+/// The card is not down until the capsule is pressed, and while it is down it
+/// offers exactly the candidates the line was handed — one here, because the
 /// node already wired is not in its own list.
 #[test]
 fn the_card_is_shut_until_it_is_opened() {
@@ -273,10 +270,10 @@ fn the_card_is_shut_until_it_is_opened() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A pick names the deck, the node, the input's own word and the node
-/// picked** — `Record::Edge`'s two halves and the deck the operation is
-/// addressed to, which is the one operation in this vocabulary addressed by
-/// name at both ends.
+/// A pick names the deck, the node, the input's own word and the node picked —
+/// `Record::Edge`'s two halves and the deck the operation is addressed to,
+/// which is the one operation in this vocabulary addressed by name at both
+/// ends.
 #[test]
 fn a_pick_names_the_node_the_input_and_the_deck() {
     let pane = mock();
@@ -302,9 +299,9 @@ fn a_pick_names_the_node_the_input_and_the_deck() {
     );
 }
 
-/// **A line with nothing to offer opens no card**, which is a deck holding one
-/// node of the kind the input takes: the node already wired is left out of its
-/// own list, so there is nothing to pick.
+/// A line with nothing to offer opens no card, which is a deck holding one node
+/// of the kind the input takes: the node already wired is left out of its own
+/// list, so there is nothing to pick.
 #[test]
 fn a_line_with_no_candidate_offers_no_card() {
     let mut pane = mock();
@@ -330,8 +327,8 @@ fn a_line_with_no_candidate_offers_no_card() {
 // The publish mark
 // ---------------------------------------------------------------------------
 
-/// **A press on a published row's number asks for the interface without it, in
-/// interface order.**
+/// A press on a published row's number asks for the interface without it, in
+/// interface order.
 ///
 /// The order is the assertion. `exposure` is numbered 1 and drawn last and
 /// `amount` is numbered 3 and drawn first, so a list built by walking the pane
@@ -360,9 +357,9 @@ fn taking_a_control_off_names_the_rest_in_interface_order() {
     );
 }
 
-/// **A press on an unpublished row's mark puts it back at the end of the
-/// list**, which is a decision and not an accident: nothing says where it was,
-/// and inventing a place would move knobs nobody pressed anything about.
+/// A press on an unpublished row's mark puts it back at the end of the list,
+/// which is a decision and not an accident: nothing says where it was, and
+/// inventing a place would move knobs nobody pressed anything about.
 #[test]
 fn putting_a_control_back_lands_it_at_the_end() {
     let pane = mock();
@@ -387,7 +384,7 @@ fn putting_a_control_back_lands_it_at_the_end() {
     );
 }
 
-/// **The mark is claimed and the rest of the row is not**, which is *a control
+/// The mark is claimed and the rest of the row is not, which is *a control
 /// claims what it acts on and no more*: the cell is a fixed track of the mock's
 /// grid, and the name beside it is a readout.
 #[test]
@@ -409,12 +406,12 @@ fn the_mark_is_the_cell_and_nothing_beside_it() {
     assert_eq!(laid.publishing(&pane, at(beside)), None);
 }
 
-/// **An unpublished row draws no fader**, which is what publishing decides: the
-/// row is a mark and a name, and there is nothing on it to take hold of.
+/// An unpublished row draws no fader, which is what publishing decides: the row
+/// is a mark and a name, and there is nothing on it to take hold of.
 ///
-/// **It carries its own negative control**, which is the half that makes it a
-/// test rather than a sweep that finds nothing: the *published* row beside it
-/// is swept first and a knob is found, so a run where nothing is found anywhere
+/// It carries its own negative control, which is the half that makes it a test
+/// rather than a sweep that finds nothing: the *published* row beside it is
+/// swept first and a knob is found, so a run where nothing is found anywhere
 /// fails on the published row and says the probe stopped working rather than
 /// passing on a row that has no handle for the wrong reason.
 #[test]

@@ -4,15 +4,15 @@ use super::*;
 // The Sequencer bay
 // ---------------------------------------------------------------------------
 
-/// **The word at the head of the Sequencer bay**, in the source's own
+/// The word at the head of the Sequencer bay, in the source's own
 /// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
 /// that is done at paint time so the word a reader searches for is the word in
 /// the source.
 pub(super) const SEQUENCER_TITLE: &str = "Sequencer";
 
-/// **The mark a lane's label carries after the deck's letter**: `▮` for a
-/// fader and `∿` for a parameter, which are the two glyphs
-/// `docs/manual/console.html` draws on the four lane labels.
+/// The mark a lane's label carries after the deck's letter: `▮` for a fader and
+/// `∿` for a parameter, which are the two glyphs `docs/manual/console.html`
+/// draws on the four lane labels.
 ///
 /// A `match` over the target and not a field on the reading, for
 /// `karakuri_operation::Sync::name`'s reason one crate down: a target added to
@@ -24,8 +24,8 @@ fn lane_mark(target: &LaneTarget) -> &'static str {
     }
 }
 
-/// **What one lane's row reads**: the deck's letter and the mark for what it
-/// drives — `A ▮`, `B ∿` — which is the mock's own label word for word.
+/// What one lane's row reads: the deck's letter and the mark for what it drives
+/// — `A ▮`, `B ∿` — which is the mock's own label word for word.
 pub(crate) fn lane_label(target: &LaneTarget) -> String {
     let letter = DECK_LETTERS
         .get(usize::from(target.deck()))
@@ -37,23 +37,23 @@ pub(crate) fn lane_label(target: &LaneTarget) -> String {
     format!("{letter} {}", lane_mark(target))
 }
 
-/// **What the sequencer bay reads this frame**: the armed pattern, which bank
-/// it is, and where the playhead was left.
+/// What the sequencer bay reads this frame: the armed pattern, which bank it
+/// is, and where the playhead was left.
 ///
-/// **A pattern and not a copy of one, taken apart.** The bay draws the mode,
-/// the lanes, what each drives, its steps and its mute, which is the whole of
-/// what a pattern is — so a reading with a field per drawn thing would be a
-/// second spelling of `karakuri_pattern::Pattern` that could disagree with it.
-/// This crate holds no pattern and applies nothing to one (ADR-0156); the host
+/// A pattern and not a copy of one, taken apart. The bay draws the mode, the
+/// lanes, what each drives, its steps and its mute, which is the whole of what
+/// a pattern is — so a reading with a field per drawn thing would be a second
+/// spelling of `karakuri_pattern::Pattern` that could disagree with it. This
+/// crate holds no pattern and applies nothing to one (ADR-0156); the host
 /// writes this per frame beside the frame it is about, which is
 /// [`View::mixer`]'s seam.
 ///
-/// **`step` comes from the poll and not from `beats`.** Where the playhead is
-/// is what the *producer* last answered — `karakuri_pattern::Playhead` — and
+/// `step` comes from the poll and not from `beats`. Where the playhead is is
+/// what the *producer* last answered — `karakuri_pattern::Playhead` — and
 /// deriving it here from the transport's beats would be a second derivation
 /// that could name a step the sequencer never emitted (P-0087). `None` before
-/// the first poll, which draws no column: a bay that has not been polled is
-/// not a bay at step zero.
+/// the first poll, which draws no column: a bay that has not been polled is not
+/// a bay at step zero.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sequenced {
     /// The armed pattern, as the host read it this frame.
@@ -64,47 +64,48 @@ pub struct Sequenced {
     pub step: Option<usize>,
 }
 
-/// **One item of the `+ lane` chooser**: a target a lane may be pointed at, and
-/// the words drawn on it.
+/// One item of the `+ lane` chooser: a target a lane may be pointed at, and the
+/// words drawn on it.
 ///
-/// **The words are the lane label the pick will make, plus what it is.** A
-/// fader item reads `A ▮ fader` and a parameter item `B ∿ L2:0 twist`, so the
-/// row that appears after the press reads as the item that was picked — the
-/// deck's letter and [`lane_mark`], which is [`lane_label`]'s own derivation
-/// asked one control earlier.
+/// The words are the lane label the pick will make, plus what it is. A fader
+/// item reads `A ▮ fader` and a parameter item `B ∿ L2:0 twist`, so the row
+/// that appears after the press reads as the item that was picked — the deck's
+/// letter and [`lane_mark`], which is [`lane_label`]'s own derivation asked one
+/// control earlier.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LaneChoice {
-    /// What a pick points the lane at — the payload of
-    /// `Operation::PointLane`, whole.
+    /// What a pick points the lane at — the payload of `Operation::PointLane`,
+    /// whole.
     pub target: LaneTarget,
     /// The words on the item.
     pub words: String,
 }
 
-/// **What the `+ lane` chooser offers this frame**, read off the [`View`] once
-/// and handed in — [`Target`]'s shape one bay along, and for its reason: the
-/// item that is painted and the item a press lands on are one derivation of one
+/// What the `+ lane` chooser offers this frame, read off the [`View`] once and
+/// handed in — [`Target`]'s shape one bay along, and for its reason: the item
+/// that is painted and the item a press lands on are one derivation of one
 /// reading.
 ///
-/// # What is in the list, and why it is one deck's parameters and every deck's fader
+/// # What is in the list, and why it is one deck's parameters and every deck's
+/// fader
 ///
 /// A lane's target is `Fader { deck }` or `Param { deck, param }`
 /// ([ADR-0321](../../../../docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)),
 /// so the list is the faders of every deck the mixer draws a strip for —
 /// [`View::select`]'s own count read a fourth time — and the published controls
-/// of **one** deck: the Library bay's load pulldown's
-/// ([`View::target_deck`], ADR-0305).
+/// of one deck: the Library bay's load pulldown's ([`View::target_deck`],
+/// ADR-0305).
 ///
-/// **That mark and not a second one.** It is the console's one pointer meaning
-/// *a deck named without moving the keys*, which is exactly what pointing a
-/// lane wants — a lane on deck C while deck A is playing — and a chooser of its
-/// own in this bay would be a fourth pointer on a panel that already explains
-/// three (ADR-0305's counting argument). Listing every deck's keys instead
-/// would put the same key in the list once per deck, so the operator would pick
-/// a deck by reading a list four times as long rather than by a control.
+/// That mark and not a second one. It is the console's one pointer meaning *a
+/// deck named without moving the keys*, which is exactly what pointing a lane
+/// wants — a lane on deck C while deck A is playing — and a chooser of its own
+/// in this bay would be a fourth pointer on a panel that already explains three
+/// (ADR-0305's counting argument). Listing every deck's keys instead would put
+/// the same key in the list once per deck, so the operator would pick a deck by
+/// reading a list four times as long rather than by a control.
 /// [ADR-0327](../../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md).
 ///
-/// **What the console does not hold, it does not offer.** The parameters are
+/// What the console does not hold, it does not offer. The parameters are
 /// [`View::inspector`]'s, which is written when a Set lands, and the inspector
 /// holds [`PANES`] panes — so a target deck no pane is pointed at contributes
 /// no parameters and the list is its faders alone. That is the reading's own
@@ -114,19 +115,18 @@ pub struct LaneChoice {
 pub struct Choices {
     /// Every target on offer: the faders first, then the parameters.
     pub items: Vec<LaneChoice>,
-    /// **How many of the leading items are faders**, which is where the card's
-    /// separator goes — [`RowMenu::rule`]'s band between the loads and the
-    /// send, reached by the same argument: two kinds of item, and the rule says
-    /// so.
+    /// How many of the leading items are faders, which is where the card's
+    /// separator goes — [`RowMenu::rule`]'s band between the loads and the send,
+    /// reached by the same argument: two kinds of item, and the rule says so.
     pub faders: usize,
-    /// **Whether the card is down** — the console's own state, like
-    /// [`Target::open`]. See [`View::lane_open`].
+    /// Whether the card is down — the console's own state, like [`Target::open`].
+    /// See [`View::lane_open`].
     pub open: bool,
 }
 
 impl Choices {
-    /// **Nothing to point at**, which is a console with no mixer and no pane —
-    /// every test in this crate that does not hand one in.
+    /// Nothing to point at, which is a console with no mixer and no pane — every
+    /// test in this crate that does not hand one in.
     pub fn none() -> Choices {
         Choices {
             items: Vec::new(),
@@ -136,60 +136,60 @@ impl Choices {
     }
 }
 
-/// **One lane's row**: the label a press mutes it by, and the cells a press
-/// sets a step by.
+/// One lane's row: the label a press mutes it by, and the cells a press sets a
+/// step by.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SeqRow {
-    /// **The label, and it is a control**: *"Click to mute the lane and keep
-    /// the pattern"*, which is where rule 02's take-back sits for a lane.
+    /// The label, and it is a control: *"Click to mute the lane and keep the
+    /// pattern"*, which is where rule 02's take-back sits for a lane.
     pub label: Rect,
-    /// **One rectangle per step of the mode**, so there are sixteen of these
-    /// at a sixteenth and eight at an eighth: the row keeps its width and the
-    /// cells halve in the finer one (ADR-0306).
+    /// One rectangle per step of the mode, so there are sixteen of these at a
+    /// sixteenth and eight at an eighth: the row keeps its width and the cells
+    /// halve in the finer one (ADR-0306).
     pub cells: Vec<Rect>,
     /// What the row draws from: the lane's own label, which slots are on, and
     /// whether it is muted.
     pub words: String,
     pub muted: bool,
-    /// **Whether each drawn cell is on**, in the cells' order — the mode's
-    /// reading of the lane's sixteen slots, taken where the row is laid out so
-    /// the paint and the press cannot disagree about which slot a cell is.
+    /// Whether each drawn cell is on, in the cells' order — the mode's reading of
+    /// the lane's sixteen slots, taken where the row is laid out so the paint and
+    /// the press cannot disagree about which slot a cell is.
     pub on: Vec<bool>,
-    /// **Which stored slot each drawn cell is**, which is what a press sends:
-    /// the identity at a sixteenth and `2k` at an eighth, so
-    /// `Operation::SetStep` carries a slot and never a step
-    /// (`karakuri_operation::StepMode::slot_of`).
+    /// Which stored slot each drawn cell is, which is what a press sends: the
+    /// identity at a sixteenth and `2k` at an eighth, so `Operation::SetStep`
+    /// carries a slot and never a step (`karakuri_operation::StepMode::slot_of`).
     pub slots: Vec<usize>,
 }
 
-/// **The Sequencer bay, laid out**: the head's mode pill and step readout, the
+/// The Sequencer bay, laid out: the head's mode pill and step readout, the
 /// ruler, the playhead column and a row per lane.
 ///
 /// # What is drawn and what is not
 ///
+///
 /// [ADR-0200](../../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
 /// is satisfied here for the first time in this bay, and ADR-0222 said why it
 /// could not be before: every part of the drawing now reads a value that
-/// exists, because a pattern exists. **One thing the mock draws is still not
-/// drawn**: the foot's sentence, which is a readout and not a control.
+/// exists, because a pattern exists. One thing the mock draws is still not
+/// drawn: the foot's sentence, which is a readout and not a control.
 ///
 /// The bank pills and the `+ lane` pill landed on 2026-09-09. The pills are
 /// [`Head::banks`] — the head machinery gained one field and every other head's
 /// [`HeadWords`] is what it was — and they are laid out here a second time
 /// rather than copied ([`bank_capsules`]), which is [`program_head`]'s
 /// arrangement: the capsule an operator sees and the capsule a press lands on
-/// are one derivation. **Four pills and no `+`**: with four fixed banks the
-/// mock's `+` is `Operation::SelectPattern` at an empty bank, which is what a
-/// press on `seq 3` already is
+/// are one derivation. Four pills and no `+`: with four fixed banks the mock's
+/// `+` is `Operation::SelectPattern` at an empty bank, which is what a press on
+/// `seq 3` already is
 /// ([ADR-0327](../../../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
 ///
 /// # The cells are the row divided by the count, and the count follows the mode
 ///
-/// `.seq-lane` is `repeat(16, 1fr)` with a [`size::SEQ_CELL_GAP`] between, so
-/// a cell is as wide as what is left of the row after the gaps — and at an
-/// eighth there are eight of them over the same width, which is the mock's
-/// *"the row keeps its width, so the cells halve in the finer one"* read the
-/// other way round.
+/// `.seq-lane` is `repeat(16, 1fr)` with a [`size::SEQ_CELL_GAP`] between, so a
+/// cell is as wide as what is left of the row after the gaps — and at an eighth
+/// there are eight of them over the same width, which is the mock's *"the row
+/// keeps its width, so the cells halve in the finer one"* read the other way
+/// round.
 pub fn sequencer(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -352,24 +352,24 @@ pub fn sequencer(
     })
 }
 
-/// **The `+ lane` chooser's card, or `None` while it is up** — and `None` for a
+/// The `+ lane` chooser's card, or `None` while it is up — and `None` for a
 /// chooser with nothing in it, which is a console the mixer draws no strip for.
 ///
 /// # It hangs up off the pill, where a row's menu hangs down off a row
 ///
-/// [`Load::list`]'s rule, and the same one: this pill is in the **foot** of a
-/// bay, so what is under it is the bay's own edge and the card stands on the
-/// pill's top edge, one [`size::PILL_GAP`] clear of it, over this bay's rows.
-/// It is held inside the viewport, so a Sequencer bay at the bottom of a short
-/// window draws the card over the bays above rather than off the top.
+/// [`Load::list`]'s rule, and the same one: this pill is in the foot of a bay,
+/// so what is under it is the bay's own edge and the card stands on the pill's
+/// top edge, one [`size::PILL_GAP`] clear of it, over this bay's rows. It is
+/// held inside the viewport, so a Sequencer bay at the bottom of a short window
+/// draws the card over the bays above rather than off the top.
 ///
-/// **The rows are not counted against the room**, which is that method's other
+/// The rows are not counted against the room, which is that method's other
 /// clause: the list is at most [`DECKS`] faders and however many controls one
 /// deck published, and a window too short to hold it is a window with no
 /// transport row in it either.
 ///
-/// **The items are as wide as the words in them**, which is `egui`'s to answer
-/// — [`View::menu`]'s reason one bay along, and why this takes the context.
+/// The items are as wide as the words in them, which is `egui`'s to answer —
+/// [`View::menu`]'s reason one bay along, and why this takes the context.
 fn lane_card(
     ctx: &egui::Context,
     viewport: Rect,
@@ -422,14 +422,14 @@ fn lane_card(
     })
 }
 
-/// **What the head's readout says** — `step 6 of 16`, counting from one as the
+/// What the head's readout says — `step 6 of 16`, counting from one as the
 /// ruler does, and `step — of 16` before the first poll.
 ///
-/// **The count is in it and the mock's is not.** `docs/manual/console.html`
-/// draws `step 6` and says *"Step 6 of sixteen"* in its tip; the count follows
-/// the mode now and the pill beside it can be pressed, so a readout that said
-/// only `6` would leave a hand that had just halved the grid reading the same
-/// figure against a different bar.
+/// The count is in it and the mock's is not. `docs/manual/console.html` draws
+/// `step 6` and says *"Step 6 of sixteen"* in its tip; the count follows the
+/// mode now and the pill beside it can be pressed, so a readout that said only
+/// `6` would leave a hand that had just halved the grid reading the same figure
+/// against a different bar.
 fn step_words(step: Option<usize>, mode: StepMode) -> String {
     match step {
         Some(step) => format!("step {} of {}", step + 1, mode.count()),
@@ -437,7 +437,7 @@ fn step_words(step: Option<usize>, mode: StepMode) -> String {
     }
 }
 
-/// **The Sequencer bay's controls, as rectangles to press.**
+/// The Sequencer bay's controls, as rectangles to press.
 ///
 /// Everything here is derived from the pattern the host handed in this frame,
 /// so the cell that is painted is the cell that is pressed — the rule every
@@ -445,66 +445,65 @@ fn step_words(step: Option<usize>, mode: StepMode) -> String {
 /// [`crate::input::claim`] and the press handler ask the same question.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sequencer {
-    /// **The mode pill**, reading `1/16` or `1/8`. A press asks for the other
-    /// of the two by naming it — a state and never a flip.
+    /// The mode pill, reading `1/16` or `1/8`. A press asks for the other of the
+    /// two by naming it — a state and never a flip.
     pub mode_pill: Rect,
     /// The mode those rectangles were laid out from, carried for
-    /// [`MasterRow::out`]'s reason: whoever measured the type and whoever
-    /// paints it are one statement.
+    /// [`MasterRow::out`]'s reason: whoever measured the type and whoever paints it
+    /// are one statement.
     pub mode: StepMode,
-    /// **The step readout**, which is a readout: there is nothing here to
-    /// press, and a hand that wants a pattern to begin somewhere else has no
-    /// control in this bay for it.
+    /// The step readout, which is a readout: there is nothing here to press, and a
+    /// hand that wants a pattern to begin somewhere else has no control in this bay
+    /// for it.
     pub step: Rect,
     /// The words in it, measured once and painted from the same string.
     pub step_words: String,
-    /// **The ruler**, which is a readout too: four numbers over the cells.
+    /// The ruler, which is a readout too: four numbers over the cells.
     pub ruler: Rect,
-    /// **The playhead's column**, or `None` for a bay nothing has polled and
-    /// for a pattern with no lanes to stand over.
+    /// The playhead's column, or `None` for a bay nothing has polled and for a
+    /// pattern with no lanes to stand over.
     pub playhead: Option<Rect>,
     /// One per lane, in the order the pattern draws them.
     pub rows: Vec<SeqRow>,
-    /// Which bank these rows are, carried so a caller's operation names the
-    /// bank it acted on rather than implying the armed one
-    /// (`Operation::SelectDeck`'s rule).
+    /// Which bank these rows are, carried so a caller's operation names the bank it
+    /// acted on rather than implying the armed one (`Operation::SelectDeck`'s
+    /// rule).
     pub bank: usize,
-    /// **The four bank pills in the bay head**, in bank order — the same
-    /// capsules [`bay_head`] paints, laid out a second time here
-    /// ([`bank_capsules`]).
+    /// The four bank pills in the bay head, in bank order — the same capsules
+    /// [`bay_head`] paints, laid out a second time here ([`bank_capsules`]).
     ///
-    /// **Empty for a bay too short to hold its own head**, which is a head with
-    /// no capsule to press; short of four it never is, because renumbering the
-    /// ones that fit would put `seq 2`'s press on `seq 1`.
+    /// Empty for a bay too short to hold its own head, which is a head with no
+    /// capsule to press; short of four it never is, because renumbering the ones
+    /// that fit would put `seq 2`'s press on `seq 1`.
     pub banks: Vec<Rect>,
-    /// **The foot's `+ lane` pill.** A press puts [`LaneCard`] down; it emits
-    /// nothing on its own, because what is being added is *what the lane
-    /// drives* and a lane with nothing to point at emits nothing.
+    /// The foot's `+ lane` pill. A press puts [`LaneCard`] down; it emits nothing
+    /// on its own, because what is being added is *what the lane drives* and a lane
+    /// with nothing to point at emits nothing.
     pub add: Rect,
-    /// **The chooser's card, or `None` while it is up.**
+    /// The chooser's card, or `None` while it is up.
     pub card: Option<LaneCard>,
 }
 
-/// **The `+ lane` chooser's card, laid out** — [`RowMenu`]'s shape one bay
-/// along, and the same mechanism (ADR-0311): a card of items with a separator
-/// in it, hanging off the control that opened it.
+/// The `+ lane` chooser's card, laid out — [`RowMenu`]'s shape one bay along,
+/// and the same mechanism (ADR-0311): a card of items with a separator in it,
+/// hanging off the control that opened it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LaneCard {
     /// The card itself.
     pub card: Rect,
-    /// **How many of the items are faders**, which is where the rule goes.
+    /// How many of the items are faders, which is where the rule goes.
     pub faders: usize,
     /// How many items there are altogether — [`Choices::items`]' length.
     pub items: usize,
-    /// **Whether the separator is drawn**, which is whether there is anything
-    /// on both sides of it.
+    /// Whether the separator is drawn, which is whether there is anything on both
+    /// sides of it.
     pub ruled: bool,
 }
 
 impl LaneCard {
-    /// **Where one item is**, from the top of the card — the faders stacked
-    /// with no gap, then the band, then the parameters. [`RowMenu::load`]'s own
-    /// reading, with the rule in the middle rather than at the end.
+    /// Where one item is, from the top of the card — the faders stacked with no
+    /// gap, then the band, then the parameters. [`RowMenu::load`]'s own reading,
+    /// with the rule in the middle rather than at the end.
     ///
     /// Panics on an item this card has not got, which is that method's rule: a
     /// caller has invented a target.
@@ -530,9 +529,9 @@ impl LaneCard {
         )
     }
 
-    /// **The separator's band**, or `None` where none is drawn — the air,
-    /// hairline and air [`RowMenu::rule`] draws, between the faders and the
-    /// parameters. It takes no press: a press inside it is the dismissal.
+    /// The separator's band, or `None` where none is drawn — the air, hairline and
+    /// air [`RowMenu::rule`] draws, between the faders and the parameters. It takes
+    /// no press: a press inside it is the dismissal.
     pub fn rule(&self) -> Option<Rect> {
         self.ruled.then(|| {
             Rect::from_min_size(
@@ -548,16 +547,15 @@ impl LaneCard {
         })
     }
 
-    /// **Which item `p` is on**, or `None` for a point on the card's padding,
-    /// on the separator, or off the card altogether — [`RowMenu::picked`]'s
-    /// own answer.
+    /// Which item `p` is on, or `None` for a point on the card's padding, on the
+    /// separator, or off the card altogether — [`RowMenu::picked`]'s own answer.
     pub fn picked(&self, p: karakuri_layout::Point) -> Option<usize> {
         let at = Pos2::new(p.x, p.y);
         (0..self.items).find(|index| self.item(*index).contains(at))
     }
 }
 
-/// **What a press on the `+ lane` control asks for.**
+/// What a press on the `+ lane` control asks for.
 ///
 /// [`Aim`]'s shape three bays along, and the same division: every arm is either
 /// this console's own state moving or one named operation, and never a lane
@@ -567,37 +565,35 @@ impl LaneCard {
 pub enum Chose {
     /// Put the card down — a press on `+ lane` with it up.
     Open,
-    /// Take it away — a press on `+ lane` again, on the card's own ground, on
-    /// the separator, or anywhere else while it is down. **The press is spent
-    /// on the dismissal**, which is [`crate::input::claim`]'s rule 2 said in
-    /// the control.
+    /// Take it away — a press on `+ lane` again, on the card's own ground, on the
+    /// separator, or anywhere else while it is down. The press is spent on the
+    /// dismissal, which is [`crate::input::claim`]'s rule 2 said in the control.
     Shut,
-    /// **The lane, named** — `Operation::PointLane { pattern, target }`, with
-    /// the bank off this bay's own reading and the target off the item.
+    /// The lane, named — `Operation::PointLane { pattern, target }`, with the bank
+    /// off this bay's own reading and the target off the item.
     Point(Operation),
 }
 
 impl Sequencer {
-    /// **What a press at `p` asks for**, or `None` where there is nothing
-    /// under it.
+    /// What a press at `p` asks for, or `None` where there is nothing under it.
     ///
-    /// Four controls and one answer, in the order the mock draws them: a bank
-    /// pill chooses the pattern, a cell sets a step, a label mutes a lane, and
-    /// the pill chooses what a step is worth. **The mode pill is asked last**
-    /// and none of the four can overlap another, so the order is arbitrary
-    /// rather than a precedence — it is written down so that this file and the
-    /// window that acts on it ask in one order.
+    /// Four controls and one answer, in the order the mock draws them: a bank pill
+    /// chooses the pattern, a cell sets a step, a label mutes a lane, and the pill
+    /// chooses what a step is worth. The mode pill is asked last and none of the
+    /// four can overlap another, so the order is arbitrary rather than a precedence
+    /// — it is written down so that this file and the window that acts on it ask in
+    /// one order.
     ///
-    /// **The `+ lane` control is not here**, because its press is not an
-    /// operation: it puts a card down, and what comes back from that card is
-    /// [`Sequencer::chose`]. That is [`LibraryBay::aim`]'s division one bay
-    /// along, and the same one: a control whose press moves the console's own
-    /// state answers an enum rather than an `Option<Operation>`.
+    /// The `+ lane` control is not here, because its press is not an operation: it
+    /// puts a card down, and what comes back from that card is
+    /// [`Sequencer::chose`]. That is [`LibraryBay::aim`]'s division one bay along,
+    /// and the same one: a control whose press moves the console's own state
+    /// answers an enum rather than an `Option<Operation>`.
     ///
-    /// **Every arm names the bank**, which is why [`Sequencer::bank`] is
-    /// carried: implying the armed one is the shape `Operation::SelectDeck`'s
-    /// rule refuses, and a press that arrived while a bank press was in flight
-    /// would otherwise land on whichever pattern won.
+    /// Every arm names the bank, which is why [`Sequencer::bank`] is carried:
+    /// implying the armed one is the shape `Operation::SelectDeck`'s rule refuses,
+    /// and a press that arrived while a bank press was in flight would otherwise
+    /// land on whichever pattern won.
     pub fn press(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let at = Pos2::new(p.x, p.y);
         // **The bank pills first, and they are in the bay head** — outside
@@ -652,22 +648,22 @@ impl Sequencer {
             })
     }
 
-    /// **What a press at `p` asks of the `+ lane` control**, or `None` where
+    /// What a press at `p` asks of the `+ lane` control, or `None` where
     /// the press was on nothing it owns.
     ///
     /// # Two questions, and which one it is depends on whether the card is down
     ///
     /// [`LibraryBay::menu_ask`]'s rule, and it is that method's word for word:
     ///
-    /// - **With the card up** this is the pill alone — a press on it opens the
+    /// - With the card up this is the pill alone — a press on it opens the
     ///   card, and a press anywhere else answers `None` so the arms above can
     ///   have it.
-    /// - **With one down** every press is the card's, which is
+    /// - With one down every press is the card's, which is
     ///   [`crate::input::claim`]'s rule 2: on an item it picks, on the
     ///   separator, on the card's padding or anywhere else on the console it
     ///   dismisses. So this never answers `None` while the card is down.
     ///
-    /// **A pick names the bank this bay is reading**, exactly as
+    /// A pick names the bank this bay is reading, exactly as
     /// [`Sequencer::press`]'s arms do: the lane lands in the pattern that was
     /// drawn rather than in whichever is armed by the time it is performed.
     pub fn chose(&self, p: karakuri_layout::Point, choices: &Choices) -> Option<Chose> {
@@ -694,22 +690,20 @@ impl Sequencer {
         })
     }
 
-    /// **Whether `p` is on anything here a press means something on**, which
-    /// is what [`crate::input::claim`] asks. The ruler, the readout and the
-    /// playhead are readouts and answer `false`.
+    /// Whether `p` is on anything here a press means something on, which is what
+    /// [`crate::input::claim`] asks. The ruler, the readout and the playhead are
+    /// readouts and answer `false`.
     ///
-    /// **The `+ lane` pill is one of them**, and the card is not: a card that
-    /// is down claims every press on the console under rule 2, which is
-    /// answered before rule 4 is reached and is why this is only ever asked
-    /// with the card up.
+    /// The `+ lane` pill is one of them, and the card is not: a card that is down
+    /// claims every press on the console under rule 2, which is answered before
+    /// rule 4 is reached and is why this is only ever asked with the card up.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
         self.press(p).is_some() || self.add.contains(Pos2::new(p.x, p.y))
     }
 
-    /// **How many controls this bay draws**, which is what
-    /// [`crate::input::PROBES`] registers: a cell per drawn step of every
-    /// lane, a label per lane, the mode pill, the four bank pills and
-    /// `+ lane`.
+    /// How many controls this bay draws, which is what [`crate::input::PROBES`]
+    /// registers: a cell per drawn step of every lane, a label per lane, the mode
+    /// pill, the four bank pills and `+ lane`.
     pub fn controls(&self) -> usize {
         self.rows
             .iter()
@@ -721,7 +715,7 @@ impl Sequencer {
     }
 }
 
-/// **The Sequencer bay, painted.**
+/// The Sequencer bay, painted.
 ///
 /// Where everything goes is [`sequencer`]'s, so this paints and derives
 /// nothing. Term for term from `style.css`:
@@ -731,12 +725,12 @@ impl Sequencer {
 /// - the step readout — `.seq-head`'s own `color: var(--c-faint)` with the
 ///   figure in `.val`'s ink, which is what the mock draws.
 /// - the ruler — `.seq-ruler`, four numbers centred over the cells they start,
-///   at [`size::SEQ_RULER_SIZE`] in the faint ink. **Four numbers whatever the
-///   mode**, because the ruler counts *beats* and a bar has four of them: at
+///   at [`size::SEQ_RULER_SIZE`] in the faint ink. Four numbers whatever the
+///   mode, because the ruler counts *beats* and a bar has four of them: at
 ///   an eighth they group two cells rather than four, which is the same bar
 ///   read at the other width.
 /// - the playhead — `.seq-play .lane i.at`, a wash of the lavender with its
-///   own hairline, painted **under** the rows so a lit cell stays the colour
+///   own hairline, painted under the rows so a lit cell stays the colour
 ///   its lane is.
 /// - a lane's label — `.seq-label`, right-aligned, with the mark in the
 ///   lavender; and `.seq-row.mute`'s faint ink where the lane is muted.
@@ -847,9 +841,10 @@ pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
     pill_into(ui, pal, bay.add, ADD_LANE, false);
 }
 
-/// **The `+ lane` chooser's card, painted** — [`library::row_menu_into`]'s card term
-/// for term, because it is that card: the same panel fill, radius, hairline
-/// and item ink, and the same separator drawn as one rule inside its band.
+/// The `+ lane` chooser's card, painted — [`library::row_menu_into`]'s card
+/// term for term, because it is that card: the same panel fill, radius,
+/// hairline and item ink, and the same separator drawn as one rule inside its
+/// band.
 pub(super) fn lane_card_into(ui: &Ui, pal: &Palette, card: &LaneCard, choices: &Choices) {
     let painter = ui.painter();
     painter.add(pal.shadow.as_shape(card.card, CornerRadius::same(8)));
@@ -891,75 +886,74 @@ pub(super) fn lane_card_into(ui: &Ui, pal: &Palette, card: &LaneCard, choices: &
     }
 }
 
-/// **The word on the foot's pill**, the mock's own — `+ lane`.
+/// The word on the foot's pill, the mock's own — `+ lane`.
 const ADD_LANE: &str = "+ lane";
 
-/// **What a fader item says it is**, after the lane label the pick will make:
-/// `A ▮ fader`.
+/// What a fader item says it is, after the lane label the pick will make: `A ▮
+/// fader`.
 ///
 /// A parameter item says the node and the published name instead — `B ∿ L2:0
 /// twist`, which is the mock's own way of naming the fourth lane's target.
 pub(crate) const FADER_ITEM: &str = "fader";
 
-/// **How many numbers the ruler draws**: four, which is the beats in a bar.
+/// How many numbers the ruler draws: four, which is the beats in a bar.
 ///
-/// It is the bar's own count rather than a division of the cells, which is
-/// what makes the ruler read the same in both modes — four numbers over
-/// sixteen cells is a group of four, and over eight is a group of two.
+/// It is the bar's own count rather than a division of the cells, which is what
+/// makes the ruler read the same in both modes — four numbers over sixteen
+/// cells is a group of four, and over eight is a group of two.
 /// `docs/manual/console.html` draws exactly this: *"Four numbers over sixteen
 /// cells makes a group of four, which is a bar of sixteenths counted in
 /// beats."*
 const RULER_GROUPS: usize = 4;
 
-/// **`.seq-play .lane i.at`'s `color-mix(in srgb, var(--c-lav) 22%,
-/// transparent)`**, as the percentage [`tint`] takes.
+/// `.seq-play .lane i.at`'s `color-mix(in srgb, var(--c-lav) 22%,
+/// transparent)`, as the percentage [`tint`] takes.
 const PLAYHEAD_WASH: u8 = 22;
 
-/// **`.seq-row.mute .seq-lane`'s `opacity: 0.3`**, applied to a lit cell as
-/// the percentage [`tint`] takes — the pattern is kept and drives nothing, so
-/// its steps are still drawn and are drawn dim.
+/// `.seq-row.mute .seq-lane`'s `opacity: 0.3`, applied to a lit cell as the
+/// percentage [`tint`] takes — the pattern is kept and drives nothing, so its
+/// steps are still drawn and are drawn dim.
 const MUTED_LANE: u8 = 30;
 
-/// **How stale the sequencer's picture may get**, which is what this bay
-/// declares under
+/// How stale the sequencer's picture may get, which is what this bay declares
+/// under
 /// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 /// and what the harness turns into a deadline.
 ///
-/// **One sixteenth at the mock's tempo — 117.19 ms**, which is
-/// [`BEAT_MICROS`] quartered. The unit this picture moves in is a whole cell:
-/// the playhead stands over one step and then over the next, so there is
-/// nothing between two positions to be smooth about and the step *is* the
-/// step. The finer of the two modes is the one written down, because a
-/// declaration made for the eighth would be half the rate the sixteenth needs
-/// and the mode is one press away.
+/// One sixteenth at the mock's tempo — 117.19 ms, which is [`BEAT_MICROS`]
+/// quartered. The unit this picture moves in is a whole cell: the playhead
+/// stands over one step and then over the next, so there is nothing between two
+/// positions to be smooth about and the step *is* the step. The finer of the
+/// two modes is the one written down, because a declaration made for the eighth
+/// would be half the rate the sixteenth needs and the mode is one press away.
 ///
-/// **Stated at the mock's tempo, for [`BEAT_STALENESS`]'s reason**: a
-/// staleness that fell with the tempo would make `Σ (cost / staleness)` a
-/// function of how fast the music is, and the two schedulability conditions
-/// could then only be asserted against a fastest tempo nobody has written down
-/// (ADR-0212). What the music moves is [`step_moves_in`], which is the
-/// deadline and not the rate.
+/// Stated at the mock's tempo, for [`BEAT_STALENESS`]'s reason: a staleness
+/// that fell with the tempo would make `Σ (cost / staleness)` a function of how
+/// fast the music is, and the two schedulability conditions could then only be
+/// asserted against a fastest tempo nobody has written down (ADR-0212). What
+/// the music moves is [`step_moves_in`], which is the deadline and not the
+/// rate.
 ///
-/// **It is the first declaration on this panel whose unit is a beat
-/// subdivision**, so it is what `moves_in >= staleness` is tightest against
-/// (ADR-0322, ADR-0283).
+/// It is the first declaration on this panel whose unit is a beat subdivision,
+/// so it is what `moves_in >= staleness` is tightest against (ADR-0322,
+/// ADR-0283).
 pub const STEP_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / 4);
 
-/// **How long until the playhead next stands over a different cell**, from the
-/// beat count and the tempo the transport row is drawing.
+/// How long until the playhead next stands over a different cell, from the beat
+/// count and the tempo the transport row is drawing.
 ///
 /// The step index is `floor(beats × steps_per_beat)`, so the next boundary is
-/// the next whole multiple of the subdivision and this is the distance to it
-/// in seconds — the same arithmetic the producer polls with
+/// the next whole multiple of the subdivision and this is the distance to it in
+/// seconds — the same arithmetic the producer polls with
 /// (`karakuri_pattern::Pattern::step_at`), read forwards.
 ///
-/// **It never answers finer than the rate it declared**, which is
+/// It never answers finer than the rate it declared, which is
 /// [`roll_moves_in`]'s rule and [`crate::budget::Declared`]'s invariant: a
 /// frame taken a hair before a boundary would otherwise ask for a deadline
 /// tending to zero, which is the spin [`crate::repaint`] exists to refuse.
 ///
-/// **A pure function of its two arguments**, so a test chooses the beat it
-/// asserts at and nothing here reads a clock.
+/// A pure function of its two arguments, so a test chooses the beat it asserts
+/// at and nothing here reads a clock.
 pub fn step_moves_in(mode: StepMode, beats: f64, bpm: f32) -> Duration {
     // A grid at no tempo has no next boundary, and the rate this declared is
     // the only honest answer — the same shape as a rest longer than the period

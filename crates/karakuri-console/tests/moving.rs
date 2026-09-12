@@ -1,29 +1,30 @@
-//! **A region asks for frames while it is moving, and not while it is merely
-//! pending.**
+//! A region asks for frames while it is moving, and not while it is merely
+//! pending.
+//!
 //!
 //! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
-//! gives a live region two numbers — what its update costs and how stale it
-//! may get — and neither of them says whether the region has changed. So the
-//! window served the mixer bay's declared thirty a second for as long as
-//! anything in it was outstanding, and
-//! [`roll_at`](karakuri_console::view::roll_at) is **exactly zero** for the
-//! 600 ms of every [`ROLL_PERIOD`] that is not [`ROLL_TRAVEL`]: seventeen of
-//! those thirty-one frames redrew the panel exactly as it already was.
+//! gives a live region two numbers — what its update costs and how stale it may
+//! get — and neither of them says whether the region has changed. So the window
+//! served the mixer bay's declared thirty a second for as long as anything in
+//! it was outstanding, and [`roll_at`](karakuri_console::view::roll_at) is
+//! exactly zero for the 600 ms of every [`ROLL_PERIOD`] that is not
+//! [`ROLL_TRAVEL`]: seventeen of those thirty-one frames redrew the panel
+//! exactly as it already was.
+//!
 //!
 //! [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
 //! is the third number, `Declared::moves_in`, and this file is what it bought
 //! and what it may not take away:
 //!
-//! 1. **The count.** What a parked panel asks for over one period, before and
-//!    after, counted rather than described.
-//! 2. **What was dropped.** Every frame that is no longer asked for would have
-//!    drawn the chip in the position it was already in — asserted off the
-//!    curve, so it is a claim about the picture and not about the schedule.
-//! 3. **What may not be dropped.** The beat keeps its rate at every phase of
-//!    the roll, which is
-//!    [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
-//!    a panel that stopped moving because nothing had *changed* is exactly the
-//!    console that has gone quiet.
+//! 1. The count. What a parked panel asks for over one period, before and
+//! after, counted rather than described. 2. What was dropped. Every frame that
+//! is no longer asked for would have drawn the chip in the position it was
+//! already in — asserted off the curve, so it is a claim about the picture and
+//! not about the schedule. 3. What may not be dropped. The beat keeps its rate
+//! at every phase of the roll, which is
+//! [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
+//! a panel that stopped moving because nothing had *changed* is exactly the
+//! console that has gone quiet.
 //!
 //! Nothing here needs a window, a device or a clock. The phase is a value the
 //! test chooses, which is what ADR-0190 made it for.
@@ -52,11 +53,11 @@ fn arrangement() -> Panel {
 
 /// A strip where it was asked to be, with nothing armed on either fader.
 ///
-/// **With a reading in its meter**, which is what every strip in
+/// With a reading in its meter, which is what every strip in
 /// `crates/karakuri/src/main.rs` has — `Deck::enable_meters` is called for the
 /// whole deck at startup — so the counts below are a *metered* panel's counts.
-/// The meter moves on the frames this panel is drawn on and on no others, so
-/// it is in neither of the two numbers a deadline here is made of
+/// The meter moves on the frames this panel is drawn on and on no others, so it
+/// is in neither of the two numbers a deadline here is made of
 /// ([ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md),
 /// `tests/metered.rs`).
 fn settled() -> Strip {
@@ -78,9 +79,8 @@ fn settled() -> Strip {
     }
 }
 
-/// **The parked strip**, which is the one state the engine can actually
-/// produce: asked to prime, held at allocated because the budget found no
-/// room.
+/// The parked strip, which is the one state the engine can actually produce:
+/// asked to prime, held at allocated because the budget found no room.
 fn parked() -> Strip {
     Strip {
         tally: Tally::Allocated,
@@ -89,8 +89,8 @@ fn parked() -> Strip {
     }
 }
 
-/// **The mock's own transport**, which is what makes a console live: without
-/// it there is no beat grid, and the beat is the one thing on this panel that
+/// The mock's own transport, which is what makes a console live: without it
+/// there is no beat grid, and the beat is the one thing on this panel that
 /// never rests.
 fn running() -> Transport {
     Transport {
@@ -109,8 +109,8 @@ fn running() -> Transport {
     }
 }
 
-/// **The window loop, run on a phase the test chooses**: the frames a panel
-/// would be drawn on over `over`, starting with one at the origin.
+/// The window loop, run on a phase the test chooses: the frames a panel would
+/// be drawn on over `over`, starting with one at the origin.
 ///
 /// It is `crates/karakuri/src/main.rs`'s loop and nothing else — ask the view
 /// what it wants, sleep exactly that long, draw, ask again — with the clock
@@ -140,30 +140,29 @@ fn frames_over(view: &mut View, panel: &Panel, over: Duration) -> Vec<Duration> 
 // 1. What a parked panel asks for
 // ---------------------------------------------------------------------------
 
-/// **A parked slot asks for the roll's rate through the travel and for the
-/// rest of the rest through the rest** — fourteen frames a second where it
-/// asked for thirty-one.
+/// A parked slot asks for the roll's rate through the travel and for the rest
+/// of the rest through the rest — fourteen frames a second where it asked for
+/// thirty-one.
 ///
 /// The panel here is the still one: a deck with a slot the governor has
-/// refused, the mixer bay on screen, and **no transport row**, because the
-/// beat is a second and sooner declaration and would decide every deadline on
-/// its own. That is the state ADR-0193 measured the old defect in — the
-/// picture and the preview row folded away, nothing making texels, and the
-/// window woken thirty times a second to redraw a chip nobody could see
-/// moving. This is the same window with the chip on screen and the chip not
-/// moving.
+/// refused, the mixer bay on screen, and no transport row, because the beat is
+/// a second and sooner declaration and would decide every deadline on its own.
+/// That is the state ADR-0193 measured the old defect in — the picture and the
+/// preview row folded away, nothing making texels, and the window woken thirty
+/// times a second to redraw a chip nobody could see moving. This is the same
+/// window with the chip on screen and the chip not moving.
 ///
-/// **Fourteen and not twelve**, and the two extra are worth naming rather than
+/// Fourteen and not twelve, and the two extra are worth naming rather than
 /// rounding away. `ROLL_STALENESS` is 33.333 ms and the travel is 400, so
 /// thirteen steps from the origin land at 399.996 ms — inside the travel by
-/// four microseconds — and the fourteenth is the first frame of the rest,
-/// which is the frame that discovers there is one. The rest itself is then a
-/// single sleep of 566.671 ms, and it is the whole of what this record buys.
+/// four microseconds — and the fourteenth is the first frame of the rest, which
+/// is the frame that discovers there is one. The rest itself is then a single
+/// sleep of 566.671 ms, and it is the whole of what this record buys.
 ///
-/// **Run against its defect**: `View::animating` reading `staleness` instead
-/// of `moves_in` — which is what it did before ADR-0283 — fails with *"a
-/// parked panel drew 31 frames in a second and 17 of them were drawn while the
-/// roll was at rest"*.
+/// Run against its defect: `View::animating` reading `staleness` instead of
+/// `moves_in` — which is what it did before ADR-0283 — fails with *"a parked
+/// panel drew 31 frames in a second and 17 of them were drawn while the roll
+/// was at rest"*.
 #[test]
 fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
     let panel = arrangement();
@@ -233,32 +232,32 @@ fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
 // 2. What the frames that stopped being drawn would have drawn
 // ---------------------------------------------------------------------------
 
-/// **Every frame that is no longer asked for would have drawn the chip exactly
-/// where it already was.**
+/// Every frame that is no longer asked for would have drawn the chip exactly
+/// where it already was.
 ///
 /// This is the claim the whole record rests on, and it is a claim about the
 /// *picture* rather than about the schedule — so it is asserted off
-/// [`roll_at`], which is what the tally and both faders are drawn from, and
-/// not off the deadline. The curve is flat at zero for the whole of the rest,
-/// so the displacement at the moment the rest begins and the displacement at
-/// every 33.333 ms step the old schedule would have taken through it are the
-/// same number.
+/// [`roll_at`], which is what the tally and both faders are drawn from, and not
+/// off the deadline. The curve is flat at zero for the whole of the rest, so
+/// the displacement at the moment the rest begins and the displacement at every
+/// 33.333 ms step the old schedule would have taken through it are the same
+/// number.
 ///
-/// **Run against its defect**: `roll_moves_in` reduced to `ROLL_STALENESS` at
-/// every phase — a region that goes on declaring a rate it is not using —
-/// fails with *"the rest began at 400ms and the region asked to be woken in
-/// 33.333ms, which is inside its own rest"*.
+/// Run against its defect: `roll_moves_in` reduced to `ROLL_STALENESS` at every
+/// phase — a region that goes on declaring a rate it is not using — fails with
+/// *"the rest began at 400ms and the region asked to be woken in 33.333ms,
+/// which is inside its own rest"*.
 ///
-/// **A drawn frame that changes nothing is not free and it is not harmless.**
-/// ADR-0164 measured a panel pass at 184 allocations and 226.2 kB; the panel
-/// as it now stands reads 525 and 694.3 kB. Seventeen of those a second, for
-/// as long as a slot is parked, is the cost that was being paid to redraw a
-/// still chip.
+/// A drawn frame that changes nothing is not free and it is not harmless.
+/// ADR-0164 measured a panel pass at 184 allocations and 226.2 kB; the panel as
+/// it now stands reads 525 and 694.3 kB. Seventeen of those a second, for as
+/// long as a slot is parked, is the cost that was being paid to redraw a still
+/// chip.
 ///
-/// **Eighteen steps and seventeen frames, and the difference is one frame that
-/// is still drawn.** Eighteen steps of the declared staleness fall inside the
-/// rest; the schedule above keeps the first of them, because that is the frame
-/// on which the panel discovers there is a rest to sleep through.
+/// Eighteen steps and seventeen frames, and the difference is one frame that is
+/// still drawn. Eighteen steps of the declared staleness fall inside the rest;
+/// the schedule above keeps the first of them, because that is the frame on
+/// which the panel discovers there is a rest to sleep through.
 #[test]
 fn the_frames_the_rest_no_longer_asks_for_would_have_drawn_the_same_chip() {
     let began = ROLL_TRAVEL;
@@ -318,29 +317,29 @@ fn the_frames_the_rest_no_longer_asks_for_would_have_drawn_the_same_chip() {
 // 3. What may not be dropped
 // ---------------------------------------------------------------------------
 
-/// **The beat keeps its rate at every phase of the roll**, which is P-0094 and
-/// is the thing this record is most able to break.
+/// The beat keeps its rate at every phase of the roll, which is P-0094 and is
+/// the thing this record is most able to break.
 ///
 /// The failure it guards against is precise: the beat's declaration is written
 /// as *the row is drawn and there is an engine behind it*, which is the shape
-/// of an **I am drawn** claim rather than an **I move at this rate** one, so it
-/// is the declaration a reader would reach for first when looking for
-/// something else to gate. It is honest because the light travels on every
-/// frame the session advances — but nothing in this crate advances a session,
-/// so the honesty is the harness's and the rule has to be held here.
+/// of an I am drawn claim rather than an I move at this rate one, so it is the
+/// declaration a reader would reach for first when looking for something else
+/// to gate. It is honest because the light travels on every frame the session
+/// advances — but nothing in this crate advances a session, so the honesty is
+/// the harness's and the rule has to be held here.
 ///
 /// A console that stopped moving because nothing had *changed* is a console
 /// that has gone quiet, and P-0094's forced clause is that something is moving
 /// continuously while it is live. So the beat is asked at a hundred phases
 /// spread across the roll's period — including every phase at which the mixer
-/// bay has just been given permission to sleep — and it answers the same
-/// number at all of them.
+/// bay has just been given permission to sleep — and it answers the same number
+/// at all of them.
 ///
-/// **Run against its defect**: `transport_declares` handing back
-/// `roll_moves_in(self.phase)` instead of its own rate — the beat gated the
-/// way the mixer now is — fails with *"a live console asked for
-/// Some(33.333ms) at 0 ms into the roll, and the beat declares 24.671ms
-/// whatever else the panel is doing"*.
+/// Run against its defect: `transport_declares` handing back
+/// `roll_moves_in(self.phase)` instead of its own rate — the beat gated the way
+/// the mixer now is — fails with *"a live console asked for Some(33.333ms) at 0
+/// ms into the roll, and the beat declares 24.671ms whatever else the panel is
+/// doing"*.
 #[test]
 fn the_beat_keeps_its_rate_through_the_rolls_rest() {
     let panel = arrangement();

@@ -2,7 +2,8 @@
 //!
 //! None of this needs a window or a device: what to draw is a walk of the
 //! arrangement, and who gets an event is a hit test. The one test here that
-//! does need a device is not here at all — it is `crates/karakuri/src/main.rs`'s
+//! does need a device is not here at all — it is
+//! `crates/karakuri/src/main.rs`'s
 //! `gpu::egui_paints_the_console_onto_a_device`, under `mod gpu` like every
 //! other one in the workspace.
 
@@ -29,22 +30,22 @@ const BAYS: &[&str] = &[
     "sequencer",
 ];
 
-/// **The canvas the picture is fitted to**, and it is the workspace's
-/// reference workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
+/// The canvas the picture is fitted to, and it is the workspace's reference
+/// workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
 /// builds its `Present` at. It is a value the caller hands in rather than
 /// anything `src/` knows (ADR-0156), so a test hands one in too.
 const CANVAS: (u32, u32) = (1280, 720);
 
-/// **A canvas that is not the mock's shape**, so that a picture fitted to a
-/// hard-coded 16:9 and one fitted to *the canvas* can be told apart. 4:3 is
-/// the obvious other shape a performance runs at, and `--canvas` takes any
-/// pair of numbers.
+/// A canvas that is not the mock's shape, so that a picture fitted to a
+/// hard-coded 16:9 and one fitted to *the canvas* can be told apart. 4:3 is the
+/// obvious other shape a performance runs at, and `--canvas` takes any pair of
+/// numbers.
 const SQUARISH: (u32, u32) = (1024, 768);
 
 /// The transport and the outputs, which carry `class="bay"` for the card
 /// styling and no `.bay-head` at all (ADR-0159). Two kinds and one rule: the
-/// outputs row is a [`Kind::Outputs`] because it has a control in it, and it
-/// is as headless as the transport.
+/// outputs row is a [`Kind::Outputs`] because it has a control in it, and it is
+/// as headless as the transport.
 const ROWS: &[&str] = &["transport", "outputs"];
 
 fn planned(panel: &mut Panel) -> Vec<Placed> {
@@ -57,14 +58,14 @@ fn planned(panel: &mut Panel) -> Vec<Placed> {
 // What is drawn
 // ---------------------------------------------------------------------------
 
-/// **Every leaf of the arrangement is asked to be drawn, and none is skipped.**
+/// Every leaf of the arrangement is asked to be drawn, and none is skipped.
 ///
-/// The failure this exists for is silent: a region left out of the table
-/// leaves a hole in the panel with nothing anywhere saying so, and the hole is
-/// the ground showing through, which is what a divider looks like. So this
-/// asks the arrangement rather than the table — every visible leaf has to be
-/// in the plan — and then asks the other way, so a region invented in the
-/// table that the arrangement does not have is caught too.
+/// The failure this exists for is silent: a region left out of the table leaves
+/// a hole in the panel with nothing anywhere saying so, and the hole is the
+/// ground showing through, which is what a divider looks like. So this asks the
+/// arrangement rather than the table — every visible leaf has to be in the plan
+/// — and then asks the other way, so a region invented in the table that the
+/// arrangement does not have is caught too.
 #[test]
 fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
     // **The narrowest console the mock draws**, where the Program bay's body
@@ -160,7 +161,7 @@ fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
     );
 }
 
-/// **A bay gets a head and a row does not.**
+/// A bay gets a head and a row does not.
 ///
 /// Seven bays, two rows and two panes, and the title of each bay is the mock's
 /// own word for it — so a bay renamed in the manual and not here shows the old
@@ -299,24 +300,24 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
     );
 }
 
-/// **The picture's rectangle comes off its own region, and at the width the
-/// mock draws it is the mock's own picture.**
+/// The picture's rectangle comes off its own region, and at the width the mock
+/// draws it is the mock's own picture.
 ///
 /// This is the rectangle a caller sizes a texture from, so getting it from
-/// anything but `program-view` is a texture the wrong size — and the wrong
-/// size in a way nothing on screen shows, because the picture fills whatever
+/// anything but `program-view` is a texture the wrong size — and the wrong size
+/// in a way nothing on screen shows, because the picture fills whatever
 /// rectangle it is given either way. At `SMALLEST` the bay's own derivation
 /// says exactly what it should be: the centre track is 484, `.program-body`'s
 /// 9px padding leaves 466, and 466 at 16:9 is 262. Those are the two numbers
 /// the arrangement's 378 was built from, arrived at from the other end.
 ///
-/// **The region and the canvas agree here to a quarter of a pixel and not
-/// exactly**, which is the whole reason `picture_rect` rounds: `.program-view`
-/// at 466 wide is 262.125 tall and the arrangement transcribed 262, so the box
-/// is 1.778626 where the canvas is 1.777778. A strict fit would hand back
-/// 465.7778 and a caller's `physical` would round it back to a 466-texel
-/// texture — the same texture, drawn softened into a box a quarter of a pixel
-/// narrower than itself.
+/// The region and the canvas agree here to a quarter of a pixel and not
+/// exactly, which is the whole reason `picture_rect` rounds: `.program-view` at
+/// 466 wide is 262.125 tall and the arrangement transcribed 262, so the box is
+/// 1.778626 where the canvas is 1.777778. A strict fit would hand back 465.7778
+/// and a caller's `physical` would round it back to a 466-texel texture — the
+/// same texture, drawn softened into a box a quarter of a pixel narrower than
+/// itself.
 #[test]
 fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     let layout = solved(SMALLEST);
@@ -347,36 +348,35 @@ fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     assert!(near(rect.max.y, region.y + region.h - 2.0));
 }
 
-/// **The picture is the canvas's shape at every window, centred in whatever
-/// the region has, and a whole number of pixels.**
+/// The picture is the canvas's shape at every window, centred in whatever the
+/// region has, and a whole number of pixels.
 ///
 /// The rule ADR-0170 took for a deck preview cell, applied where it was first
 /// refused. Before it, the picture was the whole region and `Present::draw`
 /// letterboxed into it — so at any window above the mock's narrowest a texture
-/// was allocated at the region's full size and the bars inside it were
-/// rendered and uploaded every frame. At 1920 wide that is 1396 x 262 where
-/// 466 x 262 is the picture: **two texels in three are black nobody looks
-/// at.**
+/// was allocated at the region's full size and the bars inside it were rendered
+/// and uploaded every frame. At 1920 wide that is 1396 x 262 where 466 x 262 is
+/// the picture: two texels in three are black nobody looks at.
 ///
-/// The wide end and the tall end both matter and they fail differently. Wide
-/// is the ordinary case and the region is wider than the canvas, so the height
-/// is what limits and the leftover is ground either side. Tall only happens
-/// when an operator drags the program's height past what the width can carry,
-/// and then the width limits and the leftover is above and below — a case a
-/// rule written for wide windows alone gets wrong in silence.
+/// The wide end and the tall end both matter and they fail differently. Wide is
+/// the ordinary case and the region is wider than the canvas, so the height is
+/// what limits and the leftover is ground either side. Tall only happens when
+/// an operator drags the program's height past what the width can carry, and
+/// then the width limits and the leftover is above and below — a case a rule
+/// written for wide windows alone gets wrong in silence.
 ///
 /// # The window is arranged first, and the region is a different region past
 /// the crossover
 ///
 /// Every assertion below is against the `program-view` region, and past a
-/// 1588-wide window that region is the **whole bay**: the cells have gone down
-/// the sides and the row is set aside, so the picture's region is the bay
-/// itself less nothing. The claims still hold term for term — the picture is
-/// still the canvas's shape, still whole pixels, still centred in what the
-/// region leaves, still inside it — which is the point worth having: *the
-/// picture never leaves the rectangle it is clipped to* is the one property
-/// that does not care which arrangement won, and it is the property a
-/// rearrangement half-applied would break.
+/// 1588-wide window that region is the whole bay: the cells have gone down the
+/// sides and the row is set aside, so the picture's region is the bay itself
+/// less nothing. The claims still hold term for term — the picture is still the
+/// canvas's shape, still whole pixels, still centred in what the region leaves,
+/// still inside it — which is the point worth having: *the picture never leaves
+/// the rectangle it is clipped to* is the one property that does not care which
+/// arrangement won, and it is the property a rearrangement half-applied would
+/// break.
 #[test]
 fn the_picture_is_the_canvass_shape_at_every_window() {
     for width in [990.0, 1010.0, 1280.0, 1920.0, 3440.0] {
@@ -540,7 +540,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     );
 }
 
-/// **The shape is the canvas's and not a 16:9 written into this crate.**
+/// The shape is the canvas's and not a 16:9 written into this crate.
 ///
 /// The failure is silent and it lasts until somebody runs a performance at a
 /// canvas the mock's designer never drew: a hard-coded 16:9 gives a picture of
@@ -579,17 +579,17 @@ fn the_shape_is_the_canvass_and_not_a_sixteen_by_nine_in_this_crate() {
     );
 }
 
-/// **No rectangle where the picture is folded away**, which is the manual's
-/// *"there is no state where it is hidden and still costing a pass"*: a caller
-/// that renders into this rectangle records no pass at all when there is none.
+/// No rectangle where the picture is folded away, which is the manual's *"there
+/// is no state where it is hidden and still costing a pass"*: a caller that
+/// renders into this rectangle records no pass at all when there is none.
 ///
-/// **What carries it is the size test and not a visibility test**, and that
-/// was learnt from this test rather than assumed: written with both, deleting
-/// the visibility check left it passing, because a folded region keeps its
-/// rectangle and loses its extent. So the check went and this is what holds
-/// the remaining line — including for a picture folded by its bay rather than
-/// by itself, which a visibility test and a size test answer alike and which
-/// is asserted here so that the equivalence is not left as a belief.
+/// What carries it is the size test and not a visibility test, and that was
+/// learnt from this test rather than assumed: written with both, deleting the
+/// visibility check left it passing, because a folded region keeps its
+/// rectangle and loses its extent. So the check went and this is what holds the
+/// remaining line — including for a picture folded by its bay rather than by
+/// itself, which a visibility test and a size test answer alike and which is
+/// asserted here so that the equivalence is not left as a belief.
 #[test]
 fn a_folded_picture_has_no_rectangle() {
     let mut layout = solved(PLAUSIBLE);
@@ -621,20 +621,19 @@ fn a_folded_picture_has_no_rectangle() {
     assert_eq!(picture_rect(&layout, CANVAS), None);
 }
 
-/// **The four preview cells are the mock's own, at the width the mock draws
-/// them.**
+/// The four preview cells are the mock's own, at the width the mock draws them.
 ///
 /// Every figure here is `lib.rs`'s Program bay derivation read from the other
 /// end. At `SMALLEST` the centre track is 484, `.program-body`'s 9px padding
-/// either side leaves 466, and 466 less three 6px gaps over four tracks is
-/// **112** — which at 16:9 is **63**, the image's height. A cell is that image
-/// and the caption band under it, `.cell`'s 4 and `.caption`'s 13, so the row
-/// is 80 and the arrangement gave `deck-previews` that plus its 9px of padding
+/// either side leaves 466, and 466 less three 6px gaps over four tracks is 112
+/// — which at 16:9 is 63, the image's height. A cell is that image and the
+/// caption band under it, `.cell`'s 4 and `.caption`'s 13, so the row is 80 and
+/// the arrangement gave `deck-previews` that plus its 9px of padding
 /// underneath. The sum the bay was built from and the rectangles it solves to
 /// are the same numbers or the bay is wrong.
 ///
-/// The insets are three of the four on purpose: nothing at the top, because
-/// the 9 above the cells in the CSS is the split's 8px divider plus
+/// The insets are three of the four on purpose: nothing at the top, because the
+/// 9 above the cells in the CSS is the split's 8px divider plus
 /// `program-view`'s own bottom and belongs to neither this region nor the
 /// picture.
 #[test]
@@ -703,14 +702,14 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
     );
 }
 
-/// **The cells never overlap, never leave the region, and never stop being
-/// 16:9** — at any width, and especially at one much wider than the mock's.
+/// The cells never overlap, never leave the region, and never stop being 16:9 —
+/// at any width, and especially at one much wider than the mock's.
 ///
 /// This is the test the gap arithmetic is checked by, and the wrong version it
 /// exists for is a plausible one: divide the row by four and take a gap off
-/// each cell, which loses a gap's worth of width and leaves the last cell
-/// short of the region's padding — four tracks have **three** gaps between
-/// them and not four.
+/// each cell, which loses a gap's worth of width and leaves the last cell short
+/// of the region's padding — four tracks have three gaps between them and not
+/// four.
 ///
 /// The wide end is the other half. `deck-previews` is pinned at 72 tall, so a
 /// wider window widens the track and not the row, and a cell that filled its
@@ -719,19 +718,19 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
 ///
 /// # Why the widths stop at 1500, and it is not a threshold nudged to pass
 ///
-/// **This is the row, and past a 1588-wide window there is no row**: the cells
-/// go down the sides of the picture and `deck-previews` is set aside, so every
+/// This is the row, and past a 1588-wide window there is no row: the cells go
+/// down the sides of the picture and `deck-previews` is set aside, so every
 /// assertion here about the region they tile is an assertion about a rectangle
 /// with nothing in it. The four widths are the four of the old five that are
-/// below the crossover, and the fifth is asserted at the bottom to be past it
-/// — so a crossover that moved fails here rather than quietly leaving this
-/// test asserting the row's arithmetic at one width. The cells' arrangement
-/// beside the picture is `tests/rearrange.rs`, and the arithmetic of both is
+/// below the crossover, and the fifth is asserted at the bottom to be past it —
+/// so a crossover that moved fails here rather than quietly leaving this test
+/// asserting the row's arithmetic at one width. The cells' arrangement beside
+/// the picture is `tests/rearrange.rs`, and the arithmetic of both is
 /// `tests/program_body.rs`.
 ///
-/// A body 706 wide is where the flip is, and the body is the window less 778
-/// — the two side tracks, the four dividers and `.program-body`'s padding — so
-/// the last window with a row in it is **1483** (ADR-0239).
+/// A body 706 wide is where the flip is, and the body is the window less 778 —
+/// the two side tracks, the four dividers and `.program-body`'s padding — so
+/// the last window with a row in it is 1483 (ADR-0239).
 #[test]
 fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
     for width in [1280.0, 1350.0, 1400.0, 1450.0] {
@@ -909,7 +908,7 @@ fn luma(c: egui::Color32) -> f32 {
     (0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32) / 255.0
 }
 
-/// **The palette answers for both rooms**, and answers differently in each.
+/// The palette answers for both rooms, and answers differently in each.
 ///
 /// The failure worth catching is a colour transcribed once and left: the two
 /// blocks in `style.css` are fifteen near-identical lines each, and one line
@@ -958,24 +957,24 @@ fn on_a_boundary(panel: &mut Panel) -> Point {
     Point::new(gap.x + gap.w * 0.5, gap.y + gap.h * 0.5)
 }
 
-/// The `solo` pill in the Program bay's head, near the right end of it.
-/// **The place a boundary and a control are closest**, and so the place the
-/// rule is worth stating.
+/// The `solo` pill in the Program bay's head, near the right end of it. The
+/// place a boundary and a control are closest, and so the place the rule is
+/// worth stating.
 ///
-/// **It was *the one control the panel draws* and it is a control that acts
-/// now**, which is what these two tests had to be re-read against: a press
-/// here used to be `egui`'s because nothing on the panel answered it, and it
-/// is the panel's under rule 4 because `view::program_head` answers it. The
-/// point is kept exactly where it was — 24 in from the right of the bay and 14
-/// down, which is inside the capsule — because what it is here for is the
-/// nearness to the boundary rather than the pill.
+/// It was *the one control the panel draws* and it is a control that acts now,
+/// which is what these two tests had to be re-read against: a press here used
+/// to be `egui`'s because nothing on the panel answered it, and it is the
+/// panel's under rule 4 because `view::program_head` answers it. The point is
+/// kept exactly where it was — 24 in from the right of the bay and 14 down,
+/// which is inside the capsule — because what it is here for is the nearness to
+/// the boundary rather than the pill.
 fn on_the_solo_pill(panel: &mut Panel) -> Point {
     panel.solve();
     let program = rect_of(panel.layout(), "program");
     Point::new(program.x + program.w - 24.0, program.y + 14.0)
 }
 
-/// **A pointer on a boundary reaches the panel, and `egui` does not see it.**
+/// A pointer on a boundary reaches the panel, and `egui` does not see it.
 #[test]
 fn a_pointer_on_a_boundary_is_the_panels() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -986,15 +985,15 @@ fn a_pointer_on_a_boundary_is_the_panels() {
     );
 }
 
-/// **A pointer off a boundary and off every control is `egui`'s** — and the
-/// `solo` pill is the case that says which of the two rules answered.
+/// A pointer off a boundary and off every control is `egui`'s — and the `solo`
+/// pill is the case that says which of the two rules answered.
 ///
-/// The pill used to be in the first half of that sentence: it was the one
-/// thing the panel drew that a hand would reach for, and a press on it was
-/// `egui`'s because nothing here answered it. It is a control now, so it is
-/// the panel's under rule 4 — **not** under rule 3, which is the distinction
-/// this test is for, and the point is far enough from the boundary above the
-/// bay that only rule 4 can be giving it away.
+/// The pill used to be in the first half of that sentence: it was the one thing
+/// the panel drew that a hand would reach for, and a press on it was `egui`'s
+/// because nothing here answered it. It is a control now, so it is the panel's
+/// under rule 4 — not under rule 3, which is the distinction this test is for,
+/// and the point is far enough from the boundary above the bay that only rule 4
+/// can be giving it away.
 #[test]
 fn a_pointer_off_a_boundary_is_eguis() {
     let ctx = drawn_once();
@@ -1028,22 +1027,22 @@ fn a_pointer_off_a_boundary_is_eguis() {
     );
 }
 
-/// **A drag in hand keeps its claim, wherever the pointer wanders.**
+/// A drag in hand keeps its claim, wherever the pointer wanders.
 ///
-/// This is the one that is a bug waiting to happen. A claim re-decided from
-/// the pointer on every event hands the middle of a drag to `egui` the moment
-/// the pointer leaves the six pixels either side of the boundary — which it
-/// does immediately, because a drag is how a boundary gets anywhere — and then
-/// two things think they are dragging. The release matters just as much: asked
+/// This is the one that is a bug waiting to happen. A claim re-decided from the
+/// pointer on every event hands the middle of a drag to `egui` the moment the
+/// pointer leaves the six pixels either side of the boundary — which it does
+/// immediately, because a drag is how a boundary gets anywhere — and then two
+/// things think they are dragging. The release matters just as much: asked
 /// after `released`, the claim sees no drag and hands `egui` a button-up it
 /// never saw the button-down for.
 ///
-/// **The `solo` pill is in the wander now rather than in the before and
-/// after**, because it stopped being an elsewhere-point the day it became a
-/// control: rule 1 has to beat rule 4 as well as rule 3, and a point that is
-/// the panel's either way cannot say whether the drag kept its claim. What
-/// carries that half is the library's middle, which is on no control and on no
-/// boundary, and it goes `egui` -> panel -> `egui` across the gesture.
+/// The `solo` pill is in the wander now rather than in the before and after,
+/// because it stopped being an elsewhere-point the day it became a control:
+/// rule 1 has to beat rule 4 as well as rule 3, and a point that is the panel's
+/// either way cannot say whether the drag kept its claim. What carries that
+/// half is the library's middle, which is on no control and on no boundary, and
+/// it goes `egui` -> panel -> `egui` across the gesture.
 #[test]
 fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     let ctx = drawn_once();

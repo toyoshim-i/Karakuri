@@ -1,11 +1,11 @@
 //! The arrangement survives being written down and read back.
 //!
-//! Saving an operator's panel is `serde` on the whole `Layout`, so the
-//! question this answers is about *this* arrangement rather than about the
-//! format: every number in it has to be one the wire can carry. An unbounded
-//! maximum is the interesting case, and this arrangement is full of them — six
-//! regions say "no maximum" on purpose, because ADR-0157 makes a maximum
-//! something a solo would be held to.
+//! Saving an operator's panel is `serde` on the whole `Layout`, so the question
+//! this answers is about *this* arrangement rather than about the format: every
+//! number in it has to be one the wire can carry. An unbounded maximum is the
+//! interesting case, and this arrangement is full of them — six regions say "no
+//! maximum" on purpose, because ADR-0157 makes a maximum something a solo would
+//! be held to.
 
 mod common;
 
@@ -38,10 +38,10 @@ fn the_arrangement_survives_a_serde_round_trip() {
     assert_eq!(before_bounds, after_bounds);
 }
 
-/// A panel saved while soloed comes back soloed, and one `unsolo` on the
-/// loaded copy returns the arrangement that was saved under it. This is the
-/// path the manual's *"how you capture this window"* actually takes — the
-/// session is written out while the picture is filling the screen.
+/// A panel saved while soloed comes back soloed, and one `unsolo` on the loaded
+/// copy returns the arrangement that was saved under it. This is the path the
+/// manual's *"how you capture this window"* actually takes — the session is
+/// written out while the picture is filling the screen.
 #[test]
 fn a_solo_survives_the_round_trip_and_still_undoes() {
     let mut before = solved(PLAUSIBLE);
@@ -60,16 +60,16 @@ fn a_solo_survives_the_round_trip_and_still_undoes() {
     assert_eq!(rects(&after), rects(&solved(PLAUSIBLE)));
 }
 
-/// **A saved arrangement comes back into the window you are looking at, not
-/// the one it was saved in.**
+/// A saved arrangement comes back into the window you are looking at, not the
+/// one it was saved in.
 ///
 /// This is the panel's half of putting a saved arrangement back, and the whole
 /// of what it decides: `Panel::restore` is `Op::Reset`'s arm with the
 /// arrangement handed in, so the folds and the solo are the file's and the
 /// viewport is the running window's. A restore that took the file's viewport
-/// too would open a console arranged on a 1920x1080 desktop at that size
-/// inside a smaller window — every rectangle laid out past the edge, and the
-/// solve never asked to fit them.
+/// too would open a console arranged on a 1920x1080 desktop at that size inside
+/// a smaller window — every rectangle laid out past the edge, and the solve
+/// never asked to fit them.
 ///
 /// Read as a pair with `crates/karakuri/src/main.rs`, which is where the name
 /// becomes these bytes: this crate has no store and never sees the name

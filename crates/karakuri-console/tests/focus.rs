@@ -1,34 +1,32 @@
-//! **Focus: the ring `Tab` walks, the level `esc` leaves, and the one field
-//! the console's three pointers now are.**
+//! Focus: the ring `Tab` walks, the level `esc` leaves, and the one field the
+//! console's three pointers now are.
+//!
 //!
 //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
 //! decided the keyboard and built none of it;
 //! [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)
 //! is the first slice, and this is what holds it. Five claims:
 //!
-//! 1. **The ring is the arrangement's own walk** — down a column, then across —
-//!    and it holds every bay and only the bays. `view::REGIONS` is what it is
-//!    checked against rather than what it is derived from, which is the
-//!    record's own instruction, so this file is where the constant does the
-//!    checking.
-//! 2. **`Tab` walks it forward and wraps; `shift-Tab` is that walk run
-//!    backwards and nothing else.** The two have to agree about where they are,
-//!    which is what a round trip asserts and what a *second rule* for the
-//!    backward direction would have cost.
-//! 3. **A folded bay is visited.** It is in the ring so that there is something
-//!    to press to open it, not so that it can be operated — the narrow reason,
-//!    and the one that decides this test.
-//! 4. **`esc` leaves a level and stops at the bay.** There is no unfocused
-//!    state to fall out into, so the key acts on nothing there and says so.
-//!    That it does not quit is the window loop's half and is
-//!    `karakuri/src/main.rs`'s `focus_keys`.
-//! 5. **The deck selection, the library cursor and the marked scope are three
-//!    readings of one field.** The test that says so moves one of them through
-//!    the shared path — `Focus`, not `View::select` — and reads it back off the
-//!    method that is supposed to be a reading of it.
+//! 1. The ring is the arrangement's own walk — down a column, then across — and
+//! it holds every bay and only the bays. `view::REGIONS` is what it is checked
+//! against rather than what it is derived from, which is the record's own
+//! instruction, so this file is where the constant does the checking. 2. `Tab`
+//! walks it forward and wraps; `shift-Tab` is that walk run backwards and
+//! nothing else. The two have to agree about where they are, which is what a
+//! round trip asserts and what a *second rule* for the backward direction would
+//! have cost. 3. A folded bay is visited. It is in the ring so that there is
+//! something to press to open it, not so that it can be operated — the narrow
+//! reason, and the one that decides this test. 4. `esc` leaves a level and
+//! stops at the bay. There is no unfocused state to fall out into, so the key
+//! acts on nothing there and says so. That it does not quit is the window
+//! loop's half and is `karakuri/src/main.rs`'s `focus_keys`. 5. The deck
+//! selection, the library cursor and the marked scope are three readings of one
+//! field. The test that says so moves one of them through the shared path —
+//! `Focus`, not `View::select` — and reads it back off the method that is
+//! supposed to be a reading of it.
 //!
-//! **No device and no `egui` pass**, which is the whole of this crate: the ring
-//! is a walk of a tree and the mark is a rectangle.
+//! No device and no `egui` pass, which is the whole of this crate: the ring is
+//! a walk of a tree and the mark is a rectangle.
 
 mod common;
 
@@ -39,8 +37,8 @@ use karakuri_console::room::{size, Room};
 use karakuri_console::view::{region, Mask, Scope, Strip, Tally, View, REGIONS};
 use karakuri_operation::BlendMode;
 
-/// **The nine bays, in the order the arrangement's own walk reaches them** —
-/// the transport, then the left pane down, then the centre's, then the right
+/// The nine bays, in the order the arrangement's own walk reaches them — the
+/// transport, then the left pane down, then the centre's, then the right
 /// pane's, then the outputs row.
 ///
 /// Written out rather than derived, because deriving it is what is under test.
@@ -105,8 +103,8 @@ fn the_ring_is_the_arrangements_own_walk_down_a_column_then_across() {
     );
 }
 
-/// **The ring against the constant**, which is the direction ADR-0259 asks for:
-/// *"a ring derived from the solved tree is the honest implementation and the
+/// The ring against the constant, which is the direction ADR-0259 asks for: *"a
+/// ring derived from the solved tree is the honest implementation and the
 /// constant is a thing to check against, not the source"*.
 #[test]
 fn every_bay_and_only_the_bays_are_in_the_ring() {
@@ -204,7 +202,7 @@ fn a_tab_and_a_shift_tab_come_back_to_the_same_bay() {
     }
 }
 
-/// **A folded bay stays in the ring.**
+/// A folded bay stays in the ring.
 ///
 /// The Master bay is the one `console.html` draws the folded mark on, so it is
 /// the one folded here. It is in the ring so that there is something to press
@@ -249,9 +247,9 @@ fn a_folded_bay_is_still_in_the_ring() {
     );
 }
 
-/// **A folded pane's bays stay in the ring too**, which is the same rule one
-/// level up and is the case that says the walk is over the tree and not over
-/// what is on screen.
+/// A folded pane's bays stay in the ring too, which is the same rule one level
+/// up and is the case that says the walk is over the tree and not over what is
+/// on screen.
 #[test]
 fn a_folded_pane_keeps_its_bays_in_the_ring() {
     let mut panel = panel();
@@ -296,8 +294,8 @@ fn esc_leaves_a_level_and_stops_at_the_bay() {
     );
 }
 
-/// **`esc` at the bay leaves the remembered address alone**, which is the pair
-/// of fields earning their keep: the address `esc` popped is where the ring is
+/// `esc` at the bay leaves the remembered address alone, which is the pair of
+/// fields earning their keep: the address `esc` popped is where the ring is
 /// drawn, and what the bay *remembers* is what the deck selection is.
 #[test]
 fn esc_does_not_forget_where_the_bay_was() {
@@ -360,8 +358,8 @@ fn the_ring_is_drawn_on_the_focused_head_and_on_no_other() {
     );
 }
 
-/// **A folded bay has no rectangle, so nothing is drawn** — which is the
-/// drawing ADR-0259 leaves open and `console.html` carries beside its note.
+/// A folded bay has no rectangle, so nothing is drawn — which is the drawing
+/// ADR-0259 leaves open and `console.html` carries beside its note.
 #[test]
 fn a_folded_bay_takes_focus_and_is_not_ringed() {
     let mut panel = panel();
@@ -392,12 +390,12 @@ fn a_folded_bay_takes_focus_and_is_not_ringed() {
     );
 }
 
-/// **The three pointers are three readings of one field.**
+/// The three pointers are three readings of one field.
 ///
 /// Each of them is moved through the method that is its only writer and read
-/// back out of the **shared** path — `View::focus`, the one field they are all
-/// in — and then out of its own reader. Two directions of one claim: the
-/// storage is one thing, and what each of the three *means* is unchanged.
+/// back out of the shared path — `View::focus`, the one field they are all in —
+/// and then out of its own reader. Two directions of one claim: the storage is
+/// one thing, and what each of the three *means* is unchanged.
 #[test]
 fn the_three_pointers_are_one_mechanism() {
     let mut view = View::new(Room::Day);
@@ -462,9 +460,9 @@ fn the_three_pointers_are_one_mechanism() {
     assert_eq!(view.selection(), 3);
 }
 
-/// **The Library's two do not collide**, which is the one thing a single path
-/// per bay could not have carried: the cursor is which *item* the bay is on and
-/// the scope is a control of its *head*, so moving one leaves the other alone.
+/// The Library's two do not collide, which is the one thing a single path per
+/// bay could not have carried: the cursor is which *item* the bay is on and the
+/// scope is a control of its *head*, so moving one leaves the other alone.
 #[test]
 fn the_library_remembers_its_row_and_its_chip_separately() {
     let mut view = View::new(Room::Day);
@@ -486,9 +484,9 @@ fn the_library_remembers_its_row_and_its_chip_separately() {
     assert_eq!(view.cursor_row(), 1);
 }
 
-/// **The head is `0` and is never remembered**, which is what keeps the two
-/// above apart: a bay that filed *the head* under the same key as *the third
-/// strip* would lose the deck selection the first time an operator pressed `0`.
+/// The head is `0` and is never remembered, which is what keeps the two above
+/// apart: a bay that filed *the head* under the same key as *the third strip*
+/// would lose the deck selection the first time an operator pressed `0`.
 #[test]
 fn the_head_is_not_one_of_the_things_a_bay_remembers() {
     let mut address = Address::default();

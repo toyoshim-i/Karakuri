@@ -1,5 +1,5 @@
-//! **The `solo` pill in the Program bay's head: the console's fourteenth
-//! control, and the first one it draws inside a bay head.**
+//! The `solo` pill in the Program bay's head: the console's fourteenth
+//! control, and the first one it draws inside a bay head.
 //!
 //! `docs/manual/operations.html`'s *Solo a region* names `solo` in the panel
 //! column, and `docs/manual/console.html` is where that word is a place: the
@@ -10,19 +10,19 @@
 //!
 //! # What this file is for, control by control
 //!
-//! - **The capsule is where a bay head's pills go**, which is the claim that
+//! - The capsule is where a bay head's pills go, which is the claim that
 //!   makes one derivation out of the painting and the pressing: `bay_head`
 //!   paints from `head_pills` and [`program_head`] reads it, so a pill drawn
 //!   somewhere a press cannot land is a failure here rather than something an
 //!   operator finds.
-//! - **A press asks for the solo, and a second press undoes it** — two
+//! - A press asks for the solo, and a second press undoes it — two
 //!   operations chosen from the layout, which is `Outputs::op`'s rule and not
 //!   a toggle.
-//! - **It names the picture and never the pointer**, which is the one way it
+//! - It names the picture and never the pointer, which is the one way it
 //!   differs from `s` on the keyboard.
-//! - **The boundary above it keeps 0.75 of it**, and that is the number this
+//! - The boundary above it keeps 0.75 of it, and that is the number this
 //!   file exists to state. See [`the_boundary_above_the_bay_keeps_the_top_of_the_capsule`].
-//! - **A bay that is not laid out has no pill**, which is `mask.rs`'s
+//! - A bay that is not laid out has no pill, which is `mask.rs`'s
 //!   sentence one bay over: a control in a bay with no room for it is not a
 //!   control.
 
@@ -50,14 +50,14 @@ fn point(p: egui::Pos2) -> Point {
 // Where it is
 // ---------------------------------------------------------------------------
 
-/// **The capsule is a `.pill` in the Program bay's head, right-aligned past
-/// the grip** — the arithmetic `bay_head` paints by, asserted off the
-/// derivation a press is hit-tested against.
+/// The capsule is a `.pill` in the Program bay's head, right-aligned past the
+/// grip — the arithmetic `bay_head` paints by, asserted off the derivation a
+/// press is hit-tested against.
 ///
 /// The two cannot be two boxes: `head_pills` is what places them and both
 /// callers ask it. What this pins is that the box it places is the mock's —
-/// `.pill`'s height, centred in a 27-tall head, its right edge one
-/// `PILL_GAP` in from the grip and the grip `HEAD_PAD_X` in from the bay.
+/// `.pill`'s height, centred in a 27-tall head, its right edge one `PILL_GAP`
+/// in from the grip and the grip `HEAD_PAD_X` in from the bay.
 #[test]
 fn the_capsule_is_a_pill_in_the_bay_head() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -101,9 +101,8 @@ fn the_capsule_is_a_pill_in_the_bay_head() {
     }
 }
 
-/// **The pill names the picture, and it is the picture the arrangement
-/// names** — not the bay it is drawn in, and not whatever the pointer is
-/// over.
+/// The pill names the picture, and it is the picture the arrangement names —
+/// not the bay it is drawn in, and not whatever the pointer is over.
 #[test]
 fn the_pill_names_the_picture_and_never_the_pointer() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -122,7 +121,7 @@ fn the_pill_names_the_picture_and_never_the_pointer() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press solos the picture and a second press undoes it**, and both are
+/// A press solos the picture and a second press undoes it, and both are
 /// performed here rather than named: a control that soloed and could not undo
 /// it would be half of *Solo a region*, and the undo is the half no other
 /// gesture can reach — a solo takes every other control off the screen.
@@ -163,8 +162,8 @@ fn a_press_solos_the_picture_and_a_second_press_undoes_it() {
     );
 }
 
-/// **A press off the capsule asks for nothing and is not claimed** — the rule
-/// every control here lives by: a control claims what it acts on and no more.
+/// A press off the capsule asks for nothing and is not claimed — the rule every
+/// control here lives by: a control claims what it acts on and no more.
 #[test]
 fn a_press_off_the_pill_asks_for_nothing_and_is_not_claimed() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -191,29 +190,27 @@ fn a_press_off_the_pill_asks_for_nothing_and_is_not_claimed() {
 // The boundary gets first refusal, and this is the first control it reaches
 // ---------------------------------------------------------------------------
 
-/// **The first control on this console that does not clear a boundary's grab,
-/// and the number is 0.75 of a pixel.**
+/// The first control on this console that does not clear a boundary's grab, and
+/// the number is 0.75 of a pixel.
 ///
 /// `karakuri_console::input` states the hazard and every other control's test
 /// answers it the same way — the Outputs sink clears by 1.75, the deck head's
 /// chips by 10, the Master bay's out by 37.75. This one does not, and the
 /// reason is geometry neither the rule nor this crate chose: a bay head is
 /// `HEAD_H` = 27 and a `.pill` is `PILL_H` = 16.5 centred in it, so there is
-/// (27 - 16.5) / 2 = **5.25** of head above the capsule; the Program bay is
-/// the first child of the centre column, so its top edge is the body row's,
-/// and the boundary between the transport row and the body grabs `GRAB` = 6
-/// past it.
+/// (27 - 16.5) / 2 = 5.25 of head above the capsule; the Program bay is the
+/// first child of the centre column, so its top edge is the body row's, and the
+/// boundary between the transport row and the body grabs `GRAB` = 6 past it.
 ///
-/// **So this asserts the overlap rather than its absence**, in both
-/// directions: the capsule's top edge is the boundary's and its centre and
-/// bottom are the panel's. `input`'s rule 3 is what decides that, it decides
-/// it the same way every time, and the hazard the rule was written for —
-/// *"both do think they are dragging"* — does not arise. What is lost is the
-/// sliver.
+/// So this asserts the overlap rather than its absence, in both directions: the
+/// capsule's top edge is the boundary's and its centre and bottom are the
+/// panel's. `input`'s rule 3 is what decides that, it decides it the same way
+/// every time, and the hazard the rule was written for — *"both do think they
+/// are dragging"* — does not arise. What is lost is the sliver.
 ///
-/// **It fails if the sliver grows**, which is what it is for: a shorter bay
-/// head, a taller pill or a wider `GRAB` each make more of the control dead,
-/// and the fix then is a change to `docs/manual/console.html` or to the rule,
+/// It fails if the sliver grows, which is what it is for: a shorter bay head, a
+/// taller pill or a wider `GRAB` each make more of the control dead, and the
+/// fix then is a change to `docs/manual/console.html` or to the rule,
 /// deliberately, rather than a nudge.
 #[test]
 fn the_boundary_above_the_bay_keeps_the_top_of_the_capsule() {
@@ -269,9 +266,9 @@ fn the_boundary_above_the_bay_keeps_the_top_of_the_capsule() {
 // A bay that is not laid out
 // ---------------------------------------------------------------------------
 
-/// **A folded Program bay has no pill to press**, whichever fold hid it — the
-/// bay itself, or the column that encloses it. And unfolding puts it back,
-/// because nothing here is a latch.
+/// A folded Program bay has no pill to press, whichever fold hid it — the bay
+/// itself, or the column that encloses it. And unfolding puts it back, because
+/// nothing here is a latch.
 #[test]
 fn a_folded_program_bay_has_no_pill_to_press() {
     for enclosing in [false, true] {
@@ -321,9 +318,9 @@ fn a_folded_program_bay_has_no_pill_to_press() {
     }
 }
 
-/// **The floor**: a console that has never drawn has no fonts, so it has no
-/// pill — and a test suite that got `None` everywhere would pass every
-/// assertion above by never finding a control at all.
+/// The floor: a console that has never drawn has no fonts, so it has no pill —
+/// and a test suite that got `None` everywhere would pass every assertion above
+/// by never finding a control at all.
 #[test]
 fn a_console_that_has_never_drawn_has_no_pill() {
     let panel = common::arranged(PLAUSIBLE, MOCK_CANVAS);

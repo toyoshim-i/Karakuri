@@ -1,30 +1,27 @@
-//! **The transport row's arrangement pill: the console's sixth control, and
-//! its first with a menu.**
+//! The transport row's arrangement pill: the console's sixth control, and its
+//! first with a menu.
 //!
 //! Six things, and the first two are why this file exists rather than a few
 //! more assertions in `transport.rs`:
 //!
-//! 1. Where the control is, derived from the row's own geometry.
-//! 2. **That it clears every boundary's grab**, which is `tests/outputs.rs`'s
-//!    arithmetic over a different control and is never inherited from it: the
-//!    row is 48 and a `.pill` is 16.5, so the clearance is 15.75 against a
-//!    `GRAB` of 6 — and that is measured here rather than reasoned from the
-//!    Outputs row's 7.75.
-//! 3. **That an open menu keeps the pointer**, which is the rule
-//!    `karakuri_console::input` gained with this control: the card is drawn
-//!    across the boundary under the row, so a rule that gave the boundary
-//!    first refusal would leave rows of the menu dead.
-//! 4. That the pill says what it was handed, and that the default arrangement
-//!    is not called `default`.
-//! 5. **What each item of the menu asks for**: the reset, a restore by name,
-//!    and the one item that asks for letters.
-//! 6. That the name being typed is the console's own state and moves only
-//!    through the methods that move it.
+//! 1. Where the control is, derived from the row's own geometry. 2. That it
+//! clears every boundary's grab, which is `tests/outputs.rs`'s arithmetic over
+//! a different control and is never inherited from it: the row is 48 and a
+//! `.pill` is 16.5, so the clearance is 15.75 against a `GRAB` of 6 — and that
+//! is measured here rather than reasoned from the Outputs row's 7.75. 3. That
+//! an open menu keeps the pointer, which is the rule `karakuri_console::input`
+//! gained with this control: the card is drawn across the boundary under the
+//! row, so a rule that gave the boundary first refusal would leave rows of the
+//! menu dead. 4. That the pill says what it was handed, and that the default
+//! arrangement is not called `default`. 5. What each item of the menu asks for:
+//! the reset, a restore by name, and the one item that asks for letters. 6.
+//! That the name being typed is the console's own state and moves only through
+//! the methods that move it.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the capsule is as wide as the name in it — see `common::drawn_once`
-//! — and a `Transport`, because the pill's place is one gap after the bar and
-//! a row with no engine behind it draws nothing at all.
+//! — and a `Transport`, because the pill's place is one gap after the bar and a
+//! row with no engine behind it draws nothing at all.
 
 mod common;
 
@@ -36,15 +33,15 @@ use karakuri_console::view::{arrangement, Arrangement, Ask, Item, Menu, Transpor
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::Operation;
 
-/// **The mock's own transport, as numbers** — `transport.rs`'s `mock`, which
-/// is where the argument for each of them is. The pill sits one gap after the
-/// bar this draws, so a row is needed to have a pill at all.
+/// The mock's own transport, as numbers — `transport.rs`'s `mock`, which is
+/// where the argument for each of them is. The pill sits one gap after the bar
+/// this draws, so a row is needed to have a pill at all.
 fn mock() -> Transport {
     common::mock_transport()
 }
 
-/// A view with an engine behind it and that arrangement in front of it —
-/// what `View::draw` paints from and what `claim` hit-tests, one value.
+/// A view with an engine behind it and that arrangement in front of it — what
+/// `View::draw` paints from and what `claim` hit-tests, one value.
 fn view(arr: Arrangement) -> View {
     let mut view = View::new(Room::Day);
     view.transport = Some(mock());
@@ -52,8 +49,8 @@ fn view(arr: Arrangement) -> View {
     view
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair every test here starts from, and `outputs.rs`'s own opening.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// every test here starts from, and `outputs.rs`'s own opening.
 fn console(viewport: Rect) -> (Panel, egui::Context) {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
@@ -82,8 +79,8 @@ fn filed() -> Arrangement {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// **The pill is the row's own geometry and the mock's own box**, and every
-/// number here is read off `style.css` rather than off the panel.
+/// The pill is the row's own geometry and the mock's own box, and every number
+/// here is read off `style.css` rather than off the panel.
 ///
 /// `.pill { border-radius: 999px; padding: 0 8px }` around text at 11px and
 /// `line-height: 1.5`, in a `.transport` whose `gap` is 14 — so the capsule
@@ -132,8 +129,8 @@ fn the_pill_is_the_rows_own_geometry() {
     );
 }
 
-/// **The capsule is as wide as the name in it**, which is what makes this a
-/// control that has to be measured rather than a rectangle written down.
+/// The capsule is as wide as the name in it, which is what makes this a control
+/// that has to be measured rather than a rectangle written down.
 #[test]
 fn the_capsule_is_as_wide_as_the_name_in_it() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -163,22 +160,21 @@ fn the_capsule_is_as_wide_as_the_name_in_it() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// **The pill clears every boundary's grab**, measured here and never
-/// inherited from the Outputs row's sink.
+/// The pill clears every boundary's grab, measured here and never inherited
+/// from the Outputs row's sink.
 ///
 /// `karakuri_console::input`'s hazard is the same one: `GRAB` widens every
 /// boundary by six pixels either side, and those twelve pixels are inside the
 /// bays, over whatever a bay draws at its edge.
 ///
 /// The numbers say it clears by more than any other control on the panel: the
-/// transport row is 48, a `.pill` is 16.5 and it is centred, so there is
-/// (48 - 16.5) / 2 = **15.75** of row above the capsule and 15.75 below,
-/// against a grab of **6**. The boundary under the row gives up 9.75 pixels
-/// short of the control.
+/// transport row is 48, a `.pill` is 16.5 and it is centred, so there is (48 -
+/// 16.5) / 2 = 15.75 of row above the capsule and 15.75 below, against a grab
+/// of 6. The boundary under the row gives up 9.75 pixels short of the control.
 ///
-/// **So this fails if the control moves, if the row gets shorter, or if `GRAB`
-/// widens past 15.75** — and the last is the point: the fix then is to change
-/// the rule in `input`, deliberately, rather than to nudge the pill.
+/// So this fails if the control moves, if the row gets shorter, or if `GRAB`
+/// widens past 15.75 — and the last is the point: the fix then is to change the
+/// rule in `input`, deliberately, rather than to nudge the pill.
 #[test]
 fn the_pill_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -242,13 +238,13 @@ fn the_pill_clears_every_boundarys_grab() {
     }
 }
 
-/// **The three readouts beside the pill are still readouts**, and this test is
-/// what says so as the row gains controls.
+/// The three readouts beside the pill are still readouts, and this test is what
+/// says so as the row gains controls.
 ///
 /// It named four until 2026-09-08. The tempo figure left the list when it
 /// became the free-run tempo's control
 /// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)),
-/// and the point pressed for it here is now on the **guard** either side of the
+/// and the point pressed for it here is now on the guard either side of the
 /// band rather than at the figure's centre — a press a hand is not trusted to
 /// have meant, which the row declines and `egui` gets. That is the one point in
 /// this file where a readout and a control share a rectangle, and pressing the
@@ -287,8 +283,8 @@ fn only_the_pill_is_claimed_out_of_the_transport_row() {
     }
 }
 
-/// **Before anything has been drawn there is no control**, and a row that is
-/// not drawn has no pill: a capsule is as wide as the name in it, and a press
+/// Before anything has been drawn there is no control, and a row that is not
+/// drawn has no pill: a capsule is as wide as the name in it, and a press
 /// cannot be on something that has never been on screen.
 #[test]
 fn a_control_that_has_not_been_drawn_is_not_there() {
@@ -323,7 +319,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 // What the pill says
 // ---------------------------------------------------------------------------
 
-/// **The default arrangement has no name, and the word for it is not one.**
+/// The default arrangement has no name, and the word for it is not one.
 ///
 /// ADR-0221: the default reaches code rather than a file, an operator may save
 /// an arrangement called `default`, and it shadows nothing. A pill that wrote
@@ -351,7 +347,7 @@ fn the_default_arrangement_has_no_name_and_is_not_called_default() {
 // The menu
 // ---------------------------------------------------------------------------
 
-/// **A press on the pill opens the menu, and a press on it again shuts it.**
+/// A press on the pill opens the menu, and a press on it again shuts it.
 #[test]
 fn a_press_on_the_pill_opens_the_menu_and_a_press_again_shuts_it() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -389,7 +385,7 @@ fn a_press_on_the_pill_opens_the_menu_and_a_press_again_shuts_it() {
     assert_eq!(open.ask(&arr, at(padding)), Some(Ask::Shut));
 }
 
-/// **An open menu keeps every pointer event, boundary or no boundary.**
+/// An open menu keeps every pointer event, boundary or no boundary.
 ///
 /// This is `input`'s rule 2, and it is the reason the rule exists: the card
 /// hangs out of the transport row and down over the bays, so it crosses the
@@ -435,12 +431,11 @@ fn an_open_menu_keeps_the_pointer_and_a_shut_one_gives_the_boundary_back() {
     );
 }
 
-/// **Start a new one is the reset, and it is the same operation `r`
-/// performs.**
+/// Start a new one is the reset, and it is the same operation `r` performs.
 ///
 /// Not *like* the reset: the identical `Op`, applied to a panel that has been
-/// folded about, giving the identical arrangement. A control that reset
-/// through some path of its own is how the two stop being one operation.
+/// folded about, giving the identical arrangement. A control that reset through
+/// some path of its own is how the two stop being one operation.
 #[test]
 fn start_a_new_one_is_the_reset_the_r_key_performs() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -480,7 +475,7 @@ fn start_a_new_one_is_the_reset_the_r_key_performs() {
     );
 }
 
-/// **Load is the list, and a pick asks for that name back.**
+/// Load is the list, and a pick asks for that name back.
 ///
 /// The names are the ones handed in, in the order they were handed in, and the
 /// operation carries the name the row was drawn with — not the row's index,
@@ -515,11 +510,11 @@ fn the_menu_lists_the_names_handed_in_and_a_pick_puts_that_one_back() {
     assert_eq!(empty.rows, 2);
 }
 
-/// **Save means the name in use, and asks for one where there is none.**
+/// Save means the name in use, and asks for one where there is none.
 ///
 /// The manual: *"Once a name is in use, saving again means that name: saving
-/// over it is what saving it again is."* So the same row is two different
-/// asks, decided by what the pill was handed and not by anything it kept.
+/// over it is what saving it again is."* So the same row is two different asks,
+/// decided by what the pill was handed and not by anything it kept.
 #[test]
 fn save_means_the_name_in_use_and_asks_for_one_where_there_is_none() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -556,15 +551,15 @@ fn save_means_the_name_in_use_and_asks_for_one_where_there_is_none() {
 // The name being typed
 // ---------------------------------------------------------------------------
 
-/// **The buffer is the console's own state and moves only through the two
-/// methods that move it**, one character at a time — because `src/` has no key
-/// events to read (ADR-0156) and whoever holds the keyboard is on the other
-/// side of that seam.
+/// The buffer is the console's own state and moves only through the two methods
+/// that move it, one character at a time — because `src/` has no key events to
+/// read (ADR-0156) and whoever holds the keyboard is on the other side of that
+/// seam.
 ///
-/// **Nothing typed is checked**, which is the half that matters: a name that
-/// is not one path component is refused where the file is written, in one
-/// sentence, and a pill that dropped the characters it did not like would be a
-/// rule an operator could only find by experiment (P-0090).
+/// Nothing typed is checked, which is the half that matters: a name that is not
+/// one path component is refused where the file is written, in one sentence,
+/// and a pill that dropped the characters it did not like would be a rule an
+/// operator could only find by experiment (P-0090).
 #[test]
 fn typing_fills_the_name_and_nothing_in_it_is_checked() {
     let mut arr = Arrangement::NONE;
@@ -607,8 +602,8 @@ fn typing_fills_the_name_and_nothing_in_it_is_checked() {
     assert_eq!(arr.naming(), Some(""));
 }
 
-/// **A menu asking for a name is a field and not a list**, so there is nothing
-/// to pick and no row to hand out a rectangle for.
+/// A menu asking for a name is a field and not a list, so there is nothing to
+/// pick and no row to hand out a rectangle for.
 #[test]
 fn a_menu_asking_for_a_name_has_no_rows_to_pick() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -627,9 +622,9 @@ fn a_menu_asking_for_a_name_has_no_rows_to_pick() {
 // The values are the harness's
 // ---------------------------------------------------------------------------
 
-/// **Everything on the pill came in through the argument and the console keeps
-/// none of it** — the seam `View::picture` is on, which is the reason this
-/// crate can be asked about a console with no store anywhere near it.
+/// Everything on the pill came in through the argument and the console keeps
+/// none of it — the seam `View::picture` is on, which is the reason this crate
+/// can be asked about a console with no store anywhere near it.
 ///
 /// Asked twice with two arrangements and once more with the first: a console
 /// that had kept anything would answer the third call with the second's.
@@ -668,8 +663,8 @@ fn the_pill_is_the_harnesss_and_is_stored_nowhere() {
     assert_eq!(view.arrangement, one);
 }
 
-/// **The menu lists as many names as fit and says how many it left out**,
-/// rather than the list quietly ending where the window does.
+/// The menu lists as many names as fit and says how many it left out, rather
+/// than the list quietly ending where the window does.
 ///
 /// The Library bay's own answer to the same question, at the same `.lib-row`
 /// box — a count in a foot, which is the difference between a list that is
@@ -712,8 +707,8 @@ fn the_menu_lists_what_fits_and_says_how_many_it_left_out() {
     }
 }
 
-/// **A folded, soloed or narrow row draws no pill**, which is `transport`'s
-/// answer rather than a second one: where there is no row there is no control.
+/// A folded, soloed or narrow row draws no pill, which is `transport`'s answer
+/// rather than a second one: where there is no row there is no control.
 #[test]
 fn a_folded_or_soloed_or_narrow_row_draws_no_pill() {
     let ctx = drawn_once();

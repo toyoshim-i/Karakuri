@@ -1,42 +1,38 @@
-//! **The sensitivity row and the node head's three words: the Inspector's
-//! other two controls, and the ones that say who is holding a knob and let a
-//! hand take it back.**
+//! The sensitivity row and the node head's three words: the Inspector's other
+//! two controls, and the ones that say who is holding a knob and let a hand
+//! take it back.
 //!
 //! Eight things:
 //!
-//! 1. **That a bound row grows a row under it**, and that every row below
-//!    moves down by exactly a `.sens` — the arithmetic `group_h`,
-//!    `param_rect` and `sens_rect` all have to agree about, and the one a
-//!    stride instead of a walk gets wrong.
-//! 2. That the chips are laid out where `.sens`'s own two tracks put them,
-//!    each as wide as the word in it, and that the boxes a press is resolved
-//!    against are the boxes a frame painted.
-//! 3. **That the curve chip restates the attachment**: the same signal, the
-//!    same range, the same address, and the *next* of the four shapes — so a
-//!    press for a different curve cannot re-map the signal.
-//! 4. **That `take back` names the attachment's own address**, which is the
-//!    binding's `(layer, index, key)` and not the group the row was drawn in.
-//! 5. **That the source and the range are drawn and claimed by nothing** —
-//!    two of the four chips are readouts, and a press on one asks for nothing
-//!    rather than falling through to the row behind it.
-//! 6. **That a bound row's knob is not taken hold of**, which is
-//!    *Take a parameter back*'s answer to the question ADR-0286 left open, and
-//!    that the row is still drawn.
-//! 7. **That every one of the three authority chips is claimed and names the
-//!    level it lands on** — a destination and never a step (P-0090) — the lit
-//!    one included.
-//! 8. **That a head standing over more than one node claims nothing**, which
-//!    is authority being per node rather than per group.
+//! 1. That a bound row grows a row under it, and that every row below moves
+//! down by exactly a `.sens` — the arithmetic `group_h`, `param_rect` and
+//! `sens_rect` all have to agree about, and the one a stride instead of a walk
+//! gets wrong. 2. That the chips are laid out where `.sens`'s own two tracks
+//! put them, each as wide as the word in it, and that the boxes a press is
+//! resolved against are the boxes a frame painted. 3. That the curve chip
+//! restates the attachment: the same signal, the same range, the same address,
+//! and the *next* of the four shapes — so a press for a different curve cannot
+//! re-map the signal. 4. That `take back` names the attachment's own address,
+//! which is the binding's `(layer, index, key)` and not the group the row was
+//! drawn in. 5. That the source and the range are drawn and claimed by nothing
+//! — two of the four chips are readouts, and a press on one asks for nothing
+//! rather than falling through to the row behind it. 6. That a bound row's knob
+//! is not taken hold of, which is *Take a parameter back*'s answer to the
+//! question ADR-0286 left open, and that the row is still drawn. 7. That every
+//! one of the three authority chips is claimed and names the level it lands on
+//! — a destination and never a step (P-0090) — the lit one included. 8. That a
+//! head standing over more than one node claims nothing, which is authority
+//! being per node rather than per group.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a chip is as wide as the word in it — see `common::drawn_once`.
 //!
 //! # Where this stops
 //!
-//! Everything here ends at the **operation**. Turning one into a record is
+//! Everything here ends at the operation. Turning one into a record is
 //! `karakuri-operation-record`'s and applying it to a deck is
-//! `crates/karakuri/src/main.rs`'s; that a press reaches this crate at all is
-//! a row in `input::PROBES` and is asserted where the two halves of that seam
+//! `crates/karakuri/src/main.rs`'s; that a press reaches this crate at all is a
+//! row in `input::PROBES` and is asserted where the two halves of that seam
 //! meet.
 
 mod common;
@@ -68,13 +64,13 @@ fn row(ord: usize, name: &str, index: u32, range: [f32; 2], value: f32) -> Param
     }
 }
 
-/// **The attachment the mock draws**: `energy` through `pow2` onto
-/// `[0.10, 2.40]`, addressed at one node of the L1.
+/// The attachment the mock draws: `energy` through `pow2` onto `[0.10, 2.40]`,
+/// addressed at one node of the L1.
 ///
-/// Its range is deliberately **not** the row's published range below, because
-/// the two are two facts: a fader rides what the control was published over
-/// and a signal is mapped onto what the `bind` said. A test that gave them one
-/// value could not tell which of them the chip and the operation read.
+/// Its range is deliberately not the row's published range below, because the
+/// two are two facts: a fader rides what the control was published over and a
+/// signal is mapped onto what the `bind` said. A test that gave them one value
+/// could not tell which of them the chip and the operation read.
 fn attachment() -> Source {
     Source {
         signal: "energy".to_owned(),
@@ -107,9 +103,9 @@ fn second() -> Source {
     }
 }
 
-/// **The mock's `L1:0 drift_shell`**: three rows, the second and third bound,
-/// so there is a row above the first sensitivity row and a second sensitivity
-/// row below a row that already grew one.
+/// The mock's `L1:0 drift_shell`: three rows, the second and third bound, so
+/// there is a row above the first sensitivity row and a second sensitivity row
+/// below a row that already grew one.
 fn shell() -> Node {
     Node {
         keep: None,
@@ -138,8 +134,8 @@ fn shell() -> Node {
     }
 }
 
-/// **The folded renderers head**, which stands over two nodes and so has
-/// neither an authority nor an address to press.
+/// The folded renderers head, which stands over two nodes and so has neither an
+/// authority nor an address to press.
 fn renderers() -> Node {
     Node {
         uses: Vec::new(),
@@ -189,8 +185,8 @@ fn at(p: egui::Pos2) -> Point {
     Point::new(p.x, p.y)
 }
 
-/// **Where the `index`th row of the first group goes, worked out here from the
-/// stylesheet's own numbers** — a walk over what is above it rather than a
+/// Where the `index`th row of the first group goes, worked out here from the
+/// stylesheet's own numbers — a walk over what is above it rather than a
 /// stride, which is the whole of what the sensitivity row changes about a
 /// group. Asking `view.rs` for the answer could not tell a right one from a
 /// moved one.
@@ -226,12 +222,12 @@ const TALL: Rect = Rect {
     h: PLAUSIBLE.h,
 };
 
-/// **A bound row grows a row under it, and everything below moves.**
+/// A bound row grows a row under it, and everything below moves.
 ///
-/// The group is one `.sens` taller than the three rows alone, and the third
-/// row starts one `.sens` further down than a stride of `PARAM_H` would put
-/// it — which is the defect a stride makes and the one that would draw the
-/// last row over the chips.
+/// The group is one `.sens` taller than the three rows alone, and the third row
+/// starts one `.sens` further down than a stride of `PARAM_H` would put it —
+/// which is the defect a stride makes and the one that would draw the last row
+/// over the chips.
 #[test]
 fn a_bound_row_grows_a_sensitivity_row_and_moves_the_rows_under_it() {
     let (panel, _ctx) = console(TALL);
@@ -271,8 +267,8 @@ fn a_bound_row_grows_a_sensitivity_row_and_moves_the_rows_under_it() {
     );
 }
 
-/// **The chips are laid out where `.sens` puts them, and a press finds them
-/// there.**
+/// The chips are laid out where `.sens` puts them, and a press finds them
+/// there.
 ///
 /// One derivation, asked twice: the boxes `sens_chips` answers are inside the
 /// row `sens_rect` answers, they are in the mock's order, and each is as wide
@@ -324,7 +320,7 @@ fn the_chips_sit_in_the_sensitivity_rows_own_tracks() {
     );
 }
 
-/// **The curve chip restates the attachment and changes only the shape.**
+/// The curve chip restates the attachment and changes only the shape.
 #[test]
 fn the_curve_chip_attaches_the_same_signal_through_the_next_shape() {
     let (panel, ctx) = console(TALL);
@@ -354,7 +350,7 @@ fn the_curve_chip_attaches_the_same_signal_through_the_next_shape() {
     );
 }
 
-/// **`take back` names the attachment's own address.**
+/// `take back` names the attachment's own address.
 ///
 /// The row is drawn in `L1:0`'s group and the attachment is addressed there
 /// too, so the assertion that carries the weight is the *key*: it is the
@@ -402,7 +398,7 @@ fn take_back_removes_the_attachment_the_row_was_drawn_from() {
     );
 }
 
-/// **The source and the range are drawn and claimed by nothing.**
+/// The source and the range are drawn and claimed by nothing.
 ///
 /// A press on either lands inside the row and asks for nothing — it does not
 /// fall through to the chip beside it, and it does not reach the row above.
@@ -426,9 +422,9 @@ fn the_source_and_the_range_are_readouts() {
     }
 }
 
-/// **A bound row's knob is drawn and is not taken hold of**, and the rows
-/// either side of it still are — so this is the row's state and not the pane
-/// going inert.
+/// A bound row's knob is drawn and is not taken hold of, and the rows either
+/// side of it still are — so this is the row's state and not the pane going
+/// inert.
 #[test]
 fn a_bound_rows_knob_is_drawn_and_is_not_a_handle() {
     let (panel, ctx) = console(TALL);
@@ -472,8 +468,8 @@ fn a_bound_rows_knob_is_drawn_and_is_not_a_handle() {
     let _ = ctx;
 }
 
-/// **Every one of the three authority chips names the level it lands on**, the
-/// lit one included — a destination and never a step.
+/// Every one of the three authority chips names the level it lands on, the lit
+/// one included — a destination and never a step.
 #[test]
 fn every_authority_chip_names_the_level_it_lands_on() {
     let (panel, ctx) = console(TALL);
@@ -509,8 +505,8 @@ fn every_authority_chip_names_the_level_it_lands_on() {
     }
 }
 
-/// **A head standing over more than one node claims nothing**, because
-/// authority is per node and one chip on it would be one of two answers.
+/// A head standing over more than one node claims nothing, because authority is
+/// per node and one chip on it would be one of two answers.
 #[test]
 fn a_head_over_more_than_one_node_claims_no_press() {
     let (panel, ctx) = console(TALL);

@@ -1,27 +1,27 @@
-//! **The mixer strip's blend chip, clicked.**
+//! The mixer strip's blend chip, clicked.
 //!
-//! `mixer.rs` is where a strip's rectangles are and which of them are
-//! controls; `fader.rs` is what a hand does to the two knobs. This is the
-//! third control (ADR-0187): the chip cycles, and a press on it emits
-//! `Operation::SetBlendMode` naming the mode it **arrived at**.
+//! `mixer.rs` is where a strip's rectangles are and which of them are controls;
+//! `fader.rs` is what a hand does to the two knobs. This is the third control
+//! (ADR-0187): the chip cycles, and a press on it emits
+//! `Operation::SetBlendMode` naming the mode it arrived at.
 //!
-//! **The cycle is the affordance and the operation is the destination**, which
-//! is the affordance P-0090 leaves to whoever draws the control: a mini that
+//! The cycle is the affordance and the operation is the destination, which is
+//! the affordance P-0090 leaves to whoever draws the control: a mini that
 //! cycles the blend is one control emitting three, the operator sees a toggle
-//! and the vocabulary never does. So what is asserted here is a named destination per press, the wrap
-//! from the last mode back to the first, and that the operation names the
-//! **strip's own deck** rather than a fixed one.
+//! and the vocabulary never does. So what is asserted here is a named
+//! destination per press, the wrap from the last mode back to the first, and
+//! that the operation names the strip's own deck rather than a fixed one.
 //!
-//! **None of it needs a device.** Laying a strip out needs `egui`, because the
-//! chip is as wide as the word in it — `mixer.rs`'s own opening — and what
-//! comes out is `karakuri-operation`'s, which has no dependencies at all.
+//! None of it needs a device. Laying a strip out needs `egui`, because the chip
+//! is as wide as the word in it — `mixer.rs`'s own opening — and what comes out
+//! is `karakuri-operation`'s, which has no dependencies at all.
 //!
 //! # Where this stops
 //!
 //! At the operation, exactly as `fader.rs` does. Turning it into a
 //! `Record::Blend` and moving a deck with it is the harness's —
-//! `crates/karakuri/src/main.rs`, where there is a deck — and this crate has none
-//! (ADR-0156).
+//! `crates/karakuri/src/main.rs`, where there is a deck — and this crate has
+//! none (ADR-0156).
 
 mod common;
 
@@ -33,10 +33,10 @@ use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, Tally};
 use karakuri_layout::{Hit, Point};
 use karakuri_operation::{BlendMode, Operation};
 
-/// Four strips, **no two adjacent ones on the same blend**, so that a press
-/// answered from the wrong strip is a wrong answer rather than the right one
-/// by luck. `BlendMode::ALL` is three and there are four decks, so deck A and
-/// deck D share a mode and neither is beside the other.
+/// Four strips, no two adjacent ones on the same blend, so that a press
+/// answered from the wrong strip is a wrong answer rather than the right one by
+/// luck. `BlendMode::ALL` is three and there are four decks, so deck A and deck
+/// D share a mode and neither is beside the other.
 ///
 /// The other values are apart from each other for `fader.rs`'s reason: a bay
 /// that read the wrong strip anywhere says so.
@@ -66,8 +66,8 @@ fn strips() -> Vec<Strip> {
         .collect()
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair `mixer.rs`, `fader.rs` and `transport.rs` all open with.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// `mixer.rs`, `fader.rs` and `transport.rs` all open with.
 fn console() -> (Panel, egui::Context) {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
@@ -94,20 +94,19 @@ fn pressed(bay: &Mixer, slot: usize) -> Operation {
 // The cycle, and where each press arrives
 // ---------------------------------------------------------------------------
 
-/// **A press moves the blend to the next mode, and the last wraps to the
-/// first.**
+/// A press moves the blend to the next mode, and the last wraps to the first.
 ///
 /// Asserted against `BlendMode::ALL` walked in order rather than against three
 /// literals, so this is *the cycle is `ALL`'s order* and not *the cycle is the
 /// three lines somebody wrote in `view.rs`*. `view::after` is a match — a
 /// fourth mode does not compile until somebody says what follows it — and the
-/// price of a match is that the order is written twice; this is the
-/// measurement that keeps the two copies from drifting.
+/// price of a match is that the order is written twice; this is the measurement
+/// that keeps the two copies from drifting.
 ///
-/// **The wrap is not a special case in the assertion.** The loop's last step
-/// is `max` and the expected answer is `ALL[0]`, reached by the same modulo
-/// every other step uses, so a cycle that ran off the end would fail here
-/// rather than in a test of its own that could be forgotten.
+/// The wrap is not a special case in the assertion. The loop's last step is
+/// `max` and the expected answer is `ALL[0]`, reached by the same modulo every
+/// other step uses, so a cycle that ran off the end would fail here rather than
+/// in a test of its own that could be forgotten.
 #[test]
 fn a_press_moves_to_the_next_mode_and_the_last_wraps_to_the_first() {
     let (panel, ctx) = console();
@@ -140,14 +139,14 @@ fn a_press_moves_to_the_next_mode_and_the_last_wraps_to_the_first() {
     );
 }
 
-/// **The operation names the strip's own deck, and the mode that strip is
-/// on** — not deck 0, and not the first strip's blend.
+/// The operation names the strip's own deck, and the mode that strip is on —
+/// not deck 0, and not the first strip's blend.
 ///
 /// This is the test a hard-coded `deck: 0` has to fail: every strip is pressed
 /// and each one's answer carries its own index. The strips are seeded so that
-/// **no two adjacent decks share a mode**, so an answer read off the wrong
-/// strip is wrong in the blend as well as in the deck — one of the two would
-/// catch a wrong index even if the other were removed.
+/// no two adjacent decks share a mode, so an answer read off the wrong strip is
+/// wrong in the blend as well as in the deck — one of the two would catch a
+/// wrong index even if the other were removed.
 #[test]
 fn the_operation_names_the_strips_own_deck() {
     let (panel, ctx) = console();
@@ -187,8 +186,8 @@ fn the_operation_names_the_strips_own_deck() {
 // A control claims what it acts on and no more
 // ---------------------------------------------------------------------------
 
-/// **A press off the chip emits nothing, and what it does instead is select
-/// the deck.**
+/// A press off the chip emits nothing, and what it does instead is select the
+/// deck.
 ///
 /// `input`'s rule 4: *"a control claims what it acts on and no more."* The
 /// number above it, the name and the meter are painted by the console and none
@@ -197,20 +196,20 @@ fn the_operation_names_the_strips_own_deck() {
 /// (`Mixer::select`) — so the press is the panel's and it means *address the
 /// keys to this deck*.
 ///
-/// **Both halves, because either alone is satisfiable by the wrong code.** A
-/// chip that emitted from anywhere would change the mix from a press on the
-/// name above it; a chip whose neighbours answered nothing at all would be a
-/// column an operator cannot select by pressing.
+/// Both halves, because either alone is satisfiable by the wrong code. A chip
+/// that emitted from anywhere would change the mix from a press on the name
+/// above it; a chip whose neighbours answered nothing at all would be a column
+/// an operator cannot select by pressing.
 ///
-/// **This test required `Claim::Egui` at those points until 2026-09-07.** That
-/// was true when it was written and stopped being true on 2026-08-30, when
+/// This test required `Claim::Egui` at those points until 2026-09-07. That was
+/// true when it was written and stopped being true on 2026-08-30, when
 /// `Mixer::select` made the whole column a control and `input::on_strip` went
 /// on asking four questions instead of five. The rule has not changed; what is
 /// *left over* after the four inside the column is no longer nothing.
 ///
-/// **The mask mini 3px to its right is asserted separately**, because it is a
-/// control (ADR-0203) and the two halves come apart there: the panel claims
-/// it, and this chip must answer nothing for it.
+/// The mask mini 3px to its right is asserted separately, because it is a
+/// control (ADR-0203) and the two halves come apart there: the panel claims it,
+/// and this chip must answer nothing for it.
 #[test]
 fn a_press_off_the_chip_asks_for_nothing_and_selects_the_deck_instead() {
     let (mut panel, ctx) = console();
@@ -301,22 +300,21 @@ fn a_press_off_the_chip_asks_for_nothing_and_selects_the_deck_instead() {
 // The boundary gets first refusal, and the chip clears its band
 // ---------------------------------------------------------------------------
 
-/// **No blend chip is inside a boundary's [`GRAB`].**
+/// No blend chip is inside a boundary's [`GRAB`].
 ///
 /// `input`'s rule 2 comes before rule 3, so a control under a boundary's grab
 /// band is a control that cannot be clicked, with nothing on screen saying so.
-/// The Outputs sink is measured for this and so are the two knobs — **and this
-/// is measured too rather than inherited from them**, because the chip is at
-/// the *bottom* of a strip and the knobs are in the middle of one, which is a
+/// The Outputs sink is measured for this and so are the two knobs — and this is
+/// measured too rather than inherited from them, because the chip is at the
+/// *bottom* of a strip and the knobs are in the middle of one, which is a
 /// different clearance against a different boundary.
 ///
 /// It asks `Layout::hit` directly as well as `claim`, which is ADR-0185's
-/// caught test: `claim` says *the panel's* for a boundary **and** for a
-/// control, so a version of this that only asked `claim` passed with `GRAB`
-/// widened to 60.
+/// caught test: `claim` says *the panel's* for a boundary and for a control, so
+/// a version of this that only asked `claim` passed with `GRAB` widened to 60.
 ///
-/// The guard on itself is the same one `fader.rs` carries: the ground under
-/// the bay *is* inside a grab, which is what says the answers above are the
+/// The guard on itself is the same one `fader.rs` carries: the ground under the
+/// bay *is* inside a grab, which is what says the answers above are the
 /// clearance rather than the grab having gone missing — and the chips have to
 /// have been found at all, or a bay with no strips passes this trivially.
 #[test]
@@ -388,26 +386,26 @@ fn no_blend_chip_is_inside_a_boundarys_grab() {
 // The row the chip sits in
 // ---------------------------------------------------------------------------
 
-/// **The mode row stays inside the strip's track, at every mode.**
+/// The mode row stays inside the strip's track, at every mode.
 ///
-/// `.strip-mode` is two minis centred across the strip, and **it already
-/// overflows the strip's content box** — a strip is 53 wide inside `.strip`'s
+/// `.strip-mode` is two minis centred across the strip, and it already
+/// overflows the strip's content box — a strip is 53 wide inside `.strip`'s
 /// `padding: 7px 4px` and the row is 55.06, 57.84 or 56.84 depending on the
 /// word, so it spills 1.03 to 2.42 each side into that 4px of padding. Nothing
 /// clamps it. That is fine today and it is fine by 1.58 at the worst mode,
 /// which is the width of the *gap* between two strips being what stops a chip
 /// reaching its neighbour.
 ///
-/// **A fact that holds by 1.58 is a test rather than a sentence.** A fourth
-/// mode with a longer word, a bigger `MINI_SIZE`, more `MINI_PAD_X` or a wider
-/// mask chip each move the row outward, and the failure without this test is
-/// silent: one strip's chip painted over the next strip's, hit-tested by
-/// whichever `Mixer::blend` reaches first.
+/// A fact that holds by 1.58 is a test rather than a sentence. A fourth mode
+/// with a longer word, a bigger `MINI_SIZE`, more `MINI_PAD_X` or a wider mask
+/// chip each move the row outward, and the failure without this test is silent:
+/// one strip's chip painted over the next strip's, hit-tested by whichever
+/// `Mixer::blend` reaches first.
 ///
-/// It asserts containment in the **track** — the 61 the grid gives a strip,
-/// which is `StripBox::rect` — because that is the boundary that matters: the
-/// tracks tile with `STRIP_GAP` between them, so a row inside its own track
-/// cannot be inside anyone else's.
+/// It asserts containment in the track — the 61 the grid gives a strip, which
+/// is `StripBox::rect` — because that is the boundary that matters: the tracks
+/// tile with `STRIP_GAP` between them, so a row inside its own track cannot be
+/// inside anyone else's.
 #[test]
 fn the_mode_row_stays_inside_its_track() {
     let (panel, ctx) = console();

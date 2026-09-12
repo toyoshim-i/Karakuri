@@ -34,23 +34,23 @@ const MANUAL: &[&str] = &[
 /// Names that are not headings of *What each region is standing on*, each with
 /// what it is and where the word came from.
 ///
-/// The three columns are the manual's lede: a left pane and a right pane
-/// "which fold away to give room, and the centre, which is what they give it
-/// to". `left-pane` is `karakuri-layout`'s own word for the first of them, the
-/// split that "fold the left pane away" reaches by name, and `right-pane` is
-/// that operation on the other side. `centre` is deliberately not a third
-/// pane (ADR-0159) — folding it is not an operation anybody wants — and it is
-/// named because the drag on the program's height addresses it.
+/// The three columns are the manual's lede: a left pane and a right pane "which
+/// fold away to give room, and the centre, which is what they give it to".
+/// `left-pane` is `karakuri-layout`'s own word for the first of them, the split
+/// that "fold the left pane away" reaches by name, and `right-pane` is that
+/// operation on the other side. `centre` is deliberately not a third pane
+/// (ADR-0159) — folding it is not an operation anybody wants — and it is named
+/// because the drag on the program's height addresses it.
 ///
-/// The inspector's panes are the *n* the manual describes ("**n** panes, each
+/// The inspector's panes are the *n* the manual describes ("n panes, each
 /// showing whatever you point it at"), numbered because the mock's control for
 /// them counts — `2 up` — and because a view's name is required.
 ///
 /// The Program bay's two regions are the last two, and they are the one pair
 /// here the manual names outright without heading them. *"The bay is two
 /// regions and they fold apart. The picture is a sink, listed in Outputs as
-/// **program view** ... The **deck previews** under it are auditions of their
-/// own, so they stay when it goes."* Both words are the manual's, and both are
+/// program view ... The deck previews under it are auditions of their own, so
+/// they stay when it goes."* Both words are the manual's, and both are
 /// addressed: turning the sink off is a fold on `program-view`, and the row
 /// staying when it goes is `deck-previews` not folding with it.
 const STRUCTURAL: &[&str] = &[
@@ -93,20 +93,20 @@ fn nothing_resolves_that_is_not_a_named_region() {
     );
 }
 
-/// The body row — the one holding the two panes and the centre — has **no
-/// name**, and *nothing reaches it* is not the reason. `Layout::hit` hands the
-/// row out as `Hit::Divider { split, .. }` and `crates/karakuri/src/main.rs`'s
+/// The body row — the one holding the two panes and the centre — has no name,
+/// and *nothing reaches it* is not the reason. `Layout::hit` hands the row out
+/// as `Hit::Divider { split, .. }` and `crates/karakuri/src/main.rs`'s
 /// fold-at-pointer turns that into `Op::Fold(split)`, so `g` over the gap
 /// between two panes folds this row today. What it cannot be is reached by
-/// anything holding only a name — a keyboard, a MIDI map or MCP — and giving
-/// it one would assert that folding the row of three panes is an operation an
+/// anything holding only a name — a keyboard, a MIDI map or MCP — and giving it
+/// one would assert that folding the row of three panes is an operation an
 /// operator asks for, which is a decision nobody has taken (ADR-0197).
 ///
 /// So this is not a test that the row is unreachable. It pins the two things
-/// that decision would change: the row is still the three-way split holding
-/// the panes and the centre, and it still answers `None` when asked for a
-/// name. Naming it is then a line somebody writes here on purpose, rather
-/// than one that arrives with an edit to the arrangement.
+/// that decision would change: the row is still the three-way split holding the
+/// panes and the centre, and it still answers `None` when asked for a name.
+/// Naming it is then a line somebody writes here on purpose, rather than one
+/// that arrives with an edit to the arrangement.
 #[test]
 fn the_row_holding_the_panes_and_the_centre_is_unnamed() {
     let layout = karakuri_console::layout();

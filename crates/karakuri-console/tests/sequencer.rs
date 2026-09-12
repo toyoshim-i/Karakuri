@@ -1,26 +1,23 @@
-//! **The Sequencer bay: the console's first controls over authored state, and
-//! the first bay whose body is a value no engine holds.**
+//! The Sequencer bay: the console's first controls over authored state, and the
+//! first bay whose body is a value no engine holds.
 //!
 //! Seven things, and the first three are what the four records of 2026-09-09
 //! decided:
 //!
 //! 1. Where the bay's parts are, measured off its own rectangle — the mock's
-//!    `.seq` padding under the bay head, the head, the ruler and a row per
-//!    lane.
-//! 2. **That a cell press is a state and never a flip**, which is the mock's
-//!    own sentence and the reason `Operation::SetStep` carries `on: bool`: a
-//!    surface that could only flip has no way to arrive.
-//! 3. **That a cell sends a stored slot and not a drawn step** — the identity
-//!    at a sixteenth and `2k` at an eighth, so a step press and a mode press
-//!    cannot race into an address that means two things (ADR-0320).
-//! 4. That the label mutes the lane and the mode pill names the other mode.
-//! 5. That every press names the bank it landed on rather than implying the
-//!    armed one.
-//! 6. **What the bay declares** (ADR-0283, ADR-0322): the step's staleness
-//!    while there is a lane to move a playhead over, `moves_in` from where the
-//!    beat has got to, and the invariant between them.
-//! 7. That a console with no pattern behind it draws nothing and claims no
-//!    press.
+//! `.seq` padding under the bay head, the head, the ruler and a row per lane.
+//! 2. That a cell press is a state and never a flip, which is the mock's own
+//! sentence and the reason `Operation::SetStep` carries `on: bool`: a surface
+//! that could only flip has no way to arrive. 3. That a cell sends a stored
+//! slot and not a drawn step — the identity at a sixteenth and `2k` at an
+//! eighth, so a step press and a mode press cannot race into an address that
+//! means two things (ADR-0320). 4. That the label mutes the lane and the mode
+//! pill names the other mode. 5. That every press names the bank it landed on
+//! rather than implying the armed one. 6. What the bay declares (ADR-0283,
+//! ADR-0322): the step's staleness while there is a lane to move a playhead
+//! over, `moves_in` from where the beat has got to, and the invariant between
+//! them. 7. That a console with no pattern behind it draws nothing and claims
+//! no press.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the head's readout is as wide as the words in it — see
@@ -40,9 +37,9 @@ use karakuri_layout::Point;
 use karakuri_operation::{LaneTarget, Operation, StepMode};
 use karakuri_pattern::{Lane, Pattern, BANKS, SLOTS};
 
-/// **The mock's own first lane**: deck A's channel fader, nearly full with two
-/// gaps — `docs/manual/console.html` draws sixteen cells with steps 6, 7, 9
-/// and 10 off, and what matters here is that some are on and some are not.
+/// The mock's own first lane: deck A's channel fader, nearly full with two gaps
+/// — `docs/manual/console.html` draws sixteen cells with steps 6, 7, 9 and 10
+/// off, and what matters here is that some are on and some are not.
 fn lane_a() -> Lane {
     let mut lane = Lane::new(LaneTarget::Fader { deck: 0 }, 1.0, 0.0);
     for slot in [0, 1, 2, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15] {
@@ -71,7 +68,7 @@ fn view(mode: StepMode, step: Option<usize>) -> View {
     view
 }
 
-/// **The bay is laid out under its own head, and every row is inside it.**
+/// The bay is laid out under its own head, and every row is inside it.
 #[test]
 fn the_bay_is_laid_out_under_its_head_and_stays_inside_the_card() {
     let ctx = drawn_once();
@@ -121,9 +118,9 @@ fn the_bay_is_laid_out_under_its_head_and_stays_inside_the_card() {
     );
 }
 
-/// **The count follows the mode**: eight cells at an eighth, over the same
-/// width — *"the row keeps its width, so the cells halve in the finer one"*
-/// read the other way round (ADR-0306).
+/// The count follows the mode: eight cells at an eighth, over the same width —
+/// *"the row keeps its width, so the cells halve in the finer one"* read the
+/// other way round (ADR-0306).
 #[test]
 fn an_eighth_draws_eight_cells_over_the_same_row() {
     let ctx = drawn_once();
@@ -158,9 +155,8 @@ fn an_eighth_draws_eight_cells_over_the_same_row() {
     );
 }
 
-/// **An eighth reads slot `2k`, and a press says so.** The console sends the
-/// stored slot, so the payload means the same thing whichever mode the head is
-/// in.
+/// An eighth reads slot `2k`, and a press says so. The console sends the stored
+/// slot, so the payload means the same thing whichever mode the head is in.
 #[test]
 fn a_cell_press_sends_the_stored_slot_and_not_the_drawn_step() {
     let ctx = drawn_once();
@@ -196,8 +192,8 @@ fn a_cell_press_sends_the_stored_slot_and_not_the_drawn_step() {
     }
 }
 
-/// **A press asks for the state the cell is not in**, on a lit cell and on an
-/// unlit one — a state and never a flip, and it names the bank and the lane.
+/// A press asks for the state the cell is not in, on a lit cell and on an unlit
+/// one — a state and never a flip, and it names the bank and the lane.
 #[test]
 fn a_cell_press_is_a_state_and_names_the_bank_and_the_lane() {
     let ctx = drawn_once();
@@ -236,8 +232,8 @@ fn a_cell_press_is_a_state_and_names_the_bank_and_the_lane() {
     }
 }
 
-/// **The label mutes the lane and the mode pill names the other mode**, and
-/// both name the bank.
+/// The label mutes the lane and the mode pill names the other mode, and both
+/// name the bank.
 #[test]
 fn the_label_mutes_and_the_pill_names_the_other_mode() {
     let ctx = drawn_once();
@@ -278,8 +274,8 @@ fn the_label_mutes_and_the_pill_names_the_other_mode() {
     );
 }
 
-/// **A muted lane's label asks for it back**, which is the other half of the
-/// same state.
+/// A muted lane's label asks for it back, which is the other half of the same
+/// state.
 #[test]
 fn a_muted_lanes_label_asks_for_it_to_drive() {
     let ctx = drawn_once();
@@ -317,8 +313,8 @@ fn a_muted_lanes_label_asks_for_it_to_drive() {
     );
 }
 
-/// **The playhead stands over the cell the poll answered**, and over nothing
-/// before the first poll.
+/// The playhead stands over the cell the poll answered, and over nothing before
+/// the first poll.
 #[test]
 fn the_playhead_stands_over_the_step_the_poll_answered() {
     let ctx = drawn_once();
@@ -352,9 +348,9 @@ fn the_playhead_stands_over_the_step_the_poll_answered() {
     );
 }
 
-/// **The bay declares while it has a lane, and the two numbers obey the
-/// invariant** — ADR-0283's `moves_in >= staleness`, which this is the first
-/// region to be tight against.
+/// The bay declares while it has a lane, and the two numbers obey the invariant
+/// — ADR-0283's `moves_in >= staleness`, which this is the first region to be
+/// tight against.
 #[test]
 fn the_bay_declares_a_step_and_the_deadline_never_beats_the_rate() {
     let layout = solved(PLAUSIBLE);
@@ -397,9 +393,9 @@ fn the_bay_declares_a_step_and_the_deadline_never_beats_the_rate() {
     }
 }
 
-/// **A pattern with no lanes declares nothing**, because the playhead has
-/// nothing to stand over: a bay whose picture does not change is a bay a
-/// declaration would buy frames of nothing for (ADR-0283).
+/// A pattern with no lanes declares nothing, because the playhead has nothing
+/// to stand over: a bay whose picture does not change is a bay a declaration
+/// would buy frames of nothing for (ADR-0283).
 #[test]
 fn a_pattern_with_no_lanes_declares_nothing() {
     let layout = solved(PLAUSIBLE);
@@ -425,8 +421,8 @@ fn a_pattern_with_no_lanes_declares_nothing() {
     );
 }
 
-/// **A console with no pattern behind it draws nothing and claims no press**,
-/// which is every test in this crate that does not hand one in.
+/// A console with no pattern behind it draws nothing and claims no press, which
+/// is every test in this crate that does not hand one in.
 #[test]
 fn no_pattern_is_no_bay_and_no_press() {
     let ctx = drawn_once();
@@ -454,7 +450,7 @@ fn no_pattern_is_no_bay_and_no_press() {
     );
 }
 
-/// **The route a window loop actually takes**: `claim` says the press is the
+/// The route a window loop actually takes: `claim` says the press is the
 /// panel's, and the derivation that drew the cell is the one that answers it.
 #[test]
 fn a_press_on_a_cell_is_claimed_and_then_answered() {
@@ -492,10 +488,10 @@ fn a_press_on_a_cell_is_claimed_and_then_answered() {
     );
 }
 
-/// **The bay draws at the smallest window this arrangement is claimed to work
-/// at**, which is what `lib.rs`'s minimum for it reserves — *"a sequencer of
-/// one lane"*. A bay that answered `None` there would be a lane an operator
-/// could reach on one window and not on another, with nothing saying so.
+/// The bay draws at the smallest window this arrangement is claimed to work at,
+/// which is what `lib.rs`'s minimum for it reserves — *"a sequencer of one
+/// lane"*. A bay that answered `None` there would be a lane an operator could
+/// reach on one window and not on another, with nothing saying so.
 #[test]
 fn one_lane_draws_at_the_smallest_window() {
     let ctx = drawn_once();
@@ -520,7 +516,7 @@ fn one_lane_draws_at_the_smallest_window() {
 // The bay head's bank pills
 // ---------------------------------------------------------------------------
 
-/// **Four pills in the bay head, and the armed one is marked.**
+/// Four pills in the bay head, and the armed one is marked.
 ///
 /// Four rather than the mock's `seq 1 · seq 2 · +`: with four fixed banks the
 /// `+` is `SelectPattern` landing on an empty bank, which is what a press on
@@ -564,7 +560,7 @@ fn the_head_draws_four_bank_pills_and_they_are_inside_it() {
     );
 }
 
-/// **A press on a bank pill asks for that bank, and it is a state.**
+/// A press on a bank pill asks for that bank, and it is a state.
 ///
 /// Never *the next one* and never a cycle: a map with a button per bank has to
 /// be able to say *this bank* and mean it, which is the cell's own rule one
@@ -689,8 +685,8 @@ fn param(name: &str, at: usize) -> karakuri_console::view::Param {
     }
 }
 
-/// **The chooser lists every drawn deck's fader and one deck's published
-/// controls**, and the deck is the Library bay's load pulldown's (ADR-0305,
+/// The chooser lists every drawn deck's fader and one deck's published
+/// controls, and the deck is the Library bay's load pulldown's (ADR-0305,
 /// ADR-0327).
 #[test]
 fn the_chooser_lists_the_drawn_decks_faders_and_the_target_decks_keys() {
@@ -744,8 +740,8 @@ fn the_chooser_lists_the_drawn_decks_faders_and_the_target_decks_keys() {
     );
 }
 
-/// **A press on `+ lane` puts the card down; a pick points the lane and names
-/// the bank; every other press dismisses it.**
+/// A press on `+ lane` puts the card down; a pick points the lane and names the
+/// bank; every other press dismisses it.
 #[test]
 fn the_card_offers_the_targets_and_a_pick_points_the_lane() {
     let ctx = drawn_once();
@@ -863,7 +859,7 @@ fn the_card_offers_the_targets_and_a_pick_points_the_lane() {
     );
 }
 
-/// **A card that is down claims every press on the console**, which is
+/// A card that is down claims every press on the console, which is
 /// `input::claim`'s rule 2 with a fifth card added to it.
 #[test]
 fn the_card_claims_every_press_while_it_is_down() {
@@ -886,10 +882,10 @@ fn the_card_claims_every_press_while_it_is_down() {
     assert_eq!(claim(&mut panel, &ctx, &view, away), Claim::Egui);
 }
 
-/// **A chooser with nothing in it does not open**, which is the deck
-/// pulldown's refusal: a card with no items is a gesture with nothing to pick
-/// and nothing to leave by, and rule 2 would give it every press on the
-/// console until a second one shut it.
+/// A chooser with nothing in it does not open, which is the deck pulldown's
+/// refusal: a card with no items is a gesture with nothing to pick and nothing
+/// to leave by, and rule 2 would give it every press on the console until a
+/// second one shut it.
 #[test]
 fn a_chooser_with_nothing_to_point_at_refuses_to_open() {
     let mut view = view(StepMode::Sixteenth, Some(0));
@@ -901,13 +897,13 @@ fn a_chooser_with_nothing_to_point_at_refuses_to_open() {
     assert!(!view.lane_open());
 }
 
-/// **The bay's own minimum is what the arrangement reserves for it**, and the
-/// foot is part of it.
+/// The bay's own minimum is what the arrangement reserves for it, and the foot
+/// is part of it.
 ///
 /// `lib.rs` reserves `min(100.0)` for this region with the arithmetic written
 /// out beside it — *"the same with one lane and no foot"* — and the panel draws
-/// a foot now, so this is the assertion that says which of the two moved. **The
-/// bay is clipped rather than half drawn**, so a region at a height that cannot
+/// a foot now, so this is the assertion that says which of the two moved. The
+/// bay is clipped rather than half drawn, so a region at a height that cannot
 /// hold the rows *and* the `+ lane` pill draws nothing at all, and a minimum
 /// that had not moved would be a Sequencer bay that went blank on a short
 /// window.

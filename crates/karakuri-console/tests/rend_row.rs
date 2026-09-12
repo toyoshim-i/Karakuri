@@ -1,33 +1,29 @@
-//! **The renderer chips under a node group's head: the control that turns a
-//! deck's fold into a choice.**
+//! The renderer chips under a node group's head: the control that turns a
+//! deck's fold into a choice.
 //!
 //! Seven things:
 //!
 //! 1. Where the row is inside its group — under `.node-head`, and exactly as
-//!    tall as `group_h` counted it, so the parameter rows under it start where
-//!    the row ends.
-//! 2. Where the chips are in it, as `.rend-row`'s own padding and gap lay them
-//!    out, each as wide as the name in it.
-//! 3. **That the chips clear every boundary's grab**, which is the deck head's
-//!    arithmetic two rows up: `.rend-row`'s left padding is 12 against a
-//!    `GRAB` of 6.
-//! 4. That a press on a chip asks for **that** renderer, by its index in draw
-//!    order — the numbering a `select` record uses.
-//! 5. **That an overdrawn deck's chips are drawn and claimed by nothing**,
-//!    which is the manual's *"Only where the deck composites"* answered by a
-//!    state rather than by a missing row.
-//! 6. **That a lone renderer is drawn and not claimed** — *"and holds two or
-//!    more"*, the other half of the same sentence.
-//! 7. That a group the pane had no room to draw is not pressable, which is
-//!    `InspectorPane::shown` reaching a control.
+//! tall as `group_h` counted it, so the parameter rows under it start where the
+//! row ends. 2. Where the chips are in it, as `.rend-row`'s own padding and gap
+//! lay them out, each as wide as the name in it. 3. That the chips clear every
+//! boundary's grab, which is the deck head's arithmetic two rows up:
+//! `.rend-row`'s left padding is 12 against a `GRAB` of 6. 4. That a press on a
+//! chip asks for that renderer, by its index in draw order — the numbering a
+//! `select` record uses. 5. That an overdrawn deck's chips are drawn and
+//! claimed by nothing, which is the manual's *"Only where the deck composites"*
+//! answered by a state rather than by a missing row. 6. That a lone renderer is
+//! drawn and not claimed — *"and holds two or more"*, the other half of the
+//! same sentence. 7. That a group the pane had no room to draw is not
+//! pressable, which is `InspectorPane::shown` reaching a control.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a chip is as wide as the name in it — see `common::drawn_once`.
 //!
-//! **What is not here and cannot be**: that `input::claim` gives the panel a
-//! press on a chip. That is a row in `input::PROBES` and it is the
-//! registration half of this control, which lives in files this test's author
-//! does not own; until it lands a press here reaches `egui`.
+//! What is not here and cannot be: that `input::claim` gives the panel a press
+//! on a chip. That is a row in `input::PROBES` and it is the registration half
+//! of this control, which lives in files this test's author does not own; until
+//! it lands a press here reaches `egui`.
 
 mod common;
 
@@ -40,9 +36,9 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Authority, Layer, NodeAddress, Operation, Sync};
 
-/// **The mock's own `L4 renderers` group**: three renderers folded under one
-/// head, the first of them live, and no authority chip — a head standing over
-/// three nodes is not one of them.
+/// The mock's own `L4 renderers` group: three renderers folded under one head,
+/// the first of them live, and no authority chip — a head standing over three
+/// nodes is not one of them.
 fn renderers() -> Node {
     Node {
         uses: Vec::new(),
@@ -62,10 +58,10 @@ fn renderers() -> Node {
     }
 }
 
-/// **An ordinary group with no renderers**, which is what says the chips are
-/// the renderers group's and not every group's. It carries no parameter rows:
-/// what a `.param` is made of is another control's, and a test that named its
-/// fields would fail for a reason that is not this row's.
+/// An ordinary group with no renderers, which is what says the chips are the
+/// renderers group's and not every group's. It carries no parameter rows: what
+/// a `.param` is made of is another control's, and a test that named its fields
+/// would fail for a reason that is not this row's.
 fn shell() -> Node {
     Node {
         keep: None,
@@ -84,8 +80,8 @@ fn shell() -> Node {
     }
 }
 
-/// **The mock's own deck A**, compositing, with the renderers group first so
-/// that a short pane still draws it.
+/// The mock's own deck A, compositing, with the renderers group first so that a
+/// short pane still draws it.
 fn mock() -> Pane {
     Pane {
         deck: 0,
@@ -134,10 +130,10 @@ fn chips(
     (at_pane, boxes)
 }
 
-/// **Where the renderer row is inside a group**, written here as the mock's
-/// own arithmetic rather than imported: `.rend-row` sits under `.node-head`
-/// and is `REND_ROW_H` tall, and a test that asked `view.rs` for the answer
-/// could not tell a right one from a moved one.
+/// Where the renderer row is inside a group, written here as the mock's own
+/// arithmetic rather than imported: `.rend-row` sits under `.node-head` and is
+/// `REND_ROW_H` tall, and a test that asked `view.rs` for the answer could not
+/// tell a right one from a moved one.
 fn row_of(group: egui::Rect) -> egui::Rect {
     let top = group.min.y + size::NODE_HEAD_H;
     egui::Rect::from_min_max(
@@ -146,7 +142,7 @@ fn row_of(group: egui::Rect) -> egui::Rect {
     )
 }
 
-/// **How wide a chip is**, asked of the same fonts the paint asks: `.rend`'s
+/// How wide a chip is, asked of the same fonts the paint asks: `.rend`'s
 /// `padding: 0 7px` around a name at `BASE`.
 fn chip_w(ctx: &egui::Context, name: &str) -> f32 {
     ctx.fonts_mut(|f| {
@@ -164,13 +160,12 @@ fn chip_w(ctx: &egui::Context, name: &str) -> f32 {
 // Where the controls are
 // ---------------------------------------------------------------------------
 
-/// **The row is under the head and it is the rest of the group**, which is
+/// The row is under the head and it is the rest of the group, which is
 /// `group_h`'s own sum read back off a laid-out group: a group with a renderer
 /// row and no parameters is a head and that row, and nothing is left over.
 ///
-/// **And a group with no renderers has no row at all** — the chips belong to
-/// the renderers group and to no other, which is what the second group here is
-/// for.
+/// And a group with no renderers has no row at all — the chips belong to the
+/// renderers group and to no other, which is what the second group here is for.
 #[test]
 fn the_row_sits_under_the_node_head_and_is_the_rest_of_the_group() {
     let pane = mock();
@@ -199,9 +194,9 @@ fn the_row_sits_under_the_node_head_and_is_the_rest_of_the_group() {
     );
 }
 
-/// **The chips are `.rend-row`'s own flex row**: the first against the row's
-/// left padding, one padding down from its top rather than centred in it, each
-/// as wide as the name in it, and one `REND_GAP` apart.
+/// The chips are `.rend-row`'s own flex row: the first against the row's left
+/// padding, one padding down from its top rather than centred in it, each as
+/// wide as the name in it, and one `REND_GAP` apart.
 #[test]
 fn the_chips_are_the_rows_own_geometry() {
     let pane = mock();
@@ -252,10 +247,10 @@ fn the_chips_are_the_rows_own_geometry() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// **Every chip clears every boundary's grab.** The nearest boundary is the
-/// pane divider and what a chip has to clear sideways is `.rend-row`'s left
-/// padding — **12**, against a `GRAB` of 6, which is two more than the deck
-/// head's 10 and so is not the number that goes first.
+/// Every chip clears every boundary's grab. The nearest boundary is the pane
+/// divider and what a chip has to clear sideways is `.rend-row`'s left padding
+/// — 12, against a `GRAB` of 6, which is two more than the deck head's 10 and
+/// so is not the number that goes first.
 #[test]
 fn every_chip_clears_every_boundarys_grab() {
     let pane = mock();
@@ -317,14 +312,14 @@ fn every_chip_clears_every_boundarys_grab() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press on a chip asks for that renderer, by its position in draw
-/// order** — the numbering `--param L4:1:…` and a `select` record use, and not
-/// a position in whatever this row managed to draw.
+/// A press on a chip asks for that renderer, by its position in draw order —
+/// the numbering `--param L4:1:…` and a `select` record use, and not a position
+/// in whatever this row managed to draw.
 ///
-/// **The lit chip is claimed with the rest**: it names a destination the deck
-/// is already at, which is the anchor's shape two rows up, and a chip that
-/// stopped being pressable the moment it lit would take the claim out from
-/// under a hand on the beat the swap landed.
+/// The lit chip is claimed with the rest: it names a destination the deck is
+/// already at, which is the anchor's shape two rows up, and a chip that stopped
+/// being pressable the moment it lit would take the claim out from under a hand
+/// on the beat the swap landed.
 #[test]
 fn a_press_on_a_chip_asks_for_that_renderer() {
     let pane = mock();
@@ -342,8 +337,8 @@ fn a_press_on_a_chip_asks_for_that_renderer() {
     }
 }
 
-/// **A press names the pane's own deck**, which is [`Pane::deck`] carried
-/// through the answer the way the deck head carries it.
+/// A press names the pane's own deck, which is [`Pane::deck`] carried through
+/// the answer the way the deck head carries it.
 #[test]
 fn a_press_names_the_panes_own_deck() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -360,8 +355,8 @@ fn a_press_names_the_panes_own_deck() {
     }
 }
 
-/// **An overdrawn deck draws its chips and claims none of them.** *"Only where
-/// the deck composites"* — under overdraw every renderer draws, so a selection
+/// An overdrawn deck draws its chips and claims none of them. *"Only where the
+/// deck composites"* — under overdraw every renderer draws, so a selection
 /// would name a state the picture is not in. The chips keep their shape,
 /// because a row that vanished would move every parameter row under it.
 #[test]
@@ -389,9 +384,9 @@ fn an_overdrawn_deck_draws_its_chips_and_claims_none() {
     }
 }
 
-/// **A Set with one renderer draws its chip and claims it for nothing** —
-/// *"and holds two or more"*, which is the other half of the row's own
-/// sentence: there is nothing to choose between.
+/// A Set with one renderer draws its chip and claims it for nothing — *"and
+/// holds two or more"*, which is the other half of the row's own sentence:
+/// there is nothing to choose between.
 #[test]
 fn a_lone_renderer_is_drawn_and_not_claimed() {
     let mut pane = mock();
@@ -409,9 +404,9 @@ fn a_lone_renderer_is_drawn_and_not_claimed() {
     );
 }
 
-/// **A press between two chips, or past the last of them, is on nothing** —
-/// *a control claims what it acts on and no more*, and the row around a chip
-/// is not a target.
+/// A press between two chips, or past the last of them, is on nothing — *a
+/// control claims what it acts on and no more*, and the row around a chip is
+/// not a target.
 #[test]
 fn a_press_off_every_chip_asks_for_nothing() {
     let pane = mock();
@@ -436,15 +431,14 @@ fn a_press_off_every_chip_asks_for_nothing() {
     }
 }
 
-/// **A row the pane's body does not reach is not pressable**, which is the
-/// clip reaching a control: what is not drawn is not a target.
+/// A row the pane's body does not reach is not pressable, which is the clip
+/// reaching a control: what is not drawn is not a target.
 ///
-/// **The body says so and no longer `shown`.** A pane scrolls now
-/// (ADR-0307), so *what is on screen* is the body rectangle rather than a
-/// count of whole groups — `InspectorPane::drawn` walks it, `grip` and this
-/// refuse a press outside it, and `inspector_into` clips the paint to it. The
-/// body is emptied down to nothing here, which is a pane folded to its two
-/// heads.
+/// The body says so and no longer `shown`. A pane scrolls now (ADR-0307), so
+/// *what is on screen* is the body rectangle rather than a count of whole
+/// groups — `InspectorPane::drawn` walks it, `grip` and this refuse a press
+/// outside it, and `inspector_into` clips the paint to it. The body is emptied
+/// down to nothing here, which is a pane folded to its two heads.
 #[test]
 fn a_row_the_body_does_not_reach_is_not_pressable() {
     let pane = mock();
@@ -479,7 +473,7 @@ fn a_row_the_body_does_not_reach_is_not_pressable() {
     }
 }
 
-/// **Before the first frame there is nothing here to press**, which is
+/// Before the first frame there is nothing here to press, which is
 /// `deck_head`'s guard: a chip is as wide as the name in it and
 /// `Context::fonts` is not valid until a pass has run.
 #[test]

@@ -1,13 +1,13 @@
-//! **The Mixer bay's transition row: where it is drawn, and what its three
-//! pills ask for.**
+//! The Mixer bay's transition row: where it is drawn, and what its three pills
+//! ask for.
 //!
 //! `mixer.rs` is where a strip's rectangles are; `blend.rs` is the closest
 //! model for what is here, because this row's pills are the blend chip's
 //! affordance three times over — the pill cycles, and a press emits
-//! `Operation::SetTransition` naming the setting it **arrived at**.
+//! `Operation::SetTransition` naming the setting it arrived at.
 //!
-//! **The cycle is the affordance and the operation is the destination**, which
-//! is what P-0090 leaves to whoever draws a control: a pill that cycles is one
+//! The cycle is the affordance and the operation is the destination, which is
+//! what P-0090 leaves to whoever draws a control: a pill that cycles is one
 //! control emitting six, the operator sees a toggle and the vocabulary never
 //! does. What is asserted here is a named destination per press, the wrap on
 //! each of the three cycles, and that a press anywhere else in the bay is not
@@ -15,17 +15,17 @@
 //!
 //! # The cycles are written out here rather than read off the crate
 //!
-//! `karakuri_operation::TransitionSetting` has no `ALL` and no `name`, so
-//! there is no vocabulary list for this file to walk the way `blend.rs` walks
-//! `BlendMode::ALL`. What the console cycles is a **curation** —
+//! `karakuri_operation::TransitionSetting` has no `ALL` and no `name`, so there
+//! is no vocabulary list for this file to walk the way `blend.rs` walks
+//! `BlendMode::ALL`. What the console cycles is a curation —
 //! `view::WIPE_SHAPES`, `view::QUANTA` and `view::FADE_BEATS`, which are
 //! private — and a test that read them back would be comparing the code with
 //! itself. So the three lists below are the second copy on purpose, and they
 //! are the copy the row is judged against.
 //!
-//! **None of it needs a device.** Laying the row out needs `egui`, because a
-//! pill is as wide as the word in it — `mixer.rs`'s own opening — and what
-//! comes out is `karakuri-operation`'s, which has no dependencies at all.
+//! None of it needs a device. Laying the row out needs `egui`, because a pill
+//! is as wide as the word in it — `mixer.rs`'s own opening — and what comes out
+//! is `karakuri-operation`'s, which has no dependencies at all.
 //!
 //! # Where this stops
 //!
@@ -47,7 +47,7 @@ use karakuri_console::view::{
 use karakuri_layout::{Hit, Point, Rect};
 use karakuri_operation::{BlendMode, Operation, TransitionSetting, WipeKind};
 
-/// **The six shapes the row's first pill cycles**, in order — the curation
+/// The six shapes the row's first pill cycles, in order — the curation
 /// `view::WIPE_SHAPES` holds, written again here because nothing in
 /// `karakuri-operation` enumerates it. They are `karakuri-cli`'s `MASK_SHAPES`
 /// pairs, which is the point of the curation: two surfaces stepping this
@@ -61,16 +61,16 @@ const SHAPES: [(WipeKind, f32); 6] = [
     (WipeKind::Radial, 0.0),
 ];
 
-/// **The three grids the second pill cycles** — `karakuri-cli`'s `QUANTA`, in
-/// its order: the next bar, the next beat, now.
+/// The three grids the second pill cycles — `karakuri-cli`'s `QUANTA`, in its
+/// order: the next bar, the next beat, now.
 const QUANTA: [f64; 3] = [4.0, 1.0, 0.0];
 
-/// **The four lengths the third pill cycles** — `karakuri-cli`'s `FADE_BEATS`:
-/// a bar, half a bar, two bars, and a cut.
+/// The four lengths the third pill cycles — `karakuri-cli`'s `FADE_BEATS`: a
+/// bar, half a bar, two bars, and a cut.
 const LENGTHS: [f64; 4] = [4.0, 2.0, 8.0, 0.0];
 
-/// **The words the six shapes read**, in the same order — what the pill is as
-/// wide as and what a reader sees. `no shape` and never `off`: that word is a
+/// The words the six shapes read, in the same order — what the pill is as wide
+/// as and what a reader sees. `no shape` and never `off`: that word is a
 /// residency on this console and `preview_caption.rs` asserts it is painted
 /// nowhere.
 const SHAPE_WORDS: [&str; 6] = [
@@ -110,8 +110,8 @@ fn strips() -> Vec<Strip> {
         .collect()
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair `mixer.rs`, `blend.rs` and `fader.rs` all open with.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// `mixer.rs`, `blend.rs` and `fader.rs` all open with.
 fn console(viewport: Rect) -> (Panel, egui::Context) {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
@@ -190,8 +190,8 @@ fn texts(view: &mut View, panel: &mut Panel) -> Vec<(egui::Pos2, String)> {
 // Where the row is
 // ---------------------------------------------------------------------------
 
-/// **The row is where the mock puts it**, and every number is read off
-/// `style.css` rather than off the panel.
+/// The row is where the mock puts it, and every number is read off `style.css`
+/// rather than off the panel.
 ///
 /// The transcription first, for `mixer.rs`'s reason (ADR-0177): everything
 /// after it is a *relation* — this box is one padding under that one — and a
@@ -280,18 +280,18 @@ fn the_row_is_the_mocks_own_box() {
     );
 }
 
-/// **The pills are drawn where they are pressed**, at the widest word each
-/// cycle has.
+/// The pills are drawn where they are pressed, at the widest word each cycle
+/// has.
 ///
 /// The word a pill reads is painted inside the rectangle the hit test answers
 /// for, which is this crate's rule for every control it has: the derivation
 /// that draws a control is asked again rather than copied, so a pill an
 /// operator sees and a pill they click cannot come apart.
 ///
-/// **Every place in all three cycles**, because a pill is as wide as its own
-/// word and the words are not the same length: a row laid out from one word
-/// and painted with another would come apart only at the value where the two
-/// widths differ.
+/// Every place in all three cycles, because a pill is as wide as its own word
+/// and the words are not the same length: a row laid out from one word and
+/// painted with another would come apart only at the value where the two widths
+/// differ.
 #[test]
 fn every_word_of_every_cycle_is_painted_in_its_own_pill() {
     let strips = strips();
@@ -329,11 +329,11 @@ fn every_word_of_every_cycle_is_painted_in_its_own_pill() {
     );
 }
 
-/// **The row is drawn with no deck behind the console.**
+/// The row is drawn with no deck behind the console.
 ///
 /// `mixer` answers `None` there and draws no strips, because six readings a
-/// slot with no slot to read is a row of zeroes. These three are not readings
-/// — they are the console's own pointer and always have a value — so the row
+/// slot with no slot to read is a row of zeroes. These three are not readings —
+/// they are the console's own pointer and always have a value — so the row
 /// survives it, and a press on it is still the panel's.
 #[test]
 fn a_console_with_no_deck_still_draws_the_row() {
@@ -360,11 +360,11 @@ fn a_console_with_no_deck_still_draws_the_row() {
 // What each pill asks for
 // ---------------------------------------------------------------------------
 
-/// **A press on the shape pill asks for the next shape, and the last wraps to
-/// the first.**
+/// A press on the shape pill asks for the next shape, and the last wraps to the
+/// first.
 ///
-/// The operation names a **destination** and never a step, which is the whole
-/// of what P-0090 asks of a control that cycles. The wrap is not a case in the
+/// The operation names a destination and never a step, which is the whole of
+/// what P-0090 asks of a control that cycles. The wrap is not a case in the
 /// assertion: the loop's last step is the sixth shape and the expected answer
 /// is the first, reached by the same modulo every other step uses.
 #[test]
@@ -405,9 +405,9 @@ fn a_press_on_the_shape_pill_names_the_next_shape_and_wraps() {
     }
 }
 
-/// **A press on the quantum pill asks for the next grid, and the last wraps to
-/// the first.** [`a_press_on_the_shape_pill_names_the_next_shape_and_wraps`]
-/// one pill along.
+/// A press on the quantum pill asks for the next grid, and the last wraps to
+/// the first. [`a_press_on_the_shape_pill_names_the_next_shape_and_wraps`] one
+/// pill along.
 #[test]
 fn a_press_on_the_quantum_pill_names_the_next_grid_and_wraps() {
     for step in 0..QUANTA.len() {
@@ -426,9 +426,9 @@ fn a_press_on_the_quantum_pill_names_the_next_grid_and_wraps() {
     }
 }
 
-/// **A press on the length pill asks for the next length, and the last wraps
-/// to the first.** The cut is one of the four and is reached by the same
-/// modulo, so a cycle that skipped it would fail here.
+/// A press on the length pill asks for the next length, and the last wraps to
+/// the first. The cut is one of the four and is reached by the same modulo, so
+/// a cycle that skipped it would fail here.
 #[test]
 fn a_press_on_the_length_pill_names_the_next_length_and_wraps() {
     for step in 0..LENGTHS.len() {
@@ -447,8 +447,8 @@ fn a_press_on_the_length_pill_names_the_next_length_and_wraps() {
     }
 }
 
-/// **Each pill answers for its own setting and for neither of the other
-/// two**, so a press meant for the length cannot change the shape.
+/// Each pill answers for its own setting and for neither of the other two, so a
+/// press meant for the length cannot change the shape.
 ///
 /// The three sit in one row eight pixels apart and each is asked about all
 /// three points, which is `blend.rs`'s *the two neighbours that are controls*
@@ -478,14 +478,14 @@ fn a_pill_answers_for_its_own_setting_and_no_other() {
     }
 }
 
-/// **Pressing the row round every cycle returns it to where it started, and
-/// visits every place on the way.**
+/// Pressing the row round every cycle returns it to where it started, and
+/// visits every place on the way.
 ///
 /// This is the half a per-press assertion cannot make: a cycle that skipped a
-/// value and one that repeated one both answer a plausible destination at
-/// every step, and only the walk says the row has been everywhere and come
-/// back. It goes through [`View::set_transition`] rather than through the
-/// table, so what is walked is the door the panel actually has.
+/// value and one that repeated one both answer a plausible destination at every
+/// step, and only the walk says the row has been everywhere and come back. It
+/// goes through [`View::set_transition`] rather than through the table, so what
+/// is walked is the door the panel actually has.
 #[test]
 fn the_three_cycles_wrap_and_visit_every_place() {
     let strips = strips();
@@ -542,8 +542,8 @@ fn the_three_cycles_wrap_and_visit_every_place() {
     assert_eq!(seen, LENGTHS, "the length cycle is not the curated four");
 }
 
-/// **A setting off the cycles is refused, and one that names where the row
-/// already is moves nothing.**
+/// A setting off the cycles is refused, and one that names where the row
+/// already is moves nothing.
 ///
 /// The second half is P-0091 at a control: a caller repaints on a move and not
 /// on a press, so a press that changed nothing costs no frame. The first is
@@ -602,8 +602,8 @@ fn a_setting_off_the_cycles_is_refused_and_one_that_moves_nothing_says_so() {
 // A control claims what it acts on and no more
 // ---------------------------------------------------------------------------
 
-/// **A press elsewhere in the bay asks this row for nothing and is not claimed
-/// by it.**
+/// A press elsewhere in the bay asks this row for nothing and is not claimed by
+/// it.
 ///
 /// `input`'s rule 4: *"a control claims what it acts on and no more."* The
 /// ground either side of the pills, the gaps between them and the card under
@@ -612,14 +612,14 @@ fn a_setting_off_the_cycles_is_refused_and_one_that_moves_nothing_says_so() {
 /// answers are the same nothing, arrived at without the panel claiming a press
 /// it would throw away.
 ///
-/// **Both halves, because either alone is satisfiable by the wrong code.** A
-/// row that emitted nothing but was claimed would take presses it does nothing
+/// Both halves, because either alone is satisfiable by the wrong code. A row
+/// that emitted nothing but was claimed would take presses it does nothing
 /// with; one that emitted from anywhere would change what the next wipe means
 /// from a press on the card beside it.
 ///
-/// **A strip's own controls are asserted the other way round**, exactly as
-/// `blend.rs` does with the tally and the mask: the panel claims each, and
-/// this row must answer nothing for it.
+/// A strip's own controls are asserted the other way round, exactly as
+/// `blend.rs` does with the tally and the mask: the panel claims each, and this
+/// row must answer nothing for it.
 #[test]
 fn a_press_off_the_pills_asks_for_nothing_and_is_not_claimed() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -723,19 +723,19 @@ fn a_press_off_the_pills_asks_for_nothing_and_is_not_claimed() {
     );
 }
 
-/// **No pill of the transition row is inside a boundary's [`GRAB`].**
+/// No pill of the transition row is inside a boundary's [`GRAB`].
 ///
 /// `input`'s rule 3 comes before rule 4, so a control under a boundary's grab
 /// band is a control that cannot be clicked, with nothing on screen saying so.
-/// This row is the **lowest** thing in the Mixer bay — 24 pixels above the
-/// boundary between the mixer and the master chain — where the blend chip
-/// measured for this is at the bottom of a *strip*, so it is a different
-/// clearance against the same boundary and is measured rather than inherited.
+/// This row is the lowest thing in the Mixer bay — 24 pixels above the boundary
+/// between the mixer and the master chain — where the blend chip measured for
+/// this is at the bottom of a *strip*, so it is a different clearance against
+/// the same boundary and is measured rather than inherited.
 ///
 /// It asks `Layout::hit` directly as well as `claim`, which is ADR-0185's
-/// caught test: `claim` says *the panel's* for a boundary **and** for a
-/// control, so a version of this that only asked `claim` would pass with
-/// `GRAB` widened to 60.
+/// caught test: `claim` says *the panel's* for a boundary and for a control, so
+/// a version of this that only asked `claim` would pass with `GRAB` widened to
+/// 60.
 #[test]
 fn no_pill_is_inside_a_boundarys_grab() {
     let strips = strips();
@@ -795,15 +795,15 @@ fn no_pill_is_inside_a_boundarys_grab() {
 // The `go` capsule
 // ---------------------------------------------------------------------------
 
-/// **The `go` capsule is at the right end of the row**, which is what `.sep`'s
+/// The `go` capsule is at the right end of the row, which is what `.sep`'s
 /// `flex: 1` puts it — measured back from `.xfade`'s own padding on that side
 /// rather than forward from the length pill.
 ///
 /// The three settings grow with their words and this one does not move, which
-/// is the property a separator has and a fourth pill laid end to end would
-/// not: at `no shape · now · cut` and at `back diagonal · next beat · 8 beats`
-/// the capsule is in the same place, and the gap between it and the length
-/// pill is what changes.
+/// is the property a separator has and a fourth pill laid end to end would not:
+/// at `no shape · now · cut` and at `back diagonal · next beat · 8 beats` the
+/// capsule is in the same place, and the gap between it and the length pill is
+/// what changes.
 #[test]
 fn the_go_capsule_sits_against_the_rows_right_padding() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -870,8 +870,8 @@ fn the_go_capsule_sits_against_the_rows_right_padding() {
     );
 }
 
-/// **A press on `go` asks for a wipe naming the addressed deck and the next
-/// one round**, and the last deck wraps to the first.
+/// A press on `go` asks for a wipe naming the addressed deck and the next one
+/// round, and the last deck wraps to the first.
 ///
 /// `Operation::Wipe` carries *the deck being covered* and *the deck arriving
 /// over it*, and which two those are is a surface's translation — the
@@ -880,9 +880,9 @@ fn the_go_capsule_sits_against_the_rows_right_padding() {
 /// next slot round arrives over it, which is ADR-0259's *fade, crossfade and
 /// wipe are acts on the addressed strip*.
 ///
-/// **The wrap is not a case in the assertion**: the loop's last step is the
-/// last strip and the expected answer is the first, reached by the same modulo
-/// every other step uses.
+/// The wrap is not a case in the assertion: the loop's last step is the last
+/// strip and the expected answer is the first, reached by the same modulo every
+/// other step uses.
 #[test]
 fn a_press_on_go_covers_the_addressed_deck_with_the_next_one_round() {
     let strips = strips();
@@ -917,20 +917,19 @@ fn a_press_on_go_covers_the_addressed_deck_with_the_next_one_round() {
     }
 }
 
-/// **A press on `go` with no shape chosen is refused, and the refusal says
-/// which of the two it is.**
+/// A press on `go` with no shape chosen is refused, and the refusal says which
+/// of the two it is.
 ///
-/// The refusal is the *surface's* and not the conversion's:
-/// `Operation::Wipe` says *"Refused with no shape chosen"* at its own
-/// definition, `karakuri-operation-record`'s three answers contain no refusal
-/// at all, and the shape is this console's own setting — so this is the only
-/// place a wipe with nothing to move can be turned away.
-/// `karakuri-cli`'s `c` is the precedent and refuses the same two, in this
-/// order.
+/// The refusal is the *surface's* and not the conversion's: `Operation::Wipe`
+/// says *"Refused with no shape chosen"* at its own definition,
+/// `karakuri-operation-record`'s three answers contain no refusal at all, and
+/// the shape is this console's own setting — so this is the only place a wipe
+/// with nothing to move can be turned away. `karakuri-cli`'s `c` is the
+/// precedent and refuses the same two, in this order.
 ///
-/// **`WipeKind::None` is the first entry of the cycle and is where a run
-/// begins**, so this is the state a console nobody has pressed anything on is
-/// in rather than one a test had to arrange.
+/// `WipeKind::None` is the first entry of the cycle and is where a run begins,
+/// so this is the state a console nobody has pressed anything on is in rather
+/// than one a test had to arrange.
 #[test]
 fn a_press_on_go_with_no_shape_chosen_is_refused() {
     let strips = strips();
@@ -974,16 +973,16 @@ fn a_press_on_go_with_no_shape_chosen_is_refused() {
     );
 }
 
-/// **A press on `go` with one strip in the bay is refused, and it is the other
-/// refusal.**
+/// A press on `go` with one strip in the bay is refused, and it is the other
+/// refusal.
 ///
-/// `karakuri-cli`'s *"a wipe needs somewhere to come from — this deck holds
-/// one slot"*, and it is asked before the shape for that program's reason: a
-/// deck with nowhere to go is refused whatever is armed.
+/// `karakuri-cli`'s *"a wipe needs somewhere to come from — this deck holds one
+/// slot"*, and it is asked before the shape for that program's reason: a deck
+/// with nowhere to go is refused whatever is armed.
 ///
-/// **A console with no deck at all is the same answer**, which is the row
-/// being drawn without one ([`a_console_with_no_deck_still_draws_the_row`]):
-/// the capsule is there, it is not lit, and a press on it says why rather than
+/// A console with no deck at all is the same answer, which is the row being
+/// drawn without one ([`a_console_with_no_deck_still_draws_the_row`]): the
+/// capsule is there, it is not lit, and a press on it says why rather than
 /// reaching nothing.
 #[test]
 fn a_press_on_go_with_nowhere_to_come_from_is_refused() {
@@ -1020,8 +1019,8 @@ fn a_press_on_go_with_nowhere_to_come_from_is_refused() {
     );
 }
 
-/// **The `go` capsule answers for itself and for none of the three settings,
-/// and none of them answers for it.**
+/// The `go` capsule answers for itself and for none of the three settings, and
+/// none of them answers for it.
 ///
 /// [`a_pill_answers_for_its_own_setting_and_no_other`] with the fourth capsule
 /// added, and it is the direction that matters most on this row: a press meant

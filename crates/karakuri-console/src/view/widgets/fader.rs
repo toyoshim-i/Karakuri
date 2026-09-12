@@ -6,14 +6,14 @@ use egui::{Color32, CornerRadius, FontFamily, Pos2, Rect, Stroke, StrokeKind, Ui
 // Fader, meter, and shared drawing primitives
 // ---------------------------------------------------------------------------
 
-/// **How much of a track a value fills**, from the track's own zero — the left
-/// end of a row, and the **bottom** of a column, because a fader stands up and
-/// a meter fills from the floor.
+/// How much of a track a value fills, from the track's own zero — the left end
+/// of a row, and the bottom of a column, because a fader stands up and a meter
+/// fills from the floor.
 ///
-/// **The whole of what a [`Fader`] and a [`Meter`] share**, and it is a
-/// function rather than a shared type for the reason [`Meter`] gives. Three
-/// call sites the day it is written: the trim's fill, the opacity fader's
-/// fill, and the meter's column.
+/// The whole of what a [`Fader`] and a [`Meter`] share, and it is a function
+/// rather than a shared type for the reason [`Meter`] gives. Three call sites
+/// the day it is written: the trim's fill, the opacity fader's fill, and the
+/// meter's column.
 pub(crate) fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
     let at = unit(at);
     match axis {
@@ -28,8 +28,8 @@ pub(crate) fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
     }
 }
 
-/// **The fader, and it is one component with two call sites on the day it is
-/// written**: the horizontal trim and the vertical opacity. That is this
+/// The fader, and it is one component with two call sites on the day it is
+/// written: the horizontal trim and the vertical opacity. That is this
 /// repository's rule about an abstraction satisfied when it lands rather than
 /// promised for later, which [`bay_head`] is the other instance of.
 ///
@@ -38,12 +38,12 @@ pub(crate) fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
 /// where `.vfader b` is `left: 3px; right: 3px; bottom: 3px` inside its 17px
 /// one), and the knob's size. Everything else is this.
 ///
-/// **One number drives the fill and the knob**, which is what stops the two
+/// One number drives the fill and the knob, which is what stops the two
 /// disagreeing: the knob is centred on the fill's moving edge. The mock sets
 /// them by hand and a few percent apart — `width: 72%` with `left: 66%`,
-/// `height: 97%` with `bottom: 94%` — which is an author centring a 9px knob
-/// on a fill's end in percentages, and this is the same mark with the
-/// arithmetic done once.
+/// `height: 97%` with `bottom: 94%` — which is an author centring a 9px knob on
+/// a fill's end in percentages, and this is the same mark with the arithmetic
+/// done once.
 ///
 /// So the knob overhangs its track by half its length at either end, and the
 /// mock's own boxes have the room: [`size::STRIP_GAP_Y`] above and below the
@@ -68,14 +68,14 @@ pub(crate) fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Ve
     }
 }
 
-/// **One laid-out fader, taken hold of at `p`** — or `None` where `p` is not
-/// on its knob.
+/// One laid-out fader, taken hold of at `p` — or `None` where `p` is not on its
+/// knob.
 ///
 /// The inverse of [`fader`], off the same three numbers it laid out: the
 /// track's zero end, which is the fill's fixed edge; the travel, which is the
 /// length the value rides; and where the knob's centre is now, which is the
-/// fill's moving edge. **The offset is the pointer less that centre**, so a
-/// press keeps whatever it grabbed at and the value does not jump.
+/// fill's moving edge. The offset is the pointer less that centre, so a press
+/// keeps whatever it grabbed at and the value does not jump.
 pub(crate) fn grabbed(fader: Fader, knob: Knob, p: Pos2) -> Option<Grab> {
     if !fader.knob.contains(p) {
         return None;
@@ -99,39 +99,39 @@ pub(crate) fn span_at(text: &str, size: f32, colour: Color32) -> LayoutJob {
     )
 }
 
-/// **The drop mark**: `.strip.drop` and `.cell.drop`'s `outline: 2px solid
+/// The drop mark: `.strip.drop` and `.cell.drop`'s `outline: 2px solid
 /// var(--c-text)`, round the one rectangle a carried Set would land on.
 ///
 /// # One function, because it is one mark in two places
 ///
 /// A strip and a deck preview cell wear the same ring — `style.css` gives the
 /// two selectors one declaration and says why: the release names a deck, and
-/// which of the two rectangles it was let go over is not something the mark
-/// has to distinguish. What each caller brings is the target's own corner,
+/// which of the two rectangles it was let go over is not something the mark has
+/// to distinguish. What each caller brings is the target's own corner,
 /// [`size::STRIP_RADIUS`] or [`size::PREVIEW_RADIUS`], because the ring is on
 /// the rectangle's edge and an edge has the corner it has.
 ///
 /// # `--c-text`, and it is free ink
 ///
-/// Every state this console has is spelled in one of four colours — lavender
-/// is the deck the keys are addressed to, pink is live, sun is priming and the
+/// Every state this console has is spelled in one of four colours — lavender is
+/// the deck the keys are addressed to, pink is live, sun is priming and the
 /// star, mint is armed — and the text ink is what a word is drawn in when
 /// nothing is being said about it. That is exactly what this mark has to say:
-/// it says **where** the release lands and never **whether** it is allowed
+/// it says where the release lands and never whether it is allowed
 /// ([ADR-0265](../../../../docs/adr/0265-a-release-names-the-deck-and-nothing-is-refused.md)).
 /// Lavender is ruled out twice over — the selection is already a lavender ring
 /// round a strip, and the deck being carried to is usually the deck already
-/// selected, so the two would be one mark on one strip in the moment it is
-/// read fastest.
+/// selected, so the two would be one mark on one strip in the moment it is read
+/// fastest.
 ///
 /// # [`StrokeKind::Outside`], and it is what makes the pair legible
 ///
 /// `.strip.focus` is an inset `box-shadow` and this is an `outline` at
 /// `outline-offset: 0`, so a strip that is both selected and under the pointer
-/// wears the inner ring and the outer one at once instead of one clobbering
-/// the other. **Unclipped**, unlike the selection above: the ink is outside
-/// the target's rectangle, and a painter clipped to it would draw nothing at
-/// all. It fits — `.mixer-strips` has a `gap: 4px` between strips and the
+/// wears the inner ring and the outer one at once instead of one clobbering the
+/// other. Unclipped, unlike the selection above: the ink is outside the
+/// target's rectangle, and a painter clipped to it would draw nothing at all.
+/// It fits — `.mixer-strips` has a `gap: 4px` between strips and the
 /// `.previews` grid a `gap: 6px`, against two of ink each side.
 pub(crate) fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
     ui.painter().rect_stroke(
@@ -142,19 +142,19 @@ pub(crate) fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
     );
 }
 
-/// **The dashed ring on the bay a key press is addressed to**, the mock's
-/// `.wfocus` — `outline: 2px dashed var(--c-sun)` at `outline-offset: 2px`.
+/// The dashed ring on the bay a key press is addressed to, the mock's `.wfocus`
+/// — `outline: 2px dashed var(--c-sun)` at `outline-offset: 2px`.
 ///
-/// **Dashed rather than a second solid ring**, and the reason is
-/// `console.html`'s in its own words: *"the selection is a solid ring and focus
-/// is a dashed one, because drawing them the same way would erase which of the
-/// two you are looking at."* [`drop_ring`] above is the third mark on this
-/// panel and is solid in the text ink; the three are told apart by line and
-/// colour, which is why none of them is drawn at another's weight.
+/// Dashed rather than a second solid ring, and the reason is `console.html`'s
+/// in its own words: *"the selection is a solid ring and focus is a dashed one,
+/// because drawing them the same way would erase which of the two you are
+/// looking at."* [`drop_ring`] above is the third mark on this panel and is
+/// solid in the text ink; the three are told apart by line and colour, which is
+/// why none of them is drawn at another's weight.
 ///
-/// **`egui` has no dashed stroke on a rectangle**, so the four edges are laid
-/// out as one closed path and dashed along it. The corner radius the mock sets
-/// is not honoured for that reason and is not a loss: a 4px corner on a dash
+/// `egui` has no dashed stroke on a rectangle, so the four edges are laid out
+/// as one closed path and dashed along it. The corner radius the mock sets is
+/// not honoured for that reason and is not a loss: a 4px corner on a dash
 /// pattern of [`size::WFOCUS_DASH`] is a rounding of one dash.
 pub(crate) fn wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
     let ring = at.expand(size::WFOCUS_OFFSET);
@@ -187,7 +187,7 @@ pub(crate) fn wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
 ///   — see [`gradient`].
 /// - `.fader s` / `.vfader s` — `background: var(--c-panel)` with
 ///   `box-shadow: 0 0 0 1px var(--c-line)`, which is a 1px stroke on the
-///   **outside** because a `0 0 0 1px` shadow sits around the box rather than
+///   outside because a `0 0 0 1px` shadow sits around the box rather than
 ///   inside it. Its `0 1px 4px rgba(0,0,0,0.18)` drop shadow is dropped for
 ///   the reason `room` collapses the day palette's pair: `epaint` draws one
 ///   shadow and the rim is the one that says where the knob is.
@@ -273,10 +273,10 @@ pub(crate) fn fader_into(
 /// One `.mini`: a capsule with a 1px border and whatever goes in it.
 ///
 /// `sel` is `.mini.sel` — `color: var(--c-lav)`, `border-color: transparent`,
-/// and a 15% wash of the same behind it. **The blend's mini is always `.sel`
-/// and the mask's never is**, which is the mock's and reads: the blend names
-/// which of `Blend::ALL` is in force, where the mask is a picker showing the
-/// shape it is set to.
+/// and a 15% wash of the same behind it. The blend's mini is always `.sel` and
+/// the mask's never is, which is the mock's and reads: the blend names which of
+/// `Blend::ALL` is in force, where the mask is a picker showing the shape it is
+/// set to.
 pub(crate) fn mini_into(
     painter: &egui::Painter,
     pal: &Palette,
@@ -307,19 +307,19 @@ pub(crate) fn mini_into(
     );
 }
 
-/// **A two-colour ramp along `axis`**, which is `linear-gradient` and a
-/// painter that has none.
+/// A two-colour ramp along `axis`, which is `linear-gradient` and a painter
+/// that has none.
 ///
 /// The same problem [`bpm_job`] answers for a line of type, and a different
 /// answer because this is a shape rather than a run of glyphs: a `Mesh` of two
 /// triangles with a colour at each corner, which `epaint` interpolates across
 /// exactly. One shape, and no stepping.
 ///
-/// `capsule` is `border-radius: 999px` on the fill: a fader's fill is a
-/// capsule and its two ends are circles at the ramp's own ends, where a
-/// meter's column is square and is clipped by the well around it instead.
-/// Everything is clipped to `rect`, so an end cap on a fill shorter than it is
-/// wide is a sliver rather than a bulge.
+/// `capsule` is `border-radius: 999px` on the fill: a fader's fill is a capsule
+/// and its two ends are circles at the ramp's own ends, where a meter's column
+/// is square and is clipped by the well around it instead. Everything is
+/// clipped to `rect`, so an end cap on a fill shorter than it is wide is a
+/// sliver rather than a bulge.
 pub(crate) fn gradient(
     painter: &egui::Painter,
     rect: Rect,

@@ -1,5 +1,4 @@
-//! **The `rec` pill: the transport row's one control, and a record/stop
-//! toggle.**
+//! The `rec` pill: the transport row's one control, and a record/stop toggle.
 //!
 //! `docs/manual/console.html` draws one capsule at the very end of
 //! `.transport`, after `landed`, and `docs/manual/operations.html` gives it one
@@ -10,26 +9,22 @@
 //! Seven things, and the first two are why this is its own file rather than
 //! more assertions in `tests/transport.rs`:
 //!
-//! 1. **Where it is**: last in the row, against the row's right padding, with
-//!    the health capsule and the frame readout laid out backwards from it. That
-//!    end of the row belonged to the capsule until this pill existed, and the
-//!    two readings have to be one derivation.
-//! 2. **That a console nobody told draws no pill at all**, and that the row is
-//!    then exactly the row it was — which is what keeps `tests/transport.rs`
-//!    describing a console with no program behind it.
+//! 1. Where it is: last in the row, against the row's right padding, with the
+//! health capsule and the frame readout laid out backwards from it. That end of
+//! the row belonged to the capsule until this pill existed, and the two
+//! readings have to be one derivation. 2. That a console nobody told draws no
+//! pill at all, and that the row is then exactly the row it was — which is what
+//! keeps `tests/transport.rs` describing a console with no program behind it.
 //! 3. That it clears every boundary's grab, which is every control on this
-//!    console's own debt and is never inherited from the control beside it.
-//! 4. **What a press on it asks for, at both ends of the toggle** — and that
-//!    the payload is read off the state the pill was drawn from, so the capsule
-//!    an operator is looking at and the operation the press names cannot come
-//!    apart.
+//! console's own debt and is never inherited from the control beside it. 4.
+//! What a press on it asks for, at both ends of the toggle — and that the
+//! payload is read off the state the pill was drawn from, so the capsule an
+//! operator is looking at and the operation the press names cannot come apart.
 //! 5. That it is drawn, in the mock's two treatments and in no third one: a
-//!    rectangle is not a drawing, so the mark and the word are read off the
-//!    frame.
+//! rectangle is not a drawing, so the mark and the word are read off the frame.
 //! 6. That a start files under no id, which is what makes each one a fresh
-//!    recording (ADR-0289).
-//! 7. **The route a window loop actually takes** — `claim`, then the derivation
-//!    that drew the control, then the operation.
+//! recording (ADR-0289). 7. The route a window loop actually takes — `claim`,
+//! then the derivation that drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the pill is as wide as the word in it — see `common::drawn_once`.
@@ -44,9 +39,9 @@ use karakuri_console::view::{transport, Rec, Stage, Transport, TransportRow, Vie
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Recording};
 
-/// **The mock's own transport, as numbers** — `transport.rs`'s, which is where
-/// the argument for each of them is, with the mock's `rec` pill added: the
-/// capsule is drawn in `.pill.on` on that page, which is a recording running.
+/// The mock's own transport, as numbers — `transport.rs`'s, which is where the
+/// argument for each of them is, with the mock's `rec` pill added: the capsule
+/// is drawn in `.pill.on` on that page, which is a recording running.
 fn mock() -> Transport {
     Transport {
         rec: Some(Rec::Running),
@@ -84,8 +79,8 @@ fn middle(r: egui::Rect) -> Point {
 // Where it is
 // ---------------------------------------------------------------------------
 
-/// **The pill ends the row**, and everything after the `.sep` is laid out
-/// backwards from it.
+/// The pill ends the row, and everything after the `.sep` is laid out backwards
+/// from it.
 ///
 /// The mock's order at that end is `landed`, then `● rec`, hard against
 /// `.transport`'s own padding. Until this control existed the capsule took that
@@ -158,8 +153,8 @@ fn the_rec_pill_takes_the_rows_right_padding_and_everything_else_backs_away_from
     }
 }
 
-/// **The pill is the same width at both ends of the toggle**, so it does not
-/// move under the hand that is pressing it.
+/// The pill is the same width at both ends of the toggle, so it does not move
+/// under the hand that is pressing it.
 ///
 /// The mock writes one mark and one word and changes only the treatment between
 /// the two states, so this is a fact about the derivation rather than a
@@ -190,7 +185,7 @@ fn the_pill_does_not_move_when_the_recording_starts() {
     assert_eq!(idle.frame, running.frame);
 }
 
-/// **A console nobody has told about recording draws no pill**, and the row it
+/// A console nobody has told about recording draws no pill, and the row it
 /// draws is the row it drew before this control existed.
 ///
 /// `None` is *nobody said* rather than *not recording* — `View::audio`'s
@@ -238,8 +233,8 @@ fn a_console_nobody_told_draws_no_pill_and_the_capsule_has_the_padding_back() {
 // The grab, and the claim
 // ---------------------------------------------------------------------------
 
-/// **The pill clears every boundary's grab**, which is `input.rs`'s rule 4 and
-/// the debt every control on this console owes.
+/// The pill clears every boundary's grab, which is `input.rs`'s rule 4 and the
+/// debt every control on this console owes.
 ///
 /// The row is 48 and a pill is 16.5, centred, so there is (48 − 16.5) / 2 =
 /// 15.75 of row above the capsule and 15.75 below, against a [`GRAB`] of 6.
@@ -277,7 +272,7 @@ fn the_pill_clears_every_boundarys_grab() {
     );
 }
 
-/// **A press beside the pill is `egui`'s**, which is what says the claim is the
+/// A press beside the pill is `egui`'s, which is what says the claim is the
 /// pill's rectangle and not the row's.
 ///
 /// The point is one gap to the left of the capsule, which is the space the
@@ -298,9 +293,8 @@ fn a_press_in_the_gap_before_the_pill_is_not_the_pills() {
     assert_eq!(claim(&mut panel, &ctx, &view, beside), Claim::Egui);
 }
 
-/// **A console nobody told claims nothing there**, because there is nothing
-/// there: the pill is not drawn, so the point it would have been at is panel
-/// ground.
+/// A console nobody told claims nothing there, because there is nothing there:
+/// the pill is not drawn, so the point it would have been at is panel ground.
 #[test]
 fn a_console_nobody_told_claims_no_press_where_the_pill_would_be() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -329,8 +323,8 @@ fn a_console_nobody_told_claims_no_press_where_the_pill_would_be() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press asks for the other end of the toggle**, and the payload is read
-/// off the state the pill was drawn from.
+/// A press asks for the other end of the toggle, and the payload is read off
+/// the state the pill was drawn from.
 ///
 /// This is the whole of the decision the control is: one capsule, two
 /// operations, and which one a press is is a fact about what the operator can
@@ -375,7 +369,7 @@ fn a_press_starts_a_recording_and_a_press_stops_the_one_running() {
     );
 }
 
-/// **A start names no id**, which is what makes every press a fresh recording
+/// A start names no id, which is what makes every press a fresh recording
 /// rather than a second head in a stream that already exists.
 ///
 /// `Store::append_session` appends and `session::split` sets `started` at the
@@ -424,16 +418,16 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
         .collect()
 }
 
-/// **The pill is painted, and in the mock's two treatments.**
+/// The pill is painted, and in the mock's two treatments.
 ///
 /// A rectangle is not a drawing: the row would satisfy every geometric
 /// assertion above with a `transport_into` that laid the capsule out and never
 /// painted it. So this reads the frame — the word, the mark beside it, and
 /// which of `.pill` and `.pill.on` the capsule is wearing.
 ///
-/// **`rect_filled` against `rect_stroke` is the difference**, exactly as the
-/// health capsule's own test reads it: the `on` treatment fills the capsule
-/// with a wash of the pink and the plain one draws a hairline round nothing.
+/// `rect_filled` against `rect_stroke` is the difference, exactly as the health
+/// capsule's own test reads it: the `on` treatment fills the capsule with a
+/// wash of the pink and the plain one draws a hairline round nothing.
 #[test]
 fn the_pill_is_drawn_and_says_which_state_it_is_in() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -485,7 +479,7 @@ fn the_pill_is_drawn_and_says_which_state_it_is_in() {
 // The route a window loop takes
 // ---------------------------------------------------------------------------
 
-/// **`claim`, then the derivation, then the operation** — the three steps
+/// `claim`, then the derivation, then the operation — the three steps
 /// `crates/karakuri/src/main.rs` takes on a press, in that order.
 ///
 /// The seam this stands under is the one `mod press_handler` in that file is

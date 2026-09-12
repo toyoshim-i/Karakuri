@@ -1,12 +1,13 @@
-//! **The mixer's level meter moves on the frames it is drawn on, so it is not
-//! in what the bay declares — and the still panel survives a metered console.**
+//! The mixer's level meter moves on the frames it is drawn on, so it is not in
+//! what the bay declares — and the still panel survives a metered console.
+//!
 //!
 //! [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
-//! closed by naming the meter as an under-declaration it did not reach:
-//! *"the mixer bay's level meter moves every frame and declares nothing"*.
+//! closed by naming the meter as an under-declaration it did not reach: *"the
+//! mixer bay's level meter moves every frame and declares nothing"*.
 //! [ADR-0290](../../../docs/adr/0290-the-level-meter-moves-only-when-a-frame-is-drawn-so-it-declares-nothing.md)
-//! is that item worked out, and the answer is that there is no number to
-//! write. `Deck::level` moves inside `Deck::begin_frame` — the only caller of
+//! is that item worked out, and the answer is that there is no number to write.
+//! `Deck::level` moves inside `Deck::begin_frame` — the only caller of
 //! `Meters::collect` — and a caller calls that once per composed frame, which
 //! is once per frame this panel is drawn on. So the meter's picture is a
 //! function of the frames drawn rather than of wall time, and there is no
@@ -16,22 +17,20 @@
 //! This file is the three claims that decision rests on, in the order they
 //! would fail:
 //!
-//! 1. **A metered console with nothing pending is still.** The bay is laid
-//!    out, four readings are moving in it, and it asks for no frame at any
-//!    phase of the roll. That is ADR-0164's still-panel clause holding on a
-//!    console that meters — which is every console this program ships, because
-//!    `crates/karakuri/src/main.rs` calls `Deck::enable_meters` for the whole
-//!    deck at startup.
-//! 2. **The reading is not in the declaration.** A metered bay and an
-//!    unmetered one declare the same three numbers at every millisecond of a
-//!    period, so ADR-0283's fourteen frames are a *metered* panel's fourteen
-//!    and a meter declaration would be putting thirty-one back.
-//! 3. **The meter is drawn from the reading and not from the clock**, which is
-//!    the premise under the other two: the roll's curve reaches the tally and
-//!    both faders and does not reach the meter. A meter with ballistics — a
-//!    held peak, a fall time — would be a function of the phase exactly as the
-//!    roll is, and would have to declare; this is what fails on the day one
-//!    grows.
+//! 1. A metered console with nothing pending is still. The bay is laid out,
+//! four readings are moving in it, and it asks for no frame at any phase of the
+//! roll. That is ADR-0164's still-panel clause holding on a console that meters
+//! — which is every console this program ships, because
+//! `crates/karakuri/src/main.rs` calls `Deck::enable_meters` for the whole deck
+//! at startup. 2. The reading is not in the declaration. A metered bay and an
+//! unmetered one declare the same three numbers at every millisecond of a
+//! period, so ADR-0283's fourteen frames are a *metered* panel's fourteen and a
+//! meter declaration would be putting thirty-one back. 3. The meter is drawn
+//! from the reading and not from the clock, which is the premise under the
+//! other two: the roll's curve reaches the tally and both faders and does not
+//! reach the meter. A meter with ballistics — a held peak, a fall time — would
+//! be a function of the phase exactly as the roll is, and would have to
+//! declare; this is what fails on the day one grows.
 //!
 //! Nothing here needs a window, a device or a clock. The phase is a value the
 //! test chooses, which is what ADR-0190 made it for.
@@ -59,9 +58,9 @@ fn arrangement() -> Panel {
     panel
 }
 
-/// **A settled slot with its meter reading**: where it was asked to be,
-/// nothing armed on either fader, and the one value on the strip that moves
-/// without a hand on anything.
+/// A settled slot with its meter reading: where it was asked to be, nothing
+/// armed on either fader, and the one value on the strip that moves without a
+/// hand on anything.
 fn metered() -> Strip {
     Strip {
         name: "glass_shell".to_owned(),
@@ -81,8 +80,8 @@ fn metered() -> Strip {
     }
 }
 
-/// The same strip with no reading at all, which is `Deck::level`'s `None` —
-/// no meter, no measurement yet, or a slot that is neither Live nor being
+/// The same strip with no reading at all, which is `Deck::level`'s `None` — no
+/// meter, no measurement yet, or a slot that is neither Live nor being
 /// auditioned. The bay draws the well and nothing in it.
 fn dark() -> Strip {
     Strip {
@@ -91,9 +90,9 @@ fn dark() -> Strip {
     }
 }
 
-/// **The parked strip**, which is the one state the engine can actually
-/// produce: asked to prime, held at allocated because the budget found no
-/// room. It is what makes the mixer bay declare at all.
+/// The parked strip, which is the one state the engine can actually produce:
+/// asked to prime, held at allocated because the budget found no room. It is
+/// what makes the mixer bay declare at all.
 fn parked(strip: Strip) -> Strip {
     Strip {
         tally: Tally::Allocated,
@@ -111,25 +110,25 @@ fn declared(view: &View, panel: &Panel) -> Vec<Declared> {
 // 1. A metered console with nothing pending is still
 // ---------------------------------------------------------------------------
 
-/// **Four slots metering, the bay on screen, and not one frame asked for.**
+/// Four slots metering, the bay on screen, and not one frame asked for.
 ///
-/// The state is the still panel's: the picture and the preview row folded
-/// away, no transport row — a console with no engine behind it is every test
-/// in this crate — and every strip settled. The meters are reading, which is
-/// the whole point of asking here: with meters enabled the strip's one
-/// measurement changes on every frame the engine renders, and the reason that
-/// buys no frame is that the engine renders on the frames this panel is drawn
-/// on and on no others (ADR-0290).
+/// The state is the still panel's: the picture and the preview row folded away,
+/// no transport row — a console with no engine behind it is every test in this
+/// crate — and every strip settled. The meters are reading, which is the whole
+/// point of asking here: with meters enabled the strip's one measurement
+/// changes on every frame the engine renders, and the reason that buys no frame
+/// is that the engine renders on the frames this panel is drawn on and on no
+/// others (ADR-0290).
 ///
-/// **The bay is laid out**, asserted rather than assumed, so that this is not
+/// The bay is laid out, asserted rather than assumed, so that this is not
 /// ADR-0193's answer arriving by accident: a region nobody can see declares
 /// nothing for a different reason, and that reason would hide this one.
 ///
-/// **Run against its defect**: `mixer_declares` widened to *pending or
-/// metering* — the cheapest version of giving the meter the bay's rate, and
-/// the one that reads as free — fails with *"a metered console with nothing
-/// pending declared [Declared { region: "mixer", cost: 1.26ms, staleness:
-/// 33.333ms, moves_in: 33.333ms }] at 0 ms"*.
+/// Run against its defect: `mixer_declares` widened to *pending or metering* —
+/// the cheapest version of giving the meter the bay's rate, and the one that
+/// reads as free — fails with *"a metered console with nothing pending declared
+/// [Declared { region: "mixer", cost: 1.26ms, staleness: 33.333ms, moves_in:
+/// 33.333ms }] at 0 ms"*.
 #[test]
 fn a_metered_console_with_nothing_pending_asks_for_no_frame() {
     let panel = arrangement();
@@ -177,23 +176,23 @@ fn a_metered_console_with_nothing_pending_asks_for_no_frame() {
 // 2. The reading is not in the declaration
 // ---------------------------------------------------------------------------
 
-/// **A metered bay and an unmetered one declare the same three numbers**, at
-/// every millisecond of a period.
+/// A metered bay and an unmetered one declare the same three numbers, at every
+/// millisecond of a period.
 ///
 /// This is what makes ADR-0283's count a metered panel's count. Its own
-/// `settled()` strip carries a reading and `crates/karakuri/src/main.rs`
-/// meters every slot in the deck, so *the* configuration this program ships is
-/// the metered one: the fourteen frames a parked panel asks for are fourteen
-/// with the meters on, and a declaration for the meter would be putting the
+/// `settled()` strip carries a reading and `crates/karakuri/src/main.rs` meters
+/// every slot in the deck, so *the* configuration this program ships is the
+/// metered one: the fourteen frames a parked panel asks for are fourteen with
+/// the meters on, and a declaration for the meter would be putting the
 /// thirty-one back rather than adding a line.
 ///
-/// **The rest is still one sleep**, asserted at the foot of it on the metered
-/// console, because that is the frame ADR-0283 bought and the one a meter
-/// would take back first.
+/// The rest is still one sleep, asserted at the foot of it on the metered
+/// console, because that is the frame ADR-0283 bought and the one a meter would
+/// take back first.
 ///
-/// **Run against its defect**: `moves_in` reduced to `ROLL_STALENESS` wherever
-/// a strip is metering fails with *"the metered bay asked for 33.333ms at
-/// 400 ms and the unmetered one asked for 600.000024ms"*.
+/// Run against its defect: `moves_in` reduced to `ROLL_STALENESS` wherever a
+/// strip is metering fails with *"the metered bay asked for 33.333ms at 400 ms
+/// and the unmetered one asked for 600.000024ms"*.
 #[test]
 fn the_reading_is_not_in_what_the_mixer_bay_declares() {
     let panel = arrangement();
@@ -253,8 +252,8 @@ fn the_reading_is_not_in_what_the_mixer_bay_declares() {
 // 3. The meter is drawn from the reading and not from the clock
 // ---------------------------------------------------------------------------
 
-/// **The roll's curve reaches a fader's band and does not reach the meter**,
-/// which is the premise the two claims above rest on.
+/// The roll's curve reaches a fader's band and does not reach the meter, which
+/// is the premise the two claims above rest on.
 ///
 /// The two presentations are asked in the same strip, at two phases where
 /// [`roll_at`] is a different number: the reach moves, because it is measured
@@ -264,22 +263,22 @@ fn the_reading_is_not_in_what_the_mixer_bay_declares() {
 /// moves the meter is a new reading, and only a new reading — asserted in both
 /// directions so that neither half is vacuous.
 ///
-/// **What the meter's rectangles are worth against the mock's own percentages
-/// is `tests/mixer.rs`**; this is about what does and does not move them.
+/// What the meter's rectangles are worth against the mock's own percentages is
+/// `tests/mixer.rs`; this is about what does and does not move them.
 ///
-/// **This is the test that fails when a meter grows ballistics.** A held peak
-/// or a fall time is a function of the clock exactly as the roll is: it would
-/// move between two frames, it would go stale through the roll's 566 ms rest,
-/// and it would have to declare — which is ADR-0290's decision turned over,
-/// and it should not be turned over quietly. It fails **at the compiler**
-/// rather than in an assertion, because a meter on the clock takes the phase
-/// the way `StripBox::trim_reach` takes the curve, and this file calls
-/// `meter_at` with a reading and nothing else.
+/// This is the test that fails when a meter grows ballistics. A held peak or a
+/// fall time is a function of the clock exactly as the roll is: it would move
+/// between two frames, it would go stale through the roll's 566 ms rest, and it
+/// would have to declare — which is ADR-0290's decision turned over, and it
+/// should not be turned over quietly. It fails at the compiler rather than in
+/// an assertion, because a meter on the clock takes the phase the way
+/// `StripBox::trim_reach` takes the curve, and this file calls `meter_at` with
+/// a reading and nothing else.
 ///
-/// **Run against its defect**: `meter_at` painting a fill that does not follow
-/// the reading — `filled(self.meter, Axis::Column, 0.5)` — fails with *"the
-/// fill did not follow the mean, so this strip is not drawing what it was
-/// given"*, which is what keeps the two assertions below from being vacuous.
+/// Run against its defect: `meter_at` painting a fill that does not follow the
+/// reading — `filled(self.meter, Axis::Column, 0.5)` — fails with *"the fill
+/// did not follow the mean, so this strip is not drawing what it was given"*,
+/// which is what keeps the two assertions below from being vacuous.
 #[test]
 fn the_meter_is_drawn_from_the_reading_and_not_from_the_clock() {
     let ctx = drawn_once();

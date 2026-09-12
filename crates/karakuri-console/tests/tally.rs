@@ -1,38 +1,38 @@
-//! **The mixer strip's tally chip, pressed.**
+//! The mixer strip's tally chip, pressed.
 //!
-//! `mixer.rs` is where a strip's rectangles are and which of them are
-//! controls; `parked.rs` is what the chip *draws* while a request has not
-//! landed; `blend.rs` is the chip one row down. This is the fourth control
-//! (ADR-0195): the tally cycles, and a press on it emits
-//! `Operation::SetResidency` naming the residency it **arrived at**.
+//! `mixer.rs` is where a strip's rectangles are and which of them are controls;
+//! `parked.rs` is what the chip *draws* while a request has not landed;
+//! `blend.rs` is the chip one row down. This is the fourth control (ADR-0195):
+//! the tally cycles, and a press on it emits `Operation::SetResidency` naming
+//! the residency it arrived at.
 //!
-//! **The step is taken from the residency that was requested**, which is the
-//! decision this file exists to hold. The requested and the effective
-//! residency are the same value on every settled slot and they part on exactly
-//! one state the engine can produce — **parked**, asked to prime and held at
-//! allocated — so that state is where cycling from the request and cycling
-//! from the readout give different answers, and it is the state
+//! The step is taken from the residency that was requested, which is the
+//! decision this file exists to hold. The requested and the effective residency
+//! are the same value on every settled slot and they part on exactly one state
+//! the engine can produce — parked, asked to prime and held at allocated — so
+//! that state is where cycling from the request and cycling from the readout
+//! give different answers, and it is the state
 //! `a_parked_chip_asks_for_the_withdrawal_rather_than_going_on_air` is written
 //! at. From the request the next is `Allocated`, which *is* the withdrawal of
-//! the prime request; from the readout it would be `Live`, and a press meant
-//! to take a request back would put the deck on air.
+//! the prime request; from the readout it would be `Live`, and a press meant to
+//! take a request back would put the deck on air.
 //!
 //! That is the affordance a surface owns and not a lock it holds
 //! ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
-//! the chip refuses nothing, and `karakuri-cli`'s `w` — `toggle_priming`,
-//! which reads `Deck::requested_residency` to choose its direction — is the
-//! same choice on another surface.
+//! the chip refuses nothing, and `karakuri-cli`'s `w` — `toggle_priming`, which
+//! reads `Deck::requested_residency` to choose its direction — is the same
+//! choice on another surface.
 //!
-//! **None of it needs a device.** Laying a strip out needs `egui`, because the
+//! None of it needs a device. Laying a strip out needs `egui`, because the
 //! capsule is as wide as the widest of the three words, and what comes out is
 //! `karakuri-operation`'s, which has no dependencies at all.
 //!
 //! # Where this stops
 //!
-//! At the operation, exactly as `blend.rs` and `fader.rs` do. Turning it into
-//! a `Record::Residency`, applying it and letting the governor answer is the
-//! harness's — `crates/karakuri/src/main.rs`, where there is a deck — and this crate has
-//! none (ADR-0156).
+//! At the operation, exactly as `blend.rs` and `fader.rs` do. Turning it into a
+//! `Record::Residency`, applying it and letting the governor answer is the
+//! harness's — `crates/karakuri/src/main.rs`, where there is a deck — and this
+//! crate has none (ADR-0156).
 
 mod common;
 
@@ -65,20 +65,20 @@ fn settled(slot: usize, tally: Tally) -> Strip {
     }
 }
 
-/// **Four strips, no two adjacent ones on the same residency**, so that a
-/// press answered from the wrong strip is a wrong answer rather than the right
-/// one by luck. `Tally::ALL` is three and there are four decks, so deck A and
-/// deck D share a residency and neither is beside the other.
+/// Four strips, no two adjacent ones on the same residency, so that a press
+/// answered from the wrong strip is a wrong answer rather than the right one by
+/// luck. `Tally::ALL` is three and there are four decks, so deck A and deck D
+/// share a residency and neither is beside the other.
 fn strips() -> Vec<Strip> {
     (0..4)
         .map(|slot| settled(slot, Tally::ALL[slot % Tally::ALL.len()]))
         .collect()
 }
 
-/// **The parked strip**, which is the one state the engine can actually
-/// produce where the two residencies disagree: `Deck::is_parked` is
-/// `requested == Priming && effective == Allocated` — asked to prime, and held
-/// at allocated because the budget has not found room.
+/// The parked strip, which is the one state the engine can actually produce
+/// where the two residencies disagree: `Deck::is_parked` is `requested ==
+/// Priming && effective == Allocated` — asked to prime, and held at allocated
+/// because the budget has not found room.
 fn parked(slot: usize) -> Strip {
     Strip {
         tally: Tally::Allocated,
@@ -87,8 +87,8 @@ fn parked(slot: usize) -> Strip {
     }
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair `mixer.rs`, `blend.rs` and `fader.rs` all open with.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// `mixer.rs`, `blend.rs` and `fader.rs` all open with.
 fn console() -> (Panel, egui::Context) {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
@@ -111,12 +111,12 @@ fn pressed(bay: &Mixer, slot: usize) -> Operation {
         .unwrap_or_else(|| panic!("nothing on the tally chip of strip {slot} at {at:?}"))
 }
 
-/// **The vocabulary's word for a console residency, written out again here.**
+/// The vocabulary's word for a console residency, written out again here.
 ///
 /// `view`'s own conversion is private, and a test that asked it for the
 /// expected answer would be asserting that it agrees with itself. Two arms
-/// swapped in either copy is a chip that asks for the wrong state, and it
-/// fails here.
+/// swapped in either copy is a chip that asks for the wrong state, and it fails
+/// here.
 fn asked(tally: Tally) -> Residency {
     match tally {
         Tally::Live => Residency::Live,
@@ -125,8 +125,8 @@ fn asked(tally: Tally) -> Residency {
     }
 }
 
-/// The residency the cycle arrives at from `tally`, as the operation names it
-/// — `Tally::ALL` walked one step on, wrapping.
+/// The residency the cycle arrives at from `tally`, as the operation names it —
+/// `Tally::ALL` walked one step on, wrapping.
 fn next(tally: Tally) -> Residency {
     let step = Tally::ALL
         .iter()
@@ -139,8 +139,8 @@ fn next(tally: Tally) -> Residency {
 // The cycle, and where each press arrives
 // ---------------------------------------------------------------------------
 
-/// **A press moves the residency to the next of the three, and the last wraps
-/// to the first.**
+/// A press moves the residency to the next of the three, and the last wraps to
+/// the first.
 ///
 /// The order is the mock's own, which `docs/manual/console.html` states on
 /// every tally tooltip — *"one of three residencies — live, priming,
@@ -148,11 +148,11 @@ fn next(tally: Tally) -> Residency {
 /// order rather than against three literals, so this is *the cycle is `ALL`'s
 /// order* and not *the cycle is the three lines somebody wrote in `view.rs`*:
 /// `view::next` is a match, so a fourth residency does not compile until
-/// somebody says what follows it, and the price of a match is that the order
-/// is written twice.
+/// somebody says what follows it, and the price of a match is that the order is
+/// written twice.
 ///
-/// **The wrap is not a special case in the assertion.** The loop's last step
-/// is `alloc` and the expected answer is `ALL[0]`, reached by the same modulo
+/// The wrap is not a special case in the assertion. The loop's last step is
+/// `alloc` and the expected answer is `ALL[0]`, reached by the same modulo
 /// every other step uses, so a cycle that ran off the end would fail here
 /// rather than in a test of its own that could be forgotten.
 #[test]
@@ -191,20 +191,20 @@ fn a_press_moves_to_the_next_residency_and_the_last_wraps_to_the_first() {
     );
 }
 
-/// **A press on a parked chip asks for the withdrawal of its own prime
-/// request, and not for the next of the residency it is showing.**
+/// A press on a parked chip asks for the withdrawal of its own prime
+/// request, and not for the next of the residency it is showing.
 ///
 /// This is the test that separates *cycles from the request* from *cycles from
 /// the readout*, and the parked slot is the only state the engine can produce
 /// where the two differ. A parked slot shows `alloc` and was asked for `prim`:
 ///
-/// - from the **request**, the next is `alloc` — which is the prime request
+/// - from the request, the next is `alloc` — which is the prime request
 ///   withdrawn, arrived at by the ordinary arithmetic with no case in the code
 ///   for it, and what `karakuri-cli`'s `w` does on the same slot;
-/// - from the **readout**, the next would be `live` — a press meant to take a
+/// - from the readout, the next would be `live` — a press meant to take a
 ///   request back putting the deck on air, in front of an audience.
 ///
-/// **Both are asserted**, the second by name: the answer must be the one and
+/// Both are asserted, the second by name: the answer must be the one and
 /// must not be the other, so a rewrite that read `Strip::tally` fails here
 /// with a message that says which mistake it made rather than a mismatch of
 /// two enum values.
@@ -250,14 +250,14 @@ fn a_parked_chip_asks_for_the_withdrawal_rather_than_going_on_air() {
     assert_ne!(next(strip.tally), next(strip.requested));
 }
 
-/// **The operation names the strip's own deck, and the residency that strip
-/// was asked for** — not deck 0, and not the first strip's residency.
+/// The operation names the strip's own deck, and the residency that strip was
+/// asked for — not deck 0, and not the first strip's residency.
 ///
 /// This is the test a hard-coded `deck: 0` has to fail: every strip is pressed
 /// and each one's answer carries its own index. The strips are seeded so that
-/// **no two adjacent decks share a residency**, so an answer read off the
-/// wrong strip is wrong in the residency as well as in the deck — one of the
-/// two would catch a wrong index even if the other were removed.
+/// no two adjacent decks share a residency, so an answer read off the wrong
+/// strip is wrong in the residency as well as in the deck — one of the two
+/// would catch a wrong index even if the other were removed.
 #[test]
 fn the_operation_names_the_strips_own_deck() {
     let (panel, ctx) = console();
@@ -299,23 +299,23 @@ fn the_operation_names_the_strips_own_deck() {
 // A control claims what it acts on and no more
 // ---------------------------------------------------------------------------
 
-/// **A press off the chip asks for nothing, and what it does instead is select
-/// the deck.**
+/// A press off the chip asks for nothing, and what it does instead is select
+/// the deck.
 ///
-/// `input`'s rule 4: *"a control claims what it acts on and no more."* The
-/// name above it, the trim below it, the number and the meter are painted by
-/// the console and none of them is the tally chip, so this chip answers
-/// nothing for any of them. They are all inside the strip, though, and the
-/// strip is itself a control (`Mixer::select`) — so the press is the panel's
-/// and it means *address the keys to this deck*.
+/// `input`'s rule 4: *"a control claims what it acts on and no more."* The name
+/// above it, the trim below it, the number and the meter are painted by the
+/// console and none of them is the tally chip, so this chip answers nothing for
+/// any of them. They are all inside the strip, though, and the strip is itself
+/// a control (`Mixer::select`) — so the press is the panel's and it means
+/// *address the keys to this deck*.
 ///
-/// **Both halves, because either alone is satisfiable by the wrong code.** A
-/// chip that asked from anywhere would move a deck's residency from a press on
-/// the name above it; a chip whose neighbours answered nothing at all would be
-/// a column an operator cannot select by pressing.
+/// Both halves, because either alone is satisfiable by the wrong code. A chip
+/// that asked from anywhere would move a deck's residency from a press on the
+/// name above it; a chip whose neighbours answered nothing at all would be a
+/// column an operator cannot select by pressing.
 ///
-/// **This test required `Claim::Egui` at those points until 2026-09-07.** That
-/// was true when it was written and stopped being true on 2026-08-30, when
+/// This test required `Claim::Egui` at those points until 2026-09-07. That was
+/// true when it was written and stopped being true on 2026-08-30, when
 /// `Mixer::select` made the whole column a control and `input::on_strip` went
 /// on asking four questions instead of five. The rule has not changed; what is
 /// *left over* after the four inside the column is no longer nothing.
@@ -407,32 +407,31 @@ fn a_press_off_the_chip_asks_for_nothing_and_selects_the_deck_instead() {
     );
 }
 
-/// **A chip in a bay that is not laid out is not a control**, however much
+/// A chip in a bay that is not laid out is not a control, however much
 /// residency the strips behind it carry.
 ///
-/// The strips are written every frame from the `Deck` and say nothing about
-/// the arrangement, so *is there a chip here* is `mixer`'s question and not
-/// theirs — and the answer is `None` for a bay with no room for its row of
-/// strips, before any rectangle is hit-tested. That is where a folded bay is
-/// handled, and it is handled once for every control in it rather than per
-/// control.
+/// The strips are written every frame from the `Deck` and say nothing about the
+/// arrangement, so *is there a chip here* is `mixer`'s question and not theirs
+/// — and the answer is `None` for a bay with no room for its row of strips,
+/// before any rectangle is hit-tested. That is where a folded bay is handled,
+/// and it is handled once for every control in it rather than per control.
 ///
-/// **Both folds, because they are one question with two ways in** — the
-/// mixer bay itself, and the pane that encloses it (`parked.rs` makes the same
-/// pair for the declaration). And unfolding puts the control back, because
-/// nothing here is a latch.
+/// Both folds, because they are one question with two ways in — the mixer bay
+/// itself, and the pane that encloses it (`parked.rs` makes the same pair for
+/// the declaration). And unfolding puts the control back, because nothing here
+/// is a latch.
 ///
 /// # What claims the ground afterwards is not always nothing
 ///
 /// This used to assert that the point goes to `egui` once the bay is folded,
 /// and that stopped being true the day the deck preview cells became controls.
-/// Folding the **right pane** gives its width to the centre, which is enough
-/// for the Program bay to put its four cells down the sides of the picture
-/// instead of under it (ADR-0182) — and the right-hand column lands in the
-/// ground the mixer had. So a press where the chip was is the panel's again,
-/// for a control that moved in rather than for the one that went.
+/// Folding the right pane gives its width to the centre, which is enough for
+/// the Program bay to put its four cells down the sides of the picture instead
+/// of under it (ADR-0182) — and the right-hand column lands in the ground the
+/// mixer had. So a press where the chip was is the panel's again, for a control
+/// that moved in rather than for the one that went.
 ///
-/// **That is a fact about the arrangement and not about this bay**, so it is
+/// That is a fact about the arrangement and not about this bay, so it is
 /// derived rather than written down per arm — the same repair `mask.rs` owed
 /// one chip along, and for the same reason. What this test still asserts about
 /// the chip is what it always did, one line above: `mixer` answers `None`, so
@@ -506,25 +505,24 @@ fn a_folded_mixer_bay_has_no_chip_to_press() {
 // The boundary gets first refusal, and the chip clears its band
 // ---------------------------------------------------------------------------
 
-/// **No tally chip is inside a boundary's [`GRAB`].**
+/// No tally chip is inside a boundary's [`GRAB`].
 ///
 /// `input`'s rule 2 comes before rule 3, so a control under a boundary's grab
 /// band is a control that cannot be clicked, with nothing on screen saying so.
 /// The Outputs sink is measured for this, and so are the two knobs and the
-/// blend chip — **and this is measured too rather than inherited from any of
-/// them**. The nearest boundary to either chip is the pane divider down the
-/// left of the bay, and the two clear it by different numbers for different
-/// reasons: the blend chip is as wide as its whole mode row and clears it by
-/// **8.97**, while the tally's capsule is 44.53 in a 61 track and clears it by
-/// **14.23**, both against a [`GRAB`] of 6. Widening the grab to 9 kills the
-/// blend chip and the tally goes on working until 14.25 — which is the shape
-/// of the mistake this test exists to stop, since a clearance inherited from
-/// the control beside it would read as measured.
+/// blend chip — and this is measured too rather than inherited from any of
+/// them. The nearest boundary to either chip is the pane divider down the left
+/// of the bay, and the two clear it by different numbers for different reasons:
+/// the blend chip is as wide as its whole mode row and clears it by 8.97, while
+/// the tally's capsule is 44.53 in a 61 track and clears it by 14.23, both
+/// against a [`GRAB`] of 6. Widening the grab to 9 kills the blend chip and the
+/// tally goes on working until 14.25 — which is the shape of the mistake this
+/// test exists to stop, since a clearance inherited from the control beside it
+/// would read as measured.
 ///
 /// It asks `Layout::hit` directly as well as `claim`, which is ADR-0185's
-/// caught test: `claim` says *the panel's* for a boundary **and** for a
-/// control, so a version of this that only asked `claim` passes with `GRAB`
-/// widened to 60.
+/// caught test: `claim` says *the panel's* for a boundary and for a control, so
+/// a version of this that only asked `claim` passes with `GRAB` widened to 60.
 ///
 /// The guard on itself is the same one `fader.rs` and `blend.rs` carry: the
 /// ground under the bay *is* inside a grab, which is what says the answers
@@ -600,21 +598,20 @@ fn no_tally_chip_is_inside_a_boundarys_grab() {
 // The target does not move under its own value
 // ---------------------------------------------------------------------------
 
-/// **The chip a hand aims at stands still whatever the deck is doing.**
+/// The chip a hand aims at stands still whatever the deck is doing.
 ///
-/// The capsule is sized to the widest of the three words rather than to the
-/// one it is showing (`parked.rs` asserts that width against the three
-/// galleys, and `mixer` measures it once for the bay), so this control has
-/// something the blend chip cannot claim: `ALLOC` is ten and a half pixels
-/// wider than `LIVE`, and a chip sized to the word would move its own left
-/// edge by five every time a deck went on air — and would move it *while a
-/// word rolls through it* on a parked slot, which is a target sliding under a
-/// finger already on its way down.
+/// The capsule is sized to the widest of the three words rather than to the one
+/// it is showing (`parked.rs` asserts that width against the three galleys, and
+/// `mixer` measures it once for the bay), so this control has something the
+/// blend chip cannot claim: `ALLOC` is ten and a half pixels wider than `LIVE`,
+/// and a chip sized to the word would move its own left edge by five every time
+/// a deck went on air — and would move it *while a word rolls through it* on a
+/// parked slot, which is a target sliding under a finger already on its way
+/// down.
 ///
-/// So the rectangle is asserted **identical** across all three residencies and
-/// across the parked pair, and one fixed point — the far left of the capsule
-/// at `alloc`, the widest — is asserted to be on the control in every one of
-/// them.
+/// So the rectangle is asserted identical across all three residencies and
+/// across the parked pair, and one fixed point — the far left of the capsule at
+/// `alloc`, the widest — is asserted to be on the control in every one of them.
 #[test]
 fn the_chip_does_not_move_under_the_value_it_shows() {
     let (panel, ctx) = console();

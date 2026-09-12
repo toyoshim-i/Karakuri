@@ -1,5 +1,5 @@
-//! **How the Program bay's body arranges itself in the rectangle it has**, and
-//! the arithmetic checked against the mock rather than against the code that
+//! How the Program bay's body arranges itself in the rectangle it has, and the
+//! arithmetic checked against the mock rather than against the code that
 //! produced it.
 //!
 //! None of this needs a window or a device, and none of it needs a solved
@@ -29,43 +29,42 @@ use karakuri_console::view::{
     DECKS,
 };
 
-/// **The canvas the picture is fitted to**, and it is the workspace's
-/// reference workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
+/// The canvas the picture is fitted to, and it is the workspace's reference
+/// workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
 /// builds its `Present` at.
 const CANVAS: (u32, u32) = (1280, 720);
 
-/// **A canvas that is not the mock's shape**, so a picture fitted to a
-/// hard-coded 16:9 and one fitted to *the canvas* can be told apart, and so
-/// can a cell that followed the canvas when it should not.
+/// A canvas that is not the mock's shape, so a picture fitted to a hard-coded
+/// 16:9 and one fitted to *the canvas* can be told apart, and so can a cell
+/// that followed the canvas when it should not.
 const SQUARISH: (u32, u32) = (1024, 768);
 
-/// **The Program bay's body at the narrowest console the mock will draw.**
+/// The Program bay's body at the narrowest console the mock will draw.
 ///
 /// `.console`'s `min-width: 1010px` less its 10px of padding either side is
 /// 990; the centre track is 990 - 218 - 268 - two 10px gaps = 484; the bay is
-/// that wide, and `.program-body`'s 9px padding leaves **466**. The bay is 395
+/// that wide, and `.program-body`'s 9px padding leaves 466. The bay is 395
 /// tall, less the 27 of bay head painted over it and 9 of that padding top and
-/// bottom, which is **350**.
+/// bottom, which is 350.
 const NARROWEST: (f32, f32) = (466.0, 350.0);
 
-/// **The same body in a 1920 window.** The two side tracks and the four
-/// dividers do not move, so the centre track takes the whole of the extra
-/// width: 1920 - 340 - 400 - 20 = 1160, less the same 18 of padding = **1142** (ADR-0239).
-/// The bay is `Sizing::Fixed` along its column, so the height is still 350.
+/// The same body in a 1920 window. The two side tracks and the four dividers do
+/// not move, so the centre track takes the whole of the extra width: 1920 - 340
+/// - 400 - 20 = 1160, less the same 18 of padding = 1142 (ADR-0239). The bay is
+/// `Sizing::Fixed` along its column, so the height is still 350.
 const WIDE: (f32, f32) = (1142.0, 350.0);
 
-/// A body of that size, **and not at the origin**: every rectangle this answers
+/// A body of that size, and not at the origin: every rectangle this answers
 /// with is inside the bay somebody solved, so an arrangement that had quietly
 /// assumed a zero origin would tile a panel that has none.
 fn body(size: (f32, f32)) -> Rect {
     Rect::from_min_size(Pos2::new(37.0, 61.0), egui::vec2(size.0, size.1))
 }
 
-/// The size of the largest `aspect` box that fits in `w` x `h`, in whole
-/// pixels — `view::fitted`'s rule, **restated rather than reached for**. The
-/// decider is the thing under test here, and a test that asked the code for
-/// both of the sizes it is choosing between would be comparing the code with
-/// itself.
+/// The size of the largest `aspect` box that fits in `w` x `h`, in whole pixels
+/// — `view::fitted`'s rule, restated rather than reached for. The decider is
+/// the thing under test here, and a test that asked the code for both of the
+/// sizes it is choosing between would be comparing the code with itself.
 fn largest(w: f32, h: f32, aspect: (f32, f32)) -> Option<(f32, f32)> {
     let scale = (w / aspect.0).min(h / aspect.1);
     let box_w = (aspect.0 * scale).round().min(w.floor());
@@ -76,8 +75,8 @@ fn largest(w: f32, h: f32, aspect: (f32, f32)) -> Option<(f32, f32)> {
     }
 }
 
-/// The two pictures the decider is choosing between, `None` for one that
-/// cannot be drawn at all.
+/// The two pictures the decider is choosing between, `None` for one that cannot
+/// be drawn at all.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Hand {
     below: Option<(f32, f32)>,
@@ -130,8 +129,8 @@ fn assert_rect(rect: Rect, at: (f32, f32), size: (f32, f32), what: &str) {
 // The three worked cases
 // ---------------------------------------------------------------------------
 
-/// **At the mock's own body the arrangement is the mock's**, and every number
-/// in it is the mock's too.
+/// At the mock's own body the arrangement is the mock's, and every number in it
+/// is the mock's too.
 #[test]
 fn the_mocks_narrowest_body_is_the_mocks_own_arrangement() {
     let arranged = program_body(body(NARROWEST), CANVAS).expect("the body has room for a picture");
@@ -148,8 +147,8 @@ fn the_mocks_narrowest_body_is_the_mocks_own_arrangement() {
     }
 }
 
-/// **At a 1920 window the cells go down the sides, preserving their size from
-/// the row, and the picture is 61% larger for it.**
+/// At a 1920 window the cells go down the sides, preserving their size from the
+/// row, and the picture is 61% larger for it.
 #[test]
 fn a_nineteen_twenty_window_puts_the_cells_down_the_sides() {
     let arranged = program_body(body(WIDE), CANVAS).expect("the body has room for a picture");
@@ -188,7 +187,7 @@ fn a_nineteen_twenty_window_puts_the_cells_down_the_sides() {
     );
 }
 
-/// **Eight hundred wide goes beside with preserved preview size.**
+/// Eight hundred wide goes beside with preserved preview size.
 #[test]
 fn an_eight_hundred_wide_body_goes_beside() {
     let arranged = program_body(body((800.0, 350.0)), CANVAS).expect("on screen");
@@ -207,7 +206,7 @@ fn an_eight_hundred_wide_body_goes_beside() {
 // The decider
 // ---------------------------------------------------------------------------
 
-/// **The larger picture wins at every width, and a tie goes to the mock's.**
+/// The larger picture wins at every width, and a tie goes to the mock's.
 #[test]
 fn the_larger_picture_wins_at_every_width_and_a_tie_goes_below() {
     let mut below_won = 0;
@@ -248,9 +247,9 @@ fn the_larger_picture_wins_at_every_width_and_a_tie_goes_below() {
     );
 }
 
-/// **The two curves cross once at 706px** (ADR-0239), and the caption band
-/// did not move it: below loses the same 17 to the taller row that the bay
-/// gained, so its picture is the 466 x 262 it always was.
+/// The two curves cross once at 706px (ADR-0239), and the caption band did not
+/// move it: below loses the same 17 to the taller row that the bay gained, so
+/// its picture is the 466 x 262 it always was.
 #[test]
 fn there_is_exactly_one_crossover_and_it_is_at_706() {
     let placement = |w: i32| {
@@ -270,7 +269,7 @@ fn there_is_exactly_one_crossover_and_it_is_at_706() {
     assert_eq!(placement(706), Placement::Beside);
 }
 
-/// **A body with nothing in it has no arrangement**, either way round.
+/// A body with nothing in it has no arrangement, either way round.
 #[test]
 fn a_body_with_no_room_has_no_arrangement() {
     assert_eq!(program_body(body((466.0, 0.0)), CANVAS), None);
@@ -282,7 +281,7 @@ fn a_body_with_no_room_has_no_arrangement() {
 // The column, the cells and the gaps
 // ---------------------------------------------------------------------------
 
-/// **A side column preserves preview cell dimensions.**
+/// A side column preserves preview cell dimensions.
 #[test]
 fn the_columns_preserve_cell_dimensions() {
     let at = |w: f32| program_body(body((w, 350.0)), CANVAS).expect("on screen");
@@ -308,7 +307,7 @@ fn the_columns_preserve_cell_dimensions() {
     }
 }
 
-/// **A cell is 16:9 in both arrangements.**
+/// A cell is 16:9 in both arrangements.
 #[test]
 fn a_cell_is_the_mocks_shape_and_never_the_canvass() {
     for size in [NARROWEST, WIDE, (1100.0, 350.0)] {
@@ -334,7 +333,7 @@ fn a_cell_is_the_mocks_shape_and_never_the_canvass() {
     }
 }
 
-/// **The two gaps beside the picture are the mock's own.**
+/// The two gaps beside the picture are the mock's own.
 #[test]
 fn the_gaps_beside_the_picture_are_the_mocks_own() {
     let arranged = program_body(body((750.0, 350.0)), CANVAS).expect("on screen");
@@ -363,7 +362,7 @@ fn the_gaps_beside_the_picture_are_the_mocks_own() {
 // Against what the console draws today
 // ---------------------------------------------------------------------------
 
-/// **Below is what the console draws today, to the pixel.**
+/// Below is what the console draws today, to the pixel.
 #[test]
 fn below_is_what_the_console_draws_today() {
     let layout = solved(SMALLEST);
@@ -409,7 +408,7 @@ fn below_is_what_the_console_draws_today() {
     assert!(near(region.h - size::PREVIEW_ROW_H, size::PROGRAM_BODY_PAD));
 }
 
-/// **The same rectangle always gives the same answer.**
+/// The same rectangle always gives the same answer.
 #[test]
 fn a_width_dragged_out_and_back_comes_back_to_the_same_arrangement() {
     let at = |w: f32| program_body(body((w, 350.0)), CANVAS).expect("on screen");
@@ -442,7 +441,7 @@ fn a_width_dragged_out_and_back_comes_back_to_the_same_arrangement() {
     ));
 }
 
-/// **A bay dragged to its minimum goes beside at the narrowest console.**
+/// A bay dragged to its minimum goes beside at the narrowest console.
 #[test]
 fn a_bay_dragged_to_its_minimum_goes_beside_at_the_narrowest_console() {
     let short = program_body_with_row_h(body((466.0, 172.0)), CANVAS, size::PREVIEW_ROW_H)
