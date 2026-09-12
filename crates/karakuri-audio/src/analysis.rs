@@ -279,18 +279,9 @@ pub fn level(rms: f32) -> f32 {
 
 /// Log-spaced band edges as `[low, high)` bin ranges.
 ///
-/// Log-spaced because hearing is: eight linear bands would put seven of them
-/// above 2 kHz, where almost nothing a VJ wants to see happens. Each band is
-/// about an octave, so a kick, a snare and a hat land in different ones.
-///
-/// **The top edges are not always reachable.** [`BAND_HIGH_HZ`] is above the
-/// Nyquist frequency of any device running below about 32 kHz, and a headset on
-/// a phone call runs at 8 or 16. The bands are still eight, still ordered, and
-/// still non-empty there — the ones above Nyquist collapse to one bin each at
-/// the top of the spectrum and read the noise floor. That is the honest answer
-/// for a band the device cannot carry, and it is a great deal better than the
-/// alternative this used to do, which was to `clamp` with a low bound above its
-/// high bound and panic while opening the stream.
+/// Log-spaced to reflect auditory octaves. If high band edges exceed the Nyquist
+/// frequency for low sample rates (e.g. 8–16 kHz), upper bands collapse to single
+/// bins at the top of the spectrum rather than producing empty ranges.
 fn band_bins(sample_rate: f32) -> [(usize, usize); MAX_BANDS] {
     let bins = BLOCK / 2 + 1;
     let hz_per_bin = sample_rate / BLOCK as f32;
@@ -577,11 +568,7 @@ mod tests {
         assert!(previous < 0.05, "the envelope is still at {previous}");
     }
 
-    /// **The threshold is relative to what is usual**, and a dense mix is the
-    /// case that proves it: continuous broadband noise moves the spectrum by a
-    /// lot on every single block, so a detector comparing that movement against
-    /// a fixed floor calls every block a hit. Against a running mean, a lot of
-    /// movement all the time is not news.
+    /// Verifies adaptive onset thresholding against continuous broadband noise.
     #[test]
     fn a_continuously_busy_spectrum_is_not_a_hit_on_every_block() {
         let mut analyzer = Analyzer::new(RATE);
@@ -659,13 +646,8 @@ mod tests {
         );
     }
 
-    /// The band edges are a partition: no gaps that a tone can fall into, no
-    /// band that is empty, and they are in order.
-    ///
-    /// **Every rate a device might actually report**, not the three that are
-    /// comfortable. A Bluetooth headset on a call is 8 or 16 kHz, and the top
-    /// band edge is above the Nyquist frequency of both — which used to be a
-    /// panic inside `AudioInput::open` rather than a narrow band.
+    /// Verifies band edges form a valid, non-empty, and contiguous partition across
+    /// hardware sample rates from 8 kHz to 192 kHz.
     #[test]
     fn the_band_edges_are_ordered_non_empty_and_contiguous() {
         for rate in [

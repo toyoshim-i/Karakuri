@@ -106,22 +106,15 @@ pub struct Reading {
     /// stale estimate must stop being evidence, or the lock would keep trimming
     /// towards a grid nobody is measuring any more.
     pub estimate: Estimate,
-    /// **A**, plus however long ago the last publish was: how far in the past
-    /// the instant the estimate describes is, right now. The caller adds the
-    /// output lag to get the lead. See [`crate::lock`].
+    /// Elapsed time since the analysis window midpoint, including buffer age.
+    /// Added to output presentation latency to determine overall lead time.
     pub age: f32,
 }
 
 struct Published {
     frame: AudioFrame,
     estimate: Estimate,
-    /// **A**: half an analysis window, plus whatever of the device buffer
-    /// arrived after the sample this block ends on. Measured at publish.
-    ///
-    /// **Short by the delivery delay** — the gap between the last sample being
-    /// captured and the callback running — which nothing portable measures.
-    /// That residue and every other unmeasurable term end up in one place: the
-    /// operator's offset. See the crate doc's "The two lags".
+    /// Analysis window latency (half window duration plus tail buffer lag).
     analysis_lag: f32,
     at: Instant,
 }
@@ -303,18 +296,12 @@ impl AudioInput {
         self.sample_rate
     }
 
-    /// Tell the tracker where the grid is, so its octave window follows.
-    ///
-    /// **The grid's tempo, every frame** — that is what makes a drifting tempo
-    /// stay in one octave, and it is how the ×2 and ÷2 controls reach the
-    /// tracker: they move the grid, and this carries the window along with it.
-    /// Never waits; see the module doc for why this side of the boundary is an
-    /// atomic and the other is a mutex.
+    /// Sets the target grid tempo in BPM to update the tracking octave window.
     pub fn set_centre_bpm(&self, bpm: f32) {
         self.centre_bpm.store(bpm.to_bits(), Ordering::Relaxed);
     }
 
-    /// This frame's reading. **Never waits**; see the module doc.
+    /// Reads the latest published audio frame and tempo estimate without blocking.
     pub fn read(&mut self) -> Reading {
         if let Ok(mut slot) = self.shared.try_lock() {
             if let Some(published) = slot.take() {
@@ -323,9 +310,7 @@ impl AudioInput {
         }
 
         let Some(published) = &self.last else {
-            // A device is open and has said nothing yet. Zeroes at confidence
-            // 0.0 — every bound parameter keeps its own value, and the grid
-            // free-runs.
+            // Initial state before first publish: return zeroed frame and free-run.
             return Reading {
                 frame: AudioFrame::nothing(self.bands),
                 estimate: Estimate::unknown(0.0),
@@ -333,11 +318,7 @@ impl AudioInput {
             };
         };
 
-        // **Since the publish, not since the last read.** A reader that reset
-        // this would make a dead device look alive for as long as anything kept
-        // asking, which is the failure this whole confidence arrangement exists
-        // to avoid — and it is the one thing here a device is not needed to
-        // check, so it is `aged`'s to answer and a test's to hold.
+        // Age is measured relative to the publish timestamp, not previous read calls.
         aged(published, published.at.elapsed())
     }
 }
@@ -401,6 +382,7 @@ impl std::fmt::Display for AudioError {
 
 impl std::error::Error for AudioError {}
 
+/// Fallback description used when a CPAL device name cannot be queried.
 fn describe(device: &cpal::Device) -> String {
     device
         .description()
@@ -410,43 +392,15 @@ fn describe(device: &cpal::Device) -> String {
         .unwrap_or_else(|| "unnamed input".to_string())
 }
 
-/// **What input devices there are**, by the description [`AudioInput::open`]
-/// matches a selector against and [`AudioInput::description`] hands back — so
-/// a name from this list, passed back to `open`, opens that device.
+/// Returns the list of available audio input device names from the host.
 ///
-/// # A list that exists only inside a refusal is not a list
-///
-/// This enumeration was here before this function was, and the only way to
-/// reach it was to ask for a device that is not there and read
-/// [`AudioError::NoMatch`]'s `available`. That is fine for the operator who
-/// mistyped `--audio-in`, which is what it was written for, and it is not a
-/// listing: **a menu cannot be drawn from the text of an error.** A panel that
-/// wanted to offer the room's inputs would have had to open a device it did
-/// not want, under a name it made up, in the hope of being turned down — and
-/// then parse the sentence it was turned down with. The refusal is a sentence
-/// for a person; this is a value for a program, and the two now come out of
-/// one enumeration rather than agreeing by accident.
-///
-/// **It reads the host every call and caches nothing.** An interface plugged
-/// in between two calls is a different answer, and it should be: the caller
-/// that asks is a hand about to open a menu, which is exactly the moment the
-/// answer has to be current. It is not a thing to ask on a frame path
-/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`),
-/// for the same reason a directory listing is not.
-///
-/// **Empty is a room with no microphone, and it is not a failure** — see
-/// `docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md`. Nothing
-/// here decides what to do about that, because deciding is the caller's: a
-/// machine with no input is a machine where every name answers what it
-/// answered before audio existed.
+/// Enumerates devices directly from the host audio subsystem on demand without caching.
+/// An empty vector indicates no input devices are currently detected.
 pub fn inputs() -> Vec<String> {
     named(&enumerated(&cpal::default_host()))
 }
 
-/// Every input this host offers, in the host's own order. **One enumeration**,
-/// held rather than repeated: [`pick`] needs the devices to match against and
-/// the names to refuse with, and asking the host twice for one press is how
-/// the two answers came to be able to disagree.
+/// Enumerates input devices available on the host.
 fn enumerated(host: &cpal::Host) -> Vec<cpal::Device> {
     host.input_devices()
         .into_iter()
@@ -555,21 +509,8 @@ mod tests {
         }
     }
 
-    /// **The list a menu would draw is the list a refusal carries.**
-    ///
-    /// [`inputs`] exists because the enumeration used to be reachable only by
-    /// being turned down, and the whole point of naming it is that the two
-    /// are one answer. So the check is that they *are* one: ask for a device
-    /// that cannot be there, and what the refusal names is what the listing
-    /// names.
-    ///
-    /// **It needs no device and it is not a test that passes because nothing
-    /// ran.** A machine with no inputs answers `[]` on both sides and the
-    /// assertion still bites — it compares two derivations, not a list
-    /// against a length. A machine with inputs compares the names. What it
-    /// cannot check either way is that a stream opens, which is what no test
-    /// in this crate checks and why everything above [`AudioInput`] is a pure
-    /// function.
+    /// Verifies that the available device list reported in `AudioError::NoMatch`
+    /// matches the enumeration returned by `inputs()`.
     #[test]
     fn the_refusal_names_the_same_inputs_the_listing_does() {
         // Not a substring of any device description anywhere: `pick` matches
@@ -590,13 +531,8 @@ mod tests {
         );
     }
 
-    /// **A device that has stopped delivering reaches zero, and takes
-    /// [`STALE_SECONDS`] to get there.** The values do not move — they are
-    /// still what was measured — and both confidences fall together, because
-    /// they came out of one block at one instant.
-    ///
-    /// This is the arithmetic behind the difference between a quiet room and a
-    /// dead input, which is otherwise only checkable by unplugging something.
+    /// Verifies that staleness decay reduces confidence to zero over `STALE_SECONDS`
+    /// without mutating underlying measured values.
     #[test]
     fn a_publish_that_is_never_replaced_decays_to_nothing_and_says_how_old_it_is() {
         let published = published();

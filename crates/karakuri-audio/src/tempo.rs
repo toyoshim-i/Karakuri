@@ -107,26 +107,14 @@ use std::ops::RangeInclusive;
 /// there are two tempi in the room and no correct answer.
 pub const WINDOW_SECONDS: f32 = 8.0;
 
-/// The lags the autocorrelation searches, as tempi. Wider than a DJ set needs
-/// at both ends, because the peak is allowed to be at any multiple of the real
-/// period — the fold is what brings it back, and it can only bring back what
-/// was searched for.
+/// The range of musical tempos searched during lag autocorrelation.
 ///
-/// **This is not the range of answers.** An answer is whatever lands in the
-/// tracking window, which reaches half an octave past either end of this when
-/// the centre is at an extreme. A grid at 240 bpm is a perfectly good grid;
-/// clamping the fold back into this range would be a lie about the tempo.
+/// Lags outside this range are folded into the active tracking window.
 pub const BPM_RANGE: RangeInclusive<f32> = 60.0..=200.0;
 
-/// Width of the peak-search prior, in octaves, around the window centre.
+/// Width of the Gaussian prior weighting applied around the window centre in octaves.
 ///
-/// **The prior can no longer decide an octave**: every octave of a candidate
-/// folds to the same answer, so preferring one of them over another changes
-/// nothing at all. What is left for it is keeping a *non*-octave multiple from
-/// winning — a peak at three times the real period folds to something 3:2 out
-/// and wrong. At 0.65 octaves, a candidate half an octave from the centre is
-/// weighted 0.74 and the third of it is weighted 0.06, which is a decision
-/// rather than a tie-break.
+/// Suppresses non-octave multiples (such as 3:2 triplet harmonics) during peak selection.
 pub const PRIOR_OCTAVES: f32 = 0.65;
 
 /// The normalised autocorrelation at which a period is believed completely.
@@ -170,20 +158,9 @@ pub fn tracking_window(centre_bpm: f32) -> RangeInclusive<f32> {
     centre / std::f32::consts::SQRT_2..=centre * std::f32::consts::SQRT_2
 }
 
-/// Multiply or divide `bpm` by two until it lands in the window centred on
-/// `centre_bpm`.
+/// Multiplies or divides `bpm` by two until it falls within the octave window centred on `centre_bpm`.
 ///
-/// Exact, because the only factor ever applied is a power of two: a folded
-/// tempo and an unfolded one are the same number of ULPs from the truth.
-///
-/// **A tempo exactly half an octave from the centre has two equally right
-/// answers**, and which one it gets is decided by the last bit of a logarithm.
-/// That is not worth legislating the way [`crate::lock::wrap_beats`]'s half-beat
-/// is, because it cannot alternate the way that one could: folding is
-/// idempotent, so whichever side a given tempo lands on it stays there, and
-/// two successive windows can only disagree if the music is sitting on the
-/// boundary — which means the grid is a full half-octave away from it, and the
-/// ×2 key is the answer to that rather than a rounding rule.
+/// Idempotent and exact using power-of-two factors.
 pub fn fold(bpm: f32, centre_bpm: f32) -> f32 {
     let centre = centre(centre_bpm);
     if !bpm.is_finite() || bpm <= 0.0 {
@@ -233,13 +210,8 @@ pub struct Estimate {
     /// estimates as evidence would reach any threshold in a few frames. This is
     /// what lets it count opinions rather than frames.
     pub revision: u64,
-    /// There is nearly as much novelty *between* this grid's points as on them,
-    /// so the music may be running at twice the grid's tempo.
-    ///
-    /// **A note for the operator, never an input to the grid.** Nothing in this
-    /// crate reads it; the CLI prints it next to the tempo, and the answer to
-    /// it is the ×2 key. A grid moved by this measurement automatically is the
-    /// confidently-wrong-tempo failure this design was built to remove.
+    /// Indicates significant novelty between grid points, suggesting possible 2x tempo.
+    /// Advisory diagnostic for display; not used internally to alter tracking state.
     pub half_tempo_hint: bool,
 }
 
@@ -592,22 +564,9 @@ struct Grid {
     offbeat: f32,
 }
 
-/// Fold the whole novelty window onto one period and read the grid off it.
+/// Folds the novelty window onto one candidate period and determines grid phase and fit.
 ///
-/// **This is what replaced a single DFT bin at the beat frequency**, and the
-/// reason is the octave: `arg(Σ novelty[n]·e^{-2πin/p})` is degenerate at
-/// exactly the periods this estimator now reaches on purpose. At twice the
-/// real pulse spacing consecutive pulses land half a turn apart in that bin and
-/// cancel — the magnitude goes to nothing and the angle is arbitrary — so a
-/// grid deliberately folded an octave low would come back with a random phase
-/// and no confidence, which is the old failure wearing a new hat. Piling the
-/// novelty into bins has no such degeneracy in either direction: two pulses per
-/// period make two humps and the stronger one is picked, one pulse per two
-/// periods makes one.
-///
-/// Which of two equal humps is picked is a *parity* the novelty cannot settle —
-/// it says where a pulse is, not whether that pulse is a downbeat — and that is
-/// left unsettled rather than guessed at.
+/// Accumulates novelty periodically to avoid DFT cancellation across octave-subdivided pulses.
 fn fold_onto(window: &[f32], profile: &mut [f32], period: f32) -> Grid {
     let nothing = Grid {
         phase: 0.0,
@@ -880,17 +839,7 @@ mod tests {
         }
     }
 
-    /// The estimate is accurate enough to *extrapolate* from, which is the
-    /// property the whole design leans on: a grid that is 1% off drifts a
-    /// beat in ten seconds.
-    ///
-    /// **The fast end is where this is hard and where it is checked.** A lag is
-    /// a whole number of hops and 196 bpm is 28 of them, so a period measured
-    /// at its own lag is quantised to about 3% and lands within 0.13% of the
-    /// truth after the parabola — good enough for the grid, and four times
-    /// worse than measuring the same period eight lags further out. A tenth of
-    /// a percent is a beat in eight minutes, and it is what the octave ladder
-    /// buys; without it these tempi miss by two to three times this bound.
+    /// Verifies tempo estimation accuracy across multiple tempos (including fast tempos up to 196 BPM).
     #[test]
     fn the_tempo_is_accurate_enough_to_run_a_grid_off() {
         for bpm in [128.0_f32, 174.0, 196.0] {
@@ -974,19 +923,7 @@ mod tests {
 
     // -- the octave ---------------------------------------------------------
 
-    /// **The whole tempo range, not the three tempi that were convenient**, and
-    /// at several window centres each: an operator's `--bpm` is a guess, and
-    /// every guess inside the window has to give the same answer or the window
-    /// is not doing its job.
-    ///
-    /// This is where an estimator quietly stops working over part of its range,
-    /// and the failure is silent — a half-tempo answer reads as "the grid
-    /// settled somewhere odd" rather than as a bug, so nothing downstream
-    /// complains.
-    ///
-    /// Two window lengths per tempo, because the failure this replaced was
-    /// intermittent: the phase the old check read was numerically arbitrary, so
-    /// which window it was measured over decided the answer.
+    /// Verifies that tempos across the full range resolve correctly without sub-octave folding.
     #[test]
     fn every_tempo_in_the_range_reads_itself_and_not_its_half() {
         let mut wrong = Vec::new();
@@ -1108,11 +1045,7 @@ mod tests {
         samples
     }
 
-    /// **The intended failure, asserted so nobody repairs it into a
-    /// heuristic.** A window centred an octave below the music locks an octave
-    /// below the music — confidently, because the grid does fit: every one of
-    /// its points is a beat. Nothing automatic will move it, and the operator's
-    /// ×2 key is the whole answer.
+    /// Verifies that tracking windows centred an octave away consistently lock to the octave-offset grid.
     #[test]
     fn a_window_centred_an_octave_off_locks_an_octave_off() {
         let estimate = track(&clicks(174.0, 14.0, 0.8), 87.0).estimate();
@@ -1168,14 +1101,7 @@ mod tests {
         }
     }
 
-    /// **The centre moves with the grid, and that is what follows a drift
-    /// across an octave boundary.** The music runs away from a static window
-    /// until it is outside it and folds to half; the same music under a window
-    /// that is told where the grid is stays whole all the way.
-    ///
-    /// The tracker is fed its own answer here, which is what a locked grid
-    /// hands back to it — `crate::lock` is what makes that a slow trim rather
-    /// than a copy, and `tests/beat_tracking.rs` runs the real thing.
+    /// Verifies that moving the tracking window centre dynamically tracks accelerating tempo across octave boundaries.
     #[test]
     fn a_tempo_that_drifts_across_the_boundary_is_followed_when_the_centre_moves() {
         let start = 130.0_f32;

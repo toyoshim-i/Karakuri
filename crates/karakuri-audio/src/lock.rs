@@ -342,28 +342,11 @@ impl BeatLock {
         }
     }
 
-    /// A performer moving the grid an octave: `2.0` for ×2, `0.5` for ÷2.
+    /// Shifts the tracking grid by an octave factor (e.g. 2.0 for ×2, 0.5 for ÷2).
     ///
-    /// **This is the whole escape hatch for a window centred an octave off**,
-    /// and it is deliberately a person's key rather than a measurement. The
-    /// tracker folds every candidate into a window centred on the grid, so a
-    /// grid an octave low stays an octave low however long it listens; moving
-    /// the grid moves the window with it and tracking continues in the new
-    /// octave instead of folding straight back.
-    ///
-    /// Authoritative, like a tap: the state becomes locked and the run of
-    /// evidence is discarded, so the estimator's next few opinions — which are
-    /// still being made in the old octave, for up to a quarter second — cannot
-    /// count towards pulling it back.
-    ///
-    /// The phase does not move. Doubling a tempo subdivides the beats that are
-    /// already there and halving it takes every other one, so the beat the
-    /// performer can see stays where it is either way.
-    ///
-    /// `None` when the result would leave [`crate::tempo::BPM_RANGE`]: nothing
-    /// can be tracked out there, so the grid would be dragged back by the next
-    /// estimate that disagreed with it, and a control that undoes itself two
-    /// seconds later is worse than one that says no.
+    /// Preserves current beat phase while relocating the tracking octave window.
+    /// Resets accumulated agreement and disagreement evidence. Returns `None` if
+    /// the target BPM falls outside [`crate::tempo::BPM_RANGE`].
     pub fn octave(&mut self, factor: f32, oscillator: &Oscillator) -> Option<Correction> {
         let bpm = oscillator.bpm() * factor;
         if !BPM_RANGE.contains(&bpm) {
@@ -520,13 +503,9 @@ fn rate(step: f32, tau: f32) -> f32 {
     1.0 - (-step / tau).exp()
 }
 
-/// A phase difference into `[-0.5, 0.5)`.
+/// Normalizes a beat phase difference into the range `[-0.5, 0.5)`.
 ///
-/// **Exactly half a beat wraps to −0.5**, i.e. to "pull the grid back" rather
-/// than "push it forward". The two are equally correct and the reason to pick
-/// one is that the boundary must not flip: an error hovering at half a beat
-/// would otherwise alternate between the two, and the grid would be yanked in
-/// opposite directions on consecutive frames.
+/// An exact half-beat difference (0.5) wraps to -0.5 to provide consistent pull-back behavior.
 pub fn wrap_beats(x: f32) -> f32 {
     if !x.is_finite() {
         return 0.0;
@@ -621,11 +600,8 @@ mod tests {
         }
     }
 
-    /// **The assertion the whole change exists for.** A grid fed estimates that
-    /// are `A` old, drawn `D` before it is seen, has to put the beat on the
-    /// beat — and the same session without the lead has to be visibly late by
-    /// exactly `A + D`, or this test would pass against a loop that ignored
-    /// both.
+    /// Verifies that the phase-locked loop aligns visible beats with music beats,
+    /// properly compensating for both analysis and output latency.
     #[test]
     fn the_beat_lands_on_the_beat_including_the_analysis_and_output_lag() {
         let bpm = 128.0;
@@ -845,10 +821,8 @@ mod tests {
 
     // -- the octave ---------------------------------------------------------
 
-    /// **The operator's last word.** ×2 doubles the grid and leaves the phase
-    /// alone, and the estimates that arrive in the next quarter second — still
-    /// made in the old octave — do not pull it back, because an instruction
-    /// discards the run of evidence that was building against it.
+    /// Verifies that manual octave shifts immediately scale BPM, preserve phase,
+    /// and discard obsolete estimates from the previous octave window.
     #[test]
     fn the_octave_control_moves_the_grid_and_survives_the_old_octave_s_estimates() {
         let bpm = 87.0;
@@ -882,11 +856,7 @@ mod tests {
         );
     }
 
-    /// **An instruction discards the evidence that was building against it.**
-    /// A run of disagreement nearly long enough to re-acquire, and then the
-    /// operator moves the octave: the estimate that completes the run must not
-    /// land, because what it is evidence against is a grid that no longer
-    /// exists.
+    /// Verifies that an octave shift clears pending relock disagreement counters.
     #[test]
     fn an_octave_move_discards_the_run_of_disagreement_it_interrupts() {
         let mut session = Session::new(120.0);
@@ -919,10 +889,7 @@ mod tests {
         );
     }
 
-    /// **The half-tempo hint moves nothing.** It is a note to the operator, and
-    /// the failure this whole design removed was a measurement like it moving
-    /// the grid on its own — so two estimates differing only in that flag have
-    /// to produce the same correction, byte for byte.
+    /// Verifies that the advisory half-tempo hint does not affect oscillator tracking.
     #[test]
     fn the_half_tempo_hint_does_not_reach_the_grid() {
         let run = |hint: bool| {
@@ -959,16 +926,8 @@ mod tests {
 
     // -- a tempo named by hand ----------------------------------------------
 
-    /// **A hand naming the tempo clears the run of evidence and leaves the
-    /// state exactly as it found it**, which is the whole of what
-    /// [`BeatLock::retarget`] does and the one place it parts company with
-    /// [`BeatLock::octave`].
-    ///
-    /// Both directions, because the two failures are opposite: a set that
-    /// locked a free-running grid would draw *locked* about a room with no
-    /// beat in it and make the beat that arrives afterwards slower to take the
-    /// grid than it would have been; a set that unlocked a tracked one would
-    /// let the next three agreeing estimates jump it.
+    /// Verifies that manually setting a target tempo clears evidence counters
+    /// without mutating current lock state.
     #[test]
     fn a_tempo_named_by_hand_clears_the_run_and_says_nothing_about_the_lock() {
         // A tracked grid three revisions short of being dragged back.
@@ -1020,15 +979,8 @@ mod tests {
         }
     }
 
-    /// **The room takes a hand-set grid back only after a whole fresh run of
-    /// disagreement**, and the same session without the clearing is taken back
-    /// in three — which is what says this test measures the run rather than the
-    /// tempo.
-    ///
-    /// The press lands while the room has already been disagreeing for five
-    /// revisions, because that is the case the clearing is *for*: a lock that
-    /// is trimming has no run to speak of, and one that is being argued with
-    /// has most of one.
+    /// Verifies that manual retargeting requires a full run of fresh evidence
+    /// before automatic relocking can override it.
     #[test]
     fn a_tempo_named_by_hand_costs_the_room_a_whole_run_to_take_the_grid_back() {
         // Estimates until the grid moves again, from a session locked to one
