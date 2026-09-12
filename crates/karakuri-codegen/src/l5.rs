@@ -104,13 +104,9 @@ pub struct L5Shader {
     pub source: String,
     pub uniform_layout: UniformLayout,
     pub uniform_pad_f32: u32,
-    /// **Whether this pass reads a retained frame**, and so whether
-    /// [`BINDING_HELD`] is declared at all.
+    /// Whether this pass reads a retained frame (`BINDING_HELD`).
     ///
-    /// Echoed off the procedure rather than recomputed, because it is what
-    /// decides a cost nobody would pay otherwise: the engine allocates a
-    /// retention only where a slot's answer names one, and this is the half of
-    /// that answer the file gives.
+    /// Informs the engine whether to allocate and bind a frame feedback buffer.
     pub retains: bool,
     /// The Texture slots this pass folds in, in header order — the same order
     /// their bindings are numbered in, so an `edge` resolves to a binding by
@@ -129,12 +125,7 @@ impl L5Shader {
     }
 }
 
-/// `present.wgsl`'s and `master.wgsl`'s triangle, term for term: one oversized
-/// triangle rather than two, no seam and no vertex buffer.
-///
-/// **`clip` is carried as `@builtin(position)`**, which is what makes `texel`
-/// an unfiltered read: `vec2<i32>(in.clip.xy)` is this fragment's own texel and
-/// nothing else's, so a centre tap cannot drift by a filter.
+/// Fullscreen vertex shader generating a single screen-covering triangle.
 const VS: &str = "struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) point_coord: vec2<f32>,

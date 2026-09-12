@@ -29,24 +29,10 @@
 
 pub mod field;
 
-/// **Which of `checked`'s Field slots it actually evaluates**, in the order its
-/// header declared them.
+/// Returns the declared Field slots evaluated by `checked`, ordered by declaration.
 ///
-/// It used to be a yes-or-no — there was one field per Set and one spelling for
-/// it, so "does this procedure call one" was the whole question. A slot is a
-/// name now, and every consumer of this answer needs the name: a splice is
-/// named for its slot, and so are the params it reads.
-///
-/// **Declared, filtered by the cost estimate**, which already walks every block
-/// and counts the calls per slot — a second walk here would be a second answer
-/// to one question, and this file has paid for that shape before. Declaration
-/// order rather than first-call order, so that moving a call in a body does not
-/// reorder a uniform struct.
-///
-/// **Only the slots it evaluates**, because a splice is a body in the caller's
-/// module: a renderer that declares a field and never calls it would otherwise
-/// carry its params and fail to compile if the field's body did — a `.kir`
-/// taking down shaders that have nothing to do with it.
+/// Uses the cost estimate to filter out declared slots that are never evaluated,
+/// ensuring that unused field procedures do not introduce unused parameters or shader dependencies.
 pub(crate) fn evaluated_slots(checked: &karakuri_ir::typed::Checked) -> Vec<&str> {
     let declared = checked.field_slots();
     if declared.is_empty() {
@@ -61,20 +47,9 @@ pub(crate) fn evaluated_slots(checked: &karakuri_ir::typed::Checked) -> Vec<&str
         .collect()
 }
 
-/// **Which `kind Field` procedure fills each Field slot a caller declared**, as
-/// the Set resolved it: the caller's own name for the slot beside the procedure
-/// bound to it.
+/// Binding of declared caller Field slot names to their bound Field procedures.
 ///
-/// **A list rather than one field**, because a Set holds as many as its edges
-/// name. It used to be `Option<&Checked>` — "the Set's field, if it has one" —
-/// which is the same rule the slot notation exists to remove, said in a
-/// signature instead of in the language: a caller with two slots would have
-/// reached one procedure through both however the edges were written.
-///
-/// **Resolved by the Set and never here.** An edge is a name on each end and
-/// this crate has no names, so what arrives is already the answer; a slot with
-/// no entry is one that was never called, since a declared slot nothing binds
-/// is refused before any shader is generated.
+/// Resolved externally by the Set before shader generation.
 pub type Bound<'a> = &'a [(&'a str, &'a Checked)];
 
 /// The splices one caller needs: each bound field's body, once per slot the

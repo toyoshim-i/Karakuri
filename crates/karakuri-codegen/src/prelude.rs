@@ -70,30 +70,20 @@ impl Requirements {
         self.mod_types.insert(ty);
     }
 
-    /// Take on another module's requirements.
+    /// Absorbs another module's prelude requirements into this set.
     ///
-    /// **For a spliced field**, whose body lives in the caller's module and
-    /// therefore needs the caller's prelude to carry its helpers. Without this
-    /// a field calling `sd_torus` produces a call to a function nothing
-    /// emitted, in a shader that checked clean — the prelude being
-    /// demand-driven is exactly what makes the omission silent.
+    /// Used when splicing fields into caller modules so that all required helper
+    /// functions are emitted in the caller's prelude.
     pub fn absorb(&mut self, other: &Requirements) {
         self.builtins.extend(other.builtins.iter().copied());
         self.mod_types.extend(other.mod_types.iter().copied());
     }
 }
 
-/// The helper function name for `mod`/`%` at type `ty`.
+/// Returns the helper function name for `mod`/`%` at type `ty`.
 ///
-/// This is the one builtin whose call-site name is not [`Builtin::name`]
-/// verbatim: WGSL has no function named `mod`, and `%` on `f32` does not have
-/// `mod`'s semantics — `a - b * floor(a / b)` takes the sign of the
-/// **divisor** where WGSL's `%` takes the dividend's, so lowering must insert
-/// a wrapper. Every other
-/// helper in this module is named identically to the `Builtin` it
-/// implements, so a call site can always emit `func.name()(args)` — except
-/// this one, which is why lowering special-cases exactly one variant instead
-/// of guessing from the function's own name.
+/// WGSL `%` on floats takes the sign of the dividend, whereas mathematical `mod`
+/// (`a - b * floor(a / b)`) takes the sign of the divisor. Lowers to a helper wrapper.
 pub fn mod_helper_name(ty: Ty) -> &'static str {
     match ty {
         Ty::Float => "mod_f32",
@@ -104,22 +94,8 @@ pub fn mod_helper_name(ty: Ty) -> &'static str {
     }
 }
 
-/// **`frame_step` — a distance as a fraction of the frame's height, in the
-/// coordinates `tap` takes.**
-///
-/// `master.wgsl`'s `step_uv` with the same arithmetic and one fewer thing
-/// exposed: `.y` is the fraction itself, and `.x` is that fraction scaled by
-/// the aspect ratio so the displacement is isotropic **in texels** at any
-/// aspect ratio. The size comes from `u.viewport`, which is the frame's own,
-/// and it is deliberately not reachable any other way — no ambient carries the
-/// render size, because the render size is not part of the picture and one
-/// frame is rendered at the largest enabled output's size and scaled into the
-/// rest. So the conversion is performed without the number being handed over,
-/// and a `.kir` has no way to write a radius in texels.
-///
-/// Named for the builtin like every other helper here, under
-/// [`crate::lower::mangle_local`]'s namespace rule: nothing this crate emits
-/// can be captured by a name a procedure can spell.
+/// Helper implementing `frame_step(r)`: converts a distance specified as a fraction of
+/// frame height into UV coordinates scaled by aspect ratio for isotropic texel displacement.
 const FRAME_STEP: &str = "\
 // A distance in fractions of the frame's height, in `tap`'s coordinates —
 // isotropic in texels at any aspect ratio. The size is the frame's own and is

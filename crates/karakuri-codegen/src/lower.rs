@@ -81,37 +81,28 @@ pub trait Resolver {
     fn read_seed(&self) -> String;
     fn read_ambient(&self, amb: Ambient) -> String;
 
-    /// A read of a declared `param`, where this resolver spells them
-    /// differently from every other one.
+    /// Reads a declared `param`, allowing custom naming or prefixes.
     ///
-    /// **Only a field overrides this**, and it has to: its body is spliced into
-    /// a caller's shader and reads its params out of the *caller's* uniform, so
-    /// the two sets of names share one struct and are kept apart by a prefix.
-    /// Defaulted rather than required, because there is one such resolver and
-    /// four that want the ordinary spelling.
+    /// Overridden by field resolvers whose spliced bodies access parameters from
+    /// the caller's uniform struct using prefixed identifiers.
     fn read_param(&self, name: &str) -> Option<String> {
         let _ = name;
         None
     }
 
-    /// **The WGSL binding one of the textures an L5 was handed is declared
-    /// under.** Only [`crate::l5`] has such a resolver; the checker refuses a
-    /// fetch anywhere else, so every other implementation says so rather than
-    /// inventing an answer.
+    /// WGSL binding name for an input texture in an L5 pass.
+    ///
+    /// Texture fetches are validated by the IR checker to occur only in L5 compositors.
     fn read_texture(&self, tex: &TexRef) -> String {
         unreachable!("a fetch from {tex:?} is refused outside a `frame` block")
     }
 
-    /// **This fragment's own texel, as an integer coordinate** — what
-    /// `textureLoad` takes, and what makes `texel` unfiltered.
-    ///
-    /// Its own method rather than a constant string, because it is the one part
-    /// of a fetch that depends on how the entry point spelled its position.
+    /// Integer coordinate of the current fragment's texel, used by unfiltered `textureLoad`.
     fn texel_at(&self) -> String {
         unreachable!("`texel` is refused outside a `frame` block")
     }
 
-    /// **The sampler `tap` filters through.**
+    /// Identifier of the sampler used for filtered `tap` reads.
     fn sampler(&self) -> String {
         unreachable!("`tap` is refused outside a `frame` block")
     }

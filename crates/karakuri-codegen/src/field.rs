@@ -71,27 +71,19 @@ pub fn fn_name(slot: &str) -> String {
 /// body's locals.
 const POINT: &str = "_field_p";
 
-/// The clock, passed in rather than read.
+/// The clock, passed as a parameter rather than read globally.
 ///
-/// **A field cannot know how its caller spells `t`.** An L1 reads it from
-/// `step_args`, because it is substepped and each substep lands on its own
-/// instant; everything else reads `u.t`. One spliced body cannot say both, and
-/// generating the body once per caller would be the same text compiled several
-/// ways for no reason. So the caller passes its own answer at the call site —
-/// see `lower::lower_call`, which asks its resolver for exactly the spelling it
-/// would have used itself.
+/// Caller passes its own time representation at the call site (e.g. L1 reads substepped time
+/// from `step_args`, whereas L2/L4 reads `u.t`).
 const T: &str = "_field_t";
 const BEATS: &str = "_field_beats";
 
 pub struct FieldShader {
-    /// **The caller's name for this field**, which is what its function and its
-    /// params are addressed under. Carried rather than recomputed, because
-    /// every consumer needs it and the mangling rules are not theirs to know.
+    /// The caller's name for this field slot, under which functions and parameters are scoped.
     pub slot: String,
     /// The function, ready to splice ahead of a caller's entry points.
     pub source: String,
-    /// What the body requires of the prelude. **The caller's requirements have
-    /// to absorb these**, since the helpers live in the caller's module.
+    /// Prelude requirements for the field body, absorbed into the caller module.
     pub requirements: Requirements,
     /// Declared `param` names, in order, for the caller's uniform.
     pub params: Vec<(String, &'static str)>,

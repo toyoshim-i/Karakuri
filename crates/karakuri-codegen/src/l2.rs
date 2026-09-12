@@ -99,14 +99,9 @@ pub struct L2Shader {
     /// [`L2Shader::emits`] for the same reason — the next node in the chain
     /// compiles against this node's buffer and has to name the same fields.
     pub synthetic: Synthetic,
-    /// **Whether this node takes a second geometry**, so the engine knows to
-    /// bind one — `uses <name> : Geometry` on the header.
+    /// Whether this node binds a second geometry (`uses <name> : Geometry`).
     ///
-    /// A flag rather than the name, because by here the name has done its work:
-    /// it decided which spellings in the `deform` were reads of the far side,
-    /// and the buffer it addresses is this node's one extra input either way.
-    /// **Which** geometry fills it is the Set's answer and never appears in a
-    /// shader at all.
+    /// Directs the engine to bind an additional geometry storage buffer.
     pub uses: bool,
     /// The declared `amplify` factor, echoed back so the engine sizes the
     /// output buffer from the same number the shader loops to. `None` is the
@@ -377,13 +372,7 @@ impl Resolver for L2Resolver {
         format!("dst[i].{}", attr.name())
     }
 
-    /// **The far element, at the same slot index.** That is the whole of the
-    /// correspondence and the whole of why both sources must be static: `seed`
-    /// is the slot index only while nothing compacts, and a compaction would
-    /// pair each element with a stranger without changing a line of this.
-    ///
-    /// Indexed by `i` rather than by the loop's element index, because a node
-    /// that both uses a geometry and amplifies is refused — see `check_header`.
+    /// Reads an attribute from the far element at matching slot index `i`.
     fn read_far(&self, attr: Attr) -> String {
         debug_assert!(
             self.uses,

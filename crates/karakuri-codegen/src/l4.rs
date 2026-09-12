@@ -99,18 +99,6 @@ pub struct L4Shader {
     pub element_layout: ElementLayout,
     /// The bind group index this shader reads the camera at, or `None` if it
     /// never reads one.
-    ///
-    /// **The index is the shader's to state rather than a constant**, because
-    /// the groups below it are not always there: a per-element shader binds its
-    /// element buffers at [`group::ATTRS`] and a fullscreen one binds nothing,
-    /// so a fixed number would leave a *hole* in one of the two — group 2 bound
-    /// with group 1 empty. That is the reason, and it is the only one: wgpu
-    /// accepts a pipeline layout naming a group the module does not use, so an
-    /// unconditional trailing camera group would have been legal and merely
-    /// untidy. `None` is therefore about saying what is true rather than about
-    /// avoiding a rejection — an L4 that never projects and never marches reads
-    /// no camera, and a hand-written test fixture writing `clip =
-    /// vec4(position, 1.0)` is exactly that.
     pub camera_group: Option<u32>,
 }
 
@@ -390,12 +378,7 @@ fn corner_of(i: u32) -> vec2<f32> {
 }
 ";
 
-/// **The two per-element identity values, and what the geometry can offer.**
-///
-/// Grouped rather than passed as three booleans because they are answers to one
-/// question asked of one procedure — which identity does this shader need, and
-/// is it there to be had — and three flags threaded through three functions is
-/// three chances to hand one of them to the wrong parameter.
+/// Per-element identity metadata passed from vertex to fragment stages.
 #[derive(Clone, Copy)]
 struct Identity {
     /// The fragment block reads `seed`, so it needs a varying.
@@ -601,17 +584,7 @@ fn vertex_entry(
     out
 }
 
-/// The whole vertex stage for [`Topology::Fullscreen`], generated rather than
-/// lowered — the procedure has no `vertex` block to lower.
-///
-/// **One triangle, not two.** Three vertices covering the frame beat a quad's
-/// six: no diagonal seam where two triangles meet, and the rasterizer walks one
-/// primitive. The corners are (-1,-1), (3,-1) and (-1,3) in NDC, which is the
-/// standard trick — the triangle is twice the frame and the half outside it is
-/// clipped for free.
-///
-/// `point_coord` comes out 0..1 across the *frame*, which is the same sentence
-/// it already means for a sprite and for a stroke: 0..1 across the primitive.
+/// Vertex stage for [`Topology::Fullscreen`], emitting a single covering triangle (-1,-1), (3,-1), (-1,3) in NDC.
 const FULLSCREEN_VS: &str = "struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) point_coord: vec2<f32>,
@@ -642,62 +615,10 @@ const FULLSCREEN_RAY: &str =
     let ray = normalize(cam.fwd + cam.right * _ndc.x + cam.up * _ndc.y);
 ";
 
-/// The quad expansion for [`Topology::Lines`]: the same six corners, laid over
-/// the segment from `_clip` to `_clip_b` instead of around a point.
+/// Quad expansion for [`Topology::Lines`]: expands line segments into screen-space thick quads.
 ///
-/// **The work happens in pixels**, because the direction of the segment and
-/// the perpendicular the width is laid along are both properties of the
-/// projected picture, not of the world, so both ends are divided through by
-/// `w` first. What goes back out is multiplied by `w` again, which is what
-/// makes the rasterizer's own divide land on the pixel position computed here.
-///
-/// **`point_rate` is a fraction of the target's height, so it is turned into
-/// pixels here** — `_point_rate * u.viewport.y` — and only then laid across
-/// the segment. That one multiply is the whole difference from the pixel
-/// width this expansion used to be given, and it is what makes a stroke the
-/// same fraction of the frame at any target size. Height rather than the
-/// segment's own axis, so that a change of aspect ratio does not change a
-/// stroke's width, and so that a sprite and a stroke still mean the same
-/// number in the same unit.
-///
-/// **The width is floored at a pixel and the fragment stage is told what the
-/// floor took**, exactly as a sprite's side is. The factor is the width itself
-/// rather than its square: a stroke thinner than a pixel is short of coverage
-/// across its width and along none of its length, which is the one place the
-/// two topologies differ here.
-///
-/// **Nothing here interpolates**, and an earlier version of this comment said
-/// it did. `corner_of` returns 0.0 or 1.0 in each component, so every `mix`
-/// below is *selection*: each of the six vertices belongs to one end of the
-/// segment and takes that end's `w` and that end's divided `z`. The values in
-/// between are the rasterizer's, produced from the six it is given.
-///
-/// What keeps the stroke straight on screen is the last line rather than the
-/// mixes — `p_px / half_vp * w` cancels the divide the rasterizer is about to
-/// perform, so the vertex lands on the pixel computed here whatever `w` is.
-/// Deleting that `* w` is what a depth-varying segment fails on.
-///
-/// **A segment with an endpoint behind the eye is dropped, not clipped.**
-/// Doing it properly means intersecting the segment with the near plane and
-/// moving the endpoint there, which is real work; the rasterizer would have
-/// done it for free had the divide not already happened here, and the divide
-/// is what makes a width measured on the screen expressible at all. The honest failure is a
-/// missing stroke rather than one drawn through the camera.
-///
-/// **A zero-length segment needs no guard, and draws nothing.** Both ends land
-/// on the same pixel, every corner offsets from it by the perpendicular of a
-/// zero direction, and the quad is zero-area. That is the arithmetic behaving;
-/// what it is *not* is the same behaviour a sprite has, and the difference
-/// reaches the operator. A sprite at zero velocity is still a sprite; a stroke
-/// whose two ends coincide is gone. Any parameter that scales the distance
-/// between the ends therefore has a value that blanks the material, and its
-/// declared range should not include it — see `examples/drift_streaks.kir`.
-///
-/// A second way for a stroke to vanish silently, and the only one with no
-/// operator in front of it: `length(seg)` overflows `f32` above roughly 1.8e19
-/// pixels, making `dir` zero and the quad zero-width. Reaching it takes a
-/// vertex essentially at the eye, since `w` is only guarded against being
-/// non-positive rather than against being tiny.
+/// Computes screen-space perpendiculars in pixels based on viewport height and `point_rate`.
+/// Segments with endpoints behind the eye are dropped.
 const SEGMENT_EXPANSION: &str = "\
     let corner = corner_of(corner_idx);
     let half_vp = u.viewport * 0.5;
@@ -729,36 +650,10 @@ const WEIGHTED_FS_OUT: &str = "struct FsOut {
 
 ";
 
-/// The whole difference between the two blend modes, as WGSL: an `additive`
-/// fragment returns the colour it computed and a `weighted` one returns these
-/// two accumulations of it.
+/// Epilogue for weighted blended transparency fragment shaders.
 ///
-/// **Alpha is opacity here and is clamped**, where `additive` reads it as
-/// emission strength and lets it past 1.0. `prod(1 - a)` stops meaning "what is
-/// still visible behind this" the moment a term goes negative, so an alpha of
-/// 1.5 would not merely be bright — it would put negative light in the frame,
-/// and two of them would put it back. The clamp is the mode's contract, stated
-/// in `docs/ir-spec.md` beside the declaration.
-///
-/// **The weight's absolute scale is nearly arbitrary, and is chosen for `f16`.**
-/// The resolve divides the colour sum by the weight sum, so multiplying every
-/// weight by a constant changes almost nothing it computes — which is why the
-/// `3e3` factor the published weight functions carry is absent here. Dropping it
-/// is not optional: this pipeline is unbounded linear HDR, colours of 20 are
-/// ordinary, and an `Rgba16Float` target overflows to infinity a little past
-/// 65504. Keeping the weight in `(0, 1]` makes the accumulation of an HDR colour
-/// no larger than the accumulation of the colour itself.
-///
-/// **"Almost" is load-bearing.** The one place the cancellation does not reach
-/// is the guard on the resolve's divide, which is compared against the weight
-/// sum directly — so changing this scale moves what that guard eats. It was
-/// missed once and cost thin material its colour; see `oit_resolve.wgsl`, where
-/// the floor is now tied to `f16`'s smallest representable value rather than to
-/// any weight.
-///
-/// What survives the scaling is the *ratio*, and that is what the floor here
-/// sets: a fragment at the far plane counts a hundredth of one at the near
-/// plane.
+/// Accumulates color and transmittance weights scaled for `f16` HDR precision.
+/// Clamps alpha to `[0.0, 1.0]` to guarantee monotonic occlusion.
 const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
     let _w = _a * max(1e-2, pow(1.0 - _depth01, 3.0));
     var _out: FsOut;
@@ -767,28 +662,7 @@ const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
     return _out;
 ";
 
-/// Where this fragment sits between the camera's near and far planes, in
-/// `[0, 1]`.
-///
-/// **Linear in view depth, not in the depth buffer's.** NDC depth would need no
-/// uniform at all — it is already `[0, 1]` — and it is useless for this: with the
-/// default 0.1 near and 100 far it crushes everything past ten units into the
-/// last percent of its range, so a whole scene would land on one weight. This
-/// costs a `vec2` and keeps the two ends of the frustum a hundred to one apart.
-///
-/// **The consequence is stated rather than hidden.** Material occupying a thin
-/// slice of a wide frustum gets near-equal weights and the resolve approaches a
-/// plain alpha-weighted average. That degradation is graceful — what still
-/// separates `weighted` from `additive` there is that the layer *occludes* —
-/// and the operator's lever on it is the camera's `far`.
-///
-/// **The degenerate end of that is a procedure that never projects.** An L4
-/// writing `clip = vec4(position, 1.0)` — legal, and what a hand-written test
-/// fixture usually does — leaves `w` at 1 for every element, so every fragment
-/// lands on one depth and every weight is the same. There is no diagnostic and
-/// there should not be: `w` is whatever the procedure put there, and a renderer
-/// that declines to project is asking for a flat picture. It gets one, with the
-/// occlusion intact and the ordering gone.
+/// Evaluates linear view depth between camera near and far planes in `[0, 1]`.
 const WEIGHTED_DEPTH: &str =
     "    let _depth01 = clamp((in.view_depth - cam.depth_range.x) * cam.depth_range.y, 0.0, 1.0);\n";
 
