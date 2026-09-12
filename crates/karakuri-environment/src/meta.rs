@@ -42,6 +42,7 @@
 
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
+use karakuri_operation::Layer as OpLayer;
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
 use karakuri_store::record::{Layer, Record};
@@ -73,29 +74,48 @@ pub fn layer_of(kind: Kind) -> Layer {
     }
 }
 
+/// The operation [`OpLayer`] an engine [`Kind`] names.
+pub fn op_layer_of(kind: Kind) -> OpLayer {
+    match kind {
+        Kind::L1 => OpLayer::L1,
+        Kind::L2 => OpLayer::L2,
+        Kind::L3 => OpLayer::L3,
+        Kind::L4 => OpLayer::L4,
+        Kind::Field => OpLayer::Field,
+        Kind::L5 => OpLayer::L5,
+    }
+}
+
+/// The engine [`Kind`] an operation [`OpLayer`] names.
+pub fn kind_of_op(layer: OpLayer) -> Kind {
+    match layer {
+        OpLayer::L1 => Kind::L1,
+        OpLayer::L2 => Kind::L2,
+        OpLayer::L3 => Kind::L3,
+        OpLayer::L4 => Kind::L4,
+        OpLayer::Field => Kind::Field,
+        OpLayer::L5 => Kind::L5,
+    }
+}
+
+/// Convert a store record [`Layer`] to an operation [`OpLayer`].
+pub fn record_to_op(layer: Layer) -> OpLayer {
+    op_layer_of(kind_of(layer))
+}
+
+/// Convert an operation [`OpLayer`] to a store record [`Layer`].
+pub fn op_to_record(layer: OpLayer) -> Layer {
+    layer_of(kind_of_op(layer))
+}
+
 /// The layer name as an operator writes it.
 pub fn kind_name(kind: Kind) -> &'static str {
-    match kind {
-        Kind::L1 => "L1",
-        Kind::L2 => "L2",
-        Kind::L3 => "L3",
-        Kind::L4 => "L4",
-        Kind::Field => "Field",
-        Kind::L5 => "L5",
-    }
+    kind.name()
 }
 
 /// Look up a layer by name as written in user input or Set files.
 pub fn layer_named(name: &str) -> Option<Kind> {
-    Some(match name {
-        "L1" => Kind::L1,
-        "L2" => Kind::L2,
-        "L3" => Kind::L3,
-        "L4" => Kind::L4,
-        "Field" => Kind::Field,
-        "L5" => Kind::L5,
-        _ => return None,
-    })
+    name.parse().ok()
 }
 
 /// The metadata file format version this build writes, on the `meta` record —
@@ -201,4 +221,62 @@ pub fn put_meta(
     );
     eprintln!("{said}");
     Some(said)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use karakuri_ir::Kind;
+    use karakuri_operation::Layer as OpLayer;
+    use karakuri_store::record::Layer as RecordLayer;
+
+    #[test]
+    fn layer_conversions_and_contracts_are_coherent() {
+        for kind in Kind::ALL {
+            let record = layer_of(kind);
+            let op = op_layer_of(kind);
+
+            // Inverses
+            assert_eq!(kind_of(record), kind);
+            assert_eq!(kind_of_op(op), kind);
+            assert_eq!(record_to_op(record), op);
+            assert_eq!(op_to_record(op), record);
+
+            // Display and names match
+            assert_eq!(kind.name(), kind_name(kind));
+            assert_eq!(kind.to_string(), kind.name());
+            assert_eq!(op.to_string(), kind.name());
+            assert_eq!(record.to_string(), kind.name());
+
+            // Parsing roundtrip
+            assert_eq!(kind.name().parse::<Kind>().unwrap(), kind);
+            assert_eq!(kind.name().parse::<OpLayer>().unwrap(), op);
+            assert_eq!(kind.name().parse::<RecordLayer>().unwrap(), record);
+            assert_eq!(layer_named(kind.name()), Some(kind));
+
+            // Case-insensitivity
+            assert_eq!(kind.name().to_lowercase().parse::<Kind>().unwrap(), kind);
+            assert_eq!(kind.name().to_lowercase().parse::<OpLayer>().unwrap(), op);
+            assert_eq!(
+                kind.name().to_lowercase().parse::<RecordLayer>().unwrap(),
+                record
+            );
+            assert_eq!(layer_named(&kind.name().to_lowercase()), Some(kind));
+
+            // Frozen serde serialization contract: JSON string must match Display / name
+            let serialized = serde_json::to_string(&record).expect("record::Layer serialization");
+            assert_eq!(serialized, format!("\"{}\"", kind.name()));
+            let deserialized: RecordLayer =
+                serde_json::from_str(&serialized).expect("record::Layer deserialization");
+            assert_eq!(deserialized, record);
+        }
+    }
+
+    #[test]
+    fn invalid_layer_strings_fail_parsing() {
+        assert!("L0".parse::<Kind>().is_err());
+        assert!("L6".parse::<OpLayer>().is_err());
+        assert!("invalid".parse::<RecordLayer>().is_err());
+        assert_eq!(layer_named("unknown"), None);
+    }
 }

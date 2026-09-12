@@ -1305,14 +1305,7 @@ const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
 /// falling to a default, which is what the two places that used to map this by
 /// hand could not promise.
 fn record_layer(kind: karakuri_ir::Kind) -> Layer {
-    match kind {
-        karakuri_ir::Kind::L1 => Layer::L1,
-        karakuri_ir::Kind::L2 => Layer::L2,
-        karakuri_ir::Kind::L3 => Layer::L3,
-        karakuri_ir::Kind::L4 => Layer::L4,
-        karakuri_ir::Kind::Field => Layer::Field,
-        karakuri_ir::Kind::L5 => Layer::L5,
-    }
+    karakuri_environment::meta::layer_of(kind)
 }
 
 /// `--publish name=L4:0:exposure[0.2..0.8]`, or `--publish level=exposure[0..2]`

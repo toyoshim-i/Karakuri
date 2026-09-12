@@ -116,6 +116,56 @@ impl Kind {
         Kind::Field,
         Kind::L5,
     ];
+
+    /// Name of the layer kind as used in source declarations and error messages.
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Kind::L1 => "L1",
+            Kind::L2 => "L2",
+            Kind::L3 => "L3",
+            Kind::L4 => "L4",
+            Kind::Field => "Field",
+            Kind::L5 => "L5",
+        }
+    }
+}
+
+impl std::fmt::Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// An error returned when parsing a [`Kind`] from a string fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseKindError(String);
+
+impl std::fmt::Display for ParseKindError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unknown layer kind: `{}`; expected one of L1, L2, L3, L4, Field, L5",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ParseKindError {}
+
+impl std::str::FromStr for Kind {
+    type Err = ParseKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_uppercase().as_str() {
+            "L1" => Ok(Kind::L1),
+            "L2" => Ok(Kind::L2),
+            "L3" => Ok(Kind::L3),
+            "L4" => Ok(Kind::L4),
+            "FIELD" => Ok(Kind::Field),
+            "L5" => Ok(Kind::L5),
+            _ => Err(ParseKindError(s.to_string())),
+        }
+    }
 }
 
 /// **The incoming texture an L5 is handed**, reserved in a `frame` block the
