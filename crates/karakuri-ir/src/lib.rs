@@ -7,10 +7,7 @@
 //!
 //! The pipeline stages this crate owns are the first four:
 //!
-//! 1. parse
-//! 2. type check
-//! 3. contract check
-//! 4. cost estimation
+//! 1. parse 2. type check 3. contract check 4. cost estimation
 //!
 //! Stages 5 through 8 (WGSL generation, background compilation, probe
 //! measurement, promotion) belong to `karakuri-codegen` and `karakuri-engine`.

@@ -12,11 +12,11 @@
 //! parse time saves a full round trip through type checking. See the module
 //! docs on those two call sites below for more.
 //!
-//! Recovery happens at two granularities: a broken header declaration or
-//! block is skipped up to the next recognized keyword (or `}`), and a broken
-//! statement is skipped up to the next `;` or `}`. Everything else — a
-//! missing token inside an otherwise-recognizable construct — is patched with
-//! a placeholder so a single mistake doesn't swallow the rest of the file.
+//! Recovery happens at two granularities: a broken header declaration or block
+//! is skipped up to the next recognized keyword (or `}`), and a broken
+//! statement is skipped up to the next `;` or `}`. Everything else — a missing
+//! token inside an otherwise-recognizable construct — is patched with a
+//! placeholder so a single mistake doesn't swallow the rest of the file.
 
 use crate::ast::{
     AmplifyDecl, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Param, Proc,
@@ -30,8 +30,8 @@ use crate::span::Span;
 /// Parse one `.kir` file.
 ///
 /// Returns every syntax error found, not just the first: a generated procedure
-/// with four mistakes should produce four diagnostics so a repair prompt can fix
-/// them in one pass.
+/// with four mistakes should produce four diagnostics so a repair prompt can
+/// fix them in one pass.
 pub fn parse(src: &str) -> IrResult<Proc> {
     let (tokens, lex_errors) = lexer::lex(src);
     let mut parser = Parser {
@@ -47,8 +47,8 @@ pub fn parse(src: &str) -> IrResult<Proc> {
     }
 }
 
-/// Header/block keywords. Declaration recovery scans forward to the next one
-/// of these (or `}`), so one bad declaration does not eat the rest of the file.
+/// Header/block keywords. Declaration recovery scans forward to the next one of
+/// these (or `}`), so one bad declaration does not eat the rest of the file.
 const DECL_KEYWORDS: [&str; 19] = [
     "kind", "topology", "capacity", "amplify", "retains", "uses", "param", "emit", "consumes",
     "blend", "spawn", "element", "deform", "mask", "camera", "field", "vertex", "fragment",
@@ -77,8 +77,8 @@ impl Parser {
         matches!(self.peek().kind, TokKind::Eof)
     }
 
-    /// Advance and return the consumed token. A no-op at `Eof`, so callers
-    /// can always advance speculatively without checking first.
+    /// Advance and return the consumed token. A no-op at `Eof`, so callers can
+    /// always advance speculatively without checking first.
     fn advance(&mut self) -> Token {
         let tok = self.tokens[self.pos].clone();
         if !matches!(tok.kind, TokKind::Eof) {
@@ -87,8 +87,8 @@ impl Parser {
         tok
     }
 
-    /// Span of the most recently consumed token. Used to close out a span
-    /// after an `expect` that may or may not have consumed anything.
+    /// Span of the most recently consumed token. Used to close out a span after an
+    /// `expect` that may or may not have consumed anything.
     fn prev_span(&self) -> Span {
         if self.pos == 0 {
             Span::EMPTY
@@ -108,8 +108,8 @@ impl Parser {
         )
     }
 
-    /// Tokens a best-effort literal/expression recovery should never eat,
-    /// because they close a structure some enclosing parser still needs.
+    /// Tokens a best-effort literal/expression recovery should never eat, because
+    /// they close a structure some enclosing parser still needs.
     fn is_stopper(&self, kind: &TokKind) -> bool {
         matches!(
             kind,
@@ -132,8 +132,8 @@ impl Parser {
             .push(IrError::parse(span, message).with_hint(hint));
     }
 
-    /// Consume `want` if present; otherwise report it missing and leave the
-    /// stream untouched, so the caller can decide what to try next.
+    /// Consume `want` if present; otherwise report it missing and leave the stream
+    /// untouched, so the caller can decide what to try next.
     fn expect(&mut self, want: TokKind, desc: &str) -> bool {
         if self.peek().kind == want {
             self.advance();
@@ -250,10 +250,10 @@ impl Parser {
         val as u32
     }
 
-    /// `for` bounds are stored as plain `i32` in the AST (see `Stmt::For`),
-    /// so anything other than a literal integer — a param, an ambient, an
-    /// arithmetic expression — cannot be represented and is a parse error
-    /// here rather than a later "not a constant" check.
+    /// `for` bounds are stored as plain `i32` in the AST (see `Stmt::For`), so
+    /// anything other than a literal integer — a param, an ambient, an arithmetic
+    /// expression — cannot be represented and is a parse error here rather than a
+    /// later "not a constant" check.
     fn parse_int_bound(&mut self) -> i32 {
         let neg = if self.peek().kind == TokKind::Minus {
             self.advance();
@@ -455,10 +455,10 @@ impl Parser {
 
     // -- header declarations -----------------------------------------------
 
-    /// Always returns a `Kind`, even on failure: an invalid or missing value
-    /// is already reported here, and the caller treating `kind` as present
-    /// would otherwise cascade into a redundant "missing `kind`" diagnostic
-    /// at the end of `parse_proc`.
+    /// Always returns a `Kind`, even on failure: an invalid or missing value is
+    /// already reported here, and the caller treating `kind` as present would
+    /// otherwise cascade into a redundant "missing `kind`" diagnostic at the end of
+    /// `parse_proc`.
     fn parse_kind(&mut self) -> Kind {
         self.advance(); // "kind"
         match self.expect_ident("`L1`, `L2`, `L3`, `L4`, `L5` or `Field`") {
@@ -528,10 +528,10 @@ impl Parser {
 
     /// `amplify <factor>` — a bare literal, unlike `capacity`'s range.
     ///
-    /// **There is no range because there is nothing to override it with.** A
-    /// Set turns `capacity` because how much material to make is the operator's
-    /// question; how many copies a kaleidoscope has is the procedure's own, and
-    /// making it adjustable would resize a buffer from a fader.
+    /// There is no range because there is nothing to override it with. A Set turns
+    /// `capacity` because how much material to make is the operator's question; how
+    /// many copies a kaleidoscope has is the procedure's own, and making it
+    /// adjustable would resize a buffer from a fader.
     fn parse_amplify(&mut self) -> AmplifyDecl {
         let start = self.advance().span; // "amplify"
         let factor = self.parse_u32_literal();
@@ -541,18 +541,18 @@ impl Parser {
         }
     }
 
-    /// `uses <name> : Geometry` / `uses <name> : Field` / `uses <name> :
-    /// Camera` — one named input this node takes.
+    /// `uses <name> : Geometry` / `uses <name> : Field` / `uses <name> : Camera` —
+    /// one named input this node takes.
     ///
-    /// **The name is the procedure's and the binding is the Set's.** So this
-    /// declaration says what the file needs and never which node supplies it:
-    /// a `.kir` that named a node would be a procedure coupled to one Set, and
-    /// it would stop being a library part. See [`UsesDecl`].
+    /// The name is the procedure's and the binding is the Set's. So this
+    /// declaration says what the file needs and never which node supplies it: a
+    /// `.kir` that named a node would be a procedure coupled to one Set, and it
+    /// would stop being a library part. See [`UsesDecl`].
     ///
     /// The type is carried rather than checked and dropped, because every rule
-    /// downstream is about *which* one — an L3 refuses a geometry slot because
-    /// an L3 makes no geometry, and accepts a Field slot because evaluating a
-    /// field is not making geometry. See [`SlotTy`].
+    /// downstream is about *which* one — an L3 refuses a geometry slot because an
+    /// L3 makes no geometry, and accepts a Field slot because evaluating a field is
+    /// not making geometry. See [`SlotTy`].
     fn parse_uses(&mut self) -> Option<UsesDecl> {
         let start = self.advance().span; // "uses"
         let (name, name_span) = self.expect_ident("a name for the input this procedure takes")?;
@@ -606,9 +606,9 @@ impl Parser {
     ///
     /// The range is mandatory per spec, but a missing `[` is a mistake real
     /// generations make, so this recovers instead of losing the rest of the
-    /// declaration: if `[` is absent it looks straight for `=` and parses
-    /// the default with a placeholder `0.0..0.0` range, reporting exactly one
-    /// error rather than cascading into the default-value expression.
+    /// declaration: if `[` is absent it looks straight for `=` and parses the
+    /// default with a placeholder `0.0..0.0` range, reporting exactly one error
+    /// rather than cascading into the default-value expression.
     fn parse_param(&mut self) -> Option<Param> {
         let start = self.advance().span; // "param"
         let (name, _) = self.expect_ident("a parameter name")?;
@@ -720,8 +720,8 @@ impl Parser {
         }
     }
 
-    /// Parses `{ <stmt>* }`. On a missing `}` before end of file this is
-    /// where "unterminated block" is reported.
+    /// Parses `{ <stmt>* }`. On a missing `}` before end of file this is where
+    /// "unterminated block" is reported.
     fn parse_brace_stmts(&mut self) -> (Vec<Stmt>, Span) {
         let open_span = self.peek().span;
         if !self.expect(TokKind::LBrace, "{") {
@@ -1026,12 +1026,11 @@ impl Parser {
         expr
     }
 
-    /// `id` is a reserved word rather than an undefined name, so rejecting it
-    /// here is a lexical matter and a repair prompt gets the hint on the first
-    /// pass. Signal-bus names are not reserved and cannot be judged here: a
-    /// procedure may legally declare `param energy`, and whether a bare
-    /// `energy` resolves is a question about declarations, which is name
-    /// resolution's job.
+    /// `id` is a reserved word rather than an undefined name, so rejecting it here
+    /// is a lexical matter and a repair prompt gets the hint on the first pass.
+    /// Signal-bus names are not reserved and cannot be judged here: a procedure may
+    /// legally declare `param energy`, and whether a bare `energy` resolves is a
+    /// question about declarations, which is name resolution's job.
     fn parse_primary(&mut self) -> Expr {
         match self.peek().kind.clone() {
             TokKind::LParen => {

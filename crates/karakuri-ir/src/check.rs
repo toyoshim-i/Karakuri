@@ -14,90 +14,82 @@
 //! case a real `.kir` file hits. Each is called out at its point of use; the
 //! summary:
 //!
-//! - **`consumes` ⊆ `emit`** is, read literally, a cross-proc rule: `emit` is
-//!   declared by the L1 procedure and `consumes` by the L4 procedure that
-//!   will be paired with it in a Set, and `check` only ever sees one
-//!   procedure. Applying it within a single proc would reject the spec's own
-//!   `soft_points` example (it consumes `position`, which `soft_points`
-//!   never declares in `emit`). This pass therefore runs the subset check
-//!   only when a procedure declares *both* lists itself (which only an L1
-//!   procedure can meaningfully do, since only L1 has persistent per-element
-//!   state to emit); an L4 procedure's `consumes` is recorded as-is and left
-//!   for Set-composition time, outside this crate's scope.
-//! - **Attribute derivation splits the `consumes ⊆ emit` check in two, and
-//!   this pass keeps only the half one file can answer.** `age` and
-//!   `velocity` are synthesised where nothing emits them: the engine gives
-//!   `age` a `birth_t` slot and `velocity` a slot the L1 writes, so an L1
-//!   consuming either without emitting it is asking for something the Set
-//!   will provide rather than making a contradiction. What stays here is the
-//!   part that is genuinely local — `velocity` is derived *from* `position`,
-//!   and whether this procedure emits `position` is a one-file question. See
-//!   [`check_consumes_emitted`]. Whether anybody at all emits a consumed
-//!   attribute is `Set::build_many`'s check, at the first point that holds
-//!   every procedure at once.
-//! - **Signal-bus names are not enumerable here.** `karakuri-signal`'s bus
-//!   accepts *any* name (falling back to a zero-confidence synthesized
-//!   sample), so there is no closed vocabulary to match against. Consequently
-//!   every bare identifier that fails to resolve to a local, a param, an
-//!   attribute, or an ambient is reported as an attempted signal-bus read
-//!   with the `bind` hint — that is the only diagnosis available once the
-//!   closed categories are exhausted, and it is also what the spec asks for.
-//! - **`point_rate` is required unconditionally in an L4 `vertex` block.**
-//!   The rule as stated ("required when the source topology is points") is a
-//!   property of the *paired* L1 procedure's `topology`, which an L4 file
-//!   never declares and this pass never sees. It stays unconditional now that
-//!   `lines` exists, because it means something under both: a sprite's extent
-//!   and a stroke's width are the same number in the same units.
-//! - **What an L4 draws is inferred here, not declared.** Assigning
-//!   [`Output::ClipB`](crate::ast::Output::ClipB) — a segment's far end — is
-//!   the only thing that could make a procedure a line renderer, so this pass
-//!   reads it off the `vertex` block and records it in
-//!   [`Checked::topology`](crate::typed::Checked::topology), which is
-//!   otherwise an L1 field. Whether it agrees with the L1 it is paired with is
-//!   **not checked anywhere**, and deliberately: a segment gets both of its
-//!   ends from attributes the L4 consumes, so a renderer needs nothing of the
-//!   geometry beyond what the `emit`/`consumes` check at Set composition
-//!   already covers. Requiring agreement would forbid one L1 being drawn as
-//!   sprites by one L4 and as strokes by another.
-//! - **Attribute names are only readable/writable when declared.** The spec
-//!   states this explicitly for L4 ("Consumed attributes and seed are
-//!   readable in both blocks"); it does not restate it for L1, but the
-//!   parallel is structural, not stylistic — only attributes in `emit` get a
-//!   buffer pair at all ("Each emitted attribute gets a pair of storage
-//!   buffers"), so referencing one that is not emitted has nothing behind
-//!   it. This pass applies the same rule symmetrically to L1.
-//! - **Shadowing also covers stage outputs.** The spec's shadowing rule lists
-//!   params, attributes, and ambients; it does not mention `clip`/
-//!   `point_rate`/`color`. Leaving them unprotected would let a param or
-//!   local named `color` silently steal precedence over the output in an
-//!   assignment target, which is exactly the class of bug the documented
-//!   shadowing rule exists to prevent, so this pass extends it to outputs
-//!   too.
-//! - **`capacity` and `topology` are required on every L1 procedure**, and
-//!   `blend` on every L4 procedure. The spec doesn't say so in as many words,
-//!   but `capacity`'s range-plus-default is the only source of a value the
-//!   Set format can fall back to ("`capacity` is optional [in the Set file];
-//!   without it the `.kir` default applies"), so the `.kir` has to declare
-//!   one; `topology` and `blend` are load-bearing for lowering in the same
-//!   way.
-//! - **`let`/`var` may shadow neither a param nor another local**, per the
-//!   literal sentence in "Statements and expressions" ("`let`, `var`, and the
-//!   loop variable may not shadow a param, an attribute, or an ambient
-//!   value") and per `typed.rs`'s doc on `TStmt::Let` ("Locals do not shadow
-//!   anything — not a param, not an attribute, not an ambient, and not
-//!   another local"). This is stricter than the task checklist's paraphrase,
-//!   which drops params from the protected set; the spec text and the seam
-//!   type's own doc comment agree with each other and this pass follows
-//!   them, not the paraphrase.
+//! - `consumes` ⊆ `emit` is, read literally, a cross-proc rule: `emit` is
+//! declared by the L1 procedure and `consumes` by the L4 procedure that will be
+//! paired with it in a Set, and `check` only ever sees one procedure. Applying
+//! it within a single proc would reject the spec's own `soft_points` example
+//! (it consumes `position`, which `soft_points` never declares in `emit`). This
+//! pass therefore runs the subset check only when a procedure declares *both*
+//! lists itself (which only an L1 procedure can meaningfully do, since only L1
+//! has persistent per-element state to emit); an L4 procedure's `consumes` is
+//! recorded as-is and left for Set-composition time, outside this crate's
+//! scope. - Attribute derivation splits the `consumes ⊆ emit` check in two, and
+//! this pass keeps only the half one file can answer. `age` and `velocity` are
+//! synthesised where nothing emits them: the engine gives `age` a `birth_t`
+//! slot and `velocity` a slot the L1 writes, so an L1 consuming either without
+//! emitting it is asking for something the Set will provide rather than making
+//! a contradiction. What stays here is the part that is genuinely local —
+//! `velocity` is derived *from* `position`, and whether this procedure emits
+//! `position` is a one-file question. See [`check_consumes_emitted`]. Whether
+//! anybody at all emits a consumed attribute is `Set::build_many`'s check, at
+//! the first point that holds every procedure at once. - Signal-bus names are
+//! not enumerable here. `karakuri-signal`'s bus accepts *any* name (falling
+//! back to a zero-confidence synthesized sample), so there is no closed
+//! vocabulary to match against. Consequently every bare identifier that fails
+//! to resolve to a local, a param, an attribute, or an ambient is reported as
+//! an attempted signal-bus read with the `bind` hint — that is the only
+//! diagnosis available once the closed categories are exhausted, and it is also
+//! what the spec asks for. - `point_rate` is required unconditionally in an L4
+//! `vertex` block. The rule as stated ("required when the source topology is
+//! points") is a property of the *paired* L1 procedure's `topology`, which an
+//! L4 file never declares and this pass never sees. It stays unconditional now
+//! that `lines` exists, because it means something under both: a sprite's
+//! extent and a stroke's width are the same number in the same units. - What an
+//! L4 draws is inferred here, not declared. Assigning
+//! [`Output::ClipB`](crate::ast::Output::ClipB) — a segment's far end — is the
+//! only thing that could make a procedure a line renderer, so this pass reads
+//! it off the `vertex` block and records it in
+//! [`Checked::topology`](crate::typed::Checked::topology), which is otherwise
+//! an L1 field. Whether it agrees with the L1 it is paired with is not checked
+//! anywhere, and deliberately: a segment gets both of its ends from attributes
+//! the L4 consumes, so a renderer needs nothing of the geometry beyond what the
+//! `emit`/`consumes` check at Set composition already covers. Requiring
+//! agreement would forbid one L1 being drawn as sprites by one L4 and as
+//! strokes by another. - Attribute names are only readable/writable when
+//! declared. The spec states this explicitly for L4 ("Consumed attributes and
+//! seed are readable in both blocks"); it does not restate it for L1, but the
+//! parallel is structural, not stylistic — only attributes in `emit` get a
+//! buffer pair at all ("Each emitted attribute gets a pair of storage
+//! buffers"), so referencing one that is not emitted has nothing behind it.
+//! This pass applies the same rule symmetrically to L1. - Shadowing also covers
+//! stage outputs. The spec's shadowing rule lists params, attributes, and
+//! ambients; it does not mention `clip`/ `point_rate`/`color`. Leaving them
+//! unprotected would let a param or local named `color` silently steal
+//! precedence over the output in an assignment target, which is exactly the
+//! class of bug the documented shadowing rule exists to prevent, so this pass
+//! extends it to outputs too. - `capacity` and `topology` are required on every
+//! L1 procedure, and `blend` on every L4 procedure. The spec doesn't say so in
+//! as many words, but `capacity`'s range-plus-default is the only source of a
+//! value the Set format can fall back to ("`capacity` is optional [in the Set
+//! file]; without it the `.kir` default applies"), so the `.kir` has to declare
+//! one; `topology` and `blend` are load-bearing for lowering in the same way. -
+//! `let`/`var` may shadow neither a param nor another local, per the literal
+//! sentence in "Statements and expressions" ("`let`, `var`, and the loop
+//! variable may not shadow a param, an attribute, or an ambient value") and per
+//! `typed.rs`'s doc on `TStmt::Let` ("Locals do not shadow anything — not a
+//! param, not an attribute, not an ambient, and not another local"). This is
+//! stricter than the task checklist's paraphrase, which drops params from the
+//! protected set; the spec text and the seam type's own doc comment agree with
+//! each other and this pass follows them, not the paraphrase.
 //!
 //! ## One thing this pass decides that is not a diagnostic
 //!
-//! **Closed form versus accumulating.** A procedure that is a pure function of
+//! Closed form versus accumulating. A procedure that is a pure function of
 //! `seed`, `t`, and its params can be evaluated at any `t` directly, so the
 //! engine may take it Cold to Live with no priming and — the larger half — may
 //! scrub it forwards, hold it, or run it backwards. That is a property of the
-//! procedure, so it is decided here — where `emit`, `consumes` and cost
-//! already live — and recorded on
+//! procedure, so it is decided here — where `emit`, `consumes` and cost already
+//! live — and recorded on
 //! [`Checked::closed_form`](crate::typed::Checked::closed_form) rather than
 //! rediscovered by the engine. Nothing is rejected either way, which is exactly
 //! why it has to be conservative: see [`is_closed_form`] for what it refuses to
@@ -119,16 +111,16 @@ use crate::typed::{Checked, InputPort, Slot, TBlock, TExpr, TExprKind, TStmt, Ta
 /// Kept as a name this pass still recognises so that a `.kir` written against
 /// the old language is refused with the new spelling rather than with "never
 /// declared". It is not a reserved word: nothing stops an author declaring a
-/// local or a param called `point_size`, and if one does the declaration wins
-/// — this only catches the name when nothing else claims it.
+/// local or a param called `point_size`, and if one does the declaration wins —
+/// this only catches the name when nothing else claims it.
 const OLD_POINT_SIZE: &str = "point_size";
 
 /// What to do about it, in one sentence.
 ///
-/// **The division is deliberately not given a number.** `point_rate` is a
-/// fraction of the render target's height, and which height a file's old pixel
-/// values were authored against is a fact about that file rather than about
-/// the language. Naming one here would make it an anchor.
+/// The division is deliberately not given a number. `point_rate` is a fraction
+/// of the render target's height, and which height a file's old pixel values
+/// were authored against is a fact about that file rather than about the
+/// language. Naming one here would make it an anchor.
 const POINT_RATE_HINT: &str = concat!(
     "the output is now `point_rate`, a fraction of the render target's height ",
     "rather than a count of pixels — rename it and divide the old pixel value ",
@@ -379,7 +371,7 @@ fn kind_name(kind: Kind) -> &'static str {
 // Header
 // ---------------------------------------------------------------------------
 
-/// **A `uses … : Texture` slot on a kind that is handed no picture.**
+/// A `uses … : Texture` slot on a kind that is handed no picture.
 ///
 /// One function rather than five copies, because the refusal is one sentence
 /// with one clause that varies: a texture is what an L5 folds, and every other
@@ -1266,12 +1258,12 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
     }
 }
 
-/// Whether `name` is a stage output **this kind of procedure can write**.
+/// Whether `name` is a stage output this kind of procedure can write.
 ///
-/// **Scoped to the layer, not global.** `Output` grew from four names to ten
-/// when the camera arrived, and a global reservation would have made `up`,
-/// `target`, `near`, `far` and `fov_y` illegal as params and locals in *every*
-/// layer — `let near = length(position)` in a marcher, `let up` in an L1, both
+/// Scoped to the layer, not global. `Output` grew from four names to ten when
+/// the camera arrived, and a global reservation would have made `up`, `target`,
+/// `near`, `far` and `fov_y` illegal as params and locals in *every* layer —
+/// `let near = length(position)` in a marcher, `let up` in an L1, both
 /// previously legal and neither shadowing anything reachable there. A name is
 /// only ambiguous where the thing it names exists, and the diagnostic for the
 /// global version named a block the procedure did not have.
@@ -1282,7 +1274,7 @@ fn shadows_output(name: &str, kind: Kind) -> bool {
     Output::from_name(name).is_some_and(|o| output_block(o, kind).kind() == kind)
 }
 
-/// **Which block writes `output` in a procedure of this kind.**
+/// Which block writes `output` in a procedure of this kind.
 ///
 /// [`Output::block`] answers for the four kinds that had one each, and `color`
 /// is now written by two: a `fragment` block on an L4 and a `frame` block on an
@@ -1300,16 +1292,16 @@ fn output_block(output: Output, kind: Kind) -> BlockKind {
 /// that no param, local or declared geometry slot may take on — see the module
 /// docs on shadowing.
 ///
-/// **A slot name goes through here for the same reason a param's does**: it is
-/// read the way a local is — `far.position`, `shape(p)` — so one spelling would
-/// otherwise mean two things depending on what follows it. What it is *not* is a
-/// reserved word of its own — the name belongs to the procedure that declared
+/// A slot name goes through here for the same reason a param's does: it is read
+/// the way a local is — `far.position`, `shape(p)` — so one spelling would
+/// otherwise mean two things depending on what follows it. What it is *not* is
+/// a reserved word of its own — the name belongs to the procedure that declared
 /// it, and reserving one language-wide is what caps a procedure at one input.
 ///
 /// A *callable* slot has one more collision than this function knows about, and
-/// it is checked beside the call in [`check_slot_names`] rather than added here:
-/// a param named `sin` is still a perfectly good param.
-/// **What every slot name has to be, whatever type it was declared with.**
+/// it is checked beside the call in [`check_slot_names`] rather than added
+/// here: a param named `sin` is still a perfectly good param. What every slot
+/// name has to be, whatever type it was declared with.
 ///
 /// Outside the per-kind arms above, because it is not a rule about a kind: a
 /// Field slot is legal on four of the five, so a check that lived in L2's arm
@@ -1499,10 +1491,10 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
     map
 }
 
-/// The declaration-order list is kept alongside the set, spans and all. The
-/// set answers "is this attribute declared"; the list is what anything that
-/// reports or generates walks, because both need a fixed order — buffer slot
-/// order comes from it, and so does the order diagnostics come out in.
+/// The declaration-order list is kept alongside the set, spans and all. The set
+/// answers "is this attribute declared"; the list is what anything that reports
+/// or generates walks, because both need a fixed order — buffer slot order
+/// comes from it, and so does the order diagnostics come out in.
 fn dedup_attrs(
     list: &[(Attr, Span)],
     label: &str,
@@ -1524,16 +1516,15 @@ fn dedup_attrs(
 }
 
 /// `consumes` against what this procedure has, which since attribute derivation
-/// is **not** the same as `consumes ⊆ emit`.
+/// is not the same as `consumes ⊆ emit`.
 ///
 /// Two attributes have a rule: `age` and `velocity`. An L1 may consume either
-/// without emitting it, and the engine provides it — see
-/// `docs/ir-spec.md`, "Attribute derivation". So what is checked here is
-/// narrower than it was and is genuinely a one-file question: **`velocity` is
-/// synthesised from `position`**, and whether *this* procedure emits `position`
-/// is something one file can answer. Whether anybody emits `velocity` is not,
-/// and that half moved to `Set::build_many`, which is the first point holding
-/// every procedure at once.
+/// without emitting it, and the engine provides it — see `docs/ir-spec.md`,
+/// "Attribute derivation". So what is checked here is narrower than it was and
+/// is genuinely a one-file question: `velocity` is synthesised from `position`,
+/// and whether *this* procedure emits `position` is something one file can
+/// answer. Whether anybody emits `velocity` is not, and that half moved to
+/// `Set::build_many`, which is the first point holding every procedure at once.
 ///
 /// L1 only, for the reason it always was: an L1 is the whole of what is
 /// available to it, where an L2 and an L4 read what is available at their
@@ -1604,62 +1595,61 @@ fn check_consumes_emitted(
 /// so any `t` can be evaluated directly. See
 /// [`Checked::closed_form`](crate::typed::Checked::closed_form) for what that
 /// buys (no priming, and — the larger half — the material can be scrubbed
-/// forwards, held, or run backwards) and `docs/ir-spec.md`, "Closed form
-/// versus accumulating", for the whole of it.
+/// forwards, held, or run backwards) and `docs/ir-spec.md`, "Closed form versus
+/// accumulating", for the whole of it.
 ///
 /// Three things make a procedure accumulating, and only the first is the one
 /// the name suggests:
 ///
-/// 1. **It reads an attribute it emits.** `age = age + dt` reads one;
-///    `position = f(seed, t)` does not. Every read counts, wherever it is —
-///    inside an `if`, inside a `for`, or bound to a `let` and used later — so
-///    this walks every expression in every block rather than trying to decide
-///    which reads "reach" a write. A read that reaches an emitted attribute's
-///    value through a local is still a read of that attribute, and it is the
-///    read this looks at, not the local.
+/// 1. It reads an attribute it emits. `age = age + dt` reads one; `position =
+/// f(seed, t)` does not. Every read counts, wherever it is — inside an `if`,
+/// inside a `for`, or bound to a `let` and used later — so this walks every
+/// expression in every block rather than trying to decide which reads "reach" a
+/// write. A read that reaches an emitted attribute's value through a local is
+/// still a read of that attribute, and it is the read this looks at, not the
+/// local.
 ///
-///    **The set tested against is what the procedure *carries*, not what it
-///    emits**, and the difference arrived with attribute derivation: an L1 may
-///    consume `age` or `velocity` without emitting either, and both are
-///    per-element state carried across frames. Reading one is reading where the
-///    element has been, which is exactly what this property is about. This
-///    paragraph used to say `consumes ⊆ emit` held inside an L1 and that the
-///    membership test was therefore belt-and-braces; it no longer holds, and a
-///    permissive answer here is the one the block below calls far worse — a
-///    scrub that produces garbage, and material put on air unwarmed.
+/// The set tested against is what the procedure *carries*, not what it emits,
+/// and the difference arrived with attribute derivation: an L1 may consume
+/// `age` or `velocity` without emitting either, and both are per-element state
+/// carried across frames. Reading one is reading where the element has been,
+/// which is exactly what this property is about. This paragraph used to say
+/// `consumes ⊆ emit` held inside an L1 and that the membership test was
+/// therefore belt-and-braces; it no longer holds, and a permissive answer here
+/// is the one the block below calls far worse — a scrub that produces garbage,
+/// and material put on air unwarmed.
 ///
-/// 2. **It has a `spawn` block.** Spawning and closed form cannot coexist, and
-///    the reason is not about attributes at all: an element that does not
-///    exist yet cannot be stepped, and *whether it exists* is engine state —
-///    the spawn accumulator, the seed counter, the live range — accumulated
-///    from every frame since the Set started. Jumping to `t = 30` on a Set that
-///    spawns 8000 elements a second does not produce 240,000 elements; it
-///    produces the handful of them one frame's accumulator emits, at their
-///    spawn state. The population is the state that had to be warmed, and it is
-///    not reachable from `seed` and `t`. So a `spawn` block disqualifies,
-///    however pure the `element` block is.
+/// 2. It has a `spawn` block. Spawning and closed form cannot coexist, and the
+/// reason is not about attributes at all: an element that does not exist yet
+/// cannot be stepped, and *whether it exists* is engine state — the spawn
+/// accumulator, the seed counter, the live range — accumulated from every frame
+/// since the Set started. Jumping to `t = 30` on a Set that spawns 8000
+/// elements a second does not produce 240,000 elements; it produces the handful
+/// of them one frame's accumulator emits, at their spawn state. The population
+/// is the state that had to be warmed, and it is not reachable from `seed` and
+/// `t`. So a `spawn` block disqualifies, however pure the `element` block is.
 ///
-/// 3. **It can `kill()`.** A killed element stays killed, so the live set at
-///    `t` is a function of every step taken to get there and not of `t`. Even a
-///    kill condition written purely in `seed` and `t` is history-dependent in
-///    the direction that matters: `if t > 5.0 && t < 5.1 { kill() }` removes
-///    nothing at all if `t = 6.0` is arrived at in one step.
+/// 3. It can `kill()`. A killed element stays killed, so the live set at `t` is
+/// a function of every step taken to get there and not of `t`. Even a kill
+/// condition written purely in `seed` and `t` is history-dependent in the
+/// direction that matters: `if t > 5.0 && t < 5.1 { kill() }` removes nothing
+/// at all if `t = 6.0` is arrived at in one step.
 ///
-/// **The conservative direction is the safe one, and this errs into it
-/// deliberately.** There is no diagnostic attached to this decision — nothing
-/// is rejected either way — so the only way it can be wrong is silently. Wrong
-/// in the strict direction costs a warm-up that was not needed: a slot primes
-/// for a few seconds it could have skipped, and cannot be scrubbed when it
-/// could have been. Wrong in the permissive direction is far worse, and gets
-/// worse the more the property is used for. It puts a slot on air showing an
-/// unwarmed image — particles being born, an integrator at its initial
-/// condition — while telling the governor it needed no warming, so nothing
-/// anywhere is looking for the problem. And once transport is built on this,
-/// a wrongly-claimed closed form is a scrub that produces garbage rather than
-/// merely a bad first second: seeking an accumulating procedure to an
-/// arbitrary `t` evaluates it once from wherever it happened to be. That is
-/// the failure this whole pass exists to refuse — checking clean and then
-/// coming up short at runtime. Under-claim.
+/// The conservative direction is the safe one, and this errs into it
+/// deliberately. There is no diagnostic attached to this decision — nothing is
+/// rejected either way — so the only way it can be wrong is silently. Wrong in
+/// the strict direction costs a warm-up that was not needed: a slot primes for
+/// a few seconds it could have skipped, and cannot be scrubbed when it could
+/// have been. Wrong in the permissive direction is far worse, and gets worse
+/// the more the property is used for. It puts a slot on air showing an unwarmed
+/// image — particles being born, an integrator at its initial condition — while
+/// telling the governor it needed no warming, so nothing anywhere is looking
+/// for the problem. And once transport is built on this, a wrongly-claimed
+/// closed form is a scrub that produces garbage rather than merely a bad first
+/// second: seeking an accumulating procedure to an arbitrary `t` evaluates it
+/// once from wherever it happened to be. That is the failure this whole pass
+/// exists to refuse — checking clean and then coming up short at runtime.
+/// Under-claim.
 fn is_closed_form(kind: Kind, retains: bool, carried: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
     // **An L5 is the stateless layers' shape with one exception, and the
     // exception is the whole of what `retains` declares.** A frame effect with
@@ -1708,10 +1698,10 @@ fn accumulates(stmts: &[TStmt], carried: &HashSet<Attr>) -> bool {
     })
 }
 
-/// A read of a **carried** attribute anywhere in one expression — one this
+/// A read of a carried attribute anywhere in one expression — one this
 /// procedure emits, or one the engine derives for it.
 ///
-/// **The second half is not a detail.** A derived attribute is per-element state
+/// The second half is not a detail. A derived attribute is per-element state
 /// carried across frames exactly as an emitted one is: `age` is the clock minus
 /// a stored spawn instant, `velocity` is a stored difference. A procedure
 /// reading one is reading where it has been, which is what `closed_form` is
@@ -1752,7 +1742,7 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
     }
 }
 
-/// **Whether the procedure reads [`Ambient::Beats`] anywhere.**
+/// Whether the procedure reads [`Ambient::Beats`] anywhere.
 ///
 /// Recorded because it decides what a *transport* may do to the slot, and it is
 /// the one property there that the engine cannot work out for itself: a
@@ -1762,11 +1752,11 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
 /// result runs at roughly the square of the tempo ratio, which reads as a
 /// broken artifact rather than as two controls doing the same job.
 ///
-/// So this is a **fact, not a judgement**, and nothing is rejected for it.
-/// Unlike [`is_closed_form`] there is no conservative direction to err into:
+/// So this is a fact, not a judgement, and nothing is rejected for it. Unlike
+/// [`is_closed_form`] there is no conservative direction to err into:
 /// over-claiming greys out a control that would have worked, under-claiming
-/// offers one that compounds. Both are wrong, and neither is safe, which is
-/// why this walks the tree rather than approximating.
+/// offers one that compounds. Both are wrong, and neither is safe, which is why
+/// this walks the tree rather than approximating.
 fn reads_beats(blocks: &[TBlock]) -> bool {
     fn in_stmts(stmts: &[TStmt]) -> bool {
         stmts.iter().any(|s| match s {
@@ -1827,16 +1817,16 @@ impl CovKey {
     }
 }
 
-/// Whether the block assigns [`Output::ClipB`] **anywhere**, including on a
-/// path coverage does not count — one arm of an `if`, or a `for` body.
+/// Whether the block assigns [`Output::ClipB`] anywhere, including on a path
+/// coverage does not count — one arm of an `if`, or a `for` body.
 ///
 /// Deliberately not the same question coverage asks. Mentioning `clip_b` is
 /// what makes it *required*, and then coverage decides whether it was assigned
 /// on every path: a procedure that writes a second endpoint under some
-/// condition and not others is drawing a segment sometimes and an
-/// uninitialised one the rest of the time, which is a diagnostic rather than a
-/// picture. Asking only the coverage question would silently accept it as a
-/// points procedure with a dead store.
+/// condition and not others is drawing a segment sometimes and an uninitialised
+/// one the rest of the time, which is a diagnostic rather than a picture.
+/// Asking only the coverage question would silently accept it as a points
+/// procedure with a dead store.
 fn assigns_clip_b(stmts: &[TStmt]) -> bool {
     stmts.iter().any(|s| match s {
         TStmt::Assign { target, .. } => matches!(target, Target::Output(Output::ClipB)),
@@ -1990,73 +1980,70 @@ impl Scope {
 struct Checker<'a> {
     kind: Kind,
     block: Option<BlockKind>,
-    /// Whether this procedure draws the whole frame — an L4 with no `vertex`
-    /// block, which is the only way to say so.
+    /// Whether this procedure draws the whole frame — an L4 with no `vertex` block,
+    /// which is the only way to say so.
     ///
-    /// **Not derivable from `kind` and `block`**, which is why it is carried
-    /// here rather than folded into [`Ambient::available_in`]: it is a fact
-    /// about the procedure, and a block checker otherwise sees only its own
-    /// block. `eye` and `ray` need it — see [`Checker::marching_only`].
+    /// Not derivable from `kind` and `block`, which is why it is carried here
+    /// rather than folded into [`Ambient::available_in`]: it is a fact about the
+    /// procedure, and a block checker otherwise sees only its own block. `eye` and
+    /// `ray` need it — see [`Checker::marching_only`].
     fullscreen: bool,
-    /// **What this procedure calls the second geometry it takes**, from
-    /// `uses far : Geometry`, and `None` for a procedure that takes none.
+    /// What this procedure calls the second geometry it takes, from `uses far :
+    /// Geometry`, and `None` for a procedure that takes none.
     ///
     /// It is what makes `far.position` mean anything, and it is per *procedure*
     /// rather than per block for the reason [`Checker::fullscreen`] is: the
-    /// declaration is in the header and a block checker sees only its own
-    /// block.
+    /// declaration is in the header and a block checker sees only its own block.
     uses: Option<&'a str>,
-    /// **What this procedure calls the fields it evaluates**, from every
-    /// `uses <name> : Field` in its header.
+    /// What this procedure calls the fields it evaluates, from every `uses <name> :
+    /// Field` in its header.
     ///
-    /// The list is what makes `shape(p)` mean anything, and it is consulted
-    /// ahead of the builtin table: a call resolves against what the header
-    /// declared, which is the whole of this notation. Several, because a
-    /// procedure may want a shape and a cutter, and neither of them is "the"
-    /// field.
+    /// The list is what makes `shape(p)` mean anything, and it is consulted ahead
+    /// of the builtin table: a call resolves against what the header declared,
+    /// which is the whole of this notation. Several, because a procedure may want a
+    /// shape and a cutter, and neither of them is "the" field.
     fields: &'a [&'a str],
-    /// **What this procedure calls the camera it draws from**, from `uses view
-    /// : Camera`, and `None` for one that declares none — which then reads the
-    /// Set's camera as `camera`, `eye` and `ray`.
+    /// What this procedure calls the camera it draws from, from `uses view :
+    /// Camera`, and `None` for one that declares none — which then reads the Set's
+    /// camera as `camera`, `eye` and `ray`.
     ///
-    /// It is what makes `view.clip` mean anything, and it is per procedure for
-    /// the reason the two above are: the declaration is in the header and a
-    /// block checker sees only its own block.
+    /// It is what makes `view.clip` mean anything, and it is per procedure for the
+    /// reason the two above are: the declaration is in the header and a block
+    /// checker sees only its own block.
     camera: Option<&'a str>,
-    /// **What this procedure calls the sources it names**, from every `uses
-    /// <name> : Source` in its header.
+    /// What this procedure calls the sources it names, from every `uses <name> :
+    /// Source` in its header.
     ///
-    /// The list is what makes a bare `only` mean anything, and it is per
-    /// procedure for the reason the three above are. Several, because a mask
-    /// asking `source == a || source == b` is the ordinary case and each slot
-    /// costs a `u32` in a uniform block that already exists.
+    /// The list is what makes a bare `only` mean anything, and it is per procedure
+    /// for the reason the three above are. Several, because a mask asking `source
+    /// == a || source == b` is the ordinary case and each slot costs a `u32` in a
+    /// uniform block that already exists.
     sources: &'a [&'a str],
-    /// **What this procedure calls the pictures it folds in**, from every `uses
-    /// <name> : Texture` in its header.
+    /// What this procedure calls the pictures it folds in, from every `uses <name>
+    /// : Texture` in its header.
     ///
     /// The list is what makes `tap(<name>, uv)` mean anything, and it is per
-    /// procedure for the reason every field beside it is. Empty on a chain
-    /// slot's L5 and on every other kind, where the declaration is refused at
-    /// the header.
+    /// procedure for the reason every field beside it is. Empty on a chain slot's
+    /// L5 and on every other kind, where the declaration is refused at the header.
     textures: &'a [&'a str],
-    /// **Whether the header declares `retains`**, which is the whole of what
-    /// makes [`TEXTURE_HELD`] readable.
+    /// Whether the header declares `retains`, which is the whole of what makes
+    /// [`TEXTURE_HELD`] readable.
     ///
-    /// Carried rather than asked of the header for the reason the six lists
-    /// above are: a block does not see its own header, and `held` outside
-    /// `retains` has to be refused with a sentence about the declaration rather
-    /// than about the name.
+    /// Carried rather than asked of the header for the reason the six lists above
+    /// are: a block does not see its own header, and `held` outside `retains` has
+    /// to be refused with a sentence about the declaration rather than about the
+    /// name.
     retains: bool,
-    /// **What this procedure calls the second geometry it takes, if it takes
-    /// one** — the same declaration [`Checker::uses`] carries, kept a second
-    /// time because this one is read where `source` is.
+    /// What this procedure calls the second geometry it takes, if it takes one —
+    /// the same declaration [`Checker::uses`] carries, kept a second time because
+    /// this one is read where `source` is.
     ///
-    /// **It is what makes `source` ambiguous.** In a pairing Set the far
-    /// simulation lives inside the near `Source` and shares its uniform, so a
-    /// node with a geometry slot has *two* geometries in hand and one salt to
-    /// answer with — and the answer would silently be the near one. Refused
-    /// with the slot's name in the sentence, because a hint that says which
-    /// reading was ambiguous is better than a rule the author has to infer.
+    /// It is what makes `source` ambiguous. In a pairing Set the far simulation
+    /// lives inside the near `Source` and shares its uniform, so a node with a
+    /// geometry slot has *two* geometries in hand and one salt to answer with — and
+    /// the answer would silently be the near one. Refused with the slot's name in
+    /// the sentence, because a hint that says which reading was ambiguous is better
+    /// than a rule the author has to infer.
     paired: Option<&'a str>,
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
@@ -2113,15 +2100,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// **Which texture `name` refers to**, and `None` for a name that is not
-    /// one here.
+    /// Which texture `name` refers to, and `None` for a name that is not one here.
     ///
     /// Three sources and they are asked in this order because that is the order
-    /// they are decided in: `src` is the language's, always present in a
-    /// `frame` block; `held` is the header's, present under `retains`; a slot
-    /// is the header's too, under whatever it was called. Nothing else can
-    /// reach this — the two reserved names are refused as slot names and as
-    /// locals, so one spelling never means two things.
+    /// they are decided in: `src` is the language's, always present in a `frame`
+    /// block; `held` is the header's, present under `retains`; a slot is the
+    /// header's too, under whatever it was called. Nothing else can reach this —
+    /// the two reserved names are refused as slot names and as locals, so one
+    /// spelling never means two things.
     fn texture(&self, name: &str) -> Option<TexRef> {
         if self.block != Some(BlockKind::Frame) {
             return None;
@@ -2138,32 +2124,32 @@ impl<'a> Checker<'a> {
         None
     }
 
-    /// **`eye` and `ray` exist only where the lowering defines them**, which is
-    /// the ray prologue a fullscreen fragment stage opens with. A per-element
-    /// L4 has a `vertex` block, gets no prologue, and reading either there
-    /// lowered to a bare identifier nothing declared — so the `.kir` checked
-    /// clean, `generate_l4` produced WGSL naga refuses, and wgpu's uncaptured
-    /// error handler panicked the thread that built it. On the swap worker that
-    /// is a `SetError::Panicked`; at startup it takes the process down.
+    /// `eye` and `ray` exist only where the lowering defines them, which is the ray
+    /// prologue a fullscreen fragment stage opens with. A per-element L4 has a
+    /// `vertex` block, gets no prologue, and reading either there lowered to a bare
+    /// identifier nothing declared — so the `.kir` checked clean, `generate_l4`
+    /// produced WGSL naga refuses, and wgpu's uncaptured error handler panicked the
+    /// thread that built it. On the swap worker that is a `SetError::Panicked`; at
+    /// startup it takes the process down.
     ///
-    /// A rule about the *procedure* rather than the block, which is why it is
-    /// not in [`Ambient::available_in`]: what makes an L4 a marcher is the
-    /// absence of a `vertex` block, and a block does not know its siblings.
+    /// A rule about the *procedure* rather than the block, which is why it is not
+    /// in [`Ambient::available_in`]: what makes an L4 a marcher is the absence of a
+    /// `vertex` block, and a block does not know its siblings.
     fn marching_only(&self, amb: Ambient) -> bool {
         !matches!(amb, Ambient::Eye | Ambient::Ray) || self.fullscreen
     }
 
-    /// **The mirror of [`Checker::marching_only`], and it fails the same way.**
-    /// `seed` and `copy` are per-element identity; a fullscreen L4 has no
-    /// element, no element buffer bound, and a vertex stage the procedure did
-    /// not write. Reading either lowered to `in.seed` against a `VsOut` with no
-    /// such field — WGSL naga refuses, and wgpu's uncaptured error handler takes
-    /// the process down at startup or fails the swap worker.
+    /// The mirror of [`Checker::marching_only`], and it fails the same way. `seed`
+    /// and `copy` are per-element identity; a fullscreen L4 has no element, no
+    /// element buffer bound, and a vertex stage the procedure did not write.
+    /// Reading either lowered to `in.seed` against a `VsOut` with no such field —
+    /// WGSL naga refuses, and wgpu's uncaptured error handler takes the process
+    /// down at startup or fails the swap worker.
     ///
-    /// This is the same rule `consumes` already states for the same reason, and
-    /// the reason it needed a second statement is that `seed` is not a
-    /// `consumes`: it is available everywhere an element is, which is exactly
-    /// the sentence a fullscreen procedure falsifies.
+    /// This is the same rule `consumes` already states for the same reason, and the
+    /// reason it needed a second statement is that `seed` is not a `consumes`: it
+    /// is available everywhere an element is, which is exactly the sentence a
+    /// fullscreen procedure falsifies.
     fn element_only(&self, amb: Ambient) -> bool {
         !matches!(amb, Ambient::Seed | Ambient::Copy) || !self.fullscreen
     }
@@ -2242,10 +2228,9 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `let`, `var`, and the loop variable may not shadow `id`, an
-    /// attribute, an ambient, a stage output, a param, or another local —
-    /// see the module docs on why this is stricter than the task checklist's
-    /// paraphrase.
+    /// `let`, `var`, and the loop variable may not shadow `id`, an attribute, an
+    /// ambient, a stage output, a param, or another local — see the module docs on
+    /// why this is stricter than the task checklist's paraphrase.
     fn check_declarable_name(&mut self, name: &str, span: Span) {
         if name == "id" {
             self.err_hint(
@@ -3270,15 +3255,15 @@ impl<'a> Checker<'a> {
         None
     }
 
-    /// **What the header declared, before the table the language ships.**
+    /// What the header declared, before the table the language ships.
     ///
     /// A field is reached through a slot, so the name at a call site is the
-    /// procedure's own — and this branch is the whole of that. It is first for
-    /// the reason it is a branch at all: a call resolves against what the file
-    /// said it takes, and asking the builtin table first would make the
-    /// language's vocabulary quietly outrank the header. Nothing is hidden by
-    /// the order, since a slot named after a builtin is refused where it is
-    /// declared — see `check_slot_names`.
+    /// procedure's own — and this branch is the whole of that. It is first for the
+    /// reason it is a branch at all: a call resolves against what the file said it
+    /// takes, and asking the builtin table first would make the language's
+    /// vocabulary quietly outrank the header. Nothing is hidden by the order, since
+    /// a slot named after a builtin is refused where it is declared — see
+    /// `check_slot_names`.
     fn check_call(&mut self, name: &str, args: &[Expr], span: Span) -> Option<TExpr> {
         if self.fields.contains(&name) {
             return self.check_field_call(name, args, span);
@@ -3319,10 +3304,10 @@ impl<'a> Checker<'a> {
         None
     }
 
-    /// **A field's signature is the field block's**: one `vec3` in, a `float`
-    /// out. It is not read off the bound procedure, because no single file
-    /// holds one — every `kind Field` has exactly this shape, which is what
-    /// makes a slot bindable at all.
+    /// A field's signature is the field block's: one `vec3` in, a `float` out. It
+    /// is not read off the bound procedure, because no single file holds one —
+    /// every `kind Field` has exactly this shape, which is what makes a slot
+    /// bindable at all.
     fn check_field_call(&mut self, slot: &str, args: &[Expr], span: Span) -> Option<TExpr> {
         if args.len() != 1 {
             self.err_hint(
@@ -3355,12 +3340,12 @@ impl<'a> Checker<'a> {
         ))
     }
 
-    /// **A fetch from a named texture** — `texel(src)`, `tap(held, uv)`.
+    /// A fetch from a named texture — `texel(src)`, `tap(held, uv)`.
     ///
-    /// The texture position takes a bare name and nothing else: not a local
-    /// holding one, because there is no type to hold it in, and not an
-    /// expression, because there is nothing to compute. Every other position is
-    /// checked the ordinary way, which today is `tap`'s `vec2`.
+    /// The texture position takes a bare name and nothing else: not a local holding
+    /// one, because there is no type to hold it in, and not an expression, because
+    /// there is nothing to compute. Every other position is checked the ordinary
+    /// way, which today is `tap`'s `vec2`.
     fn check_texture_call(
         &mut self,
         b: Builtin,
@@ -3739,8 +3724,8 @@ impl<'a> Checker<'a> {
     }
 
     /// The shared tail of vector construction: every argument must be
-    /// `float`/`vec2`/`vec3`/`vec4`, and their component counts must sum to
-    /// exactly `n`.
+    /// `float`/`vec2`/`vec3`/`vec4`, and their component counts must sum to exactly
+    /// `n`.
     fn check_constructor_concat(
         &mut self,
         ty: Ty,
@@ -3793,16 +3778,16 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(ty, span, TExprKind::Construct { args }))
     }
 
-    /// `<slot>.<attr>` — an attribute of the far element, from the geometry
-    /// bound to the slot this procedure declared.
+    /// `<slot>.<attr>` — an attribute of the far element, from the geometry bound
+    /// to the slot this procedure declared.
     ///
-    /// **Only for something the node consumes.** The far geometry is an input
-    /// edge: this node reads it and writes its own output, so what is readable
-    /// there is what the node declared it takes.
+    /// Only for something the node consumes. The far geometry is an input edge:
+    /// this node reads it and writes its own output, so what is readable there is
+    /// what the node declared it takes.
     ///
-    /// `slot` is the name the header gave it, carried in only so the
-    /// diagnostics are written in the author's own spelling. Which node fills
-    /// it is not decided here and never can be — it is the Set's answer.
+    /// `slot` is the name the header gave it, carried in only so the diagnostics
+    /// are written in the author's own spelling. Which node fills it is not decided
+    /// here and never can be — it is the Set's answer.
     fn check_far(&mut self, slot: &str, name: &str, span: Span) -> Option<TExpr> {
         let Some(attr) = Attr::from_name(name) else {
             self.err_hint(
@@ -3840,29 +3825,26 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(attr.ty(), span, TExprKind::Far(attr)))
     }
 
-    /// `<slot>.<member>` — one part of the camera bound to the slot this
-    /// procedure declared.
-    ///
-    /// **The second resolution path, and the reason a Camera slot cost the
-    /// checker anything at all.** `far.position` resolves against the attribute
-    /// table, because a geometry's parts *are* attributes; a camera's are not
-    /// parts of anything else, so this asks the slot's *type* what it has.
-    /// Three members, and each is a value an L4 could already read — which is
-    /// what makes this a new spelling rather than a new capability, and why the
-    /// L3's other five stay unreadable
-    /// (`docs/adr/0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md`):
-    /// the
-    /// unnamed forms are [`Ambient::Camera`], [`Ambient::Eye`] and
-    /// [`Ambient::Ray`], and they mean the Set's camera where no slot was
+    /// `<slot>.<member>` — one part of the camera bound to the slot this procedure
     /// declared.
     ///
-    /// **So the stage rules are the ambients' own**, asked rather than
-    /// restated: `.clip` is readable wherever an L4 projects, and `.eye` and
-    /// `.ray` only in the fragment stage of a procedure that draws the whole
-    /// frame — because they are defined by the ray prologue such a stage opens
-    /// with and by nothing else. A second copy of those rules here would be a
-    /// second place for them to be wrong, and this one would be the copy
-    /// nobody looks at.
+    /// The second resolution path, and the reason a Camera slot cost the checker
+    /// anything at all. `far.position` resolves against the attribute table,
+    /// because a geometry's parts *are* attributes; a camera's are not parts of
+    /// anything else, so this asks the slot's *type* what it has. Three members,
+    /// and each is a value an L4 could already read — which is what makes this a
+    /// new spelling rather than a new capability, and why the L3's other five stay
+    /// unreadable
+    /// (`docs/adr/0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md`):
+    /// the unnamed forms are [`Ambient::Camera`], [`Ambient::Eye`] and
+    /// [`Ambient::Ray`], and they mean the Set's camera where no slot was declared.
+    ///
+    /// So the stage rules are the ambients' own, asked rather than restated:
+    /// `.clip` is readable wherever an L4 projects, and `.eye` and `.ray` only in
+    /// the fragment stage of a procedure that draws the whole frame — because they
+    /// are defined by the ray prologue such a stage opens with and by nothing else.
+    /// A second copy of those rules here would be a second place for them to be
+    /// wrong, and this one would be the copy nobody looks at.
     fn check_camera_member(&mut self, slot: &str, name: &str, span: Span) -> Option<TExpr> {
         let amb = match name {
             "clip" => Ambient::Camera,
@@ -4060,8 +4042,8 @@ fn op_symbol(op: BinOp) -> &'static str {
     }
 }
 
-/// A well-typed placeholder used only for continued error recovery. The tree
-/// it lands in is discarded whenever any error was recorded — `check` never
+/// A well-typed placeholder used only for continued error recovery. The tree it
+/// lands in is discarded whenever any error was recorded — `check` never
 /// returns `Ok` otherwise — so this only has to keep `check_stmts` from
 /// panicking, not represent anything meaningful.
 fn poison(ty: Ty, span: Span) -> TExpr {

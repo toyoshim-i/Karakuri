@@ -6,9 +6,9 @@
 //! though the AST narrows them to `i32`/`u32`/`f32` — narrowing happens in the
 //! parser, where a span is available to report a value that does not fit.
 //!
-//! The lexer never hard-fails. An unrecognized character is one diagnostic
-//! and one skipped byte, not a stop — the parser, and whatever repair prompt
-//! reads its output, wants every problem in the file, not just the first.
+//! The lexer never hard-fails. An unrecognized character is one diagnostic and
+//! one skipped byte, not a stop — the parser, and whatever repair prompt reads
+//! its output, wants every problem in the file, not just the first.
 
 use crate::error::IrError;
 use crate::span::Span;

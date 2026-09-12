@@ -1,9 +1,9 @@
 //! The builtin function table.
 //!
-//! Three passes need this and they need it to agree: the check pass types
-//! calls against it, cost estimation weighs them, and code generation lowers
-//! them. A builtin whose signature is described in three places will eventually
-//! be described three different ways, so it is described here.
+//! Three passes need this and they need it to agree: the check pass types calls
+//! against it, cost estimation weighs them, and code generation lowers them. A
+//! builtin whose signature is described in three places will eventually be
+//! described three different ways, so it is described here.
 //!
 //! Signatures are described rather than enumerated. Most of these functions are
 //! componentwise over `float` and the vector widths — `abs` is four overloads
@@ -17,25 +17,25 @@ use crate::ast::Ty;
 pub enum Shape {
     /// A fixed type, regardless of what the other positions resolve to.
     Exact(Ty),
-    /// The generic type this call resolves to. Every `Same` position in one
-    /// call is the same type.
+    /// The generic type this call resolves to. Every `Same` position in one call is
+    /// the same type.
     Same,
-    /// `float`, whatever the generic type is. `length` and `dot` are this:
-    /// vector in, scalar out.
+    /// `float`, whatever the generic type is. `length` and `dot` are this: vector
+    /// in, scalar out.
     Scalar,
-    /// **A texture this procedure is handed**, named rather than computed:
-    /// `src`, `held` under `retains`, or a `uses … : Texture` slot.
+    /// A texture this procedure is handed, named rather than computed: `src`,
+    /// `held` under `retains`, or a `uses … : Texture` slot.
     ///
-    /// **Not a [`Ty`], and it must not become one.** A texture is not a value
-    /// this language can hold — there is nothing to construct, nothing to
-    /// swizzle and nothing to pass — so what this position accepts is a *name*
-    /// the check pass resolves against what the header and the kind make
-    /// available, and never an expression. That is what makes `let x = src;` a
-    /// refusal at the read rather than a type error two lines later, and it is
-    /// why [`Builtin::texture_arg`] exists beside the ordinary unification.
+    /// Not a [`Ty`], and it must not become one. A texture is not a value this
+    /// language can hold — there is nothing to construct, nothing to swizzle and
+    /// nothing to pass — so what this position accepts is a *name* the check pass
+    /// resolves against what the header and the kind make available, and never an
+    /// expression. That is what makes `let x = src;` a refusal at the read rather
+    /// than a type error two lines later, and it is why [`Builtin::texture_arg`]
+    /// exists beside the ordinary unification.
     ///
-    /// Only [`Builtin::Texel`] and [`Builtin::Tap`] use it, and only in their
-    /// first argument.
+    /// Only [`Builtin::Texel`] and [`Builtin::Tap`] use it, and only in their first
+    /// argument.
     Texture,
 }
 
@@ -55,17 +55,17 @@ pub struct Signature {
     pub args: &'static [Shape],
     pub ret: Shape,
     pub domain: Domain,
-    /// Argument positions that must be compile-time constants. `fbm`'s octave
-    /// count is the only one: it is unrolled at lowering time, so it cannot be
-    /// a runtime value.
+    /// Argument positions that must be compile-time constants. `fbm`'s octave count
+    /// is the only one: it is unrolled at lowering time, so it cannot be a runtime
+    /// value.
     pub const_args: &'static [usize],
 }
 
 macro_rules! builtins {
     ($( $variant:ident => $name:literal, [$($arg:expr),*] -> $ret:expr, $domain:expr, [$($ca:literal),*] );* $(;)?) => {
-        /// Every function callable from IR. A name that is not here is not a
-        /// builtin; the check pass then tries it as a type constructor, and
-        /// failing that reports it undefined.
+        /// Every function callable from IR. A name that is not here is not a builtin;
+        /// the check pass then tries it as a type constructor, and failing that reports
+        /// it undefined.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Builtin { $($variant),* }
 
@@ -205,25 +205,25 @@ builtins! {
 }
 
 impl Builtin {
-    /// **Whether this builtin is an L5's**, and so is refused in every other
-    /// kind rather than left to fail at lowering.
+    /// Whether this builtin is an L5's, and so is refused in every other kind
+    /// rather than left to fail at lowering.
     ///
     /// Two of the three refuse themselves — there is no texture name in scope
     /// anywhere but a `frame` block, so `texel(x)` has nothing to name — but
-    /// `frame_step` would type-check anywhere and lower to a read of a
-    /// `viewport` field no other module carries. That is a `.kir` checking
-    /// clean and coming up short at
-    /// [stage 5](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md),
+    /// `frame_step` would type-check anywhere and lower to a read of a `viewport`
+    /// field no other module carries. That is a `.kir` checking clean and coming up
+    /// short at [stage
+    /// 5](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md),
     /// so all three are refused in one place with one sentence.
     pub fn is_frame_effect(self) -> bool {
         matches!(self, Builtin::Texel | Builtin::Tap | Builtin::FrameStep)
     }
 
-    /// **Which argument position takes a texture name**, or `None` for a
-    /// builtin that takes none.
+    /// Which argument position takes a texture name, or `None` for a builtin that
+    /// takes none.
     ///
-    /// Read off [`Signature::args`] rather than written out, so a fourth
-    /// texture builtin reaches the check pass's special case by existing.
+    /// Read off [`Signature::args`] rather than written out, so a fourth texture
+    /// builtin reaches the check pass's special case by existing.
     pub fn texture_arg(self) -> Option<usize> {
         self.signature()
             .args
@@ -231,8 +231,8 @@ impl Builtin {
             .position(|s| matches!(s, Shape::Texture))
     }
 
-    /// Whether this builtin reads the seed stream salt, and so needs it in
-    /// scope wherever it is lowered.
+    /// Whether this builtin reads the seed stream salt, and so needs it in scope
+    /// wherever it is lowered.
     pub fn is_seeded(self) -> bool {
         matches!(
             self,

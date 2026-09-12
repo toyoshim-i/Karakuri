@@ -1,7 +1,8 @@
 //! Byte offsets into `.kir` source, kept on every node so that errors can point
 //! at the text an LLM wrote rather than at a node type.
 
-/// A half-open byte range `[start, end)` into the source a `Proc` was parsed from.
+/// A half-open byte range `[start, end)` into the source a `Proc` was parsed
+/// from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
     pub start: u32,
