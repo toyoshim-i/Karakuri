@@ -1,18 +1,8 @@
 //! Unified render pass and image pass pipeline abstractions.
 //!
-//! # What it is
-//!
-//! A shared execution substrate connecting:
-//! - **Image passes** (`ImagePass`): Fullscreen fragment shaders (`kind L5`) that transform
-//!   or composite frames through uniforms, history buffers, and texture inputs.
-//! - **Render pass execution** ([`RenderPassNode`]): A unified trait for any pass node
-//!   that records draw commands into a target view (`fn record(&self, encoder, target)`).
-//! - **History retention** ([`RetentionManager`]): Position-independent retention of
-//!   retained frames (`Cut::Mix` and `Cut::Exit`), sanitized via `shaders/master.wgsl`'s
-//!   `fs_keep` pass so that no NaN or infinity propagates across frames.
-//!
-//! Every fullscreen pass in this module is driven by a single three-vertex oversized
-//! triangle covering `[-1, 1]` without requiring a vertex buffer or seam.
+//! Provides abstractions for fullscreen fragment shader passes (L5 image passes),
+//! unified render pass execution ([`RenderPassNode`]), and frame history retention
+//! ([`RetentionManager`]).
 
 use std::fmt;
 
@@ -29,19 +19,15 @@ pub const BINDING_SRC: u32 = 1;
 pub const BINDING_HELD: u32 = 2;
 pub const BINDING_SAMPLER: u32 = 3;
 
-/// **A pass node that records draw commands into a target view.**
+/// Trait for nodes that record draw commands into a target view.
 ///
-/// Implemented by both Set-level compositing nodes and Master-level image passes,
-/// unifying execution across geometry, post-processing, and compositing layers.
+/// Implemented by both Set-level compositing nodes and Master-level image passes.
 pub trait RenderPassNode {
     /// Record commands targeting `target`.
     fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView);
 }
 
-/// **Records a fullscreen pass over `target` using a 3-vertex oversized triangle.**
-///
-/// Executes `pass.draw(0..3, 0..1)` over `target` with linear HDR clear-to-transparent
-/// and store operations.
+/// Records a fullscreen pass over `target` using a 3-vertex oversized triangle.
 pub fn record_fullscreen_pass(
     encoder: &mut wgpu::CommandEncoder,
     label: Option<&str>,
@@ -72,7 +58,7 @@ pub fn record_fullscreen_pass(
     pass.draw(0..3, 0..1);
 }
 
-/// **Allocate a 2D linear HDR render target view.**
+/// Allocates a 2D linear HDR render target view.
 pub fn create_hdr_target(
     device: &wgpu::Device,
     width: u32,
@@ -99,19 +85,13 @@ pub fn create_hdr_target(
     texture.create_view(&Default::default())
 }
 
-/// **Which frame a slot reads back**, where its procedure declares `retains`.
-///
-/// The declaration is bare — *this reads a retained frame* — and **which one is
-/// the slot's answer**, which is ADR-0317's decision carried forward unchanged:
-/// the two cuts are different pictures and neither is the obvious one, so the
-/// place that instantiates a procedure chooses rather than the file.
+/// Identifies which historical frame cut is sampled by an image pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
 pub enum Cut {
-    /// **The frame as the mix wrote it**, before anything in this chain touched
-    /// it — `out` applied, nothing added.
+    /// Frame as emitted by the mixer before subsequent chain modifications.
     #[default]
     Mix,
-    /// **This chain's exit**, after the last slot and before the tone map.
+    /// Frame at chain exit, after the final slot and before tonemapping.
     Exit,
 }
 
@@ -141,7 +121,7 @@ impl Cut {
     }
 }
 
-/// **The clock an image pass reads**, handed to the chain by the host.
+/// Simulation clock parameters supplied to image passes.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Clock {
     pub t: f32,
@@ -150,11 +130,9 @@ pub struct Clock {
     pub seed_salt: u32,
 }
 
-/// **Unified frame retention management.**
+/// Manages retained frame pipelines, targets, and bind groups for historical frame cuts.
 ///
-/// Manages retention pipelines, targets, and copy bind groups for `Cut::Mix` and `Cut::Exit`.
-/// Sanitizes retained frames via `shaders/master.wgsl`'s `fs_keep` pass so that no NaN
-/// or infinity propagates into history.
+/// Retained frames are sanitized via `fs_keep` to prevent propagation of NaN or infinity.
 pub struct RetentionManager {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
@@ -312,12 +290,7 @@ impl RetentionManager {
     }
 }
 
-/// **A compiled fullscreen image pass.**
-///
-/// Encapsulates:
-/// - Pipeline execution (`pass.draw(0..3, 0..1)`).
-/// - Uniform buffer storage, layout, and packing scratch.
-/// - Standard L5 bind group construction (`uniform`, `src`, `held`, `sampler`).
+/// Compiled fullscreen image pass managing pipelines, uniforms, and textures.
 pub struct ImagePass {
     name: String,
     pipeline: wgpu::RenderPipeline,
@@ -587,7 +560,7 @@ impl ImagePass {
     }
 }
 
-/// **An [`ImagePass`] bound to its runtime resources, ready to execute.**
+/// An [`ImagePass`] bound to its runtime resources, ready to execute.
 pub struct BoundImagePass<'a> {
     pub pass: &'a ImagePass,
     pub bind_group: &'a wgpu::BindGroup,

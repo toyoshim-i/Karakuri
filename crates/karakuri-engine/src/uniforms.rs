@@ -1,43 +1,14 @@
-//! Packing CPU values into a generated uniform layout.
+//! Packing CPU parameter values into uniform buffer layouts.
 //!
-//! The generator computes each field's byte offset from WGSL's own alignment
-//! rules and publishes the result as a [`UniformLayout`]. The engine writes
-//! into that layout by field name rather than mirroring it as a `#[repr(C)]`
-//! struct, because a mirrored struct is a second copy of the layout that
-//! nothing checks: it compiles fine when it drifts, and the symptom is a
-//! shader reading a parameter out of the middle of another one.
-//!
-//! Every named field must be written before upload. A field left unset is a
-//! bug — the engine knows what the procedure declared — so this refuses to
-//! produce bytes rather than uploading a silent zero.
-//!
-//! ## Why the storage is owned by the caller
-//!
-//! Packing happens in `Set::prepare`, which runs once per frame on the render
-//! thread, where nothing allocates. An
-//! earlier version of this built a fresh `Vec<u8>` and a fresh
-//! `HashSet<String>` per call and pushed a freshly allocated `String` into
-//! that set for every field it wrote — three kinds of allocation per uniform
-//! buffer per frame, two uniform buffers per frame. The layout is fixed at
-//! build time, so all of it is knowable then: a [`UniformScratch`] sized once
-//! against the layout is handed back to a [`UniformPacker`] every frame,
-//! cleared in place, and written into. Nothing here allocates after
-//! construction, and `finish` hands back a borrow of the scratch rather than
-//! a `Vec` it had to build.
+//! Provides [`UniformScratch`] and [`UniformPacker`] to validate and serialize
+//! named uniform fields into GPU-ready byte representations without per-frame heap allocations.
 
 use karakuri_codegen::layout::UniformLayout;
 
-/// Reusable storage for one uniform buffer's worth of packing, sized once
-/// against the layout it will be written through.
-///
-/// Owned by whatever writes that buffer every frame — `Set` holds one per
-/// uniform group — and borrowed for the duration of a single frame's writes
-/// by [`UniformScratch::pack`].
+/// Reusable host-side staging buffer for packing uniform values without per-frame allocations.
 pub struct UniformScratch {
     bytes: Vec<u8>,
-    /// One flag per layout field, by field index. A `HashSet<String>` said the
-    /// same thing and allocated a `String` per field per frame to say it; the
-    /// layout's field order is fixed at build time, so an index is enough.
+    /// Tracks whether each field index in the layout has been written.
     written: Vec<bool>,
 }
 
@@ -49,13 +20,7 @@ impl UniformScratch {
         }
     }
 
-    /// Borrow this scratch for one frame's writes.
-    ///
-    /// Clears in place: `fill` over storage that is already the right size,
-    /// so there is nothing to allocate, nothing to grow, and nothing to drop.
-    /// `layout` must be the one this scratch was sized against — passing a
-    /// different one is a bug rather than a resize, since the pipelines built
-    /// against the original are still the ones being fed.
+    /// Clears scratch storage in place and returns a packer for writing frame uniforms.
     pub fn pack<'a>(&'a mut self, layout: &'a UniformLayout) -> UniformPacker<'a> {
         assert_eq!(
             self.bytes.len(),
@@ -76,6 +41,7 @@ impl UniformScratch {
     }
 }
 
+/// Serializes and validates field values against a [`UniformLayout`].
 pub struct UniformPacker<'a> {
     layout: &'a UniformLayout,
     scratch: &'a mut UniformScratch,
@@ -83,9 +49,6 @@ pub struct UniformPacker<'a> {
 
 impl<'a> UniformPacker<'a> {
     fn write(&mut self, name: &str, wgsl_ty: &str, data: &[u8]) {
-        // Copied out of `self` first: `self.layout` is a shared reference with
-        // the scratch's lifetime, and reading it *through* `self` would keep a
-        // borrow of `self` alive across the mutation of `self.scratch` below.
         let layout = self.layout;
         let (index, field) = layout
             .fields
@@ -123,8 +86,7 @@ impl<'a> UniformPacker<'a> {
     }
 
     pub fn vec3(&mut self, name: &str, v: [f32; 3]) -> &mut Self {
-        // 12 bytes written into a slot aligned to 16: the generator already
-        // placed the following field past the padding.
+        // 12-byte vec3 aligned to 16 bytes per WGSL uniform rules.
         let mut b = [0u8; 12];
         for (i, x) in v.iter().enumerate() {
             b[i * 4..i * 4 + 4].copy_from_slice(&x.to_le_bytes());
@@ -154,36 +116,11 @@ impl<'a> UniformPacker<'a> {
         self
     }
 
-    /// The packed bytes, once every named field has been written.
+    /// Finalizes packing and returns a byte slice of the serialized uniform data.
     ///
-    /// Panics rather than uploading a partially filled buffer: a missing field
-    /// reads as zero in the shader, and a parameter that is silently zero is
-    /// far harder to find than a panic naming it.
+    /// # Panics
     ///
-    /// **It cannot tell a zero somebody meant from a zero that means nothing
-    /// drives this**, and that is still true — but it is now the ordinary
-    /// scalar case rather than a vector-shaped hole. `node::write_params` packs
-    /// a `vec2` or a `vec3` from the Set's value under one component key per
-    /// component (`glow.x`, `glow.y`, `glow.z`), so a declared default, an
-    /// override and a binding all reach the field; a component with **nothing**
-    /// driving it resolves through the same `unwrap_or(0.0)` a `float` with
-    /// nothing driving it does
-    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
-    ///
-    /// **What has not changed is that a write satisfies this scan.** Every one
-    /// of those goes through `write`, which sets the flag — so where a value is
-    /// genuinely missing, "the assertion built to stop a silently-zero parameter
-    /// is satisfied by writing one" (`docs/contributing.md` §3) still describes
-    /// what happens. This paragraph said the whole vector case was that, and
-    /// after ADR-0268 that is too strong: the case is now a param whose default
-    /// the IR fold cannot state, which is a scalar's case too. The field is
-    /// written either way, because skipping it trips this panic and packing it
-    /// as an `f32` trips `write`'s type assertion on the render thread.
-    ///
-    /// The check is a scan for *any* unwritten flag before the list of names
-    /// is built, so the successful path — every frame — collects nothing and
-    /// allocates nothing. The returned slice borrows the scratch, so the
-    /// caller uploads straight out of storage that outlives the frame.
+    /// Panics if any field defined in the [`UniformLayout`] was not written.
     pub fn finish(self) -> &'a [u8] {
         if self.scratch.written.iter().any(|w| !w) {
             let missing: Vec<&str> = self
@@ -235,11 +172,7 @@ mod tests {
         );
     }
 
-    /// The whole point of reusing the storage: the second frame's bytes must
-    /// be the second frame's, not the first frame's with some of them
-    /// overwritten. A field the layout has but the caller happens to write
-    /// the same value into every frame would hide a missing `fill`; writing
-    /// different values and checking all of them is what catches it.
+    /// Verifies that consecutive pack operations overwrite all fields without carryover.
     #[test]
     fn a_reused_scratch_carries_nothing_over_from_the_previous_frame() {
         let layout = layout();
@@ -267,9 +200,7 @@ mod tests {
         );
     }
 
-    /// And the bookkeeping resets with it: a field written on the first frame
-    /// and forgotten on the second must still be refused. A `written` set that
-    /// were merely reused rather than cleared would pass this silently.
+    /// Verifies that field write tracking resets across pack invocations.
     #[test]
     #[should_panic(expected = "never written")]
     fn a_reused_scratch_does_not_remember_that_a_field_was_written_last_frame() {
@@ -306,10 +237,7 @@ mod tests {
         p.f32("nonexistent", 1.0);
     }
 
-    /// A `Set` built for one layout must not be able to pack against another.
-    /// The pipelines and the uniform buffer behind a scratch were sized against
-    /// the layout it was constructed with; a second layout of a different shape
-    /// reaching it means two of them have been crossed.
+    /// Verifies that packing against an mismatched layout panics.
     #[test]
     #[should_panic(expected = "sized against a different uniform layout")]
     fn a_scratch_cannot_be_packed_against_a_layout_it_was_not_sized_for() {

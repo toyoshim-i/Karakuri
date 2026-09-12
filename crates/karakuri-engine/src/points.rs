@@ -1,9 +1,4 @@
-//! The hardcoded point pipeline.
-//!
-//! This is the vertical slice: a `VideoSource` that puts elements on screen
-//! before the IR can produce anything. `karakuri-codegen` will replace the
-//! shader, not the surrounding structure, so everything here that is not the
-//! WGSL itself is meant to survive.
+//! Standalone point cloud rendering pipeline.
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
@@ -11,8 +6,7 @@ use wgpu::util::DeviceExt;
 use crate::camera::Orbit;
 use crate::video_source::VideoSource;
 
-/// Matches `Uniforms` in `shaders/points.wgsl`. 112 bytes, which is a multiple
-/// of 16; the trailing pad is what makes it one.
+/// Uniform buffer layout matching `shaders/points.wgsl`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 struct Uniforms {
@@ -29,8 +23,7 @@ struct Uniforms {
     _pad: [f32; 2],
 }
 
-/// The parameters a `soft_points` artifact would declare, with the ranges from
-/// the spec's example. They live here until `param` records can drive them.
+/// Configurable render parameters for the points pipeline.
 #[derive(Debug, Clone, Copy)]
 pub struct Params {
     pub point_scale: f32,
@@ -57,7 +50,7 @@ pub struct Points {
     capacity: u32,
     viewport: [f32; 2],
     seed_salt: u32,
-    /// Simulation time. Advanced by `steps * dt`, never read from a clock.
+    /// Simulation time in seconds.
     t: f32,
     dt: f32,
     pub params: Params,
@@ -65,8 +58,7 @@ pub struct Points {
 }
 
 impl Points {
-    /// Six vertices per element: WebGPU has no point size, so `topology points`
-    /// expands to a quad rather than to `PrimitiveTopology::PointList`.
+    /// Six vertices per quad element (expanding point primitives into billboard quads).
     const VERTICES_PER_ELEMENT: u32 = 6;
 
     pub fn new(device: &wgpu::Device, capacity: u32, seed_salt: u32) -> Points {
@@ -125,14 +117,7 @@ impl Points {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba16Float,
-                    // `blend additive`, no depth write: this is what avoids any
-                    // sort requirement. **This renderer is additive and has no
-                    // other mode** — `blend weighted` is a property of a
-                    // generated L4, and this is the hand-written stand-in that
-                    // predates them.
-                    // Alpha accumulates coverage for the L5 mix rather than
-                    // being discarded — the argument is in `node::Renderer`,
-                    // on the generated L4 pipeline this one shadows.
+                    // Additive blend state accumulating RGB luminance and alpha coverage.
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -177,8 +162,7 @@ impl Points {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
     }
 
-    /// Simulation seconds since start. Diverges from wall clock the moment the
-    /// step cap bites, and that is intended.
+    /// Returns current simulation time in seconds.
     pub fn time(&self) -> f32 {
         self.t
     }
@@ -200,8 +184,7 @@ impl Points {
         }
     }
 
-    /// Uploads uniforms. Separate from `render` because it needs the queue, and
-    /// a parameter change is a uniform write rather than a structural change.
+    /// Updates simulation time and writes uniform buffer data.
     pub fn prepare(&mut self, queue: &wgpu::Queue, steps: u8) {
         self.t += self.dt * f32::from(steps);
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&self.uniforms()));
@@ -222,8 +205,7 @@ impl VideoSource for Points {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    // `TRANSPARENT`: alpha is coverage and starts at nothing.
-                    // See `node::Renderer::draw`'s L4 pass.
+                    // Clear to transparent black to start coverage accumulation at zero.
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,
                 },
@@ -245,8 +227,7 @@ mod tests {
 
     #[test]
     fn uniforms_are_sixteen_byte_aligned() {
-        // A uniform buffer binding whose size is not a multiple of 16 is a
-        // validation error, and the failure is a long way from the cause.
+        // Verifies uniform buffer size is aligned to 16 bytes for WebGPU compliance.
         assert_eq!(std::mem::size_of::<Uniforms>() % 16, 0);
         assert_eq!(std::mem::size_of::<Uniforms>(), 112);
     }
