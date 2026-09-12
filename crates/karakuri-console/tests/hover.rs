@@ -1,32 +1,29 @@
-//! **The hover layer: that the words are the page's, that the dwell is a
-//! dwell, and that a tip stays inside the window.**
+//! The hover layer: that the words are the page's, that the dwell is a dwell,
+//! and that a tip stays inside the window.
 //!
 //! Six things, and the first three are what stop the layer becoming a second
 //! copy of the manual:
 //!
-//! 1. **The table is the console's own rows, at the granularity they claim.**
-//!    `hover::TIPS` is one entry per row of `input::PROBES`, in that order, so
-//!    a control registered there and never given a tip is a compile error and
-//!    an entry cannot answer for its neighbour — and a row that claims five
-//!    controls carries five entries unless `UNEVEN` says why it does not,
-//!    which is the half of *every compact control explains itself* that the
-//!    array's length cannot hold.
-//! 2. **Every citation resolves to the one element it names**, in
-//!    `docs/manual/console.html`. This is the half that goes stale in silence:
-//!    nothing about editing the page tells you a `Cite` was reading it, so the
-//!    check is *does the element this comment names still exist* rather than
-//!    *is this text plausible* — `tests/transcribed_constants_cite_the_mock.rs`'s
-//!    argument, over the page rather than over the stylesheet.
-//! 3. **No tip arrives with an entity still in it.** The mock writes
-//!    `&#8853;` and `&mdash;`, and a panel drawing those five characters is
-//!    drawing markup at an operator. The scan refuses what it cannot read
-//!    rather than reading it wrongly.
-//! 4. **The box is the mock's own rule**, term for term out of
-//!    `[data-tip]::after`.
-//! 5. **The dwell is a dwell**: nothing before it, the page's words after it,
-//!    and nothing at all once the pointer leaves.
-//! 6. **A tip is inside the window** at every corner, and it asks for a frame
-//!    when it appears or goes and never while it is up.
+//! 1. The table is the console's own rows, at the granularity they claim.
+//! `hover::TIPS` is one entry per row of `input::PROBES`, in that order, so a
+//! control registered there and never given a tip is a compile error and an
+//! entry cannot answer for its neighbour — and a row that claims five controls
+//! carries five entries unless `UNEVEN` says why it does not, which is the half
+//! of *every compact control explains itself* that the array's length cannot
+//! hold. 2. Every citation resolves to the one element it names, in
+//! `docs/manual/console.html`. This is the half that goes stale in silence:
+//! nothing about editing the page tells you a `Cite` was reading it, so the
+//! check is *does the element this comment names still exist* rather than *is
+//! this text plausible* — `tests/transcribed_constants_cite_the_mock.rs`'s
+//! argument, over the page rather than over the stylesheet. 3. No tip arrives
+//! with an entity still in it. The mock writes `&#8853;` and `&mdash;`, and a
+//! panel drawing those five characters is drawing markup at an operator. The
+//! scan refuses what it cannot read rather than reading it wrongly. 4. The box
+//! is the mock's own rule, term for term out of `[data-tip]::after`. 5. The
+//! dwell is a dwell: nothing before it, the page's words after it, and nothing
+//! at all once the pointer leaves. 6. A tip is inside the window at every
+//! corner, and it asks for a frame when it appears or goes and never while it
+//! is up.
 //!
 //! None of it needs a window, a device or a disk — the page is compiled in.
 
@@ -47,10 +44,10 @@ use karakuri_console::room::Room;
 use karakuri_console::view::{transport, View};
 use karakuri_layout::Point;
 
-/// **The rows the mock is silent about**, and the roadmap's reading rule said
-/// as a value: *the mock is not exhaustive … there will be gaps in the
-/// functions too*. A row that quietly lost its tips fails against this list,
-/// and a row that gains one in the page is a line to delete from it.
+/// The rows the mock is silent about, and the roadmap's reading rule said as a
+/// value: *the mock is not exhaustive … there will be gaps in the functions
+/// too*. A row that quietly lost its tips fails against this list, and a row
+/// that gains one in the page is a line to delete from it.
 const SILENT: [&str; 4] = [
     // The page tips a pane head's count and its `keep` capsule, and says
     // nothing about the name between them.
@@ -65,14 +62,14 @@ const SILENT: [&str; 4] = [
     "the Staging lane's back capsules",
 ];
 
-/// **How many tipped elements the scan must find at the least.** A floor and
-/// not a count: the page only grows, and what this catches is a scan that has
-/// stopped reading — `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`'s
-/// shape. It found 140 on 2026-09-09.
+/// How many tipped elements the scan must find at the least. A floor and not a
+/// count: the page only grows, and what this catches is a scan that has stopped
+/// reading — `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`'s shape. It
+/// found 140 on 2026-09-09.
 const ELEMENTS_FLOOR: usize = 120;
 
-/// A panel at a plausible viewport, solved, with a context that has drawn
-/// once — every other test in this crate's opening.
+/// A panel at a plausible viewport, solved, with a context that has drawn once
+/// — every other test in this crate's opening.
 fn console() -> (Panel, egui::Context) {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
@@ -160,25 +157,25 @@ fn a_row_with_no_tips_is_one_the_mock_is_silent_about() {
     );
 }
 
-/// **The rows whose slice is not one entry per control the row claims, and
-/// why each one is not.**
+/// The rows whose slice is not one entry per control the row claims, and why
+/// each one is not.
 ///
 /// `input::PROBES` counts what the pointer reaches through a row and `TIPS`
-/// says what explains itself, so the two numbers agree wherever the mock tips
-/// a row's controls one at a time. Where they do not, the reason is one of
-/// four and it is written down here rather than being a number that drifts:
-/// the page tips one element over several controls, it tips several elements
-/// for one, the second control is a card the page says nothing about, or the
-/// tips are owed.
+/// says what explains itself, so the two numbers agree wherever the mock tips a
+/// row's controls one at a time. Where they do not, the reason is one of four
+/// and it is written down here rather than being a number that drifts: the page
+/// tips one element over several controls, it tips several elements for one,
+/// the second control is a card the page says nothing about, or the tips are
+/// owed.
 ///
-/// **The third column is how many entries the row does carry**, and it is here
-/// for the reason the check exists at all: an excused row is out from under
+/// The third column is how many entries the row does carry, and it is here for
+/// the reason the check exists at all: an excused row is out from under
 /// `PROBES`' count, so without a number of its own an entry could be deleted
 /// from one and nothing would say so. It is a transcribed count and it moves
 /// with the bay, which is what makes touching one of these rows a line to
 /// re-read rather than a number to bump.
 ///
-/// **A row that gains its missing entries is a line to delete from here**, and
+/// A row that gains its missing entries is a line to delete from here, and
 /// deleting it is what puts the row back under the count.
 const UNEVEN: [(&str, &str, usize); 8] = [
     // One kind of control and four chips drawn: the page tips all four sinks
@@ -242,9 +239,9 @@ const UNEVEN: [(&str, &str, usize); 8] = [
     ),
 ];
 
-/// **A row claiming several controls carries several tips**, which is the
-/// exit `docs/roadmap.md`'s M5.11 names: *every compact control explains
-/// itself on hover*.
+/// A row claiming several controls carries several tips, which is the exit
+/// `docs/roadmap.md`'s M5.11 names: *every compact control explains itself on
+/// hover*.
 ///
 /// The array being `PROBES.len()` long is what stops a *row* going untipped,
 /// and it says nothing about a row that claims five controls and explains one
@@ -531,11 +528,11 @@ fn a_tip_at_an_edge_is_inside_the_window() {
     );
 }
 
-/// **The tip's MIDI line is the live map's, and the page's sentence stays
-/// where a control is unmapped.**
+/// The tip's MIDI line is the live map's, and the page's sentence stays where a
+/// control is unmapped.
 ///
-/// The page's `⊕ MIDI:` clause is the *mock's* assignment and no operator's:
-/// a run whose map puts `cc 5` on gain A read `cc → gain A` in the tip because
+/// The page's `⊕ MIDI:` clause is the *mock's* assignment and no operator's: a
+/// run whose map puts `cc 5` on gain A read `cc → gain A` in the tip because
 /// the page said so, which is the tip being confidently wrong about the one
 /// thing somebody hovers to check (P-0087, ADR-0336).
 ///

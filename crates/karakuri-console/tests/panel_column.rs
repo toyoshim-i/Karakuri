@@ -1,10 +1,10 @@
-//! **The panel column of the manual, against the operations this crate's
-//! controls emit.**
+//! The panel column of the manual, against the operations this crate's
+//! controls emit.
 //!
 //! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
 //! made the panel column of `docs/manual/operations.html` the Interface
-//! milestone's meter and defined what a badge in it means: **`has` means an
-//! operator running the instrument reaches the operation.** It also said what
+//! milestone's meter and defined what a badge in it means: `has` means an
+//! operator running the instrument reaches the operation. It also said what
 //! the first flip owes — *"a test asserts that each `has` row's operation is
 //! actually emitted by a console control, and fails in both directions"* — and
 //! this file is that test, owed by the five badges `cargo run -p karakuri`
@@ -16,22 +16,22 @@
 //! sits beside [`vocabulary.rs`](../tests/vocabulary.rs), which reads the same
 //! page for the *Arranging the console* section. It is a separate file from
 //! that one because it asks a different question of a different type:
-//! `vocabulary.rs` checks `panel::Op` against one **section**'s rows, and this
-//! checks `karakuri_operation::Operation` against one **column**'s badges.
+//! `vocabulary.rs` checks `panel::Op` against one section's rows, and this
+//! checks `karakuri_operation::Operation` against one column's badges.
 //!
 //! # The whole problem is deciding what "a control emits it" means
 //!
 //! There is no list in this crate of the operations its controls emit, and a
 //! list written here would be the second copy of one
 //! (`docs/contributing.md` §4).
-//! So the set is **read out of this crate's own source**, and the criterion is
+//! So the set is read out of this crate's own source, and the criterion is
 //! stated here rather than left for a reader to infer from a regex.
 //!
-//! **The criterion.** Over every `.rs` file in `crates/karakuri-console/src`,
+//! The criterion. Over every `.rs` file in `crates/karakuri-console/src`,
 //! a line is taken as code after two cuts: a line whose first non-space
 //! characters are `//` is dropped whole — which is every `///`, `//!` and `//`
 //! — and what is left is truncated at its first `//`. In what survives, every
-//! `Operation::` followed by an identifier is an **emission**, and the
+//! `Operation::` followed by an identifier is an emission, and the
 //! identifier is the variant. That is what separates
 //! `Knob::Trim => Operation::SetGain { .. }` from the fifteen `[`Operation::…`]`
 //! links in the doc comments around it, which `grep 'Operation::'` cannot.
@@ -39,50 +39,50 @@
 //! # What the criterion cannot see, and which way each one fails
 //!
 //! Every one of these is a way the scan is wrong; what matters is that all but
-//! the last of them **fails loudly** rather than passing quietly, and that is
+//! the last of them fails loudly rather than passing quietly, and that is
 //! why the two cuts are made in the narrowing direction.
 //!
-//! - **A block comment.** `/* … Operation::SetSync … */` is not a line comment
+//! - A block comment. `/* … Operation::SetSync … */` is not a line comment
 //!   and is read as an emission. It is a *false positive*: the phantom variant
 //!   has no `sample` arm, so [`emissions`] panics naming it.
-//! - **`//` inside a string on an emitting line.** The truncation would cut
+//! - `//` inside a string on an emitting line. The truncation would cut
 //!   the emission away with it. That is a *false negative*, and a false
 //!   negative cannot fail the direction that says every emission is on the
 //!   page — it fails
 //!   [`every_panel_route_the_page_marks_built_is_emitted_by_a_console_control`]
 //!   instead, which reports it as the page claiming a control that does not
 //!   exist. Wrong reason, right failure.
-//! - **An emission that never says `Operation::`.** A `use
+//! - An emission that never says `Operation::`. A `use
 //!   karakuri_operation::Operation::SetGain;` and a bare `SetGain { .. }`, a
 //!   type alias, a variant handed back from a helper in another crate. Invisible
 //!   here, and a *false negative* again — so it surfaces the same way, from the
 //!   other direction, the moment the page claims it.
-//! - **A false positive on a row already marked `has`.** The one combination
+//! - A false positive on a row already marked `has`. The one combination
 //!   that passes in silence: text that is not an emission, naming an operation
 //!   the page already claims. Nothing here catches that, and what does is that
-//!   the `has` rows each have a test that **presses the control** —
+//!   the `has` rows each have a test that presses the control —
 //!   `fader.rs` for the trim and the fader, `blend.rs`, `tally.rs` and
 //!   `mask.rs` for the three chips, and `arrangement_pill.rs` for the save and
 //!   the restore. This file does not press anything; it is an inventory, and
 //!   those five are the proof each item in it is real.
-//! - **Construction is not reachability, and reachability is the definition.**
+//! - Construction is not reachability, and reachability is the definition.
 //!   The largest one by far. A `pub fn` in `src/` that builds an `Operation`
 //!   and that nothing on the drawn panel calls reads exactly like one a hand
 //!   can reach, because ADR-0213's *the operator reaches it* is a property of
 //!   `crates/karakuri/src/main.rs` — where a claimed press becomes
 //!   `Mixer::blend`, `tally`, `mask` and a drag becomes `Dragged::Fader` — and
 //!   this crate takes no device and cannot depend on that binary (ADR-0156).
-//!   **So this file checks the necessary half and not the sufficient one.**
+//!   So this file checks the necessary half and not the sufficient one.
 //!   A control written here and never wired there would pass, and the badge
 //!   would be a lie the page tells on its own authority.
-//! - **Only the panel column, and only through `Operation`.** The six rows of
+//! - Only the panel column, and only through `Operation`. The six rows of
 //!   *Arranging the console* reach the operator through `panel::Op` and
 //!   through a drag that is no operation at all, not through `Operation`, so
 //!   no scan for `Operation::` can see them and this file says nothing about
 //!   their badges. `vocabulary.rs` is where that type meets this page, and it
 //!   asks a running `Panel` what a hand reaches rather than reading source.
 //!
-//!   **It is an exemption in the code and not only a sentence here**, which is
+//!   It is an exemption in the code and not only a sentence here, which is
 //!   [`ELSEWHERE`]: the second assertion below reads every `has` badge in the
 //!   column and demands an emission for it, so the day *Move a boundary* was
 //!   marked built this file failed saying the page claimed a control that does
@@ -99,9 +99,9 @@ use karakuri_operation::{BlendMode, Operation, Residency, WipeKind};
 /// The specification, relative to the workspace root.
 const PAGE: &str = "docs/manual/operations.html";
 
-/// The source this crate's controls are read out of, relative to the same
-/// root. Its own crate, read as text: there is no other way to ask *which
-/// operations does this code construct* from inside a test binary.
+/// The source this crate's controls are read out of, relative to the same root.
+/// Its own crate, read as text: there is no other way to ask *which operations
+/// does this code construct* from inside a test binary.
 const SRC: &str = "crates/karakuri-console/src";
 
 /// What marks a row on the page — the marker `vocabulary.rs` and
@@ -110,24 +110,24 @@ const SRC: &str = "crates/karakuri-console/src";
 /// neither.
 const ROW: &str = r#"<div class="op-head">"#;
 
-/// **The one section of the page whose panel badges are not this file's**, and
-/// the heading is what identifies it because a section is an `<h2>` here as it
-/// is everywhere else on the page.
+/// The one section of the page whose panel badges are not this file's, and the
+/// heading is what identifies it because a section is an `<h2>` here as it is
+/// everywhere else on the page.
 ///
 /// *Arranging the console* is the console's own shape, and every route into it
 /// is [`karakuri_console::panel::Op`] or a gesture on
 /// `karakuri_console::panel::Panel` — never a `karakuri_operation::Operation`,
 /// which is what this file scans for. So a `has` badge in that section is a
-/// claim this file cannot judge and **would judge wrongly**: *Move a boundary*
-/// is a drag rather than an operation, the vocabulary carries it as
-/// `Undecided`, and nothing in [`SRC`] will ever construct it. That was the
-/// header's last bullet said as prose; this is it said as code, because the
-/// bullet was true of the first assertion below and not of the second, which
-/// went on demanding an `Operation` for every badge in the column.
+/// claim this file cannot judge and would judge wrongly: *Move a boundary* is a
+/// drag rather than an operation, the vocabulary carries it as `Undecided`, and
+/// nothing in [`SRC`] will ever construct it. That was the header's last bullet
+/// said as prose; this is it said as code, because the bullet was true of the
+/// first assertion below and not of the second, which went on demanding an
+/// `Operation` for every badge in the column.
 ///
-/// **Those badges are checked, and `tests/vocabulary.rs` is where.** It reads
-/// this section and asks a running `Panel` what a hand on it reaches, both
-/// ways round — the same pair as here, against the type the console performs.
+/// Those badges are checked, and `tests/vocabulary.rs` is where. It reads this
+/// section and asks a running `Panel` what a hand on it reaches, both ways
+/// round — the same pair as here, against the type the console performs.
 const ELSEWHERE: &str = "<h2>Arranging the console</h2>";
 
 /// The badge text of a route that names nowhere. A `plan` badge is allowed to
@@ -136,10 +136,10 @@ const ELSEWHERE: &str = "<h2>Arranging the console</h2>";
 /// from where.
 const NOWHERE: &str = "&mdash;";
 
-/// **The rows a control on this panel emits and an operator still cannot
-/// reach**, which is the one gap between *emitted* and ADR-0213's *reached*
-/// that this file has ever had to carry. **It is empty**, and the entry it
-/// held is what the mechanism was built for.
+/// The rows a control on this panel emits and an operator still cannot reach,
+/// which is the one gap between *emitted* and ADR-0213's *reached* that this
+/// file has ever had to carry. It is empty, and the entry it held is what the
+/// mechanism was built for.
 ///
 /// # What the one entry was, and how it left
 ///
@@ -148,43 +148,42 @@ const NOWHERE: &str = "&mdash;";
 /// afterwards. *Set a deck's sync mode* did not, for one release: `SetSync`
 /// converted to `Owed(NotSettled)`, which was `karakuri-operation-record`
 /// saying that *what* its record carried was undecided — the anchor goes
-/// through the engine's clamp, so whether the record carried what was asked
-/// for or what was clamped read as *"a decision about the bytes on disk"*, and
+/// through the engine's clamp, so whether the record carried what was asked for
+/// or what was clamped read as *"a decision about the bytes on disk"*, and
 /// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
 /// left it open by name. So the deck head's sync chip and its anchor were
 /// reachable *affordances* over an unwritable record: a press was claimed, the
-/// operation was emitted, the window printed the question, and the deck did
-/// not move.
+/// operation was emitted, the window printed the question, and the deck did not
+/// move.
 ///
-/// **There were never two answers.** The clamp holds the anchor inside the
-/// range every tempo in the system is held in, and a session's tempo is
-/// already inside it, so the anchor asked for and the anchor clamped are the
-/// same number. What was missing was a reading, `Current::tempo` is it, and
-/// the conversion writes `Record::Transport` from the policy
+/// There were never two answers. The clamp holds the anchor inside the range
+/// every tempo in the system is held in, and a session's tempo is already
+/// inside it, so the anchor asked for and the anchor clamped are the same
+/// number. What was missing was a reading, `Current::tempo` is it, and the
+/// conversion writes `Record::Transport` from the policy
 /// `karakuri_engine::transport::Transport::engaged` had already fixed.
 ///
-/// **`has` would have been a lie in exactly the way ADR-0213 was written to
-/// prevent** — *"the row is claimed the day a person who launched the
-/// instrument can perform that operation from the panel in front of them"* —
-/// and drawing no control would have been a worse one, because the panel is
-/// the only surface that can offer re-anchoring at all. So the badge stayed
-/// `plan` while that was true and the exemption was written here with its
-/// reason, which is what the first assertion's own failure message invites:
-/// *"Flip the badge, or say here why the control is not reachable"*.
+/// `has` would have been a lie in exactly the way ADR-0213 was written to
+/// prevent — *"the row is claimed the day a person who launched the instrument
+/// can perform that operation from the panel in front of them"* — and drawing
+/// no control would have been a worse one, because the panel is the only
+/// surface that can offer re-anchoring at all. So the badge stayed `plan` while
+/// that was true and the exemption was written here with its reason, which is
+/// what the first assertion's own failure message invites: *"Flip the badge, or
+/// say here why the control is not reachable"*.
 ///
 /// # It was written to delete itself, and it did
 ///
-/// A list here is a second copy of something (`docs/contributing.md` §4), so
-/// it was held
-/// against both of its halves by
+/// A list here is a second copy of something (`docs/contributing.md` §4), so it
+/// was held against both of its halves by
 /// [`the_unreachable_exemption_is_still_the_state_of_the_page`]: the operation
-/// had to still be emitted, and its badge had to still **not** be `has`. The
-/// day the record was settled the badge flipped, that test failed, and it
-/// named the line to remove. That is the whole of what happened here, and it
-/// is why the array stays: the mechanism cost one line to keep and it is what
-/// the next control to reach past the page will be caught by.
+/// had to still be emitted, and its badge had to still not be `has`. The day
+/// the record was settled the badge flipped, that test failed, and it named the
+/// line to remove. That is the whole of what happened here, and it is why the
+/// array stays: the mechanism cost one line to keep and it is what the next
+/// control to reach past the page will be caught by.
 ///
-/// **Not derived from `karakuri-operation-record`**, which is where the answer
+/// Not derived from `karakuri-operation-record`, which is where the answer
 /// lives, because this package deliberately holds no dependency on it —
 /// `Cargo.toml` says so at length, and reaching for one to spell a one-line
 /// exemption would undo the closing of ADR-0156 that manifest records.
@@ -207,8 +206,8 @@ fn page() -> String {
     })
 }
 
-/// **A value of the operation a variant name stands for**, so that the row
-/// this file looks for is [`Operation::title`]'s answer and never a heading
+/// A value of the operation a variant name stands for, so that the row this
+/// file looks for is [`Operation::title`]'s answer and never a heading
 /// transcribed here.
 ///
 /// The same job `mcp.rs`'s `sample` does for a tool's arguments, and it fails
@@ -751,16 +750,15 @@ fn bind_at() -> karakuri_operation::BindAt {
     }
 }
 
-/// Every `.rs` file under `dir`, **including the ones in directories under
-/// it**.
+/// Every `.rs` file under `dir`, including the ones in directories under it.
 ///
 /// The read was one level deep until 2026-09-07, with the count floor above as
-/// its only guard — and the floor could not have caught the case it was
-/// written for. There are seven `.rs` files directly under `SRC`; splitting
-/// `view.rs` into `view/` would leave seven of them there and take every
-/// emission in it out of this scan, silently, with `files.len() >= 7` still
-/// true. `crates/karakuri/src/main.rs`'s press handler ran the same listing
-/// with the same floor and is gone; this is the other half.
+/// its only guard — and the floor could not have caught the case it was written
+/// for. There are seven `.rs` files directly under `SRC`; splitting `view.rs`
+/// into `view/` would leave seven of them there and take every emission in it
+/// out of this scan, silently, with `files.len() >= 7` still true.
+/// `crates/karakuri/src/main.rs`'s press handler ran the same listing with the
+/// same floor and is gone; this is the other half.
 fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
     let entries = fs::read_dir(dir).unwrap_or_else(|e| {
         panic!(
@@ -778,19 +776,18 @@ fn walk(dir: &Path, into: &mut Vec<PathBuf>) {
     }
 }
 
-/// **Every operation a control in this crate constructs**, by the criterion in
-/// this file's header, as an `Operation` apiece.
+/// Every operation a control in this crate constructs, by the criterion in this
+/// file's header, as an `Operation` apiece.
 ///
 /// Sorted and deduplicated by title, because the question is which rows are
-/// reached and one row may be reached from more than one file.
-/// **Every `.rs` file under [`SRC`], as one string**, for [`DRAWN`]'s markers
-/// to be looked for in.
+/// reached and one row may be reached from more than one file. Every `.rs` file
+/// under [`SRC`], as one string, for [`DRAWN`]'s markers to be looked for in.
 ///
-/// Comments are **not** cut, unlike [`emissions`]: a marker naming a field or
-/// a function is looked for as text, and a mention of one in a doc comment is
-/// a mention of a thing that exists. The failure this guards against is a
-/// readout that stopped being drawn, and deleting a field deletes the lines
-/// that talk about it.
+/// Comments are not cut, unlike [`emissions`]: a marker naming a field or a
+/// function is looked for as text, and a mention of one in a doc comment is a
+/// mention of a thing that exists. The failure this guards against is a readout
+/// that stopped being drawn, and deleting a field deletes the lines that talk
+/// about it.
 fn code_of_src() -> String {
     let dir = workspace().join(SRC);
     let mut files = Vec::new();
@@ -850,7 +847,7 @@ fn emissions() -> Vec<Operation> {
     found
 }
 
-/// **The titles of the rows in [`ELSEWHERE`]**, read off the page rather than
+/// The titles of the rows in [`ELSEWHERE`], read off the page rather than
 /// listed here, so that a row added to that section is exempt the day it lands
 /// and a section renamed out from under this file panics instead of quietly
 /// exempting nothing.
@@ -884,37 +881,38 @@ fn elsewhere() -> BTreeSet<String> {
     found
 }
 
-/// **Every row's title and its panel badge**, in page order: the badge's class
-/// — `has`, `plan` or `gap` — and the text it names the control's home with.
+/// Every row's title and its panel badge, in page order: the badge's class —
+/// `has`, `plan` or `gap` — and the text it names the control's home with.
 ///
 /// Read verbatim and never decoded, for `mcp.rs`'s reason: a `gap` badge says
 /// `&mdash;` and a home that needed decoding to match would be a home nobody
-/// could find on the console page.
-/// **What a readout the panel draws is drawn by**, one row per readout: the
-/// title on [`PAGE`] and a marker in [`SRC`] that draws it.
+/// could find on the console page. What a readout the panel draws is drawn by,
+/// one row per readout: the title on [`PAGE`] and a marker in [`SRC`] that
+/// draws it.
 ///
 /// # Why a `has` badge can be satisfied by this and not only by an emission
 ///
 /// [`every_panel_route_the_page_marks_built_is_emitted_by_a_console_control`]
 /// demands that some line of this crate construct `Operation::<the variant>`,
-/// and for a **write** that is the only way a surface reaches an operation: a
-/// fader that moves nothing is not a fader. **A readout has no gesture at
-/// all.** It is answered without being asked, so there is no press to attach
-/// an emission to, and inventing one would be ADR-0264's own rejected
-/// alternative in a worse form.
+/// and for a write that is the only way a surface reaches an operation: a fader
+/// that moves nothing is not a fader. A readout has no gesture at all. It is
+/// answered without being asked, so there is no press to attach an emission to,
+/// and inventing one would be ADR-0264's own rejected alternative in a worse
+/// form.
+///
 ///
 /// [ADR-0284](../../../docs/adr/0284-a-readout-is-drawn-and-the-panel-badge-does-not-move-because-the-meter-counts-a-gesture.md)
 /// left the badge at `plan` and named the correction to start from: relax the
 /// check for rows the page marks `read`, and hold the drawing somewhere that
-/// can see it. **What it turned that shape down for was what it would stop
-/// checking** — relaxing for a class of rows removes the emission check for
+/// can see it. What it turned that shape down for was what it would stop
+/// checking — relaxing for a class of rows removes the emission check for
 /// *every* member of it, including the two that are `has` today because a
 /// gesture really does emit. This table is the answer to that objection: the
-/// check is not relaxed, it is given a second way to be met, and the second
-/// way is as mechanical as the first. A row that is neither emitted nor drawn
-/// still fails.
+/// check is not relaxed, it is given a second way to be met, and the second way
+/// is as mechanical as the first. A row that is neither emitted nor drawn still
+/// fails.
 ///
-/// **A hand-written table, and the precedent is `press_handler::ASKED`** in
+/// A hand-written table, and the precedent is `press_handler::ASKED` in
 /// `crates/karakuri/src/main.rs` — the same shape, the same failure mode, and
 /// the same answer to it: an entry that names nothing fails, and a badge with
 /// no entry fails. What this one cannot see is the *seam* — that the value
@@ -930,7 +928,7 @@ const DRAWN: [(&str, &str); 1] = [
     ("Find out what a write did", "pub health: Option<Stage>"),
 ];
 
-/// **The titles the page marks `read`**, off the mark
+/// The titles the page marks `read`, off the mark
 /// [ADR-0281](../../../docs/adr/0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md)
 /// put in each one's `op-head`: *it only asks, so a column left empty here is
 /// that way in's own design and not something owed*.
@@ -1017,12 +1015,12 @@ fn the_scan_finds_the_page_and_the_source() {
     );
 }
 
-/// **A control reaching past the page.**
+/// A control reaching past the page.
 ///
 /// An operation this crate's controls emit whose panel badge is not `has` is a
-/// meter that has stopped moving with the thing it measures — ADR-0213's
-/// stated failure mode, which is that a badge moved and a figure did not, from
-/// the side where the code moved first.
+/// meter that has stopped moving with the thing it measures — ADR-0213's stated
+/// failure mode, which is that a badge moved and a figure did not, from the
+/// side where the code moved first.
 #[test]
 fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
     let routes = panel_routes();
@@ -1051,14 +1049,14 @@ fn every_operation_a_console_control_emits_has_a_panel_route_marked_built() {
     }
 }
 
-/// **[`DRAWN`], held against the page and the source it stands between.**
+/// [`DRAWN`], held against the page and the source it stands between.
 ///
 /// Written to fail rather than to pass, on
 /// [`the_unreachable_exemption_is_still_the_state_of_the_page`]'s terms: a
 /// table that names a row the page no longer marks `read`, or a marker no
-/// longer in the source, is a second way to meet a `has` badge that has
-/// stopped being met. It is also what stops the table being used on a
-/// **write** row, where an emission is the only honest evidence.
+/// longer in the source, is a second way to meet a `has` badge that has stopped
+/// being met. It is also what stops the table being used on a write row, where
+/// an emission is the only honest evidence.
 #[test]
 fn every_drawn_entry_names_a_read_row_the_page_marks_built_and_a_drawing_that_is_there() {
     let reads = reads();
@@ -1091,14 +1089,14 @@ fn every_drawn_entry_names_a_read_row_the_page_marks_built_and_a_drawing_that_is
     }
 }
 
-/// **The one exemption, held against the page it exempts.**
+/// The one exemption, held against the page it exempts.
 ///
 /// [`UNREACHABLE`] is a list written by hand, so it is written to fail rather
-/// than to go stale: an entry nothing emits is an exemption granted to
-/// nobody, and an entry whose badge has become `has` is an exemption that has
-/// stopped being true — which is what happens the day somebody settles
-/// `SetSync`'s record and the row is genuinely reachable. Either way this
-/// says so and names the line to delete.
+/// than to go stale: an entry nothing emits is an exemption granted to nobody,
+/// and an entry whose badge has become `has` is an exemption that has stopped
+/// being true — which is what happens the day somebody settles `SetSync`'s
+/// record and the row is genuinely reachable. Either way this says so and names
+/// the line to delete.
 #[test]
 fn the_unreachable_exemption_is_still_the_state_of_the_page() {
     let emitted: BTreeSet<&str> = emissions().iter().map(|op| op.title()).collect();
@@ -1122,16 +1120,16 @@ fn the_unreachable_exemption_is_still_the_state_of_the_page() {
     }
 }
 
-/// **The page claiming a control that does not exist.**
+/// The page claiming a control that does not exist.
 ///
 /// It fails apart from the test above because it is a different failure: that
 /// one says the console reached past the specification, this one says the
-/// specification promises a player a control nothing draws. The home is
-/// checked too, in the place `mcp.rs` checks a tool's name — the panel
-/// column's badge text is a place on the console rather than an identifier
-/// this crate holds, so what is checkable is that a built route names one at
-/// all. A `has` badge saying `&mdash;` would be the page asserting an operator
-/// reaches it and declining to say from where.
+/// specification promises a player a control nothing draws. The home is checked
+/// too, in the place `mcp.rs` checks a tool's name — the panel column's badge
+/// text is a place on the console rather than an identifier this crate holds,
+/// so what is checkable is that a built route names one at all. A `has` badge
+/// saying `&mdash;` would be the page asserting an operator reaches it and
+/// declining to say from where.
 #[test]
 fn every_panel_route_the_page_marks_built_is_emitted_by_a_console_control() {
     let emitted: BTreeSet<&str> = emissions().iter().map(|op| op.title()).collect();

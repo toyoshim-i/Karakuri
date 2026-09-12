@@ -1,12 +1,12 @@
-//! The panel under a pointer: a drag, a fold, a solo, and every hostile thing
-//! a window can do to them.
+//! The panel under a pointer: a drag, a fold, a solo, and every hostile thing a
+//! window can do to them.
 //!
 //! These drove `examples/layout.rs` when the model lived inside it. The model
 //! is [`karakuri_console::panel`] now, so they are ordinary tests of the crate
 //! and `cargo test -p karakuri-console` runs them — no event loop, no device,
 //! and nothing built that needs either.
 //!
-//! **They assert on what an operation returned**, which is the point of an
+//! They assert on what an operation returned, which is the point of an
 //! operation returning a value rather than a line: a stop holding a drag is
 //! `Dragged::held`, and a boundary that had nothing to say is a `None` rather
 //! than a string that was not printed.
@@ -36,10 +36,10 @@ fn boundary(p: &Panel, split: NodeId, index: usize) -> Option<f32> {
     Some(axis.origin(p.layout().boundary(split, index)?))
 }
 
-/// A point in the middle of a boundary's gap — what a hand aims at, and what
-/// a test with no hand presses instead. **A test affordance**, which is why it
-/// is here: the panel does not need it and neither does a view, since a view
-/// has a pointer and gets the gap to draw from `Layout::boundary`.
+/// A point in the middle of a boundary's gap — what a hand aims at, and what a
+/// test with no hand presses instead. A test affordance, which is why it is
+/// here: the panel does not need it and neither does a view, since a view has a
+/// pointer and gets the gap to draw from `Layout::boundary`.
 fn grab_point(p: &Panel, split: NodeId, index: usize) -> Option<Point> {
     let gap = p.layout().boundary(split, index)?;
     Some(Point::new(gap.x + gap.w / 2.0, gap.y + gap.h / 2.0))
@@ -71,15 +71,15 @@ fn label(p: &Panel, id: NodeId) -> String {
     }
 }
 
-/// **Whether a boundary is one a drag can fold a pane at** — a region beside
-/// it whose fold leaves its edge behind (ADR-0300).
+/// Whether a boundary is one a drag can fold a pane at — a region beside it
+/// whose fold leaves its edge behind (ADR-0300).
 ///
 /// The two tests below drag every boundary far past every stop, which is the
 /// gesture that closes such a pane; what they are about is a boundary that
 /// *moves*, so those two are left to `tests/fold_grip.rs`, where the fold is
 /// the subject rather than the accident. Read off the arrangement rather than
-/// listed, so a third pane declaring it is skipped here without anybody
-/// editing this file.
+/// listed, so a third pane declaring it is skipped here without anybody editing
+/// this file.
 fn folds_a_pane(p: &Panel, split: NodeId, index: usize) -> bool {
     match p.pair(split, index) {
         Some((a, b)) => p.layout().keeps_its_edge(a) || p.layout().keeps_its_edge(b),
@@ -91,15 +91,15 @@ fn folds_a_pane(p: &Panel, split: NodeId, index: usize) -> bool {
 /// past whatever stops it — leaves the arrangement exactly as it was, and at
 /// least one of them moves on the way.
 ///
-/// The second half is the point: `set_divider` takes an absolute coordinate,
-/// so the frames spent past a stop contribute nothing to accumulate. A caller
-/// that fed it deltas would come back short.
+/// The second half is the point: `set_divider` takes an absolute coordinate, so
+/// the frames spent past a stop contribute nothing to accumulate. A caller that
+/// fed it deltas would come back short.
 ///
-/// **A boundary beside a pane that keeps its edge is not one of these, and
-/// that is a change rather than an exemption.** A drag far past that pane's
-/// own minimum closes it, and bringing the pointer back does not open it: one
-/// gesture asks for one fold, and the way back is another gesture
-/// (ADR-0300). `tests/fold_grip.rs` is where both halves are demonstrated.
+/// A boundary beside a pane that keeps its edge is not one of these, and that
+/// is a change rather than an exemption. A drag far past that pane's own
+/// minimum closes it, and bringing the pointer back does not open it: one
+/// gesture asks for one fold, and the way back is another gesture (ADR-0300).
+/// `tests/fold_grip.rs` is where both halves are demonstrated.
 #[test]
 fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -212,15 +212,15 @@ fn a_drag_past_the_left_edge_of_the_window() {
 /// This is the readout's own bug, and it is worst exactly where a person is
 /// looking hardest: at a stop the boundary does not move, and a report per
 /// pointer event is hundreds of identical lines a second into a terminal that
-/// has to keep up with them. So the first move past the stop comes back
-/// `held`, and the two hundred after it come back with nothing to say at all.
+/// has to keep up with them. So the first move past the stop comes back `held`,
+/// and the two hundred after it come back with nothing to say at all.
 ///
-/// **A boundary beside a pane that keeps its edge answers the first move with
-/// a fold instead** (ADR-0300): pulling on past the stop is what closes the
-/// pane, so what the drag has to say is *that* rather than *held*. The
-/// property under test is the same one either way and the two hundred moves
-/// after it are what it is about — the pane is closed, its boundary does not
-/// move again, and one gesture asks for one fold.
+/// A boundary beside a pane that keeps its edge answers the first move with a
+/// fold instead (ADR-0300): pulling on past the stop is what closes the pane,
+/// so what the drag has to say is *that* rather than *held*. The property under
+/// test is the same one either way and the two hundred moves after it are what
+/// it is about — the pane is closed, its boundary does not move again, and one
+/// gesture asks for one fold.
 #[test]
 fn a_drag_held_at_a_stop_says_so_once() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -463,8 +463,8 @@ fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
 
 /// A drag lands where it is asked unless something stops it, and what it
 /// reports is what actually happened — the pair either side keeps its combined
-/// extent whatever was asked for, and a stop that held it is `held` rather
-/// than a difference the caller has to work out.
+/// extent whatever was asked for, and a stop that held it is `held` rather than
+/// a difference the caller has to work out.
 #[test]
 fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
     let mut probe = Panel::new(1600.0, 1000.0);
@@ -551,12 +551,12 @@ fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
 
 /// A fold during a drag takes the boundary away, and the release says so.
 ///
-/// [`Released::Gone`] has existed for exactly this since the model was
-/// written, and it was **unreachable**: where a boundary is was answered by
-/// checking that the visible child before it was there and returning that
-/// child's far edge, so folding the far side handed back a position — the
-/// split's own far edge — for a boundary that is not there. A release then
-/// rested on a coordinate that is not a boundary and the readout said so.
+/// [`Released::Gone`] has existed for exactly this since the model was written,
+/// and it was unreachable: where a boundary is was answered by checking that
+/// the visible child before it was there and returning that child's far edge,
+/// so folding the far side handed back a position — the split's own far edge —
+/// for a boundary that is not there. A release then rested on a coordinate that
+/// is not a boundary and the readout said so.
 ///
 /// The route is the one an operator takes: press in a gap, move the pointer
 /// into the region on the far side of it, and fold that region from the
@@ -609,19 +609,19 @@ fn a_fold_during_a_drag_leaves_the_release_with_no_boundary() {
     );
 }
 
-/// **With the root folded, the panel is blank and answers no pointer — and
-/// the way back was never the pointer's.**
+/// With the root folded, the panel is blank and answers no pointer — and the
+/// way back was never the pointer's.
 ///
 /// `g` over the transport folds the split enclosing it, which is the root, and
 /// what that leaves is a window with nothing drawn in it: a view's plan skips
-/// every node `Layout::visible` says no to, and `visible` walks up to the
-/// root. The hit test used to disagree with the plan — it descends from the
-/// root testing *children* — so `f`, `g` and `s` went on folding and soloing
-/// regions nobody could see.
+/// every node `Layout::visible` says no to, and `visible` walks up to the root.
+/// The hit test used to disagree with the plan — it descends from the root
+/// testing *children* — so `f`, `g` and `s` went on folding and soloing regions
+/// nobody could see.
 ///
 /// What the change leaves working is the whole of what an operator needs, and
-/// it is what it always was: **`z` and `r` take no target.** `UnfoldAll` reads
-/// the arrangement and `Reset` builds a fresh one, so neither asks where the
+/// it is what it always was: `z` and `r` take no target. `UnfoldAll` reads the
+/// arrangement and `Reset` builds a fresh one, so neither asks where the
 /// pointer is — which is the manual's own sentence, *"a folded region has no
 /// rectangle, so a pointer cannot reach it to undo itself"*, one node further
 /// up than it was written for.

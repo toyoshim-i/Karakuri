@@ -1,26 +1,25 @@
-//! **The Library bay's `.path` row: where this library is pointed, and the
-//! folder on its way in.**
+//! The Library bay's `.path` row: where this library is pointed, and the folder
+//! on its way in.
 //!
 //! Four things, and the first is why this is a file rather than a few more
 //! assertions in `library.rs`:
 //!
-//! 1. **That the row is drawn only once a folder has been chosen**, and that
-//!    everything under it moves down by exactly its own height when it is.
-//!    Until a folder has been dropped the bay is a line shorter, which is
-//!    `console.html`'s own answer to an empty state — *"a row saying there is
-//!    no folder would be a sentence about an absence"* — and it is the reason
-//!    the derivation takes the row as a value rather than a constant.
-//! 2. **That a folder over the window replaces the line and comes up out of
-//!    its faint**, in `--c-text` rather than `--c-faint`, which is the whole of
-//!    the mark this gesture gets: a drop carries no pointer position and there
-//!    is no rectangle to ring
-//!    (`docs/adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows.md`).
-//! 3. That the row is a **readout**: every point of it goes to `egui`, so no
-//!    press lands on it and re-pointing the bay is another drop.
-//! 4. That the row is the bay's and not the scope row's condition — a console
-//!    handed no chips at all still draws where it is pointed, because that is
-//!    also where a send's save dialog opens (ADR-0311, which supersedes
-//!    ADR-0267's reading of the row as the destination itself).
+//! 1. That the row is drawn only once a folder has been chosen, and that
+//! everything under it moves down by exactly its own height when it is. Until a
+//! folder has been dropped the bay is a line shorter, which is `console.html`'s
+//! own answer to an empty state — *"a row saying there is no folder would be a
+//! sentence about an absence"* — and it is the reason the derivation takes the
+//! row as a value rather than a constant. 2. That a folder over the window
+//! replaces the line and comes up out of its faint, in `--c-text` rather than
+//! `--c-faint`, which is the whole of the mark this gesture gets: a drop
+//! carries no pointer position and there is no rectangle to ring
+//! (`docs/adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows.md`).
+//! 3. That the row is a readout: every point of it goes to `egui`, so no press
+//! lands on it and re-pointing the bay is another drop. 4. That the row is the
+//! bay's and not the scope row's condition — a console handed no chips at all
+//! still draws where it is pointed, because that is also where a send's save
+//! dialog opens (ADR-0311, which supersedes ADR-0267's reading of the row as
+//! the destination itself).
 //!
 //! Only the ink test needs `egui`'s fonts. Every rectangle in this bay is the
 //! full width of the list, so the rest is arithmetic.
@@ -34,8 +33,8 @@ use karakuri_console::room::{size, Room};
 use karakuri_console::view::{library, LibraryBay, Pointed, Scope, View};
 use karakuri_layout::{Point, Rect};
 
-/// **The mock's own library, as names**, and `library.rs`'s: five Sets in the
-/// order it draws them.
+/// The mock's own library, as names, and `library.rs`'s: five Sets in the order
+/// it draws them.
 fn mock() -> Vec<String> {
     [
         "drift_night",
@@ -52,7 +51,7 @@ fn mock() -> Vec<String> {
 /// The four chips a host with a store hands in.
 const SCOPES: &[Scope] = &Scope::ALL;
 
-/// **The path the mock's own row reads**, less the walk: `console.html:112` is
+/// The path the mock's own row reads, less the walk: `console.html:112` is
 /// `~/sets/tour-2026/night-b › opening`, and what a drop sets is the directory
 /// alone — *what the walk inside a folder is* is the one thing ADR-0275
 /// explicitly does not decide.
@@ -72,8 +71,8 @@ fn bay(panel: &Panel, at: Option<Pointed<'_>>) -> LibraryBay {
     library(panel.layout(), SCOPES, &mock(), None, at, 0.0).expect("the library bay lists its rows")
 }
 
-/// A console with a library in it and a folder chosen — the state a drop
-/// leaves behind, built the way the host builds it.
+/// A console with a library in it and a folder chosen — the state a drop leaves
+/// behind, built the way the host builds it.
 fn pointed_view() -> View {
     let mut view = View::new(Room::Day);
     view.scopes = Scope::ALL.to_vec();
@@ -90,10 +89,10 @@ fn to_egui(r: Rect) -> egui::Rect {
 // Where the row is, and what it costs the rows under it
 // ---------------------------------------------------------------------------
 
-/// **The row is the mock's own box, under the scopes and over the fields**,
-/// and every number is read off `style.css` rather than off the panel:
-/// `.path { padding: 4px 10px; font-size: 10px; border-bottom: 1px }` is a
-/// 24-tall row, its rule the bottom pixel of it.
+/// The row is the mock's own box, under the scopes and over the fields, and
+/// every number is read off `style.css` rather than off the panel: `.path {
+/// padding: 4px 10px; font-size: 10px; border-bottom: 1px }` is a 24-tall row,
+/// its rule the bottom pixel of it.
 #[test]
 fn the_path_row_is_between_the_scopes_and_the_fields() {
     let panel = console(PLAUSIBLE);
@@ -139,13 +138,13 @@ fn the_path_row_is_between_the_scopes_and_the_fields() {
     );
 }
 
-/// **With no folder there is no row at all**, and the bay is exactly the bay
-/// it was before this row existed: the fields sit straight on the scopes and
-/// the list starts where it started.
+/// With no folder there is no row at all, and the bay is exactly the bay it was
+/// before this row existed: the fields sit straight on the scopes and the list
+/// starts where it started.
 ///
-/// **And with one, everything under it moves down by the row and by nothing
-/// else** — the one claim that says the row is furniture rather than something
-/// drawn over the list.
+/// And with one, everything under it moves down by the row and by nothing else
+/// — the one claim that says the row is furniture rather than something drawn
+/// over the list.
 #[test]
 fn a_bay_pointed_nowhere_is_the_bay_it_was_and_one_pointed_costs_exactly_the_row() {
     let panel = console(PLAUSIBLE);
@@ -190,10 +189,10 @@ fn a_bay_pointed_nowhere_is_the_bay_it_was_and_one_pointed_costs_exactly_the_row
     );
 }
 
-/// **The row is not the scope row's condition.** A console handed no chips at
-/// all still says where it is pointed, because that row is also where a send's
-/// save dialog opens (ADR-0311) — so it is drawn straight under the bay head,
-/// where the fields and the chips are not drawn at all.
+/// The row is not the scope row's condition. A console handed no chips at all
+/// still says where it is pointed, because that row is also where a send's save
+/// dialog opens (ADR-0311) — so it is drawn straight under the bay head, where
+/// the fields and the chips are not drawn at all.
 #[test]
 fn a_console_with_no_chips_still_says_where_it_is_pointed() {
     let panel = console(PLAUSIBLE);
@@ -227,17 +226,17 @@ fn a_console_with_no_chips_still_says_where_it_is_pointed() {
 // What the row reads, and in which ink
 // ---------------------------------------------------------------------------
 
-/// **A folder over the window wins over the folder that was chosen**, because
-/// the mock draws one `.path` row: a hover replaces the line rather than
-/// adding one, and what is on screen is the path a release would set.
+/// A folder over the window wins over the folder that was chosen, because the
+/// mock draws one `.path` row: a hover replaces the line rather than adding
+/// one, and what is on screen is the path a release would set.
 ///
-/// **And more than one path over the window reads as none**, which is the
-/// hover's half of *one path, and it has to be a directory*: a release sets
-/// nothing where two arrived, so there is no path a release would set — and
-/// drawing the first of them would be this row picking one out of a list the
-/// desktop happened to build. It is asserted at [`View::pointed`] because that
-/// is where the two fields become the one row, and the host is what puts a
-/// single hovered path in `incoming` at all.
+/// And more than one path over the window reads as none, which is the hover's
+/// half of *one path, and it has to be a directory*: a release sets nothing
+/// where two arrived, so there is no path a release would set — and drawing the
+/// first of them would be this row picking one out of a list the desktop
+/// happened to build. It is asserted at [`View::pointed`] because that is where
+/// the two fields become the one row, and the host is what puts a single
+/// hovered path in `incoming` at all.
 #[test]
 fn a_folder_over_the_window_replaces_the_line_and_a_bay_pointed_nowhere_has_none() {
     let mut view = View::new(Room::Day);
@@ -289,8 +288,8 @@ fn a_folder_over_the_window_replaces_the_line_and_a_bay_pointed_nowhere_has_none
     );
 }
 
-/// Every shape the console paints inside `rect`, on one frame —
-/// `library.rs`'s own helper.
+/// Every shape the console paints inside `rect`, on one frame — `library.rs`'s
+/// own helper.
 fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<egui::Shape> {
     let ctx = drawn_once();
     let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, panel));
@@ -323,10 +322,10 @@ fn line(view: &mut View, panel: &mut Panel, row: egui::Rect) -> (String, egui::C
     texts.into_iter().next().expect("the one line")
 }
 
-/// **The path is painted, and the ink is the mark.** `--c-faint` for the row
-/// as it stands and `--c-text` while a folder is over the window, which is
-/// `.path` against `.path.incoming` and is the whole of what this gesture can
-/// afford to draw.
+/// The path is painted, and the ink is the mark. `--c-faint` for the row as it
+/// stands and `--c-text` while a folder is over the window, which is `.path`
+/// against `.path.incoming` and is the whole of what this gesture can afford to
+/// draw.
 #[test]
 fn the_row_reads_the_path_and_comes_up_out_of_its_faint_while_one_is_over_the_window() {
     let mut panel = console(PLAUSIBLE);
@@ -362,11 +361,11 @@ fn the_row_reads_the_path_and_comes_up_out_of_its_faint_while_one_is_over_the_wi
 // It is a readout
 // ---------------------------------------------------------------------------
 
-/// **Nothing in the row takes a press.** Re-pointing the bay is another drop,
-/// so a capsule here would be a control nobody specified. `claim` gives every
-/// point of it to `egui`. **The foot's own readout stopped being one on
-/// 2026-09-08** (ADR-0305), so this rule is this row's rather than a rule it
-/// shares with the capsules below it.
+/// Nothing in the row takes a press. Re-pointing the bay is another drop, so a
+/// capsule here would be a control nobody specified. `claim` gives every point
+/// of it to `egui`. The foot's own readout stopped being one on 2026-09-08
+/// (ADR-0305), so this rule is this row's rather than a rule it shares with the
+/// capsules below it.
 #[test]
 fn the_path_row_answers_no_press() {
     let mut panel = console(PLAUSIBLE);

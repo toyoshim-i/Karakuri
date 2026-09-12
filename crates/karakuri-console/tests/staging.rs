@@ -1,66 +1,60 @@
-//! **The Staging lane: a card, a head, and a row per node a build changed —
-//! and, with nothing outstanding, a card and a head and nothing else.**
+//! The Staging lane: a card, a head, and a row per node a build changed — and,
+//! with nothing outstanding, a card and a head and nothing else.
 //!
 //! The lane draws four of the six things a candidate row could carry — the
 //! deck, the node's address, what that node's procedure calls itself, and
 //! whether it is on screen — and the argument for the two it omits is written
 //! out in `view`'s module documentation and at `view::staging`. A row per
-//! **changed node** rather than per slot is
+//! changed node rather than per slot is
 //! [ADR-0326](../../../docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md),
 //! and it is what gives the row its two presses: the row is *keep a candidate*
 //! and the `back` capsule at its end is *put a node's previous version back*.
 //! ADR-0200 is why what has no value is omitted outright rather than drawn
 //! hollow.
 //!
-//! **The empty case is still the case this file leads with**, because it is
-//! still this lane's ordinary state: *"a staging lane with nothing in it is
-//! simply a run in which nobody has rewritten a procedure yet — which is every
-//! run at its start and most runs throughout"*. A decision to draw nothing
-//! needs a test more than a decision to draw something does: nothing about
-//! deleting the argument would make a suite fail, and what would be added back
-//! is what the page refuses.
+//! The empty case is still the case this file leads with, because it is still
+//! this lane's ordinary state: *"a staging lane with nothing in it is simply a
+//! run in which nobody has rewritten a procedure yet — which is every run at
+//! its start and most runs throughout"*. A decision to draw nothing needs a
+//! test more than a decision to draw something does: nothing about deleting the
+//! argument would make a suite fail, and what would be added back is what the
+//! page refuses.
 //!
 //! Seven things:
 //!
-//! 1. **With nothing outstanding the bay draws the shapes of a bay with no
-//!    body**, asserted against the Sequencer bay — the lane's twin in this
-//!    console's furniture: a title, no pill, no grip, and nothing in its body
-//!    at all. It is a claim about the paint pass, so it is made by drawing a
-//!    frame and counting.
-//! 2. **Nothing else the console is handed puts anything there.** The
-//!    Library's names, the mixer's strips, the Inspector's panes and a picture
-//!    are all written onto the `View` and the lane is the same two shapes
-//!    after, which is what says the bay reads none of them: the one field it
-//!    reads is `View::staging`.
-//! 3. **A candidate draws a row**, and the rows are where the arithmetic says
-//!    — the list box off `.stage-list`'s three paddings, a stride of a
-//!    `.cand` and `.stage-list`'s gap, every row inside the list.
-//! 4. **The lane holds the mock's three and no more**, which is the one piece
-//!    of boundary arithmetic in this bay: `lib.rs` pins it at 125 because the
-//!    mock draws three rows and two gaps, and a fourth candidate is counted
-//!    and not drawn.
-//! 5. **The head is untouched by any of it**, asserted with the lane full as
-//!    well as empty: the mock's `2 waiting` is a readout and a bay head's
-//!    pills are its controls.
-//! 6. **What in it is a control and what is not**, asked of a full lane as
-//!    well as an empty one: the bay's own ground is `egui`'s, a row that
-//!    offers a keep is the panel's, and the `back` capsule inside it is asked
-//!    first because it is the smaller box.
-//! 7. **A row the checker turned down carries what it said**, which is the
-//!    one row that draws a sentence: nothing was built for it, so the word
-//!    alone says a save did not take and nothing about why (ADR-0310).
-//! 8. **Each press asks for the operation its row is addressed by**, and the
-//!    rows that offer neither say so: an overloaded row has nothing to keep
-//!    and a row that names no node has nothing to keep and nothing to step
-//!    back.
+//! 1. With nothing outstanding the bay draws the shapes of a bay with no body,
+//! asserted against the Sequencer bay — the lane's twin in this console's
+//! furniture: a title, no pill, no grip, and nothing in its body at all. It is
+//! a claim about the paint pass, so it is made by drawing a frame and counting.
+//! 2. Nothing else the console is handed puts anything there. The Library's
+//! names, the mixer's strips, the Inspector's panes and a picture are all
+//! written onto the `View` and the lane is the same two shapes after, which is
+//! what says the bay reads none of them: the one field it reads is
+//! `View::staging`. 3. A candidate draws a row, and the rows are where the
+//! arithmetic says — the list box off `.stage-list`'s three paddings, a stride
+//! of a `.cand` and `.stage-list`'s gap, every row inside the list. 4. The lane
+//! holds the mock's three and no more, which is the one piece of boundary
+//! arithmetic in this bay: `lib.rs` pins it at 125 because the mock draws three
+//! rows and two gaps, and a fourth candidate is counted and not drawn. 5. The
+//! head is untouched by any of it, asserted with the lane full as well as
+//! empty: the mock's `2 waiting` is a readout and a bay head's pills are its
+//! controls. 6. What in it is a control and what is not, asked of a full lane
+//! as well as an empty one: the bay's own ground is `egui`'s, a row that offers
+//! a keep is the panel's, and the `back` capsule inside it is asked first
+//! because it is the smaller box. 7. A row the checker turned down carries what
+//! it said, which is the one row that draws a sentence: nothing was built for
+//! it, so the word alone says a save did not take and nothing about why
+//! (ADR-0310). 8. Each press asks for the operation its row is addressed by,
+//! and the rows that offer neither say so: an overloaded row has nothing to
+//! keep and a row that names no node has nothing to keep and nothing to step
+//! back.
 //!
-//! And the four words a row can end in are the manual's own, which is
-//! ADR-0159 asked of this bay: *"whether it is on screen: landed, overloaded
-//! for costing more than one frame may, refused, or did not compile"*. **This quoted
-//! *refused by the checker* until 2026-09-08**, which was a paraphrase of a
-//! sentence the page does not have and had the two refusals the other way
-//! round: *refused* is a build that failed, and the checker's is the fourth
-//! word.
+//! And the four words a row can end in are the manual's own, which is ADR-0159
+//! asked of this bay: *"whether it is on screen: landed, overloaded for costing
+//! more than one frame may, refused, or did not compile"*. This quoted *refused
+//! by the checker* until 2026-09-08, which was a paraphrase of a sentence the
+//! page does not have and had the two refusals the other way round: *refused*
+//! is a build that failed, and the checker's is the fourth word.
 //!
 //! None of it needs a window or a device.
 
@@ -138,8 +132,8 @@ fn at_node(
     }
 }
 
-/// **A row that names no node** — a build that did not happen, or a rebuild
-/// that restated the stack and changed nothing in it. It is the slot's row and
+/// A row that names no node — a build that did not happen, or a rebuild that
+/// restated the stack and changed nothing in it. It is the slot's row and
 /// offers neither press.
 fn slot_row(deck: usize, name: &str, stage: Stage) -> Candidate {
     Candidate {
@@ -155,7 +149,7 @@ fn slot_row(deck: usize, name: &str, stage: Stage) -> Candidate {
 /// The mock's `.addr` spelling, which the host writes and this file restates
 /// because it is building the value the host would hand in.
 ///
-/// **Kept in step with `karakuri/src/main.rs`'s `layer_word` by hand**, which is
+/// Kept in step with `karakuri/src/main.rs`'s `layer_word` by hand, which is
 /// what a fixture that restates a host's spelling costs: the two are one
 /// spelling in two places, and a row addressed by one and drawn by the other
 /// would be a row an operator cannot press back.
@@ -184,8 +178,8 @@ fn layer_word(layer: karakuri_operation::Layer) -> &'static str {
 
 /// One candidate the checker turned down, with what it said.
 ///
-/// **It names no node and cannot**: nothing was built, so there is no list of
-/// nodes to hold against the one before it (`view::Candidate::at`).
+/// It names no node and cannot: nothing was built, so there is no list of nodes
+/// to hold against the one before it (`view::Candidate::at`).
 ///
 /// `karakuri_engine::swap::Refusal` carries one line per diagnostic, formatted
 /// on the build worker; these are the shape those lines have — where, which
@@ -201,7 +195,7 @@ fn refused_candidate(deck: usize, name: &str, said: &[&str]) -> Candidate {
     }
 }
 
-/// Every shape the console paints **wholly inside** `rect`, on one frame.
+/// Every shape the console paints wholly inside `rect`, on one frame.
 ///
 /// `library.rs`'s helper, and `transport.rs` is where the reasoning is written
 /// out: containment rather than intersection, so the panel's ground and the
@@ -223,21 +217,20 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> usize 
 // The bay has no body
 // ---------------------------------------------------------------------------
 
-/// **The Staging lane draws what a bay with no body draws, and the Sequencer
-/// bay is what that is.**
+/// The Staging lane draws what a bay with no body draws, and the Sequencer bay
+/// is what that is.
 ///
 /// Not a count of shapes — `egui` is free to tessellate a card differently
-/// tomorrow — but two bays held against each other. The Sequencer is the
-/// lane's exact twin in the console's own furniture: a title, no pill, **no
-/// grip**, and nothing in its body at all. `library.rs` holds the Library
-/// against the Master for the same reason and picks a different twin because
-/// the Library has a grip and the Master has one; a Staging bay held against
-/// the Master would be six grip dots short and the assertion would be about
-/// the grip.
+/// tomorrow — but two bays held against each other. The Sequencer is the lane's
+/// exact twin in the console's own furniture: a title, no pill, no grip, and
+/// nothing in its body at all. `library.rs` holds the Library against the
+/// Master for the same reason and picks a different twin because the Library
+/// has a grip and the Master has one; a Staging bay held against the Master
+/// would be six grip dots short and the assertion would be about the grip.
 ///
-/// So the two draw the same shapes, or Staging is drawing something a lane
-/// with no candidate does not have: a `.cand` row, a placeholder, or the
-/// head's `2 waiting` where there is nothing to count.
+/// So the two draw the same shapes, or Staging is drawing something a lane with
+/// no candidate does not have: a `.cand` row, a placeholder, or the head's `2
+/// waiting` where there is nothing to count.
 ///
 /// Asked at both windows, because a bay that started drawing a body would be
 /// most likely to do it at the taller one.
@@ -269,16 +262,15 @@ fn the_staging_lane_draws_no_body() {
     assert_eq!(asked, 2, "not every window was asked");
 }
 
-/// **Nothing the console is handed *except its own field* reaches the lane.**
+/// Nothing the console is handed *except its own field* reaches the lane.
 ///
 /// The four things a caller writes onto a `View` that this bay might have been
 /// reading are the Library's names, the mixer's strips, the Inspector's panes
 /// and the canvas; a fifth, the picture, takes a device and is `None` in every
-/// test in this crate. A console with all four filled is the fullest this
-/// crate can make one, and the lane is the same bay it was empty — which is
-/// what says a row comes from `View::staging` and from nothing else. That
-/// field is the one thing deliberately left alone here; the tests below are
-/// what fill it.
+/// test in this crate. A console with all four filled is the fullest this crate
+/// can make one, and the lane is the same bay it was empty — which is what says
+/// a row comes from `View::staging` and from nothing else. That field is the
+/// one thing deliberately left alone here; the tests below are what fill it.
 #[test]
 fn a_full_console_stages_nothing() {
     let mut panel = console(PLAUSIBLE);
@@ -322,21 +314,21 @@ fn a_full_console_stages_nothing() {
     );
 }
 
-/// **The lane's head is the Sequencer's head, with the lane full and with it
-/// empty.**
+/// The lane's head is the Sequencer's head, with the lane full and with it
+/// empty.
 ///
 /// The mock's Staging head reads `2 waiting` and this one reads nothing, for
 /// the reason `view::staging` gives: a bay head's pills are the mock's
-/// *controls* — every readout in a head is undrawn, `previews 3 of 4`
-/// included — and the number would say what the rows already say, this lane
-/// having no truncation to report where the Library's foot has.
+/// *controls* — every readout in a head is undrawn, `previews 3 of 4` included
+/// — and the number would say what the rows already say, this lane having no
+/// truncation to report where the Library's foot has.
 ///
-/// **Asked with three candidates in the lane**, which is the state a count
-/// would be drawn in and is the reason this is a paint-level assertion rather
-/// than the table read it used to be: the lane is `Kind::Staging` now, so the
-/// pills it does not draw are not in the table to be counted. The head strip
-/// is the top [`HEAD_H`] of each bay, and the Sequencer's is the same head
-/// over an empty bay — so the two are equal, or this one has grown a pill.
+/// Asked with three candidates in the lane, which is the state a count would be
+/// drawn in and is the reason this is a paint-level assertion rather than the
+/// table read it used to be: the lane is `Kind::Staging` now, so the pills it
+/// does not draw are not in the table to be counted. The head strip is the top
+/// [`HEAD_H`] of each bay, and the Sequencer's is the same head over an empty
+/// bay — so the two are equal, or this one has grown a pill.
 #[test]
 fn the_lane_head_counts_nothing() {
     let mut panel = console(PLAUSIBLE);
@@ -388,15 +380,15 @@ fn the_lane_head_counts_nothing() {
 // A candidate draws a row
 // ---------------------------------------------------------------------------
 
-/// **A candidate is a row, and the rows are where `.stage-list` and `.cand`
-/// put them.**
+/// A candidate is a row, and the rows are where `.stage-list` and `.cand` put
+/// them.
 ///
 /// The whole box, term for term: the list is the bay under its head, inset by
 /// `.stage-list`'s `padding: 6px 9px 8px` — which is the one padding in this
 /// console that is not the same top and bottom — and a row is [`CAND_H`] tall
 /// with [`STAGE_GAP`] between one and the next and none above the first.
 ///
-/// **Asked at both windows**, though the bay is the same 218 x 125 at each:
+/// Asked at both windows, though the bay is the same 218 x 125 at each:
 /// `lib.rs` pins it, and a lane that started deriving its own height would say
 /// so here first.
 #[test]
@@ -455,19 +447,19 @@ fn a_candidate_is_a_row_where_the_mock_puts_it() {
     assert_eq!(asked, 2, "not every window was asked");
 }
 
-/// **The lane holds the mock's three and counts the fourth**, which is the
-/// only piece of boundary arithmetic in this bay.
+/// The lane holds the mock's three and counts the fourth, which is the only
+/// piece of boundary arithmetic in this bay.
 ///
 /// `lib.rs` pins the lane at 125 and writes that number from the mock — *"27 of
-/// bay head, 6 + 8 of `.stage-list` padding, three `.cand` rows at 4 + 16.5 + 4,
-/// and two 5px gaps"* — so the list is 125 - 27 - 6 - 8 = **84** and
-/// `(84 + 5) / (24.5 + 5)` is 3.01. Three rows, and the extra hundredth is the
-/// half-pixel the arrangement rounded up (124.5 to 125), which is less than a
-/// gap and so buys nothing.
+/// bay head, 6 + 8 of `.stage-list` padding, three `.cand` rows at 4 + 16.5 +
+/// 4, and two 5px gaps"* — so the list is 125 - 27 - 6 - 8 = 84 and `(84 + 5) /
+/// (24.5 + 5)` is 3.01. Three rows, and the extra hundredth is the half-pixel
+/// the arrangement rounded up (124.5 to 125), which is less than a gap and so
+/// buys nothing.
 ///
-/// **A fourth candidate is counted and not drawn**, which is why `total` is
-/// carried beside `rows`: a lane fuller than its height is a fact, and it is
-/// the one the mock's `2 waiting` would be about.
+/// A fourth candidate is counted and not drawn, which is why `total` is carried
+/// beside `rows`: a lane fuller than its height is a fact, and it is the one
+/// the mock's `2 waiting` would be about.
 #[test]
 fn the_lane_has_room_for_the_mocks_three() {
     let panel = console(PLAUSIBLE);
@@ -494,7 +486,7 @@ fn the_lane_has_room_for_the_mocks_three() {
     assert_eq!(held, 4, "not every count was asked");
 }
 
-/// **A row is drawn, and it is drawn inside the list.**
+/// A row is drawn, and it is drawn inside the list.
 ///
 /// The geometry above is what `staging` answers; this is what the paint pass
 /// does with it. Each candidate adds shapes wholly inside the bay — a well and
@@ -528,29 +520,29 @@ fn each_candidate_adds_shapes_and_the_fourth_adds_none() {
     );
 }
 
-/// **A row is a well and four things in it: the deck it landed on, the node's
-/// address, what that node's procedure calls itself, and the verdict.**
+/// A row is a well and four things in it: the deck it landed on, the node's
+/// address, what that node's procedure calls itself, and the verdict.
 ///
-/// The deck is what tells two rows apart in the program this panel is drawn
-/// by: it plays one pair of files in **four** slots, each from its own copy, so
-/// one save produces four builds whose names are the same string. (This said
-/// *both its slots* until 2026-09-08, from a two-slot deck that is long gone.)
-/// The address is what tells two rows of **one** build apart, and it arrived
-/// with ADR-0326.
+/// The deck is what tells two rows apart in the program this panel is drawn by:
+/// it plays one pair of files in four slots, each from its own copy, so one
+/// save produces four builds whose names are the same string. (This said *both
+/// its slots* until 2026-09-08, from a two-slot deck that is long gone.) The
+/// address is what tells two rows of one build apart, and it arrived with
+/// ADR-0326.
 ///
-/// **Counted rather than read**, because a galley's text is not something a
-/// shape carries: a row that names a node is five shapes wholly inside its own
+/// Counted rather than read, because a galley's text is not something a shape
+/// carries: a row that names a node is five shapes wholly inside its own
 /// rectangle — `.cand`'s well, which is exactly the row, and one galley each —
 /// and the two subtractions below are what say which shape is which. A row
 /// handed an empty name is four, and a row that names no node is four with the
-/// name back, so a row that stopped drawing either would be caught by the
-/// count it did not fall to.
+/// name back, so a row that stopped drawing either would be caught by the count
+/// it did not fall to.
 ///
-/// **The `back` capsule is two of the seven**, a stroked capsule and the word
-/// in it, and it is drawn on every row that names a node and has room — which
-/// at `PLAUSIBLE`'s width is both of the rows below. What it is *not* drawn on
-/// is the row that names none, which is the third subtraction here and the
-/// one that says the capsule follows `Candidate::at` rather than the verdict.
+/// The `back` capsule is two of the seven, a stroked capsule and the word in
+/// it, and it is drawn on every row that names a node and has room — which at
+/// `PLAUSIBLE`'s width is both of the rows below. What it is *not* drawn on is
+/// the row that names none, which is the third subtraction here and the one
+/// that says the capsule follows `Candidate::at` rather than the verdict.
 #[test]
 fn a_row_is_a_well_and_four_things_in_it() {
     let mut panel = console(PLAUSIBLE);
@@ -616,8 +608,8 @@ fn a_row_is_a_well_and_four_things_in_it() {
     );
 }
 
-/// **A row the checker turned down draws what it said, and says how many more
-/// there are.**
+/// A row the checker turned down draws what it said, and says how many more
+/// there are.
 ///
 /// The three verdicts above this one are about a build an operator can see the
 /// result of; this one has produced nothing to look at, so the word alone says
@@ -625,12 +617,12 @@ fn a_row_is_a_well_and_four_things_in_it() {
 /// carries what the next attempt needs*
 /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
 ///
-/// **Read off the frame rather than counted**, unlike the row test above:
-/// what is being checked is that a particular sentence is painted, and a
-/// version that laid the diagnostic out and drew a blank galley would satisfy
-/// any count. The count is asserted beside it, because *one* diagnostic and
-/// *four* are the same row otherwise, and the second is the one where a
-/// repair takes more than one edit.
+/// Read off the frame rather than counted, unlike the row test above: what is
+/// being checked is that a particular sentence is painted, and a version that
+/// laid the diagnostic out and drew a blank galley would satisfy any count. The
+/// count is asserted beside it, because *one* diagnostic and *four* are the
+/// same row otherwise, and the second is the one where a repair takes more than
+/// one edit.
 #[test]
 fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest() {
     let mut panel = console(PLAUSIBLE);
@@ -713,18 +705,18 @@ fn a_row_the_checker_turned_down_draws_the_first_diagnostic_and_counts_the_rest(
     );
 }
 
-/// **The four words a row can end in are the manual's own**, which is
-/// ADR-0159 asked of this bay: the console's words are the manual's.
+/// The four words a row can end in are the manual's own, which is ADR-0159
+/// asked of this bay: the console's words are the manual's.
 ///
-/// `console.html` says what a row's third thing is — *"whether it is on
-/// screen: landed, overloaded for costing more than one frame may, refused, or
-/// did not compile"* — and the transport's health capsule names the same four answers
+/// `console.html` says what a row's third thing is — *"whether it is on screen:
+/// landed, overloaded for costing more than one frame may, refused, or did not
+/// compile"* — and the transport's health capsule names the same four answers
 /// in the same words. A word invented here would be the specification written
 /// backwards.
 ///
-/// **The fourth is the one this most needs to hold.** *Refused* is a build
-/// that failed and *did not compile* is a source the checker turned down, and
-/// the two are one keystroke away from being spelled the same on this side and
+/// The fourth is the one this most needs to hold. *Refused* is a build that
+/// failed and *did not compile* is a source the checker turned down, and the
+/// two are one keystroke away from being spelled the same on this side and
 /// argued as different on the page (ADR-0310).
 #[test]
 fn the_verdicts_are_the_manuals_words() {
@@ -772,18 +764,18 @@ fn the_verdicts_are_the_manuals_words() {
 // What in it is a control, and what is not
 // ---------------------------------------------------------------------------
 
-/// **The Staging bay's own ground takes no press, with the lane full as well
-/// as empty**, stated rather than inferred from the absence of a hit test.
+/// The Staging bay's own ground takes no press, with the lane full as well as
+/// empty, stated rather than inferred from the absence of a hit test.
 ///
-/// `library.rs`'s test one bay up, and the inset is its inset for its reason:
-/// a boundary is claimed for a drag from `GRAB` either side of it, and that is
+/// `library.rs`'s test one bay up, and the inset is its inset for its reason: a
+/// boundary is claimed for a drag from `GRAB` either side of it, and that is
 /// the panel taking a *divider* rather than anything in the bay.
 ///
-/// **The rows here are `Stage::Overloaded` on purpose**, and that is the half
-/// of this test that is about the lane rather than about the card: an
-/// overloaded row offers no keep — a slot that has stopped is not a candidate
-/// anyone is choosing between (ADR-0316) — so a press on one is `egui`'s, and
-/// this is where that is held. The row that *does* take a press is
+/// The rows here are `Stage::Overloaded` on purpose, and that is the half of
+/// this test that is about the lane rather than about the card: an overloaded
+/// row offers no keep — a slot that has stopped is not a candidate anyone is
+/// choosing between (ADR-0316) — so a press on one is `egui`'s, and this is
+/// where that is held. The row that *does* take a press is
 /// `a_press_on_a_candidate_row_asks_to_keep_it`, and the capsule inside it is
 /// `the_back_capsule_is_the_smaller_box_inside_the_row`.
 #[test]
@@ -878,20 +870,20 @@ fn the_staging_bays_ground_is_not_a_control() {
 // The two presses a row offers
 // ---------------------------------------------------------------------------
 
-/// **A press on a candidate row asks to keep that candidate**, addressed by
-/// the node the row is for.
+/// A press on a candidate row asks to keep that candidate, addressed by the
+/// node the row is for.
 ///
-/// The row *is* the control — `console.html`'s *The control is the row
-/// itself* — which is the Library bay's list one bay up read the other way
-/// round: there a row press takes a Set in hand and names no operation, and
-/// here it names one outright. What decided that this act is the large target
-/// is what it costs: keeping moves nothing, writes nothing, and takes a line
-/// off a list (ADR-0326).
+/// The row *is* the control — `console.html`'s *The control is the row itself*
+/// — which is the Library bay's list one bay up read the other way round: there
+/// a row press takes a Set in hand and names no operation, and here it names
+/// one outright. What decided that this act is the large target is what it
+/// costs: keeping moves nothing, writes nothing, and takes a line off a list
+/// (ADR-0326).
 ///
-/// **Both halves are asserted**, because they fail differently: `claim` says
-/// the console took the press at all, and `StagingBay::keep` says what it
-/// asked for. A row that was claimed and handed back the wrong node would pass
-/// the first alone.
+/// Both halves are asserted, because they fail differently: `claim` says the
+/// console took the press at all, and `StagingBay::keep` says what it asked
+/// for. A row that was claimed and handed back the wrong node would pass the
+/// first alone.
 #[test]
 fn a_press_on_a_candidate_row_asks_to_keep_it() {
     let mut panel = console(PLAUSIBLE);
@@ -981,20 +973,20 @@ fn a_press_on_a_candidate_row_asks_to_keep_it() {
     }
 }
 
-/// **The `back` capsule is the smaller box inside the row, and it asks for the
-/// node's previous version.**
+/// The `back` capsule is the smaller box inside the row, and it asks for the
+/// node's previous version.
 ///
 /// It is the Library bay's star and its row: the capsule is asked before the
 /// row it sits in, so a press on it reaches the capsule and not the keep
 /// underneath — `input::claim`'s rule 4, *a control claims what it acts on and
 /// no more*. The act that writes a file is the small target and the act that
-/// writes nothing is the large one, which is the whole of why they are this
-/// way round (ADR-0326).
+/// writes nothing is the large one, which is the whole of why they are this way
+/// round (ADR-0326).
 ///
-/// **The overloaded row is the one that matters**, and it is why the capsule
-/// is offered on more rows than the keep is: landing an earlier version is one
-/// of the three ways out of a stopped slot, and it is the only one of the
-/// three this bay can offer.
+/// The overloaded row is the one that matters, and it is why the capsule is
+/// offered on more rows than the keep is: landing an earlier version is one of
+/// the three ways out of a stopped slot, and it is the only one of the three
+/// this bay can offer.
 #[test]
 fn the_back_capsule_is_the_smaller_box_inside_the_row() {
     let mut panel = console(PLAUSIBLE);

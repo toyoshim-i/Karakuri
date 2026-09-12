@@ -1,5 +1,5 @@
-//! **An Inspector pane's scroll position: the first one anywhere in this
-//! crate, and the first thing on this console that a wheel moves.**
+//! An Inspector pane's scroll position: the first one anywhere in this crate,
+//! and the first thing on this console that a wheel moves.
 //!
 //! A pane used to draw a node group whole or not at all, so a bay shorter than
 //! its first group drew no parameter row at all — in the one bay whose whole
@@ -8,24 +8,23 @@
 //! ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)):
 //!
 //! 1. A pane taller than what it holds draws it unscrolled, and has nothing to
-//!    scroll through however far the wheel was spun.
-//! 2. A short pane scrolled to the end draws the last group against its bottom
-//!    edge and does not draw the first.
-//! 3. **A press lands on the row that is under it now**, and a row scrolled up
-//!    under the two heads takes no press at all — which is the one of the five
-//!    that fails silently, because the control is still drawn where the hand
-//!    is and the paint is what has moved.
-//! 4. **A position survives the pane growing and shrinking**, and is not
-//!    rewritten by either: the pane is solved twice at one size with a taller
-//!    one in between, and the stored number is compared with itself
-//!    ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md),
-//!    [ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)).
-//! 5. **The head says how much is not shown**, which is rule 04 of
-//!    [the manual](../../../docs/manual/index.html).
+//! scroll through however far the wheel was spun. 2. A short pane scrolled to
+//! the end draws the last group against its bottom edge and does not draw the
+//! first. 3. A press lands on the row that is under it now, and a row scrolled
+//! up under the two heads takes no press at all — which is the one of the five
+//! that fails silently, because the control is still drawn where the hand is
+//! and the paint is what has moved. 4. A position survives the pane growing and
+//! shrinking, and is not rewritten by either: the pane is solved twice at one
+//! size with a taller one in between, and the stored number is compared with
+//! itself
+//! ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md),
+//! [ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)).
+//! 5. The head says how much is not shown, which is rule 04 of [the
+//! manual](../../../docs/manual/index.html).
 //!
 //! None of it needs a window, a device or a disk. `pane_count` asks `egui` for
-//! the width of the run it draws, so the tests that reach it run a pass first
-//! — `common::drawn_once`, every other measured control's guard.
+//! the width of the run it draws, so the tests that reach it run a pass first —
+//! `common::drawn_once`, every other measured control's guard.
 
 mod common;
 
@@ -38,10 +37,10 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Authority, Layer, NodeAddress, ParamAt, Sync};
 
-/// A row over `[0, 1]` at the middle of it, so **every** knob in these panes
-/// is at the same place across its row: a fixed point is on whichever row is
-/// under it, which is what test 3 needs to be about the scroll rather than
-/// about two values.
+/// A row over `[0, 1]` at the middle of it, so every knob in these panes is at
+/// the same place across its row: a fixed point is on whichever row is under
+/// it, which is what test 3 needs to be about the scroll rather than about two
+/// values.
 fn row(ord: usize, name: &str) -> Param {
     Param {
         ord: Some(ord),
@@ -117,7 +116,7 @@ fn laid(panel: &karakuri_console::panel::Panel, view: &View, pane: &Pane) -> Ins
     inspector(panel.layout(), 0, pane, view.scroll_in(0)).expect("a pane with room in it")
 }
 
-/// **Where the `index`th row of the `group`th node goes**, worked out from the
+/// Where the `index`th row of the `group`th node goes, worked out from the
 /// stylesheet's own numbers rather than asked of the crate — `param_fader.rs`'
 /// helper, and here for its reason: a row drawn in the wrong place should be
 /// two derivations disagreeing rather than one agreeing with itself.
@@ -130,7 +129,7 @@ fn row_rect(at: &InspectorPane, pane: &Pane, group: usize, index: usize) -> egui
     )
 }
 
-/// **The centre of that row's knob**, which is the middle of its track because
+/// The centre of that row's knob, which is the middle of its track because
 /// every row here is at the middle of its range.
 fn knob(at: &InspectorPane, pane: &Pane, group: usize, index: usize) -> egui::Pos2 {
     let rect = row_rect(at, pane, group, index);
@@ -150,8 +149,7 @@ fn at(p: egui::Pos2) -> Point {
 // 1. Nothing to scroll through
 // ---------------------------------------------------------------------------
 
-/// **A pane taller than its content draws it unscrolled and offers no
-/// scroll.**
+/// A pane taller than its content draws it unscrolled and offers no scroll.
 ///
 /// The position in force is zero whatever is stored, every group is drawn and
 /// every group is counted, and the first group starts at the top of the body —
@@ -200,12 +198,11 @@ fn a_pane_taller_than_its_content_draws_it_unscrolled() {
 // 2. The end of the list
 // ---------------------------------------------------------------------------
 
-/// **A short pane scrolled to the end draws the last group and not the
-/// first.**
+/// A short pane scrolled to the end draws the last group and not the first.
 ///
 /// The end is where the last group's bottom edge meets the body's, and it is
-/// what the clamp against `content - body` *means*: one more notch of the
-/// wheel moves nothing, because there is nothing past the last row to show.
+/// what the clamp against `content - body` *means*: one more notch of the wheel
+/// moves nothing, because there is nothing past the last row to show.
 #[test]
 fn a_short_pane_scrolled_to_the_end_draws_the_last_group_and_not_the_first() {
     let pane = pane_of(3, 3);
@@ -255,15 +252,15 @@ fn a_short_pane_scrolled_to_the_end_draws_the_last_group_and_not_the_first() {
 // 3. What a press lands on
 // ---------------------------------------------------------------------------
 
-/// **A press lands on the row that is under it now**, and a row scrolled up
-/// under the two heads takes no press at all.
+/// A press lands on the row that is under it now, and a row scrolled up under
+/// the two heads takes no press at all.
 ///
-/// Two halves, and the second is the one that fails silently: `group` answers
-/// a rectangle for every index whether or not the body reaches it, so a knob
-/// scrolled under the deck head still has one — and a press resolved against
-/// it would be a hand moving a control that is not on screen, under a control
-/// that is. `InspectorPane::grip`'s `body.contains` is what refuses it, and it
-/// is the same rectangle `inspector_into` clips the paint to.
+/// Two halves, and the second is the one that fails silently: `group` answers a
+/// rectangle for every index whether or not the body reaches it, so a knob
+/// scrolled under the deck head still has one — and a press resolved against it
+/// would be a hand moving a control that is not on screen, under a control that
+/// is. `InspectorPane::grip`'s `body.contains` is what refuses it, and it is
+/// the same rectangle `inspector_into` clips the paint to.
 #[test]
 fn a_press_after_scrolling_lands_on_the_row_now_under_it() {
     let pane = pane_of(3, 3);
@@ -333,15 +330,15 @@ fn a_press_after_scrolling_lands_on_the_row_now_under_it() {
 // 4. What a resize does to it, which is nothing
 // ---------------------------------------------------------------------------
 
-/// **A scroll position survives the pane growing and shrinking, and neither
-/// rewrites it.**
+/// A scroll position survives the pane growing and shrinking, and neither
+/// rewrites it.
 ///
 /// The pane is solved short, then tall enough to hold everything, then short
-/// again, and the **stored** number is compared with itself across all three —
+/// again, and the stored number is compared with itself across all three —
 /// P-0082's *looking never writes back*, and ADR-0250's rejected *clamp the
 /// stored size during the solve* one region in. What each solve answers is the
-/// position clamped for that pane, and the tall one answers zero without
-/// taking the position with it.
+/// position clamped for that pane, and the tall one answers zero without taking
+/// the position with it.
 #[test]
 fn a_position_survives_the_pane_growing_and_shrinking() {
     let pane = pane_of(3, 3);
@@ -394,11 +391,11 @@ fn a_position_survives_the_pane_growing_and_shrinking() {
 // 5. Saying how much
 // ---------------------------------------------------------------------------
 
-/// **The head says how much is not shown**, which is rule 04: *"A list that
-/// showed you part of itself says so and says how much."*
+/// The head says how much is not shown, which is rule 04: *"A list that showed
+/// you part of itself says so and says how much."*
 ///
-/// It counts what is **whole**, so `m of m` cannot be read off a pane with a
-/// group hanging over an edge — which is what makes the number worth anything.
+/// It counts what is whole, so `m of m` cannot be read off a pane with a group
+/// hanging over an edge — which is what makes the number worth anything.
 #[test]
 fn the_head_says_how_many_groups_are_not_shown() {
     let ctx = drawn_once();

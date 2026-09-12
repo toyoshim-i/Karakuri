@@ -1,5 +1,4 @@
-//! **The Program bay rearranging itself**, and the one bit that follows from
-//! it.
+//! The Program bay rearranging itself, and the one bit that follows from it.
 //!
 //! `view::program_body` answers where the picture and the four cells go for a
 //! body rectangle and `tests/program_body.rs` holds that arithmetic against the
@@ -14,15 +13,15 @@
 //!
 //! # The crossover in windows rather than in bodies
 //!
-//! ADR-0182's flip is at a body **1064** wide. The body is the window less
-//! **524**: the left pane's 218, the right pane's 268, the two 10px dividers
-//! between the three tracks — which is the 990 - 218 - 268 - 20 = 484 the
-//! narrowest console is derived from, read at any width — and
-//! `.program-body`'s 9px of padding either side, which is 18. So the last
-//! window with the cells in a row is **1587** and the first with them down the
-//! sides is **1588**. Both are asserted rather than assumed, here and in
-//! `tests/view.rs`: a crossover that moved is a test that fails rather than a
-//! test that quietly starts asserting one arrangement twice.
+//! ADR-0182's flip is at a body 1064 wide. The body is the window less 524: the
+//! left pane's 218, the right pane's 268, the two 10px dividers between the
+//! three tracks — which is the 990 - 218 - 268 - 20 = 484 the narrowest console
+//! is derived from, read at any width — and `.program-body`'s 9px of padding
+//! either side, which is 18. So the last window with the cells in a row is 1587
+//! and the first with them down the sides is 1588. Both are asserted rather
+//! than assumed, here and in `tests/view.rs`: a crossover that moved is a test
+//! that fails rather than a test that quietly starts asserting one arrangement
+//! twice.
 
 mod common;
 
@@ -33,8 +32,8 @@ use karakuri_console::panel::{Op, Outcome, Panel};
 use karakuri_console::view::{picture_rect, preview_rects, program_bay, rearrange, Placement};
 use karakuri_layout::Rect;
 
-/// **The canvas the picture is fitted to**, and it is the workspace's
-/// reference workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
+/// The canvas the picture is fitted to, and it is the workspace's reference
+/// workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
 /// builds its `Present` at.
 const CANVAS: (u32, u32) = (1280, 720);
 
@@ -54,8 +53,8 @@ fn at(width: f32) -> Panel {
     )
 }
 
-/// Which way round the bay arranged itself, asked of the console rather than
-/// of the arithmetic.
+/// Which way round the bay arranged itself, asked of the console rather than of
+/// the arithmetic.
 fn placement(panel: &Panel) -> Placement {
     program_bay(panel.layout(), CANVAS)
         .expect("the Program bay is on screen")
@@ -74,11 +73,11 @@ fn set_aside(panel: &Panel) -> bool {
 // The crossover
 // ---------------------------------------------------------------------------
 
-/// **The bay rearranges itself at the crossover, and the row goes with it.**
+/// The bay rearranges itself at the crossover, and the row goes with it.
 ///
 /// Three things have to happen together and each fails on its own: the cells
-/// move, the row's node stops taking height, and the picture takes what the
-/// row gave up. The defect this exists for is any one of the three without the
+/// move, the row's node stops taking height, and the picture takes what the row
+/// gave up. The defect this exists for is any one of the three without the
 /// others — cells drawn down the sides with the row still 89 tall underneath
 /// them is a bay with a strip of ground where a row used to be and four
 /// thumbnails over the picture, and nothing in `program_body` can see it,
@@ -190,20 +189,20 @@ fn the_bay_rearranges_at_the_crossover() {
     }
 }
 
-/// **Out past the crossover and back, and every rectangle returns.**
+/// Out past the crossover and back, and every rectangle returns.
 ///
-/// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md)
-/// reached through the rearrangement: the bit is a function of the geometry and
-/// nothing is stored, so a window dragged wide and back comes back to the
-/// arrangement it left rather than near it. It is
+/// [P-0082](../../../docs/principles/0082-looking-never-writes-back.md) reached
+/// through the rearrangement: the bit is a function of the geometry and nothing
+/// is stored, so a window dragged wide and back comes back to the arrangement
+/// it left rather than near it. It is
 /// [ADR-0174](../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)'s
 /// round trip with a second bit in it, and the failure it is written against is
 /// hysteresis: a stored mode, a remembered placement, a `set_aside` cleared
 /// somewhere other than where it was written, and the panel comes back with the
 /// row 89 tall inside a bay that no longer has room for it.
 ///
-/// **Every rectangle in the arena**, not the two the bay draws: a bit that was
-/// left set on the way back moves the inspector under it as well.
+/// Every rectangle in the arena, not the two the bay draws: a bit that was left
+/// set on the way back moves the inspector under it as well.
 #[test]
 fn a_window_dragged_out_and_back_comes_back_to_the_same_rectangles() {
     let mut panel = at(SMALLEST.w);
@@ -243,15 +242,15 @@ fn a_window_dragged_out_and_back_comes_back_to_the_same_rectangles() {
     assert_eq!(preview_rects(panel.layout(), CANVAS), Some(cells));
 }
 
-/// **Asking twice changes nothing**, which is the whole of *nothing
-/// re-enters the solve*.
+/// Asking twice changes nothing, which is the whole of *nothing re-enters the
+/// solve*.
 ///
 /// The bit is derived from the bay's rectangle and the bay's rectangle does not
-/// depend on the bit — `program` is `Fixed(395)` over a flexible `program-view`,
-/// so what it can use is unbounded either way. That makes one write a fixed
-/// point rather than the first step of a chase, and the failure if it were not
-/// is a panel that alternates between two arrangements for as long as anything
-/// asks it to draw.
+/// depend on the bit — `program` is `Fixed(395)` over a flexible
+/// `program-view`, so what it can use is unbounded either way. That makes one
+/// write a fixed point rather than the first step of a chase, and the failure
+/// if it were not is a panel that alternates between two arrangements for as
+/// long as anything asks it to draw.
 #[test]
 fn the_second_ask_finds_nothing_to_do() {
     for width in [SMALLEST.w, BELOW, BESIDE, 2400.0, PLAUSIBLE.w] {
@@ -271,15 +270,15 @@ fn the_second_ask_finds_nothing_to_do() {
 // The guard rule
 // ---------------------------------------------------------------------------
 
-/// **With the picture folded the row is below, whatever the window is doing.**
+/// With the picture folded the row is below, whatever the window is doing.
 ///
 /// The rule is the console's and `karakuri-layout` deliberately does not hold
 /// it: a split can use nothing when none of its children is laid out, so a row
-/// set aside under a folded picture leaves the Program bay claiming **zero** —
-/// the bay, its head and both its regions gone from the panel, and the
-/// inspector swelling into the space. And the manual promises the opposite in
-/// as many words: the deck previews *"are auditions of their own, so they stay
-/// when it goes"*.
+/// set aside under a folded picture leaves the Program bay claiming zero — the
+/// bay, its head and both its regions gone from the panel, and the inspector
+/// swelling into the space. And the manual promises the opposite in as many
+/// words: the deck previews *"are auditions of their own, so they stay when it
+/// goes"*.
 ///
 /// So this asserts the bay is still there, still 89 tall, and still drawing
 /// four cells — at widths either side of the crossover, because the defect is a
@@ -338,8 +337,8 @@ fn a_folded_picture_keeps_the_row_below_it_at_every_width() {
     }
 }
 
-/// **The picture folded while the cells are beside it**, which is the guard
-/// rule as a gesture rather than as a width.
+/// The picture folded while the cells are beside it, which is the guard rule as
+/// a gesture rather than as a width.
 ///
 /// The other order, and the one an operator reaches: the bay is already
 /// rearranged, the four cells are down the sides, and then the picture goes.
@@ -383,15 +382,15 @@ fn folding_the_picture_beside_the_cells_brings_the_row_back() {
 // The operator's own fold, which is the other bit
 // ---------------------------------------------------------------------------
 
-/// **Folding the row works in both arrangements, and unfolding brings it back
-/// to the right one.**
+/// Folding the row works in both arrangements, and unfolding brings it back to
+/// the right one.
 ///
 /// Two bits and they are independent in both directions
 /// ([ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)):
 /// the operator's fold takes the cells off the panel wherever they are, and the
-/// rearrangement decides where they come back to. **The defect is one bit for
-/// both**, and it shows here in whichever direction it is written: an unfold
-/// that clears the console's bit puts an empty row back under a picture that is
+/// rearrangement decides where they come back to. The defect is one bit for
+/// both, and it shows here in whichever direction it is written: an unfold that
+/// clears the console's bit puts an empty row back under a picture that is
 /// using the height, and a rearrangement that clears the operator's fold
 /// unfolds a row nobody asked for the moment the window is dragged.
 #[test]
@@ -451,18 +450,18 @@ fn folding_the_row_works_in_both_arrangements() {
 // A frame on which nothing moved
 // ---------------------------------------------------------------------------
 
-/// **A frame on which nothing moved marks nothing dirty and asks for nothing.**
+/// A frame on which nothing moved marks nothing dirty and asks for nothing.
 ///
 /// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
 /// still-panel clause, at the one place in the console that writes to the arrangement
 /// on every frame. Two halves, and the second is the one the injection is
 /// about:
 ///
-/// - **The answer is `false`**, so `Change::Rearranged` asks for no frame — a
+/// - The answer is `false`, so `Change::Rearranged` asks for no frame — a
 ///   `rearrange` that reported what the caller asked rather than what changed
 ///   would ask for one on every frame, for ever, and the still window would
 ///   never sleep.
-/// - **The write itself does not dirty the layout.** `Layout::rect` refuses to
+/// - The write itself does not dirty the layout. `Layout::rect` refuses to
 ///   answer from a dirty solve, so the rectangle read below with no `solve`
 ///   between it and the write is what says so: an unconditional
 ///   `set_aside` panics here with *rect() read a stale solve*, which is the
@@ -490,16 +489,17 @@ fn a_frame_where_nothing_moved_writes_nothing() {
     }
 }
 
-/// **Solo the row while it is beside the picture, and the console is what
-/// says it is not beside the picture any more.**
+/// Solo the row while it is beside the picture, and the console is what says it
+/// is not beside the picture any more.
+///
 ///
 /// [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
 /// leaves this here on purpose: a solo saves and restores the operator's fold
-/// and nothing else, so **a node that is set aside stays set aside through a
-/// solo, the soloed node included** — left holding the whole viewport and
-/// still not laid out, *"until whoever set it aside says otherwise"*. This is
-/// the console saying otherwise, and it happens before a rectangle is read
-/// because `rearrange` is the first thing a frame does.
+/// and nothing else, so a node that is set aside stays set aside through a
+/// solo, the soloed node included — left holding the whole viewport and still
+/// not laid out, *"until whoever set it aside says otherwise"*. This is the
+/// console saying otherwise, and it happens before a rectangle is read because
+/// `rearrange` is the first thing a frame does.
 ///
 /// Without it the panel is empty: the row holds the viewport with no height in
 /// it and everything else is folded away, which is a black window and a key

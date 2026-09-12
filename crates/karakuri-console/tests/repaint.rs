@@ -1,9 +1,10 @@
-//! **Whether a frame is owed**, asserted without a window.
+//! Whether a frame is owed, asserted without a window.
+//!
 //!
 //! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
-//! still-panel clause has two halves and the second one is the dangerous half. *A
-//! still panel costs nothing* is easy to get right and easy to see when it is
-//! wrong — a window that spins shows up on any clock. *And everything else
+//! still-panel clause has two halves and the second one is the dangerous half.
+//! *A still panel costs nothing* is easy to get right and easy to see when it
+//! is wrong — a window that spins shows up on any clock. *And everything else
 //! still costs what it costs* is the half that fails silently: one path that
 //! changes the model and reaches no repaint leaves a control on screen showing
 //! a value that is not true any more, with nothing anywhere saying so.
@@ -11,7 +12,7 @@
 //! Neither half can be asserted in the window loop, because a `winit` handler
 //! is not something a test can call and a stale pixel is not an error. So the
 //! decision came out into [`karakuri_console::repaint`], and this is what asks
-//! it: **the still case, and every case that is not still, one at a time.**
+//! it: the still case, and every case that is not still, one at a time.
 
 mod common;
 
@@ -24,8 +25,8 @@ use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::view::rearrange;
 use karakuri_layout::Point;
 
-/// **The canvas the picture is fitted to** — the workspace's reference
-/// workload, and what the Program bay arranges its body for.
+/// The canvas the picture is fitted to — the workspace's reference workload,
+/// and what the Program bay arranges its body for.
 const CANVAS: (u32, u32) = (1280, 720);
 
 /// A panel at a plausible window size, solved.
@@ -46,10 +47,10 @@ fn on_a_boundary(panel: &mut Panel) -> Point {
 
 /// Do an operation and hand back what it did.
 ///
-/// **It used to take a point**, because an operation meant *whatever is under
-/// the pointer* and the pointer was how a test aimed one. An operation names
-/// its target now (`panel::Op`), so the aiming is `node` and this is what is
-/// left of the helper.
+/// It used to take a point, because an operation meant *whatever is under the
+/// pointer* and the pointer was how a test aimed one. An operation names its
+/// target now (`panel::Op`), so the aiming is `node` and this is what is left
+/// of the helper.
 fn did(panel: &mut Panel, op: Op) -> Outcome {
     panel.op(op)
 }
@@ -64,19 +65,19 @@ fn node(panel: &mut Panel, name: &str) -> karakuri_layout::NodeId {
 // The still half
 // ---------------------------------------------------------------------------
 
-/// **A still panel asks for no repaint, and neither does anything that reaches
-/// the model and moves nothing.**
+/// A still panel asks for no repaint, and neither does anything that reaches
+/// the model and moves nothing.
 ///
 /// The first clause is not *draw less often*; it is *do no per-frame work at
 /// all when nothing has changed*, so the assertion is [`Repaint::Never`] and
 /// not a smaller number. Every case here is one an operator produces without
-/// meaning to — a key pressed over an empty part of the panel, `z` with
-/// nothing folded, a wheel while a boundary is in hand, a pointer `egui` is
-/// already answering for — and each one is a frame that used to be drawn.
+/// meaning to — a key pressed over an empty part of the panel, `z` with nothing
+/// folded, a wheel while a boundary is in hand, a pointer `egui` is already
+/// answering for — and each one is a frame that used to be drawn.
 ///
-/// `egui`'s side of it is here too: `Duration::MAX` is what its context is
-/// left holding by a pass that asked for nothing, which is every pass on a
-/// panel with nothing on it.
+/// `egui`'s side of it is here too: `Duration::MAX` is what its context is left
+/// holding by a pass that asked for nothing, which is every pass on a panel
+/// with nothing on it.
 #[test]
 fn a_still_panel_asks_for_no_repaint() {
     let mut panel = panel();
@@ -178,12 +179,12 @@ fn a_still_panel_asks_for_no_repaint() {
 // The half that fails silently
 // ---------------------------------------------------------------------------
 
-/// **Every path that changes what is on screen reaches a repaint.**
+/// Every path that changes what is on screen reaches a repaint.
 ///
 /// This is the list from the other direction, and it is the substance of the
-/// clause rather than a footnote: a panel that under-repaints is far worse
-/// than one that over-repaints, because a stale control looks exactly like a
-/// live one.
+/// clause rather than a footnote: a panel that under-repaints is far worse than
+/// one that over-repaints, because a stale control looks exactly like a live
+/// one.
 ///
 /// Each case is driven through the model and the decision is asked of what the
 /// model returned, so a case that stops changing anything stops being asserted
@@ -327,20 +328,19 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     assert_eq!(Repaint::asked(Duration::ZERO), Repaint::Now);
 }
 
-/// **A boundary that moved less than a pixel still asks for a frame**, and
-/// this is the trap the decision is written to avoid rather than a curiosity.
+/// A boundary that moved less than a pixel still asks for a frame, and this is
+/// the trap the decision is written to avoid rather than a curiosity.
 ///
 /// `Panel::moved` returns `None` for a move too small to be *worth saying* —
 /// `WORTH_SAYING`, half a pixel, a threshold about how much a readout should
 /// print at sixty asks a second. Reading that `None` as *nothing changed* is
 /// the shortest route to a silent under-repaint: half a logical pixel is a
 /// whole physical one on a 2x display, so the boundary is drawn where it no
-/// longer is, in the middle of the one gesture an operator is watching
-/// closely.
+/// longer is, in the middle of the one gesture an operator is watching closely.
 ///
-/// So the assertion is a pair. The model reports nothing, **and** the frame is
-/// owed anyway, because the decision is taken from who claimed the event and
-/// never from what the drag returned.
+/// So the assertion is a pair. The model reports nothing, and the frame is owed
+/// anyway, because the decision is taken from who claimed the event and never
+/// from what the drag returned.
 #[test]
 fn a_drag_too_small_to_report_still_asks_for_a_frame() {
     let mut panel = panel();
@@ -384,16 +384,16 @@ fn a_drag_too_small_to_report_still_asks_for_a_frame() {
 // egui's own requests
 // ---------------------------------------------------------------------------
 
-/// **`egui`'s repaint request is honoured with the delay it named**, rather
-/// than collapsed into "draw now".
+/// `egui`'s repaint request is honoured with the delay it named, rather than
+/// collapsed into "draw now".
 ///
-/// `egui` animates, blinks a text cursor and fades a tooltip in, and it says
-/// so by asking to be repainted *after* a duration. Answering a 250 ms request
-/// with an immediate frame does not make the animation smoother — the loop
-/// then draws, `egui` asks again for what is left of the delay, and the
-/// animation becomes a spin at whatever rate the machine can manage. That is
-/// the exact cost this whole change exists to stop paying, reached from the
-/// one direction that looks like obeying the rule.
+/// `egui` animates, blinks a text cursor and fades a tooltip in, and it says so
+/// by asking to be repainted *after* a duration. Answering a 250 ms request
+/// with an immediate frame does not make the animation smoother — the loop then
+/// draws, `egui` asks again for what is left of the delay, and the animation
+/// becomes a spin at whatever rate the machine can manage. That is the exact
+/// cost this whole change exists to stop paying, reached from the one direction
+/// that looks like obeying the rule.
 ///
 /// [`Repaint::soonest`] is asserted for the same reason: it may only bring a
 /// frame forward, so combining the panel's answer with `egui`'s can lose

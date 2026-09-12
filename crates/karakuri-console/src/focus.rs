@@ -1,12 +1,13 @@
-//! **The bay a key press is addressed to, and what each bay remembers.**
+//! The bay a key press is addressed to, and what each bay remembers.
+//!
 //!
 //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
 //! decided that a key press is addressed to whatever holds focus, that `Tab`
 //! and `shift-Tab` move focus between bays along the arrangement's own walk,
-//! and that a bay's address is a **path** — a digit names the nth thing one
-//! level below it and `0` names the bay's head. This module is the whole of
-//! that: the ring, the pointer that walks it and the address each bay
-//! remembers ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
+//! and that a bay's address is a path — a digit names the nth thing one level
+//! below it and `0` names the bay's head. This module is the whole of that: the
+//! ring, the pointer that walks it and the address each bay remembers
+//! ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
 //! and the four keys that act inside a bay, in the Mixer and the Library
 //! ([ADR-0333](../../../docs/adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md))
 //! and then in the seven that were left
@@ -15,17 +16,16 @@
 //! # The three pointers are three readings of one thing
 //!
 //! `View::selection`, `View::cursor_row` and `View::scope` were three private
-//! fields with the same paragraph written at each of them — *nothing
-//! downstream can be the model of record for it*. They are three readings of
-//! [`Address`] now, on two bays:
+//! fields with the same paragraph written at each of them — *nothing downstream
+//! can be the model of record for it*. They are three readings of [`Address`]
+//! now, on two bays:
 //!
-//! | pointer | bay | where in the address |
-//! | --- | --- | --- |
-//! | `View::selection` | `mixer` | the item the bay was last on — a strip |
-//! | `View::cursor_row` | `library` | the item the bay was last on — a row |
-//! | `View::scope` | `library` | the control last named under the head |
+//! | pointer | bay | where in the address | | --- | --- | --- | |
+//! `View::selection` | `mixer` | the item the bay was last on — a strip | |
+//! `View::cursor_row` | `library` | the item the bay was last on — a row | |
+//! `View::scope` | `library` | the control last named under the head |
 //!
-//! **Nothing about what any of them means changes**, which is the record's own
+//! Nothing about what any of them means changes, which is the record's own
 //! clause: what each of them *refuses* — a deck the mixer draws no strip for, a
 //! row past the listing, a scope with no chip — stays at the method that
 //! refuses it. What moved is where the number is kept.
@@ -37,9 +37,9 @@
 //! are about the bay rather than about anything in it, so there is one of it
 //! and there is nothing to remember; a bay that remembered *the head* under the
 //! same key as *the third strip* would lose the deck selection the first time
-//! an operator pressed `0`. The head is still a rung the address **descends**
-//! through — which is exactly how the Library's scope is reached, at
-//! `[HEAD]` — and it is [`Address::at`] that says so.
+//! an operator pressed `0`. The head is still a rung the address descends
+//! through — which is exactly how the Library's scope is reached, at `[HEAD]` —
+//! and it is [`Address::at`] that says so.
 //!
 //! # The ring is derived and `REGIONS` is what it is checked against
 //!
@@ -51,28 +51,28 @@
 //! divider or folded a pane has moved the traversal with it and nothing has to
 //! be told. `tests/focus.rs` is where the constant does the checking.
 //!
-//! **A folded bay stays in the ring**, and the reason is the narrow one: it is
-//! in the ring so that there is something to press to open it, not so that it
-//! can be operated. So [`ring`] asks [`Layout::children`] and never
+//! A folded bay stays in the ring, and the reason is the narrow one: it is in
+//! the ring so that there is something to press to open it, not so that it can
+//! be operated. So [`ring`] asks [`Layout::children`] and never
 //! [`Layout::placed_children`] — the visible half is the paint's question and
 //! not the walk's.
 //!
 //! # What this module does not do
 //!
-//! **It binds no key.** `crates/karakuri/src/main.rs` is where `Tab` and `esc`
+//! It binds no key. `crates/karakuri/src/main.rs` is where `Tab` and `esc`
 //! reach these methods, for [`crate::panel`]'s reason: a surface is where the
 //! buck stops and this crate is asked rather than asking.
 //!
-//! **The six keys are all here.** A digit, the arrows, `space` and `enter` are
-//! the grammar ADR-0259 designs; [`press`] resolves an address against what a
-//! bay is drawing and answers what the host has to do about it, and [`BUILT`]
-//! is the table it is written in — one row per bay, all nine of them since
+//! The six keys are all here. A digit, the arrows, `space` and `enter` are the
+//! grammar ADR-0259 designs; [`press`] resolves an address against what a bay
+//! is drawing and answers what the host has to do about it, and [`BUILT`] is
+//! the table it is written in — one row per bay, all nine of them since
 //! [ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md).
 //!
-//! **`space` on a bay is the fold, and it is the one press that means the same
-//! thing wherever focus is.** So it is declared once, under [`ANY`], rather
-//! than nine times over — which is what lets *Fold a bay away* carry one key
-//! badge saying `space · in any bay`.
+//! `space` on a bay is the fold, and it is the one press that means the same
+//! thing wherever focus is. So it is declared once, under [`ANY`], rather than
+//! nine times over — which is what lets *Fold a bay away* carry one key badge
+//! saying `space · in any bay`.
 
 use std::collections::BTreeMap;
 
@@ -83,16 +83,16 @@ use karakuri_layout::{Layout, NodeId};
 use crate::panel::{Op, Panel};
 use crate::view::{region, Kind, Mask, Region, Tally, View};
 
-/// **The digit that names a bay's head**, which is the one digit that is not
-/// an item.
+/// The digit that names a bay's head, which is the one digit that is not an
+/// item.
 ///
 /// A constant rather than a literal, because two very different things are
-/// spelled `0` in this module — the head, and the first element of a path —
-/// and only one of them is this.
+/// spelled `0` in this module — the head, and the first element of a path — and
+/// only one of them is this.
 pub const HEAD: usize = 0;
 
-/// **The Mixer bay, by the name the arrangement gives it** — whose remembered
-/// item is the deck selection.
+/// The Mixer bay, by the name the arrangement gives it — whose remembered item
+/// is the deck selection.
 ///
 /// A constant rather than a literal at the two methods that read it, for
 /// [`crate::view::REGIONS`]' own reason: a bay nobody can find by name is a
@@ -100,11 +100,11 @@ pub const HEAD: usize = 0;
 /// the ring holds it.
 pub const MIXER: &str = "mixer";
 
-/// **The Library bay** — whose remembered item is the row under the cursor and
+/// The Library bay — whose remembered item is the row under the cursor and
 /// whose head's remembered control is the marked scope. [`MIXER`]'s reason.
 pub const LIBRARY: &str = "library";
 
-/// **Whether a region is one of the nine bays.**
+/// Whether a region is one of the nine bays.
 ///
 /// The four that are not are what a bay *contains*: the Program bay's picture
 /// and preview row and the Inspector's two panes are its items, which is
@@ -128,19 +128,18 @@ pub const fn is_bay(kind: Kind) -> bool {
     }
 }
 
-/// **The tab ring: every bay of `layout`, in the order the walk reaches
-/// them** — down a column first and only then across to the next one.
+/// The tab ring: every bay of `layout`, in the order the walk reaches them —
+/// down a column first and only then across to the next one.
 ///
 /// The order is the arrangement's own geometry rather than a list anybody
 /// maintains, which is what keeps it right after a divider is dragged: a
 /// column's children are taken top to bottom, a row's left to right, and the
 /// walk stops at a bay instead of descending into it.
 ///
-/// **A folded bay is in it** — see the module documentation. **A node the
-/// arrangement names and [`REGIONS`](crate::view::REGIONS) does not is
-/// structure**, so `left-pane`, `centre` and `right-pane` are walked through
-/// and not into the ring, which is the same reading `View::draw` makes of
-/// them.
+/// A folded bay is in it — see the module documentation. A node the arrangement
+/// names and [`REGIONS`](crate::view::REGIONS) does not is structure, so
+/// `left-pane`, `centre` and `right-pane` are walked through and not into the
+/// ring, which is the same reading `View::draw` makes of them.
 pub fn ring(layout: &Layout) -> Vec<&'static Region> {
     let mut bays = Vec::new();
     descend(layout, layout.root(), &mut bays);
@@ -160,10 +159,10 @@ fn descend(layout: &Layout, id: NodeId, bays: &mut Vec<&'static Region>) {
     }
 }
 
-/// **Where the dashed focus ring goes on `bay`**, or `None` where the
-/// arrangement gives that bay no rectangle to put one on.
+/// Where the dashed focus ring goes on `bay`, or `None` where the arrangement
+/// gives that bay no rectangle to put one on.
 ///
-/// **The head, or the whole row for a bay that draws none.** The mock draws
+/// The head, or the whole row for a bay that draws none. The mock draws
 /// `.wfocus` as a dashed sun outline and the deck selection as a solid lavender
 /// ring, on purpose — *"drawing them the same way would erase which of the two
 /// a reader is looking at"* — and `console.html`'s mark for a focused bay is
@@ -172,13 +171,13 @@ fn descend(layout: &Layout, id: NodeId, bays: &mut Vec<&'static Region>) {
 /// headless row, so `0` names the row itself"*, so the row stands in for the
 /// head and the ring goes round the row.
 ///
-/// **`None` for a folded bay, and that is the drawing ADR-0259 leaves open.** A
+/// `None` for a folded bay, and that is the drawing ADR-0259 leaves open. A
 /// folded region has no rectangle and no divider is drawn beside it
 /// ([ADR-0204](../../../docs/adr/0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md)),
 /// so there is nothing on the panel to ring; `console.html` draws the mark that
 /// is owed — the head alone — beside the note that defines it, and no bay is
-/// folded in the panel it draws. **The bay stays in the ring either way**,
-/// which is what `space` is for.
+/// folded in the panel it draws. The bay stays in the ring either way, which is
+/// what `space` is for.
 ///
 /// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
 pub fn mark(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> {
@@ -193,28 +192,28 @@ pub fn mark(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> {
     })
 }
 
-/// **Where the mark for a *folded* bay goes**, or `None` for a bay that is not
+/// Where the mark for a *folded* bay goes, or `None` for a bay that is not
 /// folded, or one the arrangement is not drawing an edge for.
 ///
-/// **A folded bay keeps its place in the ring so that it can be opened**, not
-/// so that it can be operated — so it has to be markable, and a folded region
-/// has no rectangle to mark. `docs/manual/console.html` draws what is owed:
-/// *the head alone*, wearing the dashed ring, saying two things and no more —
-/// **there is a bay here, and `space` opens it**.
+/// A folded bay keeps its place in the ring so that it can be opened, not so
+/// that it can be operated — so it has to be markable, and a folded region has
+/// no rectangle to mark. `docs/manual/console.html` draws what is owed: *the
+/// head alone*, wearing the dashed ring, saying two things and no more — there
+/// is a bay here, and `space` opens it.
 ///
-/// **The head is grown from the edge the fold leaves.** A closed child keeps
-/// its divider ([`Layout::is_placed`]), so it still solves to a rectangle — one
+/// The head is grown from the edge the fold leaves. A closed child keeps its
+/// divider ([`Layout::is_placed`]), so it still solves to a rectangle — one
 /// with no extent along its parent's axis, sitting exactly where the bay was.
 /// This is that edge given a head's height, held inside the parent so that a
 /// bay folded against the bottom of a column marks upward instead of off the
-/// end of it. **Every bay of this arrangement hangs in a column**, so the width
-/// is the edge's own; the parent's is the fallback for an arrangement whose
-/// bays are a row, and it is written rather than assumed.
+/// end of it. Every bay of this arrangement hangs in a column, so the width is
+/// the edge's own; the parent's is the fallback for an arrangement whose bays
+/// are a row, and it is written rather than assumed.
 ///
-/// **`None` unless the operator folded *this* bay.** A bay inside a folded pane
-/// is invisible and is not collapsed, and there is nothing of it on the panel
-/// to mark — [`Layout::is_collapsed`] is the bit this asks and
-/// [`Layout::visible`] is the one it does not.
+/// `None` unless the operator folded *this* bay. A bay inside a folded pane is
+/// invisible and is not collapsed, and there is nothing of it on the panel to
+/// mark — [`Layout::is_collapsed`] is the bit this asks and [`Layout::visible`]
+/// is the one it does not.
 ///
 /// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
 /// one.
@@ -243,18 +242,18 @@ pub fn folded_head(layout: &Layout, bay: &'static Region) -> Option<egui::Rect> 
     )))
 }
 
-/// **The word a folded bay's mark carries beside its title**, which is the
-/// whole of what it says: there is a bay here, and this is the press that opens
-/// it. `console.html` draws exactly this string.
+/// The word a folded bay's mark carries beside its title, which is the whole of
+/// what it says: there is a bay here, and this is the press that opens it.
+/// `console.html` draws exactly this string.
 pub const OPENS: &str = "space opens";
 
-/// **A bay's remembered address**: where the address is inside this bay, and
-/// the nth thing it last named at each level.
+/// A bay's remembered address: where the address is inside this bay, and the
+/// nth thing it last named at each level.
 ///
 /// The path is the record's own: `[]` is the bay itself, `[2]` is its second
 /// item, `[2, 3]` is that item's third control, and [`HEAD`] in place of an
-/// item names the bay's head. Digits count from **one** because they count what
-/// the bay drew, which is ADR-0259's change from the four deck keys.
+/// item names the bay's head. Digits count from one because they count what the
+/// bay drew, which is ADR-0259's change from the four deck keys.
 ///
 /// # Two fields, because they answer two questions
 ///
@@ -266,16 +265,16 @@ pub const OPENS: &str = "space opens";
 /// popped would have taken the selection with it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Address {
-    /// Where the address is now, from the bay down. Empty is the bay itself,
-    /// which is where every bay starts and where `esc` stops.
+    /// Where the address is now, from the bay down. Empty is the bay itself, which
+    /// is where every bay starts and where `esc` stops.
     at: Vec<usize>,
-    /// **The nth item last named under each path**, and never [`HEAD`] — see
-    /// the module documentation, which is where that is argued.
+    /// The nth item last named under each path, and never [`HEAD`] — see the module
+    /// documentation, which is where that is argued.
     ///
     /// A map rather than one number, because a bay has more than one place to
-    /// remember: the Library remembers which row it was on *and* which chip of
-    /// its head is marked, and those are two levels of one address rather than
-    /// two pointers.
+    /// remember: the Library remembers which row it was on *and* which chip of its
+    /// head is marked, and those are two levels of one address rather than two
+    /// pointers.
     memory: BTreeMap<Vec<usize>, usize>,
 }
 
@@ -285,27 +284,26 @@ impl Address {
         &self.at
     }
 
-    /// **The nth item last named under `under`**, or `None` for a path nothing
-    /// has been named under.
+    /// The nth item last named under `under`, or `None` for a path nothing has been
+    /// named under.
     ///
-    /// One-based, which is the digit that named it: `1` is the first thing the
-    /// bay drew at that level. A caller that wants a position subtracts one,
-    /// and the three places that arithmetic is written all subtract with a
-    /// floor — **never because zero is reachable**, which it is not
-    /// ([`Address::remember`] refuses [`HEAD`] and nothing else writes here),
-    /// but because a wrapped `usize` in a paint path is a panic in an event
-    /// handler and this crate's rule is the guard rather than the message.
+    /// One-based, which is the digit that named it: `1` is the first thing the bay
+    /// drew at that level. A caller that wants a position subtracts one, and the
+    /// three places that arithmetic is written all subtract with a floor — never
+    /// because zero is reachable, which it is not ([`Address::remember`] refuses
+    /// [`HEAD`] and nothing else writes here), but because a wrapped `usize` in a
+    /// paint path is a panic in an event handler and this crate's rule is the guard
+    /// rather than the message.
     pub fn remembered(&self, under: &[usize]) -> Option<usize> {
         self.memory.get(under).copied()
     }
 
-    /// **Remember that the `nth` thing under `under` was named**, and answer
-    /// whether that moved anything.
+    /// Remember that the `nth` thing under `under` was named, and answer whether
+    /// that moved anything.
     ///
-    /// **[`HEAD`] is refused rather than stored**, which is the module's own
-    /// rule: the head is not one of the things a bay lists, so there is nothing
-    /// to remember about it and remembering it would overwrite the item this
-    /// bay was on.
+    /// [`HEAD`] is refused rather than stored, which is the module's own rule: the
+    /// head is not one of the things a bay lists, so there is nothing to remember
+    /// about it and remembering it would overwrite the item this bay was on.
     ///
     /// The `bool` is `View::select`'s: a caller repaints on a move and not on a
     /// press.
@@ -316,80 +314,80 @@ impl Address {
         self.memory.insert(under.to_vec(), nth) != Some(nth)
     }
 
-    /// **Descend to the `nth` thing below where the address is**, remembering
-    /// it on the way — which is what a digit does.
+    /// Descend to the `nth` thing below where the address is, remembering it on the
+    /// way — which is what a digit does.
     ///
     /// Nothing here says the nth thing exists: the bay that draws it is what
-    /// refuses a digit past its end, exactly as `View::select` refuses a deck
-    /// the mixer has no strip for. This is the path and not the panel.
+    /// refuses a digit past its end, exactly as `View::select` refuses a deck the
+    /// mixer has no strip for. This is the path and not the panel.
     pub fn down(&mut self, nth: usize) {
         self.remember(&self.at.clone(), nth);
         self.at.push(nth);
     }
 
-    /// **Up one level, and answer whether there was one to leave.**
+    /// Up one level, and answer whether there was one to leave.
     ///
-    /// `false` at the bay, which is what `esc` says out loud: there is no
-    /// unfocused state to fall out into, so the key acts on nothing and the
-    /// caller is the one that says so
+    /// `false` at the bay, which is what `esc` says out loud: there is no unfocused
+    /// state to fall out into, so the key acts on nothing and the caller is the one
+    /// that says so
     /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
-    /// **What it does not do is quit**, which is the whole of ADR-0259's change
-    /// to that key.
+    /// What it does not do is quit, which is the whole of ADR-0259's change to that
+    /// key.
     pub fn up(&mut self) -> bool {
         self.at.pop().is_some()
     }
 
-    /// **Back to the bay, without forgetting where it was.**
+    /// Back to the bay, without forgetting where it was.
     ///
     /// `esc` repeated is the ordinary way there and this is the other one: an
-    /// address on something the bay has stopped drawing names nothing, and
-    /// acting on whatever has taken that position is the failure
-    /// [`crate::view::View::point_at`] refuses one level down. The memory is
-    /// left alone, for [`Address::up`]'s reason — what a bay *was* on is the
-    /// solid ring and is not what went stale.
+    /// address on something the bay has stopped drawing names nothing, and acting
+    /// on whatever has taken that position is the failure
+    /// [`crate::view::View::point_at`] refuses one level down. The memory is left
+    /// alone, for [`Address::up`]'s reason — what a bay *was* on is the solid ring
+    /// and is not what went stale.
     pub fn to_the_bay(&mut self) {
         self.at.clear();
     }
 
-    /// **Put the address on the `nth` item**, remembering it — what an arrow
-    /// does when the address had already descended to one.
+    /// Put the address on the `nth` item, remembering it — what an arrow does when
+    /// the address had already descended to one.
     ///
-    /// It is [`Address::down`] with the level replaced rather than pushed: a
-    /// walk moves along a level and never into one.
+    /// It is [`Address::down`] with the level replaced rather than pushed: a walk
+    /// moves along a level and never into one.
     pub fn to_item(&mut self, nth: usize) {
         self.at.clear();
         self.down(nth);
     }
 }
 
-/// **Which bay the keyboard is talking to, and what each bay remembers.**
+/// Which bay the keyboard is talking to, and what each bay remembers.
 ///
 /// One pointer and nine addresses. The pointer is the dashed ring the mock
 /// draws; an address is the solid one, seen once per bay.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Focus {
-    /// **The bay focus is on**, or `None` for a console nobody has tabbed on
-    /// yet — which resolves to *the first bay the traversal reaches* rather
-    /// than to a bay named here.
+    /// The bay focus is on, or `None` for a console nobody has tabbed on yet —
+    /// which resolves to *the first bay the traversal reaches* rather than to a bay
+    /// named here.
     ///
-    /// **There is no unfocused state and this is not one.** ADR-0259 rejected
-    /// starting focus on a named bay because that is a second rule to keep in
-    /// step with the walk — *"the first divider dragged would have parted
-    /// them"* — so the start is the walk's own answer and [`Focus::bay`] is
-    /// where it is asked. The same reading is what puts focus back in the ring
-    /// when a bay leaves the arrangement.
+    /// There is no unfocused state and this is not one. ADR-0259 rejected starting
+    /// focus on a named bay because that is a second rule to keep in step with the
+    /// walk — *"the first divider dragged would have parted them"* — so the start
+    /// is the walk's own answer and [`Focus::bay`] is where it is asked. The same
+    /// reading is what puts focus back in the ring when a bay leaves the
+    /// arrangement.
     at: Option<&'static str>,
-    /// Every bay that has ever been addressed, and what it remembers. A bay
-    /// with no entry has been addressed by nobody, which is where a run starts.
+    /// Every bay that has ever been addressed, and what it remembers. A bay with no
+    /// entry has been addressed by nobody, which is where a run starts.
     addresses: BTreeMap<&'static str, Address>,
 }
 
 impl Focus {
-    /// **The bay focus is on**, resolved against `layout`.
+    /// The bay focus is on, resolved against `layout`.
     ///
     /// The first bay of the ring where nothing has been focused yet, and again
-    /// where what was focused is no longer a bay of this arrangement — a
-    /// pointer at a region that is not there is a ring drawn nowhere, which is
+    /// where what was focused is no longer a bay of this arrangement — a pointer at
+    /// a region that is not there is a ring drawn nowhere, which is
     /// `View::select`'s rule read at the bay instead of at a strip.
     ///
     /// `None` only for an arrangement with no bay in it at all, which no
@@ -406,11 +404,11 @@ impl Focus {
         }
     }
 
-    /// **Put focus on `bay`**, and answer whether it moved.
+    /// Put focus on `bay`, and answer whether it moved.
     ///
     /// Resolved against `layout` for [`Focus::bay`]'s reason: a bay this
-    /// arrangement does not hold is refused rather than stored, so nothing here
-    /// can name a ring drawn nowhere.
+    /// arrangement does not hold is refused rather than stored, so nothing here can
+    /// name a ring drawn nowhere.
     pub fn put(&mut self, layout: &Layout, bay: &str) -> bool {
         let Some(found) = ring(layout).into_iter().find(|found| found.name == bay) else {
             return false;
@@ -420,22 +418,22 @@ impl Focus {
         was != Some(found.name)
     }
 
-    /// **`Tab`, and `shift-Tab` at `step` of `-1`**: the next bay of the ring,
+    /// `Tab`, and `shift-Tab` at `step` of `-1`: the next bay of the ring,
     /// wrapping.
     ///
-    /// **It always moves between bays, whatever depth the address had reached
-    /// inside the one it leaves, and it never descends** — which is why nothing
-    /// here touches an [`Address`]. The bay it leaves keeps where it was, and
-    /// that is the whole of what a remembered address is for.
+    /// It always moves between bays, whatever depth the address had reached inside
+    /// the one it leaves, and it never descends — which is why nothing here touches
+    /// an [`Address`]. The bay it leaves keeps where it was, and that is the whole
+    /// of what a remembered address is for.
     ///
-    /// **`shift-Tab` is this walk run backwards and nothing else.** One key is
-    /// the walk and the other is the walk reversed, so an operator who
-    /// overshoots gets back exactly where they were — which is what a second
-    /// rule for the backward direction would have cost.
+    /// `shift-Tab` is this walk run backwards and nothing else. One key is the walk
+    /// and the other is the walk reversed, so an operator who overshoots gets back
+    /// exactly where they were — which is what a second rule for the backward
+    /// direction would have cost.
     ///
-    /// `false` where there is nothing to move to: an arrangement with one bay
-    /// or none. A ring of one that wrapped onto itself would be a press that
-    /// changed nothing and asked for a frame.
+    /// `false` where there is nothing to move to: an arrangement with one bay or
+    /// none. A ring of one that wrapped onto itself would be a press that changed
+    /// nothing and asked for a frame.
     pub fn tab(&mut self, layout: &Layout, step: i32) -> bool {
         let bays = ring(layout);
         if bays.len() < 2 {
@@ -453,24 +451,24 @@ impl Focus {
         moved
     }
 
-    /// **What `bay` remembers**, or `None` for a bay nobody has addressed.
+    /// What `bay` remembers, or `None` for a bay nobody has addressed.
     pub fn address(&self, bay: &str) -> Option<&Address> {
         self.addresses.get(bay)
     }
 
-    /// **What `bay` remembers, to write into** — created empty on the first
-    /// write, which is what makes *a bay nobody has addressed* a state rather
-    /// than a row of defaults.
+    /// What `bay` remembers, to write into — created empty on the first write,
+    /// which is what makes *a bay nobody has addressed* a state rather than a row
+    /// of defaults.
     pub fn address_mut(&mut self, bay: &'static str) -> &mut Address {
         self.addresses.entry(bay).or_default()
     }
 
-    /// **`esc`: up one level of the focused bay's address.**
+    /// `esc`: up one level of the focused bay's address.
     ///
     /// `false` at bay level, which is the refusal ADR-0259 asks to be said out
     /// loud: there is no rung below the bay and no unfocused state to fall out
-    /// into, and a key that declines silently is indistinguishable from one
-    /// that is not bound. **It never leaves the ring and it never quits.**
+    /// into, and a key that declines silently is indistinguishable from one that is
+    /// not bound. It never leaves the ring and it never quits.
     pub fn up(&mut self, layout: &Layout) -> bool {
         let Some(bay) = self.bay(layout) else {
             return false;
@@ -486,8 +484,8 @@ impl Focus {
 // The grammar: what the six keys reach inside a bay
 // ---------------------------------------------------------------------------
 
-/// **The four keys of the grammar that are addressed to whatever the bay's
-/// address is on.**
+/// The four keys of the grammar that are addressed to whatever the bay's
+/// address is on.
 ///
 /// `Tab` and `esc` are the other two of ADR-0259's six and are not here: they
 /// move the address rather than acting on it, so they reach the same thing in
@@ -499,11 +497,11 @@ impl Focus {
 pub enum Grammar {
     /// A digit — the nth thing one level below the address, and `0` the head.
     Digit,
-    /// An arrow — the neighbour of the addressed thing, along the axis it is
-    /// drawn on, or the next value of a level.
+    /// An arrow — the neighbour of the addressed thing, along the axis it is drawn
+    /// on, or the next value of a level.
     Arrows,
-    /// `space` — the addressed thing's next state, or a level's declared
-    /// default, or **a bay's fold**.
+    /// `space` — the addressed thing's next state, or a level's declared default,
+    /// or a bay's fold.
     Space,
     /// `enter` — the act the addressed thing is for.
     Enter,
@@ -519,24 +517,24 @@ impl Grammar {
     ];
 }
 
-/// **The bay a press that acts the same in every bay is addressed in**, which
-/// is not one of the nine.
+/// The bay a press that acts the same in every bay is addressed in, which is
+/// not one of the nine.
 ///
 /// `space` at bay level is the fold, and folding is a rule about *a bay* — so
 /// the route it names is not the Mixer's or the Master's but every bay's, and
-/// the page spells it `space &middot; in any bay`. It is a constant rather
-/// than a literal for [`MIXER`]'s reason, and `crates/karakuri/src/main.rs`'s
+/// the page spells it `space &middot; in any bay`. It is a constant rather than
+/// a literal for [`MIXER`]'s reason, and `crates/karakuri/src/main.rs`'s
 /// `key_column` resolves the page's spelling to it.
 ///
-/// **It is a route and not a region**, so nothing looks it up in
+/// It is a route and not a region, so nothing looks it up in
 /// [`crate::view::REGIONS`]: a badge that named a bay here would be naming one
 /// of nine places a press works.
 pub const ANY: &str = "any";
 
-/// **Which way an arrow points.** Four rather than two, because the axis is
-/// half of what an arrow means: the Mixer's strips are a row and the Library's
-/// rows are a column, so `←→` walk one and `↑↓` the other, and a level is
-/// stepped by `↑↓` whichever bay it is in.
+/// Which way an arrow points. Four rather than two, because the axis is half of
+/// what an arrow means: the Mixer's strips are a row and the Library's rows are
+/// a column, so `←→` walk one and `↑↓` the other, and a level is stepped by
+/// `↑↓` whichever bay it is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arrow {
     Up,
@@ -551,9 +549,9 @@ impl Arrow {
         matches!(self, Arrow::Left | Arrow::Right)
     }
 
-    /// **Which way along its axis**: `-1` for up and left, `1` for down and
-    /// right. A list runs down and a row runs right, so *further on* is one
-    /// direction and the page needs no second rule for it.
+    /// Which way along its axis: `-1` for up and left, `1` for down and right. A
+    /// list runs down and a row runs right, so *further on* is one direction and
+    /// the page needs no second rule for it.
     pub const fn step(self) -> i32 {
         match self {
             Arrow::Up | Arrow::Left => -1,
@@ -562,7 +560,7 @@ impl Arrow {
     }
 }
 
-/// **One press of the grammar, with what the key itself said.**
+/// One press of the grammar, with what the key itself said.
 ///
 /// A digit carries which digit and an arrow carries which way; `space` and
 /// `enter` carry nothing, because the address is the whole of what they are
@@ -587,22 +585,21 @@ impl Press {
     }
 }
 
-/// **A control a bay draws, as the grammar addresses it.**
+/// A control a bay draws, as the grammar addresses it.
 ///
-/// One variant per control the nine bays draw at a rung the address reaches,
-/// in the order the bay draws them — which is what makes a digit name the nth
-/// of them. **It is not a list of every rectangle on the panel**: a readout is
-/// not a control, and a control ADR-0259's walk does not name is not addressed
-/// — each of those is written down at the bay's row in [`BUILT`] rather than
-/// left to be noticed.
+/// One variant per control the nine bays draw at a rung the address reaches, in
+/// the order the bay draws them — which is what makes a digit name the nth of
+/// them. It is not a list of every rectangle on the panel: a readout is not a
+/// control, and a control ADR-0259's walk does not name is not addressed — each
+/// of those is written down at the bay's row in [`BUILT`] rather than left to
+/// be noticed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Control {
     // -- the Mixer ---------------------------------------------------------
-    /// A strip's residency chip — `space` asks the deck for the next of the
-    /// three.
+    /// A strip's residency chip — `space` asks the deck for the next of the three.
     Tally,
-    /// A strip's trim, which is a **level**: arrows step it and `space` returns
-    /// it to the value it was declared at.
+    /// A strip's trim, which is a level: arrows step it and `space` returns it to
+    /// the value it was declared at.
     Trim,
     /// A strip's channel fader, and [`Control::Trim`]'s rules exactly.
     Fader,
@@ -610,16 +607,15 @@ pub enum Control {
     Blend,
     /// A strip's mask mini — `space` cycles the shape.
     Mask,
-    /// The transition row's shape pill, in the Mixer's **head**: the settings
-    /// are about the bay rather than about any one strip, which is what a head
-    /// is for.
+    /// The transition row's shape pill, in the Mixer's head: the settings are about
+    /// the bay rather than about any one strip, which is what a head is for.
     Shape,
     /// The transition row's quantum pill. [`Control::Shape`]'s rules.
     Quantum,
     /// The transition row's length pill. [`Control::Shape`]'s rules.
     Length,
-    /// The transition row's `go` capsule — the act, on the **addressed
-    /// strip**, which is the deck selection.
+    /// The transition row's `go` capsule — the act, on the addressed strip, which
+    /// is the deck selection.
     Go,
 
     // -- the Library -------------------------------------------------------
@@ -631,12 +627,12 @@ pub enum Control {
     Params,
 
     // -- the Transport -----------------------------------------------------
-    /// The tempo figure, which is a track a press positions rather than a
-    /// level anything steps.
+    /// The tempo figure, which is a track a press positions rather than a level
+    /// anything steps.
     Tempo,
     /// The `½ ×2` pair, whose only operand is the direction the key spells.
     Grid,
-    /// The latency offset, which is a **level**.
+    /// The latency offset, which is a level.
     Offset,
     /// The beat grid — a readout.
     Beat,
@@ -650,7 +646,7 @@ pub enum Control {
     Arrangement,
     /// The tone map pill — `space` cycles the four operators.
     Tonemap,
-    /// The exposure track, which is a **level**.
+    /// The exposure track, which is a level.
     Exposure,
 
     // -- the Program bay ---------------------------------------------------
@@ -660,8 +656,8 @@ pub enum Control {
     Class,
     /// The picture. Its on and off is the Outputs row's one control.
     Picture,
-    /// One of the four deck preview cells — a monitor, and a monitor is a
-    /// thing you look at.
+    /// One of the four deck preview cells — a monitor, and a monitor is a thing you
+    /// look at.
     Cell,
 
     // -- the Inspector -----------------------------------------------------
@@ -673,19 +669,18 @@ pub enum Control {
     Sync,
     /// The deck head's anchor, scrubbed a quarter beat by the arrows.
     Anchor,
-    /// The deck head's composite chip — `space` names the layering it is not
-    /// in.
+    /// The deck head's composite chip — `space` names the layering it is not in.
     Composite,
     /// A node head's authority chip — `space` cycles man, sug and auto.
     Authority,
     /// A node's renderer chips — `space` steps which one is live.
     Renderer,
-    /// One parameter row of a node group, which is a **level**, and whose act
-    /// is taking an attachment back.
+    /// One parameter row of a node group, which is a level, and whose act is taking
+    /// an attachment back.
     Param,
 
     // -- the Master chain --------------------------------------------------
-    /// The master out, which is a **level**.
+    /// The master out, which is a level.
     Out,
     /// One of the three effects, whose parameters have no spelling in the
     /// vocabulary — so a digit reaches the effect and stops.
@@ -700,8 +695,8 @@ pub enum Control {
     AddLane,
     /// A lane's label, whose mute is a state.
     Label,
-    /// One step of a lane — a row of alike cells the arrows walk **across**
-    /// while the lanes they sit in are walked down.
+    /// One step of a lane — a row of alike cells the arrows walk across while the
+    /// lanes they sit in are walked down.
     Step,
 
     // -- the Outputs row ---------------------------------------------------
@@ -715,46 +710,44 @@ pub enum Control {
     Back,
 }
 
-/// **What a control answers to**, which is the one thing the grammar has to
-/// know about a control and the whole of what decides which of the four keys
-/// act on it.
+/// What a control answers to, which is the one thing the grammar has to know
+/// about a control and the whole of what decides which of the four keys act on
+/// it.
 ///
-/// ADR-0259's kinds, as the grammar reads them: a **state** is a closed list
-/// `space` cycles, a **level** is a continuum the arrows step and `space`
-/// returns to its default, an **act** is a control that performs rather than
-/// sets, and the last two are what the walk found that the record's seven do
-/// not have a word for — a row of alike cells, and a control that is drawn and
-/// answers nothing.
+/// ADR-0259's kinds, as the grammar reads them: a state is a closed list
+/// `space` cycles, a level is a continuum the arrows step and `space` returns
+/// to its default, an act is a control that performs rather than sets, and the
+/// last two are what the walk found that the record's seven do not have a word
+/// for — a row of alike cells, and a control that is drawn and answers nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Answers {
-    /// A closed list: `space` cycles it and the arrows decline, because the
-    /// values of a closed list are not laid out on an axis.
+    /// A closed list: `space` cycles it and the arrows decline, because the values
+    /// of a closed list are not laid out on an axis.
     State,
-    /// A continuum: the arrows step it and `space` returns it to the value it
-    /// was declared at.
+    /// A continuum: the arrows step it and `space` returns it to the value it was
+    /// declared at.
     Level,
     /// A control that performs: `enter` does it, and `space` and the arrows
     /// decline.
     Act(Act),
-    /// **One of a row (or a column) of alike controls** the arrows walk and
-    /// `space` sets — the Sequencer's steps, and the one place a bay walks two
-    /// axes: `across` is this control's and [`Built::across`] is its items'.
+    /// One of a row (or a column) of alike controls the arrows walk and `space`
+    /// sets — the Sequencer's steps, and the one place a bay walks two axes:
+    /// `across` is this control's and [`Built::across`] is its items'.
     Cells { across: bool },
-    /// **A control whose press puts a card down.** The card's own rows are a
-    /// second listing and the address does not descend into one, so the four
-    /// keys decline here and say so rather than opening something they cannot
-    /// then walk.
+    /// A control whose press puts a card down. The card's own rows are a second
+    /// listing and the address does not descend into one, so the four keys decline
+    /// here and say so rather than opening something they cannot then walk.
     Card(&'static str),
-    /// **Drawn, addressed, and answering nothing**, with the sentence that
-    /// says why — a digit lands on it and the ring is drawn, which is
-    /// ADR-0259's own finding about the four preview cells.
+    /// Drawn, addressed, and answering nothing, with the sentence that says why — a
+    /// digit lands on it and the ring is drawn, which is ADR-0259's own finding
+    /// about the four preview cells.
     Nothing(&'static str),
 }
 
 impl Control {
-    /// **What this control answers to.** A `match` with no wildcard, so a
-    /// control added to the panel is a compile error here rather than one the
-    /// grammar quietly declines on.
+    /// What this control answers to. A `match` with no wildcard, so a control added
+    /// to the panel is a compile error here rather than one the grammar quietly
+    /// declines on.
     pub const fn answers(self) -> Answers {
         match self {
             Control::Tally | Control::Blend | Control::Mask => Answers::State,
@@ -834,22 +827,22 @@ impl Control {
         }
     }
 
-    /// **Whether this control is a level** — a continuum the arrows step and
-    /// `space` returns to its default.
+    /// Whether this control is a level — a continuum the arrows step and `space`
+    /// returns to its default.
     pub const fn level(self) -> bool {
         matches!(self.answers(), Answers::Level)
     }
 
-    /// **What `enter` on this control performs**, or `None` for one that sets
-    /// rather than performs.
+    /// What `enter` on this control performs, or `None` for one that sets rather
+    /// than performs.
     ///
-    /// It is [`Control::answers`] with one addition, and the addition is the
-    /// one place a control is two of ADR-0259's kinds at once: **a parameter
-    /// row is a level and it also performs**, because the sensitivity row
-    /// under it carries `take back` and that is the act of the control the row
-    /// draws rather than a control of its own — a parameter with nothing
-    /// holding it draws no sensitivity row at all. A fourth rung for one chip
-    /// would be a rung whose only inhabitant is sometimes there.
+    /// It is [`Control::answers`] with one addition, and the addition is the one
+    /// place a control is two of ADR-0259's kinds at once: a parameter row is a
+    /// level and it also performs, because the sensitivity row under it carries
+    /// `take back` and that is the act of the control the row draws rather than a
+    /// control of its own — a parameter with nothing holding it draws no
+    /// sensitivity row at all. A fourth rung for one chip would be a rung whose
+    /// only inhabitant is sometimes there.
     pub const fn acts(self) -> Option<Act> {
         match self.answers() {
             Answers::Act(act) => Some(act),
@@ -882,17 +875,17 @@ impl Control {
     }
 }
 
-/// **What `enter` on an addressed thing performs.**
+/// What `enter` on an addressed thing performs.
 ///
 /// One variant per act the nine bays draw, which is what keeps `enter` a rule
-/// about a kind rather than a per-bay verb: where an item has two acts they
-/// are two controls and a digit chooses between them, which is the Staging
-/// lane's `n 1` and `n 2`.
+/// about a kind rather than a per-bay verb: where an item has two acts they are
+/// two controls and a digit chooses between them, which is the Staging lane's
+/// `n 1` and `n 2`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Act {
-    /// The Set under the Library's cursor, loaded onto the selected deck —
-    /// with both operands on screen before the press, which is what that
-    /// argument was always about.
+    /// The Set under the Library's cursor, loaded onto the selected deck — with
+    /// both operands on screen before the press, which is what that argument was
+    /// always about.
     Load,
     /// What one Set holds and declares, opened on the row the cursor is on.
     Read,
@@ -902,25 +895,25 @@ pub enum Act {
     Back,
     /// The transition the Mixer's head is set to, run on the addressed strip.
     Go,
-    /// The attachment on a parameter row, taken back — after it the row is a
-    /// handle again.
+    /// The attachment on a parameter row, taken back — after it the row is a handle
+    /// again.
     TakeBack,
 }
 
-/// **What the things at one rung are made of**: the controls drawn first, and
-/// the control every one after them is.
+/// What the things at one rung are made of: the controls drawn first, and the
+/// control every one after them is.
 ///
 /// A fixed list is not enough for two of the nine. An Inspector pane draws one
 /// deck head and then a node group per node of the Set in the slot, and a
 /// Sequencer lane draws one label and then a cell per step of the mode — so a
-/// rung is *a prefix and a repeat*, and how many of the repeat there are is
-/// the bay's own reading rather than anything written here.
+/// rung is *a prefix and a repeat*, and how many of the repeat there are is the
+/// bay's own reading rather than anything written here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Of {
     /// The controls drawn before the counted ones, in draw order.
     pub first: &'static [Control],
-    /// **The control every thing after them is**, or `None` where a thing
-    /// draws only the controls above.
+    /// The control every thing after them is, or `None` where a thing draws only
+    /// the controls above.
     pub then: Option<Control>,
 }
 
@@ -936,12 +929,12 @@ impl Of {
         Of { first, then: None }
     }
 
-    /// **The `nth` control of this rung, counting from one**, against a rung
-    /// drawing `drawn` of them — or `None` past the end.
+    /// The `nth` control of this rung, counting from one, against a rung drawing
+    /// `drawn` of them — or `None` past the end.
     ///
-    /// `drawn` is the bay's reading and not this table's: a pane with two
-    /// nodes draws three things at its second rung and a pane with nine draws
-    /// ten, and a digit counts what was drawn.
+    /// `drawn` is the bay's reading and not this table's: a pane with two nodes
+    /// draws three things at its second rung and a pane with nine draws ten, and a
+    /// digit counts what was drawn.
     pub fn nth(&self, nth: usize, drawn: usize) -> Option<Control> {
         if nth == HEAD || nth > drawn {
             return None;
@@ -961,30 +954,30 @@ impl Of {
             }
     }
 
-    /// Whether any control of this rung is reached by `key`, against a rung
-    /// drawing everything it can.
+    /// Whether any control of this rung is reached by `key`, against a rung drawing
+    /// everything it can.
     fn reaches(&self, key: Grammar) -> bool {
         self.first.iter().any(|c| c.reached_by(key)) || self.then.is_some_and(|c| c.reached_by(key))
     }
 }
 
-/// **What a bay's items are.**
+/// What a bay's items are.
 ///
 /// Two shapes, and the split is ADR-0259's own: a headless row's *"items are
 /// the controls left to right"*, and every other bay's items are alike things
 /// with controls under them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Items {
-    /// **The bay's items are its controls**, so a digit at bay level names one
-    /// outright and there is no item rung at all — the Transport, the Outputs
-    /// row, the Master chain and the Program bay.
+    /// The bay's items are its controls, so a digit at bay level names one outright
+    /// and there is no item rung at all — the Transport, the Outputs row, the
+    /// Master chain and the Program bay.
     Controls(&'static [Control]),
-    /// **The bay lists alike things** and a digit names the nth of them; these
-    /// are the controls one of them draws.
+    /// The bay lists alike things and a digit names the nth of them; these are the
+    /// controls one of them draws.
     Alike(Of),
 }
 
-/// **One bay's grammar: what each level of its address is made of.**
+/// One bay's grammar: what each level of its address is made of.
 ///
 /// The table [`BUILT`] is written in, and the thing
 /// `crates/karakuri/src/main.rs`'s `key_column` reads in place of this
@@ -997,26 +990,25 @@ pub enum Items {
 pub struct Built {
     /// The bay, by the name the arrangement gives it.
     pub bay: &'static str,
-    /// The controls of the bay's head, in the order the head draws them —
-    /// empty for a head that holds none and for a bay that draws none.
+    /// The controls of the bay's head, in the order the head draws them — empty for
+    /// a head that holds none and for a bay that draws none.
     pub head: &'static [Control],
     /// What the bay's items are.
     pub items: Items,
-    /// **The third rung**, which only the Inspector has: the control the
-    /// address descends *through*, and what is under it. ADR-0259 calls that
-    /// bay three deep and says it is *"what proves the address has to be a
-    /// path rather than two levels"*.
+    /// The third rung, which only the Inspector has: the control the address
+    /// descends *through*, and what is under it. ADR-0259 calls that bay three deep
+    /// and says it is *"what proves the address has to be a path rather than two
+    /// levels"*.
     pub under: &'static [(Control, Of)],
-    /// **What `enter` on an item performs**, or `None` where an item is not an
-    /// act.
+    /// What `enter` on an item performs, or `None` where an item is not an act.
     pub act: Option<Act>,
-    /// **Whether naming an item is itself an operation.** The Mixer's is: a
-    /// digit that names a strip *is* the deck selection, which is why that row
-    /// keeps a key badge rather than losing one.
+    /// Whether naming an item is itself an operation. The Mixer's is: a digit that
+    /// names a strip *is* the deck selection, which is why that row keeps a key
+    /// badge rather than losing one.
     pub selects: bool,
-    /// **Which way the arrows walk this bay's items** — `true` for a row, so
-    /// `←→`, and `false` for a column, so `↑↓`. It is a reading of how the bay
-    /// draws them and not a preference.
+    /// Which way the arrows walk this bay's items — `true` for a row, so `←→`, and
+    /// `false` for a column, so `↑↓`. It is a reading of how the bay draws them and
+    /// not a preference.
     pub across: bool,
 }
 
@@ -1038,15 +1030,14 @@ impl Built {
             .map_or(Of::NONE, |(_, of)| *of)
     }
 
-    /// **Whether one of the four keys acts anywhere in this bay**, derived from
-    /// what the bay is made of rather than listed beside it — a second list
-    /// would be a second answer to *what does `space` do here*.
+    /// Whether one of the four keys acts anywhere in this bay, derived from what
+    /// the bay is made of rather than listed beside it — a second list would be a
+    /// second answer to *what does `space` do here*.
     ///
-    /// **The fold is not counted here.** `space` at bay level folds every one
-    /// of the nine, so counting it would make this answer `true` for `space`
-    /// in a bay whose controls answer nothing — and the page would then owe
-    /// nine badges for one rule. It is declared once, under [`ANY`], by
-    /// [`reaches`].
+    /// The fold is not counted here. `space` at bay level folds every one of the
+    /// nine, so counting it would make this answer `true` for `space` in a bay
+    /// whose controls answer nothing — and the page would then owe nine badges for
+    /// one rule. It is declared once, under [`ANY`], by [`reaches`].
     pub fn reaches(&self, key: Grammar) -> bool {
         match key {
             // **A digit names the nth item, and `0` the head.** Every bay the
@@ -1067,14 +1058,14 @@ impl Built {
     }
 }
 
-/// **The nine bays' grammar, and what each is made of.**
+/// The nine bays' grammar, and what each is made of.
 ///
 /// ADR-0259 walks all nine and this is the whole of that walk: ADR-0333 built
-/// the Mixer and the Library, and ADR-0343 the seven that were left. **A bay
-/// with nothing of a kind is recorded as a finding rather than smoothed
-/// over**, which is the record's own instruction — the Staging lane holds no
-/// state at all, the Outputs row holds nothing but states, and the Program
-/// bay's four cells answer neither of the two keys that act on a thing.
+/// the Mixer and the Library, and ADR-0343 the seven that were left. A bay with
+/// nothing of a kind is recorded as a finding rather than smoothed over, which
+/// is the record's own instruction — the Staging lane holds no state at all,
+/// the Outputs row holds nothing but states, and the Program bay's four cells
+/// answer neither of the two keys that act on a thing.
 pub const BUILT: &[Built] = &[
     // -- Transport ---------------------------------------------------------
     //
@@ -1303,9 +1294,9 @@ pub const BUILT: &[Built] = &[
     },
 ];
 
-/// **The picture, by the name the arrangement gives it** — the node the
-/// Program bay's `solo` acts on and the Outputs row's one sink turns on and
-/// off. A constant for [`MIXER`]'s reason.
+/// The picture, by the name the arrangement gives it — the node the Program
+/// bay's `solo` acts on and the Outputs row's one sink turns on and off. A
+/// constant for [`MIXER`]'s reason.
 const PICTURE: &str = "program-view";
 
 /// The Transport row, by the name the arrangement gives it. [`MIXER`]'s reason.
@@ -1328,15 +1319,15 @@ pub fn built(bay: &str) -> Option<&'static Built> {
     BUILT.iter().find(|found| found.bay == bay)
 }
 
-/// **Every (bay, key) pair the grammar binds**, flattened — the dispatch table
-/// as a check can read it.
+/// Every (bay, key) pair the grammar binds, flattened — the dispatch table as a
+/// check can read it.
 ///
 /// `crates/karakuri/src/main.rs`'s `key_column` holds the *rows* each pair
 /// reaches, because a page heading is what a check reads and is not something
 /// this program says to anybody; this is the half that says which pairs exist,
 /// and the two are held against each other in both directions.
 ///
-/// **[`ANY`] is the first pair and is not a bay.** `space` at bay level is the
+/// [`ANY`] is the first pair and is not a bay. `space` at bay level is the
 /// fold, and it works in every one of the nine — so it is one route naming all
 /// of them rather than nine routes naming one row, which is what a badge
 /// reading `space &middot; in any bay` says.
@@ -1352,8 +1343,8 @@ pub fn reaches() -> Vec<(&'static str, Grammar)> {
     found
 }
 
-/// **Where a bay's address has actually got to**, resolved against what the bay
-/// is drawing now.
+/// Where a bay's address has actually got to, resolved against what the bay is
+/// drawing now.
 ///
 /// A path is a list of digits and the bay is what says whether they name
 /// anything: a listing that shrank between two frames leaves an address on a
@@ -1370,16 +1361,15 @@ pub enum Addressed {
     OfHead(usize, Control),
     /// The nth item — only in a bay that lists items.
     Item(usize),
-    /// **A control**: the item it is under, `None` in a bay whose items are
-    /// its controls, then the control's own number and which it is.
+    /// A control: the item it is under, `None` in a bay whose items are its
+    /// controls, then the control's own number and which it is.
     Of {
         item: Option<usize>,
         nth: usize,
         control: Control,
     },
-    /// **The third rung**: the item, the number of the control the address
-    /// descended through, then the number of the thing under it and which it
-    /// is.
+    /// The third rung: the item, the number of the control the address descended
+    /// through, then the number of the thing under it and which it is.
     Under {
         item: usize,
         through: usize,
@@ -1443,42 +1433,40 @@ pub fn addressed(
     }
 }
 
-/// **What the deck is holding right now**, read at the press rather than off
-/// the strip a frame copied.
+/// What the deck is holding right now, read at the press rather than off the
+/// strip a frame copied.
 ///
 /// The three states a strip's chips cycle, and the angle the mask is wearing.
-/// **This crate owns the cycle and not the reading**: a scheduled fade landing
+/// This crate owns the cycle and not the reading: a scheduled fade landing
 /// between the frame and the press would leave `view::Strip` a value the deck
 /// has already left behind, which is `crates/karakuri/src/main.rs`'s own rule
 /// at the three keys this replaces — *"read off the deck and not off the
 /// strip"*.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Held {
-    /// What the deck was last **asked** for, which is what the tally cycles
-    /// from — see `view::Mixer::tally`, whose argument this is one surface
-    /// along.
+    /// What the deck was last asked for, which is what the tally cycles from — see
+    /// `view::Mixer::tally`, whose argument this is one surface along.
     pub requested: Tally,
     pub blend: BlendMode,
     pub mask: Mask,
-    /// The angle the slot is already wearing, carried through unchanged
-    /// (ADR-0203).
+    /// The angle the slot is already wearing, carried through unchanged (ADR-0203).
     pub mask_angle: f32,
 }
 
-/// **Which way a press took a level.**
+/// Which way a press took a level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Up,
     Down,
-    /// `space` — back to the value the control was declared at, which is the
-    /// one state a continuum has.
+    /// `space` — back to the value the control was declared at, which is the one
+    /// state a continuum has.
     Default,
 }
 
-/// **Which level a press landed on**, since the host names a different
-/// operation for each and reads a different thing to step from.
+/// Which level a press landed on, since the host names a different operation
+/// for each and reads a different thing to step from.
 ///
-/// **The four here are the levels whose value is the world's** — a deck's, the
+/// The four here are the levels whose value is the world's — a deck's, the
 /// engine's, the audio session's — so the host reads them and does the
 /// arithmetic, which is ADR-0333's seam and `karakuri-cli`'s parity argument.
 /// The two the console steps itself are the Inspector's, and they are not here
@@ -1496,50 +1484,49 @@ pub enum Level {
     Offset,
 }
 
-/// **What a press of one of the four keys asks for.**
+/// What a press of one of the four keys asks for.
 ///
 /// The console resolves the address and says what was landed on; the window
 /// loop names the operation, because the levels above need the world in front
 /// of them and two of the answers reach the store (ADR-0333).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Asked {
-    /// **Nothing there answers this key**, and the sentence that says why — a
-    /// key that declines silently and a key that is not bound are the same
-    /// experience
+    /// Nothing there answers this key, and the sentence that says why — a key that
+    /// declines silently and a key that is not bound are the same experience
     /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
     Nothing(&'static str),
     /// The address moved and nothing was asked of anything.
     Moved,
-    /// One operation, named outright — the deck selection and the controls
-    /// whose next state is this console's own affordance.
+    /// One operation, named outright — the deck selection and the controls whose
+    /// next state is this console's own affordance.
     Emitted(Operation),
-    /// **A move of the arrangement**, which is not the vocabulary's: the fold
-    /// `space` performs on a bay, and the Program head's solo.
+    /// A move of the arrangement, which is not the vocabulary's: the fold `space`
+    /// performs on a bay, and the Program head's solo.
     Panel(Op),
-    /// **The picture's on and off**, which is one press asking for two things:
-    /// the operation that names the output, and the fold that carries it out.
+    /// The picture's on and off, which is one press asking for two things: the
+    /// operation that names the output, and the fold that carries it out.
     Routed(Operation, Op),
-    /// **A level, and which way the press went.** The host reads the value off
-    /// the world and names the destination, because the size of a step and the
-    /// clamp on it are its arithmetic and `karakuri-cli`'s.
+    /// A level, and which way the press went. The host reads the value off the
+    /// world and names the destination, because the size of a step and the clamp on
+    /// it are its arithmetic and `karakuri-cli`'s.
     Stepped { level: Level, step: Step },
-    /// The Library head's scope, stepped — the host performs it and re-reads
-    /// the listing, which is a directory read and not a thing this crate can
-    /// do at all (ADR-0156).
+    /// The Library head's scope, stepped — the host performs it and re-reads the
+    /// listing, which is a directory read and not a thing this crate can do at all
+    /// (ADR-0156).
     Scope,
     /// The Set under the Library's cursor, loaded onto the selected deck — the
-    /// host's for the scope's reason, and because a preset row is taken into
-    /// the store on the way.
+    /// host's for the scope's reason, and because a preset row is taken into the
+    /// store on the way.
     Load,
 }
 
-/// The sentence for a key pressed in a bay whose grammar is not built. **No
-/// bay is, as of ADR-0343**, and the arm stays because a tenth region added to
-/// the panel would arrive here rather than at a panic.
+/// The sentence for a key pressed in a bay whose grammar is not built. No bay
+/// is, as of ADR-0343, and the arm stays because a tenth region added to the
+/// panel would arrive here rather than at a panic.
 const NOT_BUILT: &str = "the six keys are not built in this bay yet — space still folds it, and \
                          tab moves on to the next";
 
-/// **What a press asks for, and the address moved to answer it.**
+/// What a press asks for, and the address moved to answer it.
 ///
 /// The one entry point for the four keys of the grammar. It resolves the
 /// focused bay's address against what that bay is drawing, moves the address
@@ -1552,11 +1539,11 @@ const NOT_BUILT: &str = "the six keys are not built in this bay yet — space st
 /// `space` on a chip calls `View::step_scope` — so a deck the mixer draws no
 /// strip for, a row past the listing and a scope with no chip are refused
 /// exactly where they were refused before, and the address descends only where
-/// the refusal did not fire. **The grammar adds a route and no exception.**
+/// the refusal did not fire. The grammar adds a route and no exception.
 ///
 /// `held` is asked what the deck is holding, and only where a press needs a
-/// state to cycle from. **A closure rather than a value**, because which strip
-/// to read is what the address says and the address is what this function
+/// state to cycle from. A closure rather than a value, because which strip to
+/// read is what the address says and the address is what this function
 /// resolves. It answers `None` where this deck has no slot behind that strip,
 /// and the press then declines and says so.
 pub fn press(
@@ -1783,7 +1770,7 @@ pub fn press(
     }
 }
 
-/// **`space` on a bay: the fold.**
+/// `space` on a bay: the fold.
 ///
 /// The one press that means the same thing in all nine, which is what a badge
 /// reading `space &middot; in any bay` says and what ADR-0333 declined to bind
@@ -1800,9 +1787,9 @@ fn fold(panel: &Panel, bay: &'static Region) -> Asked {
     })
 }
 
-/// **How many things `bay` draws under `path`** — the one reading in this
-/// module that is a bay's own rather than the grammar's, and it is a reading
-/// rather than a rule.
+/// How many things `bay` draws under `path` — the one reading in this module
+/// that is a bay's own rather than the grammar's, and it is a reading rather
+/// than a rule.
 ///
 /// `[]` is the bay's items, `[n]` the nth item's controls, `[n, c]` what is
 /// under that control. A bay drawing nothing answers zero, and the press then
@@ -1861,8 +1848,8 @@ fn lanes(view: &View) -> usize {
         .map_or(0, |seq| seq.pattern.lanes().len())
 }
 
-/// How many cells a lane draws, which is the pattern's mode and not a
-/// constant: sixteen at a sixteenth and eight at an eighth (ADR-0306).
+/// How many cells a lane draws, which is the pattern's mode and not a constant:
+/// sixteen at a sixteenth and eight at an eighth (ADR-0306).
 fn steps(view: &View) -> usize {
     view.sequencer
         .as_ref()
@@ -1874,7 +1861,7 @@ fn address_into(view: &mut View, bay: &'static str, nth: usize) {
     view.focus_mut().address_mut(bay).down(nth);
 }
 
-/// **A digit at bay level, naming the nth item** — and the deck selection where
+/// A digit at bay level, naming the nth item — and the deck selection where
 /// naming one is that.
 fn name_item(view: &mut View, bay: &'static str, built: &Built, nth: usize, items: usize) -> Asked {
     if nth > items {
@@ -1910,9 +1897,9 @@ fn name_item(view: &mut View, bay: &'static str, built: &Built, nth: usize, item
     }
 }
 
-/// **An arrow at bay or item level, walking the bay's items.**
+/// An arrow at bay or item level, walking the bay's items.
 ///
-/// **From the item the bay remembers, not from the address**, which is the one
+/// From the item the bay remembers, not from the address, which is the one
 /// place the two fields of an [`Address`] are read together on purpose: at bay
 /// level there is no addressed item, and arrows that declined until a digit had
 /// been pressed would take away the two keys the Library bay has today
@@ -1988,8 +1975,8 @@ fn walk(
     }
 }
 
-/// **Which item a bay is remembering**, one-based and inside what it is
-/// drawing — the solid ring, read where the walk needs somewhere to start.
+/// Which item a bay is remembering, one-based and inside what it is drawing —
+/// the solid ring, read where the walk needs somewhere to start.
 fn remembered(view: &View, bay: &str, items: usize) -> usize {
     view.focus()
         .address(bay)
@@ -1998,8 +1985,8 @@ fn remembered(view: &View, bay: &str, items: usize) -> usize {
         .clamp(1, items.max(1))
 }
 
-/// **An arrow on a control**: the next value of a level, or the neighbouring
-/// cell of a row of them.
+/// An arrow on a control: the next value of a level, or the neighbouring cell
+/// of a row of them.
 #[allow(clippy::too_many_arguments)]
 fn stepped(view: &View, item: Option<usize>, control: Control, arrow: Arrow) -> Asked {
     match control.answers() {
@@ -2026,7 +2013,7 @@ fn stepped(view: &View, item: Option<usize>, control: Control, arrow: Arrow) -> 
     }
 }
 
-/// **An arrow on the third rung**: the Inspector's levels, and nothing else.
+/// An arrow on the third rung: the Inspector's levels, and nothing else.
 #[allow(clippy::too_many_arguments)]
 fn under_arrow(
     view: &View,
@@ -2062,7 +2049,7 @@ fn under_arrow(
     }
 }
 
-/// **A parameter row, stepped a tenth of what it publishes.**
+/// A parameter row, stepped a tenth of what it publishes.
 fn param(view: &View, item: usize, through: usize, nth: usize, up: bool) -> Asked {
     let Some(param) = view
         .inspector
@@ -2088,12 +2075,12 @@ fn param(view: &View, item: usize, through: usize, nth: usize, up: bool) -> Aske
     })
 }
 
-/// **One press of a parameter key**, as a fraction of what the control
-/// publishes — the trim's tenth read on a range that is declared rather than
-/// fixed. `Param::valued` clamps it, which is that method's own rule.
+/// One press of a parameter key, as a fraction of what the control publishes —
+/// the trim's tenth read on a range that is declared rather than fixed.
+/// `Param::valued` clamps it, which is that method's own rule.
 const PARAM_STEP: f32 = 0.1;
 
-/// **A level the host steps**, named here and stepped there.
+/// A level the host steps, named here and stepped there.
 fn level(view: &View, item: Option<usize>, control: Control, step: Step) -> Asked {
     match control {
         Control::Trim => Asked::Stepped {
@@ -2132,9 +2119,9 @@ fn level(view: &View, item: Option<usize>, control: Control, step: Step) -> Aske
     }
 }
 
-/// **`space` on a control** — the next state, named here because the cycle is
-/// this console's affordance (P-0090) and read off the deck by the caller where
-/// the reading is not.
+/// `space` on a control — the next state, named here because the cycle is this
+/// console's affordance (P-0090) and read off the deck by the caller where the
+/// reading is not.
 #[allow(clippy::too_many_arguments)]
 fn cycled(
     view: &View,
@@ -2154,7 +2141,7 @@ fn cycled(
     }
 }
 
-/// **The next state of a control whose values are a closed list**, and the
+/// The next state of a control whose values are a closed list, and the
 /// operation that names where it arrived.
 #[allow(clippy::too_many_arguments)]
 fn state(
@@ -2260,7 +2247,7 @@ fn state(
     }
 }
 
-/// **`space` on a lane's label**: the mute, named as the state it arrives at.
+/// `space` on a lane's label: the mute, named as the state it arrives at.
 fn lane_state(view: &View, lane: usize) -> Asked {
     let Some(seq) = view.sequencer.as_ref() else {
         return Asked::Nothing("this console has no pattern behind it");
@@ -2275,8 +2262,8 @@ fn lane_state(view: &View, lane: usize) -> Asked {
     }
 }
 
-/// **`space` on a cell**: the step, named as the state it arrives at — and the
-/// **stored slot** rather than the drawn step, which is what keeps the payload
+/// `space` on a cell: the step, named as the state it arrives at — and the
+/// stored slot rather than the drawn step, which is what keeps the payload
 /// independent of the mode.
 fn step_state(view: &View, lane: usize, nth: usize) -> Asked {
     let Some(seq) = view.sequencer.as_ref() else {
@@ -2301,8 +2288,8 @@ fn step_state(view: &View, lane: usize, nth: usize) -> Asked {
     })
 }
 
-/// **`space` on a sink**: the picture's on and off, which is one press asking
-/// for the operation that names the output and the fold that carries it out.
+/// `space` on a sink: the picture's on and off, which is one press asking for
+/// the operation that names the output and the fold that carries it out.
 fn sink(panel: &Panel) -> Asked {
     let Some(id) = panel.layout().find(PICTURE) else {
         return Asked::Nothing("this arrangement draws no picture");
@@ -2320,8 +2307,8 @@ fn sink(panel: &Panel) -> Asked {
     )
 }
 
-/// **`space` on the third rung** — the Inspector's chips, each naming the state
-/// it arrives at rather than a flip, which is P-0090 and the chips' own rule.
+/// `space` on the third rung — the Inspector's chips, each naming the state it
+/// arrives at rather than a flip, which is P-0090 and the chips' own rule.
 fn under_space(view: &View, item: usize, through: usize, nth: usize, control: Control) -> Asked {
     let Some(pane) = view.inspector.get(item.wrapping_sub(1)) else {
         return Asked::Nothing("this pane is not drawn");
@@ -2375,7 +2362,7 @@ fn under_space(view: &View, item: usize, through: usize, nth: usize, control: Co
     }
 }
 
-/// **The next of the three authorities, wrapping** — the cycle a chip row is,
+/// The next of the three authorities, wrapping — the cycle a chip row is,
 /// curated here because the list is the vocabulary's and the cycle is the
 /// surface's (`view::AUTHORITIES`' own argument, one control along).
 fn next_authority(level: Authority) -> Authority {
@@ -2386,7 +2373,7 @@ fn next_authority(level: Authority) -> Authority {
     crate::view::AUTHORITIES[(at + 1) % crate::view::AUTHORITIES.len()]
 }
 
-/// **`enter` on a control**, where the control is an act.
+/// `enter` on a control, where the control is an act.
 fn act_of(view: &View, item: Option<usize>, control: Control) -> Asked {
     match control.answers() {
         Answers::Act(act) => performed(view, item, act),
@@ -2399,7 +2386,7 @@ fn act_of(view: &View, item: Option<usize>, control: Control) -> Asked {
     }
 }
 
-/// **What `enter` performs**, per act.
+/// What `enter` performs, per act.
 fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
     match act {
         Act::Load => Asked::Load,
@@ -2470,8 +2457,8 @@ fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
     }
 }
 
-/// **`enter` on the third rung**: taking a parameter back, which is the one act
-/// the Inspector draws that the address reaches.
+/// `enter` on the third rung: taking a parameter back, which is the one act the
+/// Inspector draws that the address reaches.
 fn under_enter(view: &View, item: usize, through: usize, nth: usize, control: Control) -> Asked {
     if control != Control::Param {
         return Asked::Nothing(

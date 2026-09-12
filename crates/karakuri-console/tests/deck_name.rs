@@ -1,43 +1,38 @@
-//! **The name in an Inspector pane's head: this console's second
-//! letter-taking flow.**
+//! The name in an Inspector pane's head: this console's second letter-taking
+//! flow.
 //!
-//! The head reads `showing  deck A · drift_night` with the `keep` capsule at
-//! the other end of the same row. A press on the name puts the head into a
-//! naming state, letters go into it, return files the deck under what was
-//! typed, and escape leaves it alone —
+//! The head reads `showing deck A · drift_night` with the `keep` capsule at the
+//! other end of the same row. A press on the name puts the head into a naming
+//! state, letters go into it, return files the deck under what was typed, and
+//! escape leaves it alone —
 //! [ADR-0292](../../../docs/adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md).
 //!
 //! Nine things:
 //!
 //! 1. Where the run sits, as `.half-head`'s flex row lays it out — after the
-//!    label, one gap along, aligned with the capsule at the other end.
-//! 2. **That it clears every boundary's grab**, which is `keep_pill.rs`'
-//!    arithmetic at the other end of the same row: the capsule's nearest
-//!    boundary is the pane divider on its right, and this one's is the
-//!    divider on its left.
-//! 3. **Where the `▾` boundary is.** The mock's chevron means *point this
-//!    pane at another deck* and is not a control this console has. The name
-//!    target stops at the run's own ink and the chevron's rectangle is
-//!    reserved beside it, so the day the chooser lands it takes that place
-//!    rather than taking it back.
-//! 4. That the run never reaches the `keep` capsule.
-//! 5. That a press opens the field in that head and in no other, and that one
-//!    head asks at a time.
-//! 6. That the commit is `SaveSet { deck, id: Some(typed) }` for the deck that
-//!    head is showing — and that **the capsule beside it still files under a
-//!    stamp**, which is ADR-0287 surviving as the unnamed route.
-//! 7. That escape leaves the deck alone, and that a half-typed name is not
-//!    kept for next time.
-//! 8. That a head with no room for the run draws none, and that a console
-//!    that has not drawn has none — `keep_pill.rs`' two guards, on a readout
-//!    instead of on a capsule.
+//! label, one gap along, aligned with the capsule at the other end. 2. That it
+//! clears every boundary's grab, which is `keep_pill.rs`' arithmetic at the
+//! other end of the same row: the capsule's nearest boundary is the pane
+//! divider on its right, and this one's is the divider on its left. 3. Where
+//! the `▾` boundary is. The mock's chevron means *point this pane at another
+//! deck* and is not a control this console has. The name target stops at the
+//! run's own ink and the chevron's rectangle is reserved beside it, so the day
+//! the chooser lands it takes that place rather than taking it back. 4. That
+//! the run never reaches the `keep` capsule. 5. That a press opens the field in
+//! that head and in no other, and that one head asks at a time. 6. That the
+//! commit is `SaveSet { deck, id: Some(typed) }` for the deck that head is
+//! showing — and that the capsule beside it still files under a stamp, which is
+//! ADR-0287 surviving as the unnamed route. 7. That escape leaves the deck
+//! alone, and that a half-typed name is not kept for next time. 8. That a head
+//! with no room for the run draws none, and that a console that has not drawn
+//! has none — `keep_pill.rs`' two guards, on a readout instead of on a capsule.
 //! 9. That the field is *painted*: the label reads `keep as` and the run reads
-//!    what was typed with the caret after it.
+//! what was typed with the caret after it.
 //!
-//! **What is not here and cannot be**: that `input::claim` gives the panel a
-//! press on the run, and that the keyboard reaches `View::type_into_name`
-//! while a head is asking. Those are `input::PROBES`' row and the window's key
-//! arm, in files this test's author does not own.
+//! What is not here and cannot be: that `input::claim` gives the panel a press
+//! on the run, and that the keyboard reaches `View::type_into_name` while a
+//! head is asking. Those are `input::PROBES`' row and the window's key arm, in
+//! files this test's author does not own.
 
 mod common;
 
@@ -51,8 +46,8 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Sync};
 
-/// The mock's own deck A, which is the head the mock draws
-/// `deck A · drift_night` in.
+/// The mock's own deck A, which is the head the mock draws `deck A ·
+/// drift_night` in.
 fn mock() -> Pane {
     Pane {
         deck: 0,
@@ -86,9 +81,9 @@ fn at(p: egui::Pos2) -> Point {
     Point::new(p.x, p.y)
 }
 
-/// **How wide a run of the head's own type is**, asked of the same fonts the
-/// paint asks. Written here rather than imported so that a change to the
-/// derivation has to be made twice before it can pass unnoticed.
+/// How wide a run of the head's own type is, asked of the same fonts the paint
+/// asks. Written here rather than imported so that a change to the derivation
+/// has to be made twice before it can pass unnoticed.
 fn run(ctx: &egui::Context, text: &str) -> f32 {
     ctx.fonts_mut(|f| {
         f.layout_no_wrap(
@@ -101,8 +96,8 @@ fn run(ctx: &egui::Context, text: &str) -> f32 {
     })
 }
 
-/// A view with two panes and nothing else — a console with a deck behind it
-/// and no store, which is what every test in this file is.
+/// A view with two panes and nothing else — a console with a deck behind it and
+/// no store, which is what every test in this file is.
 fn view_of(panes: [Pane; PANES]) -> View {
     let mut view = View::new(Room::Day);
     view.inspector = panes.into_iter().collect();
@@ -113,10 +108,10 @@ fn view_of(panes: [Pane; PANES]) -> View {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// **The run sits one `.half-head` gap after the label**, one padding down
-/// from the top, and is as tall as the capsule at the other end of the row —
-/// `align-items: center` over a content box whose `border-bottom` is inside
-/// the row.
+/// The run sits one `.half-head` gap after the label, one padding down from the
+/// top, and is as tall as the capsule at the other end of the row —
+/// `align-items: center` over a content box whose `border-bottom` is inside the
+/// row.
 #[test]
 fn the_run_sits_one_gap_after_the_label() {
     let pane = mock();
@@ -186,9 +181,9 @@ fn the_run_sits_one_gap_after_the_label() {
     }
 }
 
-/// **The run never reaches the `keep` capsule**, which is the clip
-/// `inspector_into` paints the words inside: everything up to the capsule, one
-/// `.half-head` gap short of it.
+/// The run never reaches the `keep` capsule, which is the clip `inspector_into`
+/// paints the words inside: everything up to the capsule, one `.half-head` gap
+/// short of it.
 #[test]
 fn the_run_stops_one_gap_short_of_the_capsule() {
     let pane = mock();
@@ -215,9 +210,9 @@ fn the_run_stops_one_gap_short_of_the_capsule() {
     }
 }
 
-/// **A long name is clipped rather than growing over the capsule**, which is
-/// the row's own answer to a long name either way — there is no ellipsis in
-/// this console to draw.
+/// A long name is clipped rather than growing over the capsule, which is the
+/// row's own answer to a long name either way — there is no ellipsis in this
+/// console to draw.
 #[test]
 fn a_name_too_long_for_the_head_is_clipped_at_the_capsule() {
     let pane = Pane {
@@ -238,9 +233,9 @@ fn a_name_too_long_for_the_head_is_clipped_at_the_capsule() {
     );
 }
 
-/// **A head with no room for any of the run draws none**, which is
-/// `keep_pill`'s rule read on a readout: a target over ink nobody can see is a
-/// press that lands on nothing an operator could have aimed at.
+/// A head with no room for any of the run draws none, which is `keep_pill`'s
+/// rule read on a readout: a target over ink nobody can see is a press that
+/// lands on nothing an operator could have aimed at.
 ///
 /// The narrow head is built here rather than solved for, because the panel's
 /// own minimum is far wider than this — `keep_pill.rs`' reason, one control
@@ -289,9 +284,9 @@ fn a_head_with_no_room_for_the_run_draws_none() {
     );
 }
 
-/// **Before the first frame there is nothing here to press.**
-/// `Context::fonts` is not valid until a pass has run, and this run is as wide
-/// as the words in it — the same guard every measured control carries.
+/// Before the first frame there is nothing here to press. `Context::fonts` is
+/// not valid until a pass has run, and this run is as wide as the words in it —
+/// the same guard every measured control carries.
 #[test]
 fn a_console_that_has_not_drawn_has_no_run() {
     let pane = mock();
@@ -307,11 +302,10 @@ fn a_console_that_has_not_drawn_has_no_run() {
 // The claim rule, and where the `▾` boundary sits
 // ---------------------------------------------------------------------------
 
-/// **The run clears every boundary's grab.** The capsule at the other end of
-/// this row is measured against the pane divider on its right; this one's
-/// nearest boundary is the divider on its *left*, and what it clears is
-/// `.half-head`'s left-hand padding plus the label plus a gap, against a
-/// `GRAB` of 6.
+/// The run clears every boundary's grab. The capsule at the other end of this
+/// row is measured against the pane divider on its right; this one's nearest
+/// boundary is the divider on its *left*, and what it clears is `.half-head`'s
+/// left-hand padding plus the label plus a gap, against a `GRAB` of 6.
 #[test]
 fn the_run_clears_every_boundarys_grab() {
     let pane = mock();
@@ -362,11 +356,10 @@ fn the_run_clears_every_boundarys_grab() {
     }
 }
 
-/// **The `▾`'s place is reserved and is claimed by nothing.** The chevron
-/// means *point this pane at another deck*, which is a control this console
-/// does not have: the name target stops at the run's own ink, and the
-/// rectangle one gap after it is held so that the chooser takes it rather than
-/// taking it back.
+/// The `▾`'s place is reserved and is claimed by nothing. The chevron means
+/// *point this pane at another deck*, which is a control this console does not
+/// have: the name target stops at the run's own ink, and the rectangle one gap
+/// after it is held so that the chooser takes it rather than taking it back.
 #[test]
 fn the_chevrons_place_is_beside_the_run_and_is_not_claimed() {
     let pane = mock();
@@ -406,8 +399,8 @@ fn the_chevrons_place_is_beside_the_run_and_is_not_claimed() {
     }
 }
 
-/// **A press off the run asks for nothing**, which is *a control claims what
-/// it acts on and no more*: the label to its left is a readout, the deck head
+/// A press off the run asks for nothing, which is *a control claims what it
+/// acts on and no more*: the label to its left is a readout, the deck head
 /// under it is four other controls, and the capsule at the far end is the
 /// unnamed route.
 #[test]
@@ -444,10 +437,9 @@ fn a_press_off_the_run_is_not_on_it() {
 // What the flow does
 // ---------------------------------------------------------------------------
 
-/// **One head asks at a time, and it is the one that was pressed.** The
-/// keyboard is taken whole while a name is being asked for, so two open fields
-/// would be two places one keystroke could go with nothing on the panel saying
-/// which.
+/// One head asks at a time, and it is the one that was pressed. The keyboard is
+/// taken whole while a name is being asked for, so two open fields would be two
+/// places one keystroke could go with nothing on the panel saying which.
 #[test]
 fn one_head_asks_at_a_time() {
     let mut view = view_of([showing(0), showing(1)]);
@@ -468,9 +460,9 @@ fn one_head_asks_at_a_time() {
     assert_eq!(view.naming_set_in(1), None, "two heads are asking at once");
 }
 
-/// **The letters, the rub-out and the refusal**, which is the arrangement
-/// pill's own contract on a second flow: nothing typed is checked, and a
-/// control character is not a letter because a newline is the commit.
+/// The letters, the rub-out and the refusal, which is the arrangement pill's
+/// own contract on a second flow: nothing typed is checked, and a control
+/// character is not a letter because a newline is the commit.
 #[test]
 fn the_field_takes_letters_and_gives_them_back() {
     let mut view = view_of([showing(0), showing(1)]);
@@ -508,9 +500,9 @@ fn the_field_takes_letters_and_gives_them_back() {
     );
 }
 
-/// **The commit is the deck that head is showing, filed under what was
-/// typed** — `SaveSet { deck, id: Some(typed) }`, which is ADR-0128's *an
-/// operator's own act gets the name it asked for*.
+/// The commit is the deck that head is showing, filed under what was typed —
+/// `SaveSet { deck, id: Some(typed) }`, which is ADR-0128's *an operator's own
+/// act gets the name it asked for*.
 #[test]
 fn the_commit_files_this_heads_deck_under_the_typed_name() {
     for (index, deck) in [(0usize, 0usize), (1, 2)] {
@@ -537,7 +529,7 @@ fn the_commit_files_this_heads_deck_under_the_typed_name() {
     }
 }
 
-/// **An empty name leaves as an empty name.** The wall is where the bytes are
+/// An empty name leaves as an empty name. The wall is where the bytes are
 /// written, in one sentence, by whoever writes them — a head that refused it
 /// here would be a rule an operator could only find by experiment.
 #[test]
@@ -553,10 +545,10 @@ fn an_empty_name_is_emitted_and_refused_elsewhere() {
     );
 }
 
-/// **A commit into a head that has gone emits nothing and takes the field
-/// away.** The deck is read at the commit rather than at the press, because
-/// this gesture spans frames and what is filed has to be the deck the head
-/// says it is filing now.
+/// A commit into a head that has gone emits nothing and takes the field away.
+/// The deck is read at the commit rather than at the press, because this
+/// gesture spans frames and what is filed has to be the deck the head says it
+/// is filing now.
 #[test]
 fn a_commit_into_a_pane_that_has_gone_emits_nothing() {
     let mut view = view_of([showing(0), showing(1)]);
@@ -570,8 +562,8 @@ fn a_commit_into_a_pane_that_has_gone_emits_nothing() {
     );
 }
 
-/// **Escape leaves the deck alone, and a half-typed name is not kept for the
-/// next time**: the buffer is the gesture, and the gesture ended.
+/// Escape leaves the deck alone, and a half-typed name is not kept for the next
+/// time: the buffer is the gesture, and the gesture ended.
 #[test]
 fn escape_leaves_it_alone_and_keeps_nothing() {
     let mut view = view_of([showing(0), showing(1)]);
@@ -589,9 +581,9 @@ fn escape_leaves_it_alone_and_keeps_nothing() {
     );
 }
 
-/// **The capsule beside it still files under a stamp**, which is ADR-0287
-/// surviving as the *unnamed* route: two routes to one operation, differing in
-/// exactly the `id` — ADR-0128's own sentence, drawn on one row.
+/// The capsule beside it still files under a stamp, which is ADR-0287 surviving
+/// as the *unnamed* route: two routes to one operation, differing in exactly
+/// the `id` — ADR-0128's own sentence, drawn on one row.
 #[test]
 fn the_capsule_is_the_unnamed_route_and_is_unchanged() {
     let pane = mock();
@@ -621,7 +613,7 @@ fn the_capsule_is_the_unnamed_route_and_is_unchanged() {
 // What the head draws while it is asking
 // ---------------------------------------------------------------------------
 
-/// Every galley the console paints **wholly inside** `rect`, on one frame.
+/// Every galley the console paints wholly inside `rect`, on one frame.
 /// `keep_pill.rs`' helper, narrowed to text: `egui` tessellates on the CPU and
 /// the device only ever sees the result, so a whole frame through
 /// `Context::run_ui` is all a run of words takes to read.
@@ -642,11 +634,11 @@ fn words_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<Str
         .collect()
 }
 
-/// **The head says what the letters are for, and shows them with the caret
-/// after them.** `showing deck A · drift_night` becomes
-/// `keep as deck A · glass▏`: the label is the only thing in the row that can
-/// say what a run of letters is *for*, and the deck stays because the half of
-/// the run being replaced is exactly the half a name is.
+/// The head says what the letters are for, and shows them with the caret after
+/// them. `showing deck A · drift_night` becomes `keep as deck A · glass▏`: the
+/// label is the only thing in the row that can say what a run of letters is
+/// *for*, and the deck stays because the half of the run being replaced is
+/// exactly the half a name is.
 #[test]
 fn the_head_reads_keep_as_while_it_is_asking() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);

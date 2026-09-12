@@ -4,12 +4,12 @@ use super::*;
 // The Outputs row
 // ---------------------------------------------------------------------------
 
-/// **The word at the head of the Outputs row**, in the source's own
-/// capitalisation for the reason [`Kind::Bay`]'s title is: the mock
-/// upper-cases in CSS, and that is done at paint time here so the word a
-/// reader searches for is the word in the source.
+/// The word at the head of the Outputs row, in the source's own capitalisation
+/// for the reason [`Kind::Bay`]'s title is: the mock upper-cases in CSS, and
+/// that is done at paint time here so the word a reader searches for is the
+/// word in the source.
 ///
-/// It is **not** a [`bay_head`]. The mock's markup is an inline span with
+/// It is not a [`bay_head`]. The mock's markup is an inline span with
 /// `.bay-head`'s type on it — `font-size: 10px`, `letter-spacing: 0.16em`,
 /// `text-transform: uppercase`, `--c-faint` — inside a row that has no head at
 /// all (ADR-0159), so it is that typography and none of that structure: no
@@ -17,23 +17,22 @@ use super::*;
 /// rather than a head's.
 const OUTPUTS_LABEL: &str = "Outputs";
 
-/// **The one sink the console has**, and the manual's name for it: *"The
-/// picture in the Program bay is a sink like any other and is the first
-/// row."*
+/// The one sink the console has, and the manual's name for it: *"The picture in
+/// the Program bay is a sink like any other and is the first row."*
 const PROGRAM_VIEW: &str = "program view";
 
-/// **The projector window's chip**, and the whole of its name.
+/// The projector window's chip, and the whole of its name.
 ///
-/// The mock draws `projector · DELL U2720Q`, and the display half is not
-/// built: naming which screen a window is on wants a list of displays this
-/// program does not read, and a label that carries a monitor's model is a
-/// label that changes when the cable does — which is exactly why
+/// The mock draws `projector · DELL U2720Q`, and the display half is not built:
+/// naming which screen a window is on wants a list of displays this program
+/// does not read, and a label that carries a monitor's model is a label that
+/// changes when the cable does — which is exactly why
 /// [`karakuri_operation::Output`] is a closed list and not a string. The chip
 /// says what it is; the manual's tooltip says which display it would name.
 const PROJECTOR: &str = "projector";
 
-/// **The two plugin sinks the mock draws, and what they say with no plugin
-/// loaded.**
+/// The two plugin sinks the mock draws, and what they say with no plugin
+/// loaded.
 ///
 /// `docs/plugins.md` specifies the process and the handshake and nothing
 /// implements them, so there is no manifest to read a sink out of and neither
@@ -44,42 +43,41 @@ const PROJECTOR: &str = "projector";
 /// whether this program has heard of it.
 const PLUGIN_SINKS: [&str; 2] = ["Syphon · no plugin", "NDI · no plugin"];
 
-/// **One chip in the Outputs row that is not the program view.**
+/// One chip in the Outputs row that is not the program view.
 ///
 /// The program view is not one of these and the asymmetry is the model rather
 /// than a shortcut: its on/off is [`Layout::visible`] on the picture's node —
-/// read, never stored ([`Outputs::on`]) — and no other output has a layout
-/// node at all. A uniform array would have needed an `Option<NodeId>` on every
-/// chip, which would say a projector window might have one.
+/// read, never stored ([`Outputs::on`]) — and no other output has a layout node
+/// at all. A uniform array would have needed an `Option<NodeId>` on every chip,
+/// which would say a projector window might have one.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SinkChip {
-    /// **What this chip names**, and what a press asks for by name — see
-    /// [`karakuri_operation::Output`], which is where the closed list is
-    /// argued.
+    /// What this chip names, and what a press asks for by name — see
+    /// [`karakuri_operation::Output`], which is where the closed list is argued.
     pub output: Output,
-    /// The capsule, dot and name together: what a press has to land in, the
-    /// same whole-chip target the program view's is.
+    /// The capsule, dot and name together: what a press has to land in, the same
+    /// whole-chip target the program view's is.
     pub chip: Rect,
     /// The `.dot` inside it.
     pub dot: Rect,
-    /// Whether this output is on. **`false` until somebody says otherwise** —
-    /// this crate has no window and no plugin host, so [`Outputs::told`] is
-    /// how the answer arrives.
+    /// Whether this output is on. `false` until somebody says otherwise — this
+    /// crate has no window and no plugin host, so [`Outputs::told`] is how the
+    /// answer arrives.
     pub on: bool,
-    /// **Whether there is anything behind it at all.** `false` draws `.absent`
-    /// — dim, and not a control — which is the mock's own state for a sink
-    /// whose plugin is not loaded.
+    /// Whether there is anything behind it at all. `false` draws `.absent` — dim,
+    /// and not a control — which is the mock's own state for a sink whose plugin is
+    /// not loaded.
     pub present: bool,
     /// What is written in it.
     pub name: &'static str,
 }
 
 impl SinkChip {
-    /// **What a press on this chip asks for**, or `None` where there is
-    /// nothing behind it to switch.
+    /// What a press on this chip asks for, or `None` where there is nothing behind
+    /// it to switch.
     ///
-    /// The `on` it names is the state being *asked for* and not the state it
-    /// is in: an operation names a destination and never a toggle
+    /// The `on` it names is the state being *asked for* and not the state it is in:
+    /// an operation names a destination and never a toggle
     /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// and the chip's toggle is this method.
     pub fn route(&self) -> Option<Operation> {
@@ -89,15 +87,14 @@ impl SinkChip {
         })
     }
 
-    /// Whether `p` is on this chip. Absent chips answer `false`: a control
-    /// that switches nothing does not take a press away from the row it sits
-    /// in.
+    /// Whether `p` is on this chip. Absent chips answer `false`: a control that
+    /// switches nothing does not take a press away from the row it sits in.
     pub fn hit(&self, p: karakuri_layout::Point) -> bool {
         self.present && self.chip.contains(Pos2::new(p.x, p.y))
     }
 }
 
-/// **The Outputs row, laid out**: where the word goes, where the console's one
+/// The Outputs row, laid out: where the word goes, where the console's one
 /// control is, and whether that control is lit.
 ///
 /// # One derivation, because a control drawn where it cannot be clicked is
@@ -105,14 +102,14 @@ impl SinkChip {
 ///
 /// [`View::draw`] paints exactly these rectangles and [`crate::input::claim`]
 /// hit-tests exactly these rectangles, the way [`preview_cells`] serves both
-/// [`preview_rects`] and the frame. Two copies of this arithmetic is a dot
-/// that lights up under a pointer that cannot switch it, and nothing on screen
-/// says so.
+/// [`preview_rects`] and the frame. Two copies of this arithmetic is a dot that
+/// lights up under a pointer that cannot switch it, and nothing on screen says
+/// so.
 ///
 /// # `on` is read, never stored
 ///
 /// The manual: *"The picture is a sink, listed in Outputs as program view, and
-/// **it is on screen exactly when that sink is on**."* So the sink's state is
+/// it is on screen exactly when that sink is on."* So the sink's state is
 /// [`Layout::visible`] on the picture's node and there is no second copy of it
 /// to drift — a fold from the keyboard lights the dot down, and the dot folds
 /// the same node the keyboard does.
@@ -120,38 +117,36 @@ impl SinkChip {
 /// stored `soloed` because it could not be derived; this can.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Outputs {
-    /// Where the word OUTPUTS is painted: its top-left, and the box the
-    /// galley fills.
+    /// Where the word OUTPUTS is painted: its top-left, and the box the galley
+    /// fills.
     pub label: Rect,
-    /// **The class pill**, beside the word that stands in for a head.
+    /// The class pill, beside the word that stands in for a head.
     ///
-    /// **This row is the one placement the console had no precedent for.** The
-    /// other three openings sit in a bay head, where [`head_pills`] has laid
-    /// capsules out since the `solo` pill landed; this row is headless
-    /// (ADR-0159, [`Kind::Outputs`]) — no hairline, no pills and no grip — so
-    /// there was nothing to add a capsule to. `docs/manual/console.html` says
-    /// where it goes and why in as many words: *"This row has no bay head to
-    /// put an indicator in — it is headless, like the transport — so the pill
-    /// sits beside the word that stands in for one."*
+    /// This row is the one placement the console had no precedent for. The other
+    /// three openings sit in a bay head, where [`head_pills`] has laid capsules out
+    /// since the `solo` pill landed; this row is headless (ADR-0159,
+    /// [`Kind::Outputs`]) — no hairline, no pills and no grip — so there was
+    /// nothing to add a capsule to. `docs/manual/console.html` says where it goes
+    /// and why in as many words: *"This row has no bay head to put an indicator in
+    /// — it is headless, like the transport — so the pill sits beside the word that
+    /// stands in for one."*
     ///
-    /// So it is laid out here, in `.outputs`'s own flex row, between the word
-    /// and the first sink: one [`size::OUTPUTS_GAP`] after the label, one
-    /// before the chip, [`size::PILL_H`] tall and centred in the row like
-    /// everything else in it. **Which is why [`outputs`] takes an opening**:
-    /// the two words are not the same width, so where the sink starts depends
-    /// on what the pill says.
+    /// So it is laid out here, in `.outputs`'s own flex row, between the word and
+    /// the first sink: one [`size::OUTPUTS_GAP`] after the label, one before the
+    /// chip, [`size::PILL_H`] tall and centred in the row like everything else in
+    /// it. Which is why [`outputs`] takes an opening: the two words are not the
+    /// same width, so where the sink starts depends on what the pill says.
     ///
-    /// [`mcp_pill`] is what reads it back out, so that the four openings are
-    /// one type and one probe however differently the two placements are
-    /// arrived at.
+    /// [`mcp_pill`] is what reads it back out, so that the four openings are one
+    /// type and one probe however differently the two placements are arrived at.
     pub mcp: Rect,
-    /// Whether the class this row's pill opens is open — read out of the
-    /// opening handed in, and kept nowhere here.
+    /// Whether the class this row's pill opens is open — read out of the opening
+    /// handed in, and kept nowhere here.
     pub open: bool,
-    /// **The control**: `.sink`'s capsule, dot and name together, which is
-    /// what a press has to land in. The mock gives the whole chip the click,
-    /// not the dot alone — a 7px dot is not a target a hand finds, which is
-    /// [`GRAB`]'s argument one control along.
+    /// The control: `.sink`'s capsule, dot and name together, which is what a press
+    /// has to land in. The mock gives the whole chip the click, not the dot alone —
+    /// a 7px dot is not a target a hand finds, which is [`GRAB`]'s argument one
+    /// control along.
     pub sink: Rect,
     /// The `.dot` inside it.
     pub dot: Rect,
@@ -159,33 +154,32 @@ pub struct Outputs {
     pub id: NodeId,
     /// Whether the picture is on screen — `layout.visible(id)`, read here.
     pub on: bool,
-    /// **The rest of the list**, left to right after the program view: the
-    /// projector window, then the two plugin sinks.
+    /// The rest of the list, left to right after the program view: the projector
+    /// window, then the two plugin sinks.
     ///
-    /// See [`SinkChip`] for why they are not one array with the program view
-    /// in it. `on` is `false` on all three until [`Outputs::told`] says
-    /// otherwise, and the two plugin chips are `present: false` for as long as
-    /// there is no manifest to read them out of.
+    /// See [`SinkChip`] for why they are not one array with the program view in it.
+    /// `on` is `false` on all three until [`Outputs::told`] says otherwise, and the
+    /// two plugin chips are `present: false` for as long as there is no manifest to
+    /// read them out of.
     pub more: [SinkChip; 3],
 }
 
 impl Outputs {
-    /// **What a press on the control asks for.** Two operations and no toggle:
-    /// [`Op::Fold`] while the picture is on, [`Op::Unfold`] while it is off.
-    /// The toggle is this method — an affordance over two operations — and the
-    /// vocabulary underneath it stays two things a MIDI map or an MCP call can
-    /// ask for by name. See [`Op`].
+    /// What a press on the control asks for. Two operations and no toggle:
+    /// [`Op::Fold`] while the picture is on, [`Op::Unfold`] while it is off. The
+    /// toggle is this method — an affordance over two operations — and the
+    /// vocabulary underneath it stays two things a MIDI map or an MCP call can ask
+    /// for by name. See [`Op`].
     ///
-    /// **A press on a dark dot always lights it**, whatever darkened it — the
-    /// picture folded on its own, the Program bay folded around it, a solo
-    /// that left it out. That is [`Op::Unfold`]'s rule and not a special case
-    /// here: an unfold makes its node *visible*, so it undoes the way to it as
-    /// well as the node. This control is why the rule is written that way, and
-    /// the manual's own note on this row is the argument — *"Nothing is
-    /// refused here, so nothing has to be explained: a control that quietly
-    /// declines the last of something is a rule an operator can only find by
-    /// experiment."* A press that lit nothing would be that rule with no words
-    /// at all.
+    /// A press on a dark dot always lights it, whatever darkened it — the picture
+    /// folded on its own, the Program bay folded around it, a solo that left it
+    /// out. That is [`Op::Unfold`]'s rule and not a special case here: an unfold
+    /// makes its node *visible*, so it undoes the way to it as well as the node.
+    /// This control is why the rule is written that way, and the manual's own note
+    /// on this row is the argument — *"Nothing is refused here, so nothing has to
+    /// be explained: a control that quietly declines the last of something is a
+    /// rule an operator can only find by experiment."* A press that lit nothing
+    /// would be that rule with no words at all.
     pub fn op(&self) -> Op {
         match self.on {
             true => Op::Fold(self.id),
@@ -193,14 +187,13 @@ impl Outputs {
         }
     }
 
-    /// **What a press on the program view's chip asks for**, in the
-    /// vocabulary every surface shares.
+    /// What a press on the program view's chip asks for, in the vocabulary every
+    /// surface shares.
     ///
-    /// [`Outputs::op`] above is how the console *performs* it and this is what
-    /// is *asked*, which is one fact and not two: the picture's on and off is
-    /// the fold, so the operation names the output and the fold is what
-    /// carries it out. Storing a second `on` beside the layout node is what
-    /// this refuses —
+    /// [`Outputs::op`] above is how the console *performs* it and this is what is
+    /// *asked*, which is one fact and not two: the picture's on and off is the
+    /// fold, so the operation names the output and the fold is what carries it out.
+    /// Storing a second `on` beside the layout node is what this refuses —
     /// [ADR-0161](../../../../docs/adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)
     /// stored `soloed` because it could not be derived; this can.
     pub fn route(&self) -> Operation {
@@ -210,18 +203,18 @@ impl Outputs {
         }
     }
 
-    /// **Say which of the outputs this crate cannot see are on.**
+    /// Say which of the outputs this crate cannot see are on.
     ///
     /// The picture's state is a layout node and this row reads it; a projector
-    /// window is `crates/karakuri`'s and there is nothing in this crate that
-    /// could know ([ADR-0156](../../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
-    /// — the console takes no device). So it arrives the way
-    /// [`View::picture`] does: written by whoever owns the window, beside the
-    /// frame that draws it.
+    /// window is `crates/karakuri`'s and there is nothing in this crate that could
+    /// know
+    /// ([ADR-0156](../../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
+    /// — the console takes no device). So it arrives the way [`View::picture`]
+    /// does: written by whoever owns the window, beside the frame that draws it.
     ///
-    /// A builder rather than a fourth argument to [`outputs`], because the
-    /// answer is only needed to *paint* a chip and every caller that
-    /// hit-tests one has no opinion about it.
+    /// A builder rather than a fourth argument to [`outputs`], because the answer
+    /// is only needed to *paint* a chip and every caller that hit-tests one has no
+    /// opinion about it.
     pub fn told(mut self, projector: bool) -> Outputs {
         self.more[0].on = projector;
         self
@@ -232,13 +225,13 @@ impl Outputs {
         self.sink.contains(Pos2::new(p.x, p.y))
     }
 
-    /// **Which chip `p` is on**, over the whole row — the program view and the
-    /// three beside it.
+    /// Which chip `p` is on, over the whole row — the program view and the three
+    /// beside it.
     ///
-    /// `None` for a press on the row's ground, on the word, on the class pill
-    /// or on a chip with nothing behind it. [`Outputs::hit`] is the same
-    /// question asked of the first chip alone, and it stays because
-    /// [`crate::input`]'s claim rule is written against one control.
+    /// `None` for a press on the row's ground, on the word, on the class pill or on
+    /// a chip with nothing behind it. [`Outputs::hit`] is the same question asked
+    /// of the first chip alone, and it stays because [`crate::input`]'s claim rule
+    /// is written against one control.
     pub fn chip_at(&self, p: karakuri_layout::Point) -> Option<Output> {
         if self.hit(p) {
             return Some(Output::Program);
@@ -247,7 +240,7 @@ impl Outputs {
     }
 }
 
-/// **The Outputs row's furniture, derived**: the word, and the one sink.
+/// The Outputs row's furniture, derived: the word, and the one sink.
 ///
 /// `None` where there is no row to draw in — the row folded away, a solo
 /// somewhere else, or a window too small to hold the chip — which is
@@ -256,8 +249,8 @@ impl Outputs {
 ///
 /// # What is in the mock's row and is deliberately not here
 ///
-/// The mock draws four `.sink`s and a `+ add output` pill. **One of them
-/// exists.** Drawing the others is the scaffolding this module's
+/// The mock draws four `.sink`s and a `+ add output` pill. One of them
+/// exists. Drawing the others is the scaffolding this module's
 /// documentation refuses — a control that looks finished does not get
 /// replaced, and each of these is a control over something that has not been
 /// built:
@@ -268,7 +261,7 @@ impl Outputs {
 ///   system, and `NDI`'s own row says so — it is drawn `.absent`, which is a
 ///   control explaining that the thing it would switch is not installed.
 /// - `+ add output` adds a region while the panel is running, which the arena
-///   cannot do: `docs/roadmap.md` records it as **one gap drawn five times**
+///   cannot do: `docs/roadmap.md` records it as one gap drawn five times
 ///   (`+ lane`, `+ add`, `+ add output`, `+` on the scope list, and the
 ///   inspector's `2 up`), and it arrives with the arena operations, not with
 ///   this row.
@@ -277,8 +270,8 @@ impl Outputs {
 ///
 /// Every `.sink` in the mock carries a `data-tip`, and the manual makes a
 /// point of it: *"hover says three things: what the control is, what state it
-/// is in, and what a click will do."* A tooltip needs `egui` to **own a
-/// widget** — a `Response` with a hover state and a layer above the panel —
+/// is in, and what a click will do."* A tooltip needs `egui` to own a
+/// widget — a `Response` with a hover state and a layer above the panel —
 /// and this console paints, with no widget anywhere in it
 /// ([`crate::input`]). Giving one control a widget is a decision about who
 /// owns the pointer, and it is its own; so no tooltip is drawn here and no
@@ -370,12 +363,12 @@ pub fn outputs(
 /// - `.outputs { display: flex; align-items: center; gap: 8px;
 ///   padding: 8px 11px }` — the word and the chip laid left to right from
 ///   [`size::OUTPUTS_PAD_X`], one [`size::OUTPUTS_GAP`] between them, and both
-///   **centred in the row** rather than sat on its padding.
+///   centred in the row rather than sat on its padding.
 /// - `.sink { padding: 1px 10px; gap: 6px; border-radius: 999px }` — a
 ///   [`size::SINK_H`] capsule holding a [`size::SINK_DOT`] dot, a
 ///   [`size::SINK_GAP`], and the name.
 ///
-/// **The centring is where the 34 comes back.** The row is 34 and a sink is
+/// The centring is where the 34 comes back. The row is 34 and a sink is
 /// 18.5, so there is (34 - 18.5) / 2 = 7.75 of row above the chip and 7.75
 /// below — more than the six pixels [`GRAB`] widens the boundary above it by,
 /// which is the whole reason this control can be clicked at all. `.outputs`'s
@@ -383,7 +376,7 @@ pub fn outputs(
 /// the quarter pixel the CSS and the row disagree by is spent here rather than
 /// argued about: `align-items: center` is what the CSS says, and it is what
 /// leaves the two clearances equal.
-/// **What [`outputs_row`] hands back**: the word, the class pill and the four
+/// What [`outputs_row`] hands back: the word, the class pill and the four
 /// chips, each with the dot inside it.
 ///
 /// A named type rather than a tuple because the tuple grew a term per chip and
@@ -461,7 +454,7 @@ fn label_job(colour: Color32) -> LayoutJob {
     )
 }
 
-/// **The Outputs row's contents**: the word, and the one `.sink`.
+/// The Outputs row's contents: the word, and the one `.sink`.
 ///
 /// Where everything goes is [`outputs`]'s, so this paints and derives nothing.
 /// Term for term from `style.css`:

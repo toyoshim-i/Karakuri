@@ -1,5 +1,5 @@
-//! **Every constant this crate transcribes out of the mock says where it came
-//! from, and this file checks that it came from there.** It reads the sources
+//! Every constant this crate transcribes out of the mock says where it came
+//! from, and this file checks that it came from there. It reads the sources
 //! in [`SOURCES`] and `docs/manual/style.css` and holds each constant against
 //! the source its own doc comment cites.
 //!
@@ -16,34 +16,34 @@
 //! stayed green. When this file landed, 23 of the 72 were named by no test at
 //! all.
 //!
-//! `lib.rs`'s arrangement dividers are the same transcription and are **more**
+//! `lib.rs`'s arrangement dividers are the same transcription and are more
 //! exposed, not less: they are private consts, so no test can name even one of
 //! them. They are read here for that reason. Nothing else in the workspace is
 //! — `karakuri-layout` and the engine have numbers of their own and none of
 //! them is a copy of a stylesheet.
 //!
-//! The direction that matters most is the other one. **The stylesheet is the
-//! specification and it is the one that moves**: nothing about editing
+//! The direction that matters most is the other one. The stylesheet is the
+//! specification and it is the one that moves: nothing about editing
 //! `style.css` tells you that a Rust constant was reading it. So the check is
 //! not "is this number plausible" but "does the rule this comment names still
 //! say this", and a change on either side breaks it.
 //!
 //! # Three kinds of constant, told apart rather than forced into one mould
 //!
-//! - **transcribed** — a literal that appears in the mock. Its doc comment
+//! - transcribed — a literal that appears in the mock. Its doc comment
 //!   cites a selector and a declaration, and the guard resolves both.
-//! - **derived** — computed from other constants in the module: `HEAD_H` is
+//! - derived — computed from other constants in the module: `HEAD_H` is
 //!   `6 + 10 * 1.5 + 6`, `PILL_H` is `BASE * LINE`. The arithmetic is the
 //!   claim and the compiler already holds it; no stylesheet carries such a
 //!   sum, so none is demanded. A derived constant is recognised from its
 //!   *initializer* — it names another constant — and not from its prose,
 //!   because that is the half that cannot be got wrong.
-//! - **the console's own** — a number with no single source in the mock.
+//! - the console's own — a number with no single source in the mock.
 //!   [`HAIRLINE`] is the one here: one pixel is what the mock draws every rule
 //!   at, and no one selector is its source. `panel::GRAB` is the same shape and
 //!   lives outside this module.
 //!
-//! **A constant that declares none of the three fails**, which is the half
+//! A constant that declares none of the three fails, which is the half
 //! that makes this a convention rather than a lint: the next literal written
 //! here has to say where it came from before it can compile a green suite.
 //!
@@ -52,9 +52,9 @@
 //! The doc comments were prose before this file existed and they are prose
 //! still — 69 of the 72 needed no change at all. What is read out of them is:
 //!
-//! - a **source**, in backticks: a selector (anything starting with `.`) or a
+//! - a source, in backticks: a selector (anything starting with `.`) or a
 //!   file under `docs/manual/`;
-//! - a **declaration**, in backticks and containing a colon: `gap: 14px`, or
+//! - a declaration, in backticks and containing a colon: `gap: 14px`, or
 //!   several at once, `width: 15px; height: 6px`.
 //!
 //! A declaration binds to the nearest source named *before* it in the same doc
@@ -71,7 +71,7 @@
 //! constant ([`PILL_GAP`]), because the mock sets that one inline in the
 //! markup and the stylesheet genuinely does not carry it.
 //!
-//! A declaration with **no** source before it is prose, not a citation:
+//! A declaration with no source before it is prose, not a citation:
 //! `TALLY_H`'s aside about `border-radius: 999px` names no selector because it
 //! is talking about every capsule in the mock. Those are still checked to
 //! exist somewhere in `docs/manual/`, so a property that has been renamed away
@@ -81,15 +81,15 @@
 //! # What the numbers are checked against
 //!
 //! The stylesheet's value, not the comment's copy of it — the comment has
-//! already been held against the stylesheet by then. A **transcribed**
+//! already been held against the stylesheet by then. A transcribed
 //! constant's value must be one of the numbers in the declarations it cites,
 //! which is what makes a shared comment work: `padding: 6px 10px` cited by
 //! both `HEAD_PAD_X` and `HEAD_PAD_Y` offers 6 and 10 and each takes one.
-//! **Signs are dropped** — `.vfader s`'s `left: -2px` is `VFADER_KNOB_OUT =
+//! Signs are dropped — `.vfader s`'s `left: -2px` is `VFADER_KNOB_OUT =
 //! 2.0`, two pixels *proud*; this module is about sizes and a direction is not
 //! one.
 //!
-//! A **derived** constant that cites something has its citation resolved like
+//! A derived constant that cites something has its citation resolved like
 //! any other, and then the literal factors in its own expression are checked
 //! against the cited numbers: `HEAD_TRACKING` is `HEAD_SIZE * 0.16` against
 //! `letter-spacing: 0.16em`, so the 0.16 is held to the stylesheet even though
@@ -100,8 +100,8 @@
 //! One doc comment can cover several constants — `padding: 6px 10px` is
 //! written once above `HEAD_PAD_X` and `HEAD_PAD_Y`, and only the first of the
 //! two carries the comment as far as `rustdoc` is concerned. This file reads
-//! them the way a person does: **a doc comment covers every constant that
-//! follows it until the next doc comment or the next section rule**. That is
+//! them the way a person does: a doc comment covers every constant that
+//! follows it until the next doc comment or the next section rule. That is
 //! load-bearing — read strictly, ten constants here would have no citation at
 //! all and the guard would demand ten comments nobody wants.
 //!
@@ -114,11 +114,11 @@ use karakuri_console::view::{Band, BAND_BLUE_MS, BAND_PURPLE_MS, BAND_RED_MS, BA
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The transcriptions under test, each paired with the text its constants
-/// start after. A pair rather than a bare path because `room.rs` also holds
+/// The transcriptions under test, each paired with the text its constants start
+/// after. A pair rather than a bare path because `room.rs` also holds
 /// `Palette::DAY` and `Palette::NIGHT`, which are constants and are not
-/// transcribed sizes, and because a marker that drifts fails loudly here
-/// rather than quietly shrinking the scan.
+/// transcribed sizes, and because a marker that drifts fails loudly here rather
+/// than quietly shrinking the scan.
 const SOURCES: &[(&str, &str)] = &[
     ("crates/karakuri-console/src/room.rs", "pub mod size {"),
     (
@@ -147,9 +147,9 @@ fn workspace() -> PathBuf {
 }
 
 /// Whitespace runs to one space, trimmed, and no space hugging a `:` or a `;`.
-/// One normalisation for both sides: it turns the stylesheet's
-/// `gap: 5px` and the markup's `gap:5px` into the same string, which is the
-/// only reason a citation can name either.
+/// One normalisation for both sides: it turns the stylesheet's `gap: 5px` and
+/// the markup's `gap:5px` into the same string, which is the only reason a
+/// citation can name either.
 fn tighten(text: &str) -> String {
     let squashed = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut out = String::with_capacity(squashed.len());
@@ -167,8 +167,8 @@ fn tighten(text: &str) -> String {
     out
 }
 
-/// Whitespace runs to one space, trimmed — for a selector or a value, where
-/// the spaces around a colon are not in play.
+/// Whitespace runs to one space, trimmed — for a selector or a value, where the
+/// spaces around a colon are not in play.
 fn squash(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -300,8 +300,8 @@ fn numbers(text: &str) -> Vec<f64> {
 enum Source {
     /// A selector, resolved in the stylesheet.
     Selector(String),
-    /// A file under `docs/manual/`, resolved by looking the declaration up in
-    /// it verbatim.
+    /// A file under `docs/manual/`, resolved by looking the declaration up in it
+    /// verbatim.
     File(String),
     /// Nothing named it — prose about the mock at large.
     Prose,
@@ -393,8 +393,8 @@ fn strip_links(doc: &str) -> String {
 }
 
 /// The citations in one doc comment, in the order they are written. A source
-/// span replaces whatever source was in force; a declaration span takes the
-/// one in force at that point.
+/// span replaces whatever source was in force; a declaration span takes the one
+/// in force at that point.
 fn citations(doc: &str) -> Vec<Citation> {
     let stripped = strip_links(doc);
     let mut out = Vec::new();
@@ -664,7 +664,7 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
 /// when*, and deck A's caption tooltip.
 const PAGE: &str = "docs/manual/console.html";
 
-/// **Every reading of one band's boundary in the page.**
+/// Every reading of one band's boundary in the page.
 ///
 /// A band's name, as a whole word, with a figure in milliseconds after it and
 /// nothing but the qualifier — *up to*, *over*, *about* — in between. An
@@ -673,11 +673,11 @@ const PAGE: &str = "docs/manual/console.html";
 /// window is what tells the two apart without this file having to hold a copy
 /// of the sentences.
 ///
-/// **Whole word, because `red` is inside `coloured`, `prepared` and
-/// `required`**, all three of which are on this page.
+/// Whole word, because `red` is inside `coloured`, `prepared` and `required`,
+/// all three of which are on this page.
 fn boundaries_in(page: &str, word: &str) -> Vec<f64> {
-    /// Far enough to clear `</strong>, up to ` and no further: the next
-    /// sentence's own figures must not be in reach.
+    /// Far enough to clear `</strong>, up to ` and no further: the next sentence's
+    /// own figures must not be in reach.
     const WINDOW: usize = 40;
 
     let lower = page.to_lowercase();
@@ -705,26 +705,26 @@ fn boundaries_in(page: &str, word: &str) -> Vec<f64> {
     out
 }
 
-/// **The five bands' boundaries are the ones `docs/manual/console.html`
-/// states**, and they are stated there twice.
+/// The five bands' boundaries are the ones `docs/manual/console.html` states,
+/// and they are stated there twice.
 ///
 /// `view::BAND_BLUE_MS` and its three siblings are the console's own table —
-/// `karakuri-engine` produces a number of milliseconds and has no opinion
-/// about how many of a thing an operator can mix — and they are a
-/// transcription out of the page like every constant above.
+/// `karakuri-engine` produces a number of milliseconds and has no opinion about
+/// how many of a thing an operator can mix — and they are a transcription out
+/// of the page like every constant above.
 ///
-/// **Two readings per band, and they must agree.** The scale is written on
-/// deck A's caption tooltip and again in the body under *What a deck preview
-/// cell shows, and when*, which is the duplication the manual's own rule warns
-/// about: *"the same prose sits in three places … and duplication produces
-/// gaps and contradictions"*. So this asserts every reading of a band rather
-/// than the first, and a page that moved a boundary in one passage and not the
-/// other fails here rather than shipping two scales.
+/// Two readings per band, and they must agree. The scale is written on deck A's
+/// caption tooltip and again in the body under *What a deck preview cell shows,
+/// and when*, which is the duplication the manual's own rule warns about: *"the
+/// same prose sits in three places … and duplication produces gaps and
+/// contradictions"*. So this asserts every reading of a band rather than the
+/// first, and a page that moved a boundary in one passage and not the other
+/// fails here rather than shipping two scales.
 ///
-/// **Green and blue are one boundary read from both ends** — *"Green, up to 4
-/// ms"* and *"Blue, over 4 ms"* — which is the four-boundary table stated as
-/// five bands, and is why [`BAND_BLUE_MS`] is named for the band it lets you
-/// into rather than the one it leaves.
+/// Green and blue are one boundary read from both ends — *"Green, up to 4 ms"*
+/// and *"Blue, over 4 ms"* — which is the four-boundary table stated as five
+/// bands, and is why [`BAND_BLUE_MS`] is named for the band it lets you into
+/// rather than the one it leaves.
 #[test]
 fn the_band_boundaries_are_the_ones_the_console_page_states() {
     let page = fs::read_to_string(workspace().join(PAGE)).expect("the console page");
@@ -772,21 +772,21 @@ fn the_band_boundaries_are_the_ones_the_console_page_states() {
     assert!(page.contains("16.7 ms at 60 Hz is about 4 ms each"));
 }
 
-/// **The five band colours are the room's own five**, and neither room wears
-/// the other's.
+/// The five band colours are the room's own five, and neither room wears the
+/// other's.
 ///
 /// `--c-band-green` and its four siblings are stated twice in the stylesheet
-/// like every other `--c-*`: once for the page under
-/// `@media (prefers-color-scheme: …)` and once on `.console.day` and
-/// `.console.night`, which is what the room switch toggles. **The
-/// `.console.*` pair is what `room` transcribes**, so it is the pair this
-/// reads — the page's are the surrounding document's and only happen to agree.
+/// like every other `--c-*`: once for the page under `@media
+/// (prefers-color-scheme: …)` and once on `.console.day` and `.console.night`,
+/// which is what the room switch toggles. The `.console.*` pair is what `room`
+/// transcribes, so it is the pair this reads — the page's are the surrounding
+/// document's and only happen to agree.
 ///
 /// This is the check the twelve moods above it do not have. `Palette` sits
-/// outside the scan at the top of this file — `SOURCES` starts at
-/// `pub mod size {`, so no colour in `room.rs` is held against the stylesheet
-/// by anything. These five are held because they are new; the other twelve are
-/// named in the report that added them.
+/// outside the scan at the top of this file — `SOURCES` starts at `pub mod size
+/// {`, so no colour in `room.rs` is held against the stylesheet by anything.
+/// These five are held because they are new; the other twelve are named in the
+/// report that added them.
 #[test]
 fn the_band_colours_are_the_rooms_own_five() {
     let root = workspace();

@@ -1,14 +1,15 @@
-//! **The mixer strip's mask mini, pressed.**
+//! The mixer strip's mask mini, pressed.
 //!
-//! `mixer.rs` is where a strip's rectangles are and which of them are
-//! controls; `blend.rs` is the chip 3px to the left of this one and `tally.rs`
-//! is the chip four rows up. This is the fifth control (ADR-0203): the mini
-//! cycles, and a press on it emits `Operation::SetMaskShape` naming the shape
-//! it **arrived at**.
+//! `mixer.rs` is where a strip's rectangles are and which of them are controls;
+//! `blend.rs` is the chip 3px to the left of this one and `tally.rs` is the
+//! chip four rows up. This is the fifth control (ADR-0203): the mini cycles,
+//! and a press on it emits `Operation::SetMaskShape` naming the shape it
+//! arrived at.
 //!
-//! **The angle is what makes this control different from the other two**, and
-//! it is the decision this file exists to hold. `Operation::SetMaskShape`
-//! carries a shape **and an angle** ([ADR-0201](../../../docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)),
+//! The angle is what makes this control different from the other two, and it is
+//! the decision this file exists to hold. `Operation::SetMaskShape` carries a
+//! shape and an angle
+//! ([ADR-0201](../../../docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)),
 //! and this chip names only the shape — *"`.mini` is a chip that says which
 //! shape, and three numbers about that shape are the inspector's row, not this
 //! one."* So a press has to carry a number the control does not control, and
@@ -16,25 +17,25 @@
 //! wearing. Sending `0.0` would make choosing a shape silently straighten a
 //! diagonal wipe — a press that changed something nobody asked it to, and
 //! invisible on the panel, because the mark a mini draws is the same mark at
-//! any angle. `the_press_carries_the_angle_the_slot_is_already_wearing` is
-//! that assertion, in both directions.
+//! any angle. `the_press_carries_the_angle_the_slot_is_already_wearing` is that
+//! assertion, in both directions.
 //!
-//! **What is *not* here is the position and the softness.** Neither is in the
+//! What is *not* here is the position and the softness. Neither is in the
 //! operation at all: `Record::Mask` is written whole and the half a shape
 //! operation does not ask for is filled in where the record is written, from a
 //! reading of the running mask. So there is nothing on this surface to assert
-//! about them, and a strip that carried them would be this crate keeping half
-//! a deck.
+//! about them, and a strip that carried them would be this crate keeping half a
+//! deck.
 //!
-//! **None of it needs a device.** Laying a strip out needs `egui`, because the
+//! None of it needs a device. Laying a strip out needs `egui`, because the
 //! blend chip beside this one is as wide as the word in it, and what comes out
 //! is `karakuri-operation`'s, which has no dependencies at all.
 //!
 //! # Where this stops
 //!
-//! At the operation, exactly as `blend.rs` and `tally.rs` do. Turning it into
-//! a `Record::Mask` — whole, with the front and the soft edge read off the
-//! deck — and applying it is the harness's, and `crates/karakuri/src/main.rs`'s
+//! At the operation, exactly as `blend.rs` and `tally.rs` do. Turning it into a
+//! `Record::Mask` — whole, with the front and the soft edge read off the deck —
+//! and applying it is the harness's, and `crates/karakuri/src/main.rs`'s
 //! `a_press_on_the_mask_mini_chooses_a_shape_and_keeps_the_angle` is that end
 //! of the same press. This crate has no deck (ADR-0156).
 
@@ -48,26 +49,25 @@ use karakuri_console::view::{mixer, program_bay, Level, Mask, Mixer, Strip, Tall
 use karakuri_layout::{Hit, Point};
 use karakuri_operation::{BlendMode, Operation, WipeKind};
 
-/// **Every shape there is, in the order a press walks them** — and the order
-/// is `karakuri_engine::deck::MaskKind::ALL`'s, which states its own reason:
+/// Every shape there is, in the order a press walks them — and the order is
+/// `karakuri_engine::deck::MaskKind::ALL`'s, which states its own reason:
 /// *"`None` first, because it is the default and a cycle should start where a
 /// slot starts."*
 ///
-/// **Written here rather than read off a `Mask::ALL`, because there is no
-/// `Mask::ALL`.** `Tally::ALL` and `BlendMode::ALL` exist for readers —
-/// `mixer` measures the tally capsule against the widest of the three words,
-/// and a map file is offered the blend's three — and nothing reads a list of
-/// mask shapes: the mini holds a mark rather than a word and is the same width
-/// whichever shape it shows, and no map target names a shape, which is why
-/// `karakuri_operation::WipeKind` has none either. So `view::next_shape` is
-/// the only statement of the order in the crate, and this is the copy it is
-/// checked against — which is what `blend.rs` and `tally.rs` get from walking
-/// an `ALL`.
+/// Written here rather than read off a `Mask::ALL`, because there is no
+/// `Mask::ALL`. `Tally::ALL` and `BlendMode::ALL` exist for readers — `mixer`
+/// measures the tally capsule against the widest of the three words, and a map
+/// file is offered the blend's three — and nothing reads a list of mask shapes:
+/// the mini holds a mark rather than a word and is the same width whichever
+/// shape it shows, and no map target names a shape, which is why
+/// `karakuri_operation::WipeKind` has none either. So `view::next_shape` is the
+/// only statement of the order in the crate, and this is the copy it is checked
+/// against — which is what `blend.rs` and `tally.rs` get from walking an `ALL`.
 const CYCLE: [Mask; 3] = [Mask::None, Mask::Linear, Mask::Radial];
 
-/// **The guard that [`CYCLE`] is every shape and not three of them**: a match,
-/// so a fourth variant of `Mask` does not compile until somebody has put it in
-/// the list above and said where it goes.
+/// The guard that [`CYCLE`] is every shape and not three of them: a match, so a
+/// fourth variant of `Mask` does not compile until somebody has put it in the
+/// list above and said where it goes.
 fn step_of(mask: Mask) -> usize {
     match mask {
         Mask::None => 0,
@@ -76,12 +76,12 @@ fn step_of(mask: Mask) -> usize {
     }
 }
 
-/// **The vocabulary's word for a console mask shape, written out again here.**
+/// The vocabulary's word for a console mask shape, written out again here.
 ///
 /// `view`'s own conversion is private, and a test that asked it for the
 /// expected answer would be asserting that it agrees with itself. Two arms
-/// swapped in either copy is a chip that asks for the wrong shape, and it
-/// fails here.
+/// swapped in either copy is a chip that asks for the wrong shape, and it fails
+/// here.
 fn asked(mask: Mask) -> WipeKind {
     match mask {
         Mask::None => WipeKind::None,
@@ -98,7 +98,7 @@ fn next(mask: Mask) -> WipeKind {
 
 /// A strip wearing `mask` at `angle`.
 ///
-/// **The angle is never zero on any strip these tests build**, and that is
+/// The angle is never zero on any strip these tests build, and that is
 /// deliberate: a fixture at zero cannot tell a press that carries the slot's
 /// angle from one that carries a default, which is the whole difference this
 /// file is about.
@@ -123,15 +123,15 @@ fn wearing(slot: usize, mask: Mask, angle: f32) -> Strip {
     }
 }
 
-/// **Four strips, no two adjacent ones wearing the same shape, and every one
-/// at a different angle** — so that a press answered from the wrong strip is a
-/// wrong answer rather than the right one by luck. There are three shapes and
-/// four decks, so deck A and deck D share one and neither is beside the other;
-/// the angles are all different, so even those two answer differently.
+/// Four strips, no two adjacent ones wearing the same shape, and every one at a
+/// different angle — so that a press answered from the wrong strip is a wrong
+/// answer rather than the right one by luck. There are three shapes and four
+/// decks, so deck A and deck D share one and neither is beside the other; the
+/// angles are all different, so even those two answer differently.
 ///
-/// One of the angles is **negative**, because an angle is a direction in
-/// radians and nothing about it is a proportion — a copy that clamped or
-/// unit-ed it on the way through would pass on four positive numbers.
+/// One of the angles is negative, because an angle is a direction in radians
+/// and nothing about it is a proportion — a copy that clamped or unit-ed it on
+/// the way through would pass on four positive numbers.
 fn strips() -> Vec<Strip> {
     const ANGLES: [f32; 4] = [0.9, -0.4, 2.75, 1.25];
     (0..4)
@@ -139,8 +139,8 @@ fn strips() -> Vec<Strip> {
         .collect()
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair `mixer.rs`, `blend.rs` and `tally.rs` all open with.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// `mixer.rs`, `blend.rs` and `tally.rs` all open with.
 fn console() -> (Panel, egui::Context) {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
@@ -167,20 +167,19 @@ fn pressed(bay: &Mixer, slot: usize) -> Operation {
 // The cycle, and where each press arrives
 // ---------------------------------------------------------------------------
 
-/// **A press moves the mask to the next shape, and the last wraps to the
-/// first.**
+/// A press moves the mask to the next shape, and the last wraps to the first.
 ///
 /// Asserted against [`CYCLE`] walked in order rather than against three
 /// literals in three assertions, so this is *the cycle is that order* and not
-/// *the cycle is the three lines somebody wrote in `view.rs`*. `view::next_shape`
-/// is a match — a fourth shape does not compile until somebody says what
-/// follows it — and this is the second copy that keeps it honest, since there
-/// is no `Mask::ALL` for it to be checked against.
+/// *the cycle is the three lines somebody wrote in `view.rs`*.
+/// `view::next_shape` is a match — a fourth shape does not compile until
+/// somebody says what follows it — and this is the second copy that keeps it
+/// honest, since there is no `Mask::ALL` for it to be checked against.
 ///
-/// **The wrap is not a special case in the assertion.** The loop's last step
-/// is `radial` and the expected answer is `CYCLE[0]`, reached by the same
-/// modulo every other step uses, so a cycle that ran off the end would fail
-/// here rather than in a test of its own that could be forgotten.
+/// The wrap is not a special case in the assertion. The loop's last step is
+/// `radial` and the expected answer is `CYCLE[0]`, reached by the same modulo
+/// every other step uses, so a cycle that ran off the end would fail here
+/// rather than in a test of its own that could be forgotten.
 #[test]
 fn a_press_moves_to_the_next_shape_and_the_last_wraps_to_the_first() {
     let (panel, ctx) = console();
@@ -220,19 +219,19 @@ fn a_press_moves_to_the_next_shape_and_the_last_wraps_to_the_first() {
     );
 }
 
-/// **The press carries the angle the slot is already wearing, and never a
-/// default.**
+/// The press carries the angle the slot is already wearing, and never a
+/// default.
 ///
 /// This is the test that separates this design from the wrong one, and the
 /// wrong one is tidy: the chip names a *shape*, the angle is not its business,
 /// so send `0.0` and let the shape be the whole of what a press means. It is
-/// wrong because `Record::Mask` is written whole out of what the operation
-/// says — so a press that named a zero angle would **straighten a diagonal
-/// wipe**, on a control whose entire visible business is choosing between a
-/// circle and a straight edge, and the mark would look the same afterwards.
+/// wrong because `Record::Mask` is written whole out of what the operation says
+/// — so a press that named a zero angle would straighten a diagonal wipe, on a
+/// control whose entire visible business is choosing between a circle and a
+/// straight edge, and the mark would look the same afterwards.
 ///
-/// **Both directions, and at every shape.** The answer must carry the strip's
-/// own angle and must not carry zero, so an implementation that sent a default
+/// Both directions, and at every shape. The answer must carry the strip's own
+/// angle and must not carry zero, so an implementation that sent a default
 /// fails here with a message saying which mistake it made rather than a
 /// mismatch of two operations.
 #[test]
@@ -274,16 +273,15 @@ fn the_press_carries_the_angle_the_slot_is_already_wearing() {
     assert_ne!(wearing(0, Mask::Linear, 0.9).mask_angle, 0.0);
 }
 
-/// **The operation names the strip's own deck, the shape after that strip's
-/// own, and that strip's own angle** — not deck 0, and not the first strip's
-/// values.
+/// The operation names the strip's own deck, the shape after that strip's own,
+/// and that strip's own angle — not deck 0, and not the first strip's values.
 ///
 /// This is the test a hard-coded `deck: 0` has to fail: every strip is pressed
-/// and each answer carries its own index. The strips are seeded so that **no
-/// two adjacent decks wear the same shape and no two decks share an angle**,
-/// so an answer read off the wrong strip is wrong in the payload as well as in
-/// the deck — any one of the three would catch a wrong index even if the other
-/// two were removed.
+/// and each answer carries its own index. The strips are seeded so that no two
+/// adjacent decks wear the same shape and no two decks share an angle, so an
+/// answer read off the wrong strip is wrong in the payload as well as in the
+/// deck — any one of the three would catch a wrong index even if the other two
+/// were removed.
 #[test]
 fn the_operation_names_the_strips_own_deck() {
     let (panel, ctx) = console();
@@ -325,23 +323,23 @@ fn the_operation_names_the_strips_own_deck() {
 // A control claims what it acts on and no more
 // ---------------------------------------------------------------------------
 
-/// **A press off the mini asks for nothing, and what it does instead is select
-/// the deck.**
+/// A press off the mini asks for nothing, and what it does instead is select
+/// the deck.
 ///
 /// `input`'s rule 4: *"a control claims what it acts on and no more."* The
-/// number above it, the meter, the name and the trim's label are painted by
-/// the console and none of them is the mask mini, so this mini answers nothing
-/// for any of them. They are all inside the strip, though, and the strip is
-/// itself a control (`Mixer::select`) — so the press is the panel's and it
-/// means *address the keys to this deck*.
+/// number above it, the meter, the name and the trim's label are painted by the
+/// console and none of them is the mask mini, so this mini answers nothing for
+/// any of them. They are all inside the strip, though, and the strip is itself
+/// a control (`Mixer::select`) — so the press is the panel's and it means
+/// *address the keys to this deck*.
 ///
-/// **Both halves, because either alone is satisfiable by the wrong code.** A
-/// mini that asked from anywhere would change a deck's mask from a press on
-/// the number above it; a mini whose neighbours answered nothing at all would
-/// be a column an operator cannot select by pressing.
+/// Both halves, because either alone is satisfiable by the wrong code. A mini
+/// that asked from anywhere would change a deck's mask from a press on the
+/// number above it; a mini whose neighbours answered nothing at all would be a
+/// column an operator cannot select by pressing.
 ///
-/// **This test required `Claim::Egui` at those points until 2026-09-07.** That
-/// was true when it was written and stopped being true on 2026-08-30, when
+/// This test required `Claim::Egui` at those points until 2026-09-07. That was
+/// true when it was written and stopped being true on 2026-08-30, when
 /// `Mixer::select` made the whole column a control and `input::on_strip` went
 /// on asking four questions instead of five. The rule has not changed; what is
 /// *left over* after the four inside the column is no longer nothing.
@@ -430,35 +428,35 @@ fn a_press_off_the_mini_asks_for_nothing_and_selects_the_deck_instead() {
     );
 }
 
-/// **A mini in a bay that is not laid out is not a control**, whatever mask
-/// the strips behind it carry.
+/// A mini in a bay that is not laid out is not a control, whatever mask the
+/// strips behind it carry.
 ///
-/// The strips are written every frame from the `Deck` and say nothing about
-/// the arrangement, so *is there a mini here* is `mixer`'s question and not
-/// theirs — and the answer is `None` for a bay with no room for its row of
-/// strips, before any rectangle is hit-tested. That is where a folded bay is
-/// handled, once for every control in it rather than per control.
+/// The strips are written every frame from the `Deck` and say nothing about the
+/// arrangement, so *is there a mini here* is `mixer`'s question and not theirs
+/// — and the answer is `None` for a bay with no room for its row of strips,
+/// before any rectangle is hit-tested. That is where a folded bay is handled,
+/// once for every control in it rather than per control.
 ///
-/// **Both folds, because they are one question with two ways in** — the mixer
-/// bay itself, and the pane that encloses it. And unfolding puts the control
-/// back, because nothing here is a latch.
+/// Both folds, because they are one question with two ways in — the mixer bay
+/// itself, and the pane that encloses it. And unfolding puts the control back,
+/// because nothing here is a latch.
 ///
 /// # What claims the ground afterwards is not always nothing
 ///
 /// This used to assert that the point goes to `egui` once the bay is folded,
 /// and that stopped being true the day the deck preview cells became controls.
-/// Folding the **right pane** gives its width to the centre, which is enough
-/// for the Program bay to put its four cells down the sides of the picture
-/// instead of under it (ADR-0182) — and the right-hand column lands in the
-/// ground the mixer had. So a press where the mini was is the panel's again,
-/// for a control that moved in rather than for the one that went.
+/// Folding the right pane gives its width to the centre, which is enough for
+/// the Program bay to put its four cells down the sides of the picture instead
+/// of under it (ADR-0182) — and the right-hand column lands in the ground the
+/// mixer had. So a press where the mini was is the panel's again, for a control
+/// that moved in rather than for the one that went.
 ///
-/// **That is a fact about the arrangement and not about this bay**, so it is
-/// derived rather than written down per arm: the expected claim is *panel
-/// where a cell is there and `egui` where none is*, asked of the same
-/// `program_bay` the rule hit-tests. What this test still asserts about the
-/// mini is what it always did, one line above — `mixer` answers `None`, so
-/// there is no mini to press whatever else is on the screen.
+/// That is a fact about the arrangement and not about this bay, so it is
+/// derived rather than written down per arm: the expected claim is *panel where
+/// a cell is there and `egui` where none is*, asked of the same `program_bay`
+/// the rule hit-tests. What this test still asserts about the mini is what it
+/// always did, one line above — `mixer` answers `None`, so there is no mini to
+/// press whatever else is on the screen.
 #[test]
 fn a_folded_mixer_bay_has_no_mini_to_press() {
     for enclosing in [false, true] {
@@ -528,27 +526,26 @@ fn a_folded_mixer_bay_has_no_mini_to_press() {
 // The boundary gets first refusal, and the mini clears its band
 // ---------------------------------------------------------------------------
 
-/// **No mask mini is inside a boundary's [`GRAB`].**
+/// No mask mini is inside a boundary's [`GRAB`].
 ///
 /// `input`'s rule 2 comes before rule 3, so a control under a boundary's grab
 /// band is a control that cannot be clicked, with nothing on screen saying so.
 /// The Outputs sink, the two knobs, the blend chip and the tally chip are each
-/// measured for this — **and this is measured too rather than inherited from
-/// the chip 3px to its left**, which is the mistake the numbers make easy: the
-/// blend chip clears the pane divider down the left of the bay by **8.97** and
-/// this one clears it by **41.03**, because it sits at the far end of the same
-/// row.
+/// measured for this — and this is measured too rather than inherited from the
+/// chip 3px to its left, which is the mistake the numbers make easy: the blend
+/// chip clears the pane divider down the left of the bay by 8.97 and this one
+/// clears it by 41.03, because it sits at the far end of the same row.
 ///
-/// **It is also the one control whose nearest boundary is not the same one on
-/// every strip.** On deck A the pane divider is nearest, at 41.03; on the other
-/// three the nearest is the boundary *under* the bay, **74.50** below the mode
-/// row. A clearance inherited from the control beside it would have named the
-/// wrong boundary and the wrong number at once.
+/// It is also the one control whose nearest boundary is not the same one on
+/// every strip. On deck A the pane divider is nearest, at 41.03; on the other
+/// three the nearest is the boundary *under* the bay, 74.50 below the mode row.
+/// A clearance inherited from the control beside it would have named the wrong
+/// boundary and the wrong number at once.
 ///
 /// It asks `Layout::hit` directly as well as `claim`, which is ADR-0185's
-/// caught test: `claim` says *the panel's* for a boundary **and** for a
-/// control, so a version of this that only asked `claim` passes with [`GRAB`]
-/// widened to 60.
+/// caught test: `claim` says *the panel's* for a boundary and for a control, so
+/// a version of this that only asked `claim` passes with [`GRAB`] widened to
+/// 60.
 ///
 /// The guard on itself is `fader.rs`'s, `blend.rs`'s and `tally.rs`'s: the
 /// ground under the bay *is* inside a grab, which is what says the answers
@@ -624,16 +621,15 @@ fn no_mask_mini_is_inside_a_boundarys_grab() {
 // The target does not move under its own value
 // ---------------------------------------------------------------------------
 
-/// **The mini a hand aims at stands still whatever shape the deck is
-/// wearing.**
+/// The mini a hand aims at stands still whatever shape the deck is wearing.
 ///
 /// The mark is drawn rather than typed and the box is `MINI_SIZE` wide inside
 /// `.mini`'s padding whichever shape it is showing — so this control has what
 /// the tally's capsule buys by being sized to the widest word, and what the
 /// blend chip, sized to the word it shows, cannot claim at all.
 ///
-/// The rectangle is asserted **identical** across all three shapes, and one
-/// fixed point on it is a control in every one of them.
+/// The rectangle is asserted identical across all three shapes, and one fixed
+/// point on it is a control in every one of them.
 #[test]
 fn the_mini_does_not_move_under_the_shape_it_shows() {
     let (panel, ctx) = console();

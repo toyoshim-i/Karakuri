@@ -11,7 +11,7 @@
 //! The stylesheet states each room twice — once under
 //! `@media (prefers-color-scheme: …)` for the page, and once as `.console.day`
 //! and `.console.night` for the panel itself, which is what the room switch
-//! toggles. **The `.console.*` pair is what this transcribes**, because those
+//! toggles. The `.console.*` pair is what this transcribes, because those
 //! are the panel's own values; the page's are the surrounding document's and
 //! only happen to agree.
 //!
@@ -25,15 +25,15 @@
 //! twelve moods, and the risk badge's five bands. Four are `rgba(…)` or a
 //! shadow, and are written out:
 //!
-//! - **`--c-shadow` is two shadows by day and one by night.** `epaint` draws
+//! - `--c-shadow` is two shadows by day and one by night. `epaint` draws
 //!   one, so the day pair is collapsed to its larger member — the `0 4px 14px`
 //!   at 7% — and the `0 1px 0` hairline at 4% is dropped. It contributes about
 //!   a pixel of edge that the bay's own boundary already gives.
-//! - **`--c-glow` and `--c-glowp` are the halo on an armed control**, and no
+//! - `--c-glow` and `--c-glowp` are the halo on an armed control, and no
 //!   control is drawn in this pass. They are transcribed anyway, because they
 //!   are two lines and the alternative is reading the stylesheet a second time
 //!   for them.
-//! - **`--c-tint` is the fourth**, and it is the plain case the rule below
+//! - `--c-tint` is the fourth, and it is the plain case the rule below
 //!   covers: a colour at an alpha, premultiplied here because
 //!   `Color32::from_rgba_unmultiplied` is not `const`.
 //!
@@ -47,8 +47,8 @@
 //! `--f-code: "M PLUS 1 Code"`, and neither is chased here: shipping two
 //! webfonts is a decision of its own and the sizes and weights are what a
 //! layout is checked against. So the sizes below are the stylesheet's and the
-//! faces are whatever `egui` loaded. **Weight is the one that cannot be
-//! honoured at all** — `egui`'s default proportional face has no bold — so a
+//! faces are whatever `egui` loaded. Weight is the one that cannot be
+//! honoured at all — `egui`'s default proportional face has no bold — so a
 //! `font-weight: 700` in the CSS is a colour and a size here and nothing else.
 
 use egui::epaint::Shadow;
@@ -125,19 +125,19 @@ pub struct Palette {
     pub glow: Color32,
     /// `--c-glowp`: the same on a pink one.
     pub glow_pink: Color32,
-    /// `--c-band-green`: the first of the risk badge's five, and the only one
-    /// of the five that is not a warning of some degree.
+    /// `--c-band-green`: the first of the risk badge's five, and the only one of
+    /// the five that is not a warning of some degree.
     ///
-    /// **These five are the one group here that is not a mood.** Every colour
-    /// above says what a thing *is* — armed, on air, an address — and each is
-    /// used wherever that thing is drawn. The bands say where one number fell
-    /// on one scale, they are used in exactly one place
-    /// ([`view::caption_into`](crate::view::caption_into)), and the mock gives
-    /// them custom properties of their own rather than reaching for `--c-mint`
-    /// and `--c-pink`: a green dot is not *live in the good sense* and a red
-    /// one is not *on air*. Transcribed as five because the stylesheet states
-    /// five, and read through [`view::Band`](crate::view::Band), which is
-    /// where the number becomes one of them.
+    /// These five are the one group here that is not a mood. Every colour above
+    /// says what a thing *is* — armed, on air, an address — and each is used
+    /// wherever that thing is drawn. The bands say where one number fell on one
+    /// scale, they are used in exactly one place
+    /// ([`view::caption_into`](crate::view::caption_into)), and the mock gives them
+    /// custom properties of their own rather than reaching for `--c-mint` and
+    /// `--c-pink`: a green dot is not *live in the good sense* and a red one is not
+    /// *on air*. Transcribed as five because the stylesheet states five, and read
+    /// through [`view::Band`](crate::view::Band), which is where the number becomes
+    /// one of them.
     pub band_green: Color32,
     /// `--c-band-blue`.
     pub band_blue: Color32,
@@ -255,34 +255,32 @@ pub mod size {
     pub const HEAD_SIZE: f32 = 10.0;
 
     /// `.bay-head`'s `letter-spacing: 0.16em` at [`HEAD_SIZE`], in pixels. `egui`
-    /// spaces after every glyph including the last, which the CSS also does,
-    /// so the two agree and a right-aligned head is a pixel and a half wider
-    /// than its glyphs. Left alone: it is the trailing space of an
-    /// upper-cased, letter-spaced heading and it reads as intended.
+    /// spaces after every glyph including the last, which the CSS also does, so the
+    /// two agree and a right-aligned head is a pixel and a half wider than its
+    /// glyphs. Left alone: it is the trailing space of an upper-cased,
+    /// letter-spaced heading and it reads as intended.
     pub const HEAD_TRACKING: f32 = HEAD_SIZE * 0.16;
 
     /// `.bay-head`'s `padding: 6px 10px`.
     pub const HEAD_PAD_X: f32 = 10.0;
     pub const HEAD_PAD_Y: f32 = 6.0;
 
-    /// The whole bay head: `6 + 10 * 1.5 + 6`. The arrangement's minima are
-    /// written from the same sum, which is why a head is 27 in both places or
-    /// in neither.
+    /// The whole bay head: `6 + 10 * 1.5 + 6`. The arrangement's minima are written
+    /// from the same sum, which is why a head is 27 in both places or in neither.
     pub const HEAD_H: f32 = HEAD_PAD_Y * 2.0 + HEAD_SIZE * LINE;
 
     /// `.bay`'s `border-radius: 11px`.
     pub const BAY_RADIUS: f32 = 11.0;
 
-    /// One pixel wherever the mock draws a rule, and the rule the console
-    /// actually draws is the one under a bay head:
-    /// `.bay-head`'s `border-bottom: 1px solid var(--c-hair)`.
+    /// One pixel wherever the mock draws a rule, and the rule the console actually
+    /// draws is the one under a bay head: `.bay-head`'s `border-bottom: 1px solid
+    /// var(--c-hair)`.
     ///
-    /// **The other rules in the mock are all one pixel too** — `.scopes`,
-    /// `.path`, `.node-group` and the rest — so the citation is one of many
-    /// and not an arbitrary pick: it is the one this constant is used for.
-    /// Cited rather than called the console's own, because a number nothing
-    /// checks is the thing the guard beside this module exists to end, and
-    /// this was the last of them.
+    /// The other rules in the mock are all one pixel too — `.scopes`, `.path`,
+    /// `.node-group` and the rest — so the citation is one of many and not an
+    /// arbitrary pick: it is the one this constant is used for. Cited rather than
+    /// called the console's own, because a number nothing checks is the thing the
+    /// guard beside this module exists to end, and this was the last of them.
     pub const HAIRLINE: f32 = 1.0;
 
     /// `.pill`'s `padding: 0 8px`, around text at [`BASE`].
@@ -292,193 +290,184 @@ pub mod size {
     pub const PILL_H: f32 = BASE * LINE;
 
     /// The gap between the pills in a bay head, and the one number here the
-    /// stylesheet does not carry: `.bay-head`'s own `gap` is `0.8rem`, and
-    /// the two heads that hold pills — the program's and the inspector's —
-    /// set the pills' gap on the span that holds them. So this is
-    /// `docs/manual/console.html`'s `gap: 5px`, inline on that span.
+    /// stylesheet does not carry: `.bay-head`'s own `gap` is `0.8rem`, and the two
+    /// heads that hold pills — the program's and the inspector's — set the pills'
+    /// gap on the span that holds them. So this is `docs/manual/console.html`'s
+    /// `gap: 5px`, inline on that span.
     pub const PILL_GAP: f32 = 5.0;
 
-    /// `.divider-v`, the bar between the inspector's panes. The stylesheet
-    /// gives it no width of its own, so its width is the middle track of
-    /// `.insp-split`'s `grid-template-columns: 1fr 9px 1fr`.
+    /// `.divider-v`, the bar between the inspector's panes. The stylesheet gives it
+    /// no width of its own, so its width is the middle track of `.insp-split`'s
+    /// `grid-template-columns: 1fr 9px 1fr`.
     ///
-    /// **And it is the divider the arrangement leaves for that bar**, which
-    /// `lib.rs` declared separately as `INSPECTOR_DIVIDER` until the two were
-    /// found to be the same 9 read off the same track. It is the one divider
-    /// in the console that is not 10, because the mock draws this one as
-    /// something a hand takes hold of rather than leaving it as ground —
-    /// `.divider-v`'s `cursor: col-resize`. So the bar `view.rs` paints and
-    /// the gap `arrangement()` opens for it are one number or neither.
+    /// And it is the divider the arrangement leaves for that bar, which `lib.rs`
+    /// declared separately as `INSPECTOR_DIVIDER` until the two were found to be
+    /// the same 9 read off the same track. It is the one divider in the console
+    /// that is not 10, because the mock draws this one as something a hand takes
+    /// hold of rather than leaving it as ground — `.divider-v`'s `cursor:
+    /// col-resize`. So the bar `view.rs` paints and the gap `arrangement()` opens
+    /// for it are one number or neither.
     pub const PANE_DIVIDER: f32 = 9.0;
 
-    /// `.program-body`'s `padding: 9px`: the ring of ground the Program bay
-    /// leaves between its head, its edges and the picture inside it. The
-    /// arrangement's 378 is written from the same 9 — see the Program bay's
-    /// own derivation in `lib.rs` — so the padding a rectangle is inset by
-    /// here and the padding the bay's height was derived from are one number
-    /// or neither.
+    /// `.program-body`'s `padding: 9px`: the ring of ground the Program bay leaves
+    /// between its head, its edges and the picture inside it. The arrangement's 378
+    /// is written from the same 9 — see the Program bay's own derivation in
+    /// `lib.rs` — so the padding a rectangle is inset by here and the padding the
+    /// bay's height was derived from are one number or neither.
     pub const PROGRAM_BODY_PAD: f32 = 9.0;
 
-    /// `.previews`'s `gap: 6px`: between two deck preview cells, and the only
-    /// gap in that row — the CSS grid is `repeat(4, 1fr)` with this between
-    /// the tracks and nothing outside them, so the padding either end is
-    /// [`PROGRAM_BODY_PAD`] and not this. The Program bay's 395 is written
-    /// from the same 6 (`(466 - three 6px gaps) / 4 = 112`), so a cell is 112
-    /// wide in both places or in neither.
+    /// `.previews`'s `gap: 6px`: between two deck preview cells, and the only gap
+    /// in that row — the CSS grid is `repeat(4, 1fr)` with this between the tracks
+    /// and nothing outside them, so the padding either end is [`PROGRAM_BODY_PAD`]
+    /// and not this. The Program bay's 395 is written from the same 6 (`(466 -
+    /// three 6px gaps) / 4 = 112`), so a cell is 112 wide in both places or in
+    /// neither.
     pub const PREVIEW_GAP: f32 = 6.0;
 
-    /// **How tall a deck preview cell's image is** — `.preview` alone, with
-    /// nothing of the `.caption` under it.
+    /// How tall a deck preview cell's image is — `.preview` alone, with nothing of
+    /// the `.caption` under it.
     ///
-    /// **A cell is `.cell`, the image and the caption together**, which is
-    /// [`PREVIEW_ROW_H`]. That is not what `preview_rects` answers — its
-    /// rectangles are the images, because a texture is sized from one — and
-    /// the two-meanings clash is named at `caption_of` rather than renamed
-    /// here.
+    /// A cell is `.cell`, the image and the caption together, which is
+    /// [`PREVIEW_ROW_H`]. That is not what `preview_rects` answers — its rectangles
+    /// are the images, because a texture is sized from one — and the two-meanings
+    /// clash is named at `caption_of` rather than renamed here.
     ///
-    /// **Derived rather than transcribed, because the mock states no height
-    /// for the row at all.** `.previews` is
-    /// `grid-template-columns: repeat(4, 1fr)` with [`PREVIEW_GAP`] between
-    /// the tracks, and an image carries `.preview`'s `aspect-ratio: 16/9`, so
-    /// the height falls out of the width it has at the narrowest console
-    /// the mock will draw. That width is 466 — `.console`'s
+    /// Derived rather than transcribed, because the mock states no height for the
+    /// row at all. `.previews` is `grid-template-columns: repeat(4, 1fr)` with
+    /// [`PREVIEW_GAP`] between the tracks, and an image carries `.preview`'s
+    /// `aspect-ratio: 16/9`, so the height falls out of the width it has at the
+    /// narrowest console the mock will draw. That width is 466 — `.console`'s
     /// `min-width: 1010px` less its own `padding: 10px` either side, less
-    /// `.body-grid`'s two fixed tracks and the two gaps between the three,
-    /// less `.program-body`'s padding either side — and `lib.rs` writes that
-    /// derivation out where the Program bay's 395 is built from it. A track is
-    /// (466 - three gaps) / 4 = 112, and 112 at that aspect is **63**.
+    /// `.body-grid`'s two fixed tracks and the two gaps between the three, less
+    /// `.program-body`'s padding either side — and `lib.rs` writes that derivation
+    /// out where the Program bay's 395 is built from it. A track is (466 - three
+    /// gaps) / 4 = 112, and 112 at that aspect is 63.
     pub const PREVIEW_IMAGE_H: f32 = (466.0 - PREVIEW_GAP * 3.0) / 4.0 * 9.0 / 16.0;
 
-    /// `.cell`'s `gap: 4px`: between a cell's image and the caption under it,
-    /// and the only gap inside a cell — `.cell` is a two-child column, so
-    /// there is one of these and never two.
+    /// `.cell`'s `gap: 4px`: between a cell's image and the caption under it, and
+    /// the only gap inside a cell — `.cell` is a two-child column, so there is one
+    /// of these and never two.
     pub const PREVIEW_CAPTION_GAP: f32 = 4.0;
 
-    /// `.caption`'s `height: 13px`: the strip under a cell's image that
-    /// carries the letter, the state word and the risk badge. Stated in the
-    /// stylesheet rather than left to the line box, because the row's height
-    /// is the arrangement's and a height that follows a font is not a number
-    /// [`PREVIEW_ROW_H`] can be written from.
+    /// `.caption`'s `height: 13px`: the strip under a cell's image that carries the
+    /// letter, the state word and the risk badge. Stated in the stylesheet rather
+    /// than left to the line box, because the row's height is the arrangement's and
+    /// a height that follows a font is not a number [`PREVIEW_ROW_H`] can be
+    /// written from.
     pub const PREVIEW_CAPTION_H: f32 = 13.0;
 
-    /// **How tall the row of deck preview cells is**, which is the 80 in the
+    /// How tall the row of deck preview cells is, which is the 80 in the
     /// arrangement's 89 for `deck-previews` — the row of cells, and
     /// [`PROGRAM_BODY_PAD`] under them.
     ///
     /// A cell is its image, one [`PREVIEW_CAPTION_GAP`], and one
-    /// [`PREVIEW_CAPTION_H`] of caption: `.cell` read top to bottom. The row
-    /// grew by those two when the caption moved out of the image, and the
-    /// image kept its 63 — see `lib.rs`, where the bay's height is built from
-    /// this and the argument for growing rather than shrinking is written out.
+    /// [`PREVIEW_CAPTION_H`] of caption: `.cell` read top to bottom. The row grew
+    /// by those two when the caption moved out of the image, and the image kept its
+    /// 63 — see `lib.rs`, where the bay's height is built from this and the
+    /// argument for growing rather than shrinking is written out.
     pub const PREVIEW_ROW_H: f32 = PREVIEW_IMAGE_H + PREVIEW_CAPTION_GAP + PREVIEW_CAPTION_H;
 
     /// `.preview`'s `border-radius: 7px`, one shade tighter than the bay's
     /// [`BAY_RADIUS`] because the cell is inside it.
     pub const PREVIEW_RADIUS: f32 = 7.0;
 
-    /// `.caption`'s `font-size: 9px`: the deck's letter and the state word,
-    /// which are the only type a cell carries — and they are under the image
-    /// rather than on it.
+    /// `.caption`'s `font-size: 9px`: the deck's letter and the state word, which
+    /// are the only type a cell carries — and they are under the image rather than
+    /// on it.
     pub const PREVIEW_SIZE: f32 = 9.0;
 
     /// `.caption`'s `gap: 5px`, between the letter and the word beside it.
     pub const PREVIEW_CAPTION_GAP_X: f32 = 5.0;
 
-    /// `.risk`'s `width: 6px; height: 6px`: the risk badge, a dot at the far
-    /// end of a cell's caption. Square in the stylesheet and round on the
-    /// panel, because `.risk` also carries `border-radius: 999px` — which on
-    /// a box this size is a circle of half this across.
+    /// `.risk`'s `width: 6px; height: 6px`: the risk badge, a dot at the far end of
+    /// a cell's caption. Square in the stylesheet and round on the panel, because
+    /// `.risk` also carries `border-radius: 999px` — which on a box this size is a
+    /// circle of half this across.
     ///
-    /// **It is one number and not two on purpose.** A badge that could be
-    /// drawn 6 by 5 is a badge that can be drawn wrong, and the stylesheet
-    /// states the two equal; the ellipse this would need is not a shape the
-    /// mock has anywhere.
+    /// It is one number and not two on purpose. A badge that could be drawn 6 by 5
+    /// is a badge that can be drawn wrong, and the stylesheet states the two equal;
+    /// the ellipse this would need is not a shape the mock has anywhere.
     pub const PREVIEW_RISK: f32 = 6.0;
 
-    /// `.transport`'s `padding: 9px 12px`. The 9 is the same 9 the
-    /// arrangement's 48 was written from (`lib.rs`: 9 + 30 + 9), so the row's
-    /// height and the space around what is in it are one derivation or
-    /// neither.
+    /// `.transport`'s `padding: 9px 12px`. The 9 is the same 9 the arrangement's 48
+    /// was written from (`lib.rs`: 9 + 30 + 9), so the row's height and the space
+    /// around what is in it are one derivation or neither.
     pub const TRANSPORT_PAD_X: f32 = 12.0;
     pub const TRANSPORT_PAD_Y: f32 = 9.0;
 
-    /// `.transport`'s `gap: 14px`: between the BPM and its label, the label
-    /// and the beat grid, and every other pair in the row.
+    /// `.transport`'s `gap: 14px`: between the BPM and its label, the label and the
+    /// beat grid, and every other pair in the row.
     pub const TRANSPORT_GAP: f32 = 14.0;
 
-    /// `.octave`'s `gap: 3px`, between the two halves of the one control that
-    /// moves the grid an octave. The same 3 `.scrub` sets one bay over, and a
-    /// second constant rather than a reuse of [`SCRUB_GAP`] because the two
-    /// are two rules in the stylesheet and either can move on its own.
+    /// `.octave`'s `gap: 3px`, between the two halves of the one control that moves
+    /// the grid an octave. The same 3 `.scrub` sets one bay over, and a second
+    /// constant rather than a reuse of [`SCRUB_GAP`] because the two are two rules
+    /// in the stylesheet and either can move on its own.
     pub const OCTAVE_GAP: f32 = 3.0;
 
-    /// `.octave i`'s `font-size: 9px`: `½` or `×2`, at the type size the
-    /// scrub's arrows and the anchor beside them are drawn at.
+    /// `.octave i`'s `font-size: 9px`: `½` or `×2`, at the type size the scrub's
+    /// arrows and the anchor beside them are drawn at.
     pub const OCTAVE_SIZE: f32 = 9.0;
 
     /// `.octave i`'s `padding: 0 4px`, around one half of it — tighter than a
-    /// [`PILL_PAD_X`] for [`SCRUB_PAD_X`]'s reason, since what is inside is a
-    /// mark rather than a word.
+    /// [`PILL_PAD_X`] for [`SCRUB_PAD_X`]'s reason, since what is inside is a mark
+    /// rather than a word.
     pub const OCTAVE_PAD_X: f32 = 4.0;
 
-    /// One half's box: [`OCTAVE_SIZE`] at [`LINE`] inside its
-    /// `border: 1px solid var(--c-line)` — **15.5**, which is [`SCRUB_H`]'s own
-    /// number at the same type size, so the pair sits in the transport row
-    /// without making it any taller than the pills beside them.
+    /// One half's box: [`OCTAVE_SIZE`] at [`LINE`] inside its `border: 1px solid
+    /// var(--c-line)` — 15.5, which is [`SCRUB_H`]'s own number at the same type
+    /// size, so the pair sits in the transport row without making it any taller
+    /// than the pills beside them.
     pub const OCTAVE_H: f32 = OCTAVE_SIZE * LINE + HAIRLINE * 2.0;
 
     /// `.bpm`'s `font-size: 20px`, the one large number on the panel.
     pub const BPM_SIZE: f32 = 20.0;
 
-    /// The BPM's box: [`BPM_SIZE`] at [`LINE`] — **30**, which is the 30 in
-    /// the arrangement's `9 + 30 + 9` for the transport row. The row is 48
-    /// because this number is this tall, so the two are read off each other
-    /// rather than measured twice.
+    /// The BPM's box: [`BPM_SIZE`] at [`LINE`] — 30, which is the 30 in the
+    /// arrangement's `9 + 30 + 9` for the transport row. The row is 48 because this
+    /// number is this tall, so the two are read off each other rather than measured
+    /// twice.
     pub const BPM_H: f32 = BPM_SIZE * LINE;
 
-    /// `.bpm`'s `letter-spacing: -0.01em` at [`BPM_SIZE`], in pixels.
-    /// **Negative**: the mock tightens this one number rather than spacing it,
-    /// which is the opposite of what [`HEAD_TRACKING`] does to a heading. Like
-    /// that one it applies after the last glyph as well, so the box is a fifth
-    /// of a pixel narrower than the glyphs need; left alone for the same
-    /// reason.
+    /// `.bpm`'s `letter-spacing: -0.01em` at [`BPM_SIZE`], in pixels. Negative: the
+    /// mock tightens this one number rather than spacing it, which is the opposite
+    /// of what [`HEAD_TRACKING`] does to a heading. Like that one it applies after
+    /// the last glyph as well, so the box is a fifth of a pixel narrower than the
+    /// glyphs need; left alone for the same reason.
     pub const BPM_TRACKING: f32 = BPM_SIZE * -0.01;
 
-    /// `.beat-grid i`'s `width: 15px; height: 6px`. Its
-    /// `border-radius: 999px` on a box this short is a capsule, drawn as half
-    /// the height.
+    /// `.beat-grid i`'s `width: 15px; height: 6px`. Its `border-radius: 999px` on a
+    /// box this short is a capsule, drawn as half the height.
     pub const BEAT_W: f32 = 15.0;
     pub const BEAT_H: f32 = 6.0;
 
-    /// `.beat-grid`'s `gap: 4px`, and it is **between** the dots and nowhere
-    /// else — the same reading as [`PREVIEW_GAP`]: *n* dots have *n - 1* gaps,
-    /// not one each.
+    /// `.beat-grid`'s `gap: 4px`, and it is between the dots and nowhere else — the
+    /// same reading as [`PREVIEW_GAP`]: *n* dots have *n - 1* gaps, not one each.
     pub const BEAT_GAP: f32 = 4.0;
 
-    /// `.beat-grid i.on`'s `box-shadow: 0 0 9px var(--c-glowp)`: the halo on
-    /// the lit dot, one pixel wider than the 8px the Outputs row's dot carries
-    /// and in the pink glow rather than the mint one.
+    /// `.beat-grid i.on`'s `box-shadow: 0 0 9px var(--c-glowp)`: the halo on the
+    /// lit dot, one pixel wider than the 8px the Outputs row's dot carries and in
+    /// the pink glow rather than the mint one.
     pub const BEAT_GLOW: u8 = 9;
 
-    /// `.outputs`'s `padding: 8px 11px`. The 8 is the same 8 the arrangement's
-    /// 34 was written from (`lib.rs`: 8 + 18.5 + 8, rounded), so the row's
-    /// height and the space around what is in it are one derivation or
-    /// neither.
+    /// `.outputs`'s `padding: 8px 11px`. The 8 is the same 8 the arrangement's 34
+    /// was written from (`lib.rs`: 8 + 18.5 + 8, rounded), so the row's height and
+    /// the space around what is in it are one derivation or neither.
     pub const OUTPUTS_PAD_X: f32 = 11.0;
     pub const OUTPUTS_PAD_Y: f32 = 8.0;
 
-    /// `.outputs`'s `gap: 8px`: between the word OUTPUTS and the first sink,
-    /// and between two sinks when there is a second one.
+    /// `.outputs`'s `gap: 8px`: between the word OUTPUTS and the first sink, and
+    /// between two sinks when there is a second one.
     pub const OUTPUTS_GAP: f32 = 8.0;
 
     /// `.sink`'s `padding: 1px 10px`, around a dot and a name at [`BASE`].
     pub const SINK_PAD_X: f32 = 10.0;
     pub const SINK_PAD_Y: f32 = 1.0;
 
-    /// A sink's box: [`BASE`] at [`LINE`] inside that padding — **18.5**,
-    /// which is the 18.5 in the arrangement's `8 + 18.5 + 8` for the outputs
-    /// row. The row is 34 because a sink is this tall, so the two are read
-    /// off each other rather than measured twice.
+    /// A sink's box: [`BASE`] at [`LINE`] inside that padding — 18.5, which is the
+    /// 18.5 in the arrangement's `8 + 18.5 + 8` for the outputs row. The row is 34
+    /// because a sink is this tall, so the two are read off each other rather than
+    /// measured twice.
     pub const SINK_H: f32 = BASE * LINE + SINK_PAD_Y * 2.0;
 
     /// `.sink`'s own `gap: 6px`, between its dot and its name.
@@ -489,19 +478,19 @@ pub mod size {
 
     // -- the mixer's strips -------------------------------------------------
 
-    /// `.mixer-strips`'s `padding: 6px`: the ring of card the strips sit
-    /// inside, under the bay head. The mixer's 316 is written from the same 6
-    /// — see the right pane's derivation in `lib.rs`, where the strips are
-    /// `6 + 215.5 + 6` — so the padding a rectangle is inset by here and the
-    /// padding the bay's height was derived from are one number or neither.
+    /// `.mixer-strips`'s `padding: 6px`: the ring of card the strips sit inside,
+    /// under the bay head. The mixer's 316 is written from the same 6 — see the
+    /// right pane's derivation in `lib.rs`, where the strips are `6 + 215.5 + 6` —
+    /// so the padding a rectangle is inset by here and the padding the bay's height
+    /// was derived from are one number or neither.
     pub const STRIPS_PAD: f32 = 6.0;
 
-    /// `.mixer-strips`'s `gap: 4px`: between two strips, and it is **between**
-    /// them and nowhere else — the same reading as [`PREVIEW_GAP`], because it
-    /// is the same shape of CSS: `repeat(4, 1fr)` with this between the tracks
-    /// and nothing outside them, where the outside is [`STRIPS_PAD`]. The
-    /// right pane's minimum of 172 is written from the same 4 (four 37-wide
-    /// strips and three of these, inside 6 + 6).
+    /// `.mixer-strips`'s `gap: 4px`: between two strips, and it is between them and
+    /// nowhere else — the same reading as [`PREVIEW_GAP`], because it is the same
+    /// shape of CSS: `repeat(4, 1fr)` with this between the tracks and nothing
+    /// outside them, where the outside is [`STRIPS_PAD`]. The right pane's minimum
+    /// of 172 is written from the same 4 (four 37-wide strips and three of these,
+    /// inside 6 + 6).
     pub const STRIP_GAP: f32 = 4.0;
 
     /// `.strip`'s `border-radius: 9px`, one shade tighter than the bay's
@@ -509,69 +498,68 @@ pub mod size {
     /// [`PREVIEW_RADIUS`] is.
     pub const STRIP_RADIUS: f32 = 9.0;
 
-    /// `.strip.focus`'s `box-shadow: inset 0 0 0 2px var(--c-lav)`: the ring
-    /// round the selected deck's strip. **Inset**, so it is drawn inside the
-    /// strip's own box and takes no width from the gap beside it — which is
-    /// what lets a selection move between two strips 4 apart without either of
-    /// them appearing to grow. Twice [`HAIRLINE`] and deliberately so: the
-    /// mock's other focus is a *dashed* outline at the same 2, and the two
-    /// have to be told apart by their line and not by their weight.
+    /// `.strip.focus`'s `box-shadow: inset 0 0 0 2px var(--c-lav)`: the ring round
+    /// the selected deck's strip. Inset, so it is drawn inside the strip's own box
+    /// and takes no width from the gap beside it — which is what lets a selection
+    /// move between two strips 4 apart without either of them appearing to grow.
+    /// Twice [`HAIRLINE`] and deliberately so: the mock's other focus is a *dashed*
+    /// outline at the same 2, and the two have to be told apart by their line and
+    /// not by their weight.
     pub const STRIP_FOCUS_RING: f32 = 2.0;
 
     /// `.strip.drop`'s `outline: 2px solid var(--c-text)`: the ring round the
-    /// rectangle a carried Set lands on if it is let go there. **Outside**,
-    /// where [`STRIP_FOCUS_RING`] above is inset, and that is what lets one
-    /// strip wear both at once — the selection sits inside the strip's edge
-    /// and this sits on it, which is the case the mark had to survive. Its
-    /// `outline-offset: 0` is why it is on the edge rather than proud of it:
-    /// the ring belongs to the target and not to the alley beside it.
+    /// rectangle a carried Set lands on if it is let go there. Outside, where
+    /// [`STRIP_FOCUS_RING`] above is inset, and that is what lets one strip wear
+    /// both at once — the selection sits inside the strip's edge and this sits on
+    /// it, which is the case the mark had to survive. Its `outline-offset: 0` is
+    /// why it is on the edge rather than proud of it: the ring belongs to the
+    /// target and not to the alley beside it.
     ///
-    /// **One number for two rectangles.** `.cell.drop` carries the same
-    /// declaration, because it is one mark in two places; what differs is the
-    /// corner it is drawn round, and that is the target's own —
-    /// [`STRIP_RADIUS`] on a strip and [`PREVIEW_RADIUS`] on a cell. The
-    /// mock's `.cell.drop` sets a `border-radius: 8px` of its own, which is
-    /// the `.cell` box's corner — a box with no background that the console
-    /// does not draw, because a cell there is its image and the caption under
-    /// it — the view's `caption_of` is where the second half of it is.
+    /// One number for two rectangles. `.cell.drop` carries the same declaration,
+    /// because it is one mark in two places; what differs is the corner it is drawn
+    /// round, and that is the target's own — [`STRIP_RADIUS`] on a strip and
+    /// [`PREVIEW_RADIUS`] on a cell. The mock's `.cell.drop` sets a `border-radius:
+    /// 8px` of its own, which is the `.cell` box's corner — a box with no
+    /// background that the console does not draw, because a cell there is its image
+    /// and the caption under it — the view's `caption_of` is where the second half
+    /// of it is.
     pub const DROP_RING: f32 = 2.0;
 
-    /// `.wfocus`'s `outline: 2px dashed var(--c-sun)`: **the second of the
-    /// mock's two focuses**, and the one the panel draws since 2026-09-09 —
-    /// the ring on the bay a key press is addressed to (ADR-0259, and
-    /// [`crate::focus::mark`] for where it goes).
+    /// `.wfocus`'s `outline: 2px dashed var(--c-sun)`: the second of the mock's two
+    /// focuses, and the one the panel draws since 2026-09-09 — the ring on the bay
+    /// a key press is addressed to (ADR-0259, and [`crate::focus::mark`] for where
+    /// it goes).
     ///
-    /// The same 2 as [`STRIP_FOCUS_RING`] on purpose, which is that constant's
-    /// own sentence read from this side: *"the two have to be told apart by
-    /// their line and not by their weight"*. What tells them apart is that this
-    /// one is dashed, in `--c-sun` rather than `--c-lav`, and outside the box
-    /// rather than inset.
+    /// The same 2 as [`STRIP_FOCUS_RING`] on purpose, which is that constant's own
+    /// sentence read from this side: *"the two have to be told apart by their line
+    /// and not by their weight"*. What tells them apart is that this one is dashed,
+    /// in `--c-sun` rather than `--c-lav`, and outside the box rather than inset.
     pub const WFOCUS_RING: f32 = 2.0;
 
-    /// `.wfocus`'s `outline-offset: 2px`: the ring is drawn **proud** of the
-    /// thing it marks, where [`STRIP_FOCUS_RING`] is inset — which is what
-    /// lets a bay head wear this and a strip inside it wear that without
-    /// either mark touching the other.
+    /// `.wfocus`'s `outline-offset: 2px`: the ring is drawn proud of the thing it
+    /// marks, where [`STRIP_FOCUS_RING`] is inset — which is what lets a bay head
+    /// wear this and a strip inside it wear that without either mark touching the
+    /// other.
     pub const WFOCUS_OFFSET: f32 = 2.0;
 
-    /// **How long one dash of that outline is, and the gap after it** — the
-    /// console's own, because `dashed` is a CSS keyword and a browser picks the
-    /// pattern. What the mock states is that the line is broken; these two are
-    /// what breaking it costs, chosen so that a [`HEAD_H`] head's short edge
-    /// carries whole dashes rather than one long one.
+    /// How long one dash of that outline is, and the gap after it — the console's
+    /// own, because `dashed` is a CSS keyword and a browser picks the pattern. What
+    /// the mock states is that the line is broken; these two are what breaking it
+    /// costs, chosen so that a [`HEAD_H`] head's short edge carries whole dashes
+    /// rather than one long one.
     pub const WFOCUS_DASH: f32 = 4.0;
 
-    /// The gap between two dashes of [`WFOCUS_DASH`] — the console's own, for
-    /// that constant's reason and stated beside it.
+    /// The gap between two dashes of [`WFOCUS_DASH`] — the console's own, for that
+    /// constant's reason and stated beside it.
     pub const WFOCUS_GAP: f32 = 3.0;
 
     /// `.strip`'s `padding: 7px 4px`.
     pub const STRIP_PAD_X: f32 = 4.0;
     pub const STRIP_PAD_Y: f32 = 7.0;
 
-    /// `.strip`'s `gap: 5px`: between the six things stacked in a strip, so
-    /// there are **five** of these and not six — the same reading as
-    /// [`STRIP_GAP`], one axis along.
+    /// `.strip`'s `gap: 5px`: between the six things stacked in a strip, so there
+    /// are five of these and not six — the same reading as [`STRIP_GAP`], one axis
+    /// along.
     pub const STRIP_GAP_Y: f32 = 5.0;
 
     /// `.strip-name`'s `font-size: 10px`: what the deck is playing.
@@ -580,22 +568,22 @@ pub mod size {
     /// `.tally`'s `font-size: 9px`.
     pub const TALLY_SIZE: f32 = 9.0;
 
-    /// `.tally`'s `letter-spacing: 0.1em` at [`TALLY_SIZE`], in pixels — the
-    /// same treatment [`HEAD_TRACKING`] gives a heading, and applied after the
-    /// last glyph for the same reason and left alone for it.
+    /// `.tally`'s `letter-spacing: 0.1em` at [`TALLY_SIZE`], in pixels — the same
+    /// treatment [`HEAD_TRACKING`] gives a heading, and applied after the last
+    /// glyph for the same reason and left alone for it.
     pub const TALLY_TRACKING: f32 = TALLY_SIZE * 0.1;
 
     /// `.tally`'s `padding: 0 7px`, around text at [`TALLY_SIZE`].
     pub const TALLY_PAD_X: f32 = 7.0;
 
-    /// A tally's box: [`TALLY_SIZE`] at [`LINE`] — **13.5**, which is the 13.5
-    /// in the mixer's own 215.5. Its `border-radius: 999px` on a box this
-    /// short is a capsule.
+    /// A tally's box: [`TALLY_SIZE`] at [`LINE`] — 13.5, which is the 13.5 in the
+    /// mixer's own 215.5. Its `border-radius: 999px` on a box this short is a
+    /// capsule.
     pub const TALLY_H: f32 = TALLY_SIZE * LINE;
 
-    /// `.tally.live`'s `box-shadow: 0 0 10px var(--c-glowp)`: the halo on a
-    /// slot that is on air, in the pink glow and one pixel wider than the 9px
-    /// the transport's lit beat carries.
+    /// `.tally.live`'s `box-shadow: 0 0 10px var(--c-glowp)`: the halo on a slot
+    /// that is on air, in the pink glow and one pixel wider than the 9px the
+    /// transport's lit beat carries.
     pub const TALLY_GLOW: u8 = 10;
 
     /// `.trim`'s `gap: 5px`, between the `g` and the mini fader beside it.
@@ -608,24 +596,23 @@ pub mod size {
     pub const TRIM_LABEL_SIZE: f32 = 9.0;
 
     /// The trim row's box: the label is the tallest thing in it —
-    /// [`TRIM_LABEL_SIZE`] at [`LINE`] is 13.5 against the track's
-    /// [`FADER_H`], which is the 13.5 in the mixer's own 215.5.
+    /// [`TRIM_LABEL_SIZE`] at [`LINE`] is 13.5 against the track's [`FADER_H`],
+    /// which is the 13.5 in the mixer's own 215.5.
     pub const TRIM_H: f32 = TRIM_LABEL_SIZE * LINE;
 
-    /// `.fader`'s `height: 5px`. Its `border-radius: 999px` on a box this
-    /// short is a capsule, drawn as half the height.
+    /// `.fader`'s `height: 5px`. Its `border-radius: 999px` on a box this short is
+    /// a capsule, drawn as half the height.
     pub const FADER_H: f32 = 5.0;
 
-    /// `.fader s`'s `width: 9px; height: 11px`: the trim's knob, taller than
-    /// the track it rides so that a 5px control has a mark a hand can see.
+    /// `.fader s`'s `width: 9px; height: 11px`: the trim's knob, taller than the
+    /// track it rides so that a 5px control has a mark a hand can see.
     pub const FADER_KNOB_W: f32 = 9.0;
     pub const FADER_KNOB_H: f32 = 11.0;
 
-    /// `.fader-col`'s `height: 104px` — **stated in the CSS rather than
-    /// derived from anything in it**, and the one number in a strip that is
-    /// not type. It is the 104 in the mixer's own 215.5, which is why the
-    /// manual can say four strips never scroll: nothing in the bay gets
-    /// smaller.
+    /// `.fader-col`'s `height: 104px` — stated in the CSS rather than derived from
+    /// anything in it, and the one number in a strip that is not type. It is the
+    /// 104 in the mixer's own 215.5, which is why the manual can say four strips
+    /// never scroll: nothing in the bay gets smaller.
     pub const FADER_COL_H: f32 = 104.0;
 
     /// `.fader-col`'s `gap: 6px`, between the vertical fader and the meter.
@@ -634,24 +621,24 @@ pub mod size {
     /// `.vfader`'s `width: 17px`.
     pub const VFADER_W: f32 = 17.0;
 
-    /// `.vfader b`'s `left: 3px; right: 3px; bottom: 3px`: the fill sits
-    /// inside the track rather than filling it edge to edge, which is what
-    /// makes the track read as a well with something in it.
+    /// `.vfader b`'s `left: 3px; right: 3px; bottom: 3px`: the fill sits inside the
+    /// track rather than filling it edge to edge, which is what makes the track
+    /// read as a well with something in it.
     pub const VFADER_INSET: f32 = 3.0;
 
-    /// `.vfader s`'s `height: 9px`, and its `left: -2px; right: -2px` — a knob
-    /// two pixels proud of the track either side, so [`VFADER_KNOB_W`] wide.
+    /// `.vfader s`'s `height: 9px`, and its `left: -2px; right: -2px` — a knob two
+    /// pixels proud of the track either side, so [`VFADER_KNOB_W`] wide.
     pub const VFADER_KNOB_H: f32 = 9.0;
     pub const VFADER_KNOB_OUT: f32 = 2.0;
     pub const VFADER_KNOB_W: f32 = VFADER_W + VFADER_KNOB_OUT * 2.0;
 
-    /// `.strip.live .vfader s`'s `box-shadow: 0 0 0 1px var(--c-pink),
-    /// 0 0 9px var(--c-glowp)`: the knob of a slot that is on air carries a
-    /// pink rim and a pink halo, and no other knob does.
+    /// `.strip.live .vfader s`'s `box-shadow: 0 0 0 1px var(--c-pink), 0 0 9px
+    /// var(--c-glowp)`: the knob of a slot that is on air carries a pink rim and a
+    /// pink halo, and no other knob does.
     pub const VFADER_KNOB_GLOW: u8 = 9;
 
-    /// `.vmeter`'s `width: 6px` — a third of the fader beside it, which is how
-    /// a reading is told from a control at a glance.
+    /// `.vmeter`'s `width: 6px` — a third of the fader beside it, which is how a
+    /// reading is told from a control at a glance.
     pub const VMETER_W: f32 = 6.0;
 
     /// `.vmeter u`'s `height: 2px`: the peak mark.
@@ -669,20 +656,19 @@ pub mod size {
     /// `.mini`'s `padding: 0 6px`, around text at [`MINI_SIZE`].
     pub const MINI_PAD_X: f32 = 6.0;
 
-    /// A mini's box: [`MINI_SIZE`] at [`LINE`] inside its
-    /// `border: 1px solid var(--c-line)` — **15.5**, which is the 15.5 in the
-    /// mixer's own 215.5. The border is counted because the mock's box model
-    /// is the browser default (`content-box`) for everything except where a
-    /// `box-shadow: inset` draws it, and this one is a real border.
+    /// A mini's box: [`MINI_SIZE`] at [`LINE`] inside its `border: 1px solid
+    /// var(--c-line)` — 15.5, which is the 15.5 in the mixer's own 215.5. The
+    /// border is counted because the mock's box model is the browser default
+    /// (`content-box`) for everything except where a `box-shadow: inset` draws it,
+    /// and this one is a real border.
     pub const MINI_H: f32 = MINI_SIZE * LINE + HAIRLINE * 2.0;
 
-    /// **The whole of a strip**, and it is the sum every other constant in
-    /// this section feeds: `.strip`'s [`STRIP_PAD_Y`] either side of six
-    /// children — the name at 15, the tally at 13.5, the trim at 13.5, the
-    /// fader column's 104, the number at 15 and the modes at 15.5 — with five
-    /// [`STRIP_GAP_Y`]s between them. **215.5**, which is the 215.5 the
-    /// mixer's 316 is written from in `lib.rs`, so a strip is this tall in
-    /// both places or in neither.
+    /// The whole of a strip, and it is the sum every other constant in this section
+    /// feeds: `.strip`'s [`STRIP_PAD_Y`] either side of six children — the name at
+    /// 15, the tally at 13.5, the trim at 13.5, the fader column's 104, the number
+    /// at 15 and the modes at 15.5 — with five [`STRIP_GAP_Y`]s between them.
+    /// 215.5, which is the 215.5 the mixer's 316 is written from in `lib.rs`, so a
+    /// strip is this tall in both places or in neither.
     pub const STRIP_H: f32 = STRIP_PAD_Y * 2.0
         + STRIP_NAME_SIZE * LINE
         + TALLY_H
@@ -694,102 +680,97 @@ pub mod size {
 
     // -- the mixer's transition row -----------------------------------------
 
-    /// `.xfade`'s `padding: 8px 10px 10px`: the ring of card the transition
-    /// row sits inside, under the strips. Three numbers and not two — the
-    /// block is the one in the mixer whose bottom padding is not its top, as
-    /// `.stage-list` is one bay along — so the box is asymmetric down the
-    /// column and even across it. `lib.rs`'s 316 for this bay is written from
-    /// the same 8 and 10 (*"`.xfade` (1px rule, 8 + 10 padding, …)"*), so the
-    /// padding a rectangle is inset by here and the height the arrangement
-    /// reserves are one derivation or neither.
+    /// `.xfade`'s `padding: 8px 10px 10px`: the ring of card the transition row
+    /// sits inside, under the strips. Three numbers and not two — the block is the
+    /// one in the mixer whose bottom padding is not its top, as `.stage-list` is
+    /// one bay along — so the box is asymmetric down the column and even across it.
+    /// `lib.rs`'s 316 for this bay is written from the same 8 and 10 (*"`.xfade`
+    /// (1px rule, 8 + 10 padding, …)"*), so the padding a rectangle is inset by
+    /// here and the height the arrangement reserves are one derivation or neither.
     pub const XFADE_PAD_TOP: f32 = 8.0;
     pub const XFADE_PAD_X: f32 = 10.0;
     pub const XFADE_PAD_BOTTOM: f32 = 10.0;
 
-    /// `.xfade`'s `gap: 7px`, between the two rows the block used to hold.
-    /// **Nothing draws it**, and it is transcribed because something reads
-    /// it: `lib.rs` reserved 61 for this block and 23.5 of that was the
-    /// crossfader's — this gap and a [`PILL_H`] row — so the reservation can
-    /// only be checked against the mock in terms that name the gap.
-    /// `tests/mixer.rs` is where that check is.
+    /// `.xfade`'s `gap: 7px`, between the two rows the block used to hold. Nothing
+    /// draws it, and it is transcribed because something reads it: `lib.rs`
+    /// reserved 61 for this block and 23.5 of that was the crossfader's — this gap
+    /// and a [`PILL_H`] row — so the reservation can only be checked against the
+    /// mock in terms that name the gap. `tests/mixer.rs` is where that check is.
     pub const XFADE_GAP: f32 = 7.0;
 
-    /// `.xrow`'s `gap: 8px`: between two pills of the transition row, and it
-    /// is **between** them and nowhere else — [`STRIP_GAP`]'s reading, one
-    /// row down. What is outside them is [`XFADE_PAD_X`].
+    /// `.xrow`'s `gap: 8px`: between two pills of the transition row, and it is
+    /// between them and nowhere else — [`STRIP_GAP`]'s reading, one row down. What
+    /// is outside them is [`XFADE_PAD_X`].
     pub const XROW_GAP: f32 = 8.0;
 
-    /// **One pill of the transition row**: [`BASE`] at [`LINE`] inside its
-    /// `border: 1px solid var(--c-line)` — **18.5**, which is the box
-    /// [`MINI_H`] and [`REND_H`] are, at the console's own type size.
+    /// One pill of the transition row: [`BASE`] at [`LINE`] inside its `border: 1px
+    /// solid var(--c-line)` — 18.5, which is the box [`MINI_H`] and [`REND_H`] are,
+    /// at the console's own type size.
     ///
-    /// **It is two pixels taller than [`PILL_H`], and that is the border
-    /// rather than a second reading of the row.** `PILL_H` transcribes a pill
-    /// as *what an inline span is* and leaves the border out; this counts it,
-    /// because the mock's box model is the browser default (`content-box`)
-    /// and a pill's is a real border — `MINI_H`'s own sentence, and `REND_H`
-    /// says it again for a chip at this size.
-    /// **`lib.rs`'s derivation of this bay is written from the 18.5** —
-    /// *"a 16.5 row, a 7px gap and an 18.5 row"*, where the 18.5 is this row
-    /// — so the pill this console draws here and the pill the bay's height
-    /// was reserved for are one number. The bay-head pills are not changed to
-    /// match, which is a transcription worth revisiting and not this row's to
-    /// revisit.
+    /// It is two pixels taller than [`PILL_H`], and that is the border rather than
+    /// a second reading of the row. `PILL_H` transcribes a pill as *what an inline
+    /// span is* and leaves the border out; this counts it, because the mock's box
+    /// model is the browser default (`content-box`) and a pill's is a real border —
+    /// `MINI_H`'s own sentence, and `REND_H` says it again for a chip at this size.
+    /// `lib.rs`'s derivation of this bay is written from the 18.5 — *"a 16.5 row, a
+    /// 7px gap and an 18.5 row"*, where the 18.5 is this row — so the pill this
+    /// console draws here and the pill the bay's height was reserved for are one
+    /// number. The bay-head pills are not changed to match, which is a
+    /// transcription worth revisiting and not this row's to revisit.
     pub const XPILL_H: f32 = BASE * LINE + HAIRLINE * 2.0;
 
-    /// **The transition row's box**: one [`XPILL_H`] pill inside
-    /// [`XFADE_PAD_TOP`] and [`XFADE_PAD_BOTTOM`], plus the one pixel of the
-    /// rule above it — [`HAIRLINE`], which is `.xfade`'s own
-    /// `border-top: 1px solid var(--c-hair)` and the same pixel every other
-    /// rule in the mock is drawn at. **37.5**, which is what `lib.rs` says
-    /// the block is in the mock now that the crossfader has gone from it, so
-    /// the rectangle this console carves and the height the mock draws are
-    /// one derivation or neither.
+    /// The transition row's box: one [`XPILL_H`] pill inside [`XFADE_PAD_TOP`] and
+    /// [`XFADE_PAD_BOTTOM`], plus the one pixel of the rule above it —
+    /// [`HAIRLINE`], which is `.xfade`'s own `border-top: 1px solid var(--c-hair)`
+    /// and the same pixel every other rule in the mock is drawn at. 37.5, which is
+    /// what `lib.rs` says the block is in the mock now that the crossfader has gone
+    /// from it, so the rectangle this console carves and the height the mock draws
+    /// are one derivation or neither.
     pub const XFADE_H: f32 = HAIRLINE + XFADE_PAD_TOP + XPILL_H + XFADE_PAD_BOTTOM;
 
     // -- the master bay's out row -------------------------------------------
 
-    /// `.master-body`'s `padding: 8px 10px 10px`: the ring of card the bay's
-    /// rows sit inside, under the bay head. Two constants because the top and
-    /// the sides differ and the bottom is the sides' number again — the one
-    /// row this bay draws is measured off the first two, and the third is
-    /// under the chain nothing draws yet.
+    /// `.master-body`'s `padding: 8px 10px 10px`: the ring of card the bay's rows
+    /// sit inside, under the bay head. Two constants because the top and the sides
+    /// differ and the bottom is the sides' number again — the one row this bay
+    /// draws is measured off the first two, and the third is under the chain
+    /// nothing draws yet.
     pub const MASTER_PAD_X: f32 = 10.0;
     pub const MASTER_PAD_TOP: f32 = 8.0;
 
     /// `.master-row`'s `gap: 8px`, between the `out` label, the track and the
-    /// figure. Not [`TRIM_GAP`]'s 5: the mixer's trim is a label against a
-    /// track inside a 53-wide strip and this row is the width of a bay.
+    /// figure. Not [`TRIM_GAP`]'s 5: the mixer's trim is a label against a track
+    /// inside a 53-wide strip and this row is the width of a bay.
     pub const MASTER_GAP: f32 = 8.0;
 
-    /// **The out row**, which is one line of type: the tallest thing in it is
-    /// the label and the figure, both at [`BASE`], and the track is 5.
-    /// `lib.rs`'s minimum for this bay is written from the same 16.5 — *"the
-    /// out row 16.5"* — so the row a rectangle is given here and the height
-    /// the arrangement reserves are one number or neither.
+    /// The out row, which is one line of type: the tallest thing in it is the label
+    /// and the figure, both at [`BASE`], and the track is 5. `lib.rs`'s minimum for
+    /// this bay is written from the same 16.5 — *"the out row 16.5"* — so the row a
+    /// rectangle is given here and the height the arrangement reserves are one
+    /// number or neither.
     pub const MASTER_ROW_H: f32 = BASE * LINE;
 
     // -- the master bay's three effect rows ---------------------------------
 
-    /// `.master-body`'s `gap: 8px`, between the out row and the first effect
-    /// row and between the effect rows. The same number as [`MASTER_GAP`] and
-    /// a constant of its own, because they are two rules in the stylesheet —
-    /// one is the gap *inside* a row and one is the gap *between* rows, and a
-    /// change to either is a change to one of them.
+    /// `.master-body`'s `gap: 8px`, between the out row and the first effect row
+    /// and between the effect rows. The same number as [`MASTER_GAP`] and a
+    /// constant of its own, because they are two rules in the stylesheet — one is
+    /// the gap *inside* a row and one is the gap *between* rows, and a change to
+    /// either is a change to one of them.
     pub const MASTER_STACK_GAP: f32 = 8.0;
 
-    /// `.fx`'s `padding: 4px 8px`, `gap: 7px` and `border-radius: 8px`: one
-    /// effect of the master chain, drawn as a well with a dot, a name, a track
-    /// and a figure in it.
+    /// `.fx`'s `padding: 4px 8px`, `gap: 7px` and `border-radius: 8px`: one effect
+    /// of the master chain, drawn as a well with a dot, a name, a track and a
+    /// figure in it.
     pub const FX_PAD_X: f32 = 8.0;
     pub const FX_PAD_Y: f32 = 4.0;
     pub const FX_GAP: f32 = 7.0;
     pub const FX_RADIUS: u8 = 8;
 
-    /// **One effect row**, which is `lib.rs`'s *"one `.fx` at 4 + 16.5 + 4"* —
-    /// the same 24.5 the arrangement's minimum for this bay reserves, so the
-    /// row a rectangle is given here and the height the arrangement keeps for
-    /// it are one derivation.
+    /// One effect row, which is `lib.rs`'s *"one `.fx` at 4 + 16.5 + 4"* — the same
+    /// 24.5 the arrangement's minimum for this bay reserves, so the row a rectangle
+    /// is given here and the height the arrangement keeps for it are one
+    /// derivation.
     pub const FX_H: f32 = FX_PAD_Y * 2.0 + BASE * LINE;
 
     /// `.fx .dot`'s `width: 6px` — square, and drawn as a circle by its own
@@ -798,427 +779,414 @@ pub mod size {
 
     // -- the library's scopes -----------------------------------------------
 
-    /// `.scopes`'s `padding: 7px 9px` and its `gap: 4px`: the row of chips
-    /// between the bay head and the list, which says *which library is being
-    /// listed* rather than what is in it.
+    /// `.scopes`'s `padding: 7px 9px` and its `gap: 4px`: the row of chips between
+    /// the bay head and the list, which says *which library is being listed* rather
+    /// than what is in it.
     pub const SCOPES_PAD_X: f32 = 9.0;
     pub const SCOPES_PAD_Y: f32 = 7.0;
     pub const SCOPES_GAP: f32 = 4.0;
 
-    /// `.scope`'s `padding: 0 8px`, around one scope's word at [`BASE`]. The
-    /// same padding a [`PILL_PAD_X`] is and a different chip: a `.pill` is a
-    /// control in a bay head and this is one of a row of questions under one.
+    /// `.scope`'s `padding: 0 8px`, around one scope's word at [`BASE`]. The same
+    /// padding a [`PILL_PAD_X`] is and a different chip: a `.pill` is a control in
+    /// a bay head and this is one of a row of questions under one.
     pub const SCOPE_PAD_X: f32 = 8.0;
 
-    /// One chip's box: [`BASE`] at [`LINE`], with **no border to count** —
-    /// `.scope` draws none where the `.rend` chips in the inspector each draw
-    /// one, so this is [`PILL_H`]'s number and not [`REND_H`]'s. **16.5**.
+    /// One chip's box: [`BASE`] at [`LINE`], with no border to count — `.scope`
+    /// draws none where the `.rend` chips in the inspector each draw one, so this
+    /// is [`PILL_H`]'s number and not [`REND_H`]'s. 16.5.
     pub const SCOPE_H: f32 = BASE * LINE;
 
-    /// The scope row's box: one chip inside [`SCOPES_PAD_Y`], plus the one
-    /// pixel of the rule under it — [`HAIRLINE`], which is `.scopes`'s own
-    /// border-bottom and the same pixel every other rule in the mock is drawn
-    /// at. **31.5**, which is what `lib.rs`'s minimum for this bay counts now:
-    /// that sum said 31 while this row was undrawn — the rule left out and
-    /// what was left rounded up — and it is written from this constant's own
-    /// terms now, as [`LIB_FOOT_H`] is.
+    /// The scope row's box: one chip inside [`SCOPES_PAD_Y`], plus the one pixel of
+    /// the rule under it — [`HAIRLINE`], which is `.scopes`'s own border-bottom and
+    /// the same pixel every other rule in the mock is drawn at. 31.5, which is what
+    /// `lib.rs`'s minimum for this bay counts now: that sum said 31 while this row
+    /// was undrawn — the rule left out and what was left rounded up — and it is
+    /// written from this constant's own terms now, as [`LIB_FOOT_H`] is.
     ///
-    /// **One row and not a wrap**, which is [`REND_ROW_H`]'s rule one bay
-    /// along: `.scopes` carries a wrapping flex and this console draws the
-    /// chips that fit in one row of it.
+    /// One row and not a wrap, which is [`REND_ROW_H`]'s rule one bay along:
+    /// `.scopes` carries a wrapping flex and this console draws the chips that fit
+    /// in one row of it.
     pub const SCOPES_H: f32 = SCOPES_PAD_Y * 2.0 + SCOPE_H + HAIRLINE;
 
     // -- the library's path row ---------------------------------------------
 
-    /// `.path`'s `padding: 4px 10px`, around the directory this library is
-    /// pointed at. The row between the scope row and the filters, and the one
-    /// row of this bay's furniture that is drawn only sometimes — until a
-    /// folder has been dropped on the window there is no path and no row
-    /// (ADR-0275).
+    /// `.path`'s `padding: 4px 10px`, around the directory this library is pointed
+    /// at. The row between the scope row and the filters, and the one row of this
+    /// bay's furniture that is drawn only sometimes — until a folder has been
+    /// dropped on the window there is no path and no row (ADR-0275).
     pub const PATH_PAD_X: f32 = 10.0;
     pub const PATH_PAD_Y: f32 = 4.0;
 
-    /// `.path`'s `font-size: 10px`: the directory, and the only type in the
-    /// row. [`LIB_FOOT_SIZE`]'s number at the other end of the bay and for the
-    /// mock's own reason — the small type is what this bay draws everything a
-    /// row is not named by in.
+    /// `.path`'s `font-size: 10px`: the directory, and the only type in the row.
+    /// [`LIB_FOOT_SIZE`]'s number at the other end of the bay and for the mock's
+    /// own reason — the small type is what this bay draws everything a row is not
+    /// named by in.
     pub const PATH_SIZE: f32 = 10.0;
 
-    /// The path row's box: [`PATH_SIZE`] at [`LINE`] inside [`PATH_PAD_Y`],
-    /// plus the one pixel of the rule under it — [`HAIRLINE`], which is
-    /// `.path`'s own border-bottom and the same pixel every other rule in the
-    /// mock is drawn at. **24**, which is shorter than the two rows either
-    /// side of it because the type in it is the foot's 10 rather than the
-    /// console's [`BASE`].
+    /// The path row's box: [`PATH_SIZE`] at [`LINE`] inside [`PATH_PAD_Y`], plus
+    /// the one pixel of the rule under it — [`HAIRLINE`], which is `.path`'s own
+    /// border-bottom and the same pixel every other rule in the mock is drawn at.
+    /// 24, which is shorter than the two rows either side of it because the type in
+    /// it is the foot's 10 rather than the console's [`BASE`].
     pub const PATH_H: f32 = PATH_PAD_Y * 2.0 + PATH_SIZE * LINE + HAIRLINE;
 
     // -- the library's filter field and its kind chips ------------------------
 
-    /// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row under
-    /// the scope row, which narrows what the marked library answers where the
-    /// chips above it say *which* library is being read.
+    /// `.lib-filters`'s `padding: 6px 9px` and its `gap: 5px`: the row under the
+    /// scope row, which narrows what the marked library answers where the chips
+    /// above it say *which* library is being read.
     ///
-    /// **The gap is kept and nothing is drawn either side of it**, which is
-    /// worth a sentence rather than a deletion: the row held two fields until
-    /// 2026-09-10, and ADR-0338 retired `layer…` for the six toggles in
-    /// [`LIB_KINDS_H`]'s own row. `.lib-filters` still declares `gap: 5px` and
-    /// still would space a second field, so the number stays where the page's
-    /// own declaration is rather than being taken out of a transcription of it.
+    /// The gap is kept and nothing is drawn either side of it, which is worth a
+    /// sentence rather than a deletion: the row held two fields until 2026-09-10,
+    /// and ADR-0338 retired `layer…` for the six toggles in [`LIB_KINDS_H`]'s own
+    /// row. `.lib-filters` still declares `gap: 5px` and still would space a second
+    /// field, so the number stays where the page's own declaration is rather than
+    /// being taken out of a transcription of it.
     pub const LIB_FILTERS_PAD_X: f32 = 9.0;
     pub const LIB_FILTERS_PAD_Y: f32 = 6.0;
     pub const LIB_FILTERS_GAP: f32 = 5.0;
 
-    /// `.field`'s `padding: 0 9px`, around the word in it at [`BASE`]. The
-    /// vertical half of that declaration is zero, which is why the box below
-    /// is the type's own height and its border and nothing else.
+    /// `.field`'s `padding: 0 9px`, around the word in it at [`BASE`]. The vertical
+    /// half of that declaration is zero, which is why the box below is the type's
+    /// own height and its border and nothing else.
     pub const FIELD_PAD_X: f32 = 9.0;
 
-    /// One field's box: [`BASE`] at [`LINE`] inside its
-    /// `border: 1px solid var(--c-line)` — **18.5**, which is [`XPILL_H`]'s
-    /// arithmetic one bay along and for the same reason, a bordered capsule
-    /// round one line of type. The border is counted because the mock's box
-    /// model is the browser default (`content-box`) and this one is a real
-    /// border — [`MINI_H`]'s own sentence, at the console's own type size.
+    /// One field's box: [`BASE`] at [`LINE`] inside its `border: 1px solid
+    /// var(--c-line)` — 18.5, which is [`XPILL_H`]'s arithmetic one bay along and
+    /// for the same reason, a bordered capsule round one line of type. The border
+    /// is counted because the mock's box model is the browser default
+    /// (`content-box`) and this one is a real border — [`MINI_H`]'s own sentence,
+    /// at the console's own type size.
     pub const FIELD_H: f32 = BASE * LINE + HAIRLINE * 2.0;
 
-    /// The filter row's box: one field inside [`LIB_FILTERS_PAD_Y`], plus the
-    /// one pixel of the rule under it — [`HAIRLINE`], which is
-    /// `.lib-filters`'s own border-bottom and the same pixel every other rule
-    /// in the mock is drawn at. **31.5**, which is [`SCOPES_H`]'s number one
-    /// row up and reached by different arithmetic: a field is two pixels of
-    /// border taller than a chip and stands inside a pixel less padding above
-    /// and below, so the two rows land on the same height without either
-    /// being read off the other.
+    /// The filter row's box: one field inside [`LIB_FILTERS_PAD_Y`], plus the one
+    /// pixel of the rule under it — [`HAIRLINE`], which is `.lib-filters`'s own
+    /// border-bottom and the same pixel every other rule in the mock is drawn at.
+    /// 31.5, which is [`SCOPES_H`]'s number one row up and reached by different
+    /// arithmetic: a field is two pixels of border taller than a chip and stands
+    /// inside a pixel less padding above and below, so the two rows land on the
+    /// same height without either being read off the other.
     pub const LIB_FILTERS_H: f32 = LIB_FILTERS_PAD_Y * 2.0 + FIELD_H + HAIRLINE;
 
-    /// `.lib-kinds`'s `padding: 5px 9px` and its `gap: 4px`: the row of six
-    /// toggles under the filter field, which says which kinds of row the
-    /// listing holds (ADR-0338).
+    /// `.lib-kinds`'s `padding: 5px 9px` and its `gap: 4px`: the row of six toggles
+    /// under the filter field, which says which kinds of row the listing holds
+    /// (ADR-0338).
     ///
-    /// **Its own band and not room made beside the field**, which is
-    /// `style.css`'s own note: `.field` carries `flex: 1`, and six chips
-    /// sharing one row with it in a bay this narrow would leave the chips a few
-    /// pixels each — a chip nobody can hit is not a control.
+    /// Its own band and not room made beside the field, which is `style.css`'s own
+    /// note: `.field` carries `flex: 1`, and six chips sharing one row with it in a
+    /// bay this narrow would leave the chips a few pixels each — a chip nobody can
+    /// hit is not a control.
     pub const LIB_KINDS_PAD_X: f32 = 9.0;
     pub const LIB_KINDS_PAD_Y: f32 = 5.0;
     pub const LIB_KINDS_GAP: f32 = 4.0;
 
-    /// `.kind`'s `font-size: 9px` and its `padding: 0 6px`, around the word in
-    /// it. The vertical half of that padding is zero, which is why the box
-    /// below is the type's own height and nothing else — [`FIELD_H`]'s own
-    /// sentence at a smaller size, and with the border **not** counted for the
-    /// reason a `.kind.on` has none to count: the lit chip trades its border
-    /// for a wash, so a height that included one would move six chips whenever
-    /// one was pressed.
+    /// `.kind`'s `font-size: 9px` and its `padding: 0 6px`, around the word in it.
+    /// The vertical half of that padding is zero, which is why the box below is the
+    /// type's own height and nothing else — [`FIELD_H`]'s own sentence at a smaller
+    /// size, and with the border not counted for the reason a `.kind.on` has none
+    /// to count: the lit chip trades its border for a wash, so a height that
+    /// included one would move six chips whenever one was pressed.
     pub const KIND_SIZE: f32 = 9.0;
     pub const KIND_PAD_X: f32 = 6.0;
 
-    /// One kind chip's box: [`KIND_SIZE`] at [`LINE`] — **13.5**.
+    /// One kind chip's box: [`KIND_SIZE`] at [`LINE`] — 13.5.
     pub const KIND_H: f32 = KIND_SIZE * LINE;
 
-    /// The kind row's box: one chip inside [`LIB_KINDS_PAD_Y`], plus the one
-    /// pixel of the rule under it — [`HAIRLINE`], which is `.lib-kinds`'s own
-    /// border-bottom and the same pixel every other rule in this bay is drawn
-    /// at. **24.5**.
+    /// The kind row's box: one chip inside [`LIB_KINDS_PAD_Y`], plus the one pixel
+    /// of the rule under it — [`HAIRLINE`], which is `.lib-kinds`'s own
+    /// border-bottom and the same pixel every other rule in this bay is drawn at.
+    /// 24.5.
     pub const LIB_KINDS_H: f32 = LIB_KINDS_PAD_Y * 2.0 + KIND_H + HAIRLINE;
 
     // -- a row's badges -------------------------------------------------------
 
     /// `.badge`'s `font-size: 8px` and its `padding: 0 4px`, around the layer's
-    /// word; `.badges`' `gap: 3px` between two of them. What a badge says is
-    /// which layers a row implements, and it is a readout: nothing here is
-    /// pressed, and what narrows the list by kind is the row of chips above
-    /// (ADR-0338).
+    /// word; `.badges`' `gap: 3px` between two of them. What a badge says is which
+    /// layers a row implements, and it is a readout: nothing here is pressed, and
+    /// what narrows the list by kind is the row of chips above (ADR-0338).
     pub const BADGE_SIZE: f32 = 8.0;
     pub const BADGE_PAD_X: f32 = 4.0;
     pub const BADGE_GAP: f32 = 3.0;
 
-    /// One badge's box: [`BADGE_SIZE`] at [`LINE`] — **12**. Its
-    /// `border: 1px solid var(--c-hair)` is not counted, for [`KIND_H`]'s
-    /// reason read the other way: every badge draws one, so counting it would
-    /// move the whole row and change nothing about which of them is taller.
+    /// One badge's box: [`BADGE_SIZE`] at [`LINE`] — 12. Its `border: 1px solid
+    /// var(--c-hair)` is not counted, for [`KIND_H`]'s reason read the other way:
+    /// every badge draws one, so counting it would move the whole row and change
+    /// nothing about which of them is taller.
     pub const BADGE_H: f32 = BADGE_SIZE * LINE;
 
-    /// `.badge`'s `border-radius: 3px`, which is the one rounded box in this
-    /// bay that is not a capsule: a badge is as tall as one line of very small
-    /// type, and a `999px` radius on it would be a lozenge round two letters.
+    /// `.badge`'s `border-radius: 3px`, which is the one rounded box in this bay
+    /// that is not a capsule: a badge is as tall as one line of very small type,
+    /// and a `999px` radius on it would be a lozenge round two letters.
     pub const BADGE_RADIUS: f32 = 3.0;
 
     // -- the library's list -------------------------------------------------
 
-    /// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside,
-    /// under the bay head and the scope row. The library's minimum of 158 in
-    /// `lib.rs` is written from the same 3 — *"a list of three rows (3 + 3 of
-    /// `.lib-list` padding, plus 3 x 22.5)"* — so the padding a rectangle is
-    /// inset by here and the minimum the bay declares are one number or
-    /// neither.
+    /// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside, under
+    /// the bay head and the scope row. The library's minimum of 158 in `lib.rs` is
+    /// written from the same 3 — *"a list of three rows (3 + 3 of `.lib-list`
+    /// padding, plus 3 x 22.5)"* — so the padding a rectangle is inset by here and
+    /// the minimum the bay declares are one number or neither.
     pub const LIB_LIST_PAD: f32 = 3.0;
 
-    /// `.lib-row`'s `padding: 3px 7px`, around a Set's name at [`BASE`]. The
-    /// rows stack with no gap between them: `.lib-list` is a column flex with
-    /// no `gap` at all, which is the one list in the mock that has none.
+    /// `.lib-row`'s `padding: 3px 7px`, around a Set's name at [`BASE`]. The rows
+    /// stack with no gap between them: `.lib-list` is a column flex with no `gap`
+    /// at all, which is the one list in the mock that has none.
     pub const LIB_ROW_PAD_X: f32 = 7.0;
     pub const LIB_ROW_PAD_Y: f32 = 3.0;
 
-    /// A row's box: [`BASE`] at [`LINE`] inside that padding — **22.5**, which
-    /// is the 22.5 the library's minimum of 158 is written from in `lib.rs`,
-    /// so a row is this tall in both places or in neither.
+    /// A row's box: [`BASE`] at [`LINE`] inside that padding — 22.5, which is the
+    /// 22.5 the library's minimum of 158 is written from in `lib.rs`, so a row is
+    /// this tall in both places or in neither.
     pub const LIB_ROW_H: f32 = BASE * LINE + LIB_ROW_PAD_Y * 2.0;
 
-    /// `.lib-row`'s `border-radius: 7px`, which nothing in this bay draws
-    /// until a row is under the cursor: the wash behind that one row is the
-    /// only fill a row ever has, and a square-cornered fill inside a card
-    /// rounded at [`BAY_RADIUS`] is the one shape the mock never draws.
+    /// `.lib-row`'s `border-radius: 7px`, which nothing in this bay draws until a
+    /// row is under the cursor: the wash behind that one row is the only fill a row
+    /// ever has, and a square-cornered fill inside a card rounded at [`BAY_RADIUS`]
+    /// is the one shape the mock never draws.
     pub const LIB_ROW_RADIUS: f32 = 7.0;
 
-    /// `.lib-foot`'s `padding: 5px 10px`, around the count at
-    /// [`LIB_FOOT_SIZE`].
+    /// `.lib-foot`'s `padding: 5px 10px`, around the count at [`LIB_FOOT_SIZE`].
     pub const LIB_FOOT_PAD_X: f32 = 10.0;
     pub const LIB_FOOT_PAD_Y: f32 = 5.0;
 
-    /// `.lib-foot`'s `font-size: 10px`: how many rows are listed of how many
-    /// there are, and the only type in the row.
+    /// `.lib-foot`'s `font-size: 10px`: how many rows are listed of how many there
+    /// are, and the only type in the row.
     pub const LIB_FOOT_SIZE: f32 = 10.0;
 
-    /// The foot's box: [`LIB_FOOT_SIZE`] at [`LINE`] inside that padding, plus
-    /// the one pixel of the rule above it — [`HAIRLINE`], which is
-    /// `.lib-foot`'s own border-top and the same pixel every other rule in the
-    /// mock is drawn at. **26**, and the library's minimum of 158 in `lib.rs`
-    /// is written from it — as it is from [`SCOPES_H`], and as it was from
-    /// neither while this row and that one were undrawn.
+    /// The foot's box: [`LIB_FOOT_SIZE`] at [`LINE`] inside that padding, plus the
+    /// one pixel of the rule above it — [`HAIRLINE`], which is `.lib-foot`'s own
+    /// border-top and the same pixel every other rule in the mock is drawn at. 26,
+    /// and the library's minimum of 158 in `lib.rs` is written from it — as it is
+    /// from [`SCOPES_H`], and as it was from neither while this row and that one
+    /// were undrawn.
     pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 
     /// `.lib-foot`'s `gap: 8px`, between the count, the `params` chip and the
-    /// `load` pill. It is the row's only spacing that is not padding: `.sep`
-    /// takes whatever is left over, so this is what separates the two capsules
-    /// at the right-hand end of the row and nothing else.
+    /// `load` pill. It is the row's only spacing that is not padding: `.sep` takes
+    /// whatever is left over, so this is what separates the two capsules at the
+    /// right-hand end of the row and nothing else.
     pub const LIB_FOOT_GAP: f32 = 8.0;
 
-    /// **The air either side of a row menu's separator** — `.rowmenu .rule`'s
-    /// `margin: 4px 6px`, the vertical half of it. The horizontal half is the
-    /// hairline's own inset from the card's edge and is drawn rather than laid
-    /// out, so it is not a constant here.
+    /// The air either side of a row menu's separator — `.rowmenu .rule`'s `margin:
+    /// 4px 6px`, the vertical half of it. The horizontal half is the hairline's own
+    /// inset from the card's edge and is drawn rather than laid out, so it is not a
+    /// constant here.
     pub const ROW_MENU_RULE_PAD: f32 = 4.0;
 
-    /// **A row menu's separator band**: the air, the hairline and the air
-    /// again. It is a band and not a row, because nothing in it is a control —
-    /// [`LIB_ROW_H`] is what an item is tall and this is what the space
-    /// between the loads and the send is.
+    /// A row menu's separator band: the air, the hairline and the air again. It is
+    /// a band and not a row, because nothing in it is a control — [`LIB_ROW_H`] is
+    /// what an item is tall and this is what the space between the loads and the
+    /// send is.
     pub const ROW_MENU_RULE_H: f32 = ROW_MENU_RULE_PAD * 2.0 + HAIRLINE;
 
-    /// **The narrowest a row menu's card is drawn** — `.rowmenu`'s
-    /// `min-width: 124px`. The items are as wide as the words in them and
-    /// `Save as a kbset` is the longest of the six, so this is only ever
-    /// reached by a face narrower than the mock's.
+    /// The narrowest a row menu's card is drawn — `.rowmenu`'s `min-width: 124px`.
+    /// The items are as wide as the words in them and `Save as a kbset` is the
+    /// longest of the six, so this is only ever reached by a face narrower than the
+    /// mock's.
     pub const ROW_MENU_MIN_W: f32 = 124.0;
 
-    /// **How far in from the row's left edge the card hangs** — `.rowmenu`'s
-    /// `left: 22px`, which puts it clear of the star and under the name the
-    /// press landed on rather than under the mark beside it.
+    /// How far in from the row's left edge the card hangs — `.rowmenu`'s `left:
+    /// 22px`, which puts it clear of the star and under the name the press landed
+    /// on rather than under the mark beside it.
     pub const ROW_MENU_INSET: f32 = 22.0;
 
     // -- the library's reading ----------------------------------------------
 
-    /// **The box a reading stands in**, opened under the row the cursor is on:
+    /// The box a reading stands in, opened under the row the cursor is on:
     /// `docs/manual/console.html`'s `margin: 2px 2px 3px`, inline on the one
     /// element in that bay the stylesheet carries no rule for.
     ///
-    /// Three numbers and not two, which is [`STAGE_LIST_PAD_BOTTOM`]'s shape
-    /// one bay along: the box stands a pixel further off the row under it than
-    /// off the row above it, because what is under it is the next Set and what
-    /// is above it is the Set this reading is of.
+    /// Three numbers and not two, which is [`STAGE_LIST_PAD_BOTTOM`]'s shape one
+    /// bay along: the box stands a pixel further off the row under it than off the
+    /// row above it, because what is under it is the next Set and what is above it
+    /// is the Set this reading is of.
     ///
-    /// **Cited to the markup rather than to a selector**, which is
-    /// [`PILL_GAP`]'s case and the second of two: the mock sets this box's
-    /// whole appearance inline, and `style.css` genuinely carries no `.reading`
-    /// rule to point at. The note *Reading a Set before you spend a load on it*
-    /// says why there is none — *"No new CSS: every class it uses is already in
-    /// the stylesheet"*.
+    /// Cited to the markup rather than to a selector, which is [`PILL_GAP`]'s case
+    /// and the second of two: the mock sets this box's whole appearance inline, and
+    /// `style.css` genuinely carries no `.reading` rule to point at. The note
+    /// *Reading a Set before you spend a load on it* says why there is none — *"No
+    /// new CSS: every class it uses is already in the stylesheet"*.
     pub const READING_MARGIN_X: f32 = 2.0;
     pub const READING_MARGIN_TOP: f32 = 2.0;
     pub const READING_MARGIN_BOTTOM: f32 = 3.0;
 
-    /// The same box's `docs/manual/console.html`'s `border-radius: 8px`, which
-    /// is [`CAND_RADIUS`]' number one bay along and not [`LIB_ROW_RADIUS`]'s
-    /// row radius: this is a well with rows in it, drawn at the radius the
-    /// mock gives every well it draws — `.cand` and `.fx` are both 8.
+    /// The same box's `docs/manual/console.html`'s `border-radius: 8px`, which is
+    /// [`CAND_RADIUS`]' number one bay along and not [`LIB_ROW_RADIUS`]'s row
+    /// radius: this is a well with rows in it, drawn at the radius the mock gives
+    /// every well it draws — `.cand` and `.fx` are both 8.
     pub const READING_RADIUS: f32 = 8.0;
 
     /// A reading's row is a `.lib-row` with its left padding overridden —
-    /// `docs/manual/console.html`'s `padding-left: 18px`, inline on each of
-    /// them. **The indent is the whole of what says these rows are not Sets**:
-    /// they are drawn in the same box at the same height inside the same list,
-    /// so a reading drawn flush with the names above it would read as Sets
-    /// nested under a Set.
+    /// `docs/manual/console.html`'s `padding-left: 18px`, inline on each of them.
+    /// The indent is the whole of what says these rows are not Sets: they are drawn
+    /// in the same box at the same height inside the same list, so a reading drawn
+    /// flush with the names above it would read as Sets nested under a Set.
     pub const READING_PAD_X: f32 = 18.0;
 
     // -- the staging lane's candidates --------------------------------------
 
-    /// `.stage-list`'s `padding: 6px 9px 8px`: the ring of card the candidate
-    /// rows sit inside, under the bay head. Three numbers and not two — the
-    /// lane is the one list in the mock whose bottom padding is not its top —
-    /// so the list's box is asymmetric down the column and even across it.
-    /// `lib.rs`'s 125 for this bay is written from the same 6 and 8 — *"6 + 8
-    /// of `.stage-list` padding"* — so the padding a rectangle is inset by
-    /// here and the height the arrangement reserves are one derivation or
-    /// neither.
+    /// `.stage-list`'s `padding: 6px 9px 8px`: the ring of card the candidate rows
+    /// sit inside, under the bay head. Three numbers and not two — the lane is the
+    /// one list in the mock whose bottom padding is not its top — so the list's box
+    /// is asymmetric down the column and even across it. `lib.rs`'s 125 for this
+    /// bay is written from the same 6 and 8 — *"6 + 8 of `.stage-list` padding"* —
+    /// so the padding a rectangle is inset by here and the height the arrangement
+    /// reserves are one derivation or neither.
     pub const STAGE_LIST_PAD_TOP: f32 = 6.0;
     pub const STAGE_LIST_PAD_X: f32 = 9.0;
     pub const STAGE_LIST_PAD_BOTTOM: f32 = 8.0;
 
-    /// `.stage-list`'s `gap: 5px`, between one candidate row and the next.
-    /// **The one list in this console that has a gap** — `.lib-list` states
-    /// none and its rows are flush — and it is the same 5 `lib.rs`'s 125 is
-    /// written from (*"two 5px gaps"*).
+    /// `.stage-list`'s `gap: 5px`, between one candidate row and the next. The one
+    /// list in this console that has a gap — `.lib-list` states none and its rows
+    /// are flush — and it is the same 5 `lib.rs`'s 125 is written from (*"two 5px
+    /// gaps"*).
     pub const STAGE_GAP: f32 = 5.0;
 
     /// `.cand`'s `padding: 4px 7px`, around the row's own type at [`BASE`].
     pub const CAND_PAD_X: f32 = 7.0;
     pub const CAND_PAD_Y: f32 = 4.0;
 
-    /// A candidate row's box: [`BASE`] at [`LINE`] inside that padding —
-    /// **24.5**, which is the 24.5 `lib.rs`'s 125 and its minimum of 66 are
-    /// both written from (*"three `.cand` rows at 4 + 16.5 + 4"*), so a row is
-    /// this tall in both places or in neither.
+    /// A candidate row's box: [`BASE`] at [`LINE`] inside that padding — 24.5,
+    /// which is the 24.5 `lib.rs`'s 125 and its minimum of 66 are both written from
+    /// (*"three `.cand` rows at 4 + 16.5 + 4"*), so a row is this tall in both
+    /// places or in neither.
     pub const CAND_H: f32 = BASE * LINE + CAND_PAD_Y * 2.0;
 
     /// `.cand`'s `border-radius: 8px`, one shade tighter than the bay's
-    /// [`BAY_RADIUS`] because the row is inside it — [`PREVIEW_RADIUS`]'s
-    /// relation to the same bay, one column along.
+    /// [`BAY_RADIUS`] because the row is inside it — [`PREVIEW_RADIUS`]'s relation
+    /// to the same bay, one column along.
     pub const CAND_RADIUS: f32 = 8.0;
 
-    /// `.cand`'s `gap: 6px`, between the deck the candidate landed on and what
-    /// it is called.
+    /// `.cand`'s `gap: 6px`, between the deck the candidate landed on and what it
+    /// is called.
     pub const CAND_GAP: f32 = 6.0;
 
     /// `.cand .who`'s `font-size: 10px`: the small type at the far end of a
-    /// candidate row. The mock puts the producer there and this console puts
-    /// the verdict — see [`crate::view::staging`], which is where that
-    /// substitution is argued.
+    /// candidate row. The mock puts the producer there and this console puts the
+    /// verdict — see [`crate::view::staging`], which is where that substitution is
+    /// argued.
     pub const CAND_WHO_SIZE: f32 = 10.0;
 
     // -- the inspector's panes ----------------------------------------------
 
-    /// `.half-head`'s `padding: 5px 10px` and its `gap: 6px`: the row that
-    /// says *which* deck a pane is showing, above the deck head that says what
-    /// that deck is doing.
+    /// `.half-head`'s `padding: 5px 10px` and its `gap: 6px`: the row that says
+    /// *which* deck a pane is showing, above the deck head that says what that deck
+    /// is doing.
     pub const HALF_HEAD_PAD_X: f32 = 10.0;
     pub const HALF_HEAD_PAD_Y: f32 = 5.0;
     pub const HALF_HEAD_GAP: f32 = 6.0;
 
-    /// The pane head's box: [`BASE`] at [`LINE`] inside that padding, plus the
-    /// one pixel of its own `border-bottom: 1px solid var(--c-hair)` —
-    /// **27.5**, which is the 27.5 the inspector's minimum of 151.5 is written
-    /// from in `lib.rs`, so the row is this tall in both places or in neither.
+    /// The pane head's box: [`BASE`] at [`LINE`] inside that padding, plus the one
+    /// pixel of its own `border-bottom: 1px solid var(--c-hair)` — 27.5, which is
+    /// the 27.5 the inspector's minimum of 151.5 is written from in `lib.rs`, so
+    /// the row is this tall in both places or in neither.
     pub const HALF_HEAD_H: f32 = HALF_HEAD_PAD_Y * 2.0 + BASE * LINE + HAIRLINE;
 
-    /// `.deck-head`'s `padding: 5px 10px` and its `gap: 6px`: the strip of
-    /// chips that heads a *deck* rather than a bay — its clock and its fold.
+    /// `.deck-head`'s `padding: 5px 10px` and its `gap: 6px`: the strip of chips
+    /// that heads a *deck* rather than a bay — its clock and its fold.
     pub const DECK_HEAD_PAD_X: f32 = 10.0;
     pub const DECK_HEAD_PAD_Y: f32 = 5.0;
     pub const DECK_HEAD_GAP: f32 = 6.0;
 
-    /// The deck head's box: a [`MINI_H`] chip inside that padding — **25.5**,
-    /// which is the stylesheet's own arithmetic for the row (*"the tallest
-    /// thing in it is a `.mini` at 15.5, so the row is 5 + 15.5 + 5"*) and the
-    /// 25.5 the inspector's minimum of 151.5 is written from in `lib.rs`.
+    /// The deck head's box: a [`MINI_H`] chip inside that padding — 25.5, which is
+    /// the stylesheet's own arithmetic for the row (*"the tallest thing in it is a
+    /// `.mini` at 15.5, so the row is 5 + 15.5 + 5"*) and the 25.5 the inspector's
+    /// minimum of 151.5 is written from in `lib.rs`.
     pub const DECK_HEAD_H: f32 = DECK_HEAD_PAD_Y * 2.0 + MINI_H;
 
-    /// `.anchor`'s `font-size: 9px`: the tempo a deck was engaged at, beside
-    /// the chip that says what its clock is locked to.
+    /// `.anchor`'s `font-size: 9px`: the tempo a deck was engaged at, beside the
+    /// chip that says what its clock is locked to.
     pub const ANCHOR_SIZE: f32 = 9.0;
 
-    /// `.scrub`'s `gap: 3px`, between the two arrows a quarter beat a press
-    /// goes through.
+    /// `.scrub`'s `gap: 3px`, between the two arrows a quarter beat a press goes
+    /// through.
     pub const SCRUB_GAP: f32 = 3.0;
 
-    /// `.scrub i`'s `font-size: 9px`: one of the two arrows a quarter beat a
-    /// press goes through, at the same type size as the anchor beside it.
+    /// `.scrub i`'s `font-size: 9px`: one of the two arrows a quarter beat a press
+    /// goes through, at the same type size as the anchor beside it.
     pub const SCRUB_SIZE: f32 = 9.0;
 
     /// `.scrub i`'s `padding: 0 4px`, around one arrow — tighter than a
     /// [`MINI_PAD_X`] because what is inside it is a mark and not a word.
     pub const SCRUB_PAD_X: f32 = 4.0;
 
-    /// One arrow's box: [`SCRUB_SIZE`] at [`LINE`] inside its
-    /// `border: 1px solid var(--c-line)` — **15.5**, which is [`MINI_H`]'s own
-    /// number at the same type size, and is why the two arrows sit in the deck
-    /// head without making [`DECK_HEAD_H`] any taller than the chip beside
-    /// them.
+    /// One arrow's box: [`SCRUB_SIZE`] at [`LINE`] inside its `border: 1px solid
+    /// var(--c-line)` — 15.5, which is [`MINI_H`]'s own number at the same type
+    /// size, and is why the two arrows sit in the deck head without making
+    /// [`DECK_HEAD_H`] any taller than the chip beside them.
     pub const SCRUB_H: f32 = SCRUB_SIZE * LINE + HAIRLINE * 2.0;
 
-    /// `.node-head`'s `padding: 5px 10px` and its `gap: 7px`: a node's
-    /// address, its name and who is allowed to move it.
+    /// `.node-head`'s `padding: 5px 10px` and its `gap: 7px`: a node's address, its
+    /// name and who is allowed to move it.
     pub const NODE_HEAD_PAD_X: f32 = 10.0;
     pub const NODE_HEAD_PAD_Y: f32 = 5.0;
     pub const NODE_HEAD_GAP: f32 = 7.0;
 
-    /// A node head's box: [`BASE`] at [`LINE`] inside that padding — **26.5**,
-    /// which is the 26.5 the inspector's minimum of 151.5 is written from in
-    /// `lib.rs`. The authority chips beside the name are shorter than the name
-    /// is ([`AUTH_H`] against 16.5), so the name is what sets the height.
+    /// A node head's box: [`BASE`] at [`LINE`] inside that padding — 26.5, which is
+    /// the 26.5 the inspector's minimum of 151.5 is written from in `lib.rs`. The
+    /// authority chips beside the name are shorter than the name is ([`AUTH_H`]
+    /// against 16.5), so the name is what sets the height.
     pub const NODE_HEAD_H: f32 = NODE_HEAD_PAD_Y * 2.0 + BASE * LINE;
 
     /// `.auth`'s `gap: 3px`, between the three words on a node head.
     pub const AUTH_GAP: f32 = 3.0;
 
-    /// `.auth span`'s `padding: 0 5px` and its `font-size: 9px`: one of
-    /// `man`, `sug` and `auto`.
+    /// `.auth span`'s `padding: 0 5px` and its `font-size: 9px`: one of `man`,
+    /// `sug` and `auto`.
     pub const AUTH_PAD_X: f32 = 5.0;
     pub const AUTH_SIZE: f32 = 9.0;
 
-    /// An authority chip's box: [`AUTH_SIZE`] at [`LINE`] — **13.5**, with no
-    /// border to count, which is what makes it shorter than the node name
-    /// beside it. Its `border-radius: 999px` on a box this short is a capsule.
+    /// An authority chip's box: [`AUTH_SIZE`] at [`LINE`] — 13.5, with no border to
+    /// count, which is what makes it shorter than the node name beside it. Its
+    /// `border-radius: 999px` on a box this short is a capsule.
     pub const AUTH_H: f32 = AUTH_SIZE * LINE;
 
-    /// `.param`'s `padding: 3px 10px 3px 12px` — **the one row in the mock
-    /// whose two side paddings differ**, twelve in from the left of the pane
-    /// and ten from the right, which is what indents a parameter under the
-    /// node head above it — and its `gap: 8px`, between the four tracks.
+    /// `.param`'s `padding: 3px 10px 3px 12px` — the one row in the mock whose two
+    /// side paddings differ, twelve in from the left of the pane and ten from the
+    /// right, which is what indents a parameter under the node head above it — and
+    /// its `gap: 8px`, between the four tracks.
     pub const PARAM_PAD_L: f32 = 12.0;
     pub const PARAM_PAD_R: f32 = 10.0;
     pub const PARAM_PAD_Y: f32 = 3.0;
     pub const PARAM_GAP: f32 = 8.0;
 
-    /// `.param`'s `grid-template-columns: 15px 88px 1fr 58px`: the ordinal a
-    /// MIDI control is learned against, the name, the fader — which takes
-    /// whatever the other three leave — and the value.
+    /// `.param`'s `grid-template-columns: 15px 88px 1fr 58px`: the ordinal a MIDI
+    /// control is learned against, the name, the fader — which takes whatever the
+    /// other three leave — and the value.
     pub const PARAM_ORD_W: f32 = 15.0;
     pub const PARAM_NAME_W: f32 = 88.0;
     pub const PARAM_VAL_W: f32 = 58.0;
 
-    /// `.param .ord`'s `font-size: 9.5px`: the position in the deck's
-    /// published interface, and the only type in the row that is not the
-    /// pane's own size.
+    /// `.param .ord`'s `font-size: 9.5px`: the position in the deck's published
+    /// interface, and the only type in the row that is not the pane's own size.
     pub const PARAM_ORD_SIZE: f32 = 9.5;
 
-    /// A parameter row's box: [`BASE`] at [`LINE`] inside that padding —
-    /// **22.5**, which is the 22.5 the inspector's minimum of 151.5 is written
-    /// from in `lib.rs`, so a row is this tall in both places or in neither.
-    /// The fader in the middle of it is [`FADER_H`] and its knob
-    /// [`FADER_KNOB_H`], both shorter than the type either side.
+    /// A parameter row's box: [`BASE`] at [`LINE`] inside that padding — 22.5,
+    /// which is the 22.5 the inspector's minimum of 151.5 is written from in
+    /// `lib.rs`, so a row is this tall in both places or in neither. The fader in
+    /// the middle of it is [`FADER_H`] and its knob [`FADER_KNOB_H`], both shorter
+    /// than the type either side.
     pub const PARAM_H: f32 = PARAM_PAD_Y * 2.0 + BASE * LINE;
 
-    /// **How far one notch of the wheel scrolls an Inspector pane** — three
-    /// parameter rows, **67.5**.
+    /// How far one notch of the wheel scrolls an Inspector pane — three parameter
+    /// rows, 67.5.
     ///
-    /// It is written as a multiple of [`PARAM_H`] rather than as a number
-    /// because that is what the page says it is (`docs/manual/console.html`,
-    /// *The pane scrolls, and it says how much it is not showing*: *"three
-    /// parameter rows a notch"*), and a figure here that stopped being a
-    /// multiple of the row would be a second answer to how far a notch goes.
+    /// It is written as a multiple of [`PARAM_H`] rather than as a number because
+    /// that is what the page says it is (`docs/manual/console.html`, *The pane
+    /// scrolls, and it says how much it is not showing*: *"three parameter rows a
+    /// notch"*), and a figure here that stopped being a multiple of the row would
+    /// be a second answer to how far a notch goes.
     ///
-    /// **Only a notch is measured in these**, which is the whole of why this
-    /// is not the console's idea of a scroll speed: a trackpad hands over a
-    /// distance in pixels already and is passed through untouched, so this
-    /// converts a *count of detents* and nothing else
+    /// Only a notch is measured in these, which is the whole of why this is not the
+    /// console's idea of a scroll speed: a trackpad hands over a distance in pixels
+    /// already and is passed through untouched, so this converts a *count of
+    /// detents* and nothing else
     /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
     pub const WHEEL_STEP: f32 = PARAM_H * 3.0;
 
-    /// `.rend-row`'s `padding: 3px 10px 6px 12px` — the renderer chips stand
-    /// on the same 12 and 10 a parameter row does, with more room under them
-    /// than over — and its `gap: 5px`, between two chips.
+    /// `.rend-row`'s `padding: 3px 10px 6px 12px` — the renderer chips stand on the
+    /// same 12 and 10 a parameter row does, with more room under them than over —
+    /// and its `gap: 5px`, between two chips.
     pub const REND_ROW_PAD_L: f32 = 12.0;
     pub const REND_ROW_PAD_R: f32 = 10.0;
     pub const REND_ROW_PAD_T: f32 = 3.0;
@@ -1228,89 +1196,87 @@ pub mod size {
     /// `.rend`'s `padding: 0 7px`, around a renderer's name at [`BASE`].
     pub const REND_PAD_X: f32 = 7.0;
 
-    /// A renderer chip's box: [`BASE`] at [`LINE`] inside its
-    /// `border: 1px solid var(--c-line)` — the same box [`MINI_H`] is, at the
-    /// pane's own type size rather than a mini's, so **18.5**.
+    /// A renderer chip's box: [`BASE`] at [`LINE`] inside its `border: 1px solid
+    /// var(--c-line)` — the same box [`MINI_H`] is, at the pane's own type size
+    /// rather than a mini's, so 18.5.
     pub const REND_H: f32 = BASE * LINE + HAIRLINE * 2.0;
 
     /// The renderer row's box: one chip inside [`REND_ROW_PAD_T`] and
-    /// [`REND_ROW_PAD_B`] — **27.5**. One row and not a wrap: `.rend-row`
-    /// carries `flex-wrap: wrap` and the console draws the chips that fit,
-    /// which is [`crate::view::inspector`]'s rule about a pane that overflows
-    /// stated one row along.
+    /// [`REND_ROW_PAD_B`] — 27.5. One row and not a wrap: `.rend-row` carries
+    /// `flex-wrap: wrap` and the console draws the chips that fit, which is
+    /// [`crate::view::inspector`]'s rule about a pane that overflows stated one row
+    /// along.
     pub const REND_ROW_H: f32 = REND_ROW_PAD_T + REND_H + REND_ROW_PAD_B;
 
-    /// `.sens`'s `padding: 2px 10px 6px 12px` — the sensitivity row stands on
-    /// the same 12 and 10 the parameter row above it does, tight under it and
-    /// with the group's own breathing room below.
+    /// `.sens`'s `padding: 2px 10px 6px 12px` — the sensitivity row stands on the
+    /// same 12 and 10 the parameter row above it does, tight under it and with the
+    /// group's own breathing room below.
     pub const SENS_PAD_L: f32 = 12.0;
     pub const SENS_PAD_R: f32 = 10.0;
     pub const SENS_PAD_T: f32 = 2.0;
     pub const SENS_PAD_B: f32 = 6.0;
 
-    /// `.sens`'s `grid-template-columns: 111px 1fr` and its `gap: 8px`: the
-    /// word *sensitivity*, then the chips.
+    /// `.sens`'s `grid-template-columns: 111px 1fr` and its `gap: 8px`: the word
+    /// *sensitivity*, then the chips.
     pub const SENS_LABEL_W: f32 = 111.0;
     pub const SENS_GAP: f32 = 8.0;
 
     /// `.sens .chips`'s `gap: 5px`, between two chips.
     pub const SENS_CHIP_GAP: f32 = 5.0;
 
-    /// `.sens`'s `font-size: 10px`, which the pills inside it inherit — so a
-    /// chip here is smaller than a renderer chip and larger than an authority
-    /// one, and none of the three is [`BASE`].
+    /// `.sens`'s `font-size: 10px`, which the pills inside it inherit — so a chip
+    /// here is smaller than a renderer chip and larger than an authority one, and
+    /// none of the three is [`BASE`].
     pub const SENS_SIZE: f32 = 10.0;
 
-    /// A sensitivity chip's box: [`SENS_SIZE`] at [`LINE`] inside a pill's
-    /// `border: 1px solid var(--c-line)` — **17**. [`REND_H`]'s shape written
-    /// at this row's own type size, and the border counts for [`REND_H`]'s
-    /// reason: a pill's is a real border where a mini's is a wash.
+    /// A sensitivity chip's box: [`SENS_SIZE`] at [`LINE`] inside a pill's `border:
+    /// 1px solid var(--c-line)` — 17. [`REND_H`]'s shape written at this row's own
+    /// type size, and the border counts for [`REND_H`]'s reason: a pill's is a real
+    /// border where a mini's is a wash.
     pub const SENS_CHIP_H: f32 = SENS_SIZE * LINE + HAIRLINE * 2.0;
 
-    /// The sensitivity row's box: one chip inside [`SENS_PAD_T`] and
-    /// [`SENS_PAD_B`] — **25**. One row and not a wrap, which is
-    /// [`REND_ROW_H`]'s rule: `.sens .chips` carries `flex-wrap: wrap` and the
-    /// console draws the chips that fit.
+    /// The sensitivity row's box: one chip inside [`SENS_PAD_T`] and [`SENS_PAD_B`]
+    /// — 25. One row and not a wrap, which is [`REND_ROW_H`]'s rule: `.sens .chips`
+    /// carries `flex-wrap: wrap` and the console draws the chips that fit.
     pub const SENS_H: f32 = SENS_PAD_T + SENS_CHIP_H + SENS_PAD_B;
 
-    /// `.pill`'s `padding: 0 8px` is [`PILL_PAD_X`]; this is the same number
-    /// named for this row, so a change to one is not silently a change to the
-    /// other. The mock gives `.sens`'s pills no padding of their own.
+    /// `.pill`'s `padding: 0 8px` is [`PILL_PAD_X`]; this is the same number named
+    /// for this row, so a change to one is not silently a change to the other. The
+    /// mock gives `.sens`'s pills no padding of their own.
     pub const SENS_CHIP_PAD_X: f32 = PILL_PAD_X;
 
     // -- a node's declared inputs -------------------------------------------
 
     /// `.uses`'s `font-size: 10px`, which the capsule in it inherits — the
-    /// sensitivity row's size, and for the same reason: both are a line of
-    /// prose with a control on the end of it rather than a row of the pane's
-    /// own type.
+    /// sensitivity row's size, and for the same reason: both are a line of prose
+    /// with a control on the end of it rather than a row of the pane's own type.
     pub const USES_SIZE: f32 = 10.0;
 
     /// `.uses`'s `padding: 2px 10px 4px 12px`, top and bottom. The left is
-    /// [`PARAM_PAD_L`] and the right [`PARAM_PAD_R`] — the same indent a
-    /// parameter row stands on, because the line belongs to the rows under it.
+    /// [`PARAM_PAD_L`] and the right [`PARAM_PAD_R`] — the same indent a parameter
+    /// row stands on, because the line belongs to the rows under it.
     pub const USES_PAD_T: f32 = 2.0;
-    /// The bottom of `.uses`'s `padding: 2px 10px 4px 12px`, which is a little
-    /// more than the top for [`SENS_PAD_B`]'s reason: the line sits tight under
-    /// the head it belongs to and clear of the rows it stands over.
+    /// The bottom of `.uses`'s `padding: 2px 10px 4px 12px`, which is a little more
+    /// than the top for [`SENS_PAD_B`]'s reason: the line sits tight under the head
+    /// it belongs to and clear of the rows it stands over.
     pub const USES_PAD_B: f32 = 4.0;
 
     /// `.uses`'s `gap: 6px`, between the slot's word and the capsule.
     pub const USES_GAP: f32 = 6.0;
 
-    /// A `.uses` capsule's box: [`USES_SIZE`] at [`LINE`] inside a pill's
-    /// border — [`SENS_CHIP_H`]'s arithmetic at this row's own type size, and
-    /// the same number, because the two rows are the same size.
+    /// A `.uses` capsule's box: [`USES_SIZE`] at [`LINE`] inside a pill's border —
+    /// [`SENS_CHIP_H`]'s arithmetic at this row's own type size, and the same
+    /// number, because the two rows are the same size.
     pub const USES_CHIP_H: f32 = USES_SIZE * LINE + HAIRLINE * 2.0;
 
-    /// One `.uses` line's box: a capsule inside that padding — **23**.
+    /// One `.uses` line's box: a capsule inside that padding — 23.
     pub const USES_H: f32 = USES_PAD_T + USES_CHIP_H + USES_PAD_B;
 
     // -- the sequencer bay --------------------------------------------------
 
-    /// `.seq`'s `padding: 7px 9px 9px`: the ring of card the bay's rows sit
-    /// inside, under the bay head. Two constants because the top differs from
-    /// the sides and the bottom is the sides' number again.
+    /// `.seq`'s `padding: 7px 9px 9px`: the ring of card the bay's rows sit inside,
+    /// under the bay head. Two constants because the top differs from the sides and
+    /// the bottom is the sides' number again.
     pub const SEQ_PAD_X: f32 = 9.0;
     pub const SEQ_PAD_TOP: f32 = 7.0;
 
@@ -1320,40 +1286,39 @@ pub mod size {
     /// `.seq-head`'s `gap: 6px`, between the mode pill and the step readout.
     pub const SEQ_HEAD_GAP: f32 = 6.0;
 
-    /// `.seq-body`'s `gap: 3px`, between two lanes. Tighter than the stack's
-    /// 5: the rows are one pattern read against itself, which is why they
-    /// share a ruler.
+    /// `.seq-body`'s `gap: 3px`, between two lanes. Tighter than the stack's 5: the
+    /// rows are one pattern read against itself, which is why they share a ruler.
     pub const SEQ_BODY_GAP: f32 = 3.0;
 
-    /// `.seq-row`'s `grid-template-columns: 30px 1fr` and its `gap: 5px`: the
-    /// label column every lane's name is right-aligned into, and the gap
-    /// before the cells.
+    /// `.seq-row`'s `grid-template-columns: 30px 1fr` and its `gap: 5px`: the label
+    /// column every lane's name is right-aligned into, and the gap before the
+    /// cells.
     pub const SEQ_LABEL_W: f32 = 30.0;
     pub const SEQ_ROW_GAP: f32 = 5.0;
 
-    /// `.seq-label`'s `font-size: 10px`: a lane's name, smaller than the bay's
-    /// own type because it is a label on a row rather than a reading.
+    /// `.seq-label`'s `font-size: 10px`: a lane's name, smaller than the bay's own
+    /// type because it is a label on a row rather than a reading.
     pub const SEQ_LABEL_SIZE: f32 = 10.0;
 
     /// `.seq-lane`'s `gap: 2px`, between two cells.
     pub const SEQ_CELL_GAP: f32 = 2.0;
 
-    /// `.seq-lane i`'s `height: 15px` and its `border-radius: 3px`: one cell,
-    /// which is one step of one lane.
+    /// `.seq-lane i`'s `height: 15px` and its `border-radius: 3px`: one cell, which
+    /// is one step of one lane.
     ///
-    /// **The width is not here and cannot be**: `.seq-lane` is
-    /// `repeat(16, 1fr)`, so a cell is as wide as the row divided by the
-    /// count, and the count follows the mode — which is why an eighth's cells
-    /// are twice this one's width and the same height (ADR-0306).
+    /// The width is not here and cannot be: `.seq-lane` is `repeat(16, 1fr)`, so a
+    /// cell is as wide as the row divided by the count, and the count follows the
+    /// mode — which is why an eighth's cells are twice this one's width and the
+    /// same height (ADR-0306).
     pub const SEQ_CELL_H: f32 = 15.0;
     pub const SEQ_CELL_RADIUS: u8 = 3;
 
-    /// `.seq-ruler`'s `font-size: 9px` and its `margin-left: 35px`: the count
-    /// a pattern is read against, inset so its numbers stand over the cells
-    /// rather than over the labels. **35 and not [`SEQ_LABEL_W`] plus
-    /// [`SEQ_ROW_GAP`]**, which is the same number arrived at twice: the
-    /// stylesheet writes the inset and the row writes the columns, and this
-    /// transcribes the one the ruler is actually laid out by.
+    /// `.seq-ruler`'s `font-size: 9px` and its `margin-left: 35px`: the count a
+    /// pattern is read against, inset so its numbers stand over the cells rather
+    /// than over the labels. 35 and not [`SEQ_LABEL_W`] plus [`SEQ_ROW_GAP`], which
+    /// is the same number arrived at twice: the stylesheet writes the inset and the
+    /// row writes the columns, and this transcribes the one the ruler is actually
+    /// laid out by.
     pub const SEQ_RULER_SIZE: f32 = 9.0;
     pub const SEQ_RULER_INSET: f32 = 35.0;
 

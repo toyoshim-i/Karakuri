@@ -1,23 +1,22 @@
-//! **The transport row's `learn` and `map` pills**: the two the mock drew that
-//! this console did not, until ADR-0336.
+//! The transport row's `learn` and `map` pills: the two the mock drew that this
+//! console did not, until ADR-0336.
 //!
 //! Four things, and the first two are the ones that could only go wrong here:
 //!
-//! 1. **A console nobody has told about a surface draws neither**, and the
-//!    arrangement pill lands exactly where it did before they existed. That is
-//!    `View::map`'s `Option` doing the work `View::audio`'s does one pill
-//!    along — a program with no port has nothing to learn onto, and a pill
-//!    drawn for it would be this crate answering a question about a device.
-//! 2. **They are in the mock's order and the arrangement pill moves for
-//!    them** — `learn`, `map · <name>`, `arr · <name>` — because the three are
-//!    laid out one from the next.
+//! 1. A console nobody has told about a surface draws neither, and the
+//! arrangement pill lands exactly where it did before they existed. That is
+//! `View::map`'s `Option` doing the work `View::audio`'s does one pill along —
+//! a program with no port has nothing to learn onto, and a pill drawn for it
+//! would be this crate answering a question about a device. 2. They are in the
+//! mock's order and the arrangement pill moves for them — `learn`, `map ·
+//! <name>`, `arr · <name>` — because the three are laid out one from the next.
 //! 3. That the `learn` pill is a press and names a state rather than a
-//!    direction, and that the `map` pill is a readout.
-//! 4. That the `map` pill says what it was handed, and that a surface with no
-//!    map reads `none` rather than a name.
+//! direction, and that the `map` pill is a readout. 4. That the `map` pill says
+//! what it was handed, and that a surface with no map reads `none` rather than
+//! a name.
 //!
-//! No window, no device and no disk. It does need `egui`'s fonts, because
-//! every capsule in this row is as wide as the words in it.
+//! No window, no device and no disk. It does need `egui`'s fonts, because every
+//! capsule in this row is as wide as the words in it.
 
 mod common;
 
@@ -51,14 +50,14 @@ fn at(p: egui::Pos2) -> Point {
     Point::new(p.x, p.y)
 }
 
-/// **A console nobody has told about a surface draws neither pill, and the
-/// arrangement pill does not move.**
+/// A console nobody has told about a surface draws neither pill, and the
+/// arrangement pill does not move.
 ///
 /// This is the property that lets the two be added at all: every run this
 /// program had before a port existed drew a transport row, and the row it drew
 /// has to be the row it still draws. `View::map` is `None` for a run with no
-/// surface — and for every test in this crate that is not this one — so the
-/// gap `arrangement` measures from is the tracker group's, exactly as it was.
+/// surface — and for every test in this crate that is not this one — so the gap
+/// `arrangement` measures from is the tracker group's, exactly as it was.
 #[test]
 fn no_surface_means_neither_pill_and_an_arrangement_that_has_not_moved() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -118,8 +117,8 @@ fn no_surface_means_neither_pill_and_an_arrangement_that_has_not_moved() {
     );
 }
 
-/// **The mock's order, and each laid out from the one before it** — `learn`,
-/// then `map`, then `arr`, left to right with the row's own gap between them.
+/// The mock's order, and each laid out from the one before it — `learn`, then
+/// `map`, then `arr`, left to right with the row's own gap between them.
 #[test]
 fn the_three_pills_are_in_the_mocks_order() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -176,7 +175,7 @@ fn the_three_pills_are_in_the_mocks_order() {
     assert!((map.pill.center().y - arr.center().y).abs() < 0.01);
 }
 
-/// **`learn` is a press that names a state; `map` is a readout.**
+/// `learn` is a press that names a state; `map` is a readout.
 ///
 /// The press is `LearnPill::next` and it is a `bool` rather than an
 /// `Operation`, because a learn edits the *map* — the layer every surface
@@ -243,11 +242,11 @@ fn learn_names_the_other_state_and_both_pills_take_the_pointer() {
     );
 }
 
-/// **The pill says what it was handed, and `none` is a word for a state.**
+/// The pill says what it was handed, and `none` is a word for a state.
 ///
-/// A surface with no map is a run an operator can still learn into, so the
-/// pill says so rather than not being drawn — `NO_ARRANGEMENT`'s argument one
-/// pill along, where a name would be a reading this console invented.
+/// A surface with no map is a run an operator can still learn into, so the pill
+/// says so rather than not being drawn — `NO_ARRANGEMENT`'s argument one pill
+/// along, where a name would be a reading this console invented.
 #[test]
 fn the_map_pill_names_the_file_and_says_none_where_there_is_not_one() {
     assert_eq!(MapPill::NONE.word(), "none");

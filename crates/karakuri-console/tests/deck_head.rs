@@ -1,45 +1,39 @@
-//! **The deck head's six chips and the seven controls in them, and the first
-//! controls on this console that are not in a row of their own.**
+//! The deck head's six chips and the seven controls in them, and the first
+//! controls on this console that are not in a row of their own.
 //!
 //! Thirteen things, and the first two are why this is its own file rather than
 //! a few more assertions in `view.rs`'s module tests:
 //!
 //! 1. Where they sit, as `.deck-head`'s flex row lays them out — the three on
-//!    the left measured from the left and the three after the `.sep` measured
-//!    leftwards from the fold.
-//! 2. **That the controls clear every boundary's grab**, which is
-//!    `tests/look.rs`'s arithmetic over a row that is not a row of the
-//!    arrangement: a pane's deck head is measured against the **pane
-//!    divider**, and the number that binds is `.deck-head`'s own 10 pixels of
-//!    left padding against a `GRAB` of 6.
-//! 3. That the sync chip cycles all three modes and comes back, once each.
-//! 4. **That the cycle skips a mode the material cannot honour**, which is the
-//!    one thing this cycle has that the mixer's two do not.
-//! 5. **That the anchor asks for the mode the deck is already in**, which is
-//!    the one thing the chip beside it structurally cannot ask for.
-//! 6. That an arrow asks for a quarter beat, signed by which arrow it was.
-//! 7. **That an inert scrub is drawn and not claimed**, which is *a control
-//!    claims what it acts on and no more* answered by a state.
-//! 8. **That the fold names the layering the deck is not in**, which is the
-//!    chip that was drawn and claimed nothing until 2026-09-09 — see
-//!    `docs/adr/0314-…`.
-//! 9. **That the capacity chip steps every rung of its ladder once and wraps**,
-//!    and that a slot running off the ladder steps *up* rather than back to the
-//!    bottom — `docs/adr/0328-…`.
-//! 10. **That a capacity with nowhere to step is drawn and claims nothing**,
-//!     which is the inert scrub's arrangement one control along.
-//! 11. **That `re-salt` asks for the salt it was handed**, which is the whole
-//!     of what keeps a re-seed reproducible.
-//! 12. **That a pane too narrow for the two build chips keeps the five that
-//!     were here before them**, which is the one place this row drops part of
-//!     itself rather than all of it — and the reason is a measurement, at the
-//!     test.
-//! 13. **The route a window loop actually takes** — `claim`, then the
-//!     derivation that drew the control, then the operation.
+//! the left measured from the left and the three after the `.sep` measured
+//! leftwards from the fold. 2. That the controls clear every boundary's grab,
+//! which is `tests/look.rs`'s arithmetic over a row that is not a row of the
+//! arrangement: a pane's deck head is measured against the pane divider, and
+//! the number that binds is `.deck-head`'s own 10 pixels of left padding
+//! against a `GRAB` of 6. 3. That the sync chip cycles all three modes and
+//! comes back, once each. 4. That the cycle skips a mode the material cannot
+//! honour, which is the one thing this cycle has that the mixer's two do not.
+//! 5. That the anchor asks for the mode the deck is already in, which is the
+//! one thing the chip beside it structurally cannot ask for. 6. That an arrow
+//! asks for a quarter beat, signed by which arrow it was. 7. That an inert
+//! scrub is drawn and not claimed, which is *a control claims what it acts on
+//! and no more* answered by a state. 8. That the fold names the layering the
+//! deck is not in, which is the chip that was drawn and claimed nothing until
+//! 2026-09-09 — see `docs/adr/0314-…`. 9. That the capacity chip steps every
+//! rung of its ladder once and wraps, and that a slot running off the ladder
+//! steps *up* rather than back to the bottom — `docs/adr/0328-…`. 10. That a
+//! capacity with nowhere to step is drawn and claims nothing, which is the
+//! inert scrub's arrangement one control along. 11. That `re-salt` asks for the
+//! salt it was handed, which is the whole of what keeps a re-seed reproducible.
+//! 12. That a pane too narrow for the two build chips keeps the five that were
+//! here before them, which is the one place this row drops part of itself
+//! rather than all of it — and the reason is a measurement, at the test. 13.
+//! The route a window loop actually takes — `claim`, then the derivation that
+//! drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
-//! because a chip is as wide as the word in it — see `common::drawn_once` —
-//! and a `Pane`, because a console with no deck behind it has no pane to head.
+//! because a chip is as wide as the word in it — see `common::drawn_once` — and
+//! a `Pane`, because a console with no deck behind it has no pane to head.
 
 mod common;
 
@@ -54,11 +48,11 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Sync};
 
-/// **The mock's own deck B**: beat-synced, engaged at 128 BPM and sitting a
-/// quarter beat ahead of the room, with nothing its material refuses. It is
-/// deck B rather than deck A because that is the pane the mock draws every
-/// part of this row live on — a tempo-synced deck's arrows are `.scrub.idle`,
-/// which is its own test below.
+/// The mock's own deck B: beat-synced, engaged at 128 BPM and sitting a quarter
+/// beat ahead of the room, with nothing its material refuses. It is deck B
+/// rather than deck A because that is the pane the mock draws every part of
+/// this row live on — a tempo-synced deck's arrows are `.scrub.idle`, which is
+/// its own test below.
 fn mock() -> Pane {
     Pane {
         deck: 1,
@@ -73,19 +67,19 @@ fn mock() -> Pane {
     }
 }
 
-/// **The mock deck B's build chips**, and every number in it is the mock's own:
+/// The mock deck B's build chips, and every number in it is the mock's own:
 /// `lattice_veil`'s geometry is `examples/lattice_shell.kir`, which declares
 /// `capacity [4096, 262144] = 32768`, and the mock draws that default unlit
 /// because nobody has asked this deck for another number.
 ///
-/// **The ladder is the powers of two inside the declared range**, ascending,
-/// which is the list a host reads off the material rather than a list this
-/// console owns — so it is written out here as data rather than generated,
-/// exactly as the mock writes it.
+/// The ladder is the powers of two inside the declared range, ascending, which
+/// is the list a host reads off the material rather than a list this console
+/// owns — so it is written out here as data rather than generated, exactly as
+/// the mock writes it.
 ///
-/// **The salt is any number and the test is that it is *this* one**: what a
-/// press asks for is a value the host handed over, so a console that computed
-/// one would be reproducible only by accident. `NEXT_SALT` is what
+/// The salt is any number and the test is that it is *this* one: what a press
+/// asks for is a value the host handed over, so a console that computed one
+/// would be reproducible only by accident. `NEXT_SALT` is what
 /// `karakuri_engine::set::derived_salt(0, 1)` is, which makes it a plausible
 /// one to be handed.
 fn aimed() -> Aimed {
@@ -141,19 +135,19 @@ fn at(p: egui::Pos2) -> Point {
     Point::new(p.x, p.y)
 }
 
-/// Every mode, and the order is deliberately **not** the cycle's: what is
-/// asserted below is that the cycle visits each of these once, and a list in
-/// the cycle's own order could not tell that from a cycle that had lost one.
+/// Every mode, and the order is deliberately not the cycle's: what is asserted
+/// below is that the cycle visits each of these once, and a list in the cycle's
+/// own order could not tell that from a cycle that had lost one.
 const EVERY: [Sync; 3] = [Sync::Beat, Sync::Free, Sync::Tempo];
 
 // ---------------------------------------------------------------------------
 // Where the controls are
 // ---------------------------------------------------------------------------
 
-/// **The head is `.deck-head`'s own flex row**: the mode chip against the
-/// left-hand padding, the anchor one gap along, the two arrows one gap after
-/// that with `.scrub`'s own 3 between them, and the fold hard against the
-/// right-hand padding.
+/// The head is `.deck-head`'s own flex row: the mode chip against the left-hand
+/// padding, the anchor one gap along, the two arrows one gap after that with
+/// `.scrub`'s own 3 between them, and the fold hard against the right-hand
+/// padding.
 #[test]
 fn the_deck_head_is_the_rows_own_geometry() {
     let pane = mock();
@@ -217,7 +211,7 @@ fn the_deck_head_is_the_rows_own_geometry() {
     );
 }
 
-/// **The two build chips are measured leftwards from the fold**, which is what
+/// The two build chips are measured leftwards from the fold, which is what
 /// `.sep`'s `flex: 1` does to everything after it: the fold against the
 /// right-hand padding, `re-salt` one gap before it, and the capacity one gap
 /// before that.
@@ -252,17 +246,17 @@ fn the_build_chips_are_measured_leftwards_from_the_fold() {
     );
 }
 
-/// **A pane too narrow for the two build chips keeps the five that were here
-/// before them**, which is the one place this row answers *a control that does
+/// A pane too narrow for the two build chips keeps the five that were here
+/// before them, which is the one place this row answers *a control that does
 /// not fit is no control at all* by dropping part of the row rather than all of
 /// it.
 ///
-/// **The measurement is the argument.** An Inspector pane at the console's
-/// declared minimum window is 237.5 pixels wide and the row needs about 296 for
-/// all seven, so a row that took all of them or none would draw **nothing** at
-/// the width this arrangement claims to work at — trading two controls that
-/// were never there for four that were. The threshold is a window of about 1360
-/// with two panes open, and the console page says so.
+/// The measurement is the argument. An Inspector pane at the console's declared
+/// minimum window is 237.5 pixels wide and the row needs about 296 for all
+/// seven, so a row that took all of them or none would draw nothing at the
+/// width this arrangement claims to work at — trading two controls that were
+/// never there for four that were. The threshold is a window of about 1360 with
+/// two panes open, and the console page says so.
 #[test]
 fn a_pane_too_narrow_for_the_build_chips_keeps_the_rest_of_the_row() {
     let pane = mock();
@@ -308,8 +302,8 @@ fn a_pane_too_narrow_for_the_build_chips_keeps_the_rest_of_the_row() {
     );
 }
 
-/// **A free deck draws no anchor, and the row closes up rather than leaving a
-/// hole where one would have been** — which is what a flex row does and is why
+/// A free deck draws no anchor, and the row closes up rather than leaving a
+/// hole where one would have been — which is what a flex row does and is why
 /// the arrows are measured from whichever of the two came last.
 #[test]
 fn a_free_deck_draws_no_anchor_and_the_row_closes_up() {
@@ -323,15 +317,14 @@ fn a_free_deck_draws_no_anchor_and_the_row_closes_up() {
     assert!(near(head.back.min.x, head.mode.max.x + size::DECK_HEAD_GAP));
 }
 
-/// **A row that cannot hold its chips draws none of them**, which is `look`'s
-/// rule one bay up: half a control is a picture of something that cannot be
-/// pressed.
+/// A row that cannot hold its chips draws none of them, which is `look`'s rule
+/// one bay up: half a control is a picture of something that cannot be pressed.
 ///
 /// The narrow pane is built here rather than solved for, because the panel's
 /// own minimum width is wider than this: below 990 the solve stops honouring
 /// minima and scales the whole console down together, so there is no viewport
-/// that reaches this state. The rule is stated anyway, and this is what says
-/// it holds.
+/// that reaches this state. The rule is stated anyway, and this is what says it
+/// holds.
 #[test]
 fn a_row_too_narrow_for_its_chips_draws_none_of_them() {
     let pane = mock();
@@ -363,21 +356,21 @@ fn a_row_too_narrow_for_its_chips_draws_none_of_them() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// **All three controls clear every boundary's grab**, measured here off their
-/// own rectangles and never inherited from the transport row's.
+/// All three controls clear every boundary's grab, measured here off their own
+/// rectangles and never inherited from the transport row's.
 ///
-/// **The nearest boundary is the pane divider, not the one under the row.** A
-/// deck head is the second row *inside* an inspector pane, so what a chip has
-/// to clear sideways is the bar between the two panes and the bay's own edges,
-/// and the tightest of those is `.deck-head`'s left-hand padding: the mode
-/// chip starts **10** pixels in from the pane's edge, against a `GRAB` of
-/// **6**. Down the row the clearance is far larger — a pane's head and the bay
-/// head are above it — and that is asserted rather than assumed.
+/// The nearest boundary is the pane divider, not the one under the row. A deck
+/// head is the second row *inside* an inspector pane, so what a chip has to
+/// clear sideways is the bar between the two panes and the bay's own edges, and
+/// the tightest of those is `.deck-head`'s left-hand padding: the mode chip
+/// starts 10 pixels in from the pane's edge, against a `GRAB` of 6. Down the
+/// row the clearance is far larger — a pane's head and the bay head are above
+/// it — and that is asserted rather than assumed.
 ///
-/// **So it fails if a chip moves, if the row's padding shrinks, or if `GRAB`
-/// widens past 10** — and the last is the point: 10 is the tightest clearance
-/// on this console, so the deck head is what goes first, and the fix is then
-/// to change the rule in `input`, deliberately.
+/// So it fails if a chip moves, if the row's padding shrinks, or if `GRAB`
+/// widens past 10 — and the last is the point: 10 is the tightest clearance on
+/// this console, so the deck head is what goes first, and the fix is then to
+/// change the rule in `input`, deliberately.
 #[test]
 fn every_control_clears_every_boundarys_grab() {
     let pane = mock();
@@ -463,8 +456,8 @@ fn every_control_clears_every_boundarys_grab() {
     }
 }
 
-/// **The band beside the panes is still the boundary's**, which is what says
-/// the clearance above is a clearance and not the grab having gone missing.
+/// The band beside the panes is still the boundary's, which is what says the
+/// clearance above is a clearance and not the grab having gone missing.
 #[test]
 fn the_band_the_chips_clear_is_still_a_boundarys() {
     let pane = mock();
@@ -492,16 +485,15 @@ fn the_band_the_chips_clear_is_still_a_boundarys() {
     );
 }
 
-/// **A control claims what it acts on and no more.** The gaps between the
-/// chips are not controls, and neither is an arrow on a deck the scrub is
-/// inert on.
+/// A control claims what it acts on and no more. The gaps between the chips are
+/// not controls, and neither is an arrow on a deck the scrub is inert on.
 ///
-/// **The fold moved from the second list to the first on 2026-09-09**, which
-/// is the whole of what ADR-0314 changed about this row: it was drawn and
-/// claimed nothing, on the argument that layering is a build decision the
-/// engine has no setter for. It has none, and a press re-aims the slot
-/// instead. **The two build chips joined it the same day** (ADR-0328), and
-/// they are the same shape one field of the aim along.
+/// The fold moved from the second list to the first on 2026-09-09, which is the
+/// whole of what ADR-0314 changed about this row: it was drawn and claimed
+/// nothing, on the argument that layering is a build decision the engine has no
+/// setter for. It has none, and a press re-aims the slot instead. The two build
+/// chips joined it the same day (ADR-0328), and they are the same shape one
+/// field of the aim along.
 #[test]
 fn nothing_beside_the_six_controls_is_claimed() {
     let pane = mock();
@@ -558,7 +550,7 @@ fn nothing_beside_the_six_controls_is_claimed() {
     }
 }
 
-/// **An inert scrub is drawn and not claimed.** A deck that is not beat-synced
+/// An inert scrub is drawn and not claimed. A deck that is not beat-synced
 /// keeps both arrows — the row would move under the hand every time the chip
 /// beside them was pressed otherwise — and a press on one asks for nothing.
 #[test]
@@ -600,9 +592,9 @@ fn an_inert_scrub_keeps_its_shape_and_claims_nothing() {
     }
 }
 
-/// **Before anything has been drawn there is no control**, and neither is
-/// there without a deck: a chip is as wide as the word in it, and a pane is
-/// what a deck head heads.
+/// Before anything has been drawn there is no control, and neither is there
+/// without a deck: a chip is as wide as the word in it, and a pane is what a
+/// deck head heads.
 #[test]
 fn a_control_that_has_not_been_drawn_is_not_there() {
     let pane = mock();
@@ -629,13 +621,12 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **The chip cycles all three modes and comes back, once each** — which is
+/// The chip cycles all three modes and comes back, once each — which is
 /// `tests/blend.rs`'s measurement over the deck's clock, and is what keeps
 /// `SYNCS` and the cycle from drifting apart.
 ///
-/// The step is asserted **as an operation**, so what is checked is the thing a
-/// map or a model would be offered: `SetSync` naming the destination, never a
-/// step.
+/// The step is asserted as an operation, so what is checked is the thing a map
+/// or a model would be offered: `SetSync` naming the destination, never a step.
 #[test]
 fn the_chip_cycles_every_mode_once_and_wraps() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -675,9 +666,9 @@ fn the_chip_cycles_every_mode_once_and_wraps() {
     }
 }
 
-/// **The cycle skips a mode this material cannot honour rather than offering
-/// it**, which is the one thing this cycle has that the mixer's two do not —
-/// and the reading it skips on is the engine's, handed in.
+/// The cycle skips a mode this material cannot honour rather than offering it,
+/// which is the one thing this cycle has that the mixer's two do not — and the
+/// reading it skips on is the engine's, handed in.
 #[test]
 fn the_cycle_skips_a_mode_the_material_cannot_honour() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -719,9 +710,9 @@ fn the_cycle_skips_a_mode_the_material_cannot_honour() {
     );
 }
 
-/// **The anchor asks for the mode the deck is already in**, which re-anchors —
-/// and it is the one thing the chip beside it can never say, because a cycle
-/// starts at the mode *after* the one you are on.
+/// The anchor asks for the mode the deck is already in, which re-anchors — and
+/// it is the one thing the chip beside it can never say, because a cycle starts
+/// at the mode *after* the one you are on.
 #[test]
 fn the_anchor_asks_for_the_mode_the_deck_is_already_in() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -750,8 +741,8 @@ fn the_anchor_asks_for_the_mode_the_deck_is_already_in() {
     }
 }
 
-/// **A free deck has no anchor and nothing to re-ask for.** Free reads no
-/// anchor at all, so there is nothing a press could re-anchor to.
+/// A free deck has no anchor and nothing to re-ask for. Free reads no anchor at
+/// all, so there is nothing a press could re-anchor to.
 #[test]
 fn a_free_deck_has_nothing_to_re_anchor() {
     let pane = at_sync(Sync::Free);
@@ -767,8 +758,8 @@ fn a_free_deck_has_nothing_to_re_anchor() {
     }
 }
 
-/// **An arrow asks for a quarter beat, and which arrow it was is the sign** —
-/// the one control on this panel that moves by an amount, because there is no
+/// An arrow asks for a quarter beat, and which arrow it was is the sign — the
+/// one control on this panel that moves by an amount, because there is no
 /// destination in the vocabulary for it to name.
 #[test]
 fn the_arrows_ask_for_a_quarter_beat_each_way() {
@@ -810,7 +801,7 @@ fn the_arrows_ask_for_a_quarter_beat_each_way() {
     );
 }
 
-/// **A press is one of the six or none**, so no point on the row asks two
+/// A press is one of the six or none, so no point on the row asks two
 /// questions.
 #[test]
 fn a_press_is_one_control_or_none() {
@@ -855,7 +846,7 @@ fn a_press_is_one_control_or_none() {
 // The route a window loop takes
 // ---------------------------------------------------------------------------
 
-/// **The fold names the layering the deck is not in, and never a step.**
+/// The fold names the layering the deck is not in, and never a step.
 ///
 /// Two panes, one compositing and one overdrawing, and the same chip on each:
 /// what leaves is `SetCompositing` carrying the destination, computed from the
@@ -865,7 +856,7 @@ fn a_press_is_one_control_or_none() {
 /// a control that could only step would leave two surfaces disagreeing about
 /// where the deck is.
 ///
-/// **It does not claim reachability**: whether the press re-aims the slot is
+/// It does not claim reachability: whether the press re-aims the slot is
 /// `crates/karakuri/src/main.rs`'s, which this crate cannot depend on
 /// (ADR-0156). ADR-0314 is the record.
 #[test]
@@ -903,14 +894,14 @@ fn the_fold_asks_for_the_layering_the_deck_is_not_in() {
     }
 }
 
-/// **The capacity chip steps the powers of two inside the declared range, once
-/// each, and wraps through the bottom** — and what leaves is the number it
+/// The capacity chip steps the powers of two inside the declared range, once
+/// each, and wraps through the bottom — and what leaves is the number it
 /// arrived at rather than a step, which is what a second surface would need to
 /// agree with it (P-0090).
 ///
-/// **The whole ladder is walked** rather than one press asserted, because a
-/// cycle that had lost a rung, repeated one or stopped at the top would all
-/// pass a single-press test.
+/// The whole ladder is walked rather than one press asserted, because a cycle
+/// that had lost a rung, repeated one or stopped at the top would all pass a
+/// single-press test.
 #[test]
 fn the_capacity_chip_steps_every_rung_once_and_wraps() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -952,12 +943,12 @@ fn the_capacity_chip_steps_every_rung_once_and_wraps() {
     );
 }
 
-/// **A slot running at a number that is not on the ladder steps *up*, not back
-/// to the bottom.** `examples/beat_strands.kir` declares `capacity [4096,
-/// 1048576] = 81920`, and a Set file may record anything the range allows, so
-/// this is an ordinary state rather than a corner: a press that read as *one
-/// step* and dropped the slot from 81920 to 4096 would be a control that
-/// reallocated every element buffer in the wrong direction.
+/// A slot running at a number that is not on the ladder steps *up*, not back to
+/// the bottom. `examples/beat_strands.kir` declares `capacity [4096, 1048576] =
+/// 81920`, and a Set file may record anything the range allows, so this is an
+/// ordinary state rather than a corner: a press that read as *one step* and
+/// dropped the slot from 81920 to 4096 would be a control that reallocated
+/// every element buffer in the wrong direction.
 #[test]
 fn a_capacity_off_the_ladder_steps_up() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -981,10 +972,10 @@ fn a_capacity_off_the_ladder_steps_up() {
     );
 }
 
-/// **A chip with nowhere to step is drawn and claims nothing**, which is the
-/// inert scrub's arrangement one control along: two geometries whose declared
-/// ranges do not overlap have no capacity one re-aim could send, and the number
-/// the slot is running at is still worth reading.
+/// A chip with nowhere to step is drawn and claims nothing, which is the inert
+/// scrub's arrangement one control along: two geometries whose declared ranges
+/// do not overlap have no capacity one re-aim could send, and the number the
+/// slot is running at is still worth reading.
 #[test]
 fn a_capacity_with_no_shared_range_is_drawn_and_claims_nothing() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -1012,9 +1003,9 @@ fn a_capacity_with_no_shared_range_is_drawn_and_claims_nothing() {
     );
 }
 
-/// **The `re-salt` capsule asks for the salt it was handed**, and that is the
-/// whole assertion: a console that derived one would be producing a picture a
-/// later run could reproduce only by accident
+/// The `re-salt` capsule asks for the salt it was handed, and that is the whole
+/// assertion: a console that derived one would be producing a picture a later
+/// run could reproduce only by accident
 /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
 /// The number here is arbitrary on purpose — nothing in this crate can compute
 /// it, so nothing in this crate can agree with a computation by luck.
@@ -1037,12 +1028,12 @@ fn the_re_salt_capsule_asks_for_the_salt_it_was_handed() {
     assert_eq!(head.compositing(at(aim.salt.center())), None);
 }
 
-/// **The whole route, as the window loop drives it**: `claim` first, then the
-/// pane and the head derived a second time, then the operation.
+/// The whole route, as the window loop drives it: `claim` first, then the pane
+/// and the head derived a second time, then the operation.
 ///
-/// **It does not claim reachability.** Whether a claimed press becomes one of
-/// these operations is `crates/karakuri/src/main.rs`'s, which this crate
-/// cannot depend on (ADR-0156).
+/// It does not claim reachability. Whether a claimed press becomes one of these
+/// operations is `crates/karakuri/src/main.rs`'s, which this crate cannot
+/// depend on (ADR-0156).
 #[test]
 fn a_press_reaches_both_operations_the_way_the_window_loop_reaches_them() {
     let pane = mock();

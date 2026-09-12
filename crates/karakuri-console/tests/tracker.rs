@@ -1,5 +1,5 @@
-//! **The tracker group's other three controls: the latency offset, the tap and
-//! the octave.**
+//! The tracker group's other three controls: the latency offset, the tap and
+//! the octave.
 //!
 //! They are the ninth, tenth and eleventh controls this console draws, and they
 //! finish the group `docs/manual/style.css` puts round exactly four things:
@@ -13,26 +13,23 @@
 //! more assertions in `tests/look.rs`:
 //!
 //! 1. Where the three are, laid end to end from the audio-in pill's right edge
-//!    at the group's own gap — and that the arrangement pill has moved along by
-//!    exactly this group and one `.transport` gap, which is what a flex row is.
-//! 2. **That all three clear every boundary's grab**, which is
-//!    `tests/look.rs`'s arithmetic over three more controls and is never
-//!    inherited from it. The octave's chips are the shortest targets in this
-//!    row — `OCTAVE_H` is 15.5 where a pill is 16.5 — so the clearance is
-//!    measured against them rather than against the tap.
-//! 3. **That the refused half of the octave is drawn and not claimed**, which
-//!    is `DeckHead::arrow`'s rule one bay over: *"the arrows keep their shape
-//!    when they are refused"*, and a chip that vanished would move the row
-//!    under the hand every time the grid crossed 100 or 120 BPM.
-//! 4. What a press on each of them asks for.
-//! 5. **That one pixel of the offset track is one press of `o` or `p`**, which
-//!    is the whole of why it is 80 wide.
-//! 6. That the ends are exactly ∓200 ms and the middle exactly zero.
-//! 7. **That a console with nothing open draws no offset at all**, and that the
-//!    tap closes up behind it — the page's own answer to a track with no value
-//!    to point at.
-//! 8. **The route a window loop actually takes** — `claim`, then the derivation
-//!    that drew the control, then the operation.
+//! at the group's own gap — and that the arrangement pill has moved along by
+//! exactly this group and one `.transport` gap, which is what a flex row is. 2.
+//! That all three clear every boundary's grab, which is `tests/look.rs`'s
+//! arithmetic over three more controls and is never inherited from it. The
+//! octave's chips are the shortest targets in this row — `OCTAVE_H` is 15.5
+//! where a pill is 16.5 — so the clearance is measured against them rather than
+//! against the tap. 3. That the refused half of the octave is drawn and not
+//! claimed, which is `DeckHead::arrow`'s rule one bay over: *"the arrows keep
+//! their shape when they are refused"*, and a chip that vanished would move the
+//! row under the hand every time the grid crossed 100 or 120 BPM. 4. What a
+//! press on each of them asks for. 5. That one pixel of the offset track is one
+//! press of `o` or `p`, which is the whole of why it is 80 wide. 6. That the
+//! ends are exactly ∓200 ms and the middle exactly zero. 7. That a console with
+//! nothing open draws no offset at all, and that the tap closes up behind it —
+//! the page's own answer to a track with no value to point at. 8. The route a
+//! window loop actually takes — `claim`, then the derivation that drew the
+//! control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the tap capsule is as wide as the word in it and the offset's figure
@@ -52,14 +49,14 @@ use karakuri_console::view::{
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{GridScale, Operation};
 
-/// **The mock's own transport, as numbers** — `transport.rs`'s, which is where
-/// the argument for each of them is. The group is measured from the audio-in
-/// pill and the pill from the bar, so a row is needed to have any of it.
+/// The mock's own transport, as numbers — `transport.rs`'s, which is where the
+/// argument for each of them is. The group is measured from the audio-in pill
+/// and the pill from the bar, so a row is needed to have any of it.
 fn mock() -> Transport {
     common::mock_transport()
 }
 
-/// **The mock's own tracker**: `offset −15 ms`, `½` live and `×2` refused.
+/// The mock's own tracker: `offset −15 ms`, `½` live and `×2` refused.
 ///
 /// The refusal is the mock's and it is not a choice made here:
 /// `docs/manual/console.html` draws `×2` `.idle` at 128.0 and says why in as
@@ -73,9 +70,9 @@ fn mock_tracker() -> Tracker {
     }
 }
 
-/// **A console that has been told about audio and found something**, which is
-/// what the mock draws: the group's head is a pill and the three below are laid
-/// out from it.
+/// A console that has been told about audio and found something, which is what
+/// the mock draws: the group's head is a pill and the three below are laid out
+/// from it.
 fn heard() -> AudioIn {
     let mut audio = AudioIn::NONE;
     audio.device = Some("Scarlett 2i2".to_owned());
@@ -114,8 +111,8 @@ fn at(p: egui::Pos2) -> Point {
 // Where they are
 // ---------------------------------------------------------------------------
 
-/// **The mock's own order, at the mock's own gaps**, and the arrangement pill
-/// moved along by exactly this group.
+/// The mock's own order, at the mock's own gaps, and the arrangement pill moved
+/// along by exactly this group.
 ///
 /// The four things `.tracker` holds are `audio-in`, the offset, the tap and the
 /// octave, laid end to end at `PILL_GAP`; the group ends at the octave's second
@@ -179,7 +176,7 @@ fn the_group_is_laid_out_the_way_the_mock_lays_it_out() {
     );
 }
 
-/// **The track is exactly as wide as the presses that cross it.**
+/// The track is exactly as wide as the presses that cross it.
 ///
 /// Eighty five-millisecond steps between −200 and +200, and eighty pixels — so
 /// a pointer can ask for every value `o` and `p` can reach and neither surface
@@ -205,7 +202,7 @@ fn one_pixel_of_the_track_is_one_press_of_a_key() {
     }
 }
 
-/// **The two ends are exactly the two ends, and the middle is exactly zero.**
+/// The two ends are exactly the two ends, and the middle is exactly zero.
 ///
 /// Linear rather than the exposure's logarithm, because an offset is a
 /// difference and not a ratio — and the symmetry is what makes the middle
@@ -224,13 +221,13 @@ fn the_ends_are_the_ends_and_the_middle_is_zero() {
     assert_eq!(unit_of_offset(1000.0), 1.0);
 }
 
-/// **All three clear every boundary's grab**, which is rule 3's ordinary price
-/// and is measured here rather than inherited.
+/// All three clear every boundary's grab, which is rule 3's ordinary price and
+/// is measured here rather than inherited.
 ///
 /// The transport row is 48 tall and the shortest target in the group is an
-/// octave chip at `OCTAVE_H` — 15.5 — so the clearance above and below is
-/// 16.25 against a `GRAB` of 6. The offset's target is the **track grown to a
-/// line's height** and not the 5px track, which is the number that matters.
+/// octave chip at `OCTAVE_H` — 15.5 — so the clearance above and below is 16.25
+/// against a `GRAB` of 6. The offset's target is the track grown to a line's
+/// height and not the 5px track, which is the number that matters.
 #[test]
 fn the_three_clear_every_boundary() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -277,7 +274,7 @@ fn the_three_clear_every_boundary() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **Each of the three, pressed, names its own operation.**
+/// Each of the three, pressed, names its own operation.
 #[test]
 fn a_press_on_each_of_the_three_asks_for_its_operation() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -325,11 +322,11 @@ fn a_press_on_each_of_the_three_asks_for_its_operation() {
     );
 }
 
-/// **The refused half is drawn, and it is not claimed.**
+/// The refused half is drawn, and it is not claimed.
 ///
 /// `DeckHead::arrow`'s rule one bay over, and the mock's own picture: `×2` at
-/// 128.0 keeps its shape and its tooltip says why. The rectangle is still
-/// there — this is not the assertion passing on a control that went away.
+/// 128.0 keeps its shape and its tooltip says why. The rectangle is still there
+/// — this is not the assertion passing on a control that went away.
 #[test]
 fn the_refused_half_of_the_octave_is_drawn_and_not_claimed() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -379,7 +376,7 @@ fn the_refused_half_of_the_octave_is_drawn_and_not_claimed() {
 // What is not drawn, and why
 // ---------------------------------------------------------------------------
 
-/// **With nothing open there is no offset**, and the tap closes up behind it.
+/// With nothing open there is no offset, and the tap closes up behind it.
 ///
 /// An offset belongs to a session and `karakuri_environment::audio`'s default
 /// is where the *next* one starts, so a track drawn on a console with nothing
@@ -410,8 +407,8 @@ fn with_nothing_open_there_is_no_offset_track() {
     );
 }
 
-/// **A console nobody has told anything about the tracker draws none of it**,
-/// and the arrangement pill is where it was before this group existed.
+/// A console nobody has told anything about the tracker draws none of it, and
+/// the arrangement pill is where it was before this group existed.
 ///
 /// `View::audio`'s rule one control to the left: *empty is a state and unasked
 /// is not*.
@@ -458,8 +455,8 @@ fn a_console_told_nothing_about_the_tracker_draws_none_of_it() {
 // The route a window loop takes
 // ---------------------------------------------------------------------------
 
-/// **`claim`, then the derivation, then the operation** — the three steps a
-/// window loop takes on a press, over each of the three controls.
+/// `claim`, then the derivation, then the operation — the three steps a window
+/// loop takes on a press, over each of the three controls.
 ///
 /// `tests/look.rs`'s last pass over two more controls: it is the whole route
 /// and not the pieces, because a control can be claimed and never asked, and

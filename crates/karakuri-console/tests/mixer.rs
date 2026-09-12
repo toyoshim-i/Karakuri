@@ -1,33 +1,31 @@
-//! **The Mixer bay: as many strips as the deck has, every one of them a
-//! readout, and nothing at all where there is no deck.**
+//! The Mixer bay: as many strips as the deck has, every one of them a readout,
+//! and nothing at all where there is no deck.
 //!
 //! Six things, and the first two are why this file exists rather than a few
 //! more assertions in `view.rs`:
 //!
-//! 1. **That the strips are the deck's count and not four.** A page has four
-//!    tracks whatever the deck holds, and a track with no strip in it draws
-//!    nothing — not the empty strip the mock drew until `39f1e6b`, which would
-//!    be six readings nobody took. This file held the panel to ADR-0178
-//!    against the mock for as long as both existed, and the claim is the
-//!    record's rather than the page's, so it outlives the strip.
-//! 2. **That a console with no deck behind it draws nothing in the bay's
-//!    body** — asserted by drawing a frame and counting what landed in the
-//!    strips' own rectangle, because *nothing is drawn* is a claim about the
-//!    paint pass and not about a rectangle.
-//! 3. Where everything in a strip is, from the mock's own boxes — and the
-//!    boxes themselves against the stylesheet's literals, which is a different
-//!    claim from the relations stated in terms of them (ADR-0177).
-//! 4. **That the faders and the meter follow their values**, at zero, at one
-//!    and in between, and that the peak mark never leaves the well.
-//! 5. That the tally, the blend and the mask show the state they were given.
-//!    **What the tally does when the residency it was given and the one that
-//!    was asked for disagree is `parked.rs`**, not here: the strips in this
-//!    file are all settled, so nothing in it moves.
-//! 6. **Which of these are controls and which are readouts** — five controls
-//!    inside the column and the column itself, both directions stated rather
-//!    than inferred from the presence or absence of a hit test: a press
-//!    anywhere in a strip is the panel's, and the alley between two strips is
-//!    `egui`'s. What a drag on a knob *does* is `tests/fader.rs`.
+//! 1. That the strips are the deck's count and not four. A page has four tracks
+//! whatever the deck holds, and a track with no strip in it draws nothing — not
+//! the empty strip the mock drew until `39f1e6b`, which would be six readings
+//! nobody took. This file held the panel to ADR-0178 against the mock for as
+//! long as both existed, and the claim is the record's rather than the page's,
+//! so it outlives the strip. 2. That a console with no deck behind it draws
+//! nothing in the bay's body — asserted by drawing a frame and counting what
+//! landed in the strips' own rectangle, because *nothing is drawn* is a claim
+//! about the paint pass and not about a rectangle. 3. Where everything in a
+//! strip is, from the mock's own boxes — and the boxes themselves against the
+//! stylesheet's literals, which is a different claim from the relations stated
+//! in terms of them (ADR-0177). 4. That the faders and the meter follow their
+//! values, at zero, at one and in between, and that the peak mark never leaves
+//! the well. 5. That the tally, the blend and the mask show the state they were
+//! given. What the tally does when the residency it was given and the one that
+//! was asked for disagree is `parked.rs`, not here: the strips in this file are
+//! all settled, so nothing in it moves. 6. Which of these are controls and
+//! which are readouts — five controls inside the column and the column itself,
+//! both directions stated rather than inferred from the presence or absence of
+//! a hit test: a press anywhere in a strip is the panel's, and the alley
+//! between two strips is `egui`'s. What a drag on a knob *does* is
+//! `tests/fader.rs`.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the tally's capsule and the blend's mini are as wide as the words in them.
@@ -42,8 +40,8 @@ use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, StripBox, Tally, 
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{BlendMode, Operation};
 
-/// **The mock's own first strip, as values**: `drift_night` live, a trim at
-/// 0.72, the fader at 1.00, `add` over no mask, and a meter reading.
+/// The mock's own first strip, as values: `drift_night` live, a trim at 0.72,
+/// the fader at 1.00, `add` over no mask, and a meter reading.
 ///
 /// The numbers are the mock's percentages read as the values behind them —
 /// `.trim`'s `width: 72%`, `.strip-num`'s `1.00`, `.vmeter b`'s `74%` and
@@ -107,8 +105,8 @@ fn mock_strips() -> Vec<Strip> {
     ]
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair every test here starts from, and `transport.rs`'s own opening.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// every test here starts from, and `transport.rs`'s own opening.
 fn console(viewport: Rect) -> (Panel, egui::Context) {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
@@ -121,8 +119,8 @@ fn bay<'a>(panel: &Panel, ctx: &egui::Context, strips: &'a [Strip]) -> Mixer<'a>
 }
 
 /// The `.mixer-strips` row inside the mixer's region, worked out here from the
-/// mock's boxes rather than asked of the crate — so that a row derived wrong
-/// is a row in the wrong place rather than two functions agreeing.
+/// mock's boxes rather than asked of the crate — so that a row derived wrong is
+/// a row in the wrong place rather than two functions agreeing.
 fn strips_row(region: Rect) -> egui::Rect {
     egui::Rect::from_min_size(
         egui::pos2(
@@ -143,7 +141,7 @@ fn point(p: egui::Pos2) -> Point {
 // Where a strip is
 // ---------------------------------------------------------------------------
 
-/// **A strip is the mock's own boxes**, and every number here is read off
+/// A strip is the mock's own boxes, and every number here is read off
 /// `style.css` rather than off the panel.
 #[test]
 fn a_strip_is_the_mocks_own_boxes() {
@@ -406,7 +404,7 @@ fn a_strip_is_the_mocks_own_boxes() {
     assert!(row.contains_rect(at.rect));
 }
 
-/// **The strips tile their row and never overlap**, which is the same gap
+/// The strips tile their row and never overlap, which is the same gap
 /// arithmetic `preview_cells` is checked for and the same wrong version: a gap
 /// per track rather than a gap between two.
 #[test]
@@ -447,9 +445,9 @@ fn the_strips_tile_their_row_and_never_overlap() {
 // As many strips as the deck has
 // ---------------------------------------------------------------------------
 
-/// **A page is four tracks wide whatever the deck holds**, so a strip does not
-/// get wider because there are fewer of them — and there are exactly as many
-/// strips as there are values.
+/// A page is four tracks wide whatever the deck holds, so a strip does not get
+/// wider because there are fewer of them — and there are exactly as many strips
+/// as there are values.
 ///
 /// The one-slot deck is this example's, and the number that would change is a
 /// strip's *width*: tracks that followed the count would make one strip four
@@ -486,7 +484,7 @@ fn the_strips_are_the_decks_count_and_a_track_is_a_quarter_either_way() {
     }
 }
 
-/// **A strip this bay has not got is a panic and not a rectangle** — the rule
+/// A strip this bay has not got is a panic and not a rectangle — the rule
 /// `TransportRow::dot` states about a dot of a grid.
 #[test]
 #[should_panic(expected = "strip 1 of a mixer of 1")]
@@ -500,7 +498,7 @@ fn a_strip_the_deck_has_not_got_is_not_a_rectangle() {
 // No deck behind the console
 // ---------------------------------------------------------------------------
 
-/// Every shape the console paints **wholly inside** `rect`, on one frame.
+/// Every shape the console paints wholly inside `rect`, on one frame.
 ///
 /// `transport.rs`'s own helper, and it is written again here for the reason
 /// that one gives: a whole frame through `Context::run_ui`, containment rather
@@ -524,12 +522,12 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
 /// How many `.strip` wells were painted inside `rect`: a filled rectangle a
 /// strip's own size.
 ///
-/// **Filled and unstroked, which the prose above always said and the filter
-/// did not.** The deck selection's ring is `.strip.focus`'s `box-shadow:
-/// inset 0 0 0 2px` and is drawn at exactly the strip's rectangle, so a scan
-/// that took any rect of that size counted the selected strip twice and read
-/// a one-slot deck as two. This is the reach corrected and not the claim: one
-/// well per strip is still the whole assertion.
+/// Filled and unstroked, which the prose above always said and the filter did
+/// not. The deck selection's ring is `.strip.focus`'s `box-shadow: inset 0 0 0
+/// 2px` and is drawn at exactly the strip's rectangle, so a scan that took any
+/// rect of that size counted the selected strip twice and read a one-slot deck
+/// as two. This is the reach corrected and not the claim: one well per strip is
+/// still the whole assertion.
 fn wells(shapes: &[egui::Shape], width: f32) -> usize {
     shapes
         .iter()
@@ -545,19 +543,19 @@ fn wells(shapes: &[egui::Shape], width: f32) -> usize {
         .count()
 }
 
-/// **With no deck behind the console the bay's body is empty, and that is
-/// asserted by drawing it.**
+/// With no deck behind the console the bay's body is empty, and that is
+/// asserted by drawing it.
 ///
 /// `View::mixer` is empty in every test in this crate and in the whole of
 /// `cargo test -p karakuri-console`, which is a console with nothing running
-/// behind it. What it draws then is the card and the head and **nothing in the
-/// body** — not four empty strips, which is what the mock's own fourth strip
-/// was until `39f1e6b` and which would be six readings nobody took.
+/// behind it. What it draws then is the card and the head and nothing in the
+/// body — not four empty strips, which is what the mock's own fourth strip was
+/// until `39f1e6b` and which would be six readings nobody took.
 ///
 /// So this counts what lands inside the strips' own rectangle on a frame drawn
-/// with nothing, with one strip and with four. **One well per strip and not
-/// one per track** is the whole claim, and it fails in both directions: a bay
-/// that always drew four, and a bay that drew none.
+/// with nothing, with one strip and with four. One well per strip and not one
+/// per track is the whole claim, and it fails in both directions: a bay that
+/// always drew four, and a bay that drew none.
 #[test]
 fn a_console_with_no_deck_draws_nothing_in_the_bay() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -603,7 +601,7 @@ fn a_console_with_no_deck_draws_nothing_in_the_bay() {
     );
 }
 
-/// **Before anything has been drawn there are no strips**, for `outputs`'s own
+/// Before anything has been drawn there are no strips, for `outputs`'s own
 /// reason: the tally and the blend are as wide as the words in them, and
 /// `Context::fonts` is not valid until the first pass.
 #[test]
@@ -616,7 +614,7 @@ fn a_bay_that_has_not_been_drawn_is_not_there() {
     assert_eq!(mixer(&fresh, panel.layout(), &strips), None);
 }
 
-/// **The strips are drawn where the bay can hold them, and nowhere else** —
+/// The strips are drawn where the bay can hold them, and nowhere else —
 /// `picture_rect`'s rule, stated on a bay of strips.
 #[test]
 fn a_folded_or_soloed_or_narrow_mixer_draws_nothing() {
@@ -650,9 +648,9 @@ fn a_folded_or_soloed_or_narrow_mixer_draws_nothing() {
 // The faders and the meter
 // ---------------------------------------------------------------------------
 
-/// **A fader's fill is its value**, at zero, at one and in between — and the
-/// two run in different directions, which is the mistake worth catching: the
-/// trim fills from the left and the fader fills from the **bottom**.
+/// A fader's fill is its value, at zero, at one and in between — and the two
+/// run in different directions, which is the mistake worth catching: the trim
+/// fills from the left and the fader fills from the bottom.
 #[test]
 fn the_faders_fill_by_their_values_and_the_tall_one_fills_upwards() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -716,10 +714,9 @@ fn the_faders_fill_by_their_values_and_the_tall_one_fills_upwards() {
     }
 }
 
-/// **The meter's column is the mean and its mark is the peak**, and the mark
-/// never leaves the well — which is the one thing `.vmeter`'s
-/// `overflow: hidden` would hide rather than show, at exactly the reading that
-/// matters most.
+/// The meter's column is the mean and its mark is the peak, and the mark never
+/// leaves the well — which is the one thing `.vmeter`'s `overflow: hidden`
+/// would hide rather than show, at exactly the reading that matters most.
 #[test]
 fn the_meters_column_is_the_mean_and_its_mark_is_the_peak() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -825,9 +822,9 @@ fn discs(shapes: &[egui::Shape], rect: egui::Rect) -> Vec<f32> {
         .collect()
 }
 
-/// **The tally says the residency it was given, in that residency's own
-/// colour** — three states, three words and three washes, and the live one is
-/// the only one with a halo on it.
+/// The tally says the residency it was given, in that residency's own colour —
+/// three states, three words and three washes, and the live one is the only one
+/// with a halo on it.
 #[test]
 fn the_tally_shows_the_residency_it_is_given() {
     let pal = Room::Day.palette();
@@ -881,15 +878,15 @@ fn the_tally_shows_the_residency_it_is_given() {
     }
 }
 
-/// **The blend mini says the mode it was given**, in the vocabulary's own
+/// The blend mini says the mode it was given, in the vocabulary's own
 /// lower-case word.
 ///
-/// **The list is now closed and that is the change**: this used to be handed
+/// The list is now closed and that is the change: this used to be handed
 /// arbitrary strings — `screen` and `multiply` among them — because the field
 /// was the engine's `&'static str` and the console had nothing to do with the
 /// list but draw it. The chip is a control now (ADR-0187), so it carries a
-/// `BlendMode` and the three this walks are every mode there is. A fourth
-/// would fail to compile in `BlendMode::name` before it reached here.
+/// `BlendMode` and the three this walks are every mode there is. A fourth would
+/// fail to compile in `BlendMode::name` before it reached here.
 #[test]
 fn the_blend_mini_shows_the_mode_it_is_given() {
     for blend in BlendMode::ALL {
@@ -927,8 +924,8 @@ fn the_blend_mini_shows_the_mode_it_is_given() {
     );
 }
 
-/// **The mask mini shows the mask it was given**, and the three marks are
-/// three different marks.
+/// The mask mini shows the mask it was given, and the three marks are three
+/// different marks.
 ///
 /// The outline is drawn for all three — it is the circle the mock's `◯` is —
 /// and what tells them apart is what is filled inside it: nothing, a half at
@@ -965,8 +962,8 @@ fn the_mask_mini_shows_the_mask_it_is_given() {
     }
 }
 
-/// **The number under the fader is the opacity**, to the two places the mock
-/// writes it.
+/// The number under the fader is the opacity, to the two places the mock writes
+/// it.
 #[test]
 fn the_number_is_the_opacity() {
     for (opacity, text) in [(1.0, "1.00"), (0.3, "0.30"), (0.0, "0.00")] {
@@ -976,8 +973,8 @@ fn the_number_is_the_opacity() {
     }
 }
 
-/// **A strip with no reading draws the meter's well and nothing in it**, which
-/// is the mock's own `alloc` strip — a `.vmeter` with no `b` and no `u`.
+/// A strip with no reading draws the meter's well and nothing in it, which is
+/// the mock's own `alloc` strip — a `.vmeter` with no `b` and no `u`.
 #[test]
 fn a_strip_with_no_reading_draws_an_empty_meter() {
     let with = strip_shapes(vec![mock()], 0);
@@ -1034,7 +1031,7 @@ fn a_strip_with_no_reading_draws_an_empty_meter() {
     assert!(wells(&without) > 0, "no reading was drawn as no meter");
 }
 
-/// **The name is elided rather than wrapped**, which is `.strip-name`'s own
+/// The name is elided rather than wrapped, which is `.strip-name`'s own
 /// `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` — a strip
 /// is 53 wide inside its padding and most real names are wider.
 #[test]
@@ -1093,37 +1090,36 @@ fn a_name_too_long_for_a_strip_is_elided_on_one_line() {
 // The whole strip is claimed, and which control it is the derivation's
 // ---------------------------------------------------------------------------
 
-/// **Every point inside a strip is the panel's, and the alley between two of
-/// them is `egui`'s.**
+/// Every point inside a strip is the panel's, and the alley between two of them
+/// is `egui`'s.
 ///
 /// The console's rule has three claims before `egui`'s: a drag in hand, a
-/// boundary within `GRAB`, and a control the console draws (ADR-0176). This
-/// bay asks five questions of the third kind: four name something inside the
-/// column — `Mixer::grab` for either knob, the blend chip (ADR-0187), the
-/// tally chip (ADR-0195) and the mask mini (ADR-0203) — and the fifth is the
-/// **strip they sit in**, which is the whole column and is what a press on the
-/// name, the number, the meter or a fader's track means: address the keys to
-/// this deck (`Mixer::select`, and `console.html`'s *"a press anywhere on this
-/// strip that no knob under the pointer claimed"*).
+/// boundary within `GRAB`, and a control the console draws (ADR-0176). This bay
+/// asks five questions of the third kind: four name something inside the column
+/// — `Mixer::grab` for either knob, the blend chip (ADR-0187), the tally chip
+/// (ADR-0195) and the mask mini (ADR-0203) — and the fifth is the strip they
+/// sit in, which is the whole column and is what a press on the name, the
+/// number, the meter or a fader's track means: address the keys to this deck
+/// (`Mixer::select`, and `console.html`'s *"a press anywhere on this strip that
+/// no knob under the pointer claimed"*).
 ///
-/// **This test asserted the opposite until 2026-09-07, and it was written
-/// before the selection existed.** `at.rect.center()` and `at.name.center()`
-/// were required to be `Claim::Egui`, which was true on 2026-08-25 when a
-/// strip's ground was nobody's; `Mixer::select` landed five days later,
+/// This test asserted the opposite until 2026-09-07, and it was written before
+/// the selection existed. `at.rect.center()` and `at.name.center()` were
+/// required to be `Claim::Egui`, which was true on 2026-08-25 when a strip's
+/// ground was nobody's; `Mixer::select` landed five days later,
 /// `karakuri/src/main.rs` asked it from the press arm, and `input::on_strip`
 /// went on asking four questions — so the arm never ran and the test held the
 /// hole open. Nothing decided a strip's ground should not be claimed; the four
 /// probes were simply never made five.
 ///
-/// **What the claim can no longer tell apart, the derivation still can.** A
-/// knob is inside the strip's rectangle, so `Claim::Panel` at a knob is now
-/// satisfied by the strip and would go on being satisfied by it if the knob
-/// stopped being hit-tested. So the second half asks the bay directly: at each
-/// control's own point exactly that control answers, and at the ground the
-/// four answer `None` and `select` names the deck. What a drag on a knob
-/// *does* is `tests/fader.rs`, and how far each control sits from a boundary
-/// is `tests/fader.rs`, `tests/blend.rs`, `tests/tally.rs` and
-/// `tests/mask.rs`.
+/// What the claim can no longer tell apart, the derivation still can. A knob is
+/// inside the strip's rectangle, so `Claim::Panel` at a knob is now satisfied
+/// by the strip and would go on being satisfied by it if the knob stopped being
+/// hit-tested. So the second half asks the bay directly: at each control's own
+/// point exactly that control answers, and at the ground the four answer `None`
+/// and `select` names the deck. What a drag on a knob *does* is
+/// `tests/fader.rs`, and how far each control sits from a boundary is
+/// `tests/fader.rs`, `tests/blend.rs`, `tests/tally.rs` and `tests/mask.rs`.
 #[test]
 fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -1253,12 +1249,12 @@ fn the_whole_strip_is_claimed_and_the_alley_between_two_is_not() {
 // The values are the harness's
 // ---------------------------------------------------------------------------
 
-/// **Every value in the bay came in through the argument, and the console
-/// keeps none of them.**
+/// Every value in the bay came in through the argument, and the console keeps
+/// none of them.
 ///
 /// The bay is a function of what it was handed and of the arrangement, and of
-/// nothing else — the seam `View::picture` is on, and the reason this crate
-/// can be asked about a live console with no device anywhere near it.
+/// nothing else — the seam `View::picture` is on, and the reason this crate can
+/// be asked about a live console with no device anywhere near it.
 #[test]
 fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -1322,17 +1318,17 @@ fn ringed(shapes: &[egui::Shape], at: &Mixer) -> Vec<usize> {
         .collect()
 }
 
-/// **The selection is a ring round exactly one strip, and it is the strip it
-/// names.**
+/// The selection is a ring round exactly one strip, and it is the strip it
+/// names.
 ///
 /// `console.html`'s *Two focuses, and they do not look alike*: the deck
 /// selection is a solid ring and keyboard focus is a dashed one, and nothing
 /// here takes keyboard focus — so one ring, solid, and never two.
 ///
-/// It is asserted by drawing, because *the ring is round this strip* is a
-/// claim about the paint pass: `Mixer::selected` answering the right rectangle
-/// and `View::draw` painting it round another would pass an assertion about
-/// the derivation alone.
+/// It is asserted by drawing, because *the ring is round this strip* is a claim
+/// about the paint pass: `Mixer::selected` answering the right rectangle and
+/// `View::draw` painting it round another would pass an assertion about the
+/// derivation alone.
 #[test]
 fn the_selection_is_one_ring_and_it_is_round_the_strip_it_names() {
     let (mut panel, _ctx) = console(PLAUSIBLE);
@@ -1363,15 +1359,14 @@ fn the_selection_is_one_ring_and_it_is_round_the_strip_it_names() {
     }
 }
 
-/// **A deck the bay has no strip for cannot be selected**, which is what keeps
+/// A deck the bay has no strip for cannot be selected, which is what keeps
 /// every deck-addressed key honest — and the Library bay's deck pulldown is
-/// refused on the same count, one mark along (`View::aim_at`, ADR-0305): a
-/// mark naming a deck the press would be refused on is worse than no mark at
-/// all.
+/// refused on the same count, one mark along (`View::aim_at`, ADR-0305): a mark
+/// naming a deck the press would be refused on is worse than no mark at all.
 ///
 /// It refuses rather than clamping: `3` on a two-slot deck means *deck D*, and
-/// answering *deck B* would move the mix under a hand that asked for nothing
-/// of the sort.
+/// answering *deck B* would move the mix under a hand that asked for nothing of
+/// the sort.
 #[test]
 fn a_deck_with_no_strip_cannot_be_selected() {
     let mut view = View::new(Room::Day);
@@ -1396,8 +1391,8 @@ fn a_deck_with_no_strip_cannot_be_selected() {
     }
 }
 
-/// **A press on a strip selects that deck, and a press on one of its controls
-/// does not.**
+/// A press on a strip selects that deck, and a press on one of its controls
+/// does not.
 ///
 /// The strip's rectangle contains the trim, the fader, the two chips and the
 /// mask mini, so this is the ordering stated as an assertion rather than left
@@ -1436,18 +1431,18 @@ fn a_press_on_a_strip_selects_that_deck() {
     assert_eq!(at.select(point(outside)), None);
 }
 
-/// **The bay's last strip and `MINIMUM_VIEWPORT`'s width are one number**, and
+/// The bay's last strip and `MINIMUM_VIEWPORT`'s width are one number, and
 /// under it the pointer loses the deck selection while the keys keep it.
 ///
 /// This is the concrete thing a window minimum buys, so it is asserted as the
 /// pair rather than as the threshold alone. At
 /// `karakuri_console::MINIMUM_VIEWPORT.0` the right pane is exactly 172, a
 /// track is exactly 37, and the fader column is exactly 29 inside 4 + 4 of
-/// padding — `strip_box`'s own condition, met with nothing to spare. A tenth
-/// of a pixel narrower and every strip is `None`, so `Mixer::select` answers
-/// for nowhere on the bay; and the four preview cells beside it are still
-/// drawn, because they ask only for positive area. `0`..`3` on the keyboard
-/// go on selecting a deck in that state, which is the asymmetry
+/// padding — `strip_box`'s own condition, met with nothing to spare. A tenth of
+/// a pixel narrower and every strip is `None`, so `Mixer::select` answers for
+/// nowhere on the bay; and the four preview cells beside it are still drawn,
+/// because they ask only for positive area. `0`..`3` on the keyboard go on
+/// selecting a deck in that state, which is the asymmetry
 /// [ADR-0272](../../../docs/adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)
 /// closes by refusing the window.
 #[test]

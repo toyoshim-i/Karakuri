@@ -1,19 +1,18 @@
-//! **The Outputs row, and the console's first clickable control.**
+//! The Outputs row, and the console's first clickable control.
 //!
 //! Four things, and the middle two are the reason this file exists rather than
 //! a few more assertions in `view.rs`:
 //!
-//! 1. Where the control is, derived from the row's own geometry.
-//! 2. **That it clears every boundary's grab.** `karakuri_console::input` has
-//!    said since it was written that its rule holds *"only while the gaps stay
-//!    empty"* — [`GRAB`] widens every boundary by six pixels either side, and
-//!    those twelve pixels are inside the bays, over whatever a bay draws at its
-//!    edge. This is the first control drawn near one, and this is the guard
-//!    that documentation has been asking for.
-//! 3. That the dot's state is read from the arrangement and not kept beside it.
-//! 4. That a press on it is the same fold the keyboard performs, and that the
-//!    round trip restores the arrangement exactly — ADR-0174's own claim,
-//!    reached from the control instead of from the layout.
+//! 1. Where the control is, derived from the row's own geometry. 2. That it
+//! clears every boundary's grab. `karakuri_console::input` has said since it
+//! was written that its rule holds *"only while the gaps stay empty"* —
+//! [`GRAB`] widens every boundary by six pixels either side, and those twelve
+//! pixels are inside the bays, over whatever a bay draws at its edge. This is
+//! the first control drawn near one, and this is the guard that documentation
+//! has been asking for. 3. That the dot's state is read from the arrangement
+//! and not kept beside it. 4. That a press on it is the same fold the keyboard
+//! performs, and that the round trip restores the arrangement exactly —
+//! ADR-0174's own claim, reached from the control instead of from the layout.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the chip is as wide as the name in it — see `common::drawn_once`.
@@ -29,8 +28,8 @@ use karakuri_layout::{Axis, Layout, Point, Rect};
 use karakuri_operation::gate::Open;
 use karakuri_operation::{Operation, Output};
 
-/// A panel at a viewport, solved, with a context that has drawn once — the
-/// pair every test here starts from.
+/// A panel at a viewport, solved, with a context that has drawn once — the pair
+/// every test here starts from.
 fn console(viewport: Rect) -> (Panel, egui::Context) {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
@@ -46,8 +45,8 @@ fn at(p: egui::Pos2) -> Point {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// **The row's furniture is the row's rectangle and the mock's own boxes**,
-/// and every number here is read off `style.css` rather than off the panel.
+/// The row's furniture is the row's rectangle and the mock's own boxes, and
+/// every number here is read off `style.css` rather than off the panel.
 ///
 /// `.outputs { padding: 8px 11px; gap: 8px; align-items: center }` around a
 /// `.sink` of `padding: 1px 10px; gap: 6px` holding a 7px `.dot` — so the word
@@ -120,9 +119,9 @@ fn the_control_is_the_rows_own_geometry() {
     );
 }
 
-/// **The row is 34 because a sink is 18.5**, so the two are one derivation.
-/// A row that stopped being the height the arrangement says would leave the
-/// chip somewhere else, and the clearance below is what that would cost.
+/// The row is 34 because a sink is 18.5, so the two are one derivation. A row
+/// that stopped being the height the arrangement says would leave the chip
+/// somewhere else, and the clearance below is what that would cost.
 #[test]
 fn the_row_is_the_height_a_sink_needs() {
     let (panel, _) = console(PLAUSIBLE);
@@ -139,24 +138,23 @@ fn the_row_is_the_height_a_sink_needs() {
 // The claim rule
 // ---------------------------------------------------------------------------
 
-/// **The control clears every boundary's grab, and this is the guard
-/// `karakuri_console::input` has been asking for since it was written.**
+/// The control clears every boundary's grab, and this is the guard
+/// `karakuri_console::input` has been asking for since it was written.
 ///
-/// Its documentation states the hazard exactly: `GRAB` widens every boundary
-/// by six pixels either side, *"and those twelve pixels are inside the bays,
-/// over whatever the bay draws at its edge. The first control placed near a
-/// bay's edge is under a boundary's grab, and then both do think they are
-/// dragging."*
+/// Its documentation states the hazard exactly: `GRAB` widens every boundary by
+/// six pixels either side, *"and those twelve pixels are inside the bays, over
+/// whatever the bay draws at its edge. The first control placed near a bay's
+/// edge is under a boundary's grab, and then both do think they are dragging."*
 ///
 /// The numbers say it clears: the row is 34, the chip is 18.5 and centred, so
-/// there is (34 - 18.5) / 2 = **7.75** above the chip and 7.75 below, against a
-/// grab of **6**. The boundary above the row gives up 1.75 pixels short of the
+/// there is (34 - 18.5) / 2 = 7.75 above the chip and 7.75 below, against a
+/// grab of 6. The boundary above the row gives up 1.75 pixels short of the
 /// control.
 ///
-/// **So this fails if the control moves, if the row gets shorter, or if `GRAB`
-/// widens** — and the last one is the point. Widening the grab to 8 makes the
-/// top of this chip undraggable *and* unclickable, and the fix then is not to
-/// nudge the control: it is to change the rule in `input`, deliberately.
+/// So this fails if the control moves, if the row gets shorter, or if `GRAB`
+/// widens — and the last one is the point. Widening the grab to 8 makes the top
+/// of this chip undraggable *and* unclickable, and the fix then is not to nudge
+/// the control: it is to change the rule in `input`, deliberately.
 #[test]
 fn the_control_clears_every_boundarys_grab() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -218,7 +216,7 @@ fn the_control_clears_every_boundarys_grab() {
     }
 }
 
-/// **A press beside the control is `egui`'s, and one on it is the panel's.**
+/// A press beside the control is `egui`'s, and one on it is the panel's.
 ///
 /// The rule is *the boundary gets first refusal*, then the panel's own
 /// controls, then `egui`; so the interesting assertion is the one at the chip's
@@ -298,10 +296,10 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
     );
 }
 
-/// **Before anything has been drawn there is no control**, which is not a
-/// special case to be worked around: a chip is as wide as the name in it, the
-/// name has not been laid out, and a press cannot be on something that has
-/// never been on screen. A window loop has drawn long before a hand arrives.
+/// Before anything has been drawn there is no control, which is not a special
+/// case to be worked around: a chip is as wide as the name in it, the name has
+/// not been laid out, and a press cannot be on something that has never been on
+/// screen. A window loop has drawn long before a hand arrives.
 #[test]
 fn a_control_that_has_not_been_drawn_is_not_there() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -324,8 +322,8 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 // The state behind the dot
 // ---------------------------------------------------------------------------
 
-/// **The dot is `layout.visible(program-view)` in both directions, and there is
-/// no second copy of it.**
+/// The dot is `layout.visible(program-view)` in both directions, and there is
+/// no second copy of it.
 ///
 /// The manual: *"The picture is a sink, listed in Outputs as program view, and
 /// it is on screen exactly when that sink is on."* So this drives the picture
@@ -386,8 +384,8 @@ fn the_dot_follows_the_picture_and_stores_nothing() {
     assert!(on(&layout), "the solo was undone and the sink stayed dark");
 }
 
-/// **A fold from the keyboard shows on the dot**, which is the same claim from
-/// the other end: two surfaces, one state, and no message between them.
+/// A fold from the keyboard shows on the dot, which is the same claim from the
+/// other end: two surfaces, one state, and no message between them.
 #[test]
 fn a_fold_from_anywhere_else_shows_on_the_dot() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -417,8 +415,8 @@ fn a_fold_from_anywhere_else_shows_on_the_dot() {
 // What a press on it asks for
 // ---------------------------------------------------------------------------
 
-/// **A press on the control asks for `Fold(program-view)`, and a press on it
-/// again asks for `Unfold(program-view)`.**
+/// A press on the control asks for `Fold(program-view)`, and a press on it
+/// again asks for `Unfold(program-view)`.
 ///
 /// Two operations and no third one: the toggle is the control choosing between
 /// them from the state it can see, and what it hands the model is a named
@@ -458,7 +456,7 @@ fn the_dot_asks_for_a_fold_and_then_for_an_unfold() {
     );
 }
 
-/// **Off and on again through the control restores the arrangement exactly** —
+/// Off and on again through the control restores the arrangement exactly —
 /// every rectangle of it, not the picture's alone.
 ///
 /// This is
@@ -505,7 +503,7 @@ fn folding_through_the_dot_and_back_restores_the_arrangement() {
     );
 }
 
-/// **The control is drawn where the row can hold it, and nowhere else.**
+/// The control is drawn where the row can hold it, and nowhere else.
 ///
 /// `picture_rect`'s rule, stated on a control: a folded row has a rectangle
 /// with no extent in it, so there is nothing to paint and nothing to press.
@@ -566,8 +564,8 @@ fn the_boundary_above_the_row_is_still_the_panels() {
 // A press is never a press that does nothing
 // ---------------------------------------------------------------------------
 
-/// **A press on a lit dot darkens it and a press on a dark dot lights it,
-/// always.** The property, over every way the picture can be off screen.
+/// A press on a lit dot darkens it and a press on a dark dot lights it, always.
+/// The property, over every way the picture can be off screen.
 ///
 /// This is the assertion that makes *the control never appears not to respond*
 /// checkable rather than argued. `docs/manual/console.html`'s note on this row
@@ -622,8 +620,8 @@ fn a_press_darkens_a_lit_dot_and_lights_a_dark_one_always() {
     }
 }
 
-/// **The bay folded around the picture comes back with one press**, stated on
-/// its own because it is the case that prompted the rule: `g` over the picture
+/// The bay folded around the picture comes back with one press, stated on its
+/// own because it is the case that prompted the rule: `g` over the picture
 /// folds the Program bay, which is the fold an operator makes without thinking
 /// about which node it landed on.
 #[test]
@@ -658,23 +656,23 @@ fn the_bay_folded_around_the_picture_comes_back_with_one_press() {
     assert!(near(rect_of(panel.layout(), "program").h, 395.0));
 }
 
-/// **A solo that is hiding the picture is dropped by the dot, and one that is
-/// not is left alone.**
+/// A solo that is hiding the picture is dropped by the dot, and one that is not
+/// is left alone.
 ///
 /// Reachable from the control, and only one way: a solo on the outputs row
 /// itself leaves this row holding the window with its sink drawn and dark,
-/// because `Layout::solo` collapses everything off the solo's path. Every
-/// other solo either leaves the picture on screen or takes the outputs row off
-/// it, and a row that is not drawn has no control to press.
+/// because `Layout::solo` collapses everything off the solo's path. Every other
+/// solo either leaves the picture on screen or takes the outputs row off it,
+/// and a row that is not drawn has no control to press.
 ///
-/// **Dropping it is the honest operation and not a workaround.** `Layout` has
-/// no invariant tying `soloed` to the collapsed flags — `check_structure` asks
+/// Dropping it is the honest operation and not a workaround. `Layout` has no
+/// invariant tying `soloed` to the collapsed flags — `check_structure` asks
 /// only that a recorded solo addresses a node — so expanding a path under a
 /// live solo is a state the layout accepts, solves and reloads. What it is not
 /// is a state anyone can reason about: `soloed` would name a region that is no
 /// longer the only one on screen, and `unsolo` restores the flags the solo
-/// replaced, which would silently throw away the expand the operator just
-/// asked for.
+/// replaced, which would silently throw away the expand the operator just asked
+/// for.
 #[test]
 fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -754,15 +752,15 @@ fn a_solo_hiding_the_picture_is_dropped_and_one_that_is_not_is_kept() {
 // What a chip asks for
 // ---------------------------------------------------------------------------
 
-/// **Every chip in the row asks for `RouteFrame` naming its own output**, which
-/// is the panel column's `has` on *Choose where the frame goes* and is what
+/// Every chip in the row asks for `RouteFrame` naming its own output, which is
+/// the panel column's `has` on *Choose where the frame goes* and is what
 /// `panel_column.rs` reads this crate's source for.
 ///
-/// **`on` is the state being asked for and not the state it is in.** A press on
-/// a lit chip asks for it off and a press on a dark one asks for it on, which
-/// is P-0090 — an operation names a destination, never a toggle, so two
-/// surfaces switching one sink cannot disagree about where they are. The toggle
-/// is the chip.
+/// `on` is the state being asked for and not the state it is in. A press on a
+/// lit chip asks for it off and a press on a dark one asks for it on, which is
+/// P-0090 — an operation names a destination, never a toggle, so two surfaces
+/// switching one sink cannot disagree about where they are. The toggle is the
+/// chip.
 #[test]
 fn a_chip_asks_for_the_output_it_names() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -825,12 +823,11 @@ fn a_chip_asks_for_the_output_it_names() {
     }
 }
 
-/// **`chip_at` answers for the whole row and for nothing beside it.**
+/// `chip_at` answers for the whole row and for nothing beside it.
 ///
-/// The claim rule and the press are one derivation
-/// ([`crate::input`]'s rule), so this is the question `input::claim` asks: a
-/// point on a chip names its output, and a point on the row's ground names
-/// nothing.
+/// The claim rule and the press are one derivation ([`crate::input`]'s rule),
+/// so this is the question `input::claim` asks: a point on a chip names its
+/// output, and a point on the row's ground names nothing.
 #[test]
 fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -849,8 +846,8 @@ fn the_row_names_the_chip_under_the_pointer_and_nothing_else() {
     assert_eq!(row.chip_at(at(past)), None);
 }
 
-/// **The chips are laid out left to right with one `.outputs` gap between
-/// them**, and every one of them is inside the row.
+/// The chips are laid out left to right with one `.outputs` gap between them,
+/// and every one of them is inside the row.
 ///
 /// The mock's `.outputs` is `display: flex; gap: 8px`, and a capsule is as wide
 /// as what is in it — so where the third chip starts depends on what the second

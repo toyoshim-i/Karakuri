@@ -1,32 +1,28 @@
-//! **The four class pills: what a model may reach, and the hand that opens
-//! it.**
+//! The four class pills: what a model may reach, and the hand that opens it.
 //!
 //! `docs/manual/console.html` draws four of them and specifies each in its own
 //! tooltip — one in the Program bay's head beside `solo`, one in the Mixer
-//! bay's, one in the Master bay's, and one **beside the `Outputs` label**,
-//! because that row has no head to put an indicator in. Each says what it
-//! opens, that a click opens the class and a second click shuts it, and what
-//! about the press is deliberately unsettled.
+//! bay's, one in the Master bay's, and one beside the `Outputs` label, because
+//! that row has no head to put an indicator in. Each says what it opens, that a
+//! click opens the class and a second click shuts it, and what about the press
+//! is deliberately unsettled.
 //!
 //! Six things, and the third and the fourth are why this file exists rather
 //! than a few more assertions in `solo_pill.rs` and `outputs.rs`:
 //!
 //! 1. That each of the four is drawn where the page puts it, and that the
-//!    region it is in is the bay a refusal names.
-//! 2. That each is hit-tested where it is painted, and that nothing beside one
-//!    is.
-//! 3. **That a press opens exactly one class and leaves the other three
-//!    shut** — the property, over all four, because an opening that took its
-//!    neighbours with it is a permission nobody granted.
-//! 4. **That a second press shuts it**, which is the half of the page's
-//!    sentence a control could silently not have.
-//! 5. That the word says which state the class is in, and that the capsule is
-//!    measured for the word it holds.
-//! 6. That a bay carrying no class draws nothing at all, and that a pill
-//!    nobody has drawn is not one a press can be on.
+//! region it is in is the bay a refusal names. 2. That each is hit-tested where
+//! it is painted, and that nothing beside one is. 3. That a press opens exactly
+//! one class and leaves the other three shut — the property, over all four,
+//! because an opening that took its neighbours with it is a permission nobody
+//! granted. 4. That a second press shuts it, which is the half of the page's
+//! sentence a control could silently not have. 5. That the word says which
+//! state the class is in, and that the capsule is measured for the word it
+//! holds. 6. That a bay carrying no class draws nothing at all, and that a pill
+//! nobody has drawn is not one a press can be on.
 //!
-//! **What is not here is the press reaching a run's `Opening`, and the audit
-//! answering differently afterwards.** That crosses two crates this one cannot
+//! What is not here is the press reaching a run's `Opening`, and the audit
+//! answering differently afterwards. That crosses two crates this one cannot
 //! see — `karakuri-environment` holds the handle and `karakuri-operation`'s
 //! gate holds the audit — so it is `crates/karakuri/src/main.rs`'s
 //! `the_gate_lets_a_refused_operation_through_once_the_class_is_open`, which is
@@ -74,13 +70,12 @@ fn pills(ctx: &egui::Context, layout: &Layout, open: Open) -> Vec<karakuri_conso
 // Where each of the four is
 // ---------------------------------------------------------------------------
 
-/// **The region a class opens is the bay its refusal names**, in both
-/// directions.
+/// The region a class opens is the bay its refusal names, in both directions.
 ///
 /// `karakuri_operation::gate::Class::bay` is what a refused model is told —
 /// *"the operator opens it at the head of the Mixer bay"* — and this console is
-/// what has to draw a pill there. A refusal naming a place with no pill in it is
-/// worse than one naming none, because the model repeats it to the person
+/// what has to draw a pill there. A refusal naming a place with no pill in it
+/// is worse than one naming none, because the model repeats it to the person
 /// sitting there and sends them looking.
 #[test]
 fn the_region_a_class_opens_is_the_bay_its_refusal_names() {
@@ -120,8 +115,8 @@ fn the_region_a_class_opens_is_the_bay_its_refusal_names() {
     assert_eq!(Class::ALL.len(), 4);
 }
 
-/// **Each of the four is a `.pill` in the region the page puts it in**, and
-/// every number here is the mock's.
+/// Each of the four is a `.pill` in the region the page puts it in, and every
+/// number here is the mock's.
 #[test]
 fn each_class_draws_a_capsule_in_its_own_region() {
     for viewport in [SMALLEST, PLAUSIBLE] {
@@ -170,14 +165,14 @@ fn each_class_draws_a_capsule_in_its_own_region() {
     }
 }
 
-/// **The Program bay's pill sits beside `solo` and to the right of it**, which
-/// is where the page draws it: `1920×1080`, `solo`, `mcp · shut`, `previews 2
-/// of 4`.
+/// The Program bay's pill sits beside `solo` and to the right of it, which is
+/// where the page draws it: `1920×1080`, `solo`, `mcp · shut`, `previews 2 of
+/// 4`.
 ///
-/// **And `solo` moves when this one does.** The two words are not the same
-/// width, so a head laid out for one state and hit-tested against the other
-/// would put a press on `solo` a few pixels off the capsule an operator sees.
-/// One derivation answers for both — `view::head_capsule` — and this is the
+/// And `solo` moves when this one does. The two words are not the same width,
+/// so a head laid out for one state and hit-tested against the other would put
+/// a press on `solo` a few pixels off the capsule an operator sees. One
+/// derivation answers for both — `view::head_capsule` — and this is the
 /// assertion that says so.
 #[test]
 fn the_program_bays_pill_sits_beside_solo_and_moves_it() {
@@ -221,8 +216,8 @@ fn the_program_bays_pill_sits_beside_solo_and_moves_it() {
     );
 }
 
-/// **The Outputs row's pill sits beside the word that stands in for a head**,
-/// which is the placement this console had no precedent for.
+/// The Outputs row's pill sits beside the word that stands in for a head, which
+/// is the placement this console had no precedent for.
 ///
 /// The page says it outright: *"This row has no bay head to put an indicator in
 /// — it is headless, like the transport — so the pill sits beside the word that
@@ -265,7 +260,7 @@ fn the_outputs_rows_pill_sits_beside_the_word_that_stands_in_for_a_head() {
 // It is painted, and it is pressed in the same rectangle
 // ---------------------------------------------------------------------------
 
-/// Every shape the console paints **wholly inside** `rect`, on one frame —
+/// Every shape the console paints wholly inside `rect`, on one frame —
 /// `library.rs`'s helper, and the reasoning is written out there.
 fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<egui::Shape> {
     let ctx = drawn_once();
@@ -281,7 +276,7 @@ fn shapes_inside(view: &mut View, panel: &mut Panel, rect: egui::Rect) -> Vec<eg
         .collect()
 }
 
-/// **Each of the four is actually painted**, in the capsule the hit test uses.
+/// Each of the four is actually painted, in the capsule the hit test uses.
 ///
 /// *Nothing is drawn there* is a claim about the paint pass and not about a
 /// rectangle, so it is asserted by drawing a frame and counting what landed
@@ -328,9 +323,9 @@ fn each_pill_is_painted_in_the_capsule_a_press_lands_on() {
     );
 }
 
-/// **A press on a pill is the panel's and a press beside one is `egui`'s** —
-/// the rule every control here lives by: a control claims what it acts on and
-/// no more.
+/// A press on a pill is the panel's and a press beside one is `egui`'s — the
+/// rule every control here lives by: a control claims what it acts on and no
+/// more.
 #[test]
 fn each_pill_is_claimed_and_nothing_beside_it_is() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -374,12 +369,12 @@ fn each_pill_is_claimed_and_nothing_beside_it_is() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press opens exactly one class and leaves the other three shut.**
+/// A press opens exactly one class and leaves the other three shut.
 ///
 /// The property over all four, because this is the assertion nothing else can
-/// make for it: `Open`'s fields are private and `Open::with` names one class, so
-/// the only way three classes could be opened by a press on the fourth is here
-/// — in the value this control composes. `McpPill::next` takes the whole
+/// make for it: `Open`'s fields are private and `Open::with` names one class,
+/// so the only way three classes could be opened by a press on the fourth is
+/// here — in the value this control composes. `McpPill::next` takes the whole
 /// opening and writes it back for exactly that reason.
 #[test]
 fn a_press_opens_exactly_one_class_and_leaves_the_other_three_shut() {
@@ -404,8 +399,8 @@ fn a_press_opens_exactly_one_class_and_leaves_the_other_three_shut() {
     }
 }
 
-/// **A second press shuts it**, and puts the opening back exactly as it was —
-/// the other half of the page's own sentence, *"Click to open the class; click
+/// A second press shuts it, and puts the opening back exactly as it was — the
+/// other half of the page's own sentence, *"Click to open the class; click
 /// again to shut it."*
 #[test]
 fn a_second_press_shuts_it_and_leaves_the_rest_alone() {
@@ -432,8 +427,8 @@ fn a_second_press_shuts_it_and_leaves_the_rest_alone() {
     }
 }
 
-/// **The word says which state the class is in, and the capsule is measured for
-/// the word it holds.**
+/// The word says which state the class is in, and the capsule is measured for
+/// the word it holds.
 ///
 /// The two are one assertion on purpose: a control whose word changed and whose
 /// box did not would be one an operator could press on the half of it that is
@@ -467,8 +462,8 @@ fn the_word_says_the_state_and_the_capsule_is_measured_for_it() {
 // Where there is no pill at all
 // ---------------------------------------------------------------------------
 
-/// **A bay carrying no class draws nothing**, which is the answer ADR-0235's
-/// open question is left at rather than settled by this console.
+/// A bay carrying no class draws nothing, which is the answer ADR-0235's open
+/// question is left at rather than settled by this console.
 #[test]
 fn a_bay_with_no_class_draws_no_pill() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -487,7 +482,7 @@ fn a_bay_with_no_class_draws_no_pill() {
     }
 }
 
-/// **A region that is folded away, or soloed away, has no pill to press.**
+/// A region that is folded away, or soloed away, has no pill to press.
 ///
 /// `program_head`'s rule and `outputs`'s, stated once over all four: a
 /// rectangle with nothing in it is not something to paint or to click.
@@ -522,10 +517,10 @@ fn a_folded_or_soloed_region_draws_no_pill() {
     }
 }
 
-/// **Before anything has been drawn there is no pill**, which is not a special
-/// case to be worked around: a capsule is as wide as the word in it, the word
-/// has not been laid out, and a press cannot be on something that has never been
-/// on screen.
+/// Before anything has been drawn there is no pill, which is not a special case
+/// to be worked around: a capsule is as wide as the word in it, the word has
+/// not been laid out, and a press cannot be on something that has never been on
+/// screen.
 #[test]
 fn a_console_that_has_never_drawn_has_no_pill() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -537,10 +532,10 @@ fn a_console_that_has_never_drawn_has_no_pill() {
     }
 }
 
-/// **Opening a class moves nothing on the console**, which is the whole of
-/// *refused rather than hidden* seen from the operator's side: the manual's
-/// note on the Mixer's pill says *"Nothing here is ever refused to a hand"*, and
-/// a pill that folded, greyed or disabled anything would be this surface taking
+/// Opening a class moves nothing on the console, which is the whole of *refused
+/// rather than hidden* seen from the operator's side: the manual's note on the
+/// Mixer's pill says *"Nothing here is ever refused to a hand"*, and a pill
+/// that folded, greyed or disabled anything would be this surface taking
 /// something away from the person who just granted it.
 #[test]
 fn opening_a_class_moves_nothing_in_the_arrangement() {

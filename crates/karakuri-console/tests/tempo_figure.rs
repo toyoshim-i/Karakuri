@@ -1,42 +1,40 @@
-//! **The tempo figure: the track is the reading, and the band is a guard on
-//! the hand.**
+//! The tempo figure: the track is the reading, and the band is a guard on the
+//! hand.
 //!
 //! `docs/manual/console.html` gives `.bpm` a `data-tip` and it is this
 //! control's specification: *"Click along the figure to name a tempo … A press
 //! names a value outright rather than stepping, so the figure is the track and
 //! the number under your finger is the one you get. The band is ±15% of what
 //! the grid is running at, and a press outside it is ignored rather than
-//! clamped — that is a guard against a mis-click and not a statement about
-//! what a tempo may be."*
+//! clamped — that is a guard against a mis-click and not a statement about what
+//! a tempo may be."*
 //!
 //! Four things, and the second and the third are why this file exists rather
 //! than a few more assertions in `tests/transport.rs`:
 //!
-//! 1. **That the figure is a track and its middle is the number it draws** —
-//!    the one property that makes *the number under your finger* true rather
-//!    than a phrase, and the reason no track is painted under it.
-//! 2. **That a press names the tempo it landed on**, outright and not by a
-//!    step, which is what `Operation::SetFreeRunTempo` carries and what
-//!    separates this control from the octave beside it.
-//! 3. **That a press outside the band is ignored** — no operation, nothing
-//!    clamped to the edge of the band, and the point left to `egui`. It is
-//!    asserted at a point *on the figure*, because a guard that could only be
-//!    missed by missing the number is not a guard at all.
-//! 4. **That the band is the tempo at the press and moves with the grid**, so
-//!    the figure is a percentage of whatever is running rather than a range
-//!    written down anywhere — and that it bounds a press and not a tempo: 240
-//!    is out of reach in one press from the mock's 128 and reached by walking
-//!    the band five times.
+//! 1. That the figure is a track and its middle is the number it draws — the
+//! one property that makes *the number under your finger* true rather than a
+//! phrase, and the reason no track is painted under it. 2. That a press names
+//! the tempo it landed on, outright and not by a step, which is what
+//! `Operation::SetFreeRunTempo` carries and what separates this control from
+//! the octave beside it. 3. That a press outside the band is ignored — no
+//! operation, nothing clamped to the edge of the band, and the point left to
+//! `egui`. It is asserted at a point *on the figure*, because a guard that
+//! could only be missed by missing the number is not a guard at all. 4. That
+//! the band is the tempo at the press and moves with the grid, so the figure is
+//! a percentage of whatever is running rather than a range written down
+//! anywhere — and that it bounds a press and not a tempo: 240 is out of reach
+//! in one press from the mock's 128 and reached by walking the band five times.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the figure's width is the width of the number in it — see
 //! `common::drawn_once`.
 //!
-//! **What is not here is the claim**, and it is not here because it is not
-//! this crate's to make alone: `input::PROBES` is what puts a control in front
-//! of `egui` and `karakuri/src/main.rs` is what acts on it. What this file can
-//! say about the pointer is the half that holds either way — a press on the
-//! guard is `egui`'s — and it says it below.
+//! What is not here is the claim, and it is not here because it is not this
+//! crate's to make alone: `input::PROBES` is what puts a control in front of
+//! `egui` and `karakuri/src/main.rs` is what acts on it. What this file can say
+//! about the pointer is the half that holds either way — a press on the guard
+//! is `egui`'s — and it says it below.
 
 mod common;
 
@@ -83,8 +81,8 @@ fn asked(row: &TransportRow, unit: f32) -> Option<f32> {
 // The figure is the track
 // ---------------------------------------------------------------------------
 
-/// **The middle of the number is the number**, and the ends are
-/// [`TEMPO_SPAN`] either way.
+/// The middle of the number is the number, and the ends are [`TEMPO_SPAN`]
+/// either way.
 ///
 /// This is the whole of why nothing is painted for this control: the figure is
 /// drawn at the tempo it names, so the point that asks for what is already
@@ -129,10 +127,9 @@ fn the_middle_of_the_figure_is_the_number_it_draws() {
     );
 }
 
-/// **A press names the tempo it landed on**, and two presses a few pixels
-/// apart name two different tempi — which is what *outright rather than
-/// stepping* means and is the difference between this control and the `×2`
-/// beside it.
+/// A press names the tempo it landed on, and two presses a few pixels apart
+/// name two different tempi — which is what *outright rather than stepping*
+/// means and is the difference between this control and the `×2` beside it.
 #[test]
 fn a_press_names_the_tempo_it_landed_on() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -169,14 +166,13 @@ fn a_press_names_the_tempo_it_landed_on() {
 // The guard
 // ---------------------------------------------------------------------------
 
-/// **A press outside the band is ignored: no operation, nothing clamped, and
-/// the point stays `egui`'s.**
+/// A press outside the band is ignored: no operation, nothing clamped, and the
+/// point stays `egui`'s.
 ///
-/// The press is *on the number* — a fifth of the figure's width past the
-/// band's edge — which is what makes this the guard rather than a miss. And
-/// the clamp is what is being refused: a press the operator did not mean,
-/// turned into the largest move this row can make, is the failure the band
-/// exists for.
+/// The press is *on the number* — a fifth of the figure's width past the band's
+/// edge — which is what makes this the guard rather than a miss. And the clamp
+/// is what is being refused: a press the operator did not mean, turned into the
+/// largest move this row can make, is the failure the band exists for.
 #[test]
 fn a_press_outside_the_band_is_ignored_rather_than_clamped() {
     let (mut panel, ctx) = console(PLAUSIBLE);
@@ -225,10 +221,10 @@ fn a_press_outside_the_band_is_ignored_rather_than_clamped() {
     }
 }
 
-/// **The figure is clear of the boundary under the row**, which is the
-/// clearance `tests/arrangement_pill.rs` keeps for the one control in this row
-/// that had it first: a control inside a boundary's [`GRAB`] is a control the
-/// pointer rule never reaches, because rule 3 answers before rule 4.
+/// The figure is clear of the boundary under the row, which is the clearance
+/// `tests/arrangement_pill.rs` keeps for the one control in this row that had
+/// it first: a control inside a boundary's [`GRAB`] is a control the pointer
+/// rule never reaches, because rule 3 answers before rule 4.
 #[test]
 fn the_figure_is_clear_of_the_boundary_bands() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -251,26 +247,26 @@ fn the_figure_is_clear_of_the_boundary_bands() {
 // The band is the tempo at the press
 // ---------------------------------------------------------------------------
 
-/// **±15% of what the grid is running at, and not of a range written down
-/// anywhere.**
+/// ±15% of what the grid is running at, and not of a range written down
+/// anywhere.
 ///
 /// The same point on the figure asks for a different tempo at every tempo, and
 /// nothing here holds a pair of ends: `karakuri_audio::tempo::BPM_RANGE` says
 /// of itself that it is not the range of answers, and the band does not say it
 /// either.
 ///
-/// **240 is the case the manual names**, and the band is what says how long it
+/// 240 is the case the manual names, and the band is what says how long it
 /// takes rather than whether it happens: one press from the mock's 128 cannot
-/// reach it, and walking the right-hand edge of the band five times does —
-/// with the figure naming 240 outright on the last of them, because by then it
-/// is inside the band.
+/// reach it, and walking the right-hand edge of the band five times does — with
+/// the figure naming 240 outright on the last of them, because by then it is
+/// inside the band.
 ///
-/// **The manual's tip says two presses and that is not arithmetic that works
-/// from 128.** ±15% a press is 147.2, and the `×2` beside the figure is drawn
-/// **inert** at this tempo — `karakuri_audio`'s `BPM_RANGE` does not contain
-/// 256 — so there is no pair of presses that reaches 240 from where the mock
-/// stands. The walk is asserted here at the length it actually is; the tip is
-/// reported rather than met by widening a band somebody decided.
+/// The manual's tip says two presses and that is not arithmetic that works from
+/// 128. ±15% a press is 147.2, and the `×2` beside the figure is drawn inert at
+/// this tempo — `karakuri_audio`'s `BPM_RANGE` does not contain 256 — so there
+/// is no pair of presses that reaches 240 from where the mock stands. The walk
+/// is asserted here at the length it actually is; the tip is reported rather
+/// than met by widening a band somebody decided.
 #[test]
 fn the_band_is_the_tempo_at_the_press_and_moves_with_the_grid() {
     let (panel, ctx) = console(PLAUSIBLE);

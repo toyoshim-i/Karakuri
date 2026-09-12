@@ -1,5 +1,6 @@
-//! **The six keys inside a bay: what a digit names, what the arrows walk, what
-//! `space` cycles and what `enter` performs.**
+//! The six keys inside a bay: what a digit names, what the arrows walk, what
+//! `space` cycles and what `enter` performs.
+//!
 //!
 //! [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
 //! designed the grammar,
@@ -13,30 +14,26 @@
 //!
 //! Eight claims:
 //!
-//! 1. **A digit names the nth thing one level below the address and `0` the
-//!    head**, counting what the bay drew from one.
-//! 2. **Naming a strip is the deck selection**, which is why that row keeps a
-//!    key badge rather than losing one — and it goes through `View::select`,
-//!    so a deck the mixer draws no strip for is refused and the address does
-//!    not descend.
-//! 3. **The arrows take the neighbour along the axis the bay draws its items
-//!    on**, and the next value of a level along the other. **The Sequencer is
-//!    where both axes are used at once** — its lanes are a column and a lane's
-//!    cells are a row — and that is the axis check ADR-0333 left with nothing
-//!    holding it.
-//! 4. **`space` is the addressed thing's next state**, and it is the same cycle
-//!    the chip walks — asked of the same functions rather than restated.
-//! 5. **`space` on a bay is the fold**, in every one of the nine, and a folded
-//!    bay answers it and nothing else.
-//! 6. **`enter` is the act the addressed thing is for**, and it declines in a
-//!    bay whose items perform nothing.
-//! 7. **The address is a path**, which the Inspector is what proves: three
-//!    rungs, and the third is reached by a digit through a rung that is not a
-//!    control.
-//! 8. **A refusal says why.** A key that declines and a key that is not bound
-//!    are the same experience, so every `Nothing` carries a sentence.
+//! 1. A digit names the nth thing one level below the address and `0` the head,
+//! counting what the bay drew from one. 2. Naming a strip is the deck
+//! selection, which is why that row keeps a key badge rather than losing one —
+//! and it goes through `View::select`, so a deck the mixer draws no strip for
+//! is refused and the address does not descend. 3. The arrows take the
+//! neighbour along the axis the bay draws its items on, and the next value of a
+//! level along the other. The Sequencer is where both axes are used at once —
+//! its lanes are a column and a lane's cells are a row — and that is the axis
+//! check ADR-0333 left with nothing holding it. 4. `space` is the addressed
+//! thing's next state, and it is the same cycle the chip walks — asked of the
+//! same functions rather than restated. 5. `space` on a bay is the fold, in
+//! every one of the nine, and a folded bay answers it and nothing else. 6.
+//! `enter` is the act the addressed thing is for, and it declines in a bay
+//! whose items perform nothing. 7. The address is a path, which the Inspector
+//! is what proves: three rungs, and the third is reached by a digit through a
+//! rung that is not a control. 8. A refusal says why. A key that declines and a
+//! key that is not bound are the same experience, so every `Nothing` carries a
+//! sentence.
 //!
-//! **No device and no `egui` pass.** A press is a walk of a path.
+//! No device and no `egui` pass. A press is a walk of a path.
 
 mod common;
 
@@ -79,7 +76,7 @@ fn strip(at: usize) -> Strip {
     }
 }
 
-/// **One parameter row**, published at `ord` over `range` and holding `value`.
+/// One parameter row, published at `ord` over `range` and holding `value`.
 fn param(ord: usize, name: &str, range: [f32; 2], value: f32) -> Param {
     Param {
         ord: Some(ord),
@@ -97,8 +94,8 @@ fn param(ord: usize, name: &str, range: [f32; 2], value: f32) -> Param {
     }
 }
 
-/// **The pane's one node**: an authority chip, two renderers with the first
-/// live, and three parameter rows. The third is bound, so `enter` on it has an
+/// The pane's one node: an authority chip, two renderers with the first live,
+/// and three parameter rows. The third is bound, so `enter` on it has an
 /// attachment to take back and the two above it have none.
 fn node() -> Node {
     Node {
@@ -141,7 +138,7 @@ fn node() -> Node {
     }
 }
 
-/// **One Inspector pane**, on the deck the arrangement points it at.
+/// One Inspector pane, on the deck the arrangement points it at.
 fn pane(deck: usize) -> Pane {
     Pane {
         deck,
@@ -156,9 +153,9 @@ fn pane(deck: usize) -> Pane {
     }
 }
 
-/// **A pattern with two lanes**, the first unmuted with step 0 off and the
-/// second muted — so a press on either says the state it arrives at rather
-/// than being right by symmetry.
+/// A pattern with two lanes, the first unmuted with step 0 off and the second
+/// muted — so a press on either says the state it arrives at rather than being
+/// right by symmetry.
 fn pattern() -> Pattern {
     let mut pattern = Pattern::empty();
     pattern.push(Lane::new(LaneTarget::Fader { deck: 0 }, 1.0, 0.0));
@@ -168,9 +165,9 @@ fn pattern() -> Pattern {
     pattern
 }
 
-/// **A console with every bay drawing something**, which is what the seven new
-/// rows of the dispatch table need to be asked at all: a bay drawing nothing
-/// answers a digit with its own refusal, which is a different claim.
+/// A console with every bay drawing something, which is what the seven new rows
+/// of the dispatch table need to be asked at all: a bay drawing nothing answers
+/// a digit with its own refusal, which is a different claim.
 fn console() -> (Panel, View) {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
@@ -230,10 +227,10 @@ fn console() -> (Panel, View) {
     (panel, view)
 }
 
-/// **What the deck is holding**, answered off the strips this file built —
-/// which is what `crates/karakuri` reads off the *deck* at the press. Here they
-/// are the same values, and which of the two a console reads is that file's
-/// question rather than this one's.
+/// What the deck is holding, answered off the strips this file built — which is
+/// what `crates/karakuri` reads off the *deck* at the press. Here they are the
+/// same values, and which of the two a console reads is that file's question
+/// rather than this one's.
 fn holding(view: &View, deck: u8) -> Option<focus::Held> {
     let strip = view.mixer.get(usize::from(deck))?;
     Some(focus::Held {
@@ -265,7 +262,7 @@ fn press(view: &mut View, panel: &Panel, key: Press) -> Asked {
     })
 }
 
-/// **A path pressed digit by digit**, and the answer to the last press.
+/// A path pressed digit by digit, and the answer to the last press.
 fn walk_to(view: &mut View, panel: &Panel, bay: &str, path: &[usize]) {
     focus_on(view, panel, bay);
     for digit in path {
@@ -287,11 +284,11 @@ fn at(view: &View, bay: &str) -> Vec<usize> {
 // The table
 // ---------------------------------------------------------------------------
 
-/// **Which keys act in which bay is derived from what the bay is made of**, not
+/// Which keys act in which bay is derived from what the bay is made of, not
 /// listed beside it — so this is the derivation held against the nine bays the
 /// record walks.
 ///
-/// **The fold is one route and not nine.** `space` at bay level works wherever
+/// The fold is one route and not nine. `space` at bay level works wherever
 /// focus is, so it is declared under `focus::ANY` rather than nine times over —
 /// which is what lets *Fold a bay away* carry one badge saying `in any bay`.
 #[test]
@@ -345,8 +342,8 @@ fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
     );
 }
 
-/// **ADR-0259's *no bay uses all six keys* is no longer true, and this is
-/// where that is written down.**
+/// ADR-0259's *no bay uses all six keys* is no longer true, and this is
+/// where that is written down.
 ///
 /// The record found it of the panel as it stood: *"`space` reaches nothing in
 /// Staging and nothing in Library below its head, and `enter` reaches nothing
@@ -354,12 +351,12 @@ fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
 /// legend implying otherwise would be lying."* Two of those four clauses have
 /// since stopped holding, and neither by anything this grammar decided:
 ///
-/// - **The Library gained a star**, drawn after ADR-0259 was written, and a
+/// - The Library gained a star, drawn after ADR-0259 was written, and a
 ///   star is a state — so `space` reaches a row after all.
-/// - **The Mixer's `go` capsule is its head's**, which is where ADR-0343 puts
+/// - The Mixer's `go` capsule is its head's, which is where ADR-0343 puts
 ///   the transition row — so `enter` reaches a row of that bay.
 ///
-/// So two bays use all four of the keys that act, and **seven still do not**.
+/// So two bays use all four of the keys that act, and seven still do not.
 /// The list is asserted rather than the claim, so a third bay joining them is
 /// a failure that says which rather than a sentence quietly going false.
 #[test]
@@ -438,8 +435,8 @@ fn a_digit_past_what_the_bay_drew_is_refused_and_the_address_stays_put() {
     );
 }
 
-/// **`0` is the head where a bay draws one and the row itself where it does
-/// not**, which is ADR-0259's reading of the two headless rows.
+/// `0` is the head where a bay draws one and the row itself where it does not,
+/// which is ADR-0259's reading of the two headless rows.
 #[test]
 fn zero_names_the_head_and_a_headless_row_says_it_has_none() {
     let (panel, mut view) = console();
@@ -470,8 +467,8 @@ fn zero_names_the_head_and_a_headless_row_says_it_has_none() {
     assert_eq!(at(&view, "transport"), Vec::<usize>::new());
 }
 
-/// **The Inspector is what proves the address is a path**, and it is three
-/// rungs: a pane, the thing under it, and the control under that.
+/// The Inspector is what proves the address is a path, and it is three rungs: a
+/// pane, the thing under it, and the control under that.
 #[test]
 fn the_inspectors_address_is_three_rungs_deep() {
     let (panel, mut view) = console();
@@ -507,8 +504,8 @@ fn the_inspectors_address_is_three_rungs_deep() {
 // The arrows, and the axis
 // ---------------------------------------------------------------------------
 
-/// **The mixer's strips are a row and the library's rows are a column**, so
-/// each bay answers one pair and declines the other — which is ADR-0259's *the
+/// The mixer's strips are a row and the library's rows are a column, so each
+/// bay answers one pair and declines the other — which is ADR-0259's *the
 /// neighbour of the addressed thing, along the axis it is drawn on*.
 #[test]
 fn the_arrows_walk_a_bays_items_along_the_axis_it_draws_them_on() {
@@ -539,7 +536,7 @@ fn the_arrows_walk_a_bays_items_along_the_axis_it_draws_them_on() {
     );
 }
 
-/// **The one bay that uses both axes**, which is the check ADR-0333 left with
+/// The one bay that uses both axes, which is the check ADR-0333 left with
 /// nothing holding it: *"which arrow pair a badge names is not checked … the
 /// axis is `Built::across` and nothing holds the page against it"*.
 ///
@@ -587,8 +584,8 @@ fn the_sequencers_lanes_are_a_column_and_its_cells_are_a_row() {
     }
 }
 
-/// **The walk starts from the item the bay remembers, at bay level**, which is
-/// what keeps the two keys the Library already had (ADR-0333).
+/// The walk starts from the item the bay remembers, at bay level, which is what
+/// keeps the two keys the Library already had (ADR-0333).
 #[test]
 fn the_arrows_walk_from_the_remembered_item_without_a_digit_first() {
     let (panel, mut view) = console();
@@ -610,8 +607,8 @@ fn the_arrows_walk_from_the_remembered_item_without_a_digit_first() {
     );
 }
 
-/// **A walk is not a cycle**, which is `View::walk`'s rule arriving at the row
-/// of strips: a key held down must not jump the length of it.
+/// A walk is not a cycle, which is `View::walk`'s rule arriving at the row of
+/// strips: a key held down must not jump the length of it.
 #[test]
 fn the_strips_are_walked_and_clamped_rather_than_wrapped() {
     let (panel, mut view) = console();
@@ -630,8 +627,8 @@ fn the_strips_are_walked_and_clamped_rather_than_wrapped() {
     assert_eq!(view.selection(), 0, "the walk did not stop at the first");
 }
 
-/// **A level takes the arrows and a state does not.** A closed list has no
-/// axis, so the arrows decline on the three chips and say why.
+/// A level takes the arrows and a state does not. A closed list has no axis, so
+/// the arrows decline on the three chips and say why.
 #[test]
 fn the_arrows_step_a_level_and_decline_on_a_state() {
     let (panel, mut view) = console();
@@ -659,9 +656,9 @@ fn the_arrows_step_a_level_and_decline_on_a_state() {
     );
 }
 
-/// **The four levels the world holds are the host's**, and the console says
-/// which one and which way rather than reading it — ADR-0333's seam, met in the
-/// three bays ADR-0343 adds.
+/// The four levels the world holds are the host's, and the console says which
+/// one and which way rather than reading it — ADR-0333's seam, met in the three
+/// bays ADR-0343 adds.
 #[test]
 fn the_levels_the_world_holds_are_named_and_not_read() {
     let cases: [(&str, &[usize], Level); 3] = [
@@ -691,9 +688,9 @@ fn the_levels_the_world_holds_are_named_and_not_read() {
     }
 }
 
-/// **A level with nothing behind it says so** rather than asking the host to
-/// step a value no session is holding — P-0083, on the one control of the three
-/// that can be absent while its bay is drawn.
+/// A level with nothing behind it says so rather than asking the host to step a
+/// value no session is holding — P-0083, on the one control of the three that
+/// can be absent while its bay is drawn.
 #[test]
 fn the_offset_says_so_with_no_session_open() {
     let (panel, mut view) = console();
@@ -712,9 +709,9 @@ fn the_offset_says_so_with_no_session_open() {
 // `space`
 // ---------------------------------------------------------------------------
 
-/// **The key and the chip are one cycle.** The three states are asked of the
-/// same three functions `view::Mixer`'s chips ask, so a press and a click
-/// cannot disagree about which state comes next.
+/// The key and the chip are one cycle. The three states are asked of the same
+/// three functions `view::Mixer`'s chips ask, so a press and a click cannot
+/// disagree about which state comes next.
 #[test]
 fn space_on_a_state_names_the_state_the_chip_would_name() {
     let cases: [(usize, Operation); 3] = [
@@ -757,8 +754,8 @@ fn space_on_a_state_names_the_state_the_chip_would_name() {
     }
 }
 
-/// **On a level the one state worth naming is the value it was declared at**,
-/// which is the clause ADR-0259 buys with an argument rather than finds.
+/// On a level the one state worth naming is the value it was declared at, which
+/// is the clause ADR-0259 buys with an argument rather than finds.
 #[test]
 fn space_on_a_level_is_the_value_it_was_declared_at() {
     let (panel, mut view) = console();
@@ -791,9 +788,9 @@ fn space_on_the_librarys_head_is_the_scope() {
     );
 }
 
-/// **The transition row is the Mixer's head**, which is the question ADR-0333
-/// left open and ADR-0343 answers: the settings are about the bay rather than
-/// about any one strip, and that is what a head is.
+/// The transition row is the Mixer's head, which is the question ADR-0333 left
+/// open and ADR-0343 answers: the settings are about the bay rather than about
+/// any one strip, and that is what a head is.
 #[test]
 fn the_transition_rows_three_settings_are_the_mixers_head() {
     let cases: [(usize, TransitionSetting); 3] = [
@@ -818,7 +815,7 @@ fn the_transition_rows_three_settings_are_the_mixers_head() {
     }
 }
 
-/// **A row's own controls are its star and its `params` chip**, which is what
+/// A row's own controls are its star and its `params` chip, which is what
 /// ADR-0333 left owed: *"a row has no state"* was written before the star was
 /// drawn, and a star is a state.
 #[test]
@@ -845,9 +842,9 @@ fn a_library_rows_star_is_addressable() {
     );
 }
 
-/// **The Program head's `solo` is `s` and `u` collapsed into the one control
-/// they always described** (ADR-0259), and it is a move of the arrangement
-/// rather than an operation of the vocabulary.
+/// The Program head's `solo` is `s` and `u` collapsed into the one control they
+/// always described (ADR-0259), and it is a move of the arrangement rather than
+/// an operation of the vocabulary.
 #[test]
 fn space_on_the_programs_solo_is_the_solo_and_the_unsolo() {
     let (panel, mut view) = console();
@@ -860,8 +857,8 @@ fn space_on_the_programs_solo_is_the_solo_and_the_unsolo() {
     );
 }
 
-/// **The Outputs row is the simplest of the nine**: one item, one state, and
-/// one press asking for the operation that names the output and the fold that
+/// The Outputs row is the simplest of the nine: one item, one state, and one
+/// press asking for the operation that names the output and the fold that
 /// carries it out.
 #[test]
 fn space_on_a_sink_routes_the_frame_and_folds_the_picture() {
@@ -881,9 +878,9 @@ fn space_on_a_sink_routes_the_frame_and_folds_the_picture() {
     );
 }
 
-/// **The Sequencer's four `space` rows**, each naming the state it arrives at
-/// rather than a flip — and the cell carries the **stored slot** rather than
-/// the drawn step, which is what keeps the payload independent of the mode.
+/// The Sequencer's four `space` rows, each naming the state it arrives at
+/// rather than a flip — and the cell carries the stored slot rather than the
+/// drawn step, which is what keeps the payload independent of the mode.
 #[test]
 fn space_in_the_sequencer_names_the_state_it_arrives_at() {
     let cases: [(&[usize], Operation); 4] = [
@@ -936,8 +933,8 @@ fn space_in_the_sequencer_names_the_state_it_arrives_at() {
     );
 }
 
-/// **The Inspector's four chips**, each on the third rung and each naming the
-/// state it arrives at.
+/// The Inspector's four chips, each on the third rung and each naming the state
+/// it arrives at.
 #[test]
 fn space_in_the_inspector_cycles_the_four_chips() {
     let cases: [(&[usize], Operation); 4] = [
@@ -986,8 +983,8 @@ fn space_in_the_inspector_cycles_the_four_chips() {
     }
 }
 
-/// **The tone map cycles the four operators**, which is the console's own cycle
-/// and the same one the pill walks.
+/// The tone map cycles the four operators, which is the console's own cycle and
+/// the same one the pill walks.
 #[test]
 fn space_on_the_tone_map_cycles_the_operators() {
     let (panel, mut view) = console();
@@ -1007,7 +1004,7 @@ fn space_on_the_tone_map_cycles_the_operators() {
 // `space` on a bay: the fold
 // ---------------------------------------------------------------------------
 
-/// **`space` at bay level folds the focused bay, in every one of the nine** —
+/// `space` at bay level folds the focused bay, in every one of the nine —
 /// ADR-0259's rule, which ADR-0333 declined to bind while it meant it in two.
 #[test]
 fn space_on_a_bay_folds_it_in_every_bay() {
@@ -1025,7 +1022,7 @@ fn space_on_a_bay_folds_it_in_every_bay() {
     }
 }
 
-/// **And a folded bay answers `space` and nothing else**, which is the narrow
+/// And a folded bay answers `space` and nothing else, which is the narrow
 /// reason it keeps its place in the ring: it is there so that there is
 /// something to press to open it, not so that it can be operated.
 #[test]
@@ -1049,9 +1046,9 @@ fn a_folded_bay_answers_space_and_declines_the_other_three() {
     }
 }
 
-/// **And the mark is drawn**, which is the one drawing ADR-0259 created a need
-/// for: a folded region has no rectangle, so the ring alone would land on
-/// nothing an operator could read.
+/// And the mark is drawn, which is the one drawing ADR-0259 created a need for:
+/// a folded region has no rectangle, so the ring alone would land on nothing an
+/// operator could read.
 #[test]
 fn a_folded_bay_holding_focus_wears_the_mark() {
     let (mut panel, mut view) = console();
@@ -1123,8 +1120,8 @@ fn enter_on_a_library_row_is_the_load_and_on_its_params_chip_is_the_reading() {
     );
 }
 
-/// **A candidate row's two acts are two controls and a digit chooses between
-/// them**, which is ADR-0259's `n 1` and `n 2`.
+/// A candidate row's two acts are two controls and a digit chooses between
+/// them, which is ADR-0259's `n 1` and `n 2`.
 #[test]
 fn enter_on_a_staging_rows_two_controls_keeps_it_and_puts_the_previous_back() {
     let node = NodeAddress {
@@ -1150,7 +1147,7 @@ fn enter_on_a_staging_rows_two_controls_keeps_it_and_puts_the_previous_back() {
     );
 }
 
-/// **`enter` on the Mixer's head runs the transition on the addressed strip**,
+/// `enter` on the Mixer's head runs the transition on the addressed strip,
 /// which is the deck selection: this deck is covered and the next one round
 /// arrives over it.
 #[test]
@@ -1178,9 +1175,9 @@ fn enter_on_the_transition_rows_go_wipes_the_next_deck_in() {
     );
 }
 
-/// **A parameter row performs as well as sets**, which is the one control on
-/// the panel that is two of ADR-0259's kinds at once: the sensitivity row under
-/// it carries `take back`, and a row with nothing holding it draws none.
+/// A parameter row performs as well as sets, which is the one control on the
+/// panel that is two of ADR-0259's kinds at once: the sensitivity row under it
+/// carries `take back`, and a row with nothing holding it draws none.
 #[test]
 fn enter_on_a_bound_parameter_takes_the_attachment_back() {
     let (panel, mut view) = console();
@@ -1227,9 +1224,9 @@ fn enter_declines_where_a_bays_items_perform_nothing() {
 // The refusals
 // ---------------------------------------------------------------------------
 
-/// **Every refusal carries the sentence that says why**, which is P-0083 and
-/// the page's own rule that a key that declines and a key that is not bound are
-/// the same experience.
+/// Every refusal carries the sentence that says why, which is P-0083 and the
+/// page's own rule that a key that declines and a key that is not bound are the
+/// same experience.
 ///
 /// The four preview cells are ADR-0259's clearest case of an item with neither
 /// a state nor an act: a digit lands, the ring is drawn, and both keys decline.
@@ -1262,7 +1259,7 @@ fn every_refusal_says_why() {
     }
 }
 
-/// **A control whose press puts a card down declines and says so**, rather than
+/// A control whose press puts a card down declines and says so, rather than
 /// opening something the address cannot then walk.
 #[test]
 fn a_control_that_opens_a_card_declines_and_names_what_is_in_it() {
@@ -1284,8 +1281,8 @@ fn a_control_that_opens_a_card_declines_and_names_what_is_in_it() {
     }
 }
 
-/// **An address on something the bay has stopped drawing goes back to the
-/// bay**, rather than acting on whatever has taken that position — which is
+/// An address on something the bay has stopped drawing goes back to the bay,
+/// rather than acting on whatever has taken that position — which is
 /// `View::point_at`'s rule about a row past the listing, one level up.
 #[test]
 fn an_address_on_something_that_is_gone_goes_back_to_the_bay() {

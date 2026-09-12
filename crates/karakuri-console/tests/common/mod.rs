@@ -2,9 +2,9 @@
 //! two viewports the tests use.
 //!
 //! `karakuri-layout` has a checker very like this one in its own
-//! `tests/common/mod.rs`. It is a test module rather than part of the crate,
-//! so it cannot be reached from here and this is written again — see the
-//! report; it is the one duplication in this crate.
+//! `tests/common/mod.rs`. It is a test module rather than part of the crate, so
+//! it cannot be reached from here and this is written again — see the report;
+//! it is the one duplication in this crate.
 
 #![allow(dead_code)] // Each test file uses a subset.
 
@@ -20,8 +20,8 @@ pub fn near(a: f32, b: f32) -> bool {
 }
 
 /// A plausible window: a 1920x1080 desktop, which is also the resolution the
-/// mock's program header is showing and near the 1900 width the manual's
-/// "763 pixels tall" is worked out at.
+/// mock's program header is showing and near the 1900 width the manual's "763
+/// pixels tall" is worked out at.
 pub const PLAUSIBLE: Rect = Rect {
     x: 0.0,
     y: 0.0,
@@ -32,33 +32,32 @@ pub const PLAUSIBLE: Rect = Rect {
 /// The smallest window this arrangement is claimed to work at, and every digit
 /// of it is derived rather than picked.
 ///
-/// **1244 wide** is the width that gives the centre the **484** the mock's own
+/// 1244 wide is the width that gives the centre the 484 the mock's own
 /// narrowest console gives it, at the tracks this panel has: `.console`'s
 /// `min-width: 1010px` less its 10px of padding either side is 990, and the
-/// mock's `.body-grid` spends that on `218px minmax(340px, 1fr) 268px` with
-/// two 10px gaps — so 484 in the middle. The panel's outer tracks are 340 and
-/// 400 (ADR-0239) and the mock's stylesheet still carries 218 and 268, so the
-/// same 484 costs 340 + 400 + 20 more: **1244**. The 484 is what is being
-/// held, and what it buys is the inspector: each pane is 237.5, and the
-/// `.param` grid (`15px 88px 1fr 58px`, 8px gaps, 22 of padding — 207 before
-/// the fader has any width) fits in one. **`min-width: 1010px` is the stale
-/// number of the two** — read against this panel's tracks it gives a centre
-/// of 230 — and it is the mock's own, so it is not this file's to move.
+/// mock's `.body-grid` spends that on `218px minmax(340px, 1fr) 268px` with two
+/// 10px gaps — so 484 in the middle. The panel's outer tracks are 340 and 400
+/// (ADR-0239) and the mock's stylesheet still carries 218 and 268, so the same
+/// 484 costs 340 + 400 + 20 more: 1244. The 484 is what is being held, and what
+/// it buys is the inspector: each pane is 237.5, and the `.param` grid (`15px
+/// 88px 1fr 58px`, 8px gaps, 22 of padding — 207 before the fader has any
+/// width) fits in one. `min-width: 1010px` is the stale number of the two —
+/// read against this panel's tracks it gives a centre of 230 — and it is the
+/// mock's own, so it is not this file's to move.
 ///
-/// **658.5 high** is the sum of the column-axis minima: the transport's 48,
-/// the body row's 556.5 — the row of three columns — the outputs row's 34 and
-/// the two 10px dividers. The body row's 556.5 is the **centre's**: the
-/// Program bay at the 395 the mock draws it, the divider's 10 and the
-/// inspector's 151.5. It was the right pane's 530 — a mixer that cannot lose a
-/// strip (316), a master chain of one effect (94), a sequencer of one lane
-/// (100) and two dividers — until the manual gave the inspector a deck head,
-/// and it grew again by the 17 the preview captions added to the Program bay.
-/// `arrangement.rs` recomputes both numbers from the tree, so this is a claim
-/// rather than a copy.
+/// 658.5 high is the sum of the column-axis minima: the transport's 48, the
+/// body row's 556.5 — the row of three columns — the outputs row's 34 and the
+/// two 10px dividers. The body row's 556.5 is the centre's: the Program bay at
+/// the 395 the mock draws it, the divider's 10 and the inspector's 151.5. It
+/// was the right pane's 530 — a mixer that cannot lose a strip (316), a master
+/// chain of one effect (94), a sequencer of one lane (100) and two dividers —
+/// until the manual gave the inspector a deck head, and it grew again by the 17
+/// the preview captions added to the Program bay. `arrangement.rs` recomputes
+/// both numbers from the tree, so this is a claim rather than a copy.
 ///
 /// Not smaller, because below either figure the panel is no longer the panel
 /// this console describes. The two figures fail differently and it is worth
-/// keeping them apart: **658.5 is where the solve stops honouring minima** and
+/// keeping them apart: 658.5 is where the solve stops honouring minima and
 /// scales everything down together — which is the right behaviour and is not a
 /// panel anyone can work on — while 1244 is a claim about the *content*, and
 /// the solve goes on honouring every minimum down to
@@ -74,7 +73,7 @@ pub const SMALLEST: Rect = Rect {
     h: 658.5,
 };
 
-/// **An `egui` context that has drawn once.**
+/// An `egui` context that has drawn once.
 ///
 /// What laying out the Outputs row takes, and it is a real requirement rather
 /// than a test's ceremony: the chip's width is the width of the name in it, so
@@ -93,8 +92,8 @@ pub fn drawn_once() -> egui::Context {
     ctx
 }
 
-/// **A panel at `viewport` with the Program bay arranged for `canvas`** —
-/// which is what a frame does before it reads a single rectangle
+/// A panel at `viewport` with the Program bay arranged for `canvas` — which is
+/// what a frame does before it reads a single rectangle
 /// ([`karakuri_console::view::rearrange`]), and therefore what every rectangle
 /// on the console is read from.
 ///
@@ -141,8 +140,8 @@ pub fn walk(l: &Layout, id: NodeId, f: &mut impl FnMut(NodeId)) {
     }
 }
 
-/// The rectangle of a named region. Panics with the name rather than
-/// unwrapping a `None`, because a missing region is the failure worth reading.
+/// The rectangle of a named region. Panics with the name rather than unwrapping
+/// a `None`, because a missing region is the failure worth reading.
 pub fn rect_of(l: &Layout, name: &str) -> Rect {
     l.rect(id_of(l, name))
 }
@@ -153,15 +152,15 @@ pub fn id_of(l: &Layout, name: &str) -> NodeId {
         .unwrap_or_else(|| panic!("the arrangement has no region named {name}"))
 }
 
-/// Assert everything that must be true of any solve, at any viewport:
-/// no rectangle is negative, every visible one is inside the viewport, and a
+/// Assert everything that must be true of any solve, at any viewport: no
+/// rectangle is negative, every visible one is inside the viewport, and a
 /// split's children tile it exactly — no overlap, the gaps are the divider and
 /// sit only between visible children.
 ///
-/// The one permitted shortfall is the solve's own: where every visible child
-/// is already at its maximum, what is left is trailing space. This
-/// arrangement has no maximum that can be reached with room to spare, so this
-/// asserts the stricter thing and would notice one appearing.
+/// The one permitted shortfall is the solve's own: where every visible child is
+/// already at its maximum, what is left is trailing space. This arrangement has
+/// no maximum that can be reached with room to spare, so this asserts the
+/// stricter thing and would notice one appearing.
 pub fn assert_sane(l: &Layout) {
     check(l, l.root());
 }
@@ -303,14 +302,14 @@ fn bounds(l: &Layout, id: NodeId) {
 /// minima plus the dividers between them, and one laid out across it needs the
 /// widest of theirs.
 ///
-/// A node's own `min` is stated along its **parent's** axis, so it is read by
-/// the parent that arranges it and never by the node itself — which is why
-/// this takes the larger of what a child declares and what its own contents
-/// imply, rather than trusting either alone.
+/// A node's own `min` is stated along its parent's axis, so it is read by the
+/// parent that arranges it and never by the node itself — which is why this
+/// takes the larger of what a child declares and what its own contents imply,
+/// rather than trusting either alone.
 ///
-/// **The model does not compute this.** A split's minimum is a number it is
-/// given, not a function of its children's, which is why the arrangement
-/// writes the body row's out by hand and why this exists to check it.
+/// The model does not compute this. A split's minimum is a number it is given,
+/// not a function of its children's, which is why the arrangement writes the
+/// body row's out by hand and why this exists to check it.
 pub fn implied_min(l: &Layout, id: NodeId, axis: Axis) -> f32 {
     match l.axis(id) {
         None => 0.0,
@@ -332,7 +331,7 @@ pub fn implied_min(l: &Layout, id: NodeId, axis: Axis) -> f32 {
 
 /// Whether a child takes extent, a divider of its own and the bounds it
 /// declares — which is the question every geometric assertion here is about,
-/// and it is **not** whether the operator folded it.
+/// and it is not whether the operator folded it.
 ///
 /// A node the console has set aside is out of the layout by the other bit
 /// ([ADR-0183](../../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md))
@@ -359,7 +358,7 @@ fn across(axis: Axis, r: Rect) -> (f32, f32) {
     }
 }
 
-/// **A view with these strips in it and nothing else** — the argument
+/// A view with these strips in it and nothing else — the argument
 /// `karakuri_console::input::claim` takes, built where a test used to hand it a
 /// slice.
 ///
@@ -367,46 +366,45 @@ fn across(axis: Axis, r: Rect) -> (f32, f32) {
 /// wrote: a fader's knob sits on the fill's moving edge, and the arrangement
 /// pill is as wide as the name in it. `claim` takes the whole `View` so that
 /// what it hit-tests is what `View::draw` painted, and this is that view for a
-/// console with no store behind it — the default arrangement, nothing filed
-/// and the menu shut. Pass `&[]` for one with no deck behind it either, which
-/// is every test here that is not about the mixer.
+/// console with no store behind it — the default arrangement, nothing filed and
+/// the menu shut. Pass `&[]` for one with no deck behind it either, which is
+/// every test here that is not about the mixer.
 pub fn showing(strips: &[karakuri_console::view::Strip]) -> karakuri_console::view::View {
     let mut view = karakuri_console::view::View::new(karakuri_console::room::Room::Day);
     view.mixer = strips.to_vec();
     view
 }
 
-/// **A console with an engine behind it**: the mock's transport, and nothing
-/// else written to.
+/// A console with an engine behind it: the mock's transport, and nothing else
+/// written to.
 ///
 /// `docs/manual/console.html`'s `.transport` — `128.0 BPM`, the first beat of
 /// bar 37 lit, and `58 fps · 12.4/16.6 ms`. Bar 37 beat 0 is 36 whole bars of
 /// four beats, which is the 144.
 ///
-/// **It is here rather than in one test file because the arrangement pill
-/// needs it to exist at all.** The pill sits one `.transport` gap after
-/// `bar 37`, so `view::arrangement` answers `None` for a console with no
-/// engine behind it — the row draws nothing there, and a control in a row that
-/// is not drawn is not a control. Any test that presses the pill therefore has
-/// to hand in a transport, and `tests/vocabulary.rs` is one that has nothing
-/// else to do with a tempo.
+/// It is here rather than in one test file because the arrangement pill needs
+/// it to exist at all. The pill sits one `.transport` gap after `bar 37`, so
+/// `view::arrangement` answers `None` for a console with no engine behind it —
+/// the row draws nothing there, and a control in a row that is not drawn is not
+/// a control. Any test that presses the pill therefore has to hand in a
+/// transport, and `tests/vocabulary.rs` is one that has nothing else to do with
+/// a tempo.
 ///
 /// The reading itself is [`mock_transport`], which is what `tests/transport.rs`
 /// and `tests/arrangement_pill.rs` ask for: three files wanting one console's
-/// tempo is one console's tempo, written once
-/// (`docs/contributing.md` §4).
+/// tempo is one console's tempo, written once (`docs/contributing.md` §4).
 pub fn running() -> karakuri_console::view::View {
     let mut view = karakuri_console::view::View::new(karakuri_console::room::Room::Day);
     view.transport = Some(mock_transport());
     view
 }
 
-/// **The mock's own transport, as numbers**, and the one copy of them.
+/// The mock's own transport, as numbers, and the one copy of them.
 ///
 /// `docs/manual/console.html`'s `.transport`: `128.0 BPM`, the first beat of
-/// bar 37 lit, and `58 fps · 12.4/16.6 ms`. **Bar 37 beat 0 is 36 whole bars of
+/// bar 37 lit, and `58 fps · 12.4/16.6 ms`. Bar 37 beat 0 is 36 whole bars of
 /// four beats — 144 — and that is the one figure here written rather than
-/// derived**, from the mock's own `bar 37`.
+/// derived, from the mock's own `bar 37`.
 pub fn mock_transport() -> karakuri_console::view::Transport {
     karakuri_console::view::Transport {
         bpm: 128.0,

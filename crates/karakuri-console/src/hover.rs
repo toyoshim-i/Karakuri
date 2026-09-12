@@ -1,5 +1,5 @@
-//! **The console paints its own hover layer, and the words in it are the
-//! manual's own.**
+//! The console paints its own hover layer, and the words in it are the
+//! manual's own.
 //!
 //! # Who owns the pointer
 //!
@@ -7,7 +7,7 @@
 //! `egui` widgets, or paints its own hover layer* — and
 //! [`crate::input`] named it as its own and deliberately did not take it.
 //! [ADR-0330](../../../docs/adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)
-//! takes it: **the console paints its own layer**, because the mechanism is
+//! takes it: the console paints its own layer, because the mechanism is
 //! already here and the alternative buys nothing this crate does not have.
 //!
 //! - [`crate::input::PROBES`] already answers *what is under the pointer*, one
@@ -15,7 +15,7 @@
 //!   question asked on a rest instead of on a press
 //!   ([P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)).
 //! - [ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)'s
-//!   seam is that **the console paints and takes no device**, and that `egui`
+//!   seam is that the console paints and takes no device, and that `egui`
 //!   receives a rectangle rather than the arrangement. An `egui` widget under
 //!   every control would hand hit testing and layout to a second system for
 //!   this one feature, and `claim`'s rule 4 — *a press routed to `egui` there
@@ -23,19 +23,19 @@
 //!
 //! # The words are the page's, and only the key is written down here
 //!
-//! **`docs/manual/console.html` is the only copy of a tip.** The page is
+//! `docs/manual/console.html` is the only copy of a tip. The page is
 //! [`PAGE`], embedded at compile time, and [`Tips::read`] parses the
-//! `data-tip` attributes out of it **once, at start-up**, off the frame path
+//! `data-tip` attributes out of it once, at start-up, off the frame path
 //! (P-0091). Nothing here restates a word of one, so there is no second copy
 //! to drift ([`docs/contributing.md` §4](../../../docs/contributing.md), which
 //! is *generated* rather than *tested*).
 //!
-//! **What cannot be generated is the key**: which drawn control a tip belongs
+//! What cannot be generated is the key: which drawn control a tip belongs
 //! to. The mock carries no identity for a control — no `id`, no
 //! `data-control`, and its classes repeat (twenty tipped elements are a bare
 //! `.pill`) — so *which element is the tone map's capsule* is not derivable
 //! from the page by any rule that survives an edit to it. That much is
-//! transcribed, and it is transcribed as a **citation and not as prose**: a
+//! transcribed, and it is transcribed as a citation and not as prose: a
 //! [`Cite`] is the element's class and the words inside it, which is the
 //! smallest thing that names one element of the mock. [`TIPS`] is that
 //! transcription and `tests/hover.rs` is what holds it to the page, in
@@ -47,12 +47,12 @@
 //! [`TIPS`] is `[(&str, &[Tipped]); PROBES.len()]`, one entry per row of
 //! [`crate::input::PROBES`] and in that crate's own order, which is
 //! `karakuri/src/main.rs`'s `ASKED` shape one crate over and for its reason:
-//! **a control added to that table arrives here as a compile error.** A row
+//! a control added to that table arrives here as a compile error. A row
 //! whose controls the mock draws with no tip carries an empty slice, which is
 //! the roadmap's own reading rule — *the mock is not exhaustive … there will
 //! be gaps in the functions too* — said as a value rather than as a silence.
 //!
-//! **Where a row claims several controls the slice has one entry each**, asked
+//! Where a row claims several controls the slice has one entry each, asked
 //! in the caller's order: the controls inside a container first and the
 //! container last, which is `claim`'s rule 4 (*a control claims what it acts
 //! on and no more*) and `main.rs`'s press order. [`resolve`] takes the first
@@ -61,19 +61,19 @@
 //!
 //! # What it costs
 //!
-//! - **340 KB of page in the binary**, and one parse of it at start-up. The
+//! - 340 KB of page in the binary, and one parse of it at start-up. The
 //!   alternative was ~60 long strings transcribed by hand and held equal by a
 //!   test, which is a second copy of the manual's prose kept in a source file:
 //!   cheaper to run and dearer to keep true, and the page is the half that
 //!   moves.
-//! - **One walk of [`TIPS`] per pointer move that [`crate::input::claim`]
-//!   answered `Panel` to**, which is the walk that rule 4 already makes,
+//! - One walk of [`TIPS`] per pointer move that [`crate::input::claim`]
+//!   answered `Panel` to, which is the walk that rule 4 already makes,
 //!   asked a second time to say *which*. A move `claim` gave to `egui` is on
 //!   no control at all and costs one comparison.
-//! - **Nothing on the frame after the first.** The galley is laid out on the
+//! - Nothing on the frame after the first. The galley is laid out on the
 //!   frame the tip appears and kept while the pointer stays on that control;
 //!   every frame after it is one cached galley and four shapes.
-//! - **No frame at rest.** [`Hover::owed`] answers a deadline while a dwell is
+//! - No frame at rest. [`Hover::owed`] answers a deadline while a dwell is
 //!   running and nothing at all once the tip is up — the tip does not move
 //!   while it is shown, so its picture is not different from the one on
 //!   screen. That is
@@ -82,7 +82,7 @@
 //!
 //! # What it does not do
 //!
-//! **It does not know that a card is down.** `claim`'s rule 2 gives every
+//! It does not know that a card is down. `claim`'s rule 2 gives every
 //! press to whichever card is open, and this layer is told `claim`'s answer
 //! rather than re-deriving its condition — so a pointer resting over a control
 //! that an open card happens to cover still resolves to that control. Copying
@@ -108,35 +108,34 @@ use crate::view::{
     transport, Field, KindChip, Scope, View,
 };
 
-/// **The mock, embedded**: the only copy of every tip on this console.
+/// The mock, embedded: the only copy of every tip on this console.
 ///
 /// It is `include_str!` rather than a path read at run time for the reason
 /// every other transcription in this crate is a `const`: a panel that had to
 /// find `docs/manual/` on disk would draw no tips at all when it was installed
-/// anywhere else, and a tip that is missing is indistinguishable from a
-/// control that has none.
+/// anywhere else, and a tip that is missing is indistinguishable from a control
+/// that has none.
 pub const PAGE: &str = include_str!("../../../docs/manual/console.html");
 
-/// **Where one control's words are in the mock**: the element's class, exactly
-/// as the page spells it, and the text inside it with its tags removed and its
+/// Where one control's words are in the mock: the element's class, exactly as
+/// the page spells it, and the text inside it with its tags removed and its
 /// runs of whitespace collapsed.
 ///
-/// **It is a citation and not a copy.** Nothing here is a word of the tip —
-/// what is written down is where to find it, which is the part the page cannot
-/// answer for itself.
+/// It is a citation and not a copy. Nothing here is a word of the tip — what is
+/// written down is where to find it, which is the part the page cannot answer
+/// for itself.
 ///
-/// **The text is in the page's own spelling, entities and all** — `&#9662;`
-/// stays `&#9662;` — because what is being cited is the markup rather than
-/// what a browser makes of it, and a cite a reader can `grep` for is one they
-/// can check.
+/// The text is in the page's own spelling, entities and all — `&#9662;` stays
+/// `&#9662;` — because what is being cited is the markup rather than what a
+/// browser makes of it, and a cite a reader can `grep` for is one they can
+/// check.
 ///
 /// [`Cite::nth`] is which of the elements matching that pair is meant, and it
 /// is 0 for every cite that is unambiguous. A pair that matches nothing, or
 /// that matches fewer elements than `nth` reaches, fails in `tests/hover.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cite {
-    /// The element's `class` attribute, verbatim, or `""` for an element with
-    /// none.
+    /// The element's `class` attribute, verbatim, or `""` for an element with none.
     pub class: &'static str,
     /// The text inside the element, tags stripped and whitespace collapsed.
     pub text: &'static str,
@@ -144,23 +143,23 @@ pub struct Cite {
     pub nth: usize,
 }
 
-/// **One control that explains itself on hover**: its identity, where its
-/// words are in the mock, and the derivation that says the pointer is on it.
+/// One control that explains itself on hover: its identity, where its words are
+/// in the mock, and the derivation that says the pointer is on it.
 pub struct Tipped {
-    /// **The control's name**, in the words [`crate::input::PROBES`] uses for
-    /// the row it belongs to. It is what a test and a reader address this row
-    /// by, and it is never drawn.
+    /// The control's name, in the words [`crate::input::PROBES`] uses for the row
+    /// it belongs to. It is what a test and a reader address this row by, and it is
+    /// never drawn.
     pub control: &'static str,
     /// Where this control's words are in the mock.
     pub cites: Cite,
-    /// **The derivation that draws the control, asked whether the point is on
-    /// it**, and nothing is stored — [`crate::input::Probe::ask`]'s signature
-    /// and its rule, one question finer.
+    /// The derivation that draws the control, asked whether the point is on it, and
+    /// nothing is stored — [`crate::input::Probe::ask`]'s signature and its rule,
+    /// one question finer.
     pub at: fn(&Panel, &egui::Context, &View, Point) -> bool,
 }
 
-/// **Every tip this console can draw, one entry per row of
-/// [`crate::input::PROBES`] and in that table's order.**
+/// Every tip this console can draw, one entry per row of
+/// [`crate::input::PROBES`] and in that table's order.
 ///
 /// The array is `PROBES.len()` long, so a control registered there and never
 /// given a tip here is a compile error rather than a control that quietly
@@ -168,7 +167,7 @@ pub struct Tipped {
 /// answers for, by name and by position, so an entry cannot answer for its
 /// neighbour.
 ///
-/// **An empty slice is the reading rule and not an omission.** The maintainer,
+/// An empty slice is the reading rule and not an omission. The maintainer,
 /// 2026-08-31: *"the mock is not exhaustive … there will be gaps in the
 /// functions too"*, and the roadmap carries it — a control the mock draws
 /// without a tip gets none. Each empty slice says which control it is silent
@@ -1097,8 +1096,8 @@ pub fn flat() -> impl Iterator<Item = &'static Tipped> {
     TIPS.iter().flat_map(|(_, tips)| tips.iter())
 }
 
-/// **Which control the pointer is on**, as an index into [`flat`], or `None`
-/// where it is on none of them.
+/// Which control the pointer is on, as an index into [`flat`], or `None` where
+/// it is on none of them.
 ///
 /// The first row that answers wins, which is why the order inside a slice is
 /// the caller's: the controls inside a container come before the container.
@@ -1265,12 +1264,12 @@ fn on_length(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool 
     transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.length(p).is_some())
 }
 
-/// **The `go` capsule, as what is left of the row.** `TransitionRow::go` takes
-/// the selection and the deck count with the point — it answers *what a press
-/// asks for*, and a press on it is refused where there is no deck to run it on
-/// — where this question is only *is the pointer on the capsule*. The row's
-/// own `owns` is that question over all four, so the three above it having
-/// been asked first is what leaves this one the capsule.
+/// The `go` capsule, as what is left of the row. `TransitionRow::go` takes the
+/// selection and the deck count with the point — it answers *what a press asks
+/// for*, and a press on it is refused where there is no deck to run it on —
+/// where this question is only *is the pointer on the capsule*. The row's own
+/// `owns` is that question over all four, so the three above it having been
+/// asked first is what leaves this one the capsule.
 fn on_go(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     transition(ctx, panel.layout(), view.transition()).is_some_and(|row| row.owns(p))
 }
@@ -1293,7 +1292,7 @@ fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     })
 }
 
-/// **The mark and not the card**, where `input`'s row answers for both: a tip
+/// The mark and not the card, where `input`'s row answers for both: a tip
 /// explains a control an operator is pointing at, and while the card is down
 /// the hover layer is not what the next press is about — `claim`'s rule 2 has
 /// already taken it.
@@ -1324,18 +1323,18 @@ fn on_scrub(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.scrub(p).is_some())
 }
 
-/// **The capacity chip, and it is `resized` rather than `hit_size`.** The two
-/// are one question — `DeckHead::hit_size` is the chip *and* somewhere to step
-/// to — and this is the one the press handler asks, so a chip that is drawn
-/// and claims nothing (a deck whose geometries share no range) explains itself
+/// The capacity chip, and it is `resized` rather than `hit_size`. The two are
+/// one question — `DeckHead::hit_size` is the chip *and* somewhere to step to —
+/// and this is the one the press handler asks, so a chip that is drawn and
+/// claims nothing (a deck whose geometries share no range) explains itself
 /// exactly where a press on it does something.
 fn on_size(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.resized(p).is_some())
 }
 
-/// **The `re-salt` capsule.** There is no state in which it is drawn and
-/// inert, so this is `hit_salt` and `re_salted` at once; it is the latter for
-/// the chip above's reason and for the press handler's.
+/// The `re-salt` capsule. There is no state in which it is drawn and inert, so
+/// this is `hit_salt` and `re_salted` at once; it is the latter for the chip
+/// above's reason and for the press handler's.
 fn on_salt(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_head(panel, ctx, view, |head| head.re_salted(p).is_some())
 }
@@ -1416,8 +1415,8 @@ fn on_take_back(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
     })
 }
 
-/// **Which of a sensitivity row's two controls the pointer is on**, told apart
-/// by what a press on it would ask for — `InspectorPane::sensitivity` walks the
+/// Which of a sensitivity row's two controls the pointer is on, told apart by
+/// what a press on it would ask for — `InspectorPane::sensitivity` walks the
 /// row's four chips and answers the operation the one under the pointer names,
 /// which is `SensChip::operation` and is where the signal and the range being
 /// readouts is already decided. A second walk here would be a second answer to
@@ -1456,12 +1455,12 @@ fn on_cell_d(panel: &Panel, _ctx: &egui::Context, view: &View, p: Point) -> bool
     on_cell(panel, view, p, 3)
 }
 
-/// **One preview cell**, told from the three beside it by the deck
-/// `ProgramBay::cell` says the pointer is over — the row's own answer, which
-/// is what `ProgramBay::owns` is the union of and what a release on the row
-/// is resolved against. The cell of a deck with no slot is a cell like any
-/// other here: it is drawn, so it is pointed at, and `dropped`'s refusal is
-/// about the carry rather than about the rectangle.
+/// One preview cell, told from the three beside it by the deck
+/// `ProgramBay::cell` says the pointer is over — the row's own answer, which is
+/// what `ProgramBay::owns` is the union of and what a release on the row is
+/// resolved against. The cell of a deck with no slot is a cell like any other
+/// here: it is drawn, so it is pointed at, and `dropped`'s refusal is about the
+/// carry rather than about the rectangle.
 fn on_cell(panel: &Panel, view: &View, p: Point, deck: u8) -> bool {
     program_bay(panel.layout(), view.canvas).is_some_and(|bay| bay.cell(p) == Some(deck))
 }
@@ -1486,9 +1485,9 @@ fn on_scope_history(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -
     on_scope(panel, ctx, view, p, Scope::History)
 }
 
-/// **One scope chip**, told from the four beside it by the chip the bay says
-/// the pointer is on — `LibraryBay::chip`'s own answer, which carries the
-/// scope beside the operation, rather than a second walk of the row.
+/// One scope chip, told from the four beside it by the chip the bay says the
+/// pointer is on — `LibraryBay::chip`'s own answer, which carries the scope
+/// beside the operation, rather than a second walk of the row.
 fn on_scope(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, which: Scope) -> bool {
     library_bay(panel, view)
         .and_then(|bay| bay.chip(ctx, &view.scopes, p))
@@ -1523,10 +1522,10 @@ fn on_kind_sets(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
     on_kind(panel, ctx, view, p, KindChip::Sets)
 }
 
-/// **One kind chip**, told from the five beside it by the chip the bay says is
-/// at that point — `LibraryBay::kind_chips` is the same walk the paint makes
-/// and the same one a press is resolved against, so a tip and a press cannot
-/// land on two different chips.
+/// One kind chip, told from the five beside it by the chip the bay says is at
+/// that point — `LibraryBay::kind_chips` is the same walk the paint makes and
+/// the same one a press is resolved against, so a tip and a press cannot land
+/// on two different chips.
 fn on_kind(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, want: KindChip) -> bool {
     let at = Pos2::new(p.x, p.y);
     library_bay(panel, view).is_some_and(|bay| {
@@ -1537,7 +1536,7 @@ fn on_kind(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, want: Kind
     })
 }
 
-/// **A row's badges**, which is the one readout in this bay's list: nothing is
+/// A row's badges, which is the one readout in this bay's list: nothing is
 /// pressed there, and the tip is what says so and what the words mean. Asked of
 /// the rows the bay is drawing, so a badge under the pointer is a badge on
 /// screen.
@@ -1553,10 +1552,9 @@ fn on_badges(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool 
     })
 }
 
-/// **One filter field.** `LibraryBay::filter` answers with the `ListSets` a
-/// press asks for and not with which box it landed in, so the box is asked
-/// for — `LibraryBay::field` is the same rectangle that method tests, asked
-/// by name.
+/// One filter field. `LibraryBay::filter` answers with the `ListSets` a press
+/// asks for and not with which box it landed in, so the box is asked for —
+/// `LibraryBay::field` is the same rectangle that method tests, asked by name.
 fn on_field(panel: &Panel, view: &View, p: Point, which: Field) -> bool {
     library_bay(panel, view)
         .and_then(|bay| bay.field(which))
@@ -1610,9 +1608,9 @@ fn on_mcp_inputs_and_outputs(panel: &Panel, ctx: &egui::Context, view: &View, p:
     on_mcp(panel, ctx, view, p, Class::InputsAndOutputs)
 }
 
-/// **One class pill.** The four are in four different bay heads and cannot be
-/// one laid-out box, so the class is the argument that lays one out — which is
-/// the press handler's own arrangement, one derivation asked four times.
+/// One class pill. The four are in four different bay heads and cannot be one
+/// laid-out box, so the class is the argument that lays one out — which is the
+/// press handler's own arrangement, one derivation asked four times.
 fn on_mcp(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, class: Class) -> bool {
     mcp_pill(ctx, panel.layout(), class, view.opening).is_some_and(|pill| pill.hit(p))
 }
@@ -1633,9 +1631,9 @@ fn on_bank_4(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool 
     on_bank(panel, ctx, view, p, 3)
 }
 
-/// **One bank pill**, told from the three beside it by the pattern the press
-/// would name: `Sequencer::press` answers `SelectPattern` carrying the bank,
-/// which is this bay's own rule that *every arm names the bank*.
+/// One bank pill, told from the three beside it by the pattern the press would
+/// name: `Sequencer::press` answers `SelectPattern` carrying the bank, which is
+/// this bay's own rule that *every arm names the bank*.
 fn on_bank(panel: &Panel, ctx: &egui::Context, view: &View, p: Point, bank: u8) -> bool {
     on_seq(
         panel,
@@ -1664,14 +1662,13 @@ fn on_step_mode(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
     })
 }
 
-/// **Which kind of control the pointer is on in the Sequencer bay**, told
-/// apart by the operation a press there would ask for.
+/// Which kind of control the pointer is on in the Sequencer bay, told apart by
+/// the operation a press there would ask for.
 ///
 /// `Sequencer::press` is *four controls and one answer*, and which of them it
-/// was is inside the operation it hands back — the press handler's own
-/// sentence about this bay. So the sub-question is that operation read, and
-/// there is no second walk of the cells here to disagree with the one the
-/// paint made.
+/// was is inside the operation it hands back — the press handler's own sentence
+/// about this bay. So the sub-question is that operation read, and there is no
+/// second walk of the cells here to disagree with the one the paint made.
 fn on_seq(
     panel: &Panel,
     ctx: &egui::Context,
@@ -1684,15 +1681,15 @@ fn on_seq(
         .is_some_and(|op| which(&op))
 }
 
-/// **The `+ lane` pill, which is the one control in this bay whose press is
-/// not an operation**: it puts a card down, so `Sequencer::chose` is what
-/// answers for it and `Chose::Open` is the pill itself.
+/// The `+ lane` pill, which is the one control in this bay whose press is not
+/// an operation: it puts a card down, so `Sequencer::chose` is what answers for
+/// it and `Chose::Open` is the pill itself.
 ///
-/// **`Shut` is every other point on the console while the card is down**, and
-/// that is what keeps this from claiming the whole window: with the card up
-/// this answers `Open` on the pill and `None` everywhere else, and with one
-/// down it answers `Shut` — which is not this control — everywhere including
-/// on the pill. A tip under an open card is ADR-0330's own open seam.
+/// `Shut` is every other point on the console while the card is down, and that
+/// is what keeps this from claiming the whole window: with the card up this
+/// answers `Open` on the pill and `None` everywhere else, and with one down it
+/// answers `Shut` — which is not this control — everywhere including on the
+/// pill. A tip under an open card is ADR-0330's own open seam.
 fn on_add_lane(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     // The one derivation, and the choices it was laid out from asked again:
     // the card's items are the chooser's own listing, so a bay drawn from one
@@ -1730,8 +1727,8 @@ fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bo
 // `room::size`'s: the stylesheet is the specification and it is the half that
 // moves.
 
-/// `[data-tip]::after`'s `min-width: 150px`: a tip is never narrower than
-/// this, however few words are in it.
+/// `[data-tip]::after`'s `min-width: 150px`: a tip is never narrower than this,
+/// however few words are in it.
 pub const TIP_MIN_W: f32 = 150.0;
 
 /// `[data-tip]::after`'s `max-width: 236px`, which is what the words wrap to
@@ -1753,21 +1750,22 @@ pub const TIP_SIZE: f32 = 10.5;
 /// `[data-tip]::after`'s `line-height: 1.55`, as a multiple of the size above.
 pub const TIP_LINE: f32 = 1.55;
 
-/// `[data-tip]::after`'s `top: calc(100% + 6px)`: the gap between what is
-/// being explained and the box explaining it.
+/// `[data-tip]::after`'s `top: calc(100% + 6px)`: the gap between what is being
+/// explained and the box explaining it.
 pub const TIP_GAP: f32 = 6.0;
 
-/// **What the words wrap to**: [`TIP_MAX_W`] less the padding either side,
-/// which is the width a browser lays this text out in.
+/// What the words wrap to: [`TIP_MAX_W`] less the padding either side, which is
+/// the width a browser lays this text out in.
 ///
-/// The console's own arithmetic and not a number in the stylesheet — `box-sizing`
-/// is the browser's rule rather than a declaration, and this is it.
+/// The console's own arithmetic and not a number in the stylesheet —
+/// `box-sizing` is the browser's rule rather than a declaration, and this is
+/// it.
 pub const TIP_WRAP: f32 = TIP_MAX_W - TIP_PAD_X * 2.0;
 
 /// `[data-tip]::after`'s `box-shadow: 0 8px 26px rgba(0,0,0,0.22)`, and it is
-/// the tip's own rather than `--c-shadow`: the mock gives this one box a
-/// shadow of its own, so the palette's is not the one to draw it with. 0.22 of
-/// 255 is 56.
+/// the tip's own rather than `--c-shadow`: the mock gives this one box a shadow
+/// of its own, so the palette's is not the one to draw it with. 0.22 of 255 is
+/// 56.
 pub const TIP_SHADOW: egui::epaint::Shadow = egui::epaint::Shadow {
     offset: [0, 8],
     blur: 26,
@@ -1777,21 +1775,20 @@ pub const TIP_SHADOW: egui::epaint::Shadow = egui::epaint::Shadow {
 
 // -- the words, parsed out of the page ------------------------------------
 
-/// **Every tip [`TIPS`] cites, in [`flat`]'s order**, read out of [`PAGE`]
-/// once.
+/// Every tip [`TIPS`] cites, in [`flat`]'s order, read out of [`PAGE`] once.
 ///
 /// An entry is `None` where its [`Cite`] resolved to nothing, which is a
 /// transcription that has gone stale rather than a control with no tip — a
-/// control with no tip has no row at all. `tests/hover.rs` is where that
-/// fails; a panel that met one would draw nothing for that control rather than
+/// control with no tip has no row at all. `tests/hover.rs` is where that fails;
+/// a panel that met one would draw nothing for that control rather than
 /// something wrong.
 pub struct Tips {
     words: Vec<Option<String>>,
 }
 
 impl Tips {
-    /// **Parse the page.** At start-up and never on a frame: it walks 340 KB
-    /// once and allocates one `String` per tip (P-0091).
+    /// Parse the page. At start-up and never on a frame: it walks 340 KB once and
+    /// allocates one `String` per tip (P-0091).
     pub fn read() -> Tips {
         let elements = elements(PAGE);
         let words = flat()
@@ -1816,15 +1813,15 @@ impl Tips {
         self.words.len()
     }
 
-    /// Whether nothing was asked for at all, which would mean [`TIPS`] is
-    /// empty — `Tips` is never empty in this crate and `clippy` asks for this
-    /// beside [`Tips::len`].
+    /// Whether nothing was asked for at all, which would mean [`TIPS`] is empty —
+    /// `Tips` is never empty in this crate and `clippy` asks for this beside
+    /// [`Tips::len`].
     pub fn is_empty(&self) -> bool {
         self.words.is_empty()
     }
 
-    /// **Every control whose [`Cite`] resolved to nothing**, by index. Empty
-    /// on a page and a table that agree.
+    /// Every control whose [`Cite`] resolved to nothing, by index. Empty on a page
+    /// and a table that agree.
     pub fn missing(&self) -> impl Iterator<Item = usize> + '_ {
         self.words
             .iter()
@@ -1838,22 +1835,21 @@ impl Tips {
 pub struct Element<'a> {
     /// Its `class` attribute, or `""`.
     pub class: &'a str,
-    /// The text inside it, tags stripped and whitespace collapsed — the page's
-    /// own spelling, entities and all.
+    /// The text inside it, tags stripped and whitespace collapsed — the page's own
+    /// spelling, entities and all.
     pub text: String,
     /// The `data-tip` attribute's value, still escaped.
     pub tip: &'a str,
 }
 
-/// **Every element in the page carrying a `data-tip`, in document order.**
+/// Every element in the page carrying a `data-tip`, in document order.
 ///
 /// A scan and not a parser: it finds the attribute, walks back to the `<` that
 /// opened the tag, reads the class beside it, and takes the text up to the
 /// matching close tag. That is enough for this page and it is deliberately not
 /// enough for HTML in general — what it cannot read it drops, and
-/// `tests/hover.rs` carries a floor so a scan that stopped reading fails
-/// rather than passing over an empty set (`gpu_tests_are_under_mod_gpu.rs`'s
-/// shape).
+/// `tests/hover.rs` carries a floor so a scan that stopped reading fails rather
+/// than passing over an empty set (`gpu_tests_are_under_mod_gpu.rs`'s shape).
 pub fn elements(page: &str) -> Vec<Element<'_>> {
     let mut out = Vec::new();
     let mut from = 0;
@@ -1963,10 +1959,10 @@ fn text_of(inner: &str) -> String {
     out
 }
 
-/// **The named entities the mock uses**, and nothing else: an entity that is
-/// not here comes out of [`decode`] unchanged and `tests/hover.rs` fails
-/// naming it, so the day the page uses a sixteenth this stops reading rather
-/// than reading wrongly.
+/// The named entities the mock uses, and nothing else: an entity that is not
+/// here comes out of [`decode`] unchanged and `tests/hover.rs` fails naming it,
+/// so the day the page uses a sixteenth this stops reading rather than reading
+/// wrongly.
 const NAMED: [(&str, &str); 15] = [
     ("&mdash;", "\u{2014}"),
     ("&ndash;", "\u{2013}"),
@@ -1985,7 +1981,7 @@ const NAMED: [(&str, &str); 15] = [
     ("&gt;", ">"),
 ];
 
-/// **One tip's words, as a reader sees them**: the attribute's value with its
+/// One tip's words, as a reader sees them: the attribute's value with its
 /// entities resolved.
 ///
 /// `&amp;` is last on purpose — it is resolved after every other entity, so a
@@ -2035,43 +2031,43 @@ fn named(entity: &str) -> Option<String> {
 
 // -- the layer ------------------------------------------------------------
 
-/// **What the hover layer is owed**, and what [`crate::repaint::Change::Tip`]
-/// turns into a decision.
+/// What the hover layer is owed, and what [`crate::repaint::Change::Tip`] turns
+/// into a decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tip {
-    /// **Nothing.** The pointer is on no tipped control, or the tip it is on
-    /// is already drawn and does not move while it is up. This is the layer
-    /// declaring nothing at rest.
+    /// Nothing. The pointer is on no tipped control, or the tip it is on is already
+    /// drawn and does not move while it is up. This is the layer declaring nothing
+    /// at rest.
     Still,
-    /// **A dwell is running**, and this is what is left of it: the picture is
-    /// different from the one on screen in exactly this long, which is
-    /// [`crate::budget::Declared::moves_in`]'s question asked of a hand
-    /// holding still (ADR-0283).
+    /// A dwell is running, and this is what is left of it: the picture is different
+    /// from the one on screen in exactly this long, which is
+    /// [`crate::budget::Declared::moves_in`]'s question asked of a hand holding
+    /// still (ADR-0283).
     Dwelling(Duration),
-    /// **A tip is on screen that must not be**: the pointer has left the
-    /// control it belongs to. A frame is owed now, to take it down.
+    /// A tip is on screen that must not be: the pointer has left the control it
+    /// belongs to. A frame is owed now, to take it down.
     Gone,
 }
 
-/// **The console's hover layer**: which control the pointer is resting on,
-/// since when, and the one galley the tip is drawn from.
+/// The console's hover layer: which control the pointer is resting on, since
+/// when, and the one galley the tip is drawn from.
 ///
-/// **It holds no clock.** Every time in it arrives as a [`Duration`] from the
+/// It holds no clock. Every time in it arrives as a [`Duration`] from the
 /// caller, which is this crate's rule and `crate::view::Transport`'s argument
 /// for it: *"an `Instant` here would put a clock in it"*.
 pub struct Hover {
     tips: Tips,
     resting: Option<Rest>,
-    /// Whether the tip has been painted. Written by [`Hover::paint`], because
-    /// what is on screen is a fact about the frame that drew it.
+    /// Whether the tip has been painted. Written by [`Hover::paint`], because what
+    /// is on screen is a fact about the frame that drew it.
     up: bool,
-    /// The words laid out, kept while the pointer stays on the control they
-    /// belong to **and its assignment has not moved**. A learn changes the
-    /// last line of the tip that is on screen, and a cache keyed on the
-    /// control alone would go on drawing the old one.
+    /// The words laid out, kept while the pointer stays on the control they belong
+    /// to and its assignment has not moved. A learn changes the last line of the
+    /// tip that is on screen, and a cache keyed on the control alone would go on
+    /// drawing the old one.
     galley: Option<(usize, Option<String>, Arc<Galley>)>,
-    /// **Which knob the control under the pointer is on**, as the host derived
-    /// it from the live map — see [`Hover::assign`].
+    /// Which knob the control under the pointer is on, as the host derived it from
+    /// the live map — see [`Hover::assign`].
     assigned: Option<String>,
 }
 
@@ -2090,7 +2086,7 @@ impl Default for Hover {
 }
 
 impl Hover {
-    /// **Read the page and take no other reading.** At start-up: the parse is
+    /// Read the page and take no other reading. At start-up: the parse is
     /// [`Tips::read`]'s and is not on any frame path.
     pub fn new() -> Hover {
         Hover {
@@ -2102,46 +2098,45 @@ impl Hover {
         }
     }
 
-    /// **Where the pointer is resting and on which control**, or `None` where
-    /// it is on none — the point, and an index into [`flat`].
+    /// Where the pointer is resting and on which control, or `None` where it is on
+    /// none — the point, and an index into [`flat`].
     ///
-    /// **This is the learn seam.** Learn is *point at a control and move a
-    /// knob*, so what it needs is exactly what this layer already worked out
-    /// for the tip: which control the pointer is on. A second derivation in
-    /// the host would be a second answer that could disagree with the tip the
-    /// operator is reading while they do it
+    /// This is the learn seam. Learn is *point at a control and move a knob*, so
+    /// what it needs is exactly what this layer already worked out for the tip:
+    /// which control the pointer is on. A second derivation in the host would be a
+    /// second answer that could disagree with the tip the operator is reading while
+    /// they do it
     /// (`docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`).
     ///
-    /// **It answers before the dwell.** A tip waits half a second because
-    /// reading one is a decision; pointing at a control and reaching for a
-    /// knob is not, and a learn that only worked once the box was up would be
-    /// a gesture with a hidden timer in it.
+    /// It answers before the dwell. A tip waits half a second because reading one
+    /// is a decision; pointing at a control and reaching for a knob is not, and a
+    /// learn that only worked once the box was up would be a gesture with a hidden
+    /// timer in it.
     pub fn resting(&self) -> Option<(Point, usize)> {
         self.resting.map(|rest| (rest.at, rest.on))
     }
 
-    /// **Which knob the control under the pointer is on**, for the tip's last
-    /// line — `Some("cc 5")`, or `None` for a control nothing is mapped to.
+    /// Which knob the control under the pointer is on, for the tip's last line —
+    /// `Some("cc 5")`, or `None` for a control nothing is mapped to.
     ///
     /// # Why this crosses the seam instead of being derived here
     ///
-    /// A control's assignment is a fact the **map** holds, and this crate
-    /// cannot read one: `karakuri-midi` depends on `midir`, and
+    /// A control's assignment is a fact the map holds, and this crate cannot read
+    /// one: `karakuri-midi` depends on `midir`, and
     /// [ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
-    /// is that this crate takes no device. So it arrives the way every other
-    /// value does — derived by the host and handed in, beside the [`View`].
+    /// is that this crate takes no device. So it arrives the way every other value
+    /// does — derived by the host and handed in, beside the [`View`].
     ///
     /// # And why it is derived at all
     ///
-    /// The page's own `⊕ MIDI:` line is the **mock's** assignment and no
-    /// operator's. A run whose map puts `cc 5` on gain A read `cc → gain A` in
-    /// the tip because the page said so, and the tip was then confidently
-    /// wrong about the one thing somebody would hover to check
+    /// The page's own `⊕ MIDI:` line is the mock's assignment and no operator's. A
+    /// run whose map puts `cc 5` on gain A read `cc → gain A` in the tip because
+    /// the page said so, and the tip was then confidently wrong about the one thing
+    /// somebody would hover to check
     /// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
-    /// **Where nothing is mapped the page's sentence stays**, because it says
-    /// *why* — *a map line names a slot, a range or a word from a closed list,
-    /// and a Set id is none of the three* — and no reverse lookup can produce
-    /// that.
+    /// Where nothing is mapped the page's sentence stays, because it says *why* —
+    /// *a map line names a slot, a range or a word from a closed list, and a Set id
+    /// is none of the three* — and no reverse lookup can produce that.
     ///
     /// Set once per frame by the host; `None` on a run with no surface at all,
     /// which leaves every tip exactly as the page wrote it.
@@ -2149,39 +2144,36 @@ impl Hover {
         self.assigned = on;
     }
 
-    /// **How long a pointer holds still before a tip appears**, and it is
-    /// `egui`'s own `Interaction::tooltip_delay` rather than a number written
-    /// here.
+    /// How long a pointer holds still before a tip appears, and it is `egui`'s own
+    /// `Interaction::tooltip_delay` rather than a number written here.
     ///
-    /// **Read rather than transcribed**, which is
-    /// [`docs/contributing.md` §4](../../../docs/contributing.md)'s first tier
-    /// over a number this program would otherwise have invented: the toolkit
-    /// this console is drawn with already carries the interval a tooltip waits
-    /// for, so the console paints its own layer and still waits as long as
-    /// everything else the operator's machine draws. It is 0.5 s in `egui`
-    /// 0.36's default style, and a caller that changes the style moves this
-    /// with it.
+    /// Read rather than transcribed, which is [`docs/contributing.md`
+    /// §4](../../../docs/contributing.md)'s first tier over a number this program
+    /// would otherwise have invented: the toolkit this console is drawn with
+    /// already carries the interval a tooltip waits for, so the console paints its
+    /// own layer and still waits as long as everything else the operator's machine
+    /// draws. It is 0.5 s in `egui` 0.36's default style, and a caller that changes
+    /// the style moves this with it.
     pub fn dwell(ctx: &egui::Context) -> Duration {
         let style = ctx.style_of(ctx.theme());
         Duration::from_secs_f32(style.interaction.tooltip_delay.max(0.0))
     }
 
-    /// **The pointer moved.** Returns what is owed for it — [`Tip::Gone`]
-    /// where a tip is on screen and the pointer has left the control it
-    /// belongs to, and [`Tip::Still`] otherwise, because a move that starts a
-    /// dwell has already earned a frame from
-    /// [`crate::repaint::Change::Pointer`] and [`Hover::owed`] is what that
-    /// frame asks for the deadline.
+    /// The pointer moved. Returns what is owed for it — [`Tip::Gone`] where a tip
+    /// is on screen and the pointer has left the control it belongs to, and
+    /// [`Tip::Still`] otherwise, because a move that starts a dwell has already
+    /// earned a frame from [`crate::repaint::Change::Pointer`] and [`Hover::owed`]
+    /// is what that frame asks for the deadline.
     ///
-    /// **The claim goes in with the point.** `crate::input::claim` has already
-    /// walked the console's controls to answer it, and `Claim::Egui` is the
-    /// panel saying the pointer is on none of them — so the common move, which
-    /// is over nothing, costs one comparison here and the walk below happens
-    /// only where a control really is under the pointer.
+    /// The claim goes in with the point. `crate::input::claim` has already walked
+    /// the console's controls to answer it, and `Claim::Egui` is the panel saying
+    /// the pointer is on none of them — so the common move, which is over nothing,
+    /// costs one comparison here and the walk below happens only where a control
+    /// really is under the pointer.
     ///
-    /// **A drag is not a hover.** A gesture in hand is the pointer being used
-    /// rather than pointed, so it takes any tip down and starts none: that is
-    /// `claim`'s rule 1 read on this layer rather than a second copy of it.
+    /// A drag is not a hover. A gesture in hand is the pointer being used rather
+    /// than pointed, so it takes any tip down and starts none: that is `claim`'s
+    /// rule 1 read on this layer rather than a second copy of it.
     pub fn moved(
         &mut self,
         claim: Claim,
@@ -2225,8 +2217,8 @@ impl Hover {
         }
     }
 
-    /// **The pointer left the window**, which is not a move to anywhere: any
-    /// tip goes and no dwell is running.
+    /// The pointer left the window, which is not a move to anywhere: any tip goes
+    /// and no dwell is running.
     pub fn left(&mut self) -> Tip {
         let owed = match self.up {
             true => Tip::Gone,
@@ -2237,19 +2229,19 @@ impl Hover {
         owed
     }
 
-    /// **When this layer's picture is next different from the one on screen**,
-    /// asked on every frame the way `crate::view::View::animating` is.
+    /// When this layer's picture is next different from the one on screen, asked on
+    /// every frame the way `crate::view::View::animating` is.
     ///
-    /// [`Tip::Dwelling`] while a dwell is running and [`Tip::Still`]
-    /// everywhere else — including once the tip is up, because it does not
-    /// move while it is shown. A panel nobody is pointing at asks for nothing.
+    /// [`Tip::Dwelling`] while a dwell is running and [`Tip::Still`] everywhere
+    /// else — including once the tip is up, because it does not move while it is
+    /// shown. A panel nobody is pointing at asks for nothing.
     ///
-    /// **A dwell with nothing left of it is `Still` and not `Dwelling(0)`**,
-    /// which is what makes this *when is the picture next different from the
-    /// one this frame is about to draw* rather than *from the one already on
-    /// screen*: the caller asks this inside the pass that is about to paint,
-    /// so the frame the deadline was for is the frame it is being asked on,
-    /// and a zero here would buy one more frame drawing what this one drew.
+    /// A dwell with nothing left of it is `Still` and not `Dwelling(0)`, which is
+    /// what makes this *when is the picture next different from the one this frame
+    /// is about to draw* rather than *from the one already on screen*: the caller
+    /// asks this inside the pass that is about to paint, so the frame the deadline
+    /// was for is the frame it is being asked on, and a zero here would buy one
+    /// more frame drawing what this one drew.
     pub fn owed(&self, ctx: &egui::Context, now: Duration) -> Tip {
         match (self.resting, self.up) {
             (Some(rest), false) => {
@@ -2262,8 +2254,8 @@ impl Hover {
         }
     }
 
-    /// **The words on screen**, or `None` where no tip is up. What a test
-    /// reads, and the only way anything outside this module can tell.
+    /// The words on screen, or `None` where no tip is up. What a test reads, and
+    /// the only way anything outside this module can tell.
     pub fn showing(&self) -> Option<&str> {
         match self.up {
             true => self.tips.get(self.resting?.on),
@@ -2271,8 +2263,8 @@ impl Hover {
         }
     }
 
-    /// **Which control the pointer is resting on**, whether or not its dwell
-    /// has run out.
+    /// Which control the pointer is resting on, whether or not its dwell has run
+    /// out.
     pub fn resting_on(&self) -> Option<&'static Tipped> {
         flat().nth(self.resting?.on)
     }
@@ -2282,16 +2274,16 @@ impl Hover {
         &self.tips
     }
 
-    /// **Paint the tip, last of everything on the console.**
+    /// Paint the tip, last of everything on the console.
     ///
-    /// It is called from inside the same pass as `View::draw` and after it, so
-    /// the box goes over every card and every bay — which is the mock's
-    /// `z-index: 30` and the order the four cards are already painted in.
+    /// It is called from inside the same pass as `View::draw` and after it, so the
+    /// box goes over every card and every bay — which is the mock's `z-index: 30`
+    /// and the order the four cards are already painted in.
     ///
-    /// **Nothing is allocated after the first frame it is up**: the galley is
-    /// laid out once for the control the pointer is on and kept until the
-    /// pointer leaves it. What every frame after that costs is a shadow, a
-    /// fill, a stroke and one `galley` call.
+    /// Nothing is allocated after the first frame it is up: the galley is laid out
+    /// once for the control the pointer is on and kept until the pointer leaves it.
+    /// What every frame after that costs is a shadow, a fill, a stroke and one
+    /// `galley` call.
     pub fn paint(&mut self, ui: &Ui, panel: &Panel, view: &View, now: Duration) {
         let Some(rest) = self.resting else {
             return;
@@ -2351,7 +2343,7 @@ impl Hover {
     }
 }
 
-/// **The tip, with its MIDI line read off the live map** where there is one to
+/// The tip, with its MIDI line read off the live map where there is one to
 /// read.
 ///
 /// The page's `⊕ MIDI:` clause is the last thing every tip says, so what this
@@ -2360,18 +2352,18 @@ impl Hover {
 /// `docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`
 /// for the whole argument.
 ///
-/// **Three cases and only one of them rewrites anything.**
+/// Three cases and only one of them rewrites anything.
 ///
 /// - A control the map reaches: the clause becomes what the map says.
-/// - A control nothing is mapped to (`on` is `None`): **the page's own
-///   sentence stays**, because it carries the reason — *a map line names a
+/// - A control nothing is mapped to (`on` is `None`): the page's own
+///   sentence stays, because it carries the reason — *a map line names a
 ///   slot, a range or a word from a closed list* — which is worth more than
 ///   the word *unassigned* this could put there instead.
 /// - A tip with no `⊕ MIDI:` clause at all: untouched. The mock is not
 ///   exhaustive and a clause invented for a control the page is silent about
 ///   would be this console writing the manual.
 ///
-/// **It is a `Cow` in effect and an allocation only where it rewrites**: a
+/// It is a `Cow` in effect and an allocation only where it rewrites: a
 /// `String` is built on the frame a tip appears and on no other, which is the
 /// same frame the galley is laid out on.
 pub fn assigned(words: &str, on: Option<&str>) -> String {
@@ -2384,29 +2376,29 @@ pub fn assigned(words: &str, on: Option<&str>) -> String {
     format!("{head}{MIDI_LINE} {on}, which is what the map in use says today.")
 }
 
-/// **The last clause of every tip on the page**, as `console.html` spells it
-/// once the entities are resolved — the `⊕` is `&#8853;`.
+/// The last clause of every tip on the page, as `console.html` spells it once
+/// the entities are resolved — the `⊕` is `&#8853;`.
 ///
 /// Written here rather than derived because it is the page's own punctuation
 /// and there is nothing to derive it from: what makes it safe is that
 /// `tests/hover.rs` fails if the page stops ending its tips this way.
 pub const MIDI_LINE: &str = "\u{2295} MIDI:";
 
-/// **Where the box goes: under the pointer, and inside the window.**
+/// Where the box goes: under the pointer, and inside the window.
 ///
 /// The mock hangs a tip off the element it explains — `top: calc(100% + 6px)`,
-/// `left: 0` — and flips it at two edges: `.tip-right` and the last column
-/// open leftward, and the Outputs row opens upward, *so that hovering cannot
-/// summon a scrollbar*. This console has no scrollbar to summon and the rule
-/// is the same one: **a tip never leaves the window**, so it opens down and to
-/// the right of the pointer and flips at whichever edge it would cross.
+/// `left: 0` — and flips it at two edges: `.tip-right` and the last column open
+/// leftward, and the Outputs row opens upward, *so that hovering cannot summon
+/// a scrollbar*. This console has no scrollbar to summon and the rule is the
+/// same one: a tip never leaves the window, so it opens down and to the right
+/// of the pointer and flips at whichever edge it would cross.
 ///
-/// **It is anchored to the pointer rather than to the control**, which is the
-/// one place this departs from the page. A [`Tipped::at`] answers *is the
-/// pointer on this control* and not *where is it*, so a box hung off the
-/// control's own box would need every derivation to hand back a rectangle. The
-/// pointer is where the operator is looking; the day a rectangle is wanted for
-/// something else, this is what would change.
+/// It is anchored to the pointer rather than to the control, which is the one
+/// place this departs from the page. A [`Tipped::at`] answers *is the pointer
+/// on this control* and not *where is it*, so a box hung off the control's own
+/// box would need every derivation to hand back a rectangle. The pointer is
+/// where the operator is looking; the day a rectangle is wanted for something
+/// else, this is what would change.
 ///
 /// A box wider or taller than the window is clamped to the near edge rather
 /// than flipped, because a flip would only move which half is cut off.

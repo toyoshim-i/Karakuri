@@ -15,17 +15,17 @@ pub struct Placed {
 /// Every region to draw this frame, in tree order, appended to `out` after
 /// clearing it.
 ///
-/// **Tree order is load bearing and not a convenience.** The inspector is a
-/// split: its bay card and head cover the same rectangle its two panes tile,
-/// so the card has to be painted before them. Tree order gives that for
-/// nothing, and any other order would need the rule written out.
+/// Tree order is load bearing and not a convenience. The inspector is a split:
+/// its bay card and head cover the same rectangle its two panes tile, so the
+/// card has to be painted before them. Tree order gives that for nothing, and
+/// any other order would need the rule written out.
 ///
-/// **Arranges the Program bay first**, which is [`rearrange`] and is where the
+/// Arranges the Program bay first, which is [`rearrange`] and is where the
 /// solve happens: `Layout::rect` refuses to answer from a dirty layout, and a
 /// plan taken before the bay had arranged itself would list `deck-previews` as
-/// a region to draw on the very frame its cells went somewhere else. On a
-/// frame where nothing moved both solves are flag tests and the bit is written
-/// with the value it already had, which marks nothing dirty (ADR-0183).
+/// a region to draw on the very frame its cells went somewhere else. On a frame
+/// where nothing moved both solves are flag tests and the bit is written with
+/// the value it already had, which marks nothing dirty (ADR-0183).
 ///
 /// `canvas` is the picture's shape, which is what decides that arrangement —
 /// [`program_bay`]. It is [`View::canvas`] at the one call site that draws.
@@ -48,9 +48,9 @@ pub fn plan_into(panel: &mut Panel, canvas: (u32, u32), out: &mut Vec<Placed>) {
     }
 }
 
-/// **Whether there is anything of this rectangle to draw**, which is the one
-/// rule [`picture_rect`], [`preview_cells`] and [`program_body`] each answer
-/// `None` from.
+/// Whether there is anything of this rectangle to draw, which is the one rule
+/// [`picture_rect`], [`preview_cells`] and [`program_body`] each answer `None`
+/// from.
 ///
 /// It is asked of the *fitted* rectangle rather than of the box it was fitted
 /// into, always: a box under half a pixel rounds to nothing, which is nothing
@@ -64,24 +64,24 @@ pub(crate) fn positive(rect: Rect) -> bool {
     rect.width() > 0.0 && rect.height() > 0.0
 }
 
-/// **One of `count` equal tracks laid along `axis` inside `strip`**, with `gap`
+/// One of `count` equal tracks laid along `axis` inside `strip`, with `gap`
 /// between them and nowhere else.
 ///
 /// That last clause is the whole of it, and it is the reading the mock's grids
 /// and flex rows all take: `repeat(4, 1fr)` with a `gap` is four tracks and
-/// **three** gaps, not four tracks each carrying one. The same sentence is
-/// written on [`size::PREVIEW_GAP`], on [`size::BEAT_GAP`] and on
-/// [`size::STRIP_GAP`], and this is the arithmetic all three describe —
-/// [`TransportRow::dot`] is the fourth, and it steps a fixed dot width rather
-/// than dividing a strip, so it states the rule and does not call this.
+/// three gaps, not four tracks each carrying one. The same sentence is written
+/// on [`size::PREVIEW_GAP`], on [`size::BEAT_GAP`] and on [`size::STRIP_GAP`],
+/// and this is the arithmetic all three describe — [`TransportRow::dot`] is the
+/// fourth, and it steps a fixed dot width rather than dividing a strip, so it
+/// states the rule and does not call this.
 ///
-/// **Three call sites, and the third is what made it worth a function.** The
-/// row of previews and the mixer's page of strips were the same six lines
-/// written twice with a different gap in them; a column beside the picture is
-/// the third, and it is those six lines read one axis along. A track spans
-/// `strip` across the axis, exactly as a node of the arrangement spans its
-/// parent across its own — which is why the axis is
-/// [`karakuri_layout::Axis`] rather than a `bool`.
+/// Three call sites, and the third is what made it worth a function. The row of
+/// previews and the mixer's page of strips were the same six lines written
+/// twice with a different gap in them; a column beside the picture is the
+/// third, and it is those six lines read one axis along. A track spans `strip`
+/// across the axis, exactly as a node of the arrangement spans its parent
+/// across its own — which is why the axis is [`karakuri_layout::Axis`] rather
+/// than a `bool`.
 pub(crate) fn track(strip: Rect, count: usize, index: usize, gap: f32, axis: Axis) -> Rect {
     let gaps = gap * (count.max(1) - 1) as f32;
     let (along, across) = match axis {

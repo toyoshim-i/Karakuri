@@ -5,14 +5,14 @@ use egui::epaint::text::{FontId, LayoutJob, TextFormat};
 // Bay head rendering, capsule layout, and head metadata
 // ---------------------------------------------------------------------------
 
-/// **A bay head's furniture**: the word in it, the controls the mock draws in
-/// it, whether it carries a grip, and the class it opens.
+/// A bay head's furniture: the word in it, the controls the mock draws in it,
+/// whether it carries a grip, and the class it opens.
 ///
 /// [`Kind::Bay`] carries the first three in [`REGIONS`] and the four bays that
 /// are kinds of their own — the Mixer, the Master, the Library and the Staging
 /// lane — carried them nowhere, because [`View::draw`] wrote them out at its
-/// own call to [`bay_head`]. **That was one copy while nothing but the paint
-/// needed them and it is four copies now**: [`mcp_pill`] has to lay a head's
+/// own call to [`bay_head`]. That was one copy while nothing but the paint
+/// needed them and it is four copies now: [`mcp_pill`] has to lay a head's
 /// pills out again to find the class capsule among them, and a head whose words
 /// the paint and the press disagreed about is precisely the defect
 /// [`head_pills`] was written against.
@@ -26,39 +26,38 @@ pub struct Head {
     pub grip: bool,
     /// The class this head opens, where it opens one — [`class_at`].
     pub class: Option<Class>,
-    /// **The bank pills, and which of the four is armed** — `None` for every
-    /// head but the Sequencer's, which is the one head in [`REGIONS`] whose
-    /// capsules are a *value* rather than a table entry.
+    /// The bank pills, and which of the four is armed — `None` for every head but
+    /// the Sequencer's, which is the one head in [`REGIONS`] whose capsules are a
+    /// *value* rather than a table entry.
     ///
     /// # Why the head machinery grew a field rather than the table growing a row
     ///
-    /// [`Head::pills`] is `&'static [&'static str]`, which is every capsule
-    /// this console had until 2026-09-09: a word chosen when the region was
-    /// written. The Sequencer's `seq 1 … seq 4` are four words that are always
-    /// the same and **one mark that is not** — which bank the lanes are reading
-    /// — and [`view::sequencer`](sequencer)'s own note named that as the
-    /// missing piece: *"what is missing is a head that can say which pill is
-    /// armed"*.
+    /// [`Head::pills`] is `&'static [&'static str]`, which is every capsule this
+    /// console had until 2026-09-09: a word chosen when the region was written. The
+    /// Sequencer's `seq 1 … seq 4` are four words that are always the same and one
+    /// mark that is not — which bank the lanes are reading — and
+    /// [`view::sequencer`](sequencer)'s own note named that as the missing piece:
+    /// *"what is missing is a head that can say which pill is armed"*.
     ///
-    /// **It is [`mcp_pill`]'s arrangement and not a second one.** A class pill
-    /// carries a state into a head already; it does it by [`mcp_word`], because
-    /// its two states have two words. A bank's do not — `seq 2` reads `seq 2`
-    /// whether it is armed or not — so what a bank needs is the other half of
-    /// what the class pill already gets: [`HeadWords::armed`], which is where
-    /// *is this capsule lit* is answered for both of them now.
+    /// It is [`mcp_pill`]'s arrangement and not a second one. A class pill carries
+    /// a state into a head already; it does it by [`mcp_word`], because its two
+    /// states have two words. A bank's do not — `seq 2` reads `seq 2` whether it is
+    /// armed or not — so what a bank needs is the other half of what the class pill
+    /// already gets: [`HeadWords::armed`], which is where *is this capsule lit* is
+    /// answered for both of them now.
     ///
-    /// **Every other head is `None` and its [`HeadWords`] is what it was**, to
-    /// the word and to the bit; `tests/head_words.rs` renders every region's
-    /// head before and after and compares.
+    /// Every other head is `None` and its [`HeadWords`] is what it was, to the word
+    /// and to the bit; `tests/head_words.rs` renders every region's head before and
+    /// after and compares.
     pub banks: Option<usize>,
 }
 
-/// **The head a region draws**, or `None` where it has none.
+/// The head a region draws, or `None` where it has none.
 ///
 /// The transport and the Outputs row are headless (ADR-0159), and a pane, the
-/// picture and the preview row are inside a bay that has one. **The Outputs row
+/// picture and the preview row are inside a bay that has one. The Outputs row
 /// answering `None` here is what makes the fourth class pill a placement of its
-/// own** — see [`outputs`], which is where it goes instead.
+/// own — see [`outputs`], which is where it goes instead.
 pub fn head_of(region: &Region) -> Option<Head> {
     let (title, pills): (_, &'static [&'static str]) = match region.kind {
         Kind::Bay { title, pills, .. } => (title, pills),
@@ -83,8 +82,8 @@ pub fn head_of(region: &Region) -> Option<Head> {
     })
 }
 
-/// **Whether a region's head draws a grip**, said once and in a form a `const`
-/// can ask.
+/// Whether a region's head draws a grip, said once and in a form a `const` can
+/// ask.
 ///
 /// It was the third term of [`head_of`]'s own match, which was one statement
 /// while the paint was the only reader of it. [`BAY_GRIPS`] is the second
@@ -95,9 +94,9 @@ pub fn head_of(region: &Region) -> Option<Head> {
 /// two places would be two answers to *does this head carry a grip*, and the
 /// day they disagreed the mark and the control would be in different heads.
 ///
-/// **`Kind::Bay` carries its own**, because [`REGIONS`] states it there; the
-/// four bays that are kinds of their own state it here, which is where they
-/// stated it before. Everything headless answers `false` rather than being
+/// `Kind::Bay` carries its own, because [`REGIONS`] states it there; the four
+/// bays that are kinds of their own state it here, which is where they stated
+/// it before. Everything headless answers `false` rather than being
 /// unreachable, so the count above is a walk over every region and not over a
 /// subset somebody has to keep.
 pub(crate) const fn head_grip(kind: Kind) -> bool {
@@ -111,8 +110,8 @@ pub(crate) const fn head_grip(kind: Kind) -> bool {
     }
 }
 
-/// **How many bay heads draw a grip**, counted off [`REGIONS`] — which is how
-/// many bays a pointer can fold, because the grip is the control ([`bay_grip`]).
+/// How many bay heads draw a grip, counted off [`REGIONS`] — which is how many
+/// bays a pointer can fold, because the grip is the control ([`bay_grip`]).
 ///
 /// Four, on the day it is written: the Library, the Program bay, the Inspector
 /// and the Master. It is a count and not a four for [`crate::input::PROBES`]'
@@ -134,19 +133,19 @@ const fn grips() -> usize {
     total
 }
 
-/// **How many capsules one bay head can hold**: the most any entry in
-/// [`REGIONS`] lists — the Program bay's `solo` — plus the class pill, plus
-/// the bank pills the Sequencer's head draws off a value ([`Head::banks`]).
+/// How many capsules one bay head can hold: the most any entry in [`REGIONS`]
+/// lists — the Program bay's `solo` — plus the class pill, plus the bank pills
+/// the Sequencer's head draws off a value ([`Head::banks`]).
 ///
-/// **The four are added rather than maxed**, which is deliberately the
-/// pessimistic reading: nothing says a head with banks may not also list a
-/// control and open a class, and a bound that assumed otherwise would drop a
-/// capsule off the end of [`HeadWords`] in silence the day one did — which is
-/// exactly what the `const` assertion below exists to stop.
+/// The four are added rather than maxed, which is deliberately the pessimistic
+/// reading: nothing says a head with banks may not also list a control and open
+/// a class, and a bound that assumed otherwise would drop a capsule off the end
+/// of [`HeadWords`] in silence the day one did — which is exactly what the
+/// `const` assertion below exists to stop.
 const HEAD_PILLS: usize = 2 + karakuri_pattern::BANKS;
 
-/// And every entry fits **with everything a head can be handed beside it** —
-/// the class pill and the four bank pills. A head listing one more control than
+/// And every entry fits with everything a head can be handed beside it — the
+/// class pill and the four bank pills. A head listing one more control than
 /// that would lose a capsule off the end of [`HeadWords`] silently, which is a
 /// control that stops existing rather than a build that stops.
 const _: () = {
@@ -159,21 +158,21 @@ const _: () = {
     }
 };
 
-/// **Every capsule in a head this frame**: the table's own controls, and then
-/// the class pill where the bay opens a class.
+/// Every capsule in a head this frame: the table's own controls, and then the
+/// class pill where the bay opens a class.
 ///
-/// **The class pill is last, which is rightmost.** [`head_pills`] lays a head
-/// out right to left, and `docs/manual/console.html` draws the Program bay's
-/// head as `1920×1080`, `solo`, `mcp · shut`, `previews 3 of 4` — so the
-/// opening sits to the right of `solo`. That is read off the page rather than
-/// chosen here, and it is why `solo`'s own capsule moves when a class is
-/// opened: the two words are not the same width, and one derivation answering
-/// for both is what keeps the pill an operator sees and the pill a press lands
-/// on the same rectangle.
+/// The class pill is last, which is rightmost. [`head_pills`] lays a head out
+/// right to left, and `docs/manual/console.html` draws the Program bay's head
+/// as `1920×1080`, `solo`, `mcp · shut`, `previews 3 of 4` — so the opening
+/// sits to the right of `solo`. That is read off the page rather than chosen
+/// here, and it is why `solo`'s own capsule moves when a class is opened: the
+/// two words are not the same width, and one derivation answering for both is
+/// what keeps the pill an operator sees and the pill a press lands on the same
+/// rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeadWords {
     words: [&'static str; HEAD_PILLS],
-    /// **Which of them are lit**, in the same order — see [`HeadWords::armed`].
+    /// Which of them are lit, in the same order — see [`HeadWords::armed`].
     armed: [bool; HEAD_PILLS],
     len: usize,
 }
@@ -184,15 +183,15 @@ impl HeadWords {
         &self.words[..self.len]
     }
 
-    /// **Whether the capsule at `index` is drawn `.pill.armed`**, which is one
-    /// question with two answers behind it and used to be asked at the paint.
+    /// Whether the capsule at `index` is drawn `.pill.armed`, which is one question
+    /// with two answers behind it and used to be asked at the paint.
     ///
-    /// [`bay_head`] read `words[index] == MCP_OPEN`, which works only while
-    /// *lit* and *this word* are the same fact. They are for a class pill,
-    /// whose two states are two words ([`mcp_word`]); they are not for a bank
-    /// pill, which reads `seq 2` armed and `seq 2` plain. So the bit is derived
-    /// where the word is, beside it, and the paint reads one answer instead of
-    /// re-deriving one of them.
+    /// [`bay_head`] read `words[index] == MCP_OPEN`, which works only while *lit*
+    /// and *this word* are the same fact. They are for a class pill, whose two
+    /// states are two words ([`mcp_word`]); they are not for a bank pill, which
+    /// reads `seq 2` armed and `seq 2` plain. So the bit is derived where the word
+    /// is, beside it, and the paint reads one answer instead of re-deriving one of
+    /// them.
     ///
     /// `false` past the end, which is a capsule that is not there.
     pub fn armed(&self, index: usize) -> bool {
@@ -201,9 +200,9 @@ impl HeadWords {
 }
 
 impl Head {
-    /// **This head with `armed` of its four bank pills lit** — the one door
-    /// into [`Head::banks`], so a head that draws banks is a head somebody
-    /// handed a value to.
+    /// This head with `armed` of its four bank pills lit — the one door into
+    /// [`Head::banks`], so a head that draws banks is a head somebody handed a
+    /// value to.
     pub fn with_banks(self, armed: usize) -> Head {
         Head {
             banks: Some(armed),
@@ -239,15 +238,14 @@ impl Head {
     }
 }
 
-/// **The bank pills' words**, one per `karakuri_pattern::BANKS` — `seq 1` …
-/// `seq 4`, counting from one as everything an operator reads on this console
-/// does.
+/// The bank pills' words, one per `karakuri_pattern::BANKS` — `seq 1` … `seq
+/// 4`, counting from one as everything an operator reads on this console does.
 ///
 /// A `const` array sized off that crate's own count, so a fifth bank is a
 /// missing word here rather than a pill nobody draws.
 const BANK_PILLS: [&str; karakuri_pattern::BANKS] = ["seq 1", "seq 2", "seq 3", "seq 4"];
 
-/// **One capsule in a bay head, by the word in it** — [`head_pills`]'s answer,
+/// One capsule in a bay head, by the word in it — [`head_pills`]'s answer,
 /// asked for one pill rather than for all of them.
 ///
 /// The one derivation three readers share: [`bay_head`] paints from it,
@@ -273,21 +271,21 @@ pub(crate) fn head_capsule(
     found.filter(|capsule| head_box(rect).contains_rect(*capsule))
 }
 
-/// **Where each of a head's bank pills is**, in bank order — [`head_capsule`]
-/// asked by position instead of by word, because four capsules are wanted and
-/// not one.
+/// Where each of a head's bank pills is, in bank order — [`head_capsule`] asked
+/// by position instead of by word, because four capsules are wanted and not
+/// one.
 ///
-/// **By index and not by word**, which is the difference that matters: the four
+/// By index and not by word, which is the difference that matters: the four
 /// bank words are distinct today, and a control found by the word in it is a
 /// control that moves the day two capsules read the same thing. The class pill
 /// can be found by its word because [`mcp_word`]'s two are the state; a bank's
 /// is not ([`HeadWords::armed`]).
 ///
-/// **Empty for a head that draws no banks, and empty for one that cannot hold
-/// all four** — a capsule half out of a head is not one to press
-/// ([`head_capsule`]'s own filter), and dropping the ones that fit would
-/// renumber the rest: the pills are laid out right to left, so the capsule that
-/// falls off is `seq 1` and every bank after it would answer for its neighbour.
+/// Empty for a head that draws no banks, and empty for one that cannot hold all
+/// four — a capsule half out of a head is not one to press ([`head_capsule`]'s
+/// own filter), and dropping the ones that fit would renumber the rest: the
+/// pills are laid out right to left, so the capsule that falls off is `seq 1`
+/// and every bank after it would answer for its neighbour.
 pub(crate) fn bank_capsules(ctx: &egui::Context, rect: Rect, head: &Head, open: Open) -> Vec<Rect> {
     if head.banks.is_none() {
         return Vec::new();
@@ -313,7 +311,7 @@ pub(crate) fn bank_capsules(ctx: &egui::Context, rect: Rect, head: &Head, open: 
     }
 }
 
-/// **A folded bay's mark, painted** — the head alone, and the whole of what a
+/// A folded bay's mark, painted — the head alone, and the whole of what a
 /// folded bay draws.
 ///
 /// `docs/manual/console.html` is the specification, term for term: a
@@ -322,11 +320,11 @@ pub(crate) fn bank_capsules(ctx: &egui::Context, rect: Rect, head: &Head, open: 
 /// `--c-faint`. The dashed ring is the caller's, so this paints a head and
 /// nothing else.
 ///
-/// **It says there is a bay here and that `space` opens it, and nothing
-/// else** — not a bay's contents in miniature, and not a count of what is
-/// inside. While focus is on a folded bay a digit, `enter` and the arrows
-/// decline and say why, so a mark standing in for those would be offering a
-/// press that is refused.
+/// It says there is a bay here and that `space` opens it, and nothing else —
+/// not a bay's contents in miniature, and not a count of what is inside. While
+/// focus is on a folded bay a digit, `enter` and the arrows decline and say
+/// why, so a mark standing in for those would be offering a press that is
+/// refused.
 pub(crate) fn folded_head_into(ui: &Ui, pal: &Palette, at: Rect, title: &str) {
     card(ui, pal, at);
     let painter = ui.painter().with_clip_rect(at);
@@ -359,26 +357,26 @@ pub(crate) fn folded_head_into(ui: &Ui, pal: &Palette, at: Rect, title: &str) {
     painter.galley(Pos2::new(after, mid - says.size().y * 0.5), says, pal.faint);
 }
 
-/// **The bay head, and the whole of what one is.**
+/// The bay head, and the whole of what one is.
 ///
 /// A title on the left, the bay's own controls on the right, and a grip at the
-/// far right where the mock draws one — laid out into the top
-/// [`size::HEAD_H`] of `rect`, with `.bay-head`'s hairline under it.
+/// far right where the mock draws one — laid out into the top [`size::HEAD_H`]
+/// of `rect`, with `.bay-head`'s hairline under it.
 ///
 /// Seven call sites on the day it is written, which is [`REGIONS`]'s seven
 /// bays.
 ///
-/// The pills and the grip are laid out **right to left** from the right edge,
-/// which is what `justify-content: space-between` on a two-child flex row
-/// comes to: the title takes the left and the group takes the right, and the
-/// group's own order is its writing order once it is placed.
+/// The pills and the grip are laid out right to left from the right edge, which
+/// is what `justify-content: space-between` on a two-child flex row comes to:
+/// the title takes the left and the group takes the right, and the group's own
+/// order is its writing order once it is placed.
 ///
-/// **The head arrives as a [`Head`] rather than as three arguments**, because
-/// the four bays that are kinds of their own used to spell theirs out at this
-/// call and there is now a second reader of every one of them: [`mcp_pill`]
-/// lays the same head out again to find the class capsule in it. One table
-/// (`head_of`), one derivation (`head_pills`), and the capsule an operator sees
-/// is the capsule a press lands on.
+/// The head arrives as a [`Head`] rather than as three arguments, because the
+/// four bays that are kinds of their own used to spell theirs out at this call
+/// and there is now a second reader of every one of them: [`mcp_pill`] lays the
+/// same head out again to find the class capsule in it. One table (`head_of`),
+/// one derivation (`head_pills`), and the capsule an operator sees is the
+/// capsule a press lands on.
 pub fn bay_head(ui: &Ui, pal: &Palette, rect: Rect, head: &Head, open: Open) -> Rect {
     let box_of = head_box(rect);
     let painter = ui.painter().with_clip_rect(box_of);
@@ -425,8 +423,8 @@ pub fn bay_head(ui: &Ui, pal: &Palette, rect: Rect, head: &Head, open: Open) -> 
     box_of
 }
 
-/// **A region's head, painted** — the one call all five of the console's
-/// headed bays make.
+/// A region's head, painted — the one call all five of the console's headed
+/// bays make.
 ///
 /// It was five calls to [`bay_head`] with the title, the pills and the grip
 /// written out at each: one copy while the paint was the only reader of them,
@@ -442,14 +440,14 @@ pub(crate) fn head_into(ui: &Ui, pal: &Palette, rect: Rect, region: &Region, ope
     }
 }
 
-/// **The box a bay head is painted into**: the top [`size::HEAD_H`] of the
-/// bay, clipped to the bay itself so that a bay shorter than its own head has
-/// a shorter head rather than one drawn over whatever is below it.
+/// The box a bay head is painted into: the top [`size::HEAD_H`] of the bay,
+/// clipped to the bay itself so that a bay shorter than its own head has a
+/// shorter head rather than one drawn over whatever is below it.
 ///
 /// Two readers, which is why it is a function: [`bay_head`] paints into it and
 /// [`head_pills`] lays the head's controls out in it. The mid-line a pill is
-/// centred on is this box's, so a head clipped short takes its pills up with
-/// it and the two cannot disagree about where the row is.
+/// centred on is this box's, so a head clipped short takes its pills up with it
+/// and the two cannot disagree about where the row is.
 pub(crate) fn head_box(rect: Rect) -> Rect {
     Rect::from_min_max(
         rect.min,

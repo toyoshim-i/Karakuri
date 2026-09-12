@@ -1,29 +1,26 @@
-//! **The `keep` capsule on a node group's head**, which writes one node's
-//! source into the operator's own library —
+//! The `keep` capsule on a node group's head, which writes one node's source
+//! into the operator's own library —
 //! [ADR-0338](../../../docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md),
 //! decision 4.
 //!
 //! Eight things:
 //!
 //! 1. Where the capsule goes: hard against the head's right-hand padding, at
-//!    `.mini`'s own box, which is the mock's
-//!    `<span class="mini">keep</span>` after the `.auth` chips.
-//! 2. **That the three authority chips are laid out inside what it leaves**,
-//!    so neither control is drawn where the other is pressed. That is the one
-//!    thing about this row that could go wrong silently: the chips were
-//!    right-aligned on the head before the capsule existed.
-//! 3. That a press on it emits `KeepProcedure` naming **that node**, with
-//!    `id: None` — the press that types nothing takes a stamp (ADR-0128).
-//! 4. **That the two heads which carry no capsule are not targets**: a head
-//!    standing over several nodes, and the built-in camera. Both are
-//!    `Node::keep` being `None`, and the mock draws both absences.
-//! 5. That a press on the chips is still the chips' and a press on the
-//!    capsule is not a chip's.
-//! 6. That a console which has not drawn has no capsule — every measured
-//!    control's guard.
+//! `.mini`'s own box, which is the mock's `<span class="mini">keep</span>`
+//! after the `.auth` chips. 2. That the three authority chips are laid out
+//! inside what it leaves, so neither control is drawn where the other is
+//! pressed. That is the one thing about this row that could go wrong silently:
+//! the chips were right-aligned on the head before the capsule existed. 3. That
+//! a press on it emits `KeepProcedure` naming that node, with `id: None` — the
+//! press that types nothing takes a stamp (ADR-0128). 4. That the two heads
+//! which carry no capsule are not targets: a head standing over several nodes,
+//! and the built-in camera. Both are `Node::keep` being `None`, and the mock
+//! draws both absences. 5. That a press on the chips is still the chips' and a
+//! press on the capsule is not a chip's. 6. That a console which has not drawn
+//! has no capsule — every measured control's guard.
 //!
-//! **What is not here and cannot be**: that `input::claim` gives the panel a
-//! press on the capsule, and that the window writes the file. Those are
+//! What is not here and cannot be: that `input::claim` gives the panel a press
+//! on the capsule, and that the window writes the file. Those are
 //! `input::PROBES`' row and `crates/karakuri/src/main.rs`'s press arm.
 
 mod common;
@@ -53,8 +50,8 @@ fn kept(addr: &str, name: &str, at: NodeAddress) -> Node {
     }
 }
 
-/// **The built-in camera**: a node with an authority and no procedure behind
-/// it, so there is nothing to write and the head carries no capsule.
+/// The built-in camera: a node with an authority and no procedure behind it, so
+/// there is nothing to write and the head carries no capsule.
 fn built_in_camera() -> Node {
     Node {
         keep: None,
@@ -69,8 +66,8 @@ fn built_in_camera() -> Node {
     }
 }
 
-/// **The mock's folded `L4 renderers` head**, standing over three nodes: no
-/// one authority and no one source, which are the same absence twice.
+/// The mock's folded `L4 renderers` head, standing over three nodes: no one
+/// authority and no one source, which are the same absence twice.
 fn folded_renderers() -> Node {
     Node {
         addr: "L4".to_owned(),
@@ -129,7 +126,7 @@ fn head(panel: &Panel, pane: &Pane, index: usize) -> egui::Rect {
 // Where the control is
 // ---------------------------------------------------------------------------
 
-/// **Hard against the head's right-hand padding**, at `.mini`'s own box — the
+/// Hard against the head's right-hand padding, at `.mini`'s own box — the
 /// mock's `.node-head` is a flex row ending `…, .sep, .auth, .mini`.
 #[test]
 fn the_capsule_sits_inside_the_heads_right_hand_padding() {
@@ -166,8 +163,8 @@ fn the_capsule_sits_inside_the_heads_right_hand_padding() {
     );
 }
 
-/// **The three authority chips are laid out inside what the capsule leaves**,
-/// one `.node-head` gap clear of it.
+/// The three authority chips are laid out inside what the capsule leaves, one
+/// `.node-head` gap clear of it.
 ///
 /// This is the assertion the pass exists to make: the chips were right-aligned
 /// on the head's own padding before the capsule was drawn, so a capsule added
@@ -225,8 +222,8 @@ fn the_authority_chips_clear_the_capsule() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// **A press on the capsule emits `KeepProcedure` naming that node**, with
-/// `id: None` — the capsule is the press that types nothing.
+/// A press on the capsule emits `KeepProcedure` naming that node, with `id:
+/// None` — the capsule is the press that types nothing.
 #[test]
 fn a_press_on_the_capsule_keeps_that_node() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -259,7 +256,7 @@ fn a_press_on_the_capsule_keeps_that_node() {
     );
 }
 
-/// **A head standing over several nodes carries no capsule**, which is
+/// A head standing over several nodes carries no capsule, which is
 /// `SetAuthority`'s own rule on the same head: one control there would be one
 /// of several answers drawn as the answer.
 #[test]
@@ -285,9 +282,9 @@ fn a_head_over_several_nodes_has_no_capsule() {
     );
 }
 
-/// **The built-in camera carries none either**, and it is the other absence:
-/// a node with an authority and no procedure behind it, so there is no source
-/// to write (`docs/ir-spec.md`, *Several cameras*).
+/// The built-in camera carries none either, and it is the other absence: a node
+/// with an authority and no procedure behind it, so there is no source to write
+/// (`docs/ir-spec.md`, *Several cameras*).
 #[test]
 fn the_built_in_camera_has_no_capsule() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -314,8 +311,8 @@ fn the_built_in_camera_has_no_capsule() {
     );
 }
 
-/// **A press on the capsule is not a press on a chip**, and the other way
-/// round: the two controls at the right of this head own disjoint rectangles.
+/// A press on the capsule is not a press on a chip, and the other way round:
+/// the two controls at the right of this head own disjoint rectangles.
 #[test]
 fn the_capsule_and_the_chips_do_not_overlap() {
     let (panel, ctx) = console(PLAUSIBLE);
@@ -345,9 +342,9 @@ fn the_capsule_and_the_chips_do_not_overlap() {
     }
 }
 
-/// **Before the first frame there is nothing here to press.**
-/// `Context::fonts` is not valid until a pass has run, and this capsule is as
-/// wide as the word in it — the same guard every measured control carries.
+/// Before the first frame there is nothing here to press. `Context::fonts` is
+/// not valid until a pass has run, and this capsule is as wide as the word in
+/// it — the same guard every measured control carries.
 #[test]
 fn a_console_that_has_not_drawn_has_no_capsule() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -365,9 +362,9 @@ fn a_console_that_has_not_drawn_has_no_capsule() {
     assert_eq!(node_keep(&ctx, head, &pane.nodes[0]), None);
 }
 
-/// **Every pane draws its own**, which is the pane loop rather than a rule:
-/// a console with two panes has a capsule per group in each of them, and a
-/// press in the second answers with the second's deck.
+/// Every pane draws its own, which is the pane loop rather than a rule: a
+/// console with two panes has a capsule per group in each of them, and a press
+/// in the second answers with the second's deck.
 #[test]
 fn the_second_pane_keeps_its_own_deck() {
     let (panel, ctx) = console(PLAUSIBLE);

@@ -4,17 +4,16 @@ use super::*;
 // The Master bay
 // ---------------------------------------------------------------------------
 
-/// **The word at the head of the Master bay**, in the source's own
-/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
-/// that is done at paint time so the word a reader searches for is the word in
-/// the source.
+/// The word at the head of the Master bay, in the source's own capitalisation
+/// for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and that is done at
+/// paint time so the word a reader searches for is the word in the source.
 pub(super) const MASTER_TITLE: &str = "Master";
 
 /// `.master-row`'s first item: the `out` before the track, which is the bay's
 /// own word for the level and not the engine's — `Deck::out` is what it moves.
 const MASTER_LABEL: &str = "out";
 
-/// **The out row, laid out**: the word, the fader and the figure.
+/// The out row, laid out: the word, the fader and the figure.
 ///
 /// # One derivation, for [`Outputs`]' reason
 ///
@@ -36,37 +35,38 @@ const MASTER_LABEL: &str = "out";
 pub struct MasterRow {
     /// The faint `out` at the head of the row.
     pub label: Rect,
-    /// **The fader**: `.fader`'s 5px well lying down, what the level fills of
-    /// it, and the knob centred on the fill's moving edge.
+    /// The fader: `.fader`'s 5px well lying down, what the level fills of it, and
+    /// the knob centred on the fill's moving edge.
     pub fader: Fader,
-    /// **`1.00`, at the far end of the row and in a box that does not move.**
+    /// `1.00`, at the far end of the row and in a box that does not move.
     ///
-    /// As wide as the widest reading this control can ask for rather than as
-    /// wide as the one it is showing, which is [`LookRow::tone`]'s rule met by
-    /// a figure instead of by a word: the track between the label and this box
-    /// is what is left over, so a figure that changed width as it was dragged
-    /// would take the track — and the knob on it — with it.
+    /// As wide as the widest reading this control can ask for rather than as wide
+    /// as the one it is showing, which is [`LookRow::tone`]'s rule met by a figure
+    /// instead of by a word: the track between the label and this box is what is
+    /// left over, so a figure that changed width as it was dragged would take the
+    /// track — and the knob on it — with it.
     pub value: Rect,
-    /// **The value these rectangles were measured from**, carried for
-    /// [`LookRow::values`]' reason: whoever measured the type and whoever
-    /// paints it are one statement.
+    /// The value these rectangles were measured from, carried for
+    /// [`LookRow::values`]' reason: whoever measured the type and whoever paints it
+    /// are one statement.
     pub out: f32,
-    /// **The master chain's three rows**, in the chain's own order —
-    /// feedback, bloom, rgb shift — and `None` for one there is no room for.
+    /// The master chain's three rows, in the chain's own order — feedback, bloom,
+    /// rgb shift — and `None` for one there is no room for.
     ///
-    /// **A fixed three and not a list**, because the chain is fixed: three
-    /// built-in passes, all of them loaded, in that order
+    /// A fixed three and not a list, because the chain is fixed: three built-in
+    /// passes, all of them loaded, in that order
     /// ([ADR-0317](../../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
-    /// A `Vec` here would be a claim that the count can change, which is the
-    /// `+ add` row's question and is not this one's.
+    /// A `Vec` here would be a claim that the count can change, which is the `+
+    /// add` row's question and is not this one's.
     ///
     /// A row drops out from the bottom up when the bay is short, on
-    /// [`mixer::strips_row`]'s rule: the arrangement's own minimum for this bay keeps
-    /// room for the out row and one effect, so a bay at its minimum draws one.
+    /// [`mixer::strips_row`]'s rule: the arrangement's own minimum for this bay
+    /// keeps room for the out row and one effect, so a bay at its minimum draws
+    /// one.
     pub fx: [Option<FxRow>; 3],
 }
 
-/// **Which pass of the master chain a row is**, in the chain's order.
+/// Which pass of the master chain a row is, in the chain's order.
 ///
 /// The order is the engine's and is not a preference: feedback reads the
 /// previous frame, bloom spreads what is over the knee, and rgb shift is last
@@ -82,8 +82,8 @@ impl Fx {
     /// The three, in the order the bay draws them.
     pub const ALL: [Fx; 3] = [Fx::Feedback, Fx::Bloom, Fx::RgbShift];
 
-    /// **The word the row draws**, which is the mock's own and the operations
-    /// page's heading in lower case.
+    /// The word the row draws, which is the mock's own and the operations page's
+    /// heading in lower case.
     pub fn name(self) -> &'static str {
         match self {
             Fx::Feedback => "feedback",
@@ -93,13 +93,13 @@ impl Fx {
     }
 }
 
-/// **One effect row of the master chain, laid out**: the dot, the word, the
+/// One effect row of the master chain, laid out: the dot, the word, the
 /// feedback row's cut chip, the track and the figure.
 ///
-/// `.fx` in `docs/manual/console.html` — a well with `FX_PAD_X` either side
-/// and `FX_PAD_Y` above and below, its items [`size::FX_GAP`] apart, the track
-/// taking what is left between the word and the figure exactly as the out
-/// row's does.
+/// `.fx` in `docs/manual/console.html` — a well with `FX_PAD_X` either side and
+/// `FX_PAD_Y` above and below, its items [`size::FX_GAP`] apart, the track
+/// taking what is left between the word and the figure exactly as the out row's
+/// does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FxRow {
     /// Which pass, which is what decides the word and the operation.
@@ -110,38 +110,37 @@ pub struct FxRow {
     pub dot: Rect,
     /// The word.
     pub name: Rect,
-    /// **The cut chip, on the feedback row and on neither of the others** —
-    /// a `.mini`, the mixer's own blend chip: the same 9px word inside the
-    /// same padding, because it is the same thing, one value of a closed list
-    /// shown and cycled.
+    /// The cut chip, on the feedback row and on neither of the others — a `.mini`,
+    /// the mixer's own blend chip: the same 9px word inside the same padding,
+    /// because it is the same thing, one value of a closed list shown and cycled.
     ///
-    /// `None` is *this row has no second parameter*, and it is the shape that
-    /// says so: an always-present rectangle nobody draws would be a control
-    /// two rows can be pressed on.
+    /// `None` is *this row has no second parameter*, and it is the shape that says
+    /// so: an always-present rectangle nobody draws would be a control two rows can
+    /// be pressed on.
     pub cut: Option<Rect>,
     /// The track.
     pub fader: Fader,
     /// The figure, in a box as wide as the widest reading — [`MasterRow::value`]'s
     /// rule and its reason.
     pub value: Rect,
-    /// **What this pass is set to**, `[0, 1]` of its own reach. Carried for
+    /// What this pass is set to, `[0, 1]` of its own reach. Carried for
     /// [`MasterRow::out`]'s reason.
     pub amount: f32,
-    /// Which cut the feedback pass is reading. Carried on every row because
-    /// the chip is laid out from it and the operation a drag asks for needs
-    /// it; meaningless on the other two, which is why only the feedback row
-    /// has a chip to draw it in.
+    /// Which cut the feedback pass is reading. Carried on every row because the
+    /// chip is laid out from it and the operation a drag asks for needs it;
+    /// meaningless on the other two, which is why only the feedback row has a chip
+    /// to draw it in.
     pub reading: karakuri_operation::Cut,
-    /// **Whether this pass is in the frame at all.** An amount of zero is not
-    /// a pass multiplying by nothing: no pass is recorded, so the row is dim
-    /// and the dot is out.
+    /// Whether this pass is in the frame at all. An amount of zero is not a pass
+    /// multiplying by nothing: no pass is recorded, so the row is dim and the dot
+    /// is out.
     pub runs: bool,
 }
 
 impl FxRow {
-    /// **What a drag on this row asks for.** The amount is the track's
-    /// position, and the feedback row's knob carries the cut beside it because
-    /// the operation is the whole of what the pass is set to.
+    /// What a drag on this row asks for. The amount is the track's position, and
+    /// the feedback row's knob carries the cut beside it because the operation is
+    /// the whole of what the pass is set to.
     pub fn knob(&self) -> Knob {
         match self.fx {
             Fx::Feedback => Knob::Feedback { cut: self.reading },
@@ -150,15 +149,15 @@ impl FxRow {
         }
     }
 
-    /// **What a press on the cut chip asks for**, or `None` where `p` is not
-    /// on one — which is every point of the two rows that have no chip.
+    /// What a press on the cut chip asks for, or `None` where `p` is not on one —
+    /// which is every point of the two rows that have no chip.
     ///
-    /// **The next cut and not a step**, which is the difference between the
-    /// affordance and the operation: the chip cycles because a surface may,
-    /// and what it emits names where the pass is going
-    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). The
-    /// list is two long and the cycle is this crate's arithmetic over it,
-    /// exactly as the blend chip's is.
+    /// The next cut and not a step, which is the difference between the affordance
+    /// and the operation: the chip cycles because a surface may, and what it emits
+    /// names where the pass is going
+    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). The list is
+    /// two long and the cycle is this crate's arithmetic over it, exactly as the
+    /// blend chip's is.
     pub fn chip(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let chip = self.cut?;
         if !chip.contains(Pos2::new(p.x, p.y)) {
@@ -178,7 +177,7 @@ impl FxRow {
     }
 }
 
-/// **What the master chain is running at**, as the Master bay reads it.
+/// What the master chain is running at, as the Master bay reads it.
 ///
 /// `karakuri_engine::master::Chain` mirrored into this crate for the reason
 /// every mirrored list here is mirrored: the panel depends on the vocabulary
@@ -186,9 +185,8 @@ impl FxRow {
 /// others could not build the operation the whole chain's record is made from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Chain {
-    /// `[0, 1]` of `karakuri_operation::Feedback::MAX`, which is the track's
-    /// own position — a fader draws a position and the operation carries the
-    /// amount.
+    /// `[0, 1]` of `karakuri_operation::Feedback::MAX`, which is the track's own
+    /// position — a fader draws a position and the operation carries the amount.
     pub feedback: f32,
     pub cut: karakuri_operation::Cut,
     pub bloom: f32,
@@ -196,30 +194,28 @@ pub struct Chain {
 }
 
 impl MasterRow {
-    /// **What a press at `p` takes hold of**, or `None` where there is nothing
-    /// under it that a hand can move.
+    /// What a press at `p` takes hold of, or `None` where there is nothing under it
+    /// that a hand can move.
     ///
     /// # It is the knob, and the track is deliberately not a target
     ///
-    /// [`Mixer::grab`]'s rule, and this control is the one on the panel it is
-    /// most obviously right for: a master out at 0.3 whose track was clicked
-    /// would put the whole programme at 1.0, on stage, because a hand landed
-    /// three pixels off a knob.
+    /// [`Mixer::grab`]'s rule, and this control is the one on the panel it is most
+    /// obviously right for: a master out at 0.3 whose track was clicked would put
+    /// the whole programme at 1.0, on stage, because a hand landed three pixels off
+    /// a knob.
     ///
-    /// **It is not [`LookRow::exposure`]'s rule, and the two do not disagree.**
-    /// That control has no handle drawn and no gesture to be mid-way through,
-    /// so a press is the whole of it. This one has a handle — the mock draws
-    /// the `.fader s` here and deliberately draws none on the exposure track —
-    /// and a handle that jumped to the pointer would be a lie about what a
-    /// handle is.
+    /// It is not [`LookRow::exposure`]'s rule, and the two do not disagree. That
+    /// control has no handle drawn and no gesture to be mid-way through, so a press
+    /// is the whole of it. This one has a handle — the mock draws the `.fader s`
+    /// here and deliberately draws none on the exposure track — and a handle that
+    /// jumped to the pointer would be a lie about what a handle is.
     ///
     /// # One derivation, asked twice
     ///
-    /// [`crate::input::claim`] asks this and so does the caller that acts on
-    /// the press, exactly as [`Mixer::grab`] is. **The value is part of the
-    /// geometry**: the knob sits on the fill's moving edge, so where it is
-    /// depends on what the deck said this frame, and this is the same reading
-    /// the row was laid out from.
+    /// [`crate::input::claim`] asks this and so does the caller that acts on the
+    /// press, exactly as [`Mixer::grab`] is. The value is part of the geometry: the
+    /// knob sits on the fill's moving edge, so where it is depends on what the deck
+    /// said this frame, and this is the same reading the row was laid out from.
     pub fn grab(&self, p: karakuri_layout::Point) -> Option<Grab> {
         let at = Pos2::new(p.x, p.y);
         grabbed(self.fader, Knob::Out, at).or_else(|| {
@@ -230,32 +226,31 @@ impl MasterRow {
         })
     }
 
-    /// **What a press on the feedback row's cut chip asks for**, or `None`.
-    /// The bay's one control that is not a fader — see [`FxRow::chip`].
+    /// What a press on the feedback row's cut chip asks for, or `None`. The bay's
+    /// one control that is not a fader — see [`FxRow::chip`].
     pub fn chip(&self, p: karakuri_layout::Point) -> Option<Operation> {
         self.fx.iter().flatten().find_map(|row| row.chip(p))
     }
 
-    /// **Whether `p` is on one of the things here a hand can move**, which is
-    /// what [`crate::input::claim`] asks — the four knobs and the cut chip,
-    /// and not the tracks under them.
+    /// Whether `p` is on one of the things here a hand can move, which is what
+    /// [`crate::input::claim`] asks — the four knobs and the cut chip, and not the
+    /// tracks under them.
     pub fn owns(&self, p: karakuri_layout::Point) -> bool {
         self.grab(p).is_some() || self.chip(p).is_some()
     }
 }
 
-/// **The Master bay's out row, derived**: the word, the fader and the figure.
+/// The Master bay's out row, derived: the word, the fader and the figure.
 ///
 /// # Where it sits
 ///
 /// `docs/manual/console.html`'s `.master-body` is a column inside the bay,
 /// under the head, inset by [`size::MASTER_PAD_X`] either side and
-/// [`size::MASTER_PAD_TOP`] from the head; `.master-row` is a flex row of
-/// three items, [`size::MASTER_GAP`] apart, with the fader taking what is left
+/// [`size::MASTER_PAD_TOP`] from the head; `.master-row` is a flex row of three
+/// items, [`size::MASTER_GAP`] apart, with the fader taking what is left
 /// between the label and the figure. That is the mock term for term, and the
 /// arrangement's own minimum for this bay in `lib.rs` is written from the same
-/// numbers — *"bay head 27, `.master-body` padding 8 + 10, the out row
-/// 16.5"*.
+/// numbers — *"bay head 27, `.master-body` padding 8 + 10, the out row 16.5"*.
 ///
 /// # The figure's box is fixed and the track is what flexes
 ///
@@ -263,40 +258,40 @@ impl MasterRow {
 /// track's far end is wherever the figure begins. A figure sized to what it
 /// says would therefore move the track *while the track is being dragged*,
 /// which is [`look`]'s own argument about the exposure's number met here by a
-/// control that has a handle: there the figure could simply go last, here it
-/// is between the track and the bay's edge. So the box is as wide as the
-/// widest reading this control can ask for.
+/// control that has a handle: there the figure could simply go last, here it is
+/// between the track and the bay's edge. So the box is as wide as the widest
+/// reading this control can ask for.
 ///
-/// **The widest is measured and not assumed**: all ten `d.dd` strings are laid
-/// out and the widest of them wins, because whether `0.00` is wider than
-/// `1.11` is a fact about whatever font the room is drawn in and not one to
-/// take on trust ([`docs/contributing.md`](../../../../docs/contributing.md) §1).
-/// Ten cached layouts of four characters, on a pointer event and on a frame.
+/// The widest is measured and not assumed: all ten `d.dd` strings are laid out
+/// and the widest of them wins, because whether `0.00` is wider than `1.11` is
+/// a fact about whatever font the room is drawn in and not one to take on trust
+/// ([`docs/contributing.md`](../../../../docs/contributing.md) §1). Ten cached
+/// layouts of four characters, on a pointer event and on a frame.
 ///
-/// **A reading outside `[0, 1]` is the one case it does not cover**, and it is
+/// A reading outside `[0, 1]` is the one case it does not cover, and it is
 /// stated rather than guarded: `Deck::set_out` is open above 1.0 and this drag
 /// tops out at exactly 1.00, so nothing can put a fifth character in the box
 /// today. If something does, the figure is right-aligned and grows back over
-/// the track's end rather than out past the bay's padding — which keeps the
-/// row inside the card, and is the reason it is right-aligned rather than the
+/// the track's end rather than out past the bay's padding — which keeps the row
+/// inside the card, and is the reason it is right-aligned rather than the
 /// reason the box is this wide.
 ///
 /// # None where there is nothing to draw
 ///
 /// `None` for a console with no engine behind it — which is every test in this
 /// crate that does not hand a level in — and `None` for a bay with no room for
-/// the row, which is [`mixer::strips_row`]'s rule one bay up: folded away, soloed
-/// away, or a window too small.
+/// the row, which is [`mixer::strips_row`]'s rule one bay up: folded away,
+/// soloed away, or a window too small.
 ///
 /// # What it costs to ask
 ///
-/// **Eleven galley lookups**: the `out` label, and the ten `d.dd` strings the
-/// widest is taken over. The ten are what buys a track that does not move
-/// under a hand, and they are ten *cached* layouts of four characters. **The
-/// reading itself is not among them**, which is the whole of why the box does
-/// not move: nothing in this derivation lays out the level. Paid on a pointer
-/// event and on a frame, and a console with no level behind it pays none of
-/// it: the `out?` is the first line.
+/// Eleven galley lookups: the `out` label, and the ten `d.dd` strings the
+/// widest is taken over. The ten are what buys a track that does not move under
+/// a hand, and they are ten *cached* layouts of four characters. The reading
+/// itself is not among them, which is the whole of why the box does not move:
+/// nothing in this derivation lays out the level. Paid on a pointer event and
+/// on a frame, and a console with no level behind it pays none of it: the
+/// `out?` is the first line.
 ///
 /// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
 /// one.
@@ -402,14 +397,14 @@ pub fn master(
     })
 }
 
-/// **One effect row, laid out inside `well`.**
+/// One effect row, laid out inside `well`.
 ///
 /// The out row's arrangement one line down and inside a padded well: the dot,
 /// the word, the feedback row's chip, the track taking what is left, and the
 /// figure in a box that does not move. `widest` is the out row's own
-/// measurement of the widest `d.dd`, passed in rather than taken again —
-/// the figures are the same shape and one measurement is what keeps the two
-/// rows' boxes the same width.
+/// measurement of the widest `d.dd`, passed in rather than taken again — the
+/// figures are the same shape and one measurement is what keeps the two rows'
+/// boxes the same width.
 fn fx_row(
     ctx: &egui::Context,
     fx: Fx,
@@ -508,15 +503,15 @@ fn fx_row(
     })
 }
 
-/// **The level, as the mock's `.val` writes it** — `1.00`, two places, and the
-/// same string the transport row's exposure is written with. The two are the
-/// same kind of reading and deliberately read the same way; where they stop
-/// being the same *number* is ADR-0224.
+/// The level, as the mock's `.val` writes it — `1.00`, two places, and the same
+/// string the transport row's exposure is written with. The two are the same
+/// kind of reading and deliberately read the same way; where they stop being
+/// the same *number* is ADR-0224.
 fn master_text(out: f32) -> String {
     format!("{out:.2}")
 }
 
-/// **The out row, painted.**
+/// The out row, painted.
 ///
 /// Where everything goes is [`master`]'s, so this paints and derives nothing.
 /// Term for term from `style.css`:
@@ -525,7 +520,7 @@ fn master_text(out: f32) -> String {
 ///   markup, which is `pal.faint`, and it is `.trim .lbl`'s job one bay up.
 /// - `.fader`, `.fader b` and `.fader s` — [`fader_into`], which is the one
 ///   place a knob, a well and a fill are drawn and is what the mixer's own
-///   trim is painted with. **Not live and never reaching**: the pink glow is a
+///   trim is painted with. Not live and never reaching: the pink glow is a
 ///   slot on air and this level belongs to no slot, and a scheduled move is
 ///   per slot too — `Deck::set_out` takes no `cancel` because nothing can be
 ///   moving it (ADR-0224).
@@ -571,11 +566,11 @@ pub(super) fn master_into(ui: &Ui, pal: &Palette, row: &MasterRow) {
     }
 }
 
-/// **One effect row, painted.** Term for term from `style.css`:
+/// One effect row, painted. Term for term from `style.css`:
 ///
 /// - `.fx` — a `--c-well` recess with an 8px radius.
 /// - `.fx.sel` — `--c-text` and an inset mint ring, which on this bay means
-///   **this pass is in the frame**: an amount above zero, so it is recorded
+///   this pass is in the frame: an amount above zero, so it is recorded
 ///   and it costs its passes. `.fx.off` is `--c-faint`, which is the same
 ///   sentence the other way round.
 /// - `.fx .dot` — mint with a glow when the pass runs, `--c-faint` and no glow
