@@ -443,6 +443,7 @@ pub mod widgets;
 /// path for it.
 pub use widgets::card::{bay_card, popup_card};
 pub use widgets::chip::Tally;
+pub use widgets::field::CARET;
 pub use widgets::*;
 #[allow(unused_imports)]
 pub(crate) use widgets::*;
@@ -850,13 +851,6 @@ const BEAT_MICROS: u64 = 60 * 1_000_000 * 1_000 / MOCK_BPM_MILLI;
 /// the glyph's ink measures at [`size::BASE`].
 const CHEVRON_W: f32 = size::BASE * 0.5;
 const CHEVRON_H: f32 = CHEVRON_W * 0.5;
-
-/// The caret, a light vertical bar. Typed rather than drawn, unlike the
-/// chevron: `U+258F LEFT ONE EIGHTH BLOCK` is a box-drawing character, and
-/// `egui`'s default face carries the block elements. Where it did not, the
-/// fallback is a visible box in the one place an operator is looking, which is
-/// louder than a caret that has quietly gone.
-const CARET: char = '▏';
 
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.

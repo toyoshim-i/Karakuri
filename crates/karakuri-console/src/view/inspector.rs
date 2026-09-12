@@ -3401,25 +3401,11 @@ pub(super) fn inspector_into(
         // console spends no new colour on it — and the pink a capsule is lit
         // in is deliberately not reached for here, because that pink means
         // *on air* two controls away.
-        if naming.is_some() {
-            painter.rect_filled(named.name, CornerRadius::same(3), pal.tint);
-        }
-        let what = painter.layout_job(span_at(
-            &match naming {
-                Some(typed) => naming_text_in_head(pane, typed),
-                None => showing_text(pane),
-            },
-            size::BASE,
-            pal.text,
-        ));
-        painter.galley(
-            Pos2::new(
-                named.name.min.x,
-                named.name.center().y - what.size().y * 0.5,
-            ),
-            what,
-            pal.text,
-        );
+        let text = match naming {
+            Some(typed) => naming_text_in_head(pane, typed),
+            None => showing_text(pane),
+        };
+        editable_text_field(&painter, pal, named.name, &text, naming.is_some(), 3);
     }
     // `.half-head`'s own `border-bottom`, the bottom pixel of the row — drawn
     // through the whole head rather than through the words' clip, which stops
