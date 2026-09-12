@@ -1,4 +1,4 @@
-//! **The instrument**: the console in a window, with the engine behind it.
+//! The instrument: the console in a window, with the engine behind it.
 //!
 //! ```sh
 //! cargo run -p karakuri                                # the pair the repository ships
@@ -6,7 +6,7 @@
 //! cargo test -p karakuri                               # this file's own tests
 //! ```
 //!
-//! **This is the program, and it used to be an example.** It was
+//! This is the program, and it used to be an example. It was
 //! `karakuri-console/examples/panel.rs` until
 //! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md),
 //! and it was an example for one reason: everything a program needs beyond the
@@ -14,11 +14,11 @@
 //! nothing for a binary to sit on. There is now — `karakuri-environment` — and
 //! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
 //! is why the difference is not a packaging preference: a `has` badge in the
-//! panel column of `docs/manual/operations.html` means **an operator running
-//! the instrument reaches the operation**, and nobody plays a set from
+//! panel column of `docs/manual/operations.html` means an operator running
+//! the instrument reaches the operation, and nobody plays a set from
 //! `cargo run --example`.
 //!
-//! **It is still a package with no library target of its own, deliberately.**
+//! It is still a package with no library target of its own, deliberately.
 //! Nothing may depend on this one. A surface is where the buck stops.
 //!
 //! # What it is for, and what became free
@@ -32,18 +32,18 @@
 //!    the bet
 //!    [ADR-0155](../../../docs/adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)
 //!    made.
-//! 2. **That the engine's rendered texture reaches the panel**, which is the
+//! 2. That the engine's rendered texture reaches the panel, which is the
 //!    other half of that bet: a `Deck` on the same `Device`, one of its
 //!    [`SLOTS`] Sets on air, drawn through `Present` into the picture's
-//!    rectangle **and again into every deck's preview cell**, sampled by
+//!    rectangle and again into every deck's preview cell, sampled by
 //!    `egui` in the same submission. One `Present` and targets of several
 //!    sizes, because `Present::draw` letterboxes into whatever it is handed.
 //!
-//!    **The picture is the only `karakuri_engine::Sink`, and the cells are not
-//!    in the slice.** A sink is what the composited frame is handed to, and
+//!    The picture is the only `karakuri_engine::Sink`, and the cells are not
+//!    in the slice. A sink is what the composited frame is handed to, and
 //!    the picture is the one thing here that draws the whole mix, so
 //!    `frame::compose` is given `[picture]` and nothing else. Each cell is a
-//!    present pass off **its own slot's** target rather than off the fold —
+//!    present pass off its own slot's target rather than off the fold —
 //!    ADR-0240 and ADR-0258 — so it is not a sink at all, and [`monitor`]
 //!    draws all [`DECKS`] of them inside that frame's own encoder, through
 //!    `compose`'s `finally`. The panel goes into the same encoder for a
@@ -54,7 +54,7 @@
 //!    `docs/manual/console.html`.
 //! 4. That dragging a boundary still works with a toolkit in the loop.
 //!
-//! **The fifth is the one that is still a harness, and it is still here.**
+//! The fifth is the one that is still a harness, and it is still here.
 //! [`Costs::say`] prints what the window costs once nobody has touched it for
 //! three seconds, and to do it this binary installs a counting
 //! [`#[global_allocator]`](Counting) over the whole process. That is a
@@ -65,13 +65,13 @@
 //! holds its 1.26 ms honest, and both schedulability conditions are asserted
 //! against that number.
 //!
-//! **That it ships is decided, and the reason is written a few lines below in
-//! [`WRITTEN_ALLOCS`]'s own documentation**: the last number nobody was
+//! That it ships is decided, and the reason is written a few lines below in
+//! [`WRITTEN_ALLOCS`]'s own documentation: the last number nobody was
 //! checking went from 184 to 456 to 525 and stayed wrong for two commits,
 //! *"because nothing was checking it"*. A build with this compiled out is a
 //! build where that happens again, and
 //! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
-//! chose to **budget** the panel rather than forbid it to allocate — a budget
+//! chose to budget the panel rather than forbid it to allocate — a budget
 //! is a guarantee only while something counts, which is
 //! [`docs/contributing.md` §4](../../../docs/contributing.md).
 //! See
@@ -80,12 +80,12 @@
 //! Half of what `Costs` collects is not a harness at all: the per-frame timing
 //! is what the transport row draws as `frame_ms` and `fps`.
 //!
-//! **It is deliberately not the start of a bay.** Every body is empty except
+//! It is deliberately not the start of a bay. Every body is empty except
 //! the picture and the preview row, and both are empty of everything this file
 //! could have invented — no label, no frame, no placeholder; see
 //! [`karakuri_console::view`].
 //!
-//! **There is one frame loop, and it is not in this file.**
+//! There is one frame loop, and it is not in this file.
 //! `frame::compose` is `karakuri-engine`'s, and `karakuri-cli`'s window and
 //! its PNG writer are the other two callers — which is the point of it: this
 //! file used to hand-roll `begin_frame`, a render, a conditional present
@@ -101,14 +101,14 @@
 //! the command line beside `--presets` and `--store`. Three things beyond the
 //! engine are here.
 //!
-//! **Each slot watches that pair**, which is [`watched`] and is one
+//! Each slot watches that pair, which is [`watched`] and is one
 //! `HotSwap::new` over a `karakuri_environment::watch::Watch` — the same
 //! wiring `karakuri-cli` does for `--watch`, and the whole of what puts a row
 //! in the Staging lane: without it no `swap::Event` of any variant is emitted
 //! in this program, and the lane could reach no state but empty.
 //!
-//! **The store is opened to be read** — once, at startup, so the Library bay
-//! has names to list ([`library`]) — and **once to be written**, which is the
+//! The store is opened to be read — once, at startup, so the Library bay
+//! has names to list ([`library`]) — and once to be written, which is the
 //! arrangement family and the one thing in this program that reaches a disk on
 //! purpose: an operator's arrangement is kept under
 //! `arrangements/<name>.arrangement.json` and put back from there
@@ -119,32 +119,32 @@
 //! can be nowhere else: the console cannot reach the store and the store
 //! cannot name a layout, so a third party is what joins them.
 //!
-//! And **records exist**: a mixer control emits an operation,
+//! And records exist: a mixer control emits an operation,
 //! `karakuri-operation-record` turns it into a `Record`, and [`apply`] is what
 //! moves the deck with it, because
 //! [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-//! puts every control at the same record. **Records reach a disk while a
-//! recording runs** — the `rec` capsule opens a
+//! puts every control at the same record. Records reach a disk while a
+//! recording runs — the `rec` capsule opens a
 //! `karakuri_environment::session::Recorder` and every record this file applies
-//! goes into `sessions/<id>.ndjson` behind it ([`Sessions`]) — and **no record
-//! stream drives time**, which is the half that is still true: nothing here
+//! goes into `sessions/<id>.ndjson` behind it ([`Sessions`]) — and no record
+//! stream drives time, which is the half that is still true: nothing here
 //! reads a session back.
 //!
 //! # What is not wired, and what each would be for
 //!
-//! **This list used to read `no audio, no MIDI, no MCP, no replay and no
-//! session` and that was the whole of it** — five absences and not one purpose,
+//! This list used to read `no audio, no MIDI, no MCP, no replay and no
+//! session` and that was the whole of it — five absences and not one purpose,
 //! which is a note that cannot be told from a decision. It was duly read as a
 //! charter twice. Each line below says what the thing would be *for*, so that
 //! whoever reaches one knows what they are reaching for.
 //!
-//! **Four of the five have since been wired, and the entries stay** — audio,
+//! Four of the five have since been wired, and the entries stay — audio,
 //! MIDI, MCP and the session recorder — because what each is *for* is the
 //! thing this section is worth reading for, and because a list that only ever
-//! names absences is the note that was read as a charter. **One is still
-//! absent: replay.**
+//! names absences is the note that was read as a charter. One is still
+//! absent: replay.
 //!
-//! - **Audio, and this one is wired now.** The window opens the host's
+//! - Audio, and this one is wired now. The window opens the host's
 //!   default input at startup and the transport row's `audio-in` pill says
 //!   which it is and lists the others ([`listening`], [`attached`]), so the
 //!   signal bus carries a measurement rather than an invention and the grid
@@ -152,27 +152,27 @@
 //!   [the operations page](../../../docs/manual/operations.html): *Attach a
 //!   beat source* in the panel column, and *Tap the beat*, *Halve or double
 //!   the grid* and *Nudge the latency offset* in the key column — `b`, `,`,
-//!   `.`, `o` and `p`. **The last of those took a letter back.** The page
+//!   `.`, `o` and `p`. The last of those took a letter back. The page
 //!   specifies the offset as `o` and `p`, this program bound `p` to
 //!   `Op::Report`, and a badge naming two keys with one of them bound would
 //!   be a badge that lies; asked whether a panel diagnostic needs a shortcut
 //!   at all, the answer was that it does not. So `p` is the offset on both
 //!   keyboards now and the report keeps no key — see [`nudged`] and
 //!   `Op::Report`, which the console still performs and nothing here asks
-//!   for. **One of the four rows it was waiting on is still out of reach**:
+//!   for. One of the four rows it was waiting on is still out of reach:
 //!   *Attach a signal to a parameter* is a bay's worth of work of its own and
 //!   is nothing to do with a device being open.
-//! - **MIDI, and this one is wired now.** A control surface, so a hand
-//!   reaches a fader without a mouse. The window opens **the first MIDI input
-//!   there is** at startup — no flag, for
+//! - MIDI, and this one is wired now. A control surface, so a hand
+//!   reaches a fader without a mouse. The window opens the first MIDI input
+//!   there is at startup — no flag, for
 //!   [ADR-0220](../../../docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)'s
 //!   reason one column along — loads a map in two tiers
 //!   (`<store>/maps/default.map`, then the `examples/surface.map` that ships)
 //!   and drains what arrives into [`App::performed`] beside the MCP drain, so
-//!   **a mapped knob writes the record the mixer's fader writes** ([`surfaced`],
+//!   a mapped knob writes the record the mixer's fader writes ([`surfaced`],
 //!   [`App::mapped`],
 //!   [ADR-0335](../../../docs/adr/0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md)).
-//!   **And a learn is a map edit rather than an operation**, which is what is
+//!   And a learn is a map edit rather than an operation, which is what is
 //!   left of the vocabulary half: arm the transport row's `learn` pill, point
 //!   at a control, move a knob, and the line goes into
 //!   `<store>/maps/default.map` — no `Operation`, no `Record` and no row on
@@ -180,23 +180,23 @@
 //!   one would put the room's wiring in the session stream (ADR-0336). The
 //!   port and the map are still fixed for the run: the `map` pill is a
 //!   readout, and reaching a different map while running is not built.
-//! - **MCP, and this one is wired now.** The model's door — the whole reason
+//! - MCP, and this one is wired now. The model's door — the whole reason
 //!   the instrument is AI-native — and `karakuri_mcp` is the
 //!   server. `--mcp PORT` binds it before the window opens and hands it the
 //!   very [`Readout::opening`] the four `mcp` pills write, so what a hand
-//!   opens on the panel is what the server reads on its next call. **What is
-//!   still true of the entry it replaces is the vocabulary half**: no
+//!   opens on the panel is what the server reads on its next call. What is
+//!   still true of the entry it replaces is the vocabulary half: no
 //!   operation names opening the door, so the pills are a setting rather than
 //!   an operation (ADR-0236), and a run without the flag writes that setting
 //!   for nobody. A panel that opened a class silently would still be the
 //!   opposite of
 //!   [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md),
 //!   which is why every pill is shut at startup.
-//! - **Replay.** Rendering a recorded session back. This is offline work and
+//! - Replay. Rendering a recorded session back. This is offline work and
 //!   an instrument is not where it belongs; `karakuri-cli --replay` is the
-//!   right home for it and no row asks the panel for it. **This is one of the
-//!   two entries here that is still an absence.**
-//! - **Session, and this one is wired now.** Recording the timeline as it
+//!   right home for it and no row asks the panel for it. This is one of the
+//!   two entries here that is still an absence.
+//! - Session, and this one is wired now. Recording the timeline as it
 //!   happens, which is *Record the session*. The `rec` capsule at the end of
 //!   the transport row is the control — one control with two ends — and a
 //!   press opens a `session::Recorder` on a thread, writes the head Set and
@@ -204,18 +204,18 @@
 //!   ([`Sessions`]). What it produces is what `--replay` above will be typed
 //!   with; nothing in this program reads one back.
 //!
-//! **What is missing is named rather than left to be noticed**, and what is
+//! What is missing is named rather than left to be noticed, and what is
 //! no longer missing is named in the same place rather than left to be
 //! discovered by running it. Audio, MIDI, MCP and replay are all
-//! `karakuri-environment`'s and all reachable from here; **replay is the one
-//! that is not wired up**, and it is not scaffolding that is missing but a
+//! `karakuri-environment`'s and all reachable from here; replay is the one
+//! that is not wired up, and it is not scaffolding that is missing but a
 //! home — an offline render belongs in `karakuri-cli` and no row asks the
 //! panel for it. The watcher was in that list until the Staging lane needed a
 //! producer, and what it took was one function — which is the measure of how
 //! far the rest of them are, rather than an argument for doing them all now.
 //! Audio, MCP and the recorder have each since gone the same way, one function
-//! and one control at a time. **The store either side of a watcher is no
-//! longer declined, and this paragraph said it was**: `Watch::storing_to` puts
+//! and one control at a time. The store either side of a watcher is no
+//! longer declined, and this paragraph said it was: `Watch::storing_to` puts
 //! every build's sources under a content address and `Watch::snapshotting_to`
 //! keeps every version that compiled under `<store>/history/`, filed under the
 //! Set the slot was running — both wired here, from one `history::Snapshots`
@@ -224,8 +224,8 @@
 //! candidate row, and what a row says when one build changes two nodes is
 //! undecided. `karakuri-cli` is still what you play a set with.
 //!
-//! **There is a governor, and it is the one thing here that is not the
-//! shortest path.** It runs once, at startup, and it is [`Engine::ask_to_prime`]:
+//! There is a governor, and it is the one thing here that is not the
+//! shortest path. It runs once, at startup, and it is [`Engine::ask_to_prime`]:
 //! deck A is Live and deck B is asked to prime against a budget that has no
 //! room for it, so the governor parks it. That is the only way a slot on this
 //! panel can read one residency and have been asked for another —
@@ -235,7 +235,7 @@
 //! [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
 //! drew could not be seen by running this window.
 //!
-//! **Four slots, because a strip is a slot and a mixer is its channels.**
+//! Four slots, because a strip is a slot and a mixer is its channels.
 //! The deck is built full — [`SLOTS`] is `deck::MAX_SLOTS` — and every slot
 //! holds this program's one pair at its own salt, since a `HotSwap` cannot
 //! hold nothing and this program has no second pair to give one. Deck A is
@@ -244,7 +244,7 @@
 //! and running all the same. An operator brings one up by cycling its tally or
 //! by loading a Set into it.
 //!
-//! **Every cell draws, and every slot steps, whatever its residency.** An
+//! Every cell draws, and every slot steps, whatever its residency. An
 //! off-air slot is stepped and drawn into its own target on every frame, at the
 //! room's tempo, because the slot nobody is watching is the candidate and the
 //! cell is what it is judged from
@@ -255,7 +255,7 @@
 //! It costs a step and a draw per slot, both outside the governor's arithmetic;
 //! the roadmap's *Performance discipline* carries what is owed.
 //!
-//! **Each cell is its own deck's monitor and cannot be another's.** A cell is
+//! Each cell is its own deck's monitor and cannot be another's. A cell is
 //! presented from `Deck::slot_view` for the slot it is lettered for — that
 //! deck's own target rather than a cut of the composite — so no cell can draw
 //! deck C's material under the letter `A`. This paragraph used to say the
@@ -269,11 +269,11 @@
 //! the rule about who gets a pointer event are all `karakuri-console`. What is
 //! left here is a window, a surface, the `egui` plumbing between them, and the
 //! English — a `Dragged` into the line it prints, an `Outcome` into the line a
-//! key prints. **The model returns what happened; the words are this file's.**
+//! key prints. The model returns what happened; the words are this file's.
 //!
 //! # The readout is driven by the layout, not by the pointer
 //!
-//! A line is printed when the boundary **moves**, and a stop is announced
+//! A line is printed when the boundary moves, and a stop is announced
 //! once. That is `Panel::moved`'s doing rather than this file's: it returns
 //! nothing at all for a move that changed nothing. A line per pointer event is
 //! one comparison less and wrong twice over — the interesting lines are buried
@@ -286,7 +286,7 @@
 //! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
 //! still-panel clause: a panel with nothing changing on it does no per-frame
 //! work.
-//! **Whether a frame is owed is `karakuri_console::repaint`'s to answer**, not
+//! Whether a frame is owed is `karakuri_console::repaint`'s to answer, not
 //! this file's — the same seam the model came out of the window loop through,
 //! and for the same reason: an event handler cannot be called from a test, and
 //! an under-repaint is a stale pixel rather than an error, so there is nothing
@@ -326,11 +326,11 @@ use winit::event_loop::{ControlFlow, EventLoop};
 mod session;
 pub(crate) use session::{rewired, watched, Keeping};
 
-/// The window loop's own keyboard: [`keymap::KEY_BINDINGS`], the [`KeyCtx`]
-/// its actions take, and [`keymap::key_column`], the unit test that holds it
-/// against `docs/manual/operations.html`. Split out the same way
-/// [`session`] was, one piece of this file's own decomposition along —
-/// `window_event`'s dispatch into the table stays here, in `main.rs`.
+/// The window loop's own keyboard: [`keymap::KEY_BINDINGS`], the [`KeyCtx`] its
+/// actions take, and [`keymap::key_column`], the unit test that holds it
+/// against `docs/manual/operations.html`. Split out the same way [`session`]
+/// was, one piece of this file's own decomposition along — `window_event`'s
+/// dispatch into the table stays here, in `main.rs`.
 mod keymap;
 
 /// The window this opens, in logical pixels. Comfortably above the smallest
@@ -344,96 +344,97 @@ pub(crate) use readout::*;
 // The engine in the Program bay
 // ---------------------------------------------------------------------------
 
-/// **The session canvas: the shape every output is fitted to, and the size the
-/// run starts at.**
+/// The session canvas: the shape every output is fitted to, and the size the
+/// run starts at.
 ///
-/// **It is no longer what the Set renders at.** The render size belongs to an
-/// output ([ADR-0246](../../../docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md))
+/// It is no longer what the Set renders at. The render size belongs to an
+/// output
+/// ([ADR-0246](../../../docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md))
 /// and the frame is composited once at the largest enabled one
 /// ([ADR-0247](../../../docs/adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md)),
-/// which is [`render_size`]. This constant is what that derivation *starts*
-/// at, before any output has said anything, and what the picture's rectangle
-/// is fitted to. ADR-0246 called it *"wrong twice over"* — a session-wide
-/// constant where the size belongs to an output, and a measurement default
-/// standing in for an instrument's — and both halves are answered here: the
-/// size is an output's, and what is left is a shape and a starting value.
+/// which is [`render_size`]. This constant is what that derivation *starts* at,
+/// before any output has said anything, and what the picture's rectangle is
+/// fitted to. ADR-0246 called it *"wrong twice over"* — a session-wide constant
+/// where the size belongs to an output, and a measurement default standing in
+/// for an instrument's — and both halves are answered here: the size is an
+/// output's, and what is left is a shape and a starting value.
 ///
 /// # Why the picture is still fitted to this rather than to what is rendered
 ///
 /// `aims` hands this to `picture_rect` rather than `Present::size()`, and the
 /// difference is a loop. The picture's size *is* its rectangle now, and its
-/// rectangle is the canvas's shape fitted into the bay's box — so fitting it
-/// to what is rendered would fit it to itself, one frame late. The fixed point
+/// rectangle is the canvas's shape fitted into the bay's box — so fitting it to
+/// what is rendered would fit it to itself, one frame late. The fixed point
 /// happens to be the same rectangle, which is exactly what makes the mistake
 /// invisible: the reason would be circular and the picture would have no shape
 /// of its own, only whatever rounding it converged on. The console page's
 /// sentence — *"It is the canvas's shape rather than the region's"* — is what
 /// this keeps true.
 ///
-/// **The reference workload's canvas**, 1280x720 (`docs/contributing.md` §1),
-/// and it is that on purpose rather than by default: a figure taken at the
+/// The reference workload's canvas, 1280x720 (`docs/contributing.md` §1), and
+/// it is that on purpose rather than by default: a figure taken at the
 /// reference workload can be put beside every other one in this repository.
 ///
-/// **What that buys is smaller than it was, and the reading says so.** A run
-/// whose Program bay is 466 x 262 renders at 466 x 262 from its first frame,
-/// so a panel figure is at *whatever the window was* rather than at this
-/// number — which is P-0095's rule met by printing the size beside the
-/// figures rather than by pinning the size. The reference workload is a
-/// harness figure and was never a panel one (ADR-0270), and this constant was
-/// already carrying the caveat below.
+/// What that buys is smaller than it was, and the reading says so. A run whose
+/// Program bay is 466 x 262 renders at 466 x 262 from its first frame, so a
+/// panel figure is at *whatever the window was* rather than at this number —
+/// which is P-0095's rule met by printing the size beside the figures rather
+/// than by pinning the size. The reference workload is a harness figure and was
+/// never a panel one (ADR-0270), and this constant was already carrying the
+/// caveat below.
 ///
-/// **The canvas is half of that workload and the material is the other half**,
+/// The canvas is half of that workload and the material is the other half,
 /// which is the distinction ADR-0270 drew and ADR-0271 made visible: the
 /// workload is `examples/drift_cloud.kset` — 262144 elements — at this canvas,
 /// and what this program opens on is `examples/star_vortex.kset`'s pair at
 /// 10240. So this constant keeps a reading comparable *as far as the canvas
-/// goes*, and a bare run is not a reference-workload figure. The startup
-/// legend prints the material and the capacity it actually ran, and says so. **Not the
-/// size of the picture, and not the size of a preview cell either** — see
-/// [`Present::draw`], which letterboxes this into whatever it is drawn into
-/// and is handed two rectangles of different sizes a frame, and which is what
-/// the manual means by *"it letterboxes into the width it has"*.
+/// goes*, and a bare run is not a reference-workload figure. The startup legend
+/// prints the material and the capacity it actually ran, and says so. Not the
+/// size of the picture, and not the size of a preview cell either — see
+/// [`Present::draw`], which letterboxes this into whatever it is drawn into and
+/// is handed two rectangles of different sizes a frame, and which is what the
+/// manual means by *"it letterboxes into the width it has"*.
 ///
-/// **It is also the shape the picture is given**, through [`aims`] and
+/// It is also the shape the picture is given, through [`aims`] and
 /// `picture_rect`: the console sizes the picture's rectangle to this rather
 /// than to whatever the region happens to be, so what surrounds the picture is
 /// the bay's own card rather than bars anything rendered. It reached
 /// `picture_rect` from `Present::size` until 2026-09-09, when that stopped
-/// being a second copy of this number and became the frame's own derived
-/// size — see this constant's own paragraph above, and [`aims`].
+/// being a second copy of this number and became the frame's own derived size —
+/// see this constant's own paragraph above, and [`aims`].
 pub(crate) const CANVAS: (u32, u32) = (1280, 720);
 
-/// **Which profile this binary was built with**, for the legend's own reading.
+/// Which profile this binary was built with, for the legend's own reading.
 ///
 /// It said *debug, with dependencies at opt-level 3* in a string, so a
-/// `--release` run printed the wrong one at the foot of its own numbers — and
-/// a host-clock figure whose build is misreported is worse than one with no
-/// build beside it, because the reader has no reason to doubt it.
+/// `--release` run printed the wrong one at the foot of its own numbers — and a
+/// host-clock figure whose build is misreported is worse than one with no build
+/// beside it, because the reader has no reason to doubt it.
 pub(crate) const PROFILE: &str = match cfg!(debug_assertions) {
     true => "debug profile with dependencies at opt-level 3",
     false => "release profile",
 };
 
-/// **Deck A's seed salt**, which decides where its elements start. Any value
-/// is a picture; 7 is the one `karakuri-cli`'s own tests use, so this looks
-/// like what they look like.
+/// Deck A's seed salt, which decides where its elements start. Any value is a
+/// picture; 7 is the one `karakuri-cli`'s own tests use, so this looks like
+/// what they look like.
 ///
-/// **Deck A's, and the rest of the deck is counted off it** — see
-/// [`slot_salt`], which is the one place this file turns a slot into a seed.
+/// Deck A's, and the rest of the deck is counted off it — see [`slot_salt`],
+/// which is the one place this file turns a slot into a seed.
 pub(crate) const SEED_SALT: u32 = 7;
 
-/// **Every slot the engine has, and this deck is built full.**
+/// Every slot the engine has, and this deck is built full.
 ///
-/// `deck::MAX_SLOTS` rather than a number written here, and four of them
-/// rather than the two this program ran until now. A slot **is** a mixer
-/// channel — the bay draws one strip per slot, and the mock's page keeps its
-/// four tracks whatever the deck has
+/// `deck::MAX_SLOTS` rather than a number written here, and four of them rather
+/// than the two this program ran until now. A slot is a mixer channel — the bay
+/// draws one strip per slot, and the mock's page keeps its four tracks whatever
+/// the deck has
 /// ([ADR-0178](../../../docs/adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md))
 /// — so what decides how many there are is what a `Deck` can hold, which
 /// `Deck::new` states in an assert: *"a deck holds 1 to MAX_SLOTS slots"*.
 ///
-/// **This is what changed, and it is the whole change.** The second slot used
-/// to exist because a park needs somewhere to happen
+/// This is what changed, and it is the whole change. The second slot used to
+/// exist because a park needs somewhere to happen
 /// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)),
 /// which is a demonstration deciding the shape of the instrument. B, C and D
 /// are now here for the reason A is; the park still happens, on one of them,
@@ -441,24 +442,23 @@ pub(crate) const SEED_SALT: u32 = 7;
 ///
 /// # Four slots is not four Live slots, and that is measured
 ///
-/// **The reference workload does not fit the compute budget four times over
-/// on this machine.** `Deck::measure_slots` probes all four at startup, and
-/// `the_budget_parks_a_deck_and_the_strip_carries_both_residencies` prints
-/// what it got: four runs on an Apple M4 Pro read per-slot costs of 4.4 to
-/// 16.3 ms summing to 27.9, 30.0, 32.6 and 55.5 ms, against
-/// `governor::DEFAULT_COMPUTE_BUDGET_MS` of 16.7. **Four of even the cheapest
-/// reading seen — 4.39 ms — is 17.6 ms and still over.** They are host-clock
+/// The reference workload does not fit the compute budget four times over on
+/// this machine. `Deck::measure_slots` probes all four at startup, and
+/// `the_budget_parks_a_deck_and_the_strip_carries_both_residencies` prints what
+/// it got: four runs on an Apple M4 Pro read per-slot costs of 4.4 to 16.3 ms
+/// summing to 27.9, 30.0, 32.6 and 55.5 ms, against
+/// `governor::DEFAULT_COMPUTE_BUDGET_MS` of 16.7. Four of even the cheapest
+/// reading seen — 4.39 ms — is 17.6 ms and still over. They are host-clock
 /// numbers taken under `cargo test`, so they read coarse and biased high and
 /// spread by a factor of four between runs; what does not move across that
-/// spread is the verdict, which is the same property ADR-0191 bought its
-/// budget arithmetic for.
+/// spread is the verdict, which is the same property ADR-0191 bought its budget
+/// arithmetic for.
 ///
-/// So this deck opens with **one** slot Live and the rest at
-/// `Residency::Allocated` ([`Engine::new`]) — not because four slots do not
-/// fit, but because three of them hold material nobody has asked for, and the
-/// budget says what the operator would be spending if they did. **If an
-/// operator puts all four on air the governor will not stop them**: it never
-/// takes a Live slot off air
+/// So this deck opens with one slot Live and the rest at `Residency::Allocated`
+/// ([`Engine::new`]) — not because four slots do not fit, but because three of
+/// them hold material nobody has asked for, and the budget says what the
+/// operator would be spending if they did. If an operator puts all four on air
+/// the governor will not stop them: it never takes a Live slot off air
 /// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)),
 /// so what happens is `Report::over_budget` and priming suspended — a warning
 /// on the legend's governor line and a decision left with the person who made
@@ -466,81 +466,79 @@ pub(crate) const SEED_SALT: u32 = 7;
 /// it with a slot count.
 pub(crate) const SLOTS: usize = MAX_SLOTS;
 
-/// **Which slot this program opens on air, and which one it asks to warm.**
+/// Which slot this program opens on air, and which one it asks to warm.
 ///
 /// Two of [`SLOTS`], named because this file has something to say about each.
 /// Deck A is Live and is the whole of what the picture draws; every cell draws
-/// its own slot whatever its residency. Deck B is
-/// asked to prime and is parked by the budget — see [`Engine::ask_to_prime`]
-/// — which is the one state on this panel where a slot's two residencies
-/// disagree, and nothing reaches it without somebody asking.
+/// its own slot whatever its residency. Deck B is asked to prime and is parked
+/// by the budget — see [`Engine::ask_to_prime`] — which is the one state on
+/// this panel where a slot's two residencies disagree, and nothing reaches it
+/// without somebody asking.
 ///
-/// **The rest are named by nothing, which is the point of them.** A slot this
-/// file has no use for is not a slot that should not exist: it is a channel
-/// with nothing asked of it, resting at [`Residency::Allocated`] until an
-/// operator cycles its tally or loads material into it. See [`Engine::new`],
-/// where that resting state is written and argued.
+/// The rest are named by nothing, which is the point of them. A slot this file
+/// has no use for is not a slot that should not exist: it is a channel with
+/// nothing asked of it, resting at [`Residency::Allocated`] until an operator
+/// cycles its tally or loads material into it. See [`Engine::new`], where that
+/// resting state is written and argued.
 pub(crate) const ON_AIR: usize = 0;
 pub(crate) const ASKED_TO_PRIME: usize = 1;
 
-/// **The `.kir` pair this plays, and the whole of how an operator names
-/// material.**
+/// The `.kir` pair this plays, and the whole of how an operator names material.
 ///
 /// A Set is built from an L1 and an L4 — a geometry and a renderer — and
-/// `Set::build` takes exactly those two. **They are one Set, and the deck has
-/// [`SLOTS`] of them**: every slot is this same pair built again at the salt
+/// `Set::build` takes exactly those two. They are one Set, and the deck has
+/// [`SLOTS`] of them: every slot is this same pair built again at the salt
 /// [`slot_salt`] counts off for it, so four strips are four simulations of one
 /// procedure rather than one picture drawn four times.
 ///
-/// **Deliberately not `karakuri-cli`'s parser.** That program has thirty-odd
-/// flags, `--set a.kir,b.kir` among them, and they live in its own `main.rs`
-/// where nothing else can reach them. A second `--flag` vocabulary here would
-/// be a second answer to *how does an operator name material*, which is the
-/// failure this whole move exists to stop paying for
-/// ([`docs/contributing.md` §4](../../../docs/contributing.md)).
-/// So **material is two positional paths and nothing else**: enough to pick
-/// what plays, and no vocabulary to disagree with. The day the two programs
-/// share one, it comes from a package both can reach and this goes.
+/// Deliberately not `karakuri-cli`'s parser. That program has thirty-odd flags,
+/// `--set a.kir,b.kir` among them, and they live in its own `main.rs` where
+/// nothing else can reach them. A second `--flag` vocabulary here would be a
+/// second answer to *how does an operator name material*, which is the failure
+/// this whole move exists to stop paying for ([`docs/contributing.md`
+/// §4](../../../docs/contributing.md)). So material is two positional paths and
+/// nothing else: enough to pick what plays, and no vocabulary to disagree with.
+/// The day the two programs share one, it comes from a package both can reach
+/// and this goes.
 ///
 /// # And the two flags are not a second material vocabulary
 ///
 /// [`sources_from`] takes `--presets DIR` and `--store DIR`, which reads at
-/// first like the paragraph above being paid lip service and then broken. It
-/// is not, and the reason is that they answer a **different question**: not
-/// *what plays*, which is the one the sentence above is about and which is
-/// still two paths, but *where this program's data lives* — the directory the
-/// shipped presets were installed into, and the directory the library it lists
-/// is kept in. Neither can name a procedure, neither appears in a Set, and
-/// neither can be given instead of the pair. `--presets` chooses what the pair
-/// **defaults to** when the operator gives no pair at all, which is the whole
-/// of its reach into this type.
+/// first like the paragraph above being paid lip service and then broken. It is
+/// not, and the reason is that they answer a different question: not *what
+/// plays*, which is the one the sentence above is about and which is still two
+/// paths, but *where this program's data lives* — the directory the shipped
+/// presets were installed into, and the directory the library it lists is kept
+/// in. Neither can name a procedure, neither appears in a Set, and neither can
+/// be given instead of the pair. `--presets` chooses what the pair defaults to
+/// when the operator gives no pair at all, which is the whole of its reach into
+/// this type.
 ///
 /// `docs/contributing.md` §4 is about one name meaning one thing, and the
-/// failure it names would
-/// be two ways to say *play this file*. Two ways to say *and the files are
-/// over here* is not that failure; refusing to have any way to say it is how
-/// [`Sources::under`]'s predecessor came to bake the build machine's own tree
-/// into a shipped binary. See
+/// failure it names would be two ways to say *play this file*. Two ways to say
+/// *and the files are over here* is not that failure; refusing to have any way
+/// to say it is how [`Sources::under`]'s predecessor came to bake the build
+/// machine's own tree into a shipped binary. See
 /// [ADR-0230](../../../docs/adr/0230-where-the-programs-data-lives-is-told-rather-than-baked.md).
 ///
 /// `Debug` unconditionally rather than `#[cfg_attr(test, derive(Debug))]`: that
 /// idiom does not survive a crate boundary — `cfg(test)` is set when the
-/// *defining* crate's tests compile and not when a consumer's do — and
-/// ADR-0214 names it as the one class of surprise a move of this kind produces.
-/// Nothing consumes this type today, and writing the version that would break
-/// is not cheaper than writing the one that would not.
+/// *defining* crate's tests compile and not when a consumer's do — and ADR-0214
+/// names it as the one class of surprise a move of this kind produces. Nothing
+/// consumes this type today, and writing the version that would break is not
+/// cheaper than writing the one that would not.
 ///
 /// # It is what the operator named, and no longer what a deck runs from
 ///
-/// **The shape is unchanged and it is still the right one**, which is a
-/// conclusion rather than an omission: a Set is an L1 and an L4, the command
-/// line is one pair, and the strip's [`Sources::material`] is that pair's two
-/// names. What changed is the *number* of them a run holds. Every slot runs
-/// from its own working copy ([`working_copies`]), so the deck is built from
-/// **[`SLOTS`] of these** — [`Engine::new`] takes a slice, indexed by slot —
-/// and the one the command line produced is kept beside them for the two
-/// questions that are still about what the operator asked for: what the strips
-/// are called, and what a refusal names.
+/// The shape is unchanged and it is still the right one, which is a conclusion
+/// rather than an omission: a Set is an L1 and an L4, the command line is one
+/// pair, and the strip's [`Sources::material`] is that pair's two names. What
+/// changed is the *number* of them a run holds. Every slot runs from its own
+/// working copy ([`working_copies`]), so the deck is built from [`SLOTS`] of
+/// these — [`Engine::new`] takes a slice, indexed by slot — and the one the
+/// command line produced is kept beside them for the two questions that are
+/// still about what the operator asked for: what the strips are called, and
+/// what a refusal names.
 ///
 /// A single `Sources` widened to carry four pairs would have been the wrong
 /// answer to the same fact: the pair is a Set's shape and a Set is what a slot
@@ -549,19 +547,18 @@ pub(crate) const ASKED_TO_PRIME: usize = 1;
 mod launch;
 pub(crate) use launch::*;
 
-/// **How often a run with `--mcp` wakes to serve.**
+/// How often a run with `--mcp` wakes to serve.
 ///
 /// # The loop sleeps, and that is the whole of why this exists
 ///
 /// This window draws a frame when something changed it or when `egui` asked for
-/// one after a delay it named, and on no other occasion — [`App::about_to_wait`]
-/// is where that rule lives, and it is ADR-0164's still-panel clause as the
-/// operating
-/// system sees it. `karakuri-cli` has no such rule: it draws continuously, so
-/// what a model asks for is taken up on the next frame, which is always a
-/// millisecond away.
+/// one after a delay it named, and on no other occasion —
+/// [`App::about_to_wait`] is where that rule lives, and it is ADR-0164's
+/// still-panel clause as the operating system sees it. `karakuri-cli` has no
+/// such rule: it draws continuously, so what a model asks for is taken up on
+/// the next frame, which is always a millisecond away.
 ///
-/// **Ported without this, `--mcp` on the panel answers a timeout.** A `save_set`
+/// Ported without this, `--mcp` on the panel answers a timeout. A `save_set`
 /// reaches the render loop over a channel and waits for the loop to drain it,
 /// and a loop asleep on `ControlFlow::Wait` drains nothing until somebody
 /// touches the window — so the first thing a model asked this program for came
@@ -574,7 +571,7 @@ pub(crate) use launch::*;
 /// Draining alone would answer a save and a rewiring, because neither needs a
 /// picture. It would not answer the thing this surface is *for*: a procedure a
 /// model writes is picked up by a watcher, compiled on a worker and installed
-/// **at a frame boundary** — `Deck::begin_frame`, which happens on a frame and
+/// at a frame boundary — `Deck::begin_frame`, which happens on a frame and
 /// nowhere else. A run that drained and never drew would take a write, say it
 /// took it, and go on showing what it was showing.
 ///
@@ -582,7 +579,7 @@ pub(crate) use launch::*;
 /// words and needs no new ones: the picture is live, so the run takes the arm
 /// that names the engine as the reason and prints the rate it measured.
 ///
-/// **A tenth of a second, which is the watcher's own poll interval.** A model is
+/// A tenth of a second, which is the watcher's own poll interval. A model is
 /// not a pair of hands and does not need sixty frames a second to be answered;
 /// what it needs is that no request waits longer than the machinery behind it
 /// already does, and `watch::Watch` stamps its files ten times a second. Faster
@@ -590,17 +587,16 @@ pub(crate) use launch::*;
 /// slowly than the files it is watching.
 pub(crate) const SERVED: Duration = Duration::from_millis(100);
 
-/// **What one frame of a control surface is sized for**, on this side of the
+/// What one frame of a control surface is sized for, on this side of the
 /// channel.
 ///
 /// A surface's fastest gesture is a fader sweep, which a device sends at a few
 /// hundred messages a second, and every one of them is coalesced to one
-/// operation per control before it reaches here
-/// (`karakuri_environment::midi`'s `Router::emit`). So a frame's worth is a
-/// map's continuous controls plus whatever pads were hit, which is single
-/// figures — and this is generous rather than measured, for the reason the
-/// buffer exists at all: it is reserved once so that the frame path never
-/// grows it (P-0091).
+/// operation per control before it reaches here (`karakuri_environment::midi`'s
+/// `Router::emit`). So a frame's worth is a map's continuous controls plus
+/// whatever pads were hit, which is single figures — and this is generous
+/// rather than measured, for the reason the buffer exists at all: it is
+/// reserved once so that the frame path never grows it (P-0091).
 pub(crate) const MAPPED: usize = 32;
 
 // -- where `STEPS_A_FRAME` was ------------------------------------------
@@ -654,7 +650,7 @@ pub(crate) use gfx::*;
 mod app;
 pub(crate) use app::*;
 
-/// **The command line, then the window.**
+/// The command line, then the window.
 ///
 /// The arguments are read *before* the event loop exists, so a refusal is a
 /// line on stderr and an exit code rather than a window that opens and closes.

@@ -1,18 +1,17 @@
-//! **The panel starts.** Not that a deck builds, not that a widget draws —
-//! that `cargo run -p karakuri` reaches a window and says so, in the process
-//! an operator would have launched.
+//! The panel starts. Not that a deck builds, not that a widget draws — that
+//! `cargo run -p karakuri` reaches a window and says so, in the process an
+//! operator would have launched.
 //!
 //! This is the one claim nothing else in the workspace makes. `main.rs`'s own
-//! `mod gpu` tests build an `Engine` on a headless device and assert about
-//! what it produces; not one of them runs [`main`], parses a command line,
-//! resolves a preset library, writes working copies, opens a store, seeds the
-//! snapshots, binds MCP, creates a window, makes a surface, builds the panel
-//! and prints the legend — which is the *order* those happen in and therefore
-//! the only place a startup panic can live. The panel has stopped starting
-//! more than once with the whole suite green, because the suite has never
-//! started it.
+//! `mod gpu` tests build an `Engine` on a headless device and assert about what
+//! it produces; not one of them runs [`main`], parses a command line, resolves
+//! a preset library, writes working copies, opens a store, seeds the snapshots,
+//! binds MCP, creates a window, makes a surface, builds the panel and prints
+//! the legend — which is the *order* those happen in and therefore the only
+//! place a startup panic can live. The panel has stopped starting more than
+//! once with the whole suite green, because the suite has never started it.
 //!
-//! **Why the legend and not the exit code.** There is no flag that makes this
+//! Why the legend and not the exit code. There is no flag that makes this
 //! program exit on its own: `--help` prints [`USAGE`] and returns without
 //! touching a device, and every other run ends when the operator closes the
 //! window or presses `esc`. So "it started" cannot be a status; it has to be
@@ -24,18 +23,17 @@
 //! Objective-C frame), so the legend is also the only evidence that would
 //! survive one.
 //!
-//! **Bounded, and not a fixed wait.** The window is polled for the legend
-//! every few milliseconds for up to ten seconds and the test finishes the
-//! moment the line appears — usually well under a second. Ten seconds is the
-//! ceiling on a failure, not the cost of a pass. Sleeping ten seconds instead
-//! would have made the pass cost the failure's price and told the reader
-//! nothing more.
+//! Bounded, and not a fixed wait. The window is polled for the legend every few
+//! milliseconds for up to ten seconds and the test finishes the moment the line
+//! appears — usually well under a second. Ten seconds is the ceiling on a
+//! failure, not the cost of a pass. Sleeping ten seconds instead would have
+//! made the pass cost the failure's price and told the reader nothing more.
 //!
-//! **What a red run looks like.** If the process exits before the legend, this
-//! test fails *with the child's stderr in the message* — which is the panic,
-//! the refusal or the `no adapter:` line, printed where whoever ran the test
-//! will read it. That is the whole point: the failure this catches is a
-//! sentence the program already writes and nobody was listening for.
+//! What a red run looks like. If the process exits before the legend, this test
+//! fails *with the child's stderr in the message* — which is the panic, the
+//! refusal or the `no adapter:` line, printed where whoever ran the test will
+//! read it. That is the whole point: the failure this catches is a sentence the
+//! program already writes and nobody was listening for.
 
 // Every test here drives `karakuri` as a subprocess, and that binary opens a
 // window and takes a device of its own — so these are GPU tests that no
@@ -53,28 +51,28 @@ mod gpu {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
-    /// **The first line of the legend**, and the shortest prefix of it that is
-    /// not a number: `print_legend` opens with `"the console, in a {w} x {h}
-    /// viewport."` and the two figures depend on the window this machine
-    /// opened. Everything before them is fixed.
+    /// The first line of the legend, and the shortest prefix of it that is not a
+    /// number: `print_legend` opens with `"the console, in a {w} x {h} viewport."`
+    /// and the two figures depend on the window this machine opened. Everything
+    /// before them is fixed.
     ///
-    /// It is deliberately a line from *after* the device rather than one of
-    /// the three `main` prints before it — `scratch:`, `presets:` and `mcp:`
-    /// are all reached without an adapter, so waiting on one of those would
-    /// pass on a run that then died making a surface.
+    /// It is deliberately a line from *after* the device rather than one of the
+    /// three `main` prints before it — `scratch:`, `presets:` and `mcp:` are all
+    /// reached without an adapter, so waiting on one of those would pass on a run
+    /// that then died making a surface.
     const LEGEND: &str = "the console, in a ";
 
     /// The ceiling on a failure. A pass leaves the moment the line lands.
     const WAIT: Duration = Duration::from_secs(10);
 
-    /// Short enough that the pass is not paced by it, long enough that the
-    /// poll is not a spin.
+    /// Short enough that the pass is not paced by it, long enough that the poll is
+    /// not a spin.
     const POLL: Duration = Duration::from_millis(20);
 
-    /// The workspace root. Integration tests run with the *package* as the
-    /// working directory, and this program's preset library and its examples
-    /// are named relative to the workspace — the same move `replay.rs` makes
-    /// and for the same reason.
+    /// The workspace root. Integration tests run with the *package* as the working
+    /// directory, and this program's preset library and its examples are named
+    /// relative to the workspace — the same move `replay.rs` makes and for the same
+    /// reason.
     fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -82,10 +80,10 @@ mod gpu {
             .expect("workspace root")
     }
 
-    /// A store of this run's own. Never the default `.karakuri`: this test
-    /// writes four decks' working copies and a snapshot history, and doing
-    /// that in whatever store the machine's operator keeps their Sets in would
-    /// make the test a thing you have to think about before running.
+    /// A store of this run's own. Never the default `.karakuri`: this test writes
+    /// four decks' working copies and a snapshot history, and doing that in
+    /// whatever store the machine's operator keeps their Sets in would make the
+    /// test a thing you have to think about before running.
     fn scratch(name: &str) -> PathBuf {
         let dir =
             std::env::temp_dir().join(format!("karakuri-starts-{name}-{}", std::process::id()));
@@ -94,14 +92,14 @@ mod gpu {
         dir
     }
 
-    /// Read a child's stream to its end on a thread of its own, into a string
-    /// the test can look at whenever it likes.
+    /// Read a child's stream to its end on a thread of its own, into a string the
+    /// test can look at whenever it likes.
     ///
-    /// **A thread rather than a read in the poll loop**, for two reasons. A
-    /// `read` on a pipe blocks, so reading inline would stop the poll from
-    /// ever noticing that the process had died; and the legend is several
-    /// kilobytes, so a child whose pipe nobody drains can block *writing* it
-    /// and hang exactly where this test is watching for it.
+    /// A thread rather than a read in the poll loop, for two reasons. A `read` on a
+    /// pipe blocks, so reading inline would stop the poll from ever noticing that
+    /// the process had died; and the legend is several kilobytes, so a child whose
+    /// pipe nobody drains can block *writing* it and hang exactly where this test
+    /// is watching for it.
     fn drained<R: Read + Send + 'static>(stream: R) -> Arc<Mutex<String>> {
         let held = Arc::new(Mutex::new(String::new()));
         let into = Arc::clone(&held);
@@ -129,15 +127,14 @@ mod gpu {
     }
 
     impl Panel {
-        /// Launch the program an operator launches, with a store and a preset
-        /// library that belong to this test.
+        /// Launch the program an operator launches, with a store and a preset library
+        /// that belong to this test.
         ///
-        /// **`--presets` is given rather than left to resolve.** Without it
-        /// the library is looked for beside the binary and then in the
-        /// workspace the binary was compiled in, and which of those answers
-        /// depends on where the run happened — a test that passes in a
-        /// checkout and fails from an installed prefix is testing the machine.
-        /// Named, it is `examples/`, on every machine.
+        /// `--presets` is given rather than left to resolve. Without it the library is
+        /// looked for beside the binary and then in the workspace the binary was
+        /// compiled in, and which of those answers depends on where the run happened —
+        /// a test that passes in a checkout and fails from an installed prefix is
+        /// testing the machine. Named, it is `examples/`, on every machine.
         fn launch(name: &str, extra: &[&str]) -> Panel {
             let dir = scratch(name);
             let store = dir.join("store");
@@ -174,10 +171,9 @@ mod gpu {
             self.err.lock().expect("the stderr buffer").clone()
         }
 
-        /// Everything both streams hold, for a failure message. A startup
-        /// failure is a sentence this program already writes, and the whole
-        /// value of this test is putting that sentence in front of whoever ran
-        /// it.
+        /// Everything both streams hold, for a failure message. A startup failure is a
+        /// sentence this program already writes, and the whole value of this test is
+        /// putting that sentence in front of whoever ran it.
         fn transcript(&self) -> String {
             format!(
                 "--- stdout ---\n{}\n--- stderr ---\n{}",
@@ -186,9 +182,9 @@ mod gpu {
             )
         }
 
-        /// **Poll for a line, and stop on the first of three things**: the line
-        /// arrives, the process exits, or the ceiling is reached. Returns as
-        /// soon as the line is there.
+        /// Poll for a line, and stop on the first of three things: the line arrives,
+        /// the process exits, or the ceiling is reached. Returns as soon as the line is
+        /// there.
         fn wait_for(&mut self, needle: &str) {
             let deadline = Instant::now() + WAIT;
             loop {
@@ -226,10 +222,10 @@ mod gpu {
 
         /// Still up, and nothing on stderr that reads as a panic.
         ///
-        /// **Both, because either alone is weak.** A process can print the
-        /// legend and abort on the very next frame; and a `winit` callback
-        /// that aborts on macOS may leave nothing but the abort itself, so a
-        /// clean stderr on a dead process proves nothing either.
+        /// Both, because either alone is weak. A process can print the legend and abort
+        /// on the very next frame; and a `winit` callback that aborts on macOS may
+        /// leave nothing but the abort itself, so a clean stderr on a dead process
+        /// proves nothing either.
         fn is_still_running(&mut self) {
             let exited = self.child.try_wait().expect("try_wait on the panel");
             assert!(
@@ -258,10 +254,9 @@ mod gpu {
         }
     }
 
-    /// **Kill it whatever happened**, including on a failed assertion above —
-    /// otherwise a red test leaves a window open and a process running with
-    /// nobody left to close it. The scratch goes the same way and for the same
-    /// reason.
+    /// Kill it whatever happened, including on a failed assertion above — otherwise
+    /// a red test leaves a window open and a process running with nobody left to
+    /// close it. The scratch goes the same way and for the same reason.
     impl Drop for Panel {
         fn drop(&mut self) {
             let _ = self.child.kill();
@@ -270,12 +265,12 @@ mod gpu {
         }
     }
 
-    /// **The exit of a killed process is the signal's, and not a panic's.**
+    /// The exit of a killed process is the signal's, and not a panic's.
     ///
-    /// A Rust panic that unwinds out of `main` exits 101; an abort is a signal
-    /// of its own. Neither is what `kill` produces, and the assertion is that
-    /// what came back is the killing rather than something the program decided
-    /// on its own in the moment before it.
+    /// A Rust panic that unwinds out of `main` exits 101; an abort is a signal of
+    /// its own. Neither is what `kill` produces, and the assertion is that what
+    /// came back is the killing rather than something the program decided on its
+    /// own in the moment before it.
     fn ended_on_the_signal(status: ExitStatus, transcript: &str) {
         assert_ne!(
             status.code(),
@@ -294,10 +289,10 @@ mod gpu {
         }
     }
 
-    /// **A bare run reaches the window.** The command line, the preset
-    /// library, the working copies, the store, the snapshot seed, the event
-    /// loop, the surface, the adapter, the deck and the panel — in that order,
-    /// in one process, and the legend is the far side of all of it.
+    /// A bare run reaches the window. The command line, the preset library, the
+    /// working copies, the store, the snapshot seed, the event loop, the surface,
+    /// the adapter, the deck and the panel — in that order, in one process, and the
+    /// legend is the far side of all of it.
     #[test]
     fn the_panel_reaches_a_window_and_prints_its_legend() {
         let mut panel = Panel::launch("bare", &[]);
@@ -312,16 +307,16 @@ mod gpu {
         panel.no_panic();
     }
 
-    /// **`--mcp 0` binds before the window and says which port it got**, and
-    /// the run goes on to the legend anyway.
+    /// `--mcp 0` binds before the window and says which port it got, and the run
+    /// goes on to the legend anyway.
     ///
-    /// The flag is here because it is the one startup step that reaches
-    /// outside this process before the device does, and `0` is the argument
-    /// with no way to collide: an ephemeral port is one the machine says is
-    /// free, where a fixed number in a test is a number some other program on
-    /// the machine may be holding. The printed port is asked of the server
-    /// rather than echoed from the flag, so `0` in and `0` out would be the
-    /// bug — hence the parse rather than a `contains`.
+    /// The flag is here because it is the one startup step that reaches outside
+    /// this process before the device does, and `0` is the argument with no way to
+    /// collide: an ephemeral port is one the machine says is free, where a fixed
+    /// number in a test is a number some other program on the machine may be
+    /// holding. The printed port is asked of the server rather than echoed from the
+    /// flag, so `0` in and `0` out would be the bug — hence the parse rather than a
+    /// `contains`.
     #[test]
     fn the_mcp_port_is_bound_and_printed_and_the_panel_still_starts() {
         let mut panel = Panel::launch("mcp", &["--mcp", "0"]);

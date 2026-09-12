@@ -1,264 +1,262 @@
 use super::*;
 
-/// **The look this window opens under**, and it is where [`Engine::look`]
-/// starts rather than what every frame is drawn under.
+/// The look this window opens under, and it is where [`Engine::look`] starts
+/// rather than what every frame is drawn under.
 ///
 /// [`compose`] writes the tone-map uniform on every frame from the
-/// [`Committed`] the closure hands back, so a harness with nothing to say
-/// about the look still has to say something. **This file now has something to
-/// say**: the transport row's two look controls move [`Engine::look`] through
-/// a record, so what a frame is committed under is that field and this is only
-/// its first value.
+/// [`Committed`] the closure hands back, so a harness with nothing to say about
+/// the look still has to say something. This file now has something to say: the
+/// transport row's two look controls move [`Engine::look`] through a record, so
+/// what a frame is committed under is that field and this is only its first
+/// value.
 ///
-/// **Aces, and it is still not this program inventing an aesthetic.** ADR-0037
+/// Aces, and it is still not this program inventing an aesthetic. ADR-0037
 /// picked the default *by looking* and left the trade open — *"ACES works on
 /// stage … AgX is kind to material"* — and recorded that the choice is only
-/// about what happens when nobody chooses, *"and can be changed on the
-/// night"*. Until this pass nobody could change it here; now a press can, and
-/// the constant is what the night starts at.
+/// about what happens when nobody chooses, *"and can be changed on the night"*.
+/// Until this pass nobody could change it here; now a press can, and the
+/// constant is what the night starts at.
 pub(crate) const LOOK: Look = Look {
     op: TonemapOp::Aces,
     exposure: 1.0,
     white_point: 1.0,
 };
 
-/// **The engine behind the Program bay: a deck of [`SLOTS`] Sets, the present
-/// pass, and the two textures it lands in.**
+/// The engine behind the Program bay: a deck of [`SLOTS`] Sets, the present
+/// pass, and the two textures it lands in.
 ///
 /// Scaffolding still in what it is wired to — no audio, no MIDI, no store, no
 /// arguments — and a watcher on each slot, which is the one thing here that is
-/// not the shortest path to texels and is there because the Staging lane's
-/// rows are verdicts on builds ([`watched`]). What `karakuri-cli` does around
-/// this is a program; what is here is the shortest path from two `.kir` files
-/// to texels — and now back again, which is what a watched slot is.
+/// not the shortest path to texels and is there because the Staging lane's rows
+/// are verdicts on builds ([`watched`]). What `karakuri-cli` does around this
+/// is a program; what is here is the shortest path from two `.kir` files to
+/// texels — and now back again, which is what a watched slot is.
 ///
-/// **The deck is full, and the slots are channels rather than exhibits.** It
-/// has every slot a `Deck` can hold, because a strip is a slot and a mixer is
-/// its channels; what is *in* them is this program's one pair at four salts,
-/// which is what a slot nobody has loaded anything into holds ([`Engine::new`]).
+/// The deck is full, and the slots are channels rather than exhibits. It has
+/// every slot a `Deck` can hold, because a strip is a slot and a mixer is its
+/// channels; what is *in* them is this program's one pair at four salts, which
+/// is what a slot nobody has loaded anything into holds ([`Engine::new`]).
 /// [`ON_AIR`] is Live and is the whole of the picture. Every other slot rests
-/// at `Residency::Allocated` — contributing nothing to the mix, and stepped
-/// and drawn into its own cell all the same —
-/// and [`ASKED_TO_PRIME`] is additionally asked to warm up and parked by the
-/// budget in [`Engine::ask_to_prime`], which is what puts a pending request on
-/// this panel for the mixer's tally to draw. **The three cost a step and a draw
-/// each**, and none of it reaches the governor, which reads a per-Set cost.
-/// This sentence has been wrong twice in the same direction — it said the three
-/// cost nothing while they were being drawn, and *a draw each and no step*
-/// while they were being stepped — so what it is now is the whole of a frame
-/// for every slot, which is what
+/// at `Residency::Allocated` — contributing nothing to the mix, and stepped and
+/// drawn into its own cell all the same — and [`ASKED_TO_PRIME`] is
+/// additionally asked to warm up and parked by the budget in
+/// [`Engine::ask_to_prime`], which is what puts a pending request on this panel
+/// for the mixer's tally to draw. The three cost a step and a draw each, and
+/// none of it reaches the governor, which reads a per-Set cost. This sentence
+/// has been wrong twice in the same direction — it said the three cost nothing
+/// while they were being drawn, and *a draw each and no step* while they were
+/// being stepped — so what it is now is the whole of a frame for every slot,
+/// which is what
 /// [ADR-0269](../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)
 /// makes it. The number that goes with it is not one this file can carry: it is
 /// `karakuri-engine`'s `tests/deck.rs`, which prints a deck of four against a
 /// deck of one on the machine reading it.
 ///
-/// **All four preview cells are on, whatever the decks are doing.** A cell is
-/// drawn because there is a slot behind it ([`Engine::aim`]), and this deck is
-/// full, so four cells show four slots' own material, all four of them
-/// running: deck A stepping on air, deck B warming or parked, C and D warming
-/// with nobody having asked. That is [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
+/// All four preview cells are on, whatever the decks are doing. A cell is drawn
+/// because there is a slot behind it ([`Engine::aim`]), and this deck is full,
+/// so four cells show four slots' own material, all four of them running: deck
+/// A stepping on air, deck B warming or parked, C and D warming with nobody
+/// having asked. That is
+/// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
 /// met on this surface — the operator watches a candidate's cell to decide
 /// whether it is worth a fader, and then raises the fader. It used to be gated
 /// on `Residency::Live`, which left the three cells worth looking at dark; the
 /// gap ADR-0241 named was this line.
 pub(crate) struct Engine {
     pub(crate) deck: Deck,
-    /// **Elements per geometry, read off the L1's own `capacity` declaration**
-    /// rather than named here — see [`Engine::new`]. Kept because the reading
-    /// [`Costs::say`] prints names it, and a workload figure that is not the
-    /// one the run used is worse than none.
+    /// Elements per geometry, read off the L1's own `capacity` declaration rather
+    /// than named here — see [`Engine::new`]. Kept because the reading
+    /// [`Costs::say`] prints names it, and a workload figure that is not the one
+    /// the run used is worse than none.
     pub(crate) capacity: u32,
     pub(crate) present: Present,
     /// The Program bay's picture.
     pub(crate) picture: Presented,
-    /// **The four deck preview cells**, one per deck slot.
+    /// The four deck preview cells, one per deck slot.
     pub(crate) previews: [Presented; DECKS],
     /// Cached bind groups for each slot view into the tone-mapping pipeline.
     pub(crate) slot_bind_groups: [Option<wgpu::BindGroup>; DECKS],
-    /// **The look every sink is drawn under this frame**, and the one piece of
-    /// engine state this program *moves*.
+    /// The look every sink is drawn under this frame, and the one piece of engine
+    /// state this program *moves*.
     ///
-    /// It was [`LOOK`] handed straight to `compose` every frame, with the
-    /// reason written at that constant: this file had no session, no `look`
-    /// record and no key that changed it. It has a control now — the transport
-    /// row's tone map capsule and its exposure track — so a press becomes
-    /// `Operation::SetTonemap` or `SetExposure`, which become one
-    /// `Record::Look`, which [`apply`] writes here; the next frame hands this
-    /// to `compose` and the present pass uploads it. That is P-0090 on this
-    /// value exactly: the control ends in the record every other surface's
-    /// does, and nothing calls `Present::set_tonemap` behind its back.
+    /// It was [`LOOK`] handed straight to `compose` every frame, with the reason
+    /// written at that constant: this file had no session, no `look` record and no
+    /// key that changed it. It has a control now — the transport row's tone map
+    /// capsule and its exposure track — so a press becomes `Operation::SetTonemap`
+    /// or `SetExposure`, which become one `Record::Look`, which [`apply`] writes
+    /// here; the next frame hands this to `compose` and the present pass uploads
+    /// it. That is P-0090 on this value exactly: the control ends in the record
+    /// every other surface's does, and nothing calls `Present::set_tonemap` behind
+    /// its back.
     ///
-    /// **It lives here rather than beside the panel** because it is what the
-    /// *engine* is drawing under: `view::Look` is the console's reading of it,
-    /// written per frame from this the way a strip is written from the deck,
-    /// and a second copy that the console owned would be the reading and the
-    /// state as one thing (ADR-0156).
+    /// It lives here rather than beside the panel because it is what the *engine*
+    /// is drawing under: `view::Look` is the console's reading of it, written per
+    /// frame from this the way a strip is written from the deck, and a second copy
+    /// that the console owned would be the reading and the state as one thing
+    /// (ADR-0156).
     ///
-    /// `white_point` is carried and never asked for: no surface has a control
-    /// for it, so it is read back into every record and written out again
-    /// unchanged ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+    /// `white_point` is carried and never asked for: no surface has a control for
+    /// it, so it is read back into every record and written out again unchanged
+    /// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
     pub(crate) look: Look,
-    /// **What the master chain is set to**, and [`Engine::look`]'s twin at the
-    /// other end of that chain.
+    /// What the master chain is set to, and [`Engine::look`]'s twin at the other
+    /// end of that chain.
     ///
     /// Held here for `look`'s reason exactly: a press becomes
     /// `Operation::SetFeedback`, `SetBloom` or `SetRgbShift`, which become one
-    /// `Record::MasterChain`, which [`apply`] writes here; the frame loop puts
-    /// it on the `Present` and the slots' uniforms are written from it. Nothing
-    /// calls that setter behind the record's back, which is P-0090 on this
-    /// value.
+    /// `Record::MasterChain`, which [`apply`] writes here; the frame loop puts it
+    /// on the `Present` and the slots' uniforms are written from it. Nothing calls
+    /// that setter behind the record's back, which is P-0090 on this value.
     ///
-    /// **A list where the out is a bare `f32` on the deck**, and the two are
-    /// apart for the reason their records are: the level at the chain's entry
-    /// is ridden by a fader and the chain's slots are moved by a press
+    /// A list where the out is a bare `f32` on the deck, and the two are apart for
+    /// the reason their records are: the level at the chain's entry is ridden by a
+    /// fader and the chain's slots are moved by a press
     /// ([ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md),
     /// [ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)).
     ///
-    /// **A description and not the built chain**, which is the one thing that
-    /// changed when the chain became a list: `karakuri_engine::Present` holds
-    /// the compiled slots and is still the only writer of them, and this is
-    /// what a record says the chain should be. The frame loop puts one on the
-    /// other where the two differ.
+    /// A description and not the built chain, which is the one thing that changed
+    /// when the chain became a list: `karakuri_engine::Present` holds the compiled
+    /// slots and is still the only writer of them, and this is what a record says
+    /// the chain should be. The frame loop puts one on the other where the two
+    /// differ.
     pub(crate) chain: Vec<karakuri_engine::SlotSpec>,
-    /// How many registrations have been freed, **over both textures**. The
-    /// atlas leak this exists to prevent is invisible from outside: a resize
-    /// that registers without freeing leaves a bind group per drag frame and
-    /// nothing says so, so the count is kept and `mod gpu` asserts on it. It
-    /// is the whole engine's tally rather than either texture's, which is why
-    /// it lives here and is handed to [`Presented::fit`].
+    /// How many registrations have been freed, over both textures. The atlas leak
+    /// this exists to prevent is invisible from outside: a resize that registers
+    /// without freeing leaves a bind group per drag frame and nothing says so, so
+    /// the count is kept and `mod gpu` asserts on it. It is the whole engine's
+    /// tally rather than either texture's, which is why it lives here and is handed
+    /// to [`Presented::fit`].
     pub(crate) freed: usize,
-    /// **One [`Aiming`] per slot, in slot order**: how a load or a rewiring
-    /// reaches that slot's build worker, and where that watcher is pointed.
+    /// One [`Aiming`] per slot, in slot order: how a load or a rewiring reaches
+    /// that slot's build worker, and where that watcher is pointed.
     ///
-    /// This is the whole of what putting a library Set on a running deck took,
-    /// and what it is *not* is the point of it. `Deck::install` is the one
-    /// function that puts a built Set in a slot and says of itself that it is
-    /// *"deliberately not reachable from a key or a surface: a live run
-    /// changes its material by editing a file and letting the worker build it,
-    /// which is what the budget watchdog is attached to."* So nothing here
-    /// builds a Set: [`loading`] writes the library Set's procedures into the
-    /// scratch and sends an aim, and the same worker that watches for a save
-    /// picks it up. The swap lands at a frame boundary, is judged there on what
-    /// one frame of that Set costs, and rolls back on its own if that is over
-    /// the budget — none of which had to be written for the library, because a
-    /// load is now literally an edit this program made.
+    /// This is the whole of what putting a library Set on a running deck took, and
+    /// what it is *not* is the point of it. `Deck::install` is the one function
+    /// that puts a built Set in a slot and says of itself that it is *"deliberately
+    /// not reachable from a key or a surface: a live run changes its material by
+    /// editing a file and letting the worker build it, which is what the budget
+    /// watchdog is attached to."* So nothing here builds a Set: [`loading`] writes
+    /// the library Set's procedures into the scratch and sends an aim, and the same
+    /// worker that watches for a save picks it up. The swap lands at a frame
+    /// boundary, is judged there on what one frame of that Set costs, and rolls
+    /// back on its own if that is over the budget — none of which had to be written
+    /// for the library, because a load is now literally an edit this program made.
     ///
-    /// **In slot order, so the index is the deck letter**: `aimed[0]` is deck
-    /// A's, and it is the same index `Deck::events`, the strips and the
-    /// preview cells are all in. Kept beside the deck rather than inside it
-    /// for the reason the whole of [`Engine`] is on this side: the channel is
-    /// `karakuri-environment`'s and the engine takes no environment.
+    /// In slot order, so the index is the deck letter: `aimed[0]` is deck A's, and
+    /// it is the same index `Deck::events`, the strips and the preview cells are
+    /// all in. Kept beside the deck rather than inside it for the reason the whole
+    /// of [`Engine`] is on this side: the channel is `karakuri-environment`'s and
+    /// the engine takes no environment.
     pub(crate) aimed: Vec<Aiming>,
-    /// **The run's wiring** — every edge a `wire_input` has written, for the
-    /// whole run and not per slot.
+    /// The run's wiring — every edge a `wire_input` has written, for the whole run
+    /// and not per slot.
     ///
-    /// One list because `--edge` is one list: an edge names the node that
-    /// declares the input and what its procedure calls it, and a Set that has
-    /// not got that node passes it over where it is built. See [`rewired`].
+    /// One list because `--edge` is one list: an edge names the node that declares
+    /// the input and what its procedure calls it, and a Set that has not got that
+    /// node passes it over where it is built. See [`rewired`].
     ///
-    /// **What a rebuild carries and what a save records**, which is why it lives
-    /// here rather than inside a watcher: [`Aiming::re_aim`] restates it to the
-    /// worker and [`playing_values`] writes it into the file, and those are one
-    /// list or they are two answers to what the run is wired with.
+    /// What a rebuild carries and what a save records, which is why it lives here
+    /// rather than inside a watcher: [`Aiming::re_aim`] restates it to the worker
+    /// and [`playing_values`] writes it into the file, and those are one list or
+    /// they are two answers to what the run is wired with.
     ///
-    /// **It lives beside the aims rather than beside the saves**, and that is
-    /// what lets a press reach it: a rewiring writes this list and re-aims a
-    /// slot, and both halves are here. It was `Keeping`'s until 2026-09-09,
-    /// when the Inspector's `uses` line gave the list a second writer that is
-    /// not a model's request — see `docs/adr/0329-…`.
+    /// It lives beside the aims rather than beside the saves, and that is what lets
+    /// a press reach it: a rewiring writes this list and re-aims a slot, and both
+    /// halves are here. It was `Keeping`'s until 2026-09-09, when the Inspector's
+    /// `uses` line gave the list a second writer that is not a model's request —
+    /// see `docs/adr/0329-…`.
     pub(crate) edges: Vec<karakuri_engine::set::Edge>,
-    /// **Where this deck says which files its slots are running**, for the
-    /// readers that are not on this thread — see [`Aiming::pointing`], which is
-    /// a clone of this, and [`karakuri_mcp::Slots`].
+    /// Where this deck says which files its slots are running, for the readers that
+    /// are not on this thread — see [`Aiming::pointing`], which is a clone of this,
+    /// and [`karakuri_mcp::Slots`].
     ///
-    /// **The engine keeps it so that the two readers ask one handle.** The MCP
-    /// server was handed the launch working copies and the landing on a row of
-    /// the edit history built a second `Slots` of its own out of the aims
-    /// (ADR-0308); the first went stale on the first library load and the
-    /// second was the workaround for it. There is one now, this is it, and
-    /// [`restored`] reads it rather than rebuilding one.
+    /// The engine keeps it so that the two readers ask one handle. The MCP server
+    /// was handed the launch working copies and the landing on a row of the edit
+    /// history built a second `Slots` of its own out of the aims (ADR-0308); the
+    /// first went stale on the first library load and the second was the workaround
+    /// for it. There is one now, this is it, and [`restored`] reads it rather than
+    /// rebuilding one.
     pub(crate) pointing: karakuri_mcp::Slots,
-    /// **Every node the run launched with**, in file order, with the bytes each
-    /// one was compiled from — see [`karakuri_environment::compile::Placed`].
+    /// Every node the run launched with, in file order, with the bytes each one was
+    /// compiled from — see [`karakuri_environment::compile::Placed`].
     ///
-    /// **One list for four slots, because the four files hold the same bytes.**
-    /// [`working_copies`] writes the one pair the command line settled into
-    /// every slot, so a node's layer, its index, its address and its source are
-    /// the same answer four times; the only per-slot difference is the *path*,
-    /// which each watcher is given from `slots[slot]` and which no part of a
-    /// saved node carries. A second compile per slot would be four answers to
-    /// one question with a window between them — see [`Placed::source`], which
-    /// is where that hazard is written.
+    /// One list for four slots, because the four files hold the same bytes.
+    /// [`working_copies`] writes the one pair the command line settled into every
+    /// slot, so a node's layer, its index, its address and its source are the same
+    /// answer four times; the only per-slot difference is the *path*, which each
+    /// watcher is given from `slots[slot]` and which no part of a saved node
+    /// carries. A second compile per slot would be four answers to one question
+    /// with a window between them — see [`Placed::source`], which is where that
+    /// hazard is written.
     ///
-    /// This is what [`Playing`] is seeded from, and it is the reason a deck can
-    /// be saved on the first frame rather than only after something has been
-    /// rebuilt.
+    /// This is what [`Playing`] is seeded from, and it is the reason a deck can be
+    /// saved on the first frame rather than only after something has been rebuilt.
     pub(crate) placed: Vec<karakuri_environment::compile::Placed>,
 }
 
-/// **One slot's watcher, and where it is pointed.**
+/// One slot's watcher, and where it is pointed.
 ///
 /// `karakuri-cli`'s `Aiming` is the same pair for the same reason, restated
 /// here because that program is a binary with no library target and there is
 /// nothing to call.
 ///
-/// **The aim is kept and not only the sender**, because a [`watch::Aim`] is
-/// every field of the slot's identity and *anything left out comes back as the
+/// The aim is kept and not only the sender, because a [`watch::Aim`] is every
+/// field of the slot's identity and *anything left out comes back as the
 /// outgoing slot's* — a fold silently un-selected, a camera back at
 /// `Orbit::default()`, salts that repaint every element. A rewiring changes one
 /// field of an aim, so all the others have to be restated from somewhere, and
 /// this is that somewhere: what the watcher was constructed with until the
 /// first aim, and the last aim after that.
 ///
-/// **It is also where the Set a slot is running lives**, which is the roadmap's
+/// It is also where the Set a slot is running lives, which is the roadmap's
 /// *per-slot `Option<String>` beside the deck* answered where a per-slot value
 /// that must survive a re-aim already lives: [`watch::Aim::set`] is moved by
 /// every load and restated by every rewiring, and a second copy on [`Gfx`]
 /// would be a second answer to *what is this slot running*
 /// (`docs/principles/0087-name-the-property-never-the-shape.md`).
-/// [`Gfx::material`] is not that answer and never was — it is the mixer
-/// strip's readout, and at launch it is the pair the run was started with.
+/// [`Gfx::material`] is not that answer and never was — it is the mixer strip's
+/// readout, and at launch it is the pair the run was started with.
 ///
-/// **This program had the sender and not the aim**, which was harmless for as
-/// long as the only thing that sent one was [`loading`] — a load states every
-/// field off the Set file it read. It stops being harmless the moment anything
+/// This program had the sender and not the aim, which was harmless for as long
+/// as the only thing that sent one was [`loading`] — a load states every field
+/// off the Set file it read. It stops being harmless the moment anything
 /// changes *one* field, which is what `wire_input` does: a rewiring that
 /// restated the launch pair would have thrown away the Set the operator had
 /// just loaded.
 pub(crate) struct Aiming {
     /// The other end of [`watch::Watch::aimed_by`]'s channel, for this slot's
-    /// watcher and no other. A watcher re-pointed through somebody else's
-    /// sender would rebuild a deck nobody named.
+    /// watcher and no other. A watcher re-pointed through somebody else's sender
+    /// would rebuild a deck nobody named.
     pub(crate) aim: std::sync::mpsc::Sender<watch::Aim>,
     /// Where that watcher is pointed, kept in step with what has been sent.
     pub(crate) at: watch::Aim,
-    /// **Where that answer is published for the readers that are not on this
-    /// thread**, which today are the MCP server and the landing on a row of
-    /// the edit history — see [`karakuri_mcp::Slots`].
+    /// Where that answer is published for the readers that are not on this thread,
+    /// which today are the MCP server and the landing on a row of the edit history
+    /// — see [`karakuri_mcp::Slots`].
     ///
-    /// **A publication and not a second answer.** `at` above is the derivation
+    /// A publication and not a second answer. `at` above is the derivation
     /// ([`Aiming`]'s own head); this is a clone of the run's one handle, and
-    /// nothing writes it except [`Aiming::publish`], which reads `at`. The
-    /// server used to be handed the launch working copies instead, and after a
-    /// library load it resolved every address against the files the deck had
-    /// stopped running — a `read_procedure` that answered about the wrong
-    /// material, a `write_procedure` that wrote where no watcher was looking,
-    /// and a node the loaded Set does hold refused for not existing
-    /// (`docs/principles/0094-…`, and ADR-0308's *Doubted*, which recorded it
-    /// and worked around it for the landing alone).
+    /// nothing writes it except [`Aiming::publish`], which reads `at`. The server
+    /// used to be handed the launch working copies instead, and after a library
+    /// load it resolved every address against the files the deck had stopped
+    /// running — a `read_procedure` that answered about the wrong material, a
+    /// `write_procedure` that wrote where no watcher was looking, and a node the
+    /// loaded Set does hold refused for not existing (`docs/principles/0094-…`, and
+    /// ADR-0308's *Doubted*, which recorded it and worked around it for the landing
+    /// alone).
     pub(crate) pointing: karakuri_mcp::Slots,
-    /// Which slot this is, so a publication lands on the row it is about. It is
-    /// the index [`Engine::aimed`] is in, which is the deck letter.
+    /// Which slot this is, so a publication lands on the row it is about. It is the
+    /// index [`Engine::aimed`] is in, which is the deck letter.
     pub(crate) slot: usize,
 }
 
 impl Aiming {
-    /// **A watcher, and the handle where this slot's files are published.**
+    /// A watcher, and the handle where this slot's files are published.
     ///
-    /// It publishes at construction as well as on every re-point, because a
-    /// window remade makes these again and puts every slot back on the pair the
-    /// run launched with (ADR-0304): a handle left holding the layout a load
-    /// had put there would outlive the deck that was running it.
+    /// It publishes at construction as well as on every re-point, because a window
+    /// remade makes these again and puts every slot back on the pair the run
+    /// launched with (ADR-0304): a handle left holding the layout a load had put
+    /// there would outlive the deck that was running it.
     pub(crate) fn new(
         aim: std::sync::mpsc::Sender<watch::Aim>,
         at: watch::Aim,
@@ -275,48 +273,46 @@ impl Aiming {
         aiming
     }
 
-    /// **Say where this watcher is pointed**, from the aim and from nothing
-    /// else. One write, after the caller has finished writing files and before
-    /// the aim goes out, so a call arriving mid-load sees one layout or the
-    /// other and never half of either.
+    /// Say where this watcher is pointed, from the aim and from nothing else. One
+    /// write, after the caller has finished writing files and before the aim goes
+    /// out, so a call arriving mid-load sees one layout or the other and never half
+    /// of either.
     pub(crate) fn publish(&self) {
         self.pointing.re_point(self.slot, &self.at);
     }
 
-    /// **Point the watcher at what it is already looking at, with one field
-    /// changed**, and answer whether it is still there to be pointed.
+    /// Point the watcher at what it is already looking at, with one field changed,
+    /// and answer whether it is still there to be pointed.
     ///
     /// # This is the whole of what a control over a slot's shape is
     ///
     /// A [`watch::Aim`] is every field of what a slot *is* — its files, how it
-    /// layers its renderers, which one is folded to, its capacity, its seed and
-    /// its salts, its camera, its wiring, its grants and the Set it is filed
-    /// under. Anything that changes one of them changes what the slot runs, and
-    /// there is exactly one way to say so: restate the rest and send the aim.
-    /// The worker rebuilds off the render thread, the build lands at a frame
-    /// boundary and the watchdog judges it there, on what one frame of that Set
-    /// was measured to cost, like every other build (ADR-0228, ADR-0313,
-    /// ADR-0314). **Nothing is installed and
-    /// nothing on the render thread allocates**, and the values somebody moved
-    /// cross the swap (ADR-0282).
+    /// layers its renderers, which one is folded to, its capacity, its seed and its
+    /// salts, its camera, its wiring, its grants and the Set it is filed under.
+    /// Anything that changes one of them changes what the slot runs, and there is
+    /// exactly one way to say so: restate the rest and send the aim. The worker
+    /// rebuilds off the render thread, the build lands at a frame boundary and the
+    /// watchdog judges it there, on what one frame of that Set was measured to
+    /// cost, like every other build (ADR-0228, ADR-0313, ADR-0314). Nothing is
+    /// installed and nothing on the render thread allocates, and the values
+    /// somebody moved cross the swap (ADR-0282).
     ///
-    /// So a *setter on the engine* is not what a control over one of these
-    /// fields waits on, and reading `Set::merge`'s or `Set::source_salts`'
-    /// absent writer as a blocker is reading the wrong half of the sentence:
-    /// the mechanism that exists is the one this instrument already changes
-    /// material with
+    /// So a *setter on the engine* is not what a control over one of these fields
+    /// waits on, and reading `Set::merge`'s or `Set::source_salts`' absent writer
+    /// as a blocker is reading the wrong half of the sentence: the mechanism that
+    /// exists is the one this instrument already changes material with
     /// ([P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)).
     ///
     /// `change` takes the aim rather than the caller building one, because
-    /// [`restated`] is what makes a re-aim safe and it reads `self.at`: a
-    /// caller that assembled its own would be the fourteen-field restatement
-    /// written a second time, which is exactly the mistake `Watch::repointed`
-    /// destructures with no `..` to stop.
+    /// [`restated`] is what makes a re-aim safe and it reads `self.at`: a caller
+    /// that assembled its own would be the fourteen-field restatement written a
+    /// second time, which is exactly the mistake `Watch::repointed` destructures
+    /// with no `..` to stop.
     ///
-    /// `Err` is a build worker that has ended — the receiver is gone — which is
-    /// a run shutting down. It is reported rather than swallowed: the change is
-    /// in this program's aim either way, and *nothing will rebuild* is a
-    /// different fact from *the slot is recompiling*.
+    /// `Err` is a build worker that has ended — the receiver is gone — which is a
+    /// run shutting down. It is reported rather than swallowed: the change is in
+    /// this program's aim either way, and *nothing will rebuild* is a different
+    /// fact from *the slot is recompiling*.
     pub(crate) fn changed(&mut self, change: impl FnOnce(&mut watch::Aim)) -> Result<(), ()> {
         change(&mut self.at);
         // **Said again although a rewiring moves no file**, which is the point
@@ -327,22 +323,21 @@ impl Aiming {
         self.aim.send(restated(&self.at)).map_err(|_| ())
     }
 
-    /// **The run's wiring, said again**, which is [`changed`](Self::changed)
-    /// with the one field a `wire_procedure` moves.
+    /// The run's wiring, said again, which is [`changed`](Self::changed) with the
+    /// one field a `wire_procedure` moves.
     ///
     /// A method rather than the closure at the call site because `rewired` maps
-    /// over slots and a named field is what the reader of that map wants to
-    /// see.
+    /// over slots and a named field is what the reader of that map wants to see.
     pub(crate) fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
         self.changed(|at| at.edges = edges)
     }
 
-    /// **Point it at something else entirely**, keeping the aim that was sent.
+    /// Point it at something else entirely, keeping the aim that was sent.
     ///
-    /// The one route a load takes, and the reason [`loading`] is handed this
-    /// rather than the sender: a load that sent an aim and left `at` behind
-    /// would leave the *next* rewiring restating the material the run launched
-    /// with, which is the hardest version of this mistake to see.
+    /// The one route a load takes, and the reason [`loading`] is handed this rather
+    /// than the sender: a load that sent an aim and left `at` behind would leave
+    /// the *next* rewiring restating the material the run launched with, which is
+    /// the hardest version of this mistake to see.
     pub(crate) fn re_point(&mut self, aim: watch::Aim) -> Result<(), ()> {
         self.at = aim;
         self.publish();
@@ -353,11 +348,11 @@ impl Aiming {
 /// One aim, said again — because [`watch::Aim`] is not `Clone` and a re-point
 /// restates every field of it.
 ///
-/// **No `..` on either side of this**, which is `Watch::repointed`'s own rule
-/// met from the sending end: it destructures with no `..` so that a field added
-/// to `Aim` cannot be left behind, and a *sender* that filled the new field
-/// with a default would defeat that from here. The compiler names every one of
-/// them, so the day another arrives this stops compiling rather than quietly
+/// No `..` on either side of this, which is `Watch::repointed`'s own rule met
+/// from the sending end: it destructures with no `..` so that a field added to
+/// `Aim` cannot be left behind, and a *sender* that filled the new field with a
+/// default would defeat that from here. The compiler names every one of them,
+/// so the day another arrives this stops compiling rather than quietly
 /// re-aiming a slot at it.
 pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
     let watch::Aim {
@@ -403,7 +398,7 @@ pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
 // Keeping what a deck is playing
 // ---------------------------------------------------------------------------
 
-/// **What each deck is running, as the nodes a Set file names.**
+/// What each deck is running, as the nodes a Set file names.
 ///
 /// `karakuri-cli`'s `Running` is the same fact held the same way, and this is
 /// the second surface rather than a copy with a different opinion — that
@@ -413,18 +408,18 @@ pub(crate) fn restated(aim: &watch::Aim) -> watch::Aim {
 /// [`setfile::SavedNode`] whole, because the panel has one launch list for four
 /// slots and nothing to zip it against.
 ///
-/// **It is seeded before the first frame**, from [`Engine::placed`] — so every
-/// deck can be written down from the outset rather than only after something
-/// has been rebuilt. A slot that is `None` is one whose last build's sources did
+/// It is seeded before the first frame, from [`Engine::placed`] — so every deck
+/// can be written down from the outset rather than only after something has
+/// been rebuilt. A slot that is `None` is one whose last build's sources did
 /// not reach the store, which the watcher said at the time; it saves nothing
 /// rather than guessing.
 ///
-/// **A type of its own rather than a field on [`App`]**, because what a slot is
+/// A type of its own rather than a field on [`App`], because what a slot is
 /// running is one fact with one transition: a build lands and it moves. It held
 /// two lists until ADR-0316 — what is playing and what a rollback would bring
 /// back — because a rollback was the only thing that could name what it
-/// restored. **Nothing restores anything now**, so the second list was a
-/// version kept against an event that cannot happen; putting a version back is
+/// restored. Nothing restores anything now, so the second list was a version
+/// kept against an event that cannot happen; putting a version back is
 /// `Revision::Previous`, which reads the store's history and lands a build like
 /// any other, and this then records it like any other.
 pub(crate) struct Playing {
@@ -432,13 +427,13 @@ pub(crate) struct Playing {
 }
 
 impl Playing {
-    /// **Every slot seeded from the material this run compiled**, addressed by
-    /// the bytes that compile read.
+    /// Every slot seeded from the material this run compiled, addressed by the
+    /// bytes that compile read.
     ///
-    /// **No store, no disk and nothing that can fail.** The bytes ride along in
+    /// No store, no disk and nothing that can fail. The bytes ride along in
     /// [`setfile::SavedNode::source`] and reach the store at the moment a file
-    /// names them, which is [`setfile::Sources::into_nodes`] — so a run that
-    /// never saves writes no artifact.
+    /// names them, which is [`setfile::Sources::into_nodes`] — so a run that never
+    /// saves writes no artifact.
     pub(crate) fn at_launch(
         placed: &[karakuri_environment::compile::Placed],
         slots: usize,
@@ -469,18 +464,18 @@ impl Playing {
         self.playing.get(slot).and_then(Option::as_ref)
     }
 
-    /// **A build landed.** `nodes` is `None` when that build's sources never
-    /// reached the store — the watcher says so at the time, and the addresses it
-    /// would have named do not exist.
+    /// A build landed. `nodes` is `None` when that build's sources never reached
+    /// the store — the watcher says so at the time, and the addresses it would have
+    /// named do not exist.
     ///
-    /// **That is still a swap**, and taking it as one is the whole of why this
-    /// is a method rather than an assignment at the call site: the slot is on
-    /// something new, and it has no address until the next build lands.
+    /// That is still a swap, and taking it as one is the whole of why this is a
+    /// method rather than an assignment at the call site: the slot is on something
+    /// new, and it has no address until the next build lands.
     ///
-    /// **It is still a swap when the slot is stopped for cost, too.** A version
-    /// the watchdog stopped is in the slot and is what a save of that slot must
-    /// write down (ADR-0316); what is not true of it is that the slot is
-    /// running, which is the lane's to say and not this list's.
+    /// It is still a swap when the slot is stopped for cost, too. A version the
+    /// watchdog stopped is in the slot and is what a save of that slot must write
+    /// down (ADR-0316); what is not true of it is that the slot is running, which
+    /// is the lane's to say and not this list's.
     pub(crate) fn landed(&mut self, slot: usize, nodes: Option<Vec<setfile::SavedNode>>) {
         if slot >= self.playing.len() {
             return;
@@ -505,7 +500,7 @@ pub(crate) fn copied(node: &setfile::SavedNode) -> setfile::SavedNode {
     }
 }
 
-/// **What a build that just landed is running**, from the addresses the watcher
+/// What a build that just landed is running, from the addresses the watcher
 /// reported and the names the slot is spelled with.
 ///
 /// The bytes are `None` for every one of them, and that is
@@ -513,7 +508,7 @@ pub(crate) fn copied(node: &setfile::SavedNode) -> setfile::SavedNode {
 /// watcher put this build's sources in the store as it built them, so there is
 /// nothing left here to carry.
 ///
-/// **The names come off the aim the slot is pointed at**, zipped by position.
+/// The names come off the aim the slot is pointed at, zipped by position.
 /// `watch::Built::nodes` is built from the sort's `Placed`, which keeps file
 /// order, and [`Aiming::at`]'s head and rest are that same file list — so entry
 /// `n` of one is entry `n` of the other. A name belongs to the *use* rather
@@ -539,11 +534,11 @@ pub(crate) fn built_nodes(built: &watch::Built, at: &watch::Aim) -> Vec<setfile:
         .collect()
 }
 
-/// **What a Set file says about the Set that is playing**, read off that Set.
+/// What a Set file says about the Set that is playing, read off that Set.
 ///
 /// `karakuri-cli`'s `playing_values` is this function and its doc is the
-/// argument for every line: **eight of the nine are read from the Set and not
-/// from anything this program was told**, because a writer with its own copy of
+/// argument for every line: eight of the nine are read from the Set and not
+/// from anything this program was told, because a writer with its own copy of
 /// the rule records numbers the run was not using and the file then describes a
 /// picture nobody has seen. The capacities are the Set's per geometry, the
 /// params are every declaration of every node at the value it is holding, the
@@ -582,11 +577,10 @@ pub(crate) fn playing_values(
     }
 }
 
-/// **Which renderer a Set is folded to**, as a `merge` record spells it:
-/// `Some(i)` where exactly one input is live, and `None` where every one of them
-/// is.
+/// Which renderer a Set is folded to, as a `merge` record spells it: `Some(i)`
+/// where exactly one input is live, and `None` where every one of them is.
 ///
-/// **Every-live is checked first, and that decides the one-renderer case.** A
+/// Every-live is checked first, and that decides the one-renderer case. A
 /// composited Set holding a single renderer has one live input, which is both
 /// "all of them" and "exactly one" — and it is the first, because such a Set is
 /// one nobody has selected in. Writing `live 0` for it would record a choice
@@ -606,7 +600,7 @@ pub(crate) fn selected_renderer(inputs: &[karakuri_engine::mix::Input]) -> Optio
 /// [`karakuri_environment::no_such_slot`], which is the sentence it is refused
 /// in.
 ///
-/// **A raw `usize` in and a raw `usize` checked**, on [`held`]'s own terms
+/// A raw `usize` in and a raw `usize` checked, on [`held`]'s own terms
 /// elsewhere in this file: the callers here (`Keeping::save_set`'s and
 /// `Keeping::keep_procedure`'s slot arguments, an MCP request's own number)
 /// have no address yet to hand a [`DeckSlot`] — only a number to validate
@@ -619,28 +613,27 @@ pub(crate) fn slot_in_range(slot: usize, slot_count: usize) -> bool {
         .is_some_and(|slot| DeckSlot::new(slot, slot_count).is_some())
 }
 
-/// **One live save, from the frame that asked for it to the file on disk.**
+/// One live save, from the frame that asked for it to the file on disk.
 pub(crate) struct Save {
     pub(crate) slot: usize,
-    /// **Whose act this save is**, which decides the directory it lands in and
-    /// is decided at the call site — see [`Keeping::save_set`] and
+    /// Whose act this save is, which decides the directory it lands in and is
+    /// decided at the call site — see [`Keeping::save_set`] and
     /// [`karakuri_environment::Asked`].
     pub(crate) asked: Asked,
     pub(crate) id: String,
-    /// The store root, not an open store: opening it creates directories, which
-    /// is I/O, which belongs on the thread below rather than on a frame.
+    /// The store root, not an open store: opening it creates directories, which is
+    /// I/O, which belongs on the thread below rather than on a frame.
     pub(crate) root: std::path::PathBuf,
     pub(crate) sources: setfile::Sources,
-    /// **What the file will say, with `nodes` still empty.** The nodes are the
-    /// one part of a Set file that needs a store — a hash per source — so they
-    /// are filled in where one is opened and never here.
+    /// What the file will say, with `nodes` still empty. The nodes are the one part
+    /// of a Set file that needs a store — a hash per source — so they are filled in
+    /// where one is opened and never here.
     pub(crate) values: setfile::Owned,
 }
 
 impl Save {
-    /// Write it. **Everything here is off the render thread**: opening a store
-    /// creates directories, and the Set file itself is written and renamed into
-    /// place.
+    /// Write it. Everything here is off the render thread: opening a store creates
+    /// directories, and the Set file itself is written and renamed into place.
     pub(crate) fn run(self) -> Result<(), String> {
         let Save {
             asked,
@@ -664,26 +657,26 @@ impl Save {
 pub(crate) struct Saved {
     pub(crate) slot: usize,
     /// Carried through so the sentence at the end names the right place: the
-    /// library's line points at the Library bay, and the sandbox's cannot,
-    /// because the bay does not list one.
+    /// library's line points at the Library bay, and the sandbox's cannot, because
+    /// the bay does not list one.
     pub(crate) asked: Asked,
     pub(crate) id: String,
-    /// `Ok` and the file is on disk under `id`. **A failure is printed and
-    /// nothing claims otherwise**: a program saying a save happened when the
-    /// disk refused is the shape of lie this codebase is arranged against.
+    /// `Ok` and the file is on disk under `id`. A failure is printed and nothing
+    /// claims otherwise: a program saying a save happened when the disk refused is
+    /// the shape of lie this codebase is arranged against.
     pub(crate) outcome: Result<(), String>,
-    /// Where a client that asked for this save is waiting, and `None` when a
-    /// hand pressed `k`.
+    /// Where a client that asked for this save is waiting, and `None` when a hand
+    /// pressed `k`.
     ///
-    /// **It rides the save rather than being looked up when the outcome
-    /// lands.** A map from an id to whoever asked would be a second place that
-    /// knows which save is which, and the outcome already carries everything
-    /// needed to find its way home.
+    /// It rides the save rather than being looked up when the outcome lands. A map
+    /// from an id to whoever asked would be a second place that knows which save is
+    /// which, and the outcome already carries everything needed to find its way
+    /// home.
     pub(crate) reply: Option<mcp::Reply>,
 }
 
-/// **One node's procedure kept**, from the frame that asked for it to the file
-/// on disk and back.
+/// One node's procedure kept, from the frame that asked for it to the file on
+/// disk and back.
 ///
 /// [`Save`] and [`Saved`] folded into one type, and that is the difference in
 /// the act rather than a shortcut: a Set save gathers a whole slot's worth of
@@ -691,59 +684,55 @@ pub(crate) struct Saved {
 /// two shapes; a keep is one node's bytes and a name, so the request and the
 /// outcome carry the same three fields and the outcome is what is added.
 ///
-/// **Nothing here is a reading of the engine.** The bytes are the run's own —
-/// what [`Playing`] holds for that slot — and where they go is decided by
-/// [`Asked`], which is the call site's. So the whole of this crosses onto the
-/// write thread with no deck behind it.
+/// Nothing here is a reading of the engine. The bytes are the run's own — what
+/// [`Playing`] holds for that slot — and where they go is decided by [`Asked`],
+/// which is the call site's. So the whole of this crosses onto the write thread
+/// with no deck behind it.
 pub(crate) struct Kept {
-    /// **Whose act this keep is**, which decides the directory it lands in —
+    /// Whose act this keep is, which decides the directory it lands in —
     /// [`Save::asked`]'s field and its argument: an operator's own act writes
-    /// `<store>/procedures/` and a model's writes `<store>/sandbox/`
-    /// (P-0096, ADR-0261).
+    /// `<store>/procedures/` and a model's writes `<store>/sandbox/` (P-0096,
+    /// ADR-0261).
     pub(crate) asked: Asked,
-    /// **What it is filed as** — the name typed into this pane's head where
-    /// one was, and a stamp where the capsule typed nothing (ADR-0128,
-    /// ADR-0287, ADR-0292).
+    /// What it is filed as — the name typed into this pane's head where one was,
+    /// and a stamp where the capsule typed nothing (ADR-0128, ADR-0287, ADR-0292).
     pub(crate) name: String,
-    /// The store root, not an open store — [`Save::root`]'s reason: opening it
-    /// is I/O and belongs on the thread below.
+    /// The store root, not an open store — [`Save::root`]'s reason: opening it is
+    /// I/O and belongs on the thread below.
     pub(crate) root: std::path::PathBuf,
-    /// **The bytes, where this node is still on the version the run launched
-    /// with**, and `None` where a build put it in the store instead — which is
+    /// The bytes, where this node is still on the version the run launched with,
+    /// and `None` where a build put it in the store instead — which is
     /// [`setfile::SavedNode::source`]'s own rule. Either way the address below
-    /// names it, so the write thread has one place to go for what it has not
-    /// got.
+    /// names it, so the write thread has one place to go for what it has not got.
     pub(crate) source: Option<std::sync::Arc<str>>,
-    /// **The address of those bytes**, which is what a rebuilt node carries
-    /// instead of them: the watcher put its source in the store as it built
-    /// it, so `<hash>.kir` at the store root is where a keep reads it back
-    /// from.
+    /// The address of those bytes, which is what a rebuilt node carries instead of
+    /// them: the watcher put its source in the store as it built it, so
+    /// `<hash>.kir` at the store root is where a keep reads it back from.
     pub(crate) hash: karakuri_store::hash::Hash,
-    /// **What the pane calls this node** — `L2:0` — carried for the sentence
-    /// and nothing else. An address is what an operator is looking at when
-    /// they press, and an outcome naming a file with no node beside it is an
-    /// answer to a question nobody asked.
+    /// What the pane calls this node — `L2:0` — carried for the sentence and
+    /// nothing else. An address is what an operator is looking at when they press,
+    /// and an outcome naming a file with no node beside it is an answer to a
+    /// question nobody asked.
     pub(crate) addr: String,
-    /// Where the file went, once it has gone there — `Ok` and it is on disk,
-    /// `Err` and nothing claims otherwise, which is [`Saved::outcome`]'s rule.
+    /// Where the file went, once it has gone there — `Ok` and it is on disk, `Err`
+    /// and nothing claims otherwise, which is [`Saved::outcome`]'s rule.
     pub(crate) outcome: Result<std::path::PathBuf, String>,
-    /// Where a client that asked for this keep is waiting, and `None` when a
-    /// hand pressed the capsule — [`Saved::reply`]'s field and its reason.
+    /// Where a client that asked for this keep is waiting, and `None` when a hand
+    /// pressed the capsule — [`Saved::reply`]'s field and its reason.
     pub(crate) reply: Option<mcp::Reply>,
 }
 
 impl Kept {
-    /// **Write it.** Everything here is off the render thread: opening a store
-    /// creates directories, an artifact may have to be read back, and the file
-    /// itself is written and renamed into place.
+    /// Write it. Everything here is off the render thread: opening a store creates
+    /// directories, an artifact may have to be read back, and the file itself is
+    /// written and renamed into place.
     ///
-    /// **The bytes are found in one of two places and never a third.** A node
-    /// still on its launch version carries them; a node a build landed has
-    /// them in the store under the address it carries instead. **Neither is a
-    /// re-read of the `.kir` on disk**, which is
-    /// [`setfile::SavedNode::source`]'s own sentence: a file rewritten since
-    /// the compile is a version nobody has seen, and a keep of it would put a
-    /// picture nobody watched into a library.
+    /// The bytes are found in one of two places and never a third. A node still on
+    /// its launch version carries them; a node a build landed has them in the store
+    /// under the address it carries instead. Neither is a re-read of the `.kir` on
+    /// disk, which is [`setfile::SavedNode::source`]'s own sentence: a file
+    /// rewritten since the compile is a version nobody has seen, and a keep of it
+    /// would put a picture nobody watched into a library.
     pub(crate) fn run(self) -> Kept {
         let Kept {
             asked,
@@ -782,10 +771,9 @@ impl Kept {
         }
     }
 
-    /// **The one sentence this outcome is said in**, formed here so that the
-    /// words a test reads, the words an operator reads and the words a model
-    /// is handed are the same run of text — [`Sent::said`]'s rule and
-    /// [`Keeping::took_save`]'s.
+    /// The one sentence this outcome is said in, formed here so that the words a
+    /// test reads, the words an operator reads and the words a model is handed are
+    /// the same run of text — [`Sent::said`]'s rule and [`Keeping::took_save`]'s.
     pub(crate) fn said(&self) -> Result<String, String> {
         match &self.outcome {
             Ok(path) => Ok(match self.asked {
@@ -818,42 +806,39 @@ impl Kept {
     }
 }
 
-/// **What a send came back with**, at the frame it arrives.
+/// What a send came back with, at the frame it arrives.
 ///
 /// [`Saved`]'s shape one act along, and the fields differ where the two acts
 /// do: a send files under no id in this store, so there is no `Asked` to carry
-/// — the answer to *whose library is this* is *nobody's*, which is the whole
-/// of what sending is — and there is no `mcp::Reply`, because no tool asks for
+/// — the answer to *whose library is this* is *nobody's*, which is the whole of
+/// what sending is — and there is no `mcp::Reply`, because no tool asks for
 /// one.
 pub(crate) struct Sent {
-    /// **The Set that was packaged**, which is the row the menu was opened on.
+    /// The Set that was packaged, which is the row the menu was opened on.
     pub(crate) id: String,
-    /// **Where the operator sent it**, or `None` where they dismissed the
-    /// dialog without naming anywhere.
+    /// Where the operator sent it, or `None` where they dismissed the dialog
+    /// without naming anywhere.
     ///
-    /// **`None` is an outcome and not a failure**, which is why it is here
-    /// rather than an `Err` in [`outcome`](Self::outcome): nothing went wrong,
-    /// nothing was written, and the sentence a reader needs is the third one
-    /// rather than a refusal (P-0083 is about what a *rejection* carries, and
-    /// this is not one).
+    /// `None` is an outcome and not a failure, which is why it is here rather than
+    /// an `Err` in [`outcome`](Self::outcome): nothing went wrong, nothing was
+    /// written, and the sentence a reader needs is the third one rather than a
+    /// refusal (P-0083 is about what a *rejection* carries, and this is not one).
     pub(crate) to: Option<std::path::PathBuf>,
-    /// `Ok` and the bundle is on the disk at [`to`](Self::to). **A failure is
-    /// printed and nothing claims otherwise**, which is [`Saved::outcome`]'s
-    /// own rule.
+    /// `Ok` and the bundle is on the disk at [`to`](Self::to). A failure is printed
+    /// and nothing claims otherwise, which is [`Saved::outcome`]'s own rule.
     pub(crate) outcome: Result<(), String>,
 }
 
 impl Sent {
-    /// **The one sentence this outcome is said in**, formed here so that the
-    /// words a test reads and the words an operator reads are the same run of
-    /// text — [`Keeping::took_save`]'s *one sentence for both audiences*, with
-    /// one audience.
+    /// The one sentence this outcome is said in, formed here so that the words a
+    /// test reads and the words an operator reads are the same run of text —
+    /// [`Keeping::took_save`]'s *one sentence for both audiences*, with one
+    /// audience.
     ///
-    /// **Three outcomes and three sentences.** Written; refused, naming what
-    /// the disk or the store said; and *no file was named*, which is not a
-    /// refusal and does not read like one — nothing went wrong, and rule 04 of
-    /// the manual is that a press that did nothing says so rather than going
-    /// quiet.
+    /// Three outcomes and three sentences. Written; refused, naming what the disk
+    /// or the store said; and *no file was named*, which is not a refusal and does
+    /// not read like one — nothing went wrong, and rule 04 of the manual is that a
+    /// press that did nothing says so rather than going quiet.
     pub(crate) fn said(&self) -> String {
         let Sent { id, to, outcome } = self;
         match (to, outcome) {
@@ -869,12 +854,12 @@ impl Sent {
     }
 }
 
-/// A save that will not happen, to the terminal and to whoever asked if that was
-/// not a hand.
+/// A save that will not happen, to the terminal and to whoever asked if that
+/// was not a hand.
 ///
-/// **One sentence and one home.** Every refusal here reaches two audiences, and
-/// the way that goes wrong is a copy of the words for the second one — free to
-/// be right on the day it is written and wrong at the next correction.
+/// One sentence and one home. Every refusal here reaches two audiences, and the
+/// way that goes wrong is a copy of the words for the second one — free to be
+/// right on the day it is written and wrong at the next correction.
 pub(crate) fn refused(reply: Option<mcp::Reply>, said: String) {
     println!("{said}");
     if let Some(reply) = reply {
@@ -883,11 +868,11 @@ pub(crate) fn refused(reply: Option<mcp::Reply>, said: String) {
 }
 
 impl Engine {
-    /// **Sized from the arrangement rather than from the window**, by the same
-    /// two calls the frame aims with — see [`aims`]. The window this opens at
-    /// gives the picture and deck A's cell their first rectangles, so no frame
-    /// has to correct a guess and there is no second derivation here to drift
-    /// from the one in [`Engine::aim`].
+    /// Sized from the arrangement rather than from the window, by the same two
+    /// calls the frame aims with — see [`aims`]. The window this opens at gives the
+    /// picture and deck A's cell their first rectangles, so no frame has to correct
+    /// a guess and there is no second derivation here to drift from the one in
+    /// [`Engine::aim`].
     // Eight, for [`watched`]'s reason: the last three are the run-wide handles
     // this constructor hands every watcher it makes, and each has a different
     // owner in [`main`].
@@ -1147,71 +1132,68 @@ impl Engine {
         }
     }
 
-    /// **Ask deck B to warm up, and let the budget answer.** The one governor
-    /// pass this program makes, taken at startup where the stall it costs is
-    /// free, and the whole of why a strip on this panel can read one residency
-    /// and have been asked for another.
+    /// Ask deck B to warm up, and let the budget answer. The one governor pass this
+    /// program makes, taken at startup where the stall it costs is free, and the
+    /// whole of why a strip on this panel can read one residency and have been
+    /// asked for another.
     ///
-    /// **The other two slots are not in this, and that is the change.** Deck B
-    /// used to be the only other slot there was, so *the deck has a second
-    /// slot* and *the panel can show a park* were one sentence; they are two
-    /// now. C and D rest at `Residency::Allocated` — [`Engine::new`] says why
-    /// — were asked for nothing, and come back from the pass as
-    /// `Reason::OffAir`, which is the governor reporting that it was not asked
-    /// about them. They cost the arithmetic below nothing: `committed_ms` is
-    /// the sum over **Live** slots and deck A is the only one, so this sets
-    /// the same budget it set with two slots, off the same measurement, for
-    /// the same reason.
+    /// The other two slots are not in this, and that is the change. Deck B used to
+    /// be the only other slot there was, so *the deck has a second slot* and *the
+    /// panel can show a park* were one sentence; they are two now. C and D rest at
+    /// `Residency::Allocated` — [`Engine::new`] says why — were asked for nothing,
+    /// and come back from the pass as `Reason::OffAir`, which is the governor
+    /// reporting that it was not asked about them. They cost the arithmetic below
+    /// nothing: `committed_ms` is the sum over Live slots and deck A is the only
+    /// one, so this sets the same budget it set with two slots, off the same
+    /// measurement, for the same reason.
     ///
-    /// **It is `karakuri-cli`'s order rather than a second one**: measure every
-    /// slot before anything is decided about any of them, ask through
-    /// [`Deck::set_residency`], and call [`Deck::govern`], which is the only
-    /// thing in the engine that writes an *effective* residency. `set_residency`
-    /// writes the request **and grants it**, so a harness that never governs
-    /// has a deck whose two residencies agree on every slot and every frame —
-    /// which is what this file was, and is why the roll ADR-0190 drew was
-    /// tested and unreachable. The report comes back whole for the same reason
-    /// `karakuri-cli`'s `report_governing` prints one: nothing is printed in
-    /// the engine, so what an operator reads and what a test asserts are the
-    /// same values.
+    /// It is `karakuri-cli`'s order rather than a second one: measure every slot
+    /// before anything is decided about any of them, ask through
+    /// [`Deck::set_residency`], and call [`Deck::govern`], which is the only thing
+    /// in the engine that writes an *effective* residency. `set_residency` writes
+    /// the request and grants it, so a harness that never governs has a deck whose
+    /// two residencies agree on every slot and every frame — which is what this
+    /// file was, and is why the roll ADR-0190 drew was tested and unreachable. The
+    /// report comes back whole for the same reason `karakuri-cli`'s
+    /// `report_governing` prints one: nothing is printed in the engine, so what an
+    /// operator reads and what a test asserts are the same values.
     ///
     /// # The budget is what moves, and it is moved from what was measured
     ///
-    /// A deck starts on `governor::DEFAULT_COMPUTE_BUDGET_MS` — one 60 Hz
-    /// frame of measured per-Set cost — and what one of these Sets measures at
-    /// is this machine's business rather than anything this file can know. So
-    /// the budget is set **from the measurement that was just taken**: what
-    /// deck A is already committed to, plus **half** of what warming deck B was
-    /// measured at. Half of a cost is not that cost, so the request cannot fit
-    /// — the refusal is arithmetic on every machine rather than on the ones
-    /// where the numbers happen to come out.
+    /// A deck starts on `governor::DEFAULT_COMPUTE_BUDGET_MS` — one 60 Hz frame of
+    /// measured per-Set cost — and what one of these Sets measures at is this
+    /// machine's business rather than anything this file can know. So the budget is
+    /// set from the measurement that was just taken: what deck A is already
+    /// committed to, plus half of what warming deck B was measured at. Half of a
+    /// cost is not that cost, so the request cannot fit — the refusal is arithmetic
+    /// on every machine rather than on the ones where the numbers happen to come
+    /// out.
     ///
-    /// **It used to be an eighth of it, and the change is ADR-0269's.** The
-    /// governor could once admit a slot at one step in `SLOWEST_PRIME_ONE_IN`
-    /// frames and charge `cost / n` for it, so parking a request meant leaving
-    /// headroom under `cost / 8`. There is no rate left to undercut: a drawn
-    /// slot steps every frame, every slot is drawn, and a request either fits
-    /// at its whole measured cost or is parked.
+    /// It used to be an eighth of it, and the change is ADR-0269's. The governor
+    /// could once admit a slot at one step in `SLOWEST_PRIME_ONE_IN` frames and
+    /// charge `cost / n` for it, so parking a request meant leaving headroom under
+    /// `cost / 8`. There is no rate left to undercut: a drawn slot steps every
+    /// frame, every slot is drawn, and a request either fits at its whole measured
+    /// cost or is parked.
     ///
-    /// **A number computed from the measurement rather than a constant**,
-    /// because a constant is the fixture the product cannot produce
-    /// (`docs/contributing.md` §3, *a check you have not watched fail is
-    /// guessing*, read from the other side): a budget typed in here parks the request on
-    /// this machine and admits it on a faster one, and a *measurement* typed in
-    /// — `HotSwap::set_measured_cost` is public and would take one — is this
-    /// file writing down the number the probe exists to take.
+    /// A number computed from the measurement rather than a constant, because a
+    /// constant is the fixture the product cannot produce (`docs/contributing.md`
+    /// §3, *a check you have not watched fail is guessing*, read from the other
+    /// side): a budget typed in here parks the request on this machine and admits
+    /// it on a faster one, and a *measurement* typed in —
+    /// `HotSwap::set_measured_cost` is public and would take one — is this file
+    /// writing down the number the probe exists to take.
     ///
-    /// **Nothing here writes a residency, a strip or a park.** The deck is
-    /// asked and the governor answers; [`mixer`] reads both residencies back
-    /// off the deck the way it reads the gain, and `view::Strip::pending`
-    /// derives the disagreement. `Deck::is_parked` is not called in this file
-    /// at all outside `mod gpu`.
+    /// Nothing here writes a residency, a strip or a park. The deck is asked and
+    /// the governor answers; [`mixer`] reads both residencies back off the deck the
+    /// way it reads the gain, and `view::Strip::pending` derives the disagreement.
+    /// `Deck::is_parked` is not called in this file at all outside `mod gpu`.
     ///
     /// Where a measurement is missing the budget is left where it was, and the
-    /// governor parks the request anyway for a different and more serious
-    /// reason — an unmeasured Live slot means the committed cost is unknown,
-    /// which suspends priming wholesale. The caller prints the reason it got
-    /// rather than the one this comment expects.
+    /// governor parks the request anyway for a different and more serious reason —
+    /// an unmeasured Live slot means the committed cost is unknown, which suspends
+    /// priming wholesale. The caller prints the reason it got rather than the one
+    /// this comment expects.
     pub(crate) fn ask_to_prime(&mut self, gpu: &Gpu) -> Report {
         // **Before the first frame, and this is the only place it can be.**
         // Measuring means stepping and ends in a rewind, so `measure_slots`
@@ -1262,39 +1244,39 @@ impl Engine {
         self.deck.govern()
     }
 
-    /// **Aim every sink at its own rectangle, and hand back what the console
-    /// should draw in each** — the picture, and one entry per preview cell.
+    /// Aim every sink at its own rectangle, and hand back what the console should
+    /// draw in each — the picture, and one entry per preview cell.
     ///
     /// # A cell is aimed because there is a slot behind it, and residency has
     /// nothing to do with it
     ///
-    /// This read `Deck::preview` once and aimed the one preview sink at the
-    /// cell of the deck the output was auditioning: the sinks all took the same
-    /// composited frame, so a sink left in deck A's cell would have drawn deck
-    /// C's material under the letter `A` the moment somebody auditioned C.
-    /// ADR-0240 retired the audition — the picture is the master mix and every
-    /// cell is its own deck's monitor — and the sinks stopped taking the
-    /// composited frame: each cell is drawn from `Deck::slot_view` for the slot
-    /// it is lettered for, which is a texture that cannot be of the wrong deck.
+    /// This read `Deck::preview` once and aimed the one preview sink at the cell of
+    /// the deck the output was auditioning: the sinks all took the same composited
+    /// frame, so a sink left in deck A's cell would have drawn deck C's material
+    /// under the letter `A` the moment somebody auditioned C. ADR-0240 retired the
+    /// audition — the picture is the master mix and every cell is its own deck's
+    /// monitor — and the sinks stopped taking the composited frame: each cell is
+    /// drawn from `Deck::slot_view` for the slot it is lettered for, which is a
+    /// texture that cannot be of the wrong deck.
     ///
-    /// **Then it gated the aim on `Residency::Live`, and that was the defect
-    /// this pass removes.** The reason given was that an off-air slot "is not
-    /// stepping and has nothing new in its view", which was true only because
-    /// the engine refused to draw one. It is the exact case
+    /// Then it gated the aim on `Residency::Live`, and that was the defect this
+    /// pass removes. The reason given was that an off-air slot "is not stepping and
+    /// has nothing new in its view", which was true only because the engine refused
+    /// to draw one. It is the exact case
     /// [ADR-0258](../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
     /// exists for: an operator decides whether to put a candidate on air by
-    /// watching its cell, and a cell that is dark until the candidate is
-    /// already on air answers the question after it stops being asked. The deck
-    /// draws every slot into its own target on every frame now, so there is
-    /// something new in every view, every frame.
+    /// watching its cell, and a cell that is dark until the candidate is already on
+    /// air answers the question after it stops being asked. The deck draws every
+    /// slot into its own target on every frame now, so there is something new in
+    /// every view, every frame.
     ///
-    /// **What is left to decide is whether there is a slot at all**, and that
-    /// is `slot_bind_groups[slot]`: `Deck::slot_view` is `None` past
-    /// `slot_count`, so a deck of fewer than [`DECKS`] slots leaves the surplus
-    /// cells with nothing to sample. **The aim asks the same question the draw
-    /// asks**, so the two cannot disagree — a cell aimed but not drawn would be
-    /// a texture from an earlier frame held under a letter, and a cell drawn
-    /// but not aimed is a pass into nothing.
+    /// What is left to decide is whether there is a slot at all, and that is
+    /// `slot_bind_groups[slot]`: `Deck::slot_view` is `None` past `slot_count`, so
+    /// a deck of fewer than [`DECKS`] slots leaves the surplus cells with nothing
+    /// to sample. The aim asks the same question the draw asks, so the two cannot
+    /// disagree — a cell aimed but not drawn would be a texture from an earlier
+    /// frame held under a letter, and a cell drawn but not aimed is a pass into
+    /// nothing.
     pub(crate) fn aim(
         &mut self,
         gpu: &Gpu,
@@ -1420,25 +1402,25 @@ impl Engine {
     }
 }
 
-/// **Is anything making texels this frame?** — which is the whole of what
-/// decides whether the loop asks for another frame.
+/// Is anything making texels this frame? — which is the whole of what decides
+/// whether the loop asks for another frame.
 ///
-/// **The rule, rather than the expression: anything that makes texels this
-/// frame keeps the loop awake, and the list is closed.** Everything the engine
-/// draws into is read here — the picture, which is the one sink `compose` is
-/// handed, and all [`DECKS`] preview cells, which [`monitor`] draws in that
-/// frame's `finally` off each slot's own target — so a target added later and
-/// not added to this is the same bug again, and it is the bug this file has
-/// already shipped once: `live` was the picture alone, so folding the picture
-/// away left deck A auditioning under it while the loop stopped asking for
-/// frames. It fails in whichever direction the
-/// mistake is made — a window that goes on drawing what nobody asked for, or a
-/// panel that keeps changing while the loop sleeps.
+/// The rule, rather than the expression: anything that makes texels this frame
+/// keeps the loop awake, and the list is closed. Everything the engine draws
+/// into is read here — the picture, which is the one sink `compose` is handed,
+/// and all [`DECKS`] preview cells, which [`monitor`] draws in that frame's
+/// `finally` off each slot's own target — so a target added later and not added
+/// to this is the same bug again, and it is the bug this file has already
+/// shipped once: `live` was the picture alone, so folding the picture away left
+/// deck A auditioning under it while the loop stopped asking for frames. It
+/// fails in whichever direction the mistake is made — a window that goes on
+/// drawing what nobody asked for, or a panel that keeps changing while the loop
+/// sleeps.
 ///
 /// A function rather than an expression in the frame path for the reason
 /// [`Readout::pointer`] is a method: `window_event` cannot be called from a
-/// test, so the part worth asserting is lifted out to where a test can reach
-/// it — see `anything_that_makes_texels_keeps_the_loop_awake`.
+/// test, so the part worth asserting is lifted out to where a test can reach it
+/// — see `anything_that_makes_texels_keeps_the_loop_awake`.
 pub(crate) fn live(view: &View) -> bool {
     // **The projector is the third thing on the list**, and leaving it off is
     // the bug this function's own paragraph describes, one output along: with
@@ -1448,7 +1430,7 @@ pub(crate) fn live(view: &View) -> bool {
     view.picture.is_some() || view.previews.iter().any(Option::is_some) || view.projector
 }
 
-/// **What the transport row reads this frame**, out of the two things in this
+/// What the transport row reads this frame, out of the two things in this
 /// file that know: the deck's oscillator, and what the last frame cost.
 ///
 /// `Transport` here is `karakuri_console::view::Transport` — the console's row
@@ -1459,7 +1441,7 @@ pub(crate) fn live(view: &View) -> bool {
 ///
 /// # Where each number comes from, and that nothing is measured twice
 ///
-/// - **The tempo, the position and the grid.** `Deck::signals` is the
+/// - The tempo, the position and the grid. `Deck::signals` is the
 ///   session's one oscillator — the same one every binding reads — and
 ///   `Oscillator::bpm` and `Oscillator::beats` are its tempo and its musical
 ///   position. `beats` is unbounded and monotone, so which dot is lit and
@@ -1468,13 +1450,13 @@ pub(crate) fn live(view: &View) -> bool {
 ///   measured step count ([`App::clock`], and not the fixed one a frame
 ///   carried until 2026-09-08), so this reads the position as of the end of
 ///   the last frame.
-/// - **The frame's cost.** `Cost::whole` — the same three fields the reading
+/// - The frame's cost. `Cost::whole` — the same three fields the reading
 ///   sums under *"the whole frame is a median"*, for the frame just drawn.
 ///   Nothing is timed twice: `Costs::push` kept the last `Cost` and this
 ///   divides nothing.
-/// - **The rate.** `Costs::rate_now`, which is the reading's own `rate`
+/// - The rate. `Costs::rate_now`, which is the reading's own `rate`
 ///   asked before its deadline rather than at it.
-/// - **How many beats a bar has.** `karakuri_signal::oscillator::BEATS_PER_BAR`, which is
+/// - How many beats a bar has. `karakuri_signal::oscillator::BEATS_PER_BAR`, which is
 ///   where the deck's own grid gets it, and which says of itself that it is
 ///   provisional until the IR format carries a time signature. Asked rather
 ///   than transcribed, so that the day it stops being 4 the beat grid stops
@@ -1484,7 +1466,7 @@ pub(crate) fn live(view: &View) -> bool {
 /// there is no frame cost yet, and a row that made one up would be inventing
 /// exactly the reading this whole seam exists to refuse.
 ///
-/// **The rate is `None` unless something is live**, and that is not caution
+/// The rate is `None` unless something is live, and that is not caution
 /// either. With nothing making texels this loop stops asking for frames, so
 /// the last rate it measured would sit in the row describing a window that has
 /// stopped drawing — the one number here that goes stale by standing still.
@@ -1527,18 +1509,18 @@ pub(crate) fn transport(
 
 /// A `.kir` off disk, parsed and checked — the two stages `Set::build` wants a
 /// `Checked` from, and no more. `karakuri-cli`'s `compile::load` is the same
-/// two with a cost estimate and a source it keeps; neither is wanted here.
-/// **How many elements the geometry runs at**, which is the L1's own
-/// declaration and not a number written here.
+/// two with a cost estimate and a source it keeps; neither is wanted here. How
+/// many elements the geometry runs at, which is the L1's own declaration and
+/// not a number written here.
 ///
 /// `capacity [min, max] = default` is in the file and `Set::build` takes a
-/// number, so somebody has to read one across. This used to be a
-/// `const CAPACITY: u32 = 262144` — `drift_shell.kir`'s declared default,
-/// transcribed, which was fine while that was the only file this could load and
-/// silently wrong the moment it took a path: a procedure written for 131072
-/// would have run at 262144 and nothing would have said so.
+/// number, so somebody has to read one across. This used to be a `const
+/// CAPACITY: u32 = 262144` — `drift_shell.kir`'s declared default, transcribed,
+/// which was fine while that was the only file this could load and silently
+/// wrong the moment it took a path: a procedure written for 131072 would have
+/// run at 262144 and nothing would have said so.
 ///
-/// **The fallback is not the answer, it is the arm that cannot happen.**
+/// The fallback is not the answer, it is the arm that cannot happen.
 /// `karakuri_ir::DEFAULT_CAPACITY` is what is left when *nothing* declared one,
 /// and `check_header` requires a `capacity` on every L1 — so a `Checked` that
 /// passed always carries one and this `map_or` is the shape of the seam type

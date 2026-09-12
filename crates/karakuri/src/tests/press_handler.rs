@@ -1,4 +1,4 @@
-//! **Every control `karakuri-console` claims, against the presses this window answers.**
+//! Every control `karakuri-console` claims, against the presses this window answers.
 //!
 //! The console draws controls and turns presses on them into operations or intents;
 //! [`Readout::pointer`] hit-tests each control and acts on what comes back.
@@ -12,12 +12,12 @@
 //!
 //! Today, controls registered in `karakuri_console::input::PROBES` and [`ASKED`] are
 //! verified through direct behavioral execution:
-//! - **Table alignment**: [`ASKED`] mirrors `PROBES` 1:1 in length and order, ensuring
+//! - Table alignment: [`ASKED`] mirrors `PROBES` 1:1 in length and order, ensuring
 //!   every control probe registered by `karakuri-console` corresponds to the press
 //!   handler's documented derivations and asks.
-//! - **Probe evaluation**: Every probe function in `PROBES` is directly callable
+//! - Probe evaluation: Every probe function in `PROBES` is directly callable
 //!   against a solved [`Readout`] panel layout and `egui::Context`.
-//! - **Behavioral dispatch**: Pointer events (`Pointer::Moved`, `Pointer::Down`,
+//! - Behavioral dispatch: Pointer events (`Pointer::Moved`, `Pointer::Down`,
 //!   `Pointer::Up`, `Pointer::Secondary`, `Pointer::Wheel`) are dispatched through
 //!   `Readout::pointer`. When pointer events land on active controls (such as solo pills,
 //!   bay grips, transport buttons, transition controls, mixer chips, and library elements),
@@ -27,47 +27,45 @@
 //!
 //! # Why the check is here and can be nowhere else
 //!
-//! The press handler is in this package, and **nothing in this workspace may depend
-//! on this package** — it is a binary with no library target on purpose, so there is
+//! The press handler is in this package, and nothing in this workspace may depend
+//! on this package — it is a binary with no library target on purpose, so there is
 //! no other crate that can see both halves of the seam.
 
 use super::*;
 use karakuri_console::input::PROBES;
 use karakuri_operation::{Operation, Tonemap};
 
-/// **Every row of `karakuri_console::input::PROBES`, and how this file
-/// reaches what it claims.**
+/// Every row of `karakuri_console::input::PROBES`, and how this file reaches
+/// what it claims.
 ///
-/// The row's name, **the derivation this file calls to get the receiver**,
-/// and every call the press handler makes on that receiver for the
-/// controls the row covers. One entry per row and in the console's own
-/// order, which is what
-/// [`the_table_is_the_consoles_own_rows_in_the_consoles_own_order`] holds
-/// it to — so an entry cannot quietly answer for its neighbour.
+/// The row's name, the derivation this file calls to get the receiver, and
+/// every call the press handler makes on that receiver for the controls the row
+/// covers. One entry per row and in the console's own order, which is what
+/// [`the_table_is_the_consoles_own_rows_in_the_consoles_own_order`] holds it to
+/// — so an entry cannot quietly answer for its neighbour.
 ///
-/// **The array is `PROBES.len()` long, and that is the whole of the
-/// backward direction.** A control the console starts claiming and this
-/// window never asks used to be found by reading that crate's source for
-/// `pub fn`s taking a `Point`; it is now a row in a value, and a row with
-/// no entry here does not compile.
+/// The array is `PROBES.len()` long, and that is the whole of the backward
+/// direction. A control the console starts claiming and this window never asks
+/// used to be found by reading that crate's source for `pub fn`s taking a
+/// `Point`; it is now a row in a value, and a row with no entry here does not
+/// compile.
 ///
-/// **The asks are written down rather than derived**, and they have to be:
-/// nothing in a row's name says `mixer_bay`, and the derivations are a
-/// deliberate arrangement rather than a convention — a bay is derived
-/// *once* and asked six times, because six derivations of one laid-out
-/// strip would be six answers.
+/// The asks are written down rather than derived, and they have to be: nothing
+/// in a row's name says `mixer_bay`, and the derivations are a deliberate
+/// arrangement rather than a convention — a bay is derived *once* and asked six
+/// times, because six derivations of one laid-out strip would be six answers.
 ///
-/// **Three entries name calls made on a button *up* rather than a press.**
-/// A carry names its deck by where it is let go, so the mixer bay and the
-/// Program bay are laid out at the release and asked which rectangle the
-/// pointer is over — `bay.dropped(` and `cells.dropped(`.
+/// Three entries name calls made on a button *up* rather than a press. A carry
+/// names its deck by where it is let go, so the mixer bay and the Program bay
+/// are laid out at the release and asked which rectangle the pointer is over —
+/// `bay.dropped(` and `cells.dropped(`.
 ///
-/// **The preview cells' entry is that release and nothing else**, because
-/// a press on a cell asks for nothing: ADR-0240 retired `SetPreview`, and
-/// `ProgramBay::cell`'s own documentation still says *"A press on a cell
-/// asks for nothing, and that is the decision rather than a gap."* The
-/// cells are claimed all the same, because they are drawn over a boundary
-/// and `input::claim` has to keep a press on them off `egui`
+/// The preview cells' entry is that release and nothing else, because a press
+/// on a cell asks for nothing: ADR-0240 retired `SetPreview`, and
+/// `ProgramBay::cell`'s own documentation still says *"A press on a cell asks
+/// for nothing, and that is the decision rather than a gap."* The cells are
+/// claimed all the same, because they are drawn over a boundary and
+/// `input::claim` has to keep a press on them off `egui`
 /// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
 const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
     // **The Outputs row's sinks**, and the two calls are one control: the
@@ -455,15 +453,14 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
     ("the Staging lane's rows", "staging_bay(", &["bay.keep("]),
 ];
 
-/// **[`ASKED`] is the console's own rows, in the console's own order.**
+/// [`ASKED`] is the console's own rows, in the console's own order.
 ///
-/// The array's length is `PROBES.len()`, so a row added or removed there
-/// is a compile error here; this is the other half of that, and it is what
-/// makes an entry identifiable at all. Written in the same order, an entry
-/// and a row are the same control by position — written in any other, the
-/// two would agree on a count and disagree about which control each line
-/// is about, and every message this module prints would name the wrong
-/// one.
+/// The array's length is `PROBES.len()`, so a row added or removed there is a
+/// compile error here; this is the other half of that, and it is what makes an
+/// entry identifiable at all. Written in the same order, an entry and a row are
+/// the same control by position — written in any other, the two would agree on
+/// a count and disagree about which control each line is about, and every
+/// message this module prints would name the wrong one.
 #[test]
 fn the_table_is_the_consoles_own_rows_in_the_consoles_own_order() {
     for (at, (name, derivation, _)) in ASKED.iter().enumerate() {
@@ -494,8 +491,8 @@ fn bare_strip() -> view::Strip {
     }
 }
 
-/// **Every probe registered in `karakuri_console::input::PROBES` evaluates against
-/// a solved `Readout` layout and `egui::Context`.**
+/// Every probe registered in `karakuri_console::input::PROBES` evaluates against
+/// a solved `Readout` layout and `egui::Context`.
 ///
 /// Asserts that each of the 38 control probes:
 /// - Matches its corresponding entry in [`ASKED`] in name, order, and non-empty derivation.
@@ -544,10 +541,12 @@ fn every_control_probe_in_probes_evaluates_against_readout_layout_and_context() 
     }
 }
 
-/// **The press handler dispatches baseline pointer events directly as executable code.**
+/// The press handler dispatches baseline pointer events directly as executable
+/// code.
 ///
 /// Exercises `Readout::pointer` directly across pointer events (move, down, up,
-/// secondary, wheel) on empty space and asserts proper event dispatch and claim handling.
+/// secondary, wheel) on empty space and asserts proper event dispatch and claim
+/// handling.
 #[test]
 fn the_press_handler_dispatches_pointer_events() {
     let ctx = super::tests::drawn_once();
@@ -575,8 +574,8 @@ fn the_press_handler_dispatches_pointer_events() {
     assert_eq!(acted, Acted::Nothing);
 }
 
-/// **The press handler dispatches pointer events on the Program bay head's solo pill
-/// and on folding bay grips.**
+/// The press handler dispatches pointer events on the Program bay head's solo
+/// pill and on folding bay grips.
 #[test]
 fn the_press_handler_dispatches_solo_and_bay_grips() {
     let ctx = super::tests::drawn_once();
@@ -621,7 +620,7 @@ fn the_press_handler_dispatches_solo_and_bay_grips() {
     }
 }
 
-/// **The press handler dispatches pointer events on MCP class pills.**
+/// The press handler dispatches pointer events on MCP class pills.
 #[test]
 fn the_press_handler_dispatches_mcp_class_pills() {
     let ctx = super::tests::drawn_once();
@@ -651,7 +650,8 @@ fn the_press_handler_dispatches_mcp_class_pills() {
     }
 }
 
-/// **The press handler dispatches pointer events on transport and transition controls.**
+/// The press handler dispatches pointer events on transport and transition
+/// controls.
 #[test]
 fn the_press_handler_dispatches_transport_and_transition_controls() {
     let ctx = super::tests::drawn_once();
@@ -735,7 +735,8 @@ fn the_press_handler_dispatches_transport_and_transition_controls() {
     );
 }
 
-/// **The press handler dispatches pointer events on mixer strip controls and outputs row.**
+/// The press handler dispatches pointer events on mixer strip controls and
+/// outputs row.
 #[test]
 fn the_press_handler_dispatches_mixer_and_output_controls() {
     let ctx = super::tests::drawn_once();
@@ -803,7 +804,7 @@ fn the_press_handler_dispatches_mixer_and_output_controls() {
     );
 }
 
-/// **The press handler dispatches pointer events on look row and learn pill.**
+/// The press handler dispatches pointer events on look row and learn pill.
 #[test]
 fn the_press_handler_dispatches_look_and_learn_controls() {
     let ctx = super::tests::drawn_once();
@@ -880,7 +881,7 @@ fn the_press_handler_dispatches_look_and_learn_controls() {
     assert!(readout.view.learn, "learn state should now be armed");
 }
 
-/// **The press handler dispatches pointer events on Library bay controls.**
+/// The press handler dispatches pointer events on Library bay controls.
 #[test]
 fn the_press_handler_dispatches_library_controls() {
     let ctx = super::tests::drawn_once();

@@ -1,6 +1,6 @@
 use super::*;
 
-/// **What the mixer strips read this frame**: one per slot the deck has, out
+/// What the mixer strips read this frame: one per slot the deck has, out
 /// of the six things a `Deck` will say about a slot.
 ///
 /// Everything here is reachable from a `Deck` and nothing reaches around one:
@@ -11,42 +11,42 @@ use super::*;
 ///
 /// # Where each one comes from, and the two that are not the deck's
 ///
-/// - **The tally** is `Deck::residency`, which is the **effective** residency
+/// - The tally is `Deck::residency`, which is the effective residency
 ///   the frame loop reads and not `requested_residency`. The governor moves a
 ///   slot down without anybody asking, and a tally showing the request would
 ///   be describing a slot that is doing something else.
-/// - **And the request beside it** — `Deck::requested_residency`, which is the
-///   other half of the same pair. Both are handed over and **neither side
-///   computes `Deck::is_parked`**: the engine has the predicate and the
+/// - And the request beside it — `Deck::requested_residency`, which is the
+///   other half of the same pair. Both are handed over and neither side
+///   computes `Deck::is_parked`: the engine has the predicate and the
 ///   console derives its own from the two values (`view::Strip::pending`), so
 ///   what crosses the seam stays a residency and a residency rather than
 ///   becoming a bit whose meaning is written down in only one of the two
 ///   crates. It is the same reading as the four numbers below — the deck says
 ///   what it is doing, and the surface decides what that looks like.
-/// - **The trim and the fader** are `gain` and `opacity`, which are two
+/// - The trim and the fader are `gain` and `opacity`, which are two
 ///   controls and not one — *"opacity at zero silences under every blend mode,
 ///   gain at zero does not silence `over`"* — and the bay draws them as two.
-/// - **The blend** is [`blend_mode`]: the engine's `Blend` turned into the
+/// - The blend is [`blend_mode`]: the engine's `Blend` turned into the
 ///   vocabulary's `BlendMode`, because the chip is a control now and a control
 ///   has to know which of the three it is on to say what the next one is
-///   (ADR-0187). **This is where a fourth engine mode with no operation
-///   variant stops the build**, which is the failure worth having — the
+///   (ADR-0187). This is where a fourth engine mode with no operation
+///   variant stops the build, which is the failure worth having — the
 ///   alternative is a word drawn on a chip no map can ask for.
-/// - **The mask** is `Deck::mask(slot).kind()` for the mark, **and its angle
-///   beside it** — `view::Strip::mask_angle`, which is read to build the
+/// - The mask is `Deck::mask(slot).kind()` for the mark, and its angle
+///   beside it — `view::Strip::mask_angle`, which is read to build the
 ///   press's operation and drawn nowhere
 ///   ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
 ///   The position and the softness are left behind: the strip's `.mini` says
 ///   *which shape*, three numbers about that shape are an inspector row, and
 ///   the two the record needs are read where the record is written rather
 ///   than carried across this seam.
-/// - **The level** is `Deck::level`, which is already `None` for every case
+/// - The level is `Deck::level`, which is already `None` for every case
 ///   where a held reading would be about a different image. Its
 ///   `frames_behind` is not passed on — `view::Level` is where that argument
 ///   is written out, and the short of it is that the number means different
 ///   things on different loops and this loop is a `Fifo` one that never stops
 ///   asking for frames while anything is live.
-/// - **The name** is [`material`], and it is this file's because a `Set` has
+/// - The name is [`material`], and it is this file's because a `Set` has
 ///   none. See `view::Strip::name`.
 ///
 /// # Written into the `Vec` the view already holds
@@ -56,7 +56,7 @@ use super::*;
 /// one field that owns anything, and it is rewritten only when it differs —
 /// which keeps this off the frame's allocation budget (ADR-0164) rather than
 /// putting a `String` per strip on it every frame.
-/// **What a scheduled move on this control is taking it to**, or `None` for a
+/// What a scheduled move on this control is taking it to, or `None` for a
 /// control nothing is moving.
 ///
 /// The engine's `Transition` carries the instant it starts, its length in
@@ -69,20 +69,20 @@ pub(crate) fn destination(deck: &Deck, slot: EngineSlot, control: Control) -> Op
         .map(|t| t.to())
 }
 
-/// **What each preview cell's risk badge reads**, from the pass that decided
-/// it — one entry per deck slot, in slot order.
+/// What each preview cell's risk badge reads, from the pass that decided it —
+/// one entry per deck slot, in slot order.
 ///
 /// `Decision::budgeted_ms` is the number the governor spent and
 /// `Decision::basis` says which of its two numbers that is (ADR-0296). The
 /// console reads the number into five bands and carries the basis undrawn
 /// (ADR-0298), so both halves cross and neither is spent twice.
 ///
-/// **`Basis::Unbudgetable` is written as `None`**, and that is the whole of
-/// what this function decides. It is a slot nothing measured and nothing
-/// estimated, it is not a zero, and a zero here would draw a **green** dot.
+/// `Basis::Unbudgetable` is written as `None`, and that is the whole of what
+/// this function decides. It is a slot nothing measured and nothing estimated,
+/// it is not a zero, and a zero here would draw a green dot.
 ///
-/// **A deck with more slots than the row has cells contributes nothing past
-/// the fourth**, which is the reading `View::select` refuses a key on.
+/// A deck with more slots than the row has cells contributes nothing past the
+/// fourth, which is the reading `View::select` refuses a key on.
 pub(crate) fn costs(governed: &Report) -> [Option<Budgeted>; DECKS] {
     let mut out = [None; DECKS];
     for decision in &governed.decisions {
@@ -170,8 +170,8 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
     }
 }
 
-/// **The Staging lane's rows, off the deck's own verdicts and the per-node
-/// hashes its builds reported** — one per node a build changed, or one on the
+/// The Staging lane's rows, off the deck's own verdicts and the per-node
+/// hashes its builds reported — one per node a build changed, or one on the
 /// slot where a verdict has no changed node behind it (ADR-0326).
 ///
 /// # It drains, because a `HotSwap`'s events are a caller's to take
@@ -179,11 +179,11 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// `HotSwap::events` is documented as the caller's — *"a caller that stops
 /// draining eventually makes this grow"* — and until this program had a
 /// producer there was nothing to drain, so nothing did. `pending_events` is
-/// the other reading and is deliberately **not** what this uses: it is the
+/// the other reading and is deliberately not what this uses: it is the
 /// read-only view `Deck::begin_frame` takes *inside* a frame, and a surface
 /// that read it without draining would be the caller bug the engine names.
 ///
-/// **So the lane's state is kept here rather than re-derived per frame**, and
+/// So the lane's state is kept here rather than re-derived per frame, and
 /// that is what a drain forces and is also what is wanted: the events are a
 /// stream of verdicts and a slot's rows are the newest of them.
 /// `view::View::staging` is written on the frames a build landed on and left
@@ -192,29 +192,29 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 ///
 /// # What each verdict does to a row
 ///
-/// - **`Swapped`, `Rejected`, `Overloaded`, `SourceRefused`** — the slot has
+/// - `Swapped`, `Rejected`, `Overloaded`, `SourceRefused` — the slot has
 ///   rows, on `view::Stage`'s four words. Whether the build is on screen and
 ///   running is what separates the first three — `Overloaded` is on screen and
 ///   stopped — and the fourth is the one where there was no build: the checker
 ///   turned the source down, so the row carries what it said as well as the
-///   word (ADR-0310). **How many rows is the diff**: `Swapped` and
+///   word (ADR-0310). How many rows is the diff: `Swapped` and
 ///   `Overloaded` draw one per node the build changed, and `Rejected` and
 ///   `SourceRefused` draw one on the slot, because a build that did not happen
 ///   has no node list to hold against the one before it.
-/// - **`Accepted`** — the watchdog says the version held the budget, so the
+/// - `Accepted` — the watchdog says the version held the budget, so the
 ///   file and the picture agree and that slot's rows leave the lane. It is not
 ///   the operator's verdict, which is *keep* and is taste rather than cost:
 ///   the cost verdict is what clears a row an operator has not pressed, and
 ///   `view::staging` is where that substitution is argued.
-/// - **`WorkerLost`** — the build worker panicked and nothing will be built
-///   again this run. **No row changes**, and that is the reading rather than
+/// - `WorkerLost` — the build worker panicked and nothing will be built
+///   again this run. No row changes, and that is the reading rather than
 ///   an omission: every verdict already taken still stands, and there is no
 ///   verdict outstanding for the worker to have taken with it — one is reached
 ///   in the call its swap lands in. What is lost is the *next* build, and the
 ///   lane has never been where that is said — the engine prints it.
 ///
-/// **A row is not removed when its slot is parked or its material is
-/// replaced.** What takes a row off the lane is a verdict in the candidate's
+/// A row is not removed when its slot is parked or its material is
+/// replaced. What takes a row off the lane is a verdict in the candidate's
 /// favour, and residency does not reach one: a candidate is judged on its own
 /// measured cost wherever the slot is (ADR-0313).
 ///
@@ -230,7 +230,7 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 /// letter, which is why it can only say the second of those and why the lane
 /// is where the address is.
 ///
-/// **They are written from one drain because there is only one.**
+/// They are written from one drain because there is only one.
 /// `Deck::events` empties the channel; a second pass for the capsule would
 /// read nothing at all, which is the same sentence the reporter above is
 /// written under.
@@ -240,19 +240,19 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
 ///
 /// `true` when a build was installed, which is the moment `Set::published` says
 /// a console should re-read a slot — *"A console reads this when a Set lands,
-/// not per frame."* [`inspector`] is what acts on it. **Every other event
-/// answers `false`, the budget's verdict included**: since ADR-0316 neither
+/// not per frame."* [`inspector`] is what acts on it. Every other event
+/// answers `false`, the budget's verdict included: since ADR-0316 neither
 /// verdict replaces what is playing — one lets the installed Set run and the
 /// other stops it where it is — and the install that did replace it was
 /// reported by `Swapped` in the same drain.
 ///
 /// # What it costs
 ///
-/// **Nothing on a frame nothing was built on.** The event drain collects into
+/// Nothing on a frame nothing was built on. The event drain collects into
 /// a `Vec` that does not allocate when it is empty, and every allocation below
 /// that is inside the `for` over it.
 ///
-/// **On the frame a build lands**, which is the frame that also installed a
+/// On the frame a build lands, which is the frame that also installed a
 /// whole Set built on the worker: a `Vec` of the changed addresses, a `Changed`
 /// per one of them with its address and its name, and a `view::Candidate` per
 /// row. A slot's rows are replaced whole rather than rewritten in place — see
@@ -382,14 +382,14 @@ pub(crate) fn staging(
     landed
 }
 
-/// **One node a build changed, as a lane row needs it** — the address a press
-/// is spelled with, the address the row draws, and what that node is called.
+/// One node a build changed, as a lane row needs it — the address a press is
+/// spelled with, the address the row draws, and what that node is called.
 ///
-/// **Three fields and not one, because the row and the operation want
-/// different halves of the same fact.** `view::Candidate::at` is the payload
-/// and `view::Candidate::addr` is the string, which is `view::Param`'s
-/// arrangement one bay over; both are written here, in one place, so they are
-/// filled together or not at all.
+/// Three fields and not one, because the row and the operation want different
+/// halves of the same fact. `view::Candidate::at` is the payload and
+/// `view::Candidate::addr` is the string, which is `view::Param`'s arrangement
+/// one bay over; both are written here, in one place, so they are filled
+/// together or not at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Changed {
     pub(crate) at: karakuri_operation::NodeAddress,
@@ -397,21 +397,21 @@ pub(crate) struct Changed {
     pub(crate) name: String,
 }
 
-/// **The changed nodes of a build, turned into rows** — the addresses the
-/// watcher reported, resolved against the Set that swap installed.
+/// The changed nodes of a build, turned into rows — the addresses the watcher
+/// reported, resolved against the Set that swap installed.
 ///
-/// **The name is `Set::node_names`' and not the build's label**, which is the
-/// whole of why this needs the Set at all: a label is every node's `proc` name
-/// joined with ` + `, and a row that is one node wants that node's own. It is
-/// the same name the Inspector writes on a node head — `Set::node_named` turns
-/// each one back into the `(layer, index)` this compares against — so the two
-/// bays call one node one thing.
+/// The name is `Set::node_names`' and not the build's label, which is the whole
+/// of why this needs the Set at all: a label is every node's `proc` name joined
+/// with ` + `, and a row that is one node wants that node's own. It is the same
+/// name the Inspector writes on a node head — `Set::node_named` turns each one
+/// back into the `(layer, index)` this compares against — so the two bays call
+/// one node one thing.
 ///
-/// **A node the Set does not name is passed over rather than drawn nameless.**
-/// The two lists are the same build's, so this cannot happen from a rebuild;
-/// what it would mean is that the Set and the report disagree about what the
-/// slot holds, and a row invented out of that disagreement would be a press
-/// aimed at an address nothing can resolve.
+/// A node the Set does not name is passed over rather than drawn nameless. The
+/// two lists are the same build's, so this cannot happen from a rebuild; what
+/// it would mean is that the Set and the report disagree about what the slot
+/// holds, and a row invented out of that disagreement would be a press aimed at
+/// an address nothing can resolve.
 pub(crate) fn changed_rows(set: &Set, changed: &[(&'static str, u32)]) -> Vec<Changed> {
     if changed.is_empty() {
         return Vec::new();
@@ -439,8 +439,7 @@ pub(crate) fn changed_rows(set: &Set, changed: &[(&'static str, u32)]) -> Vec<Ch
     rows
 }
 
-/// **A node's address as the mock's `.addr` spells it** — `L1:0`, `L2:0`,
-/// `L4:0`.
+/// A node's address as the mock's `.addr` spells it — `L1:0`, `L2:0`, `L4:0`.
 ///
 /// [`layer_word`] is the layer half and this is the whole of it, written once
 /// because two bays draw it: the Inspector's node heads and, since 2026-09-09,
@@ -449,14 +448,14 @@ pub(crate) fn node_addr(layer: Layer, index: u32) -> String {
     format!("{}:{index}", layer_word(layer))
 }
 
-/// **Which of the four cells is showing a still**, in slot order —
+/// Which of the four cells is showing a still, in slot order —
 /// `view::View::overloaded`, which the caption reads.
 ///
 /// A slot the watchdog stopped holds the frame it last drew and is not stepped
 /// or drawn (ADR-0316), and a held frame of good material is indistinguishable
 /// from material: the word under the cell is what says which it is (ADR-0269).
 ///
-/// **`false` past `slot_count`, not a panic.** The row is `view::DECKS` cells
+/// `false` past `slot_count`, not a panic. The row is `view::DECKS` cells
 /// whatever the deck holds, so the fourth cell of a three-slot deck asks about
 /// a slot that is not there — and *there is no slot* is the caption's own word
 /// rather than a state of one (`view::PREVIEW_NO_SLOT`).
@@ -467,8 +466,8 @@ pub(crate) fn stopped_slots(deck: &Deck) -> [bool; view::DECKS] {
     std::array::from_fn(|slot| slot < deck.slot_count() && deck.overloaded(EngineSlot(slot as u8)))
 }
 
-/// **What one verdict does to the lane** — the whole of the mapping, in a
-/// function a test can reach without a device.
+/// What one verdict does to the lane — the whole of the mapping, in a function
+/// a test can reach without a device.
 ///
 /// A `match` and not a lookup, for [`blend_mode`]'s reason: a sixth
 /// `swap::Event` stops the build here rather than being passed over by a
@@ -501,26 +500,26 @@ pub(crate) fn verdict(event: &Event) -> Verdict<'_> {
     }
 }
 
-/// **One slot's rows, put where that slot's rows go.**
+/// One slot's rows, put where that slot's rows go.
 ///
-/// **A slot's rows are replaced whole rather than rewritten in place**, and
-/// that is the change ADR-0326 made here. A row used to be one slot, so the
-/// slot's row could be found and its three fields overwritten; a row is now
-/// one node a build changed, so how many rows a slot has moves with every
-/// build — two on the save that touched two files, one on the next, none on a
-/// verdict with nothing to diff. Nothing is left behind: the newest verdict is
-/// the whole of what this slot has to say, and a row from the build before it
-/// would be a node reported as unsettled by a build that has been replaced.
+/// A slot's rows are replaced whole rather than rewritten in place, and that is
+/// the change ADR-0326 made here. A row used to be one slot, so the slot's row
+/// could be found and its three fields overwritten; a row is now one node a
+/// build changed, so how many rows a slot has moves with every build — two on
+/// the save that touched two files, one on the next, none on a verdict with
+/// nothing to diff. Nothing is left behind: the newest verdict is the whole of
+/// what this slot has to say, and a row from the build before it would be a
+/// node reported as unsettled by a build that has been replaced.
 ///
-/// **Slot order, because that is the order the rows are read in** — the lane
-/// draws them top to bottom and the deck letters are `A` through `D`, so a slot
-/// whose verdict arrived later must not sit above one whose arrived first. The
-/// splice is over at most `deck::MAX_SLOTS` slots' worth of rows.
+/// Slot order, because that is the order the rows are read in — the lane draws
+/// them top to bottom and the deck letters are `A` through `D`, so a slot whose
+/// verdict arrived later must not sit above one whose arrived first. The splice
+/// is over at most `deck::MAX_SLOTS` slots' worth of rows.
 ///
-/// **And node order within a slot**, which is the order `changed` is in and is
-/// the order the Set names its own nodes in — the geometries, the deformers,
-/// the cameras, the renderers, the fields. It is the Inspector's pane order
-/// read on one slot, so two bays list one slot's nodes the same way round.
+/// And node order within a slot, which is the order `changed` is in and is the
+/// order the Set names its own nodes in — the geometries, the deformers, the
+/// cameras, the renderers, the fields. It is the Inspector's pane order read on
+/// one slot, so two bays list one slot's nodes the same way round.
 pub(crate) fn settle(
     out: &mut Vec<view::Candidate>,
     deck: usize,
@@ -565,14 +564,14 @@ pub(crate) fn settle(
     out.splice(at..end, rows);
 }
 
-/// **The layer half of a node's address, as the mock's `.addr` spells it** —
+/// The layer half of a node's address, as the mock's `.addr` spells it —
 /// `L1:0`, `L2:0`, `L4`.
 ///
 /// `karakuri_ir::Kind` carries no name of its own, and `karakuri-cli`'s
 /// `--publish name=L4:0:key` parser is in a package with no library target, so
-/// there is nothing to call. The five words are `docs/ir-spec.md`'s and this
-/// is a **match** for [`blend_mode`]'s reason: a sixth kind stops the build
-/// here rather than drawing an address nothing can be typed back in.
+/// there is nothing to call. The five words are `docs/ir-spec.md`'s and this is
+/// a match for [`blend_mode`]'s reason: a sixth kind stops the build here
+/// rather than drawing an address nothing can be typed back in.
 pub(crate) fn layer_word(layer: Layer) -> &'static str {
     match layer {
         Layer::L1 => "L1",
@@ -587,37 +586,36 @@ pub(crate) fn layer_word(layer: Layer) -> &'static str {
     }
 }
 
-/// **A node's layer as the vocabulary names one.** Delegated to
+/// A node's layer as the vocabulary names one. Delegated to
 /// [`karakuri_environment::meta::op_layer_of`] as the single source of truth.
 pub(crate) fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
     karakuri_environment::meta::op_layer_of(layer)
 }
 
-/// **And back**, delegated to [`karakuri_environment::meta::kind_of_op`].
+/// And back, delegated to [`karakuri_environment::meta::kind_of_op`].
 pub(crate) fn ir_layer(layer: karakuri_operation::Layer) -> Layer {
     karakuri_environment::meta::kind_of_op(layer)
 }
 
-/// **Which node a published control belongs to**, and `None` where it belongs
-/// to no one node.
+/// Which node a published control belongs to, and `None` where it belongs to no
+/// one node.
 ///
-/// `Published::at` is `Some` for a control an author addressed — the
-/// `--publish name=L4:0:exposure` form — and `None` for a **wildcard**, which
-/// is what the whole of the *default* interface is made of: *"one control per
-/// key, not one per declaration"*, covering every node that declares the key.
-/// This program has no `--publish` flag, so every control it ever draws is a
-/// wildcard.
+/// `Published::at` is `Some` for a control an author addressed — the `--publish
+/// name=L4:0:exposure` form — and `None` for a wildcard, which is what the
+/// whole of the *default* interface is made of: *"one control per key, not one
+/// per declaration"*, covering every node that declares the key. This program
+/// has no `--publish` flag, so every control it ever draws is a wildcard.
 ///
-/// **A wildcard over exactly one node is that node's**, and the resolution
-/// invents nothing: *where a bare name lands* is a set the Set itself
-/// determines, and where it holds one member there is no second group the row
-/// could go in. Over two or more it belongs to several groups at once, and the
-/// mock draws no `.param` outside a `.node-group` — so the row is dropped and
-/// [`inspector`] says how many were, rather than a place for it being invented
-/// here (ADR-0200: *no placeholder, and no empty case the mock did not itself
+/// A wildcard over exactly one node is that node's, and the resolution invents
+/// nothing: *where a bare name lands* is a set the Set itself determines, and
+/// where it holds one member there is no second group the row could go in. Over
+/// two or more it belongs to several groups at once, and the mock draws no
+/// `.param` outside a `.node-group` — so the row is dropped and [`inspector`]
+/// says how many were, rather than a place for it being invented here
+/// (ADR-0200: *no placeholder, and no empty case the mock did not itself
 /// draw*).
 ///
-/// **The landing is asked for rather than worked out here**, and that is a
+/// The landing is asked for rather than worked out here, and that is a
 /// correction rather than a tidying. This walked `Set::params` and counted the
 /// nodes holding the key, which is the same walk `Set::write_param` refuses on
 /// — agreeing with it by coincidence. The day the built-in camera declared a
@@ -638,25 +636,25 @@ pub(crate) fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
     }
 }
 
-/// **What is driving one node's parameter**, or `None` where nothing is —
-/// the reading behind a `.param.bound` row and the `.sens` row under it.
+/// What is driving one node's parameter, or `None` where nothing is — the
+/// reading behind a `.param.bound` row and the `.sens` row under it.
 ///
 /// # The first match, because that is what the engine writes
 ///
 /// `Set::bindings` is a list and `karakuri_engine::set::effective` takes the
-/// **first** entry matching the layer, the key and the node, so a pane that
-/// took the last would draw a source that is not the one holding the control.
-/// This is that same `find`, and it is the one place in this file that reads a
+/// first entry matching the layer, the key and the node, so a pane that took
+/// the last would draw a source that is not the one holding the control. This
+/// is that same `find`, and it is the one place in this file that reads a
 /// binding at all: the pane's seventh reading, which ADR-0191 kept out while
 /// nothing in this program could attach one.
 ///
-/// **Addressed by the node the row was resolved to**, which is safe here for
-/// the reason it would not be safe for a *write*: every row this pane draws
-/// covers exactly one node — [`node_of`] drops the ones that do not — so
-/// asking which binding covers that node is asking about the row itself. The
-/// address the take-back and the re-attach carry is the **binding's** own, off
-/// the entry found, and not this pair (ADR-0286: the placement is where a row
-/// goes, the address is what a control is).
+/// Addressed by the node the row was resolved to, which is safe here for the
+/// reason it would not be safe for a *write*: every row this pane draws covers
+/// exactly one node — [`node_of`] drops the ones that do not — so asking which
+/// binding covers that node is asking about the row itself. The address the
+/// take-back and the re-attach carry is the binding's own, off the entry found,
+/// and not this pair (ADR-0286: the placement is where a row goes, the address
+/// is what a control is).
 pub(crate) fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Option<view::Source> {
     let binding = set
         .bindings()
@@ -674,7 +672,7 @@ pub(crate) fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Optio
     })
 }
 
-/// **What the Inspector's panes read**: one pane per slot the deck has, up to
+/// What the Inspector's panes read: one pane per slot the deck has, up to
 /// the [`PANES`] the arrangement has, out of the seven things a `Set` will say
 /// about itself.
 ///
@@ -687,59 +685,59 @@ pub(crate) fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Optio
 /// All seven reads answer off a running `Set`, and each was checked against
 /// the source rather than taken on trust:
 ///
-/// - **`Set::layering`** is the fold chip. It is a *build* decision —
+/// - `Set::layering` is the fold chip. It is a *build* decision —
 ///   `merge.is_some()` — so it is a readout here and the mock's press is a
 ///   rebuild rather than a write.
-/// - **`Set::inputs`** is the renderer row: one edge per renderer in draw
+/// - `Set::inputs` is the renderer row: one edge per renderer in draw
 ///   order, and `Input::live` says which one reaches the screen. It is
 ///   *"empty of meaning under `Layering::Overdraw`"* by the engine's own
 ///   words, so `live` is only ever passed on under composite — under overdraw
 ///   every renderer draws and marking one would assert a choice the layering
 ///   does not make.
-/// - **`Set::node_names`** is a name per node, in node order, and
+/// - `Set::node_names` is a name per node, in node order, and
 ///   `Set::node_named` turns each one back into the `(layer, index)` the mock's
 ///   `.addr` is.
-/// - **`Set::authority`** is the `man / sug / auto` chip, through
+/// - `Set::authority` is the `man / sug / auto` chip, through
 ///   [`mix::authority`], and the node's own address goes across beside it
 ///   because a press on a chip has to say which node it is about
-///   (`view::NodeAuthority`). **A press writes one now**: `Deck::set_authority`
+///   (`view::NodeAuthority`). A press writes one now: `Deck::set_authority`
 ///   landed with ADR-0319, so the chips are three destinations rather than a
 ///   drawing. What a run *starts* at is still the default on every node —
 ///   `Request::authorities` is empty, because `Record::Authority` is
 ///   deliberately excluded from Set-file state in two places (ADR-0216) — and
 ///   that is the default being read rather than a placeholder being drawn: a
-///   node nobody has spoken for **is** manual.
-/// - **`Set::published`** is which controls appear and in what order, which is
-///   what numbers the rows. It **allocates and says it is not for the frame
-///   path**, which is why this is called once — see below.
-/// - **`Set::params`** is what resolves a wildcard control to a node — see
+///   node nobody has spoken for is manual.
+/// - `Set::published` is which controls appear and in what order, which is
+///   what numbers the rows. It allocates and says it is not for the frame
+///   path, which is why this is called once — see below.
+/// - `Set::params` is what resolves a wildcard control to a node — see
 ///   [`node_of`].
-/// - **`Set::bindings`** is the seventh, and it was the one this did **not**
+/// - `Set::bindings` is the seventh, and it was the one this did not
 ///   read until 2026-09-09. The reason was ADR-0191's — nothing in this
 ///   program bound a signal to anything, so it was empty in every run and a
 ///   `.pval.src` drawn off it would have been a state the engine never
 ///   entered — and what changed is that the sensitivity row's chips can attach
 ///   one (ADR-0319). [`source_of`] is the read, at the node each row was
-///   resolved to, and it takes the **first** matching entry because that is
+///   resolved to, and it takes the first matching entry because that is
 ///   what `karakuri_engine::set::effective` writes.
 ///
 /// # Read once, and that is the engine's instruction rather than a shortcut
 ///
 /// `Set::published` is documented *"Allocates, so not the frame path. A
-/// console reads this when a Set lands, not per frame."* **A Set lands
-/// whenever a `.kir` in a slot is saved**, since every slot is watched, so
+/// console reads this when a Set lands, not per frame."* A Set lands
+/// whenever a `.kir` in a slot is saved, since every slot is watched, so
 /// this is called at startup and again on the frame a build is installed —
 /// `staging` is what answers *did one land*, and it is the only thing in this
 /// program that knows. Between those
-/// frames almost every value above used to be constant. **Four things move
-/// one now**, and each is a press: a `ride`, a `source`, an `authority` and a
+/// frames almost every value above used to be constant. Four things move
+/// one now, and each is a press: a `ride`, a `source`, an `authority` and a
 /// `transport`. Every one of them re-reads the panes from
 /// [`Readout::performed`], off the *record* rather than off the operation, so
 /// a second operation writing one is caught by the same line — and none of
 /// them is on a frame.
 ///
-/// **The transport was the first that moved, and it is why this is called a
-/// second time.** It had no caller outside its own tests when this was written
+/// The transport was the first that moved, and it is why this is called a
+/// second time. It had no caller outside its own tests when this was written
 /// (ADR-0218); the deck head's scrub is that caller, so a press that writes a
 /// `Record::Transport` re-reads the panes in [`Readout::performed`] — on the
 /// press, which is where a directory read already happens, and never on a
@@ -748,7 +746,7 @@ pub(crate) fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Optio
 /// *what is this pane showing*, and the reading that draws the anchor has to
 /// be the reading the deck holds.
 ///
-/// **The other three arrived with ADR-0319 and ADR-0280**, which is what that
+/// The other three arrived with ADR-0319 and ADR-0280, which is what that
 /// sentence was waiting for: the writer the authority chip wanted is
 /// `Deck::set_authority`, and the parameter's is `Deck::write_param`.
 pub(crate) fn inspector(
@@ -1145,37 +1143,38 @@ pub(crate) fn inspector(
     }
 }
 
-/// **The `uses` lines one node draws**: every input its procedure declares,
-/// with the node filling each.
+/// The `uses` lines one node draws: every input its procedure declares, with
+/// the node filling each.
 ///
 /// # The edges *are* the declarations, and that is forced rather than chosen
 ///
 /// Nothing on a built `Set` says which inputs a node declares — the `uses`
 /// declaration is read at `Set::validate` and dropped — and nothing has to,
-/// because **an unbound declared input is refused where the Set is built**
-/// (ADR-0152: *"`If there is exactly one, use it` is the implicit rule the whole
-/// item exists to remove, and the refusal names the slot"*). So a slot that is
-/// *running* has an edge for every input it declares, and the run's edge list
-/// filtered to the nodes this Set holds is that list exactly. A reader on the
-/// engine would be a second answer to a question the refusal already settles.
+/// because an unbound declared input is refused where the Set is built
+/// (ADR-0152: *"`If there is exactly one, use it` is the implicit rule the
+/// whole item exists to remove, and the refusal names the slot"*). So a slot
+/// that is *running* has an edge for every input it declares, and the run's
+/// edge list filtered to the nodes this Set holds is that list exactly. A
+/// reader on the engine would be a second answer to a question the refusal
+/// already settles.
 ///
 /// # The candidates are the nodes on the layer the input already reaches
 ///
 /// A `uses` slot has a type — `Geometry`, `Field`, `Camera`, `Source` — and the
-/// build refused anything else, so **the node currently wired is of the right
-/// kind by construction** and its layer is the kind. The candidates are the
-/// other nodes on that layer, in node order, which is a list every entry of
-/// which the build accepts.
+/// build refused anything else, so the node currently wired is of the right
+/// kind by construction and its layer is the kind. The candidates are the other
+/// nodes on that layer, in node order, which is a list every entry of which the
+/// build accepts.
 ///
-/// **It is inference and it is honest about being it.** What this cannot do is
+/// It is inference and it is honest about being it. What this cannot do is
 /// offer a kind the input takes and the deck currently reaches by no edge — a
 /// `Field` input on a deck holding one field has an empty list, and the card
 /// does not open. That is a control offering less than the language allows
 /// rather than more, which is the side of P-0090 to be wrong on: a name this
 /// misses is still reachable from a model and from `--edge`.
 ///
-/// **The declaring node is not in its own list.** A node wired to itself is a
-/// cycle the build refuses, and offering it would be offering a refusal.
+/// The declaring node is not in its own list. A node wired to itself is a cycle
+/// the build refuses, and offering it would be offering a refusal.
 pub(crate) fn uses_of(
     set: &karakuri_engine::set::Set,
     edges: &[karakuri_engine::set::Edge],
@@ -1202,8 +1201,8 @@ pub(crate) fn uses_of(
         .collect()
 }
 
-/// **What a slot's capacity chip steps through**: the powers of two every one
-/// of this deck's geometries would accept, ascending.
+/// What a slot's capacity chip steps through: the powers of two every one of
+/// this deck's geometries would accept, ascending.
 ///
 /// # The intersection, because a re-aim sends one number
 ///
@@ -1215,16 +1214,16 @@ pub(crate) fn uses_of(
 /// where two nodes publish one key: the range is the part every declarer
 /// accepts and never any one of them on its own.
 ///
-/// **An empty intersection is an empty list**, and that is a real state rather
-/// than an unreachable one: two geometries whose declared ranges do not overlap
-/// have no capacity a single re-aim could send. The chip is then drawn and
-/// claims nothing, which is what `view::Aimed::capacities` says at the field.
+/// An empty intersection is an empty list, and that is a real state rather than
+/// an unreachable one: two geometries whose declared ranges do not overlap have
+/// no capacity a single re-aim could send. The chip is then drawn and claims
+/// nothing, which is what `view::Aimed::capacities` says at the field.
 ///
-/// **Powers of two, and nothing here says why they are the right rungs** — that
-/// is the console's affordance and its record
-/// (`docs/adr/0328-…`); what this owes is that every rung it offers is one the
-/// engine will build, which is `Set::declared_capacities` being the same
-/// declaration `karakuri_engine::set::capacity_in_range` refuses against
+/// Powers of two, and nothing here says why they are the right rungs — that is
+/// the console's affordance and its record (`docs/adr/0328-…`); what this owes
+/// is that every rung it offers is one the engine will build, which is
+/// `Set::declared_capacities` being the same declaration
+/// `karakuri_engine::set::capacity_in_range` refuses against
 /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 pub(crate) fn capacity_ladder(declared: &[[u32; 3]]) -> Vec<u32> {
     let Some(lo) = declared.iter().map(|at| at[0]).max() else {
@@ -1241,12 +1240,12 @@ pub(crate) fn capacity_ladder(declared: &[[u32; 3]]) -> Vec<u32> {
         .collect()
 }
 
-/// **What the mock calls the group its renderer chips sit under.** Not a node
-/// name — every L4 node has one of those and they are the chips themselves —
-/// but the head over all of them, which the mock writes as `L4 renderers`.
+/// What the mock calls the group its renderer chips sit under. Not a node name
+/// — every L4 node has one of those and they are the chips themselves — but the
+/// head over all of them, which the mock writes as `L4 renderers`.
 pub(crate) const RENDERERS_NODE: &str = "renderers";
 
-/// **The engine's residency, as the console's word for it** — and, like
+/// The engine's residency, as the console's word for it — and, like
 /// [`blend_mode`], a `match` so that a fourth `Residency` stops the build here
 /// rather than drawing a chip nothing can read.
 ///
@@ -1262,31 +1261,32 @@ pub(crate) fn tally(residency: Residency) -> view::Tally {
     }
 }
 
-/// **The engine's blend mode, as the vocabulary's** — and the one place the
-/// two lists are made to agree.
+/// The engine's blend mode, as the vocabulary's — and the one place the two
+/// lists are made to agree.
 ///
 /// `karakuri-operation` owns its own copy of every list a destination is drawn
 /// from, which is the cost P-0090 says the vocabulary pays: *"The two rules —
 /// be engine-neutral, and have no toggles — are not jointly satisfiable unless
 /// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
-/// this is that place for this list, on the harness side of the seam — the
-/// same side [`mixer`] reads a `Deck` from (ADR-0156).
+/// this is that place for this list, on the harness side of the seam — the same
+/// side [`mixer`] reads a `Deck` from (ADR-0156).
 ///
-/// **A match, so the day a fourth mode lands in `karakuri_engine::deck::Blend`
-/// this stops compiling.** That is the whole reason `view::Strip::blend` is a
+/// A match, so the day a fourth mode lands in `karakuri_engine::deck::Blend`
+/// this stops compiling. That is the whole reason `view::Strip::blend` is a
 /// `BlendMode` and not the engine's word: a `&str` handed through would draw
 /// the new mode's name on a chip, and the chip would cycle three ways past a
 /// state no operation can name and no MIDI map can reach, with nothing saying
 /// so. Failing here is the loud failure P-0094 asks for.
 ///
-/// **It stays this program's, and that is now settled rather than pending.**
-/// The console cannot depend on the engine (ADR-0156), and
+/// It stays this program's, and that is now settled rather than pending. The
+/// console cannot depend on the engine (ADR-0156), and
 /// `karakuri-operation-record` cannot either — it is the vocabulary and the
 /// records and nothing else, by charter. So the two lists meet on the harness
-/// side of the seam, wherever a harness holds both, and ADR-0180's *"one
-/// `From` impl per list in `karakuri-cli`"* cannot be written at all: neither
+/// side of the seam, wherever a harness holds both, and ADR-0180's *"one `From`
+/// impl per list in `karakuri-cli`"* cannot be written at all: neither
 /// [`Blend`] nor [`BlendMode`] is that package's, and the orphan rule refuses
-/// it ([ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
+/// it
+/// ([ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
 pub(crate) fn blend_mode(blend: Blend) -> BlendMode {
     match blend {
         Blend::Add => BlendMode::Add,
@@ -1312,41 +1312,41 @@ pub(crate) fn blend_mode(blend: Blend) -> BlendMode {
 // engine's three and the vocabulary's three are two crates' words for the same
 // states, and a `match` is where they are made to agree.
 
-/// **One press of a gain key.** Linear and additive, because a fader is: the
-/// same press means the same amount wherever the trim is standing, rather than
-/// a proportion of wherever it happens to be.
+/// One press of a gain key. Linear and additive, because a fader is: the same
+/// press means the same amount wherever the trim is standing, rather than a
+/// proportion of wherever it happens to be.
 ///
-/// **A tenth, because that is what the other keyboard steps by.**
+/// A tenth, because that is what the other keyboard steps by.
 /// `docs/manual/operations.html` names the keys and says nothing about how far
 /// a press goes, so the size comes from `karakuri-cli`'s own `GAIN_STEP` —
-/// which `docs/manual.md` documents as *"focused slot gain down / up"* — and
-/// it is copied rather than shared because neither binary may depend on the
-/// other (ADR-0214). A page that decides otherwise moves this constant.
+/// which `docs/manual.md` documents as *"focused slot gain down / up"* — and it
+/// is copied rather than shared because neither binary may depend on the other
+/// (ADR-0214). A page that decides otherwise moves this constant.
 pub(crate) const GAIN_STEP: f32 = 0.1;
 
-/// One press of an opacity key, and [`GAIN_STEP`]'s sentence one control
-/// along: `karakuri-cli`'s `OPACITY_STEP`, which is the same tenth, and the
-/// console's page is silent about this one too.
+/// One press of an opacity key, and [`GAIN_STEP`]'s sentence one control along:
+/// `karakuri-cli`'s `OPACITY_STEP`, which is the same tenth, and the console's
+/// page is silent about this one too.
 pub(crate) const OPACITY_STEP: f32 = 0.1;
 
-/// **Which of the grammar's four keys a press is**, or `None` for a key that is
-/// not one of them.
+/// Which of the grammar's four keys a press is, or `None` for a key that is not
+/// one of them.
 ///
 /// # Why the digits are a guard and not ten arms
 ///
-/// `1` in the Mixer is deck A's strip and `1` in the Library is its first
-/// row, so ten arms naming ten literals would say the digits are bound and
-/// say nothing about what they reach. **The dispatch table is what says
-/// that** — `karakuri_console::focus::BUILT` — so the digit is a guard here
-/// rather than ten characters (ADR-0333).
+/// `1` in the Mixer is deck A's strip and `1` in the Library is its first row,
+/// so ten arms naming ten literals would say the digits are bound and say
+/// nothing about what they reach. The dispatch table is what says that —
+/// `karakuri_console::focus::BUILT` — so the digit is a guard here rather than
+/// ten characters (ADR-0333).
 ///
-/// **`key_column::bound` no longer reads this file's text at all** — since
-/// the ten literal keys `window_event` binds outside this guard moved into
+/// `key_column::bound` no longer reads this file's text at all — since the ten
+/// literal keys `window_event` binds outside this guard moved into
 /// `KEY_BINDINGS`, there is nothing left in this file's source for a scan to
 /// find that a declared fact could not say instead. What this function still
 /// binds — `space`, `enter`, the four arrows and the digit — is declared in
-/// `key_column::bound` alongside `KEY_BINDINGS`' own keys rather than
-/// scanned for, the same as the digit always was.
+/// `key_column::bound` alongside `KEY_BINDINGS`' own keys rather than scanned
+/// for, the same as the digit always was.
 pub(crate) fn grammar(key: &Key<&str>) -> Option<focus::Press> {
     match key {
         Key::Named(NamedKey::Space) => Some(focus::Press::Space),
@@ -1360,8 +1360,8 @@ pub(crate) fn grammar(key: &Key<&str>) -> Option<focus::Press> {
     }
 }
 
-/// **One digit, `0` to `9`**, or `None` for anything else a `Key::Character`
-/// can be.
+/// One digit, `0` to `9`, or `None` for anything else a `Key::Character` can
+/// be.
 ///
 /// A `Key::Character` is *text* and may be more than one character — a dead key
 /// resolving, an IME committing a run — which is why the length is checked
@@ -1378,17 +1378,17 @@ pub(crate) fn digit(text: &str) -> Option<usize> {
     one.to_digit(10).map(|digit| digit as usize)
 }
 
-/// **What the deck is holding on `at`**, for the three chips whose next state
-/// the console names — or `None` where this deck has no slot there.
+/// What the deck is holding on `at`, for the three chips whose next state the
+/// console names — or `None` where this deck has no slot there.
 ///
 /// [`held`] is the guard, for its own reason: `Deck::blend` indexes its slots
 /// and a panic reachable from an event handler aborts this process rather than
 /// unwinding.
 ///
-/// **Read at the press and never off `view::Strip`**, which is what the three
-/// mix keys this replaces already said: a strip is this same reading copied
-/// once a frame, and a scheduled fade landing between the frame and the press
-/// would leave the cycle counting from a state the deck has left behind.
+/// Read at the press and never off `view::Strip`, which is what the three mix
+/// keys this replaces already said: a strip is this same reading copied once a
+/// frame, and a scheduled fade landing between the frame and the press would
+/// leave the cycle counting from a state the deck has left behind.
 pub(crate) fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {
     let slot = held(deck, at)?;
     Some(focus::Held {
@@ -1405,7 +1405,7 @@ pub(crate) fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {
     })
 }
 
-/// **The engine's mask shape as the console's**, and the mirror image of
+/// The engine's mask shape as the console's, and the mirror image of
 /// `karakuri_console::view::wipe_kind` on the way back out.
 ///
 /// One function and two callers — [`mixer`] builds a strip from it every frame
@@ -1421,7 +1421,7 @@ pub(crate) fn masked(kind: MaskKind) -> view::Mask {
     }
 }
 
-/// **Where a press takes the trim it is standing on.**
+/// Where a press takes the trim it is standing on.
 ///
 /// [`offset_step`]'s shape one bay along, with the grammar's own word for a
 /// direction in place of a letter: which way each press goes is a value this
@@ -1434,8 +1434,8 @@ pub(crate) fn masked(kind: MaskKind) -> view::Mask {
 /// *"focused slot gain down / up / back to 1.0"* in `docs/manual.md` — taken
 /// whole rather than invented here, because two keyboards that disagree about
 /// how far one press goes is the one mistake an operator makes in the dark and
-/// cannot see. **The letters were this keyboard's too until 2026-09-10**, and
-/// what survived them is the arithmetic rather than the spelling.
+/// cannot see. The letters were this keyboard's too until 2026-09-10, and what
+/// survived them is the arithmetic rather than the spelling.
 ///
 /// # Floored and not ceilinged, and the clamp is the surface's
 ///
@@ -1443,21 +1443,21 @@ pub(crate) fn masked(kind: MaskKind) -> view::Mask {
 /// blend mode rather than a level; above 1.0 is ordinary, because the pipeline
 /// is HDR
 /// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
-/// It is clamped **here** rather than left to `Deck::set_gain` for
-/// `karakuri-cli`'s `clamp_gain` reason: this decides what the *record* says,
-/// so a session replays the value that took effect rather than one the engine
-/// quietly corrected.
+/// It is clamped here rather than left to `Deck::set_gain` for `karakuri-cli`'s
+/// `clamp_gain` reason: this decides what the *record* says, so a session
+/// replays the value that took effect rather than one the engine quietly
+/// corrected.
 ///
-/// **So [`Step::Default`] is a destination and the other two are steps**, and
-/// all three leave as the same absolute [`Operation::SetGain`] — an absolute
-/// value can express every step and a step cannot express a setting.
+/// So [`Step::Default`] is a destination and the other two are steps, and all
+/// three leave as the same absolute [`Operation::SetGain`] — an absolute value
+/// can express every step and a step cannot express a setting.
 ///
-/// **It took the letter and takes the step since 2026-09-10.** `[`, `]` and
-/// `\` are unbound: the trim is reached by addressing it — `space` on the
-/// Mixer's strip — and the arrows step it (ADR-0259, ADR-0333). The pair of
-/// directions and the tenth between them are unchanged and are still
-/// `karakuri-cli`'s, which is what the paragraphs above are about; what went is
-/// the letter that named each one.
+/// It took the letter and takes the step since 2026-09-10. `[`, `]` and `\` are
+/// unbound: the trim is reached by addressing it — `space` on the Mixer's strip
+/// — and the arrows step it (ADR-0259, ADR-0333). The pair of directions and
+/// the tenth between them are unchanged and are still `karakuri-cli`'s, which
+/// is what the paragraphs above are about; what went is the letter that named
+/// each one.
 pub(crate) fn gain_key(step: Step, from: f32) -> f32 {
     let asked = match step {
         Step::Down => from - GAIN_STEP,
@@ -1467,24 +1467,24 @@ pub(crate) fn gain_key(step: Step, from: f32) -> f32 {
     asked.max(0.0)
 }
 
-/// **Where a press takes the fader it is standing on** — [`gain_key`]'s
-/// function on the other control.
+/// Where a press takes the fader it is standing on — [`gain_key`]'s function on
+/// the other control.
 ///
 /// The pair and the tenth between them are `karakuri-cli`'s, for the reason
 /// written at [`gain_key`]: the page names the pair and not the direction, and
 /// `;` down and `'` up were the letters until 2026-09-10.
 ///
-/// **The fader gains a default here and did not have one.** The trim's `\`
-/// had no partner on this control, so `space` on an addressed fader is the
-/// first way back to unity it has ever had — ADR-0259's *"on a level, the one
-/// state worth naming is the value it was declared at"*, which is the clause
-/// that record buys with an argument rather than finds.
+/// The fader gains a default here and did not have one. The trim's `\` had no
+/// partner on this control, so `space` on an addressed fader is the first way
+/// back to unity it has ever had — ADR-0259's *"on a level, the one state worth
+/// naming is the value it was declared at"*, which is the clause that record
+/// buys with an argument rather than finds.
 ///
-/// **Held inside `[0, 1]` where the gain is only floored**, which is the
-/// difference the vocabulary already draws between the two: opacity is a
-/// proportion of a blend and there is no such thing as 1.4 of one, where gain
-/// is a level into an HDR mix. The clamp is this surface's for [`gain_key`]'s
-/// reason — it decides what the record says.
+/// Held inside `[0, 1]` where the gain is only floored, which is the difference
+/// the vocabulary already draws between the two: opacity is a proportion of a
+/// blend and there is no such thing as 1.4 of one, where gain is a level into
+/// an HDR mix. The clamp is this surface's for [`gain_key`]'s reason — it
+/// decides what the record says.
 pub(crate) fn opacity_key(step: Step, from: f32) -> f32 {
     let asked = match step {
         Step::Down => from - OPACITY_STEP,
@@ -1494,19 +1494,18 @@ pub(crate) fn opacity_key(step: Step, from: f32) -> f32 {
     asked.clamp(0.0, 1.0)
 }
 
-/// **Where a press takes the master out** — [`gain_key`]'s function one bay
-/// down, and the three answers are the same three.
+/// Where a press takes the master out — [`gain_key`]'s function one bay down,
+/// and the three answers are the same three.
 ///
-/// **A tenth, and the same tenth**: the trim, the fader and this are one
-/// gesture on three controls, and a keyboard that stepped each of them by a
-/// different amount would be three keyboards. **Held inside `[0, 1]` where
-/// the gain is only floored**, which is [`opacity_key`]'s distinction met on
-/// the level the whole programme leaves through: `Knob::Out` drags over
-/// exactly that range, so a key and a hand can reach the same values and no
-/// others.
+/// A tenth, and the same tenth: the trim, the fader and this are one gesture on
+/// three controls, and a keyboard that stepped each of them by a different
+/// amount would be three keyboards. Held inside `[0, 1]` where the gain is only
+/// floored, which is [`opacity_key`]'s distinction met on the level the whole
+/// programme leaves through: `Knob::Out` drags over exactly that range, so a
+/// key and a hand can reach the same values and no others.
 ///
-/// **The default is unity**, which is where a run starts and what the row
-/// reads before anybody has touched it.
+/// The default is unity, which is where a run starts and what the row reads
+/// before anybody has touched it.
 pub(crate) fn out_key(step: Step, from: f32) -> f32 {
     let asked = match step {
         Step::Down => from - OPACITY_STEP,
@@ -1516,24 +1515,24 @@ pub(crate) fn out_key(step: Step, from: f32) -> f32 {
     asked.clamp(0.0, 1.0)
 }
 
-/// **Where a press takes the exposure** — a **quarter stop**, which is the
-/// step the console's own track was built for.
+/// Where a press takes the exposure — a quarter stop, which is the step the
+/// console's own track was built for.
 ///
 /// `karakuri_console::view::EXPOSURE_TRACK_W`'s documentation is where that
-/// number comes from and it says the whole argument: *"one pixel a press …  a
+/// number comes from and it says the whole argument: *"one pixel a press … a
 /// pointer on this track can ask for any of the 48 positions along it and a
 /// keyboard stepping a quarter stop at a time can ask for any of the 48 values
 /// between the ends, so neither surface can reach a value the other cannot"*.
-/// So the step is taken on the **track's** axis and converted back, rather
-/// than as a multiplier written here — the two surfaces then land on the same
-/// 48 values by construction.
+/// So the step is taken on the track's axis and converted back, rather than as
+/// a multiplier written here — the two surfaces then land on the same 48 values
+/// by construction.
 ///
-/// **Clamped by the conversion rather than here**: `unit_of` holds a value
-/// past either end at that end and `exposure_at` runs over `[0, 1]`, which is
-/// where `--exposure 200` is allowed to be unclamped and a press is not.
+/// Clamped by the conversion rather than here: `unit_of` holds a value past
+/// either end at that end and `exposure_at` runs over `[0, 1]`, which is where
+/// `--exposure 200` is allowed to be unclamped and a press is not.
 ///
-/// **The default is 1.0**, which is the middle of the track and the level a
-/// run starts at — ADR-0259's *"`space` returns it to 1.0 — today's `` ` ``"*.
+/// The default is 1.0, which is the middle of the track and the level a run
+/// starts at — ADR-0259's *"`space` returns it to 1.0 — today's `` ` ``"*.
 pub(crate) fn exposure_key(step: Step, from: f32) -> f32 {
     let at = view::unit_of(from);
     match step {
@@ -1543,27 +1542,27 @@ pub(crate) fn exposure_key(step: Step, from: f32) -> f32 {
     }
 }
 
-/// **Where a press takes the latency offset** — five milliseconds, which is
-/// the page's own step and the one `karakuri-cli`'s `o` and `p` use.
+/// Where a press takes the latency offset — five milliseconds, which is the
+/// page's own step and the one `karakuri-cli`'s `o` and `p` use.
 ///
-/// **The sign is the half that gets read wrong at two in the morning**, and
+/// The sign is the half that gets read wrong at two in the morning, and
 /// `docs/manual/console.html` says so: *"Negative and the picture waits for the
 /// music, positive and it leads."* So `Step::Down` is the picture waiting, and
-/// this function is where a test can ask which way each direction goes — a
-/// pair wired the wrong way round reads correct and points backwards.
+/// this function is where a test can ask which way each direction goes — a pair
+/// wired the wrong way round reads correct and points backwards.
 ///
-/// `o` and `p` were this keyboard's letters until 2026-09-10, and what
-/// survived them is the step rather than the spelling: the constant is
+/// `o` and `p` were this keyboard's letters until 2026-09-10, and what survived
+/// them is the step rather than the spelling: the constant is
 /// `karakuri_environment::audio`'s, which is what the command line steps by,
 /// and this program does not keep a second copy of it.
 ///
-/// **Not clamped here**, which is the one place this differs from [`gain_key`]
-/// and [`opacity_key`]: the offset's range is `karakuri_environment::audio`'s
-/// and the session holds a press at the end of its travel and says so
+/// Not clamped here, which is the one place this differs from [`gain_key`] and
+/// [`opacity_key`]: the offset's range is `karakuri_environment::audio`'s and
+/// the session holds a press at the end of its travel and says so
 /// ([`offset_said`]). A second clamp here would decide the same thing twice.
 ///
-/// **The default is zero**, which is the value the offset is declared at: a
-/// session nobody has nudged runs at no offset at all.
+/// The default is zero, which is the value the offset is declared at: a session
+/// nobody has nudged runs at no offset at all.
 pub(crate) fn offset_key(step: Step, from: f32) -> f32 {
     match step {
         Step::Down => from - audio::LATENCY_OFFSET_STEP_MS,
@@ -1572,8 +1571,8 @@ pub(crate) fn offset_key(step: Step, from: f32) -> f32 {
     }
 }
 
-/// **The slot a press or a record names, as an index this deck has**, or
-/// `None` where it has not got one.
+/// The slot a press or a record names, as an index this deck has, or `None`
+/// where it has not got one.
 ///
 /// `Deck::gain` and `Deck::set_gain` index their slots, and a panic reachable
 /// from an event handler aborts this process rather than unwinding (see the
@@ -1581,28 +1580,28 @@ pub(crate) fn offset_key(step: Step, from: f32) -> f32 {
 /// asks this first. `mix::change`'s whole reason for taking a `slot_count` is
 /// that a stream may name a slot that is not there.
 ///
-/// **Nothing in this file can produce one**: the strips are the deck's own
-/// count, and `View::select` refuses a deck the mixer draws no strip for — so
-/// this is the guard rather than the message, and the real sentence is
-/// `karakuri-cli`'s `no_such_slot`.
+/// Nothing in this file can produce one: the strips are the deck's own count,
+/// and `View::select` refuses a deck the mixer draws no strip for — so this is
+/// the guard rather than the message, and the real sentence is `karakuri-cli`'s
+/// `no_such_slot`.
 ///
-/// **One derivation and not one per caller**, which is what makes the key arms
-/// and [`apply`] refuse the same slot: a press reads the deck before it names
-/// a destination and the record writes it afterwards, and a guard on only the
+/// One derivation and not one per caller, which is what makes the key arms and
+/// [`apply`] refuse the same slot: a press reads the deck before it names a
+/// destination and the record writes it afterwards, and a guard on only the
 /// second of the two would be a read that panicked on its way to a refusal.
 pub(crate) fn held(deck: &Deck, slot: u8) -> Option<EngineSlot> {
     EngineSlot::new(slot, deck.slot_count())
 }
 
-/// **The engine's look, as the console reads it** — [`blend_mode`]'s function
-/// one row up, on the value every sink is drawn under.
+/// The engine's look, as the console reads it — [`blend_mode`]'s function one
+/// row up, on the value every sink is drawn under.
 ///
 /// Two fields of three: `white_point` is Reinhard's parameter, it is on no
 /// surface, and a console field for it would be a reading no control names —
 /// see `karakuri_console::view::Look`. The operator goes through
 /// [`mix::tonemap`], which is the match that makes the engine's list and the
-/// vocabulary's agree and stops compiling the day a fifth operator lands on
-/// one side only.
+/// vocabulary's agree and stops compiling the day a fifth operator lands on one
+/// side only.
 pub(crate) fn look(look: &Look) -> view::Look {
     view::Look {
         tonemap: mix::tonemap(look.op),
@@ -1610,7 +1609,7 @@ pub(crate) fn look(look: &Look) -> view::Look {
     }
 }
 
-/// **What this window says when a control's operation wrote no record**, and
+/// What this window says when a control's operation wrote no record, and
 /// the two ways that happens are not the same thing — so they are not the
 /// same sentence.
 ///
@@ -1619,10 +1618,10 @@ pub(crate) fn look(look: &Look) -> view::Look {
 /// other two would tell an operator that a press did nothing, which is true
 /// of neither:
 ///
-/// - [`Written::Silent`] is **settled**. Selecting a deck or folding a bay is
+/// - [`Written::Silent`] is settled. Selecting a deck or folding a bay is
 ///   a surface's own state and there is nothing to write; the sentence says
 ///   which of the four kinds of nothing it is, and that is the end of it.
-/// - [`Written::Owed`] is **a gap nobody has closed yet**. A tap owes a
+/// - [`Written::Owed`] is a gap nobody has closed yet. A tap owes a
 ///   record and no build can make it, so a press that reads as *nothing
 ///   happened* is exactly the wrong reading — the sentence names the question
 ///   instead, which is `Owed::why`'s whole job and the reason `Owed` is not
@@ -1632,17 +1631,17 @@ pub(crate) fn look(look: &Look) -> view::Look {
 /// the record *and* what the deck holds afterwards, and printing both would
 /// say one press twice.
 ///
-/// **Nothing on this panel reaches the `Owed` arm on purpose any more**, and
+/// Nothing on this panel reaches the `Owed` arm on purpose any more, and
 /// the paragraph that used to stand here is worth keeping as history because
 /// it was twice wrong in the same place. It first said no control could reach
 /// either arm and was written for the day one did; the deck head was that day,
-/// and it said the sync chip and the anchor beside it were **reachable
-/// affordances over an unwritable record** — the press claimed, the operation
+/// and it said the sync chip and the anchor beside it were reachable
+/// affordances over an unwritable record — the press claimed, the operation
 /// emitted, this sentence printed with the question in it, and the deck not
 /// moving.
 ///
-/// **What made the record unwritable was a question that had already been
-/// answered.** `Transport::engaged` decides what engaging a mode means, with
+/// What made the record unwritable was a question that had already been
+/// answered. `Transport::engaged` decides what engaging a mode means, with
 /// the reason at its own definition: the anchor is the session tempo and the
 /// scrub is cleared. The clamp that looked like a decision about the bytes on
 /// disk is the identity on every tempo an oscillator can report, so there were
@@ -1651,7 +1650,7 @@ pub(crate) fn look(look: &Look) -> view::Look {
 /// [`apply`] moves the deck, which is the ninth and tenth of this panel's ten
 /// emitting controls arriving where the other eight already were.
 ///
-/// **The refusal to route around it is what made that cheap.** A surface owns
+/// The refusal to route around it is what made that cheap. A surface owns
 /// the affordance and never the authority
 /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
 /// so this file never wrote a `Record::Transport` of its own for a `SetSync` —
@@ -1670,7 +1669,7 @@ pub(crate) fn look(look: &Look) -> view::Look {
 /// panel for an arrangement [`Op`] and the panel performs it
 /// ([`Acted::Operated`]).
 ///
-/// **The mask is also the one that can reach [`Written::Owed`] by accident**,
+/// The mask is also the one that can reach [`Written::Owed`] by accident,
 /// and that is worth having rather than designing away: a reading that did not
 /// arrive answers `Owed(NotRead(Reading::Mask))`, so a harness that stopped
 /// handing one in would say so out loud instead of moving nothing.
@@ -1689,8 +1688,8 @@ pub(crate) fn unwritten(operation: &Operation, written: &Written) -> Option<Stri
     }
 }
 
-/// **A press on a strip or a deck key, applied to the console's own pointer**,
-/// and what to say about it. `None` for every operation that is not it.
+/// A press on a strip or a deck key, applied to the console's own pointer, and
+/// what to say about it. `None` for every operation that is not it.
 ///
 /// `Operation::SelectDeck` *"writes no record, and is the reason every other
 /// variant names its deck instead of meaning the selected one"*, so there is
@@ -1699,9 +1698,9 @@ pub(crate) fn unwritten(operation: &Operation, written: &Written) -> Option<Stri
 /// beside [`arrangement`]'s for the same reason: the alternative is a second
 /// route into the view.
 ///
-/// **A deck the mixer has no strip for is refused**, and `View::select` is
-/// where that rule lives — the ring would be drawn nowhere and the library's
-/// pill would name a deck a load could not reach. It is said here rather than
+/// A deck the mixer has no strip for is refused, and `View::select` is where
+/// that rule lives — the ring would be drawn nowhere and the library's pill
+/// would name a deck a load could not reach. It is said here rather than
 /// swallowed, because a key that does nothing and a key that is not bound are
 /// the same experience.
 pub(crate) fn pointed(view: &mut View, operation: &Operation) -> Option<String> {
@@ -1729,26 +1728,25 @@ pub(crate) fn pointed(view: &mut View, operation: &Operation) -> Option<String> 
     ))
 }
 
-/// **A pick on a pane head's pulldown, applied to the console's own pointer**,
-/// and what to say about it. `None` for every operation that is not it.
+/// A pick on a pane head's pulldown, applied to the console's own pointer, and
+/// what to say about it. `None` for every operation that is not it.
 ///
 /// [`pointed`]'s shape one mark along and for its sentence:
 /// `Operation::PointPane` is `Silent(Surface)`, so there is nothing on the deck
 /// for [`apply`] to move and the surface that emits it performs it.
 ///
-/// **It is not the deck selection**, and nothing here touches it — that is the
+/// It is not the deck selection, and nothing here touches it — that is the
 /// whole of what this mark is for (ADR-0338, decision 5): a pane can show a
 /// deck the keys are not on, which is the Library bay's load pulldown's
 /// argument one bay along.
 ///
-/// **The pane is named rather than numbered**, because
-/// `Operation::PointPane { pane }` is a `String` — `karakuri-operation` has no
-/// dependencies and cannot hold the arrangement's handle type — so this is
-/// where the name is resolved back to a position in `View::inspector`. A name
-/// no pane has is refused with the two that exist, which is what the next
-/// attempt needs (P-0083).
+/// The pane is named rather than numbered, because `Operation::PointPane { pane
+/// }` is a `String` — `karakuri-operation` has no dependencies and cannot hold
+/// the arrangement's handle type — so this is where the name is resolved back
+/// to a position in `View::inspector`. A name no pane has is refused with the
+/// two that exist, which is what the next attempt needs (P-0083).
 ///
-/// **A deck the mixer has no strip for is refused**, and `View::point_pane` is
+/// A deck the mixer has no strip for is refused, and `View::point_pane` is
 /// where that rule lives — [`pointed`]'s own refusal, read on a pane instead of
 /// on the ring.
 pub(crate) fn pointed_pane(view: &mut View, operation: &Operation) -> Option<String> {
@@ -1780,22 +1778,22 @@ pub(crate) fn pointed_pane(view: &mut View, operation: &Operation) -> Option<Str
     ))
 }
 
-/// **What a refused `go` says**, and the whole of what this window puts on
-/// this side of that seam.
+/// What a refused `go` says, and the whole of what this window puts on this
+/// side of that seam.
 ///
-/// `karakuri_console::view::Go` answers *which* refusal, because the console
-/// is what can see a shape is unset and how many strips it drew; the sentence
-/// is here because this package is the one that has anywhere to print. What
-/// each of them owes is
+/// `karakuri_console::view::Go` answers *which* refusal, because the console is
+/// what can see a shape is unset and how many strips it drew; the sentence is
+/// here because this package is the one that has anywhere to print. What each
+/// of them owes is
 /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
 /// a rejection is a message to whoever makes the next attempt, and it carries
 /// the constraint and where to go rather than *refused*.
 ///
-/// **`karakuri-cli`'s `c` prints the same two**, and its wording is where
-/// these come from — *"a wipe needs somewhere to come from — this deck holds
-/// one slot"* and *"no mask shape — `z` chooses one, and a wipe is a shape
-/// moving"*. What changes on this surface is where the next attempt is made:
-/// a pill two capsules to the left rather than a key.
+/// `karakuri-cli`'s `c` prints the same two, and its wording is where these
+/// come from — *"a wipe needs somewhere to come from — this deck holds one
+/// slot"* and *"no mask shape — `z` chooses one, and a wipe is a shape
+/// moving"*. What changes on this surface is where the next attempt is made: a
+/// pill two capsules to the left rather than a key.
 pub(crate) fn refusal(refused: &Go, decks: usize) -> String {
     match refused {
         // **Unreachable while this window builds a full deck** — `SLOTS` is
@@ -1829,23 +1827,23 @@ pub(crate) fn refusal(refused: &Go, decks: usize) -> String {
     }
 }
 
-/// **The four banks a run starts with**: bank 0 holding one lane over deck A's
-/// channel fader, **muted**, and three empty banks beside it.
+/// The four banks a run starts with: bank 0 holding one lane over deck A's
+/// channel fader, muted, and three empty banks beside it.
 ///
 /// # Why there is a lane at all before anything has added one
 ///
-/// `Operation::PointLane` is the control that makes a lane and **the console
-/// draws none** — the mock's `+ lane` needs a target chooser nobody has drawn,
+/// `Operation::PointLane` is the control that makes a lane and the console
+/// draws none — the mock's `+ lane` needs a target chooser nobody has drawn,
 /// and the bay cannot grow a body while it is running anyway. So a first slice
 /// with no lane would draw a ruler over nothing and there would be no way to
 /// reach a cell (ADR-0320's consequences, and `view::sequencer`'s own list of
 /// what is not drawn). This is the demonstration, written here rather than in
-/// `karakuri-pattern` because it is *this program's opening state* and not
-/// what a pattern is.
+/// `karakuri-pattern` because it is *this program's opening state* and not what
+/// a pattern is.
 ///
 /// # Why it is muted
 ///
-/// **An unmuted lane writes its target on every step boundary**, on-steps and
+/// An unmuted lane writes its target on every step boundary, on-steps and
 /// off-steps alike — that is what makes a lane a gate rather than a set of
 /// impulses (ADR-0320). A lane over deck A's fader with every step off would
 /// therefore hold deck A at `off` from the moment the window opened: the deck
@@ -1855,10 +1853,10 @@ pub(crate) fn refusal(refused: &Go, decks: usize) -> String {
 /// So the lane arrives the way the mock's third row is drawn — *"the pattern is
 /// kept and drives nothing"* — and the first press is the one that starts it.
 /// That is also the shape of the demonstration: mute the lane and the fader is
-/// the hand's again, which is rule 02's take-back for a lane and what
-/// ADR-0322 says the mute is *for*.
+/// the hand's again, which is rule 02's take-back for a lane and what ADR-0322
+/// says the mute is *for*.
 ///
-/// **`on` is 1.0 and `off` is 0.0**, which is a fader's pair: a gate.
+/// `on` is 1.0 and `off` is 0.0, which is a fader's pair: a gate.
 pub(crate) fn demonstration_banks() -> karakuri_pattern::Banks {
     let mut banks = karakuri_pattern::Banks::default();
     let mut lane =
@@ -1870,7 +1868,7 @@ pub(crate) fn demonstration_banks() -> karakuri_pattern::Banks {
     banks
 }
 
-/// **A lane appended to the bank the press named**, and what to say about it —
+/// A lane appended to the bank the press named, and what to say about it —
 /// [`sequenced`]'s `PointLane` arm, lifted out because it is the one arm that
 /// reads something other than the pattern.
 ///
@@ -1878,25 +1876,24 @@ pub(crate) fn demonstration_banks() -> karakuri_pattern::Banks {
 ///
 /// A lane carries an `on` and an `off`
 /// ([ADR-0320](../../docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)),
-/// filled in **at the press** and never read back later, because a pattern
-/// outlives the Set it was written against. `Operation::PointLane` carries a
-/// bank and a target and nothing else (ADR-0321), so they are filled here —
-/// out of `View::inspector`, which is *the console's own published reading*
-/// and the very list the chooser drew its items from.
+/// filled in at the press and never read back later, because a pattern outlives
+/// the Set it was written against. `Operation::PointLane` carries a bank and a
+/// target and nothing else (ADR-0321), so they are filled here — out of
+/// `View::inspector`, which is *the console's own published reading* and the
+/// very list the chooser drew its items from.
 ///
-/// **That is one reading and not two.** Asking the deck again here would be a
-/// second derivation of the range, and the two could name different numbers
-/// the frame a Set lands; the operator saw the console's, and the lane gets
-/// the console's
+/// That is one reading and not two. Asking the deck again here would be a
+/// second derivation of the range, and the two could name different numbers the
+/// frame a Set lands; the operator saw the console's, and the lane gets the
+/// console's
 /// ([ADR-0327](../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
 ///
-/// **A fader's are 1.0 and 0.0**, which is a gate and is that record's own
-/// pair: a channel fader publishes no range, and `[0, 1]` is what the strip
-/// draws.
+/// A fader's are 1.0 and 0.0, which is a gate and is that record's own pair: a
+/// channel fader publishes no range, and `[0, 1]` is what the strip draws.
 ///
-/// **A parameter the console holds no row for is refused and said**, rather
-/// than defaulted: a lane with invented levels would drive its target to two
-/// numbers nobody chose, and the refusal names what the next attempt needs
+/// A parameter the console holds no row for is refused and said, rather than
+/// defaulted: a lane with invented levels would drive its target to two numbers
+/// nobody chose, and the refusal names what the next attempt needs
 /// ([P-0083](../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
 pub(crate) fn pointed_lane(
     banks: &mut karakuri_pattern::Banks,
@@ -1952,23 +1949,23 @@ pub(crate) fn pointed_lane(
     )
 }
 
-/// **A press in the Sequencer bay, applied to the pattern it names**, and what
-/// to say about it. `None` for every operation that is not one of the three.
+/// A press in the Sequencer bay, applied to the pattern it names, and what to
+/// say about it. `None` for every operation that is not one of the three.
 ///
-/// [`scheduled`]'s shape one bay along, and for the same reason:
-/// `written` answers `Silent(Surface)` for all five of the sequencer's
-/// operations — a pattern is library data under the store on the arrangement's
-/// terms, and what a *lane* does reaches the stream as its own writes
-/// (ADR-0320, ADR-0322) — so there is nothing on the deck for [`apply`] to
-/// move and the surface that emits it is what performs it.
+/// [`scheduled`]'s shape one bay along, and for the same reason: `written`
+/// answers `Silent(Surface)` for all five of the sequencer's operations — a
+/// pattern is library data under the store on the arrangement's terms, and what
+/// a *lane* does reaches the stream as its own writes (ADR-0320, ADR-0322) — so
+/// there is nothing on the deck for [`apply`] to move and the surface that
+/// emits it is what performs it.
 ///
-/// **Every arm names its bank**, and a press on a bank this session does not
-/// have is refused and said rather than swallowed, which is [`pointed`]'s rule:
-/// a press that does nothing and a press that is not bound are the same
+/// Every arm names its bank, and a press on a bank this session does not have
+/// is refused and said rather than swallowed, which is [`pointed`]'s rule: a
+/// press that does nothing and a press that is not bound are the same
 /// experience.
 ///
-/// **A mode press and a bank press reset the playhead**, and a step press does
-/// not. The first two change what a step *index* means — the same bar read at
+/// A mode press and a bank press reset the playhead, and a step press does not.
+/// The first two change what a step *index* means — the same bar read at
 /// another width, or another pattern's lanes under it — so a remembered index
 /// would hold the new reading silent until the bar came round. Turning a cell
 /// on changes what the *current* step is worth and not which step it is, and
@@ -2077,9 +2074,9 @@ pub(crate) fn sequenced(
     }
 }
 
-/// **A press on one of the transition row's three pills, applied to the
-/// console's own setting**, and what to say about it. `None` for every
-/// operation that is not it.
+/// A press on one of the transition row's three pills, applied to the console's
+/// own setting, and what to say about it. `None` for every operation that is
+/// not it.
 ///
 /// [`pointed`]'s shape one row down, and for the same reason:
 /// `Operation::SetTransition` *"changes nothing you can see and writes nothing
@@ -2089,16 +2086,15 @@ pub(crate) fn sequenced(
 /// is what performs it. `View::set_transition` is the only door into that
 /// setting, which is where the refusal below lives.
 ///
-/// **What it changes is what the next wipe means**, and that is why the line
-/// says the whole row rather than the field that moved: an operator reading
-/// *the shape is an iris* still has to know what grid it starts on.
+/// What it changes is what the next wipe means, and that is why the line says
+/// the whole row rather than the field that moved: an operator reading *the
+/// shape is an iris* still has to know what grid it starts on.
 ///
-/// **A setting no pill can draw is refused**, and it is said rather than
-/// swallowed for [`pointed`]'s reason — a press that does nothing and a press
-/// that is not bound are the same experience. Nothing this window emits can
-/// reach it: the pills name a destination out of the console's own cycles. It
-/// is a mapped controller or an MCP call that could, the day either reaches
-/// this row.
+/// A setting no pill can draw is refused, and it is said rather than swallowed
+/// for [`pointed`]'s reason — a press that does nothing and a press that is not
+/// bound are the same experience. Nothing this window emits can reach it: the
+/// pills name a destination out of the console's own cycles. It is a mapped
+/// controller or an MCP call that could, the day either reaches this row.
 pub(crate) fn scheduled(view: &mut View, operation: &Operation) -> Option<String> {
     let Operation::SetTransition { setting } = operation else {
         return None;
@@ -2127,25 +2123,25 @@ pub(crate) fn scheduled(view: &mut View, operation: &Operation) -> Option<String
     ))
 }
 
-/// **A candidate kept, applied to the lane**, and what to say about it.
-/// `None` for every operation that is not it.
+/// A candidate kept, applied to the lane, and what to say about it. `None` for
+/// every operation that is not it.
 ///
 /// [`scheduled`]'s shape one bay over, and for its reason: `written` answers
 /// `Silent(Silent::Surface)` for `Operation::KeepCandidate`, so there is no
 /// record for [`apply`] to move a deck with and the surface that draws the row
 /// is what performs the press. What it changes is one line in one list.
 ///
-/// **Nothing else moves, and that is the operation rather than a shortfall.**
-/// The version is where it was, the store holds every version it held, and the
-/// picture is the picture. What a keep says is that a person has looked at
-/// this node and is done with it — `console.html`'s *Accepting settles the
-/// node and changes nothing on screen*.
+/// Nothing else moves, and that is the operation rather than a shortfall. The
+/// version is where it was, the store holds every version it held, and the
+/// picture is the picture. What a keep says is that a person has looked at this
+/// node and is done with it — `console.html`'s *Accepting settles the node and
+/// changes nothing on screen*.
 ///
-/// **A row that is not there is said rather than swallowed**, which is
+/// A row that is not there is said rather than swallowed, which is
 /// [`pointed`]'s rule: nothing this window emits can reach it — the control is
 /// the row and a row that is not drawn takes no press — so a line here is a
-/// mapped controller or an MCP call arriving at a node with no candidate on
-/// it, the day either reaches this row.
+/// mapped controller or an MCP call arriving at a node with no candidate on it,
+/// the day either reaches this row.
 pub(crate) fn kept(view: &mut View, operation: &Operation) -> Option<String> {
     let Operation::KeepCandidate { deck, node } = operation else {
         return None;
@@ -2179,42 +2175,41 @@ pub(crate) fn kept(view: &mut View, operation: &Operation) -> Option<String> {
     ))
 }
 
-/// **Which salt a slot's material is seeded from** — the one it was built at,
-/// and the one a load restates when the Set file recorded none.
+/// Which salt a slot's material is seeded from — the one it was built at, and
+/// the one a load restates when the Set file recorded none.
 ///
 /// Deck A's is [`SEED_SALT`] and every slot after it is one further along, so
 /// this deck's four slots are four different simulations of the one procedure
-/// [`Sources`] names. **That generalises the reason the second salt was
-/// written for and then retires the constant.** `WARM_SEED_SALT` existed so
-/// that *the slot the budget parks is a different simulation rather than a
-/// second copy of the same one* — an argument about the parked slot, made when
-/// the parked slot was the only other slot there was. What it was really
-/// saying is that a deck of one picture repeated is not a mixer, and that is
-/// true of every slot rather than of deck B, so it is said once here and no
-/// constant states a reason that has gone
-/// ([`docs/contributing.md` §4](../../../docs/contributing.md)).
+/// [`Sources`] names. That generalises the reason the second salt was written
+/// for and then retires the constant. `WARM_SEED_SALT` existed so that *the
+/// slot the budget parks is a different simulation rather than a second copy of
+/// the same one* — an argument about the parked slot, made when the parked slot
+/// was the only other slot there was. What it was really saying is that a deck
+/// of one picture repeated is not a mixer, and that is true of every slot
+/// rather than of deck B, so it is said once here and no constant states a
+/// reason that has gone ([`docs/contributing.md`
+/// §4](../../../docs/contributing.md)).
 ///
-/// **`+ slot` rather than a table**, because a table of four numbers is four
-/// values with nothing to say about each other, and what is wanted is exactly
+/// `+ slot` rather than a table, because a table of four numbers is four values
+/// with nothing to say about each other, and what is wanted is exactly
 /// *distinct, and deck A's is the one the CLI's tests use*. Distinctness is
 /// then arithmetic rather than four typed numbers nobody re-reads — which
 /// `every_slot_is_its_own_simulation` asserts salt by salt, off the Sets the
 /// deck actually built rather than off this function.
 ///
-/// **The salts the run was built with, and no others**: a Set loaded into a
-/// slot is new *material* and not a new simulation, so a rebuild that derived
-/// its own seed would repaint every element in the slot for a reason nobody
-/// asked for — which is `Watch::salts`' own argument, met from the loading
-/// side.
+/// The salts the run was built with, and no others: a Set loaded into a slot is
+/// new *material* and not a new simulation, so a rebuild that derived its own
+/// seed would repaint every element in the slot for a reason nobody asked for —
+/// which is `Watch::salts`' own argument, met from the loading side.
 pub(crate) fn slot_salt(slot: usize) -> u32 {
     SEED_SALT + slot as u32
 }
 
-/// **What the derived material a procedure load leaves is a derivation *of***:
-/// the Set the slot is filed under, or the pair the run was launched with where
-/// it is filed under none.
+/// What the derived material a procedure load leaves is a derivation *of*: the
+/// Set the slot is filed under, or the pair the run was launched with where it
+/// is filed under none.
 ///
-/// **`watch::Aim::set` first**, because that is the one field a load moves and a
+/// `watch::Aim::set` first, because that is the one field a load moves and a
 /// procedure load does not (ADR-0304, ADR-0338): a slot that has been loaded is
 /// running that Set with one layer over it, and the strip has to say so. A slot
 /// nobody has loaded is running the launch pair, which no id names — that is
@@ -2224,9 +2219,9 @@ pub(crate) fn base_material(set: Option<&str>, launch: &str) -> String {
     set.map(str::to_owned).unwrap_or_else(|| launch.to_owned())
 }
 
-/// **What the strip reads once a layer has been written over what a deck is
-/// playing**: `<base> + <kir>`, which is the maintainer's own
-/// `drift_night + orbit_wide`.
+/// What the strip reads once a layer has been written over what a deck is
+/// playing: `<base> + <kir>`, which is the maintainer's own `drift_night +
+/// orbit_wide`.
 ///
 /// So what is on air says what it is made of and never claims to be a Set the
 /// library holds — `keep` is what gives it a name (ADR-0338).
@@ -2234,47 +2229,48 @@ pub(crate) fn derived_material(base: &str, procedure: &str) -> String {
     format!("{base} + {procedure}")
 }
 
-/// **Write one procedure over the layer it declares and re-aim the slot**, or
-/// say why it did not.
+/// Write one procedure over the layer it declares and re-aim the slot, or say
+/// why it did not.
 ///
 /// # Where the file comes from, and it is the two tiers and nothing else
 ///
-/// `<store>/procedures/<name>.kir` first and the presets root's
-/// `<name>.kir` after it, which is the order the Library bay lists them in and
-/// the only two places a procedure row can have come from (ADR-0227's two tiers,
-/// ADR-0338's decision 1). The content-addressed artifacts at the store root are
-/// **not** searched: that population is the edit history's, addressed by hash,
-/// and a name is not one.
+/// `<store>/procedures/<name>.kir` first and the presets root's `<name>.kir`
+/// after it, which is the order the Library bay lists them in and the only two
+/// places a procedure row can have come from (ADR-0227's two tiers, ADR-0338's
+/// decision 1). The content-addressed artifacts at the store root are not
+/// searched: that population is the edit history's, addressed by hash, and a
+/// name is not one.
 ///
-/// # Which position it lands on, and the limit is recorded rather than designed around
+/// # Which position it lands on, and the limit is recorded rather than designed
+/// around
 ///
-/// **The first node of that kind.** A procedure declares one `kind` and nothing
+/// The first node of that kind. A procedure declares one `kind` and nothing
 /// about where it goes, and a library row cannot say an index — so the payload
 /// carries none, and `L4:0` is the renderer a `kind L4` replaces. The second
 /// renderer of a three-renderer Set is unreachable from this row, and the day
 /// the Inspector's node head grows a *replace this node* control is the day the
 /// payload gains a `NodeAddress` (ADR-0338, stated at the point it bites).
 ///
-/// **Where the slot has no node of that kind the procedure is added as node 0 of
-/// it**, which is the case the request is about: a Set of a geometry and a
+/// Where the slot has no node of that kind the procedure is added as node 0 of
+/// it, which is the case the request is about: a Set of a geometry and a
 /// renderer declares no camera, so it holds the built-in orbit at `L3:0` and a
 /// `kind L3` row takes that position — the picture changes camera with nothing
 /// else moving.
 ///
 /// # What each file already on the slot is
 ///
-/// Read off the files themselves with `history::declared_kind`, which is the one
-/// scanner for a `kind` line, and with `compile`'s own fallback where a file
-/// declares none — the first node is an L1 and the rest are L4s, which is what
-/// a bare pair is. That is one small read per node, on the press, and it
+/// Read off the files themselves with `history::declared_kind`, which is the
+/// one scanner for a `kind` line, and with `compile`'s own fallback where a
+/// file declares none — the first node is an L1 and the rest are L4s, which is
+/// what a bare pair is. That is one small read per node, on the press, and it
 /// compiles nothing (P-0091).
 ///
 /// # The node name is kept, and that is what keeps the edges
 ///
-/// A replaced position keeps the **name the Set gave that node**, because an
-/// `edge` and a `bind` in the aim resolve against it: a rebuild that renamed the
-/// node would break the wiring the slot is running. A node that is *added* is
-/// named after the row, and a name the slot already holds is refused rather than
+/// A replaced position keeps the name the Set gave that node, because an `edge`
+/// and a `bind` in the aim resolve against it: a rebuild that renamed the node
+/// would break the wiring the slot is running. A node that is *added* is named
+/// after the row, and a name the slot already holds is refused rather than
 /// shadowed.
 pub(crate) fn overlaying(
     root: &std::path::Path,
@@ -2364,8 +2360,8 @@ pub(crate) fn overlaying(
     ))
 }
 
-/// **A procedure's bytes, out of whichever tier holds it**, with the word for
-/// the tier so the sentence a press prints says where the file came from.
+/// A procedure's bytes, out of whichever tier holds it, with the word for the
+/// tier so the sentence a press prints says where the file came from.
 ///
 /// The operator's own first and what ships after it, which is the order the
 /// listing draws them under `all` and `presets`: a name kept in this store is
@@ -2394,7 +2390,7 @@ pub(crate) fn kept_source(
     ))
 }
 
-/// **A deck's renderers folded or overdrawn, performed** — the Inspector deck
+/// A deck's renderers folded or overdrawn, performed — the Inspector deck
 /// head's fold pressed, and `None` for every operation that is not one.
 ///
 /// # It is [`played`]'s shape with one field instead of every field
@@ -2405,13 +2401,13 @@ pub(crate) fn kept_source(
 /// touches the deck — see [`Aiming::changed`], where the argument is, and
 /// `docs/adr/0314-…`, which is the record.
 ///
-/// **`written` answers `Silent(NoRecord)`**, exactly as it does for
+/// `written` answers `Silent(NoRecord)`, exactly as it does for
 /// `Operation::LoadSet`, so the surface that names it is the surface that
 /// performs it and there is nothing for [`apply`] to do. What a session stream
-/// has for a layering is `Record::Merge`, which is a **Set file's** statement
-/// about a Set and carries no slot; nothing in the vocabulary says *the Set in
-/// slot 3 composites*, and inventing a record here would be inventing the
-/// record stream (ADR-0046's rule, met from the panel).
+/// has for a layering is `Record::Merge`, which is a Set file's statement about
+/// a Set and carries no slot; nothing in the vocabulary says *the Set in slot 3
+/// composites*, and inventing a record here would be inventing the record
+/// stream (ADR-0046's rule, met from the panel).
 ///
 /// # A press that asks for the state the slot is in is refused rather than sent
 ///
@@ -2426,7 +2422,7 @@ pub(crate) fn kept_source(
 /// Every failure is a sentence and none of them moves anything: a slot the deck
 /// has not got, or a build worker that has gone.
 ///
-/// **A free function over the aims and not over [`Gfx`]**, which is [`rewired`]'s
+/// A free function over the aims and not over [`Gfx`], which is [`rewired`]'s
 /// arrangement and its reason: the whole of what this decides is the field, the
 /// refusal and the sentence, and none of the three needs a window, a device or
 /// a `Deck` to check. [`played`] beside it takes the program because a load
@@ -2474,8 +2470,8 @@ pub(crate) fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<S
     }
 }
 
-/// **A deck's element count moved, performed** — the Inspector deck head's
-/// capacity chip pressed, and `None` for every operation that is not one.
+/// A deck's element count moved, performed — the Inspector deck head's capacity
+/// chip pressed, and `None` for every operation that is not one.
 ///
 /// # It is [`composited`]'s shape with a different field of the aim
 ///
@@ -2485,10 +2481,10 @@ pub(crate) fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<S
 /// walked, and the reason a *setter* on `Set` was never what this waited on.
 /// `written` answers `Silent(NoRecord)` for `SetProperty` exactly as it does
 /// for `SetCompositing` and `LoadSet`, so there is nothing for [`apply`] to do:
-/// `Record::Capacity` is a **Set file's** statement about a Set and carries no
+/// `Record::Capacity` is a Set file's statement about a Set and carries no
 /// slot. A session replayed therefore does not come back at a capacity a hand
-/// stepped to — the load's cost, unchanged in size; **a deck kept does**, since
-/// a keep writes one `capacity` record per geometry off what the Set is running
+/// stepped to — the load's cost, unchanged in size; a deck kept does, since a
+/// keep writes one `capacity` record per geometry off what the Set is running
 /// at (`docs/adr/0328-…`).
 ///
 /// # It is the whole slot, and that is the aim's shape rather than a shortcut
@@ -2499,18 +2495,18 @@ pub(crate) fn composited(aims: &mut [Aiming], operation: &Operation) -> Option<S
 /// asking side rather than worked around, and it is why
 /// `karakuri_operation::Property::Capacity` names no node.
 ///
-/// **A press asking for the capacity the slot is already aimed at is refused
-/// with a sentence** and nothing is sent, on the fold's terms: it would buy a
+/// A press asking for the capacity the slot is already aimed at is refused with
+/// a sentence and nothing is sent, on the fold's terms: it would buy a
 /// recompile of the whole slot and land on the same picture. The chip cannot
 /// produce one — its step is strictly above what the slot is running — and a
-/// **model can**, since `set_property` names the number outright and arrives
-/// here as an `Acted::Emitted` like any press. That is why the guard is here
-/// and not in the console: what may be asked for is not a surface's to decide,
-/// so every way in meets the same wall in the same sentence
+/// model can, since `set_property` names the number outright and arrives here
+/// as an `Acted::Emitted` like any press. That is why the guard is here and not
+/// in the console: what may be asked for is not a surface's to decide, so every
+/// way in meets the same wall in the same sentence
 /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 ///
-/// **A free function over the aims**, for [`composited`]'s reason: the field,
-/// the refusal and the sentence are the whole of what it decides.
+/// A free function over the aims, for [`composited`]'s reason: the field, the
+/// refusal and the sentence are the whole of what it decides.
 pub(crate) fn resized(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
     let Operation::SetProperty {
         deck,
@@ -2550,8 +2546,8 @@ pub(crate) fn resized(aims: &mut [Aiming], operation: &Operation) -> Option<Stri
     }
 }
 
-/// **An input rewired, performed** — a pick out of a `uses` line's card, and
-/// `None` for every operation that is not one.
+/// An input rewired, performed — a pick out of a `uses` line's card, and `None`
+/// for every operation that is not one.
 ///
 /// # It is the route a model's `wire_input` already takes, reached from a press
 ///
@@ -2563,18 +2559,18 @@ pub(crate) fn resized(aims: &mut [Aiming], operation: &Operation) -> Option<Stri
 /// either is a defect in both rather than in whichever was tried
 /// ([P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md)).
 ///
-/// **Nothing is validated here.** The card offers nodes the pane could see and
-/// a name the Set cannot use is refused where the Set is *built*, by name and
+/// Nothing is validated here. The card offers nodes the pane could see and a
+/// name the Set cannot use is refused where the Set is *built*, by name and
 /// with what the Set does hold — which is the wall every way in meets, in one
 /// sentence
 /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
 ///
-/// **`written` answers `Silent(NoRecord)`** for `WireInput` and still does:
-/// `Record::Edge` is a **Set file's** statement about a Set and carries no
-/// slot, so a session replayed does not come back rewired where a hand asked
-/// for it — and **a keep does**, since a keep writes the run's edges into the
-/// file it saves. That is `SetProperty`'s division and `LoadSet`'s hole, not a
-/// new one (`docs/adr/0329-…`).
+/// `written` answers `Silent(NoRecord)` for `WireInput` and still does:
+/// `Record::Edge` is a Set file's statement about a Set and carries no slot, so
+/// a session replayed does not come back rewired where a hand asked for it —
+/// and a keep does, since a keep writes the run's edges into the file it saves.
+/// That is `SetProperty`'s division and `LoadSet`'s hole, not a new one
+/// (`docs/adr/0329-…`).
 pub(crate) fn wired_input(
     edges: &mut Vec<karakuri_engine::set::Edge>,
     aims: &mut [Aiming],
@@ -2610,15 +2606,14 @@ pub(crate) fn wired_input(
     })
 }
 
-/// **A deck's published interface narrowed or widened, performed** — a
-/// parameter row's publish mark pressed, and `None` for every operation that is
-/// not one.
+/// A deck's published interface narrowed or widened, performed — a parameter
+/// row's publish mark pressed, and `None` for every operation that is not one.
 ///
 /// # It is a field of the aim, which is what makes the choice survive
 ///
 /// `watch::Aim::published` is the interface a slot's watcher states at every
 /// build, and it has been empty in every run this program has ever had — an
-/// empty list *is* **publish everything**, so nothing had to fill it until
+/// empty list *is* publish everything, so nothing had to fill it until
 /// something narrowed. This fills it, and the reason it is the aim rather than
 /// a writer into the live `Set` is the one thing that decides between them: a
 /// live write is wiped by the next rebuild, and the next rebuild is the
@@ -2627,18 +2622,18 @@ pub(crate) fn wired_input(
 /// and ADR-0282 closed; there is no `Set::carry_moved_from` for an interface,
 /// so the aim is where it has to live (`docs/adr/0329-…`).
 ///
-/// **The cost is a recompile for a choice about a display**, and it is named
-/// rather than hidden: the build is the same files at the same capacity, so it
-/// is a build that has already landed once, and the Staging lane carries the
-/// verdict like every other.
+/// The cost is a recompile for a choice about a display, and it is named rather
+/// than hidden: the build is the same files at the same capacity, so it is a
+/// build that has already landed once, and the Staging lane carries the verdict
+/// like every other.
 ///
-/// **`written` answers `Silent(NoRecord)`**, and here that is a **gap in the
-/// format** rather than a record with no slot: nothing in this vocabulary says
-/// what a Set publishes, in a Set file or in a session. So a replay does not
-/// come back narrowed and **neither does a keep** — which is what makes this
-/// the weakest of the four re-aims on that row, and both manual pages say so.
+/// `written` answers `Silent(NoRecord)`, and here that is a gap in the format
+/// rather than a record with no slot: nothing in this vocabulary says what a
+/// Set publishes, in a Set file or in a session. So a replay does not come back
+/// narrowed and neither does a keep — which is what makes this the weakest of
+/// the four re-aims on that row, and both manual pages say so.
 ///
-/// **An empty list is not nothing.** `Publish { controls: [] }` asks for *every
+/// An empty list is not nothing. `Publish { controls: [] }` asks for *every
 /// declared control published*, which is what an unnarrowed deck is, and it is
 /// what a press that takes the last control off the interface would mean if
 /// anything could produce one — nothing can, because taking a row off leaves
@@ -2684,8 +2679,8 @@ pub(crate) fn attended(aims: &mut [Aiming], operation: &Operation) -> Option<Str
     }
 }
 
-/// **A deck re-seeded, performed** — the Inspector deck head's `re-salt`
-/// capsule pressed, and `None` for every operation that is not one.
+/// A deck re-seeded, performed — the Inspector deck head's `re-salt` capsule
+/// pressed, and `None` for every operation that is not one.
 ///
 /// # The salts are cleared and the seed is stated, which is one derivation
 ///
@@ -2693,7 +2688,7 @@ pub(crate) fn attended(aims: &mut [Aiming], operation: &Operation) -> Option<Str
 /// geometry, and the list wins where it is filled: `Set::build` reads a
 /// recorded salt and falls back to `derived_salt(seed_salt, ordinal)`. So a
 /// re-salt that wrote only the seed would move nothing on a slot filled from a
-/// Set file, which records one `seed` line per geometry. It **clears the list**
+/// Set file, which records one `seed` line per geometry. It clears the list
 /// instead of rewriting it, which is the same numbers with the arithmetic left
 /// where it belongs: the engine derives each geometry's salt from the slot's,
 /// and this program does not keep a second copy of that function
@@ -2710,8 +2705,8 @@ pub(crate) fn attended(aims: &mut [Aiming], operation: &Operation) -> Option<Str
 /// run cannot produce again
 /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
 ///
-/// **Nothing is refused.** The sequence goes forward, so a press cannot ask for
-/// the salt the slot is already on, and a re-seed always changes the picture —
+/// Nothing is refused. The sequence goes forward, so a press cannot ask for the
+/// salt the slot is already on, and a re-seed always changes the picture —
 /// which is what the fold's *already in that state* guard exists for and this
 /// one does not need.
 pub(crate) fn re_salted(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
@@ -2748,13 +2743,13 @@ pub(crate) fn re_salted(aims: &mut [Aiming], operation: &Operation) -> Option<St
     }
 }
 
-/// **What a [`karakuri_operation::Revision`] asked for, as a refusal names
-/// it** — a version by the name it was filed under, or a node by its address.
+/// What a [`karakuri_operation::Revision`] asked for, as a refusal names it — a
+/// version by the name it was filed under, or a node by its address.
 ///
-/// One function because the two refusals about the *deck* are the same
-/// sentence whichever arm arrived: a slot the deck has not got and a deck
-/// playing no Set are answered before anything is read, and what they have to
-/// name is only what was asked for.
+/// One function because the two refusals about the *deck* are the same sentence
+/// whichever arm arrived: a slot the deck has not got and a deck playing no Set
+/// are answered before anything is read, and what they have to name is only
+/// what was asked for.
 pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
     match revision {
         karakuri_operation::Revision::Picked(name) => format!("`{name}`"),
@@ -2765,7 +2760,7 @@ pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
     }
 }
 
-/// **The half of [`restored`] that reaches a disk**, split out for the reason
+/// The half of [`restored`] that reaches a disk, split out for the reason
 /// [`seeded`] is a free function: `main` cannot be entered from a test, a
 /// `Gfx` cannot be built without a device, and what this does is worth
 /// asserting — it writes over the file a deck is playing from.
@@ -2774,7 +2769,7 @@ pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
 /// letter, the Set the slot is running, the revision that was asked for, and
 /// where that slot's nodes are ([`karakuri_mcp::Slots`], the
 /// run's one published layout, which the caller reads off [`Engine::pointing`]).
-/// The refusals here are the ones that are about **files** — a version that is
+/// The refusals here are the ones that are about files — a version that is
 /// not in the listing, a node with nothing behind the one it is playing, a
 /// node this slot does not hold, and a file that will not be read or written —
 /// where the two about the *deck* are the caller's and are answered before
@@ -2784,7 +2779,7 @@ pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
 ///
 /// `karakuri_operation::Revision` has two arms because two surfaces can ask
 /// and each says the half it holds (ADR-0308), and what differs between them
-/// is **which row of this listing** — nothing after that. So the walk, the
+/// is which row of this listing — nothing after that. So the walk, the
 /// read, the address and the write are one path, and the arms are one `match`
 /// over the same `Vec<Version>`:
 ///
@@ -2793,7 +2788,7 @@ pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
 ///   spelling — `SetTransfer::Take`'s own arrangement, and the reason no
 ///   surface here spells a path.
 /// - `Previous` is a node the Staging lane's row handed over, and the version
-///   is **the one before the one running**: the listing is most recent first,
+///   is the one before the one running: the listing is most recent first,
 ///   the newest entry for that node is what the slot is playing — the history
 ///   is gated on compiling and not on landing, so a version that was stopped
 ///   for cost is filed too — and the entry after it is the step back
@@ -2802,7 +2797,7 @@ pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
 ///   in the way, which is `P-0083`: it says the node has nothing behind what
 ///   it is playing rather than that the press failed.
 ///
-/// **The narrowing to the Set is both arms'**, and it is the same narrowing
+/// The narrowing to the Set is both arms', and it is the same narrowing
 /// for the same reason — a version filed under no Set is a version of nothing.
 pub(crate) fn put_back(
     store: &std::path::Path,
@@ -2907,11 +2902,11 @@ pub(crate) fn put_back(
     }
 }
 
-/// **The record, applied to the deck**, and what to say about it.
+/// The record, applied to the deck, and what to say about it.
 ///
-/// **This is not the half ADR-0185 promised to delete, and it did not go with
-/// it.** Turning an `Operation` into a `Record` was the shortcut — that
-/// function is gone and [`written`] answers instead
+/// This is not the half ADR-0185 promised to delete, and it did not go with it.
+/// Turning an `Operation` into a `Record` was the shortcut — that function is
+/// gone and [`written`] answers instead
 /// ([ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
 /// Turning a record into a *deck movement* is a different job and is the
 /// harness's by design: `karakuri-operation-record` has no engine and never
@@ -2924,18 +2919,18 @@ pub(crate) fn put_back(
 /// [`written`] answers with to the setters they name.
 ///
 /// The line it returns is the loop closing, printed so that it can be read
-/// rather than inferred: the operation, the record, and **what the deck says
-/// afterwards** — which is where the next frame's strip comes from.
+/// rather than inferred: the operation, the record, and what the deck says
+/// afterwards — which is where the next frame's strip comes from.
 ///
 /// # It takes the look as well as the deck, and that is not a second target
 ///
-/// `Record::Look` is the one record here that does not name a slot: the look
-/// is what *every* sink is drawn under, so it is `Engine::look` rather than
+/// `Record::Look` is the one record here that does not name a slot: the look is
+/// what *every* sink is drawn under, so it is `Engine::look` rather than
 /// anything on the deck ([`Engine::look`], and `karakuri_engine::frame::Look`
 /// for why the master out is deliberately not in it). Handing both in is what
 /// keeps this one function the only place a record becomes a movement — a
-/// second `apply_look` beside it would be the second route into the engine
-/// that P-0090 exists to refuse.
+/// second `apply_look` beside it would be the second route into the engine that
+/// P-0090 exists to refuse.
 pub(crate) fn apply(
     record: &Record,
     deck: &mut Deck,
@@ -3487,46 +3482,45 @@ pub(crate) fn apply(
     }
 }
 
-/// **The reading an operation's record needs, taken off the deck it names.**
+/// The reading an operation's record needs, taken off the deck it names.
 ///
-/// [`written`] builds `Record::Mask` **whole** — a shape, an angle, a position
-/// and a softness — out of an operation that names two of the four, and the
-/// other two come from a reading of the mask that is running (ADR-0201). This
-/// is that reading, and it is the harness's because the deck is
-/// (ADR-0156, ADR-0194).
+/// [`written`] builds `Record::Mask` whole — a shape, an angle, a position and
+/// a softness — out of an operation that names two of the four, and the other
+/// two come from a reading of the mask that is running (ADR-0201). This is that
+/// reading, and it is the harness's because the deck is (ADR-0156, ADR-0194).
 ///
-/// **`Current::default()` is *I read nothing*, and it is still the answer for
-/// four of this panel's emitting controls**: a gain, an opacity, a blend
-/// mode and a residency each carry everything their record carries, so handing
-/// a reading in would be this file inventing a value. The mask mini is one of
-/// those that need one, and it needs it for the deck the operation *names*
-/// rather than for the deck the pointer is over — which is `Reading::Mask`'s
-/// own wording and the reason this takes the operation and not a slot.
+/// `Current::default()` is *I read nothing*, and it is still the answer for
+/// four of this panel's emitting controls: a gain, an opacity, a blend mode and
+/// a residency each carry everything their record carries, so handing a reading
+/// in would be this file inventing a value. The mask mini is one of those that
+/// need one, and it needs it for the deck the operation *names* rather than for
+/// the deck the pointer is over — which is `Reading::Mask`'s own wording and
+/// the reason this takes the operation and not a slot.
 ///
-/// **The two look controls are two of the other three**, and they read one
-/// thing between them: the look that is running. Each names a third of
-/// `Record::Look` and the other two thirds come from here — which is
-/// [`Reading::Look`]'s own wording and the reason the reading is taken for the
-/// operation rather than per control.
+/// The two look controls are two of the other three, and they read one thing
+/// between them: the look that is running. Each names a third of `Record::Look`
+/// and the other two thirds come from here — which is [`Reading::Look`]'s own
+/// wording and the reason the reading is taken for the operation rather than
+/// per control.
 ///
-/// **The scrub's two arrows are the fourth**, and the reading they take is the
-/// one thing on this list that is not a completion: see the arm.
+/// The scrub's two arrows are the fourth, and the reading they take is the one
+/// thing on this list that is not a completion: see the arm.
 ///
-/// **The sync chip and the anchor are the fifth and sixth**, and they read the
-/// one thing here that belongs to no deck: the session tempo. That arm used to
-/// be absent and the two controls used to print a question instead of moving
+/// The sync chip and the anchor are the fifth and sixth, and they read the one
+/// thing here that belongs to no deck: the session tempo. That arm used to be
+/// absent and the two controls used to print a question instead of moving
 /// anything — see [`unwritten`] for what the question turned out to be.
 ///
-/// **The softness is read back**, where `karakuri-cli`'s `mix::current_mask`
+/// The softness is read back, where `karakuri-cli`'s `mix::current_mask`
 /// substitutes its own `MASK_SOFTNESS`: that program writes wipes and has a
-/// softness of its own to write, and this window has never written one. What
-/// is read back here is therefore what is actually on the slot, and reading it
+/// softness of its own to write, and this window has never written one. What is
+/// read back here is therefore what is actually on the slot, and reading it
 /// back is what stops a press rewriting it — the same argument the angle's is,
 /// one field along.
 ///
-/// **The `go` capsule is the last of them and it is the one that reads
-/// three**: a wipe is written against the transition settings, the mask of the
-/// deck arriving and where that deck already sits in the mix. The first is the
+/// The `go` capsule is the last of them and it is the one that reads three: a
+/// wipe is written against the transition settings, the mask of the deck
+/// arriving and where that deck already sits in the mix. The first is the
 /// console's own — `settings` is what [`View::transition`] holds and what the
 /// row's three pills move — and the other two are the deck's, taken for the
 /// `to` slot and never for the `from`, which is `Current::mask`'s own wording:
@@ -3730,19 +3724,19 @@ pub(crate) fn reading(
     }
 }
 
-/// **The master chain, as the console reads it** — a level's reading rather
-/// than the level (ADR-0156), and the one place the engine's `Chain` becomes
-/// the panel's.
+/// The master chain, as the console reads it — a level's reading rather than
+/// the level (ADR-0156), and the one place the engine's `Chain` becomes the
+/// panel's.
 ///
-/// **Not `mix::current_chain`, and the two are not the same reading.** That one
+/// Not `mix::current_chain`, and the two are not the same reading. That one
 /// answers the *conversion* — what `written` completes a record from, in the
 /// engine's own amounts — and this one answers a *fader*, in track positions.
 /// The crossing they share, engine cut to vocabulary cut, is `mix::cut` and is
 /// made once.
 ///
-/// **The feedback amount arrives as a track position**, `[0, 1]`, where the
-/// engine holds `[0, 0.95]`: a fader draws where it is along its own travel,
-/// and `Knob::Feedback` multiplies back by `Feedback::MAX` on the way out. The
+/// The feedback amount arrives as a track position, `[0, 1]`, where the engine
+/// holds `[0, 0.95]`: a fader draws where it is along its own travel, and
+/// `Knob::Feedback` multiplies back by `Feedback::MAX` on the way out. The
 /// other two are `[0, 1]` at both ends and pass through.
 pub(crate) fn chain_view(chain: &[karakuri_engine::SlotSpec]) -> view::Chain {
     // **The three rows read the three shipped slots**, which is
@@ -3759,9 +3753,8 @@ pub(crate) fn chain_view(chain: &[karakuri_engine::SlotSpec]) -> view::Chain {
     }
 }
 
-/// **The engine's mask shape, as the vocabulary's** — [`blend_mode`]'s
-/// function one control along, and the one place these two lists are made to
-/// agree.
+/// The engine's mask shape, as the vocabulary's — [`blend_mode`]'s function one
+/// control along, and the one place these two lists are made to agree.
 ///
 /// A match, so the day a fourth `MaskKind` lands in the engine this stops
 /// compiling rather than reading a shape the vocabulary cannot name into a
@@ -3777,19 +3770,19 @@ pub(crate) fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
     }
 }
 
-/// **The vocabulary's mask shape, as the engine's** — [`wipe_kind`] read the
-/// other way, and the two are a pair rather than one function because the
-/// crossing happens in both directions in this file.
+/// The vocabulary's mask shape, as the engine's — [`wipe_kind`] read the other
+/// way, and the two are a pair rather than one function because the crossing
+/// happens in both directions in this file.
 ///
 /// The console holds the shape the *next* wipe takes as a
 /// [`karakuri_operation::WipeKind`] — `TransitionSetting::WipeShape` is what
 /// its pill emits — and `mix::current_transition` takes the engine's, so a
-/// wipe's front crosses here on its way to the reading. It crosses back
-/// inside that function, through `mix`'s own `wipe_kind`, which is the one
-/// place `karakuri-environment` makes the two lists agree: what a record
-/// carries is the vocabulary's word either way, and this round trip is the
-/// price of a signature that speaks the engine's types to a caller holding
-/// them (`karakuri-cli` is that caller).
+/// wipe's front crosses here on its way to the reading. It crosses back inside
+/// that function, through `mix`'s own `wipe_kind`, which is the one place
+/// `karakuri-environment` makes the two lists agree: what a record carries is
+/// the vocabulary's word either way, and this round trip is the price of a
+/// signature that speaks the engine's types to a caller holding them
+/// (`karakuri-cli` is that caller).
 ///
 /// A match for [`wipe_kind`]'s reason, so a fourth shape on either side stops
 /// the build here rather than at a record naming a shape nothing can read.
@@ -3801,33 +3794,32 @@ pub(crate) fn mask_kind(kind: karakuri_operation::WipeKind) -> MaskKind {
     }
 }
 
-/// **What a frame has to fit in on this window**: the display's refresh
-/// interval, in milliseconds — the `/16.6` in the mock's transport, at the
-/// 60 Hz it was drawn against.
+/// What a frame has to fit in on this window: the display's refresh interval,
+/// in milliseconds — the `/16.6` in the mock's transport, at the 60 Hz it was
+/// drawn against.
 ///
-/// **It is the refresh interval because that is what this window is held to.**
-/// The surface is `PresentMode::Fifo`, so a frame that takes longer than one
+/// It is the refresh interval because that is what this window is held to. The
+/// surface is `PresentMode::Fifo`, so a frame that takes longer than one
 /// interval to build is a frame that misses a vsync, and every millisecond
 /// under it is the headroom the mock's own tooltip is about. `Cost::wait` is
 /// the other side of the same number: at 60 Hz most of the frame is spent
 /// blocked in `get_current_texture` waiting for it.
 ///
-/// **It is not `karakuri_engine`'s `DEFAULT_BUDGET_MS`**, which is 20 and is a
+/// It is not `karakuri_engine`'s `DEFAULT_BUDGET_MS`, which is 20 and is a
 /// different budget with the same word on it: that one is what a *candidate
 /// Set* has to hold to survive a hot swap, measured offscreen at a fixed size
-/// and judged on a median. The mock's tooltip runs the two together — *"12.4
-/// of 16.6 — there is headroom. A candidate that cannot hold this is rolled
-/// back on its own"* — and they are two numbers. This row draws the one the
-/// frame is actually against.
+/// and judged on a median. The mock's tooltip runs the two together — *"12.4 of
+/// 16.6 — there is headroom. A candidate that cannot hold this is rolled back
+/// on its own"* — and they are two numbers. This row draws the one the frame is
+/// actually against.
 ///
 /// `None` where `winit` will not say, which is a monitor it cannot name or a
 /// mode with no refresh rate on it. The row then draws the frame time and no
 /// budget, rather than a plausible 16.6 nothing measured.
 ///
-/// **Read once, when the window opens.** A window dragged onto a 120 Hz
-/// display keeps the interval it opened on, which is a real limitation and is
-/// the price of not asking the platform for a monitor handle sixty times a
-/// second.
+/// Read once, when the window opens. A window dragged onto a 120 Hz display
+/// keeps the interval it opened on, which is a real limitation and is the price
+/// of not asking the platform for a monitor handle sixty times a second.
 pub(crate) fn budget_ms(window: &Window) -> Option<f32> {
     let millihertz = window.current_monitor()?.refresh_rate_millihertz()?;
     match millihertz > 0 {
