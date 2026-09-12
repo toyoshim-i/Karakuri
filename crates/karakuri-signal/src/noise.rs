@@ -60,17 +60,10 @@ impl Default for NoiseKind {
     }
 }
 
-/// A noise generator's full configuration: kind, period, and decorrelation.
+/// Complete noise generator configuration specifying algorithm kind, period, and stream ID.
 ///
-/// This is what a caller who needs a noise stream — for instance, an engine
-/// resolving a `bind` record that names one — constructs and calls
-/// [`sample`](NoiseConfig::sample) on directly. It is the **only** way to
-/// reach noise: [`crate::SynthesizedBus`] deliberately does not answer a
-/// `"noise"` name, because a `&str` is what
-/// [`SignalBus::sample`](crate::SignalBus::sample) takes and encoding a
-/// four-field configuration into one has no natural, collision-free grammar.
-/// A parameterless stand-in on the bus would not fix that; it would only put a
-/// second, weaker meaning behind the same name.
+/// Sampled directly via [`NoiseConfig::sample`] rather than through the bus, as noise
+/// parameters require explicit multi-field configuration.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NoiseConfig {
     pub kind: NoiseKind,
@@ -410,15 +403,7 @@ mod tests {
         assert_ne!(a, b);
     }
 
-    /// **Which clock noise runs off** — a tempo-relative rate under correction
-    /// (`docs/adr/0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md`),
-    /// answered in a
-    /// test rather than only in prose: a *tempo* correction reaches a noise
-    /// stream, and a *phase* correction does not.
-    ///
-    /// A phase correction realigns the beat grid with a room. Re-hashing every
-    /// noise stream because of it would make a flicker with no musical intent
-    /// jump whenever the tracker nudged the grid.
+    /// Verifies that noise streams follow tempo corrections but remain unaffected by phase shifts.
     #[test]
     fn noise_follows_a_tempo_correction_and_not_a_phase_one() {
         let config = NoiseConfig::default();

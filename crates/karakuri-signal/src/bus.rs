@@ -1,18 +1,12 @@
-//! The synthesized signal bus: V1's only kind of signal, since audio and
-//! external sync are out of scope. Every value on it is a pure function of the
-//! local oscillator's `t` and `bpm` — nothing else.
+//! The synthesized signal bus: computes deterministic signals derived from the local
+//! oscillator's `t` and `bpm`.
 //!
-//! **Nothing seeded lives here.** A signal a name alone can describe belongs on
-//! the bus; a generator with kind, rate, stream and octaves to say does not,
-//! because [`SignalBus::sample`](crate::SignalBus::sample) takes a `&str` and
-//! there is no collision-free grammar for four fields inside one. Noise is
-//! therefore reached through [`NoiseConfig`](crate::NoiseConfig), and the name
-//! `"noise"` belongs to the `bind` record that declares one — see
-//! [`sample`](SynthesizedBus::sample).
+//! The bus answers only unseeded signals identifiable by name alone. Parameterized
+//! noise generators require explicit configuration and are sampled through
+//! [`NoiseConfig`](crate::NoiseConfig).
 //!
-//! [`SynthesizedBus`] never fails to resolve a name and never returns an
-//! `Option`; see [`SignalBus`](crate::SignalBus) for why. Consumers branch on
-//! [`Sample::confidence`](crate::Sample::confidence) instead.
+//! [`SynthesizedBus`] resolves all valid names without returning `Option`; consumers
+//! evaluate [`Sample::confidence`](crate::Sample::confidence).
 
 use crate::oscillator::Oscillator;
 use crate::{Sample, SignalBus, SignalId};
@@ -31,17 +25,8 @@ const CONFIDENCE_INVENTED: f32 = 0.1;
 
 /// A signal bus synthesized entirely from a local [`Oscillator`].
 ///
-/// V1 has no external input, so this is the only kind of `SignalBus`: there
-/// is nothing to fall back to and nothing to blend against. Holding the
-/// oscillator by reference rather than copying its state keeps the bus and
-/// the oscillator from being able to disagree — there is exactly one phase in
-/// the system, and this just reads it.
-///
-/// **No seed.** Everything the bus answers is a deterministic waveform in `t`
-/// and `bpm`; the explicit seed stream the determinism invariant asks for is
-/// [`NoiseConfig::sample`](crate::NoiseConfig::sample)'s, where the randomness
-/// actually is. A seed carried here and read by nothing would look like a
-/// randomness source that had been accounted for.
+/// Holds the oscillator by reference to sample deterministic waveforms as a function
+/// of `t` and `bpm`. Randomness is handled separately via [`NoiseConfig`](crate::NoiseConfig).
 pub struct SynthesizedBus<'a> {
     oscillator: &'a Oscillator,
 }
@@ -150,12 +135,7 @@ mod tests {
         }
     }
 
-    /// **`"noise"` is not a bus name.** A noise generator has kind, rate,
-    /// stream and octaves to say and `sample` takes only a name, so noise is
-    /// `NoiseConfig`'s and the name belongs to the `bind` record that declares
-    /// one. Answering it here as well would give one name two meanings at two
-    /// confidences — the shape `docs/ir-spec.md` refuses when it asks for
-    /// vocabularies that are "disjoint by name" rather than in practice.
+    /// Verifies that `"noise"` is rejected by the bus and must be sampled via `NoiseConfig`.
     #[test]
     fn noise_is_not_a_name_the_bus_answers() {
         let steps = [(1u8, 1.0 / 60.0), (3, 1.0 / 60.0)];

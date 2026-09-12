@@ -56,18 +56,10 @@ use crate::{Sample, SignalBus, SignalId};
 /// The signal name for a broadband level. Already a bus name.
 pub const ENERGY: &str = "energy";
 
-/// The signal name for a transient. New with audio input.
+/// The signal name for a transient onset envelope.
 ///
-/// **A decaying envelope in `[0, 1]`, not an impulse and not a probability.**
-/// It jumps to 1.0 on a detected transient and decays with a fixed half-life
-/// from there, which is the same shape `bus::pulse` gives `beat` — so `onset`
-/// and `beat` are one signal measured and one invented, and `pow2` reads as a
-/// hit on either. The choice is forced by the rates: analysis blocks and
-/// rendered frames are not locked to each other, so an impulse one block wide
-/// would be missed by some frames and seen twice by others, while an envelope
-/// is meaningful whenever it is sampled. A probability would be a different
-/// quantity — how sure the detector is, not how recently it fired — and
-/// confidence is already where that kind of statement goes.
+/// Decaying envelope in `[0.0, 1.0]`. Jumps to 1.0 on a detected transient and
+/// decays with a fixed half-life, ensuring transient visibility across frame boundaries.
 pub const ONSET: &str = "onset";
 
 /// How many spectrum bands a frame can carry.
