@@ -587,37 +587,15 @@ pub(crate) fn layer_word(layer: Layer) -> &'static str {
     }
 }
 
-/// **A node's layer as the vocabulary names one.** `karakuri_ir::Kind` and
-/// `karakuri_operation::Layer` are two spellings of one list, and this is the
-/// converter between them; `mcp.rs`'s `layer_of` is the other instance and is
-/// private to that crate. A match rather than a cast, for [`layer_word`]'s
-/// reason: a sixth kind stops the build here.
+/// **A node's layer as the vocabulary names one.** Delegated to
+/// [`karakuri_environment::meta::op_layer_of`] as the single source of truth.
 pub(crate) fn asked_layer(layer: Layer) -> karakuri_operation::Layer {
-    match layer {
-        Layer::L1 => karakuri_operation::Layer::L1,
-        Layer::L2 => karakuri_operation::Layer::L2,
-        Layer::L3 => karakuri_operation::Layer::L3,
-        Layer::L4 => karakuri_operation::Layer::L4,
-        Layer::Field => karakuri_operation::Layer::Field,
-        Layer::L5 => karakuri_operation::Layer::L5,
-    }
+    karakuri_environment::meta::op_layer_of(layer)
 }
 
-/// **And back**, for the two things that want the compiler's own: spelling an
-/// address a press arrived with, and resolving one to the word the store files
-/// a version under. `karakuri_mcp`'s `kind_of` is the other
-/// instance and is private to that crate; this is [`asked_layer`]'s inverse
-/// and a match for its reason, so a sixth layer stops the build in both
-/// directions rather than in one.
+/// **And back**, delegated to [`karakuri_environment::meta::kind_of_op`].
 pub(crate) fn ir_layer(layer: karakuri_operation::Layer) -> Layer {
-    match layer {
-        karakuri_operation::Layer::L1 => Layer::L1,
-        karakuri_operation::Layer::L2 => Layer::L2,
-        karakuri_operation::Layer::L3 => Layer::L3,
-        karakuri_operation::Layer::L4 => Layer::L4,
-        karakuri_operation::Layer::Field => Layer::Field,
-        karakuri_operation::Layer::L5 => Layer::L5,
-    }
+    karakuri_environment::meta::kind_of_op(layer)
 }
 
 /// **Which node a published control belongs to**, and `None` where it belongs

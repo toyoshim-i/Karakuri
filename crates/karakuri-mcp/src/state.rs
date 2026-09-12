@@ -589,28 +589,14 @@ pub(crate) fn layer_name(layer: Kind) -> &'static str {
 /// one with, and the panel does not reach inside a Set. A node address is the
 /// thing MCP can say and the other three cannot.
 pub(crate) fn layer_of(layer: Kind) -> karakuri_operation::Layer {
-    match layer {
-        Kind::L1 => karakuri_operation::Layer::L1,
-        Kind::L2 => karakuri_operation::Layer::L2,
-        Kind::L3 => karakuri_operation::Layer::L3,
-        Kind::L4 => karakuri_operation::Layer::L4,
-        Kind::Field => karakuri_operation::Layer::Field,
-        Kind::L5 => karakuri_operation::Layer::L5,
-    }
+    karakuri_environment::meta::op_layer_of(layer)
 }
 
 /// And back, for the two things that want the compiler's own: resolving an
 /// address to a file, and comparing a written source's `kind` line against the
 /// address it arrived at.
 pub(crate) fn kind_of(layer: karakuri_operation::Layer) -> Kind {
-    match layer {
-        karakuri_operation::Layer::L1 => Kind::L1,
-        karakuri_operation::Layer::L2 => Kind::L2,
-        karakuri_operation::Layer::L3 => Kind::L3,
-        karakuri_operation::Layer::L4 => Kind::L4,
-        karakuri_operation::Layer::Field => Kind::Field,
-        karakuri_operation::Layer::L5 => Kind::L5,
-    }
+    karakuri_environment::meta::kind_of_op(layer)
 }
 
 /// The layers, as a client is told them in a refusal.
