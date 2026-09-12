@@ -80,7 +80,7 @@ graph TD
     P24["<b>P24: Decompose engine_bridge.rs by Responsibility</b><br/>Split sinks, engine, filesystem, and handlers [COMPLETED]"]
     P22["<b>P22: Extract Headless Runtime Orchestrator</b><br/>karakuri-runtime / slim CLI scaffolding [COMPLETED]"]
     P21["<b>P21: Consolidate Layer Conversions & Contracts</b><br/>Centralize mappings; preserve zero-dep & serde compatibility [COMPLETED]"]
-    P23["<b>P23: Rationalize karakuri-environment Boundaries</b><br/>Map all 14 modules; resolve circular coupling [READY]"]
+    P23["<b>P23: Rationalize karakuri-environment Boundaries</b><br/>Decompose monoliths, resolve couplings, and isolate tests [COMPLETED]"]
 
     P26 --> P24
     P25 --> P21
@@ -191,19 +191,30 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 
 ---
 
-### P23. Rationalize `karakuri-environment` Module Boundaries [PLANNED]
+### P23. Rationalize `karakuri-environment` Module Boundaries [COMPLETED]
 
 #### Phenomenon
-`karakuri-environment` holds 14 modules totaling 20,041 lines. Simply extracting an "I/O" crate risks confusing existing crates (`karakuri-audio`, `karakuri-midi`) which already handle low-level device I/O.
+`karakuri-environment` held 14 modules totaling 20,041 lines, with heavy monoliths (`setfile.rs` at 5,156 lines, `mix.rs` at 2,810 lines) and nearly 9,000 lines of inline unit tests intertwined with production code. Furthermore, ambiguous re-exports caused external callers to bypass canonical sources (`meta.rs`).
 
-#### Refactoring Plan
-1. **Full Accounting of All 14 Modules**:
-   - Adaptors: `audio.rs` (757 lines), `midi.rs` (2,072 lines), `tempo_source.rs` (626 lines)
-   - Formats: `setfile.rs` (5,156 lines), `session.rs` (1,234 lines), `meta.rs` (204 lines)
-   - Engine/Disk Integration: `mix.rs` (2,810 lines), `history.rs` (1,894 lines), `places.rs` (980 lines), `compile.rs` (606 lines), `scratch.rs` (501 lines), `render.rs` (456 lines), `clock.rs` (295 lines), `watch.rs` (2,450 lines)
-2. **Strategy**:
-   - Address internal circular couplings (`setfile` ↔ `compile` ↔ `meta`) before attempting any crate extraction.
-   - Re-evaluate whether `karakuri-environment` should remain a unified coordination crate with cleanly separated internal module hierarchies.
+#### Refactoring Implementation
+1. **Canonical Type Routing**:
+   - Routed layer conversions in `mix.rs`, `karakuri-cli`, `karakuri-mcp`, and `karakuri::bridge` directly to `karakuri-environment::meta`.
+   - Added canonical `layer_name` and preserved backward-compatible re-exports with documentation directives.
+2. **Decomposition of Monoliths**:
+   - Decomposed `setfile/` into:
+     - `types.rs` (314 lines): data representations (`Loaded`, `Node`, `Saving`, `Owned`)
+     - `binding.rs` (225 lines): binding decoder, encoder, and parameter ordinals
+     - `bundle.rs` (604 lines): packaging, bundling, unbundling, and `.kset` resolution
+     - `summary.rs` (317 lines): store summarization, listing, and `Sources`
+     - `codec.rs` (958 lines): save, load, and Set serialization pipeline
+     - `tests.rs` (2,677 lines): isolated test suite
+     - `mod.rs` (96 lines): slim public facade
+   - Decomposed `mix/` into:
+     - `shipped.rs` (57 lines): embedded example presets and addresses
+     - `mod.rs` (1,333 lines): performance mix state and record change translation
+     - `tests.rs` (1,415 lines): isolated test suite
+3. **Test Suite Isolation**:
+   - Extracted dedicated `tests.rs` submodules for `history` (945 lines), `watch` (966 lines), and `midi` (841 lines), reducing all production modules below or near ~1,000 lines.
 
 ---
 
@@ -216,4 +227,4 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 | **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **COMPLETED** |
 | **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **COMPLETED** |
 | **P21** | Type Conversions | Centralize layer conversions in `meta.rs`; establish serialization parity test | **COMPLETED** |
-| **P23** | `karakuri-environment` | Untangle internal cyclic couplings; map destinations for all 14 modules | **READY** |
+| **P23** | `karakuri-environment` | Decompose monoliths (`setfile`, `mix`), resolve couplings, and isolate test suites | **COMPLETED** |
