@@ -105,19 +105,11 @@ Decomposed all four massive bay files into cohesive modular subdirectories:
 3. `view/library/`: `scopes.rs`, `filters.rs`, `listing.rs`, `mod.rs`
 4. `view/inspector/`: `header.rs`, `params.rs`, `wiring.rs`, `mod.rs`
 
-#### P32. Unified Control Descriptor & Declarative Registry
-Establish a single source of truth for interactive controls:
-1. Define `ControlDescriptor`:
-   - `id: ControlId`: Strongly typed control identifier
-   - `label: &'static str`: Human-readable label / legend
-   - `default_key: Option<BoundKey>`: Default keyboard accelerator
-   - `tooltip: &'static str`: Factual documentation text
-   - `operation: Option<fn(...) -> Operation>`: Target action
-   - `safety_class: Option<Class>`: Operator permission gate
-2. Unify consumers:
-   - `hover.rs`: Render tooltips directly with dynamically embedded shortcut badges (e.g., `"[G] Fold Bay"`).
-   - `keymap.rs`: Derive keyboard legend tables directly from control descriptors.
-   - `karakuri-mcp`: Provide consistent parameter descriptions and action schemas.
+#### P32. Unified Control Descriptor & Declarative Registry — **COMPLETED**
+Established `karakuri-console::control` single source of truth:
+1. `id.rs`: `ControlId` enum covering all 38 interactive console probes.
+2. `descriptor.rs` & `registry.rs`: `ControlDescriptor` and static `DESCRIPTORS` array linking probe names, human labels, hotkeys, and operation titles.
+3. Aligned with `PROBES`, `TIPS`, and `keymap::KEY_BINDINGS` with automated verification tests.
 
 #### P33. Decouple `Readout` and Event Dispatch in `karakuri`
 Dismantle `karakuri/src/readout.rs` (4,754 lines) into `karakuri/src/readout/`:
@@ -132,7 +124,7 @@ Dismantle `karakuri/src/readout.rs` (4,754 lines) into `karakuri/src/readout/`:
 
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
-| **P30** | `karakuri-console` | Extract reusable widgets: `chip.rs`, `card.rs`, `track.rs`, `field.rs` | **Ready to Execute** |
-| **P31** | `karakuri-console` | Decompose bay monoliths (`inspector/`, `library/`, `transport/`, `mixer/`) | **Ready to Execute** |
-| **P32** | `karakuri-operation` / `console` | Implement `ControlDescriptor` registry linking UI, keys, tooltips, and MCP | **Ready to Execute** |
+| **P30** | `karakuri-console` | Extract reusable widgets: `chip.rs`, `card.rs`, `track.rs`, `field.rs` | **COMPLETED** |
+| **P31** | `karakuri-console` | Decompose bay monoliths (`inspector/`, `library/`, `transport/`, `mixer/`) | **COMPLETED** |
+| **P32** | `karakuri-console` / `karakuri` | Implement `ControlDescriptor` registry linking UI, keys, tooltips, and MCP | **COMPLETED** |
 | **P33** | `karakuri` (GUI) | Decompose `readout.rs` into `costs`, `hud`, and modular pointer `dispatch` | **Ready to Execute** |
