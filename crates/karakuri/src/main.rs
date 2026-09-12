@@ -644,8 +644,9 @@ pub(crate) const MAPPED: usize = 32;
 // every one of them — five failed at once and said so. The fixture the tests
 // still want is `gpu::STEPS_A_FRAME`, beside the frames that use it.
 
-mod engine_bridge;
-pub(crate) use engine_bridge::*;
+mod bridge;
+pub(crate) use bridge as engine_bridge;
+pub(crate) use bridge::*;
 
 mod gfx;
 pub(crate) use gfx::*;
