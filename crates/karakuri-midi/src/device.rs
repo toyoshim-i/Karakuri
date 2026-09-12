@@ -74,54 +74,23 @@ pub struct Port {
     name: String,
 }
 
-/// **What the MIDI thread is handed**: where to put a message, and who to tell.
-///
-/// A struct rather than the bare `Sender` this used to be, because there are
-/// now two things to do per message and `midir` carries exactly one value into
-/// the callback. See *A frame loop that sleeps has to be woken* above for why
-/// the second is not a second channel.
+/// Context passed to the MIDI input callback.
 struct Callback {
     messages: Sender<Message>,
-    /// **Called once per message, on the MIDI thread**, or `None` for a caller
-    /// that is going to ask anyway. Boxed because this crate must not know
-    /// what a wake *is*: the panel's is an event-loop proxy and
-    /// `karakuri-cli`'s is nothing at all.
+    /// Optional notification closure called once per incoming message on the MIDI thread.
     wake: Option<Box<dyn Fn() + Send>>,
 }
 
 impl Port {
-    /// Open the first input whose name contains `wanted`, case-insensitively,
-    /// or the first input at all when `wanted` is empty.
-    ///
-    /// A substring rather than an exact name because the name a MIDI port
-    /// reports is the manufacturer's and often carries a port number and a
-    /// bus — "nanoKONTROL2 SLIDER/KNOB" is one real example — and asking an
-    /// operator to type that exactly is asking them to run the tool once to
-    /// find out what to type.
-    ///
-    /// The error names every port there was, for the same reason.
-    ///
-    /// **Nothing is woken.** This is the constructor for a caller that drains
-    /// every frame regardless — see [`Port::waking`] for the other one.
+    /// Opens the first input whose name contains `wanted` case-insensitively, or the first
+    /// available input if `wanted` is empty.
     pub fn open(wanted: &str) -> Result<Port, String> {
         Port::opened(wanted, None)
     }
 
-    /// [`Port::open`], and `wake` is called once per message on the MIDI
-    /// thread, right after it is queued.
+    /// Opens the matching input and registers a `wake` closure invoked per received message.
     ///
-    /// **For a caller whose loop sleeps.** A message arriving is the only
-    /// thing that can tell such a loop there is anything to drain, and a knob
-    /// turned on a panel nobody is touching would otherwise be applied at
-    /// whatever the next mouse move was — which is a control that silently
-    /// does nothing, and is what
-    /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`
-    /// rules out.
-    ///
-    /// **The wake carries nothing and answers nothing**, which is what keeps
-    /// this crate ignorant of who is listening: it says *ask again*, and what
-    /// the caller does about it is the caller's. A failure to wake is dropped
-    /// for the send's reason — a loop that has gone is a run that is ending.
+    /// Wakes sleeping event loops when new MIDI messages arrive.
     pub fn waking(wanted: &str, wake: impl Fn() + Send + 'static) -> Result<Port, String> {
         Port::opened(wanted, Some(Box::new(wake)))
     }
@@ -208,52 +177,17 @@ impl Port {
     }
 }
 
-/// **An open MIDI output, written to from a thread of its own.**
+/// Open MIDI output device connection managed on a dedicated worker thread.
 ///
-/// The other direction, and it is a different problem from [`Port`]'s. An
-/// input hands this process bytes on somebody else's thread and the frame
-/// drains them; an output is written to *by the frame*, and
-/// `MidiOutputConnection::send` is a system call into a driver that this
-/// process does not own the timing of. **Nothing on the frame path waits**
-/// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`),
-/// so the frame does not make that call.
-///
-/// ## The shape is ADR-0067's, one stream along
-///
-/// A **bounded** channel to a thread that owns the connection, and a frame
-/// that finds it full **drops and counts** rather than blocking or growing:
-///
-/// - **Bounded**, because the queue is a picture of one moment. A surface's
-///   LEDs and faders show where the deck is *now*, so a backlog is a fader
-///   travelling through positions it was already past — unlike a session
-///   stream, where every record is owed.
-/// - **Dropped rather than blocked**, because the alternative is the render
-///   thread waiting on a driver. What a drop costs is one stale control until
-///   the next change moves it, and the caller re-states a control whenever the
-///   deck changes it.
-/// - **Counted**, because a surface that quietly stopped following the deck is
-///   the failure nobody notices — `docs/adr/0067-the-session-writer-never-blocks-never-grows-and-never-silently-drops.md`
-///   is the record and [`Out::dropped`] is the count, said once by whoever
-///   holds this.
-///
-/// **The connection is opened on the sender's own thread** rather than moved
-/// on to it, and the result is carried back over a one-shot channel: the
-/// caller still finds out why a port would not open, and nothing here depends
-/// on a `midir` connection being `Send`.
+/// Emits MIDI bytes asynchronously across a bounded channel to prevent blocking the render thread.
+/// If the channel fills, subsequent messages are dropped and counted in `dropped`.
 pub struct Out {
     to: mpsc::SyncSender<[u8; 3]>,
     name: String,
     dropped: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
-/// **How many messages may be in flight**, and it is a whole surface's worth
-/// several times over.
-///
-/// A frame writes at most one message per mapped control that changed, and a
-/// map is single figures to a few dozen lines; a pair is two. So this is full
-/// only when the sender thread has stopped making progress at all — a driver
-/// that has stopped taking bytes, or a device unplugged mid-set — which is
-/// exactly the case a bound exists for.
+/// Maximum in-flight messages permitted in the output queue.
 const QUEUE: usize = 256;
 
 impl Out {
@@ -337,12 +271,7 @@ impl Out {
         Ok((connection, name))
     }
 
-    /// **Queue one message. Never waits.**
-    ///
-    /// `true` if it was queued and `false` if it was dropped — a full queue or
-    /// a sender thread that has gone. A dropped message is counted either way,
-    /// so a caller that ignores the answer still has [`Out::dropped`] to say
-    /// it with.
+    /// Queues one message without blocking. Returns true if queued, or false if dropped.
     pub fn send(&self, message: [u8; 3]) -> bool {
         match self.to.try_send(message) {
             Ok(()) => true,
@@ -369,14 +298,7 @@ impl Out {
 mod tests {
     use super::*;
 
-    /// **A full queue drops rather than blocking**, which is the property the
-    /// bound exists for and the one that cannot be checked with a device
-    /// attached: what it is about is a sender thread that has stopped taking
-    /// bytes.
-    ///
-    /// The queue with nothing draining it stands in for that exactly — no
-    /// port, no thread, and the same `SyncSender` the frame writes to. A test
-    /// that hangs here is the failure it is looking for.
+    /// Verifies that a full queue drops excess messages without blocking.
     #[test]
     fn a_full_queue_drops_rather_than_blocking() {
         let (to, held) = mpsc::sync_channel::<[u8; 3]>(QUEUE);

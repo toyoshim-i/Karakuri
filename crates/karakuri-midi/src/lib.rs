@@ -1,57 +1,23 @@
-//! MIDI in: a control surface driving the deck through the record stream.
+//! MIDI control surface input handling and translation to declarative operations.
 //!
-//! A MIDI control surface goes on a dedicated controller, not the DJ
-//! controller. The reason it is a separate surface is that the DJ
-//! controller belongs to whoever is playing the music, and the visuals cannot
-//! be on a device somebody else's hands are on.
+//! # Architecture
 //!
-//! ## Why this crate knows nothing about the engine
+//! `karakuri-midi` captures incoming MIDI wire messages, parses them into structured
+//! [`Message`] events, and matches them against user `.kmap` tables to emit pure
+//! [`karakuri_operation::Operation`] commands.
 //!
-//! It produces a [`karakuri_operation::Operation`] — "the operator asked for
-//! gain 0.7 on deck 2" — and stops. `karakuri-operation-record` turns that
-//! into the same `gain` record a keypress writes, and the engine is driven
-//! through that.
+//! Hardware bindings are kept separate from the engine:
+//! - Hardware mapping maps messages into standard system operation vocabulary.
+//! - Mutations flow into the record stream, enabling full deterministic session replay
+//!   without hardware attached.
+//! - Map files describe local physical controller layouts and are not serialized into
+//!   portable session archives.
 //!
-//! **The vocabulary is not this crate's**, and that is the point: a map line
-//! names one of the operations `docs/manual/operations.html` specifies, so a
-//! pad and a key are two routes into one name rather than two lists that have
-//! to agree. `Action` — eight gestures of this crate's own, full of toggles
-//! because a crate that would not name a value had nothing else to offer — is
-//! gone
-//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
-//! The one dependency it costs has no dependencies itself, which is
-//! `karakuri-operation`'s charter and was written with this crate as its
-//! worked example (ADR-0180).
+//! # Submodules
 //!
-//! **That is the invariant, not an arrangement.** The record stream
-//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`)
-//! is the sole mutation path, and the reason an automatic writer is safe to run
-//! is that it can do nothing a human could not do through the same interface. A
-//! surface is the first thing to test that claim against, because a surface is
-//! the first thing that is not the keyboard. Every consequence follows from it:
-//! a session recorded from a controller **replays with no controller
-//! attached**, an unmapped knob cannot reach anything, and there is no control
-//! a surface can move that a key cannot.
-//!
-//! It also settles where the map lives. The map is **not** in the session
-//! stream: which knob is which is a property of the hardware in the room, and
-//! replaying one room's wiring in another is not replaying a performance. It is
-//! the same argument `residency` makes about the *effective* level, from the
-//! other end.
-//!
-//! ## The split
-//!
-//! The same shape as `karakuri-audio`, and for the same reason: everything that
-//! decides anything is a pure function, tested against bytes rather than
-//! against a device.
-//!
-//! - [`Message`] is the wire, parsed. Three message kinds, and everything else
-//!   ignored rather than misread.
-//! - [`Map`] is the operator's table, and turns a message into a
-//!   [`karakuri_operation::Operation`].
-//! - `device` opens a port and pushes bytes across a channel. It is the only
-//!   part that cannot be tested without hardware, and it is deliberately the
-//!   part with nothing in it.
+//! - [`message`]: Pure, zero-allocation MIDI packet decoding.
+//! - [`map`]: Domain mapping table translating control changes/notes into operations.
+//! - [`device`]: Hardware port interface wrapping `midir`.
 
 mod device;
 mod map;

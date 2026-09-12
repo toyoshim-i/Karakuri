@@ -32,26 +32,15 @@ pub enum Message {
 }
 
 impl Message {
-    /// Parse one message, or `None` for one this engine has no use for.
-    ///
-    /// **Complete messages only.** Running status — where a sender omits the
-    /// status byte and repeats the last one — is a serial-cable economy that
-    /// belongs to the transport, and every host MIDI API reassembles it before
-    /// delivery. Accepting it here would mean holding parser state across
-    /// callbacks for a case that cannot arrive.
+    /// Parses a complete raw MIDI byte slice into a [`Message`], or `None` if unhandled or malformed.
     pub fn parse(bytes: &[u8]) -> Option<Message> {
         let (&status, data) = bytes.split_first()?;
-        // A data byte where a status byte belongs: running status, or a
-        // fragment. Neither is this function's to reassemble.
+        // A data byte where a status byte belongs: running status or a fragment.
         if status & 0x80 == 0 {
             return None;
         }
         let channel = status & 0x0f;
-        // **Masked before anything is matched on**, and the order is
-        // load-bearing: the top bit is not part of a data byte, and a
-        // velocity of `0x80` masks to zero — which is a release. Matching
-        // first and masking after read it as a press at velocity 0, which is
-        // the one case where the difference is not cosmetic.
+        // Data bytes mask off the top bit (0x7f) per MIDI specification.
         let data = |i: usize| data.get(i).map(|b| b & 0x7f);
         match (status & 0xf0, data(0), data(1)) {
             (0xb0, Some(controller), Some(value)) => Some(Message::ControlChange {
@@ -96,10 +85,7 @@ mod tests {
         );
     }
 
-    /// **A note-on at velocity 0 is a note-off.** The spec allows both
-    /// spellings and hardware disagrees about which it sends, so a reader that
-    /// took velocity 0 for a press would see every release as a second press —
-    /// which on a control surface means every pad toggling twice per hit.
+    /// Verifies that NoteOn with velocity 0 is treated as NoteOff.
     #[test]
     fn a_note_on_at_velocity_zero_is_a_release_not_a_press() {
         assert_eq!(
@@ -125,9 +111,7 @@ mod tests {
         );
     }
 
-    /// **Everything else is ignored rather than misread.** A pitch bend and a
-    /// control change differ by one nibble, and a parser that fell through to
-    /// its nearest match would turn a pitch wheel into a fader move.
+    /// Verifies that unsupported message types are ignored and return None.
     #[test]
     fn a_message_this_engine_has_no_use_for_is_none_rather_than_a_near_miss() {
         for bytes in [
@@ -159,11 +143,7 @@ mod tests {
         assert_eq!(Message::parse(&[7, 100]), None);
     }
 
-    /// **A data byte's top bit is not part of the value.** A device sending
-    /// one is out of spec, and the two readings are "controller 135" — which
-    /// does not exist — and "controller 7 with a bit set". Masking makes it the
-    /// second, and it is here rather than assumed because the alternative is a
-    /// fader silently answering as a controller nothing can be mapped to.
+    /// Verifies that data bytes with top bits set are masked to 7 bits.
     #[test]
     fn a_data_byte_with_its_top_bit_set_is_masked_rather_than_read_wide() {
         assert_eq!(

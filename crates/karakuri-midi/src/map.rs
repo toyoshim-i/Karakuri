@@ -188,35 +188,9 @@ enum Shape {
     Ratio,
 }
 
-/// **A member of the deck** — which of the (up to) four positions a line
-/// names — carried as the `slot` field on the six of [`Target`]'s variants
-/// that address a deck.
+/// Deck slot position (0..3) addressed by a map line.
 ///
-/// **Its own type because ADR-0344 asks the bare `u8` deck-position to become
-/// one**, replacing the bare number this crate used to carry on these six
-/// variants — see
-/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`.
-/// This crate has no other sense of "slot" to collide with (no
-/// `master::Slot`, no `karakuri-pattern::SLOTS`), so the name is chosen for
-/// consistency with `karakuri_store::record::DeckSlot` and
-/// `karakuri_engine::deck::DeckSlot` rather than to avoid a clash here.
-///
-/// **Mirrors those two rather than depending on either.** This crate depends
-/// on `karakuri-operation` alone and nothing else, by charter (ADR-0180, this
-/// module's own documentation): a `DeckSlot` shared from `karakuri-store` or
-/// `karakuri-engine` would be a second dependency paid for one field. Every
-/// crossing back into a bare `u8` — this crate's own [`Control`] and
-/// [`Parameter`], and `karakuri_operation::Operation`'s `deck` fields — is a
-/// plain field copy (`slot.0`), on `karakuri_engine::deck::DeckSlot`'s own
-/// precedent for a boundary that does not take the newtype.
-///
-/// **No fallible constructor, unlike the store and engine copies.** Their
-/// `DeckSlot::new` checks a slot against a deck's own size; this crate reads
-/// nothing back and has no deck to size one against (this module's
-/// documentation, "Why this crate knows nothing about the engine") — a map
-/// line's slot number is checked against the deck it plays on wherever that
-/// deck is held, by `karakuri_engine::DeckSlot::new`
-/// (`karakuri_environment::midi`'s `Interface`/`Feedback` among its callers).
+/// Dedicated type isolating deck slot positions from bare integer indices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct DeckSlot(u8);
 
@@ -232,12 +206,7 @@ impl From<u8> for DeckSlot {
     }
 }
 
-/// What a message is mapped to, before its value is known.
-///
-/// **A press carries its destination and a fader carries its range**, which is
-/// the whole difference between the two halves of this list: a note's line said
-/// everything it had to say at parse time, so `Target::Residency` holds the
-/// state it names and `Target::Blend` holds the mode. Nothing here is a step.
+/// Destination and configuration mapped to a MIDI control.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Target {
     Gain {
@@ -264,30 +233,7 @@ enum Target {
         blend: BlendMode,
     },
     Tap,
-    /// **A control of the Set on a deck, by its place in the published
-    /// interface** — `cc 30 -> param 0 3`.
-    ///
-    /// **A position and never a name**, which is
-    /// [ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)'s
-    /// rule and the whole reason learn is worth having: *knob 3 is knob 3
-    /// whatever Set is loaded*. Binding to a Set's parameter by name would
-    /// make the mapping a cost paid again on every swap, and it also settles
-    /// the crossing — the same Set in two decks is two addresses, because the
-    /// deck is in the address.
-    ///
-    /// **Counting from one**, which is the number the Inspector draws beside
-    /// the row (`karakuri_console::view::Param::ord`). It is the only place a
-    /// position is visible at all, so a line an operator cannot check against
-    /// the pane is a line they cannot fix by hand.
-    ///
-    /// **The range is optional here and nowhere else**, and that is not an
-    /// inconsistency: every other continuous target has a range this crate can
-    /// state, because what it moves is the console's own control. A published
-    /// control's range is the *Set's* — `Published::range`, which narrows the
-    /// procedure's declaration — and this crate reads nothing back. So `None`
-    /// means *the range the Set published it over*, filled in by whoever holds
-    /// the deck, and a range written on the line overrides it the way it does
-    /// on a gain.
+    /// Published Set parameter on a deck, addressed by 1-based interface position (`cc 30 -> param 0 3`).
     Param {
         slot: DeckSlot,
         position: u16,
@@ -303,20 +249,7 @@ impl Target {
         }
     }
 
-    /// **The right-hand side of the line that reaches this target**, spelled
-    /// the way [`parse_target`] reads it.
-    ///
-    /// **It is the control's identity in a map file**, and that is what it is
-    /// for: [`Map::bound`] reads the table backwards by this string, so a
-    /// tooltip can say which knob a control is on, and a learn writes
-    /// `<key> -> <this>`. **One spelling, produced by the grammar's own enum**,
-    /// rather than a formatter beside the parser that could come to disagree
-    /// with it — a line this returns is a line [`Map::parse`] accepts, which
-    /// `a_spelled_target_parses_back_to_itself` is what holds.
-    ///
-    /// **The range is left out.** Two lines differing only by a range are the
-    /// same control reached over two spans, so a reverse lookup keyed on the
-    /// range would answer *unassigned* for a knob that is plainly assigned.
+    /// Canonical text representation of the target in a map file.
     pub fn spelled(self) -> String {
         match self {
             Target::Gain { slot, .. } => format!("gain {slot}"),
@@ -347,33 +280,7 @@ impl Target {
     }
 }
 
-/// **The default range of every continuous control**, chosen so that both ends
-/// of a fader are exact.
-///
-/// `[0, 1]` for gain even though the mix is HDR and values above 1.0 are
-/// ordinary: 127 maps to exactly 1.0 this way, and a fader whose top is unity
-/// is what a fader means. Reaching past it is `]`'s job, or an explicit range
-/// in the mapping. The alternative — a default of `[0, 2]` so a surface could
-/// push a layer — puts unity at 1.008 and nowhere else, and a mixer whose
-/// faders cannot be matched is worse than one that cannot be pushed.
-///
-/// Exposure's `[0.25, 4]` is two stops either side of unity, and it is a ratio
-/// scale, so the middle of the fader is exactly 1.0.
-///
-/// **A mask position's `[0, 1]` is the control's own range rather than a
-/// default chosen here**, and both ends being exact matters for a stronger
-/// reason than matching two faders. `karakuri_engine::deck::Mask` says of its
-/// `position` that 0 shows nothing anywhere and 1 shows everything everywhere
-/// *for any softness* — which `Blend::silent_at` depends on at the bottom and a
-/// wipe that has to actually finish depends on at the top. A fader that came up
-/// an ulp short at the top would leave a front that never quite arrives, on a
-/// deck that looks finished. It is linear because a front travelling at an even
-/// rate is what a wipe is, which is [`Shape::Linear`] and is what
-/// [`Target::shape`] answers for everything that is not exposure.
-///
-/// Writing a wider range is allowed here as it is on a gain, and buys less: the
-/// engine clamps a mask to the unit interval on apply, where a gain above unity
-/// is a real place to be.
+/// Default value range for continuous controls.
 const GAIN_RANGE: [f32; 2] = [0.0, 1.0];
 const OPACITY_RANGE: [f32; 2] = [0.0, 1.0];
 const EXPOSURE_RANGE: [f32; 2] = [0.25, 4.0];
@@ -397,14 +304,7 @@ enum Key {
 }
 
 impl Key {
-    /// **The left-hand side of the line this is**, spelled the way
-    /// [`parse_key`] reads it — [`Target::spelled`]'s other half, and the
-    /// answer [`Map::bound`] gives and a learn writes.
-    ///
-    /// The channel is the front panel's 1-16, because that is what is printed
-    /// on the device an operator reads it off; the wire's 0-15 is
-    /// [`crate::Message`]'s and the translation happens in `parse_key`, once
-    /// each way.
+    /// Canonical text representation of the key on the left side of a map line.
     fn spelled(self) -> String {
         self.spelled_with(None)
     }
@@ -437,73 +337,46 @@ impl Key {
     }
 }
 
-/// **What a message asks of a deck's published interface**, which is the one
-/// thing a map cannot finish on its own — see [`Map::parameter`].
-///
-/// A position rather than a key, because that is what a map line holds
-/// (ADR-0268), and a position becomes a `ParamAt` only against the Set that is
-/// in the deck right now.
+/// Control message targeting a deck's published parameter interface.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Parameter {
-    /// The deck slot, as every other line spells it: counting from zero.
+    /// Zero-based deck slot index.
     pub deck: u8,
-    /// **The place in that deck's published interface, counting from one** —
-    /// the number the Inspector draws beside the row.
+    /// 1-based position in the deck's published parameter interface.
     pub position: u16,
-    /// Where the control change sits on its span, `[0, 1]`. The span itself is
-    /// [`Parameter::value`]'s argument.
+    /// Normalized position on parameter span in `[0, 1]`.
     pub at: f32,
-    /// The range written on the line, or `None` for *the range the Set
-    /// published this control over*.
+    /// Explicit range override from map line, or None to use published range.
     pub range: Option<[f32; 2]>,
 }
 
 impl Parameter {
-    /// **The value asked for**, over the line's own range where it has one and
-    /// over `declared` where it has not.
-    ///
-    /// Linear, and there is no ratio case: a published control's range is the
-    /// procedure's declaration narrowed by the Set, and nothing in a `.kir`
-    /// says a parameter is logarithmic. Exposure is the one ratio control this
-    /// grammar has and it is not a published parameter.
+    /// Evaluates requested value across `range` (if specified) or `declared` range.
     pub fn value(self, declared: [f32; 2]) -> f32 {
         let [lo, hi] = self.range.unwrap_or(declared);
         lo + self.at * (hi - lo)
     }
 }
 
-/// **Which half of a 14-bit control a message is**, and the pair it belongs
-/// to — [`Map::wide`]'s answer.
-///
-/// The pair is named by its **MSB** controller whichever half arrived, so a
-/// caller holds the MSB it has seen under one number rather than two.
+/// 14-bit control component and parent pair identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wide {
-    /// The MSB half's controller — the first number on the `cc14` line.
+    /// The MSB half's controller index naming the pair.
     pub control: u8,
-    /// Which half this message is.
+    /// Half of the 14-bit pair represented by this message.
     pub half: Half,
 }
 
-/// The two halves of a 14-bit control change.
+/// The two halves of a 14-bit Control Change message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Half {
-    /// The top seven bits. **On its own it moves the control coarsely**, at
-    /// exactly the reading a plain `cc` line would give — see the module
-    /// documentation, where the lone-MSB rule is.
+    /// Top 7 bits (MSB).
     Msb,
-    /// The bottom seven bits. **On its own it moves nothing**: there is
-    /// nothing to refine until an MSB has been seen for that control.
+    /// Bottom 7 bits (LSB).
     Lsb,
 }
 
-/// **What a mapped control *is*, as an address rather than a value** — what
-/// [`Echo::control`] answers and what whoever holds the deck reads a value at.
-///
-/// It is [`Target`] with the ranges taken off, which is the difference between
-/// *what the map does to a message* and *which control of the instrument this
-/// line is about*. A caller answering these is answering about the deck and
-/// never about the mapping.
+/// Address of a mapped control target on a deck or global instrument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Control {
     Gain {
@@ -516,57 +389,37 @@ pub enum Control {
     MaskPosition {
         deck: u8,
     },
-    /// **A pad, and the state it names.** What is shown is whether the deck is
-    /// in that state — one pad of the three lights, which is what makes a
-    /// residency row on a surface a readout as well as a control.
+    /// Pad controlling deck residency state.
     Residency {
         deck: u8,
         residency: Residency,
     },
-    /// A pad, and the mode it names, on [`Control::Residency`]'s terms.
+    /// Pad controlling blend mode.
     Blend {
         deck: u8,
         blend: BlendMode,
     },
-    /// A control of the Set on a deck, by its place in the published
-    /// interface, counting from one.
+    /// Published parameter addressed by 1-based position.
     Param {
         deck: u8,
         position: u16,
     },
-    /// **A beat has no state**, so nothing is ever shown for a `tap` line. It
-    /// is here so that the list is the grammar's list and a target added to
-    /// the grammar and not to this one does not compile.
+    /// Tap beat trigger.
     Tap,
 }
 
-/// **Where a control is right now**, as whoever holds the deck reads it —
-/// [`Echo::position`]'s argument.
+/// Current hardware control state to reflect on a feedback surface.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shown {
-    /// A continuous control at `value`, in the control's own units.
+    /// Continuous control at `value` in native units.
     At(f32),
-    /// **A published control**, whose range is the Set's rather than this
-    /// crate's: `declared` is what the Set published it over, and a range
-    /// written on the `param` line wins over it exactly as it does on the way
-    /// in ([`Parameter::value`]).
+    /// Published Set control at `value` with Set `declared` range.
     Published { value: f32, declared: [f32; 2] },
-    /// A pad's control, and whether the deck is in the state that pad names.
+    /// State of a pad toggle/selector.
     On(bool),
 }
 
-/// **One mapped control, as something to show a surface** — the map read the
-/// other way, and the whole of MIDI out that this crate owns.
-///
-/// It carries the line: which message reaches the control, whether that line
-/// is a pair, and what the control is. [`Echo::control`] says what to read,
-/// [`Echo::position`] turns the value read back into the number the wire
-/// carries, and [`Echo::wire`] turns that into bytes.
-///
-/// **The two steps are separate because the caller compares them.** A surface
-/// is written to when the deck changes a control and not once a frame, and the
-/// thing worth comparing is the *position* — a gain that moved by less than a
-/// step of the fader is a message that would say nothing.
+/// Descriptor of a mapped control for MIDI output feedback.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Echo {
     key: Key,
@@ -575,8 +428,7 @@ pub struct Echo {
 }
 
 impl Echo {
-    /// **What this shows**, as an address whoever holds the deck can read a
-    /// value at.
+    /// Address of the control represented by this feedback mapping.
     pub fn control(self) -> Control {
         match self.target {
             Target::Gain { slot, .. } => Control::Gain { deck: slot.0 },
@@ -599,21 +451,7 @@ impl Echo {
         }
     }
 
-    /// **Where `shown` sits on this control's own range, as the wire carries
-    /// it**: `0..=127` on a `cc` line, `0..=16383` on a `cc14` one, and 0 or
-    /// 127 for a pad.
-    ///
-    /// **The inverse of [`scale`]**, and exact at both ends wherever that one
-    /// is: a gain at 0.0 answers 0 and a gain at 1.0 answers the top of the
-    /// span, so a motorised fader parks where the operator would have put it
-    /// rather than a step short. A value outside the line's range is clamped
-    /// to the end it is past — a gain pushed to 1.4 by `]` on a fader written
-    /// `[0, 1]` shows the top of that fader, which is where the fader would
-    /// have to be.
-    ///
-    /// A value that is not finite answers 0 rather than a number built out of
-    /// a NaN: what reaches the wire has to be seven bits either way, and 0 is
-    /// the end a control that cannot be read should be shown at.
+    /// Returns normalized wire position for `shown` (0..127 for 7-bit, 0..16383 for 14-bit).
     pub fn position(self, shown: Shown) -> u16 {
         let steps = f32::from(self.steps());
         let (range, value) = match (self.target, shown) {
@@ -643,19 +481,7 @@ impl Echo {
         (at.clamp(0.0, 1.0) * steps).round() as u16
     }
 
-    /// **The bytes that show `position`**, appended to `into`: one message for
-    /// a `cc` line and for a pad, and **two for a pair, MSB first**, which is
-    /// the order the wire has always taken them in.
-    ///
-    /// **The channel is the line's**, and channel 1 where the line named none
-    /// — the same forgiving default the way in has, read the other way: a map
-    /// that does not care which channel a knob arrives on is a map whose
-    /// surface is the only thing plugged in.
-    ///
-    /// A pad is lit with a note-on at velocity 127 and unlit with one at
-    /// velocity 0, which is [`crate::Message`]'s own reading of a release —
-    /// so a surface that echoes what it is sent stays consistent with what
-    /// this crate would read back from it.
+    /// Appends wire messages representing `position` to `into` (1 message for 7-bit/pad, 2 for 14-bit pair).
     pub fn wire(self, position: u16, into: &mut Vec<[u8; 3]>) {
         let channel = match self.key {
             Key::Cc { channel, .. } | Key::Note { channel, .. } => channel.unwrap_or(0) & 0x0f,
@@ -698,34 +524,19 @@ impl Echo {
     }
 }
 
-/// **One line of the table**: what the message moves, and the controller its
-/// LSB half arrives on where the line is a `cc14`.
-///
-/// A pair is **one** entry and not two, which is what keeps [`Map::len`], the
-/// line a readout says and the line [`Map::lines`] writes back all talking
-/// about the line an operator wrote. The LSB half is reached through
-/// [`Map::fine`](Map) instead, which points at the MSB this is keyed by.
+/// Single mapping table entry associating a message key with a target and optional 14-bit LSB.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Entry {
     target: Target,
-    /// The controller the LSB half arrives on, or `None` for a 7-bit line.
+    /// Controller index of the LSB half for a 14-bit CC pair.
     lsb: Option<u8>,
 }
 
-/// One operator's table.
+/// Mapping table associating incoming MIDI messages with target operations and parameters.
 #[derive(Debug, Default, Clone)]
 pub struct Map {
     entries: HashMap<Key, Entry>,
-    /// **The LSB half of every `cc14` line**, pointing at the controller its
-    /// MSB half is keyed by — the number the pair is named by everywhere else
-    /// here.
-    ///
-    /// A second table rather than a second entry, because a pair is one
-    /// mapping: an LSB in `entries` would be counted, listed and read back as
-    /// a control of its own. Nothing is looked up here until `entries` has
-    /// answered `None`, so a plain `cc N` line always wins over a pair that
-    /// wanted N for its LSB — and [`Map::parse`] says so out loud rather than
-    /// letting the pair go quiet.
+    /// Maps LSB keys to their corresponding MSB controller indices.
     fine: HashMap<Key, u8>,
 }
 
@@ -787,35 +598,7 @@ impl Map {
         (map, notes)
     }
 
-    /// **Bind `message` to `target`, and give back the line that says so.**
-    ///
-    /// This is learn, and it is the only thing in this crate that *changes* a
-    /// map. What it takes is a message that just arrived and the right-hand
-    /// side of a line — [`Target::spelled`]'s output, which is what the caller
-    /// asking *what is the pointer on* has — and what it gives back is the
-    /// whole line, for the caller to put in the file.
-    ///
-    /// **It parses what it is about to insert**, rather than inserting a
-    /// target it was handed. So every refusal the grammar has applies to a
-    /// learn on the same terms as to a hand-written line — a `note` on a
-    /// fader's target is refused here exactly as it is on load, and a target
-    /// this crate does not know is refused with the list. **A learn cannot put
-    /// a line in a map that the map could not have been loaded with**, which
-    /// is what keeps the file an operator can still edit by hand.
-    ///
-    /// **The line names no channel**, which is the map's own default and the
-    /// forgiving one: a surface is usually the only thing plugged in, and a
-    /// learned binding that stopped working because the controller was moved
-    /// to another channel would be a mapping an operator has no way to see.
-    /// Writing `ch N` by hand still narrows it, and still wins over this.
-    ///
-    /// **In the table, the later learn simply replaces the earlier one.** What
-    /// a caller does to the *file* is the caller's, and
-    /// `karakuri_environment::midi`'s `appended` says why it replaces a line
-    /// in place rather than adding one: [`Map::parse`]'s *the later line wins*
-    /// keeps the map right either way, but it also **reports** the shadowed
-    /// line, so a knob learned five times would print four complaints on every
-    /// start.
+    /// Binds `message` to `target` and returns the generated map line string.
     pub fn learn(&mut self, message: crate::Message, target: &str) -> Result<String, String> {
         use crate::Message;
         let key = match message {
@@ -834,31 +617,12 @@ impl Map {
         Ok(line)
     }
 
-    /// What this message asks for, or `None` if nothing is mapped to it.
-    ///
-    /// **A pure function of one message.** No readback, no state, no engine —
-    /// which is what lets every test here be `parse` then this, and is the
-    /// reason `cc -> exposure` names an exposure rather than a look
-    /// (ADR-0192).
-    ///
-    /// A release is deliberately nothing. Every pad here is a press naming a
-    /// state or a selection, so acting on the release too would undo it —
-    /// and a momentary control that wants both ends is a different target from
-    /// these, not the same one read twice.
+    /// Translates `message` to an [`Operation`], or `None` if unmapped.
     pub fn operation(&self, message: crate::Message) -> Option<Operation> {
         operating(self.target(message)?, coarse(message))
     }
 
-    /// **Which half of a 14-bit control this message is**, or `None` for a
-    /// message no `cc14` line names either half of.
-    ///
-    /// [`Wide::control`] is the pair's **MSB** controller whichever half
-    /// arrived, so it is the key a caller holds the halves under — see the
-    /// module documentation, where the whole of the pairing is.
-    ///
-    /// A plain `cc` line answers `None` here, and so does a controller that is
-    /// both a plain line and some pair's LSB: the plain line wins, which
-    /// [`Map::parse`] says out loud when it loads the two.
+    /// Returns 14-bit pair component information for `message`, or `None` if not mapped as `cc14`.
     pub fn wide(&self, message: crate::Message) -> Option<Wide> {
         let crate::Message::ControlChange {
             channel,
@@ -897,19 +661,12 @@ impl Map {
         })
     }
 
-    /// **[`Map::operation`] for a 14-bit pair whose halves are both in hand**,
-    /// where `value` is `(msb << 7) | lsb` — `0..=16383`.
-    ///
-    /// `message` is either half; what it names is the pair, and the pair's
-    /// target. A message no `cc14` line names answers `None`, so this cannot
-    /// be used to read a 7-bit line at 14 bits.
+    /// Translates an assembled 14-bit value (`0..=16383`) into an [`Operation`].
     pub fn operation_wide(&self, message: crate::Message, value: u16) -> Option<Operation> {
         operating(self.wide_target(message)?, Some(fine(value)))
     }
 
-    /// **[`Map::parameter`] for a 14-bit pair**, on
-    /// [`Map::operation_wide`]'s terms exactly — the two stay disjoint by
-    /// target at 14 bits for the reason they are at 7.
+    /// Translates an assembled 14-bit value into a [`Parameter`].
     pub fn parameter_wide(&self, message: crate::Message, value: u16) -> Option<Parameter> {
         parametered(self.wide_target(message)?, Some(fine(value)))
     }
@@ -940,18 +697,7 @@ impl Map {
             .copied()
     }
 
-    /// **Every mapped control, as something to show a surface** — the map read
-    /// the other way, for MIDI out.
-    ///
-    /// Built once and kept, not asked per frame: it allocates, and the caller
-    /// that sends feedback runs inside a frame. `karakuri_environment::midi`'s
-    /// `Router` builds it at construction and again on a learn, which are the
-    /// two moments a map changes.
-    ///
-    /// **Sorted by the message that reaches the control**, because a
-    /// `HashMap`'s order is not an order: a surface lit in a different order
-    /// every run is a surface whose dropped messages are a different set every
-    /// run.
+    /// Returns sorted feedback descriptors for all mapped controls.
     pub fn echoes(&self) -> Vec<Echo> {
         let mut echoes: Vec<Echo> = self
             .entries
@@ -966,44 +712,12 @@ impl Map {
         echoes
     }
 
-    /// **What this message asks of a deck's published interface**, or `None`
-    /// where it is not on a `param` line.
-    ///
-    /// # Why this is a second accessor and not a second spelling
-    ///
-    /// [`Map::operation`] answers *the operation this message names*, and it
-    /// is a pure function of one message because every target it can complete
-    /// addresses something the vocabulary spells outright — a slot number, a
-    /// word from a closed list, a level. **`param` addresses something only
-    /// the deck can resolve**: position 3 of a Set's published interface is a
-    /// different node and a different key after a load, which is the whole
-    /// point of binding to a position (ADR-0268).
-    ///
-    /// So the two are one question in two shapes, and they are **disjoint by
-    /// target**: a message on a `param` line answers `None` to `operation` and
-    /// `Some` here, and every other mapped message the other way round.
-    /// `every_mapped_message_answers_exactly_one_of_the_two` is what holds
-    /// that, so a target added to the grammar and to neither accessor is a
-    /// knob that goes quiet rather than a compile error.
-    ///
-    /// **It reads nothing back either.** What comes out is the address and
-    /// where the knob is on its span; turning that into a value takes the
-    /// declared range, which is [`Parameter::value`]'s argument.
+    /// Returns [`Parameter`] destination and value for a `param` mapping, or `None` if unmapped.
     pub fn parameter(&self, message: crate::Message) -> Option<Parameter> {
         parametered(self.target(message)?, coarse(message))
     }
 
-    /// **Every mapping, as the lines that would load it** — the map written
-    /// back out.
-    ///
-    /// **For one caller and one moment**: seeding an operator's map file that
-    /// does not exist yet, on the first learn of a run. It is not a save — the
-    /// comments in the file this came from are the file's and not the table's,
-    /// so anything written from here is bare lines, and whoever calls it says
-    /// as much in the file it writes.
-    ///
-    /// Unordered, because a `HashMap` is; the caller sorts, and one that did
-    /// not would write a file that shuffled on every run.
+    /// Returns an iterator of map lines formatted for `.kmap` persistence.
     pub fn lines(&self) -> impl Iterator<Item = String> + '_ {
         self.entries.iter().map(|(key, entry)| {
             format!(
@@ -1014,31 +728,7 @@ impl Map {
         })
     }
 
-    /// **Which message reaches `target`**, as an operator would write the
-    /// left-hand side — `cc 5`, `note 32 ch 2` — or `None` for a control
-    /// nothing is mapped to.
-    ///
-    /// **The map read backwards, and it is what a tooltip says.** A control's
-    /// assignment is a fact this table holds, so the console's `⊕ MIDI:` line
-    /// is derived from it rather than transcribed from the manual — the
-    /// manual's text is the *mock's* assignments and no operator's
-    /// (ADR-0335, ADR-0336).
-    ///
-    /// **Keyed by [`Target::spelled`]**, which is the control's identity in a
-    /// map file: the caller spells the right-hand side of the line it is
-    /// asking about, and gets back the left-hand side or nothing. That is the
-    /// one key both directions can agree on without this crate learning what a
-    /// console control is.
-    ///
-    /// **A linear scan**, which is what the shape costs and it is the right
-    /// cost here: this is asked once per pointer *rest*, not per frame, and a
-    /// map is single-figure to a few dozen entries. A second `HashMap` keyed
-    /// the other way would be a second table to keep in step with this one.
-    ///
-    /// **The first in an arbitrary order wins where two lines reach one
-    /// control**, and that is a real ambiguity rather than a defect to hide: a
-    /// map may put two knobs on one gain, and a tooltip naming one of them is
-    /// the honest half of that. What it must not do is answer *unassigned*.
+    /// Returns the input message syntax bound to `target` (for tooltips and UI readouts).
     pub fn bound(&self, target: &str) -> Option<String> {
         self.entries
             .iter()
@@ -1046,23 +736,7 @@ impl Map {
             .map(|(key, entry)| key.spelled_with(entry.lsb))
     }
 
-    /// **Whether this message moves a control that carries a position**, and
-    /// `false` for anything nothing is mapped to.
-    ///
-    /// [`Map::operation`]'s question one step earlier, and here for one
-    /// caller: `karakuri-cli`'s router keeps the last value a control sent
-    /// within a frame and drops the ones before it, which it may do to a fader
-    /// and may not do to a pad — two presses in one frame are two things that
-    /// happened, where two positions from one fader are one place it ended up.
-    ///
-    /// **It is [`Target::continuous`] and not a second list.** That is the
-    /// same predicate `parse_line` refuses a `note` on a fader's target with,
-    /// so the line is drawn once; a caller matching on the operations it
-    /// believes to be continuous would be a list to keep in step with this
-    /// one, and a target added to only one of them would coalesce a press.
-    ///
-    /// A pure function of one message, like [`Map::operation`] and for the
-    /// same reason: it reads the table and nothing else.
+    /// Returns true if `message` maps to a continuous control (fader/dial).
     pub fn is_continuous(&self, message: crate::Message) -> bool {
         // **Either half of a pair is the fader it is half of.** An LSB is not
         // in `entries` — a pair is one mapping — so asking `target` alone
@@ -1129,23 +803,7 @@ impl Map {
     }
 }
 
-/// **What a target asks for at `at`**, where `at` is where the control change
-/// sits on its span and `None` is a press.
-///
-/// The one match over the grammar's targets, so [`Map::operation`] and
-/// [`Map::operation_wide`] cannot come to disagree about what a line means at
-/// two resolutions.
-///
-/// A fader mapped to a pad's target, or the reverse, cannot happen:
-/// `parse_line` refuses it. This is the same fact stated where the value is
-/// used, so a target added to one list and not the other is a `None` rather
-/// than a wrong operation. `target.shape()` rather than the shape spelled out
-/// per arm: the same function decides which validation a range gets at parse
-/// time, so a target that is validated as a ratio cannot be scaled as a line.
-///
-/// **Nothing below allocates.** Every operation a map line can name carries
-/// scalars only, which is what lets `karakuri-cli` route a fader sweep inside
-/// `Live::frame` without a heap touch per message.
+/// Evaluates target operation for normalized position `at` (or None for buttons/pads).
 fn operating(target: Target, at: Option<f32>) -> Option<Operation> {
     let shape = target.shape();
     {
@@ -1205,12 +863,7 @@ fn parametered(target: Target, at: Option<f32>) -> Option<Parameter> {
     })
 }
 
-/// **Where a 7-bit control change sits on its span**, and `None` for a press.
-///
-/// It is also what a `cc14` line's **MSB half alone** is read as, which is the
-/// module documentation's lone-MSB rule: `msb / 127` reaches both ends of the
-/// range exactly, so a surface that sends no LSB is a 7-bit fader on the same
-/// line rather than one that cannot quite arrive.
+/// Normalizes a 7-bit Control Change value to `[0.0, 1.0]`.
 fn coarse(message: crate::Message) -> Option<f32> {
     match message {
         crate::Message::ControlChange { value, .. } => Some(f32::from(value.min(127)) / 127.0),
@@ -1218,20 +871,12 @@ fn coarse(message: crate::Message) -> Option<f32> {
     }
 }
 
-/// **Where an assembled 14-bit pair sits on its span** — `(msb << 7) | lsb`
-/// over 16383, so both ends are exact and 16384 positions lie between them.
+/// Normalizes an assembled 14-bit pair (`0..=16383`) to `[0.0, 1.0]`.
 fn fine(value: u16) -> f32 {
     f32::from(value.min(16383)) / 16383.0
 }
 
-/// A `0..=127` position on a range.
-///
-/// **Exact at both ends for every range worth writing**, which is not the same
-/// as for every range: `lo + t*(hi - lo)` at `t = 1` is `hi` whenever the
-/// subtraction and the addition are, and both defaults are. A hand-written
-/// `[5.4778967, 6.2798347]` comes back an ulp low at the top. The claim is
-/// worth the qualification because it is the one that matters — a fader that
-/// cannot reach silence or unity cannot be matched against another slot.
+/// Scales normalized parameter `t` in `[0.0, 1.0]` onto `range` using `shape`.
 fn scale(t: f32, range: [f32; 2], shape: Shape) -> f32 {
     let [lo, hi] = range;
     match shape {
@@ -1481,21 +1126,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
     Ok(target)
 }
 
-/// **One of a value list the vocabulary owns**, or a complaint naming all of
-/// them.
-///
-/// The list is `karakuri_operation`'s — [`Residency::ALL`], [`BlendMode::ALL`]
-/// — rather than a second list here, which is what
-/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-/// buys: a vocabulary that names destinations has to own the values a
-/// destination is drawn from, and a map file is then offered them without a
-/// parser's copy to keep in step. The words are the same ones the record
-/// carries and the status line prints, so what an operator writes is what they
-/// read back.
-///
-/// `missing` describes the whole line and `what` names the kind of word, so a
-/// bare `blend 0` — which is the old spelling — is answered with the three
-/// lines that replace it rather than with a bare *expected a mode*.
+/// Parses a token against a predefined slice of vocabulary values, returning an error naming all alternatives if invalid.
 fn value_word<T: Copy, const N: usize>(
     word: Option<&str>,
     all: [T; N],
@@ -1579,8 +1210,7 @@ mod tests {
         [cc(msb, (value >> 7) as u8), cc(lsb, (value & 0x7f) as u8)]
     }
 
-    /// **`cc14 <msb> <lsb>` is the pair**, it is one mapping rather than two,
-    /// and it spells itself back as the line an operator wrote.
+    /// Verifies that `cc14 <msb> <lsb>` is the pair.
     #[test]
     fn a_cc14_line_is_one_mapping_and_spells_itself_back() {
         let m = map("cc14 1 33 -> gain 0");
@@ -1600,10 +1230,7 @@ mod tests {
         assert_eq!(m.bound("gain 0").as_deref(), Some("cc14 1 33 ch 2"));
     }
 
-    /// **A malformed pair is refused at parse, naming both numbers.** Which
-    /// two controllers a line means is the whole of what a `cc14` says, so a
-    /// refusal that named one of them would be a refusal an operator has to
-    /// go and look the other half up for (P-0083).
+    /// Verifies that a malformed pair is refused at parse, naming both numbers.
     #[test]
     fn a_malformed_pair_is_refused_at_parse_naming_both_numbers() {
         for (line, wanted) in [
@@ -1635,9 +1262,7 @@ mod tests {
         );
     }
 
-    /// **The pair assembles into 16384 positions and scales onto the range**,
-    /// which is the whole of what 14 bits buys: the step between two adjacent
-    /// pairs is a 128th of what a 7-bit step is.
+    /// Verifies that the pair assembles into 16384 positions and scales onto the range.
     #[test]
     fn a_pair_assembles_into_sixteen_thousand_positions_and_scales_onto_the_range() {
         let m = map("cc14 1 33 -> gain 0");
@@ -1675,10 +1300,7 @@ mod tests {
         );
     }
 
-    /// **An MSB alone never leaves the fader between two values.** It is read
-    /// as the 7-bit value it is — both ends exact — so a surface that sends no
-    /// LSB is a 7-bit fader on the same line, and one that sends the pair is
-    /// the same fader refined. Nothing is held back waiting for a partner.
+    /// Verifies that an MSB alone never leaves the fader between two values.
     #[test]
     fn an_msb_alone_does_not_leave_the_fader_between_two_values() {
         let m = map("cc14 1 33 -> gain 0");
@@ -1702,10 +1324,7 @@ mod tests {
         assert_eq!(m.parameter(cc(33, 100)), None);
     }
 
-    /// **A controller cannot be a plain line and half of a pair.** The plain
-    /// line wins — it is the whole of what it says — and the pair keeps its
-    /// coarse half, which is a fader at 128 positions rather than one that
-    /// went quiet. Said out loud on load either way round.
+    /// Verifies that a controller cannot be a plain line and half of a pair.
     #[test]
     fn a_controller_that_is_both_a_line_and_a_pairs_lsb_is_reported() {
         for text in [
@@ -1734,8 +1353,7 @@ mod tests {
         }
     }
 
-    /// **An echo says what to read and what the wire shows**, which is the
-    /// whole of MIDI out this crate owns.
+    /// Verifies that an echo says what to read and what the wire shows.
     #[test]
     fn an_echo_says_what_to_read_and_the_wire_shows_it() {
         let m = map(
@@ -1825,10 +1443,7 @@ mod tests {
         assert_eq!(of(Control::Tap).control(), Control::Tap);
     }
 
-    /// **A `param` line names a deck and a place in its interface**, and it
-    /// answers [`Map::parameter`] rather than [`Map::operation`] — the one
-    /// target this crate cannot finish, because a position becomes a key only
-    /// against the Set that is in the deck (ADR-0268).
+    /// Verifies that a `param` line names a deck and a place in its interface.
     #[test]
     fn a_param_line_names_a_deck_and_a_position_and_is_not_an_operation_here() {
         let m = map("cc 30 -> param 0 3");
@@ -1863,10 +1478,7 @@ mod tests {
         assert!(notes[0].contains("map a `cc`"), "{notes:?}");
     }
 
-    /// **Positions count from one**, because that is the number the Inspector
-    /// draws beside the row and the only place a position is visible at all. A
-    /// zero is somebody counting from the other end, and it is refused with
-    /// the reason rather than read as the first control.
+    /// Verifies that positions count from one.
     #[test]
     fn a_position_of_zero_is_refused_with_where_the_number_comes_from() {
         let (map, notes) = Map::parse("cc 30 -> param 0 0");
@@ -1882,15 +1494,7 @@ mod tests {
         assert!(notes[0].contains("needs a position"), "{notes:?}");
     }
 
-    /// **Every target spells itself back into a line this parser accepts**,
-    /// which is what makes [`Map::bound`] safe to key on and a learn safe to
-    /// write with: the string a control is identified by is a string the file
-    /// can hold.
-    ///
-    /// **The generator is the parser's own output**, so a target added to the
-    /// grammar arrives here without anything being transcribed — and a
-    /// `spelled` that drifted from `parse_target` fails on the line it drifted
-    /// on rather than somewhere downstream.
+    /// Verifies that every target spells itself back into a line this parser accepts.
     #[test]
     fn a_spelled_target_parses_back_to_itself() {
         let lines = [
@@ -1926,11 +1530,7 @@ mod tests {
         assert_eq!(m.bound("gain 0").as_deref(), Some("cc 5 ch 2"));
     }
 
-    /// **Every mapped message answers exactly one of the two accessors.**
-    ///
-    /// The two are disjoint by target and there is no third: a target added to
-    /// the grammar and to neither is a knob that goes quiet, which is the one
-    /// failure neither accessor's own tests can see.
+    /// Verifies that every mapped message answers exactly one of the two accessors.
     #[test]
     fn every_mapped_message_answers_exactly_one_of_the_two() {
         let text = "cc 1 -> gain 0\ncc 5 -> opacity 0\ncc 20 -> exposure\n\
@@ -1959,9 +1559,7 @@ mod tests {
         assert!(m.operation(cc(99, 0)).is_none() && m.parameter(cc(99, 0)).is_none());
     }
 
-    /// **Both ends of a fader are exact.** A gain that cannot be put at
-    /// silence, or at unity, is a fader that cannot be matched against another
-    /// slot — and matching them is what a fader is for.
+    /// Verifies that both ends of a fader are exact.
     #[test]
     fn a_fader_reaches_both_ends_of_its_range_exactly() {
         let m = map("cc 1 -> gain 0");
@@ -1986,9 +1584,7 @@ mod tests {
         );
     }
 
-    /// **Exposure is a ratio, so the middle of the fader is unity.** A linear
-    /// map over `[0.25, 4]` would put 1.0 at a fifth of the way up and spend
-    /// three quarters of the travel above it, which is not what a stop is.
+    /// Verifies that exposure is a ratio, so the middle of the fader is unity.
     #[test]
     fn exposure_moves_in_stops_rather_than_in_equal_steps() {
         let m = map("cc 20 -> exposure");
@@ -2006,14 +1602,8 @@ mod tests {
         assert!(at(1) - at(0) < at(127) - at(126));
     }
 
-    /// **A mask's front reaches both ends of its travel exactly, and moves in
-    /// equal steps.** Not the fader argument — a mask at 0 shows nothing
-    /// anywhere and a mask at 1 shows everything everywhere *for any
-    /// softness*, which is what `karakuri_engine::deck::Mask` promises of its
-    /// `position` and what a wipe that has to actually finish depends on. A
-    /// range that came up short at the top is a front that never quite
-    /// arrives, on a deck that looks done; a ratio shape would spend the
-    /// bottom of the travel on nothing and is refused outright at zero.
+    /// Verifies that a mask's front reaches both ends of its travel exactly, and moves in
+    /// equal steps.
     #[test]
     fn a_mask_front_reaches_both_ends_exactly_and_moves_in_equal_steps() {
         let m = map("cc 9 -> mask-position 0");
@@ -2055,11 +1645,7 @@ mod tests {
         );
     }
 
-    /// **The front takes a fader and refuses a pad**, with the grammar's own
-    /// complaint rather than a special case. A pad on a position would set the
-    /// front to one number and nothing else, which is a wipe with one frame in
-    /// it — and the refusal has to name the message to write instead, because
-    /// that is the whole of what an operator can act on.
+    /// Verifies that the front takes a fader and refuses a pad.
     #[test]
     fn the_mask_front_takes_a_fader_and_refuses_a_pad() {
         let (m, notes) = Map::parse("note 62 -> mask-position 0");
@@ -2071,18 +1657,8 @@ mod tests {
         assert_eq!(map("cc 9 -> mask-position 0").len(), 1);
     }
 
-    /// **The mask's other half has no line, and a file that tries to write one
-    /// is refused rather than half-loaded.**
-    ///
-    /// `Operation::SetMaskShape` carries an angle beside its kind, and this
-    /// grammar has no bare number in it — a line says a slot, a word out of a
-    /// value list, or a trailing `[lo, hi]`. A target that took the kind and
-    /// invented the angle would be ADR-0192's fault one field along, and this
-    /// crate reads nothing back to invent it from. So every spelling somebody
-    /// would reach for is refused by the same arm every unknown control is,
-    /// naming the controls there are. The defect this is against is a target
-    /// added for the kind alone: it would load, and it would write a record
-    /// squaring the front's angle to whatever a default said, mid-wipe.
+    /// Verifies that the mask's other half has no line, and a file that tries to write one
+    /// is refused rather than half-loaded.
     #[test]
     fn the_mask_shape_has_no_line_and_every_spelling_of_one_is_refused() {
         for line in [
@@ -2105,9 +1681,7 @@ mod tests {
         }
     }
 
-    /// **A pad and a fader cannot be mapped to each other's targets.** A knob
-    /// wired to `on-air` would toggle the slot on every message it sent, which
-    /// is sixty times a second while it is moving.
+    /// Verifies that a pad and a fader cannot be mapped to each other's targets.
     #[test]
     fn a_control_that_takes_a_press_refuses_a_fader_and_the_reverse() {
         let (m, notes) = Map::parse("cc 1 -> residency 0 live\nnote 36 -> gain 0");
@@ -2145,9 +1719,7 @@ mod tests {
         })
     }
 
-    /// **A specific channel wins over `any`.** Otherwise a map that says
-    /// "controller 1 anywhere, except on channel 3 where it means something
-    /// else" would resolve by whichever the hash happened to reach.
+    /// Verifies that a specific channel wins over `any`.
     #[test]
     fn a_mapping_with_a_channel_wins_over_one_without() {
         let m = map("cc 1 -> gain 0\ncc 1 ch 1 -> gain 3");
@@ -2169,9 +1741,7 @@ mod tests {
         );
     }
 
-    /// **A release does nothing.** Every pad here toggles or selects on the
-    /// press, so acting on the release too would undo it — a pad that turned a
-    /// slot on and off again before the operator's finger came up.
+    /// Verifies that a release does nothing.
     #[test]
     fn a_release_is_not_a_second_press() {
         let m = map("note 36 -> residency 0 live");
@@ -2245,14 +1815,8 @@ mod tests {
         assert_eq!(m.operation(note(41)), Some(Operation::TapBeat));
     }
 
-    /// **A pad names a state, and every state the vocabulary holds is
-    /// writable.** The defect this is against is the one P-0090 describes: a
-    /// map that could only say *step it* leaves `allocated` and `max`
-    /// unreachable from a surface, and two surfaces stepping one control
-    /// disagree about where they are. The words are read off
-    /// `Residency::ALL` and `BlendMode::ALL` rather than spelled here twice,
-    /// so a value added to the vocabulary is checked by this test on the day
-    /// it lands.
+    /// Verifies that a pad names a state, and every state the vocabulary holds is
+    /// writable.
     #[test]
     fn a_pad_names_one_of_the_values_the_vocabulary_holds() {
         for (i, residency) in Residency::ALL.iter().enumerate() {
@@ -2281,15 +1845,8 @@ mod tests {
         }
     }
 
-    /// **A file written against the old grammar is refused, line by line, with
-    /// the line to write instead.**
-    ///
-    /// `on-air 0` meant *flip slot 0*; as a destination it would mean *put
-    /// slot 0 live*, and a checked-in map would go on loading and do something
-    /// else mid-set. That is the one outcome this format must not have, so the
-    /// three old spellings are refused where an operator can read them — and a
-    /// refusal that only said *not a control* would leave them guessing at the
-    /// grammar that replaced it (ADR-0196).
+    /// Verifies that a file written against the old grammar is refused, line by line, with
+    /// the line to write instead.
     #[test]
     fn a_line_in_the_old_grammar_is_refused_with_the_line_to_write_instead() {
         let (m, notes) = Map::parse(
@@ -2335,8 +1892,7 @@ mod tests {
         assert!(notes[0].contains("`blend 0 max`"), "{}", notes[0]);
     }
 
-    /// **One bad line is a line, not a file.** A typo in a map mid-set must not
-    /// cost the surface, and the operator has to be told which line it was.
+    /// Verifies that one bad line is a line, not a file.
     #[test]
     fn a_bad_line_is_reported_and_the_rest_of_the_file_loads() {
         let (m, notes) = Map::parse(
@@ -2371,10 +1927,7 @@ mod tests {
         assert!(notes[0].contains("cannot reach zero"), "{}", notes[0]);
     }
 
-    /// **The example map in the repository loads clean.** A format documented
-    /// by a file nobody parses is a format that drifts from the parser, and
-    /// `examples/surface.map` is what an operator copies before they have one
-    /// of their own.
+    /// Verifies that the example map in the repository loads clean.
     #[test]
     fn the_example_map_in_the_repository_parses_with_no_complaints() {
         let text = include_str!("../../../examples/surface.map");
@@ -2392,11 +1945,7 @@ mod tests {
         assert_eq!(map.len(), lines, "a mapping was overwritten by another");
     }
 
-    /// **A range with one value in it, or a value that is not one.** Both load
-    /// as a fader: `[1, 1]` as one whose whole travel is a single number, and
-    /// `[nan, 1]` as one that writes NaN into a gain — where nothing downstream
-    /// rejects it and the mix does not treat it as silence. Refused where an
-    /// operator can read the line rather than discovered on a fader.
+    /// Verifies that a range with one value in it, or a value that is not one.
     #[test]
     fn a_range_that_is_not_two_different_numbers_is_refused() {
         for line in [
@@ -2416,9 +1965,7 @@ mod tests {
         assert_eq!(map("cc 1 -> gain 0 [0, 2]").len(), 1);
     }
 
-    /// **The later line wins, and says so.** Two lines for one knob is a map
-    /// being edited, and an operator who is told which one took effect can fix
-    /// it; one who is not has a knob doing the wrong thing with no clue where.
+    /// Verifies that the later line wins, and says so.
     #[test]
     fn a_second_mapping_for_one_message_replaces_the_first_and_is_reported() {
         let (m, notes) = Map::parse("cc 1 -> gain 0\ncc 1 -> gain 3");
@@ -2436,10 +1983,7 @@ mod tests {
         assert!(notes.is_empty(), "{notes:?}");
     }
 
-    /// **Every number a line carries is checked against the wire's range.** A
-    /// controller number past 127 cannot arrive, and a channel outside 1-16
-    /// does not exist — a map that accepted either would have a line that never
-    /// answers, which reads exactly like a broken knob.
+    /// Verifies that every number a line carries is checked against the wire's range.
     #[test]
     fn a_number_the_wire_cannot_carry_is_refused_on_the_line() {
         for (line, wanted) in [
@@ -2468,13 +2012,7 @@ mod tests {
         assert!(notes[0].contains("no range"), "{}", notes[0]);
     }
 
-    /// **Every fader's target is continuous and no pad's is**, which is the
-    /// line `karakuri-cli`'s router coalesces a frame's messages along: a
-    /// target that answered `false` here would have a sweep's every message
-    /// kept, and one that answered `true` would have the second of two presses
-    /// in a frame dropped. All eight targets, because the answer is per target
-    /// and a ninth added to one half of `Target::continuous` is what this
-    /// catches.
+    /// Verifies that every fader's target is continuous and no pad's is.
     #[test]
     fn a_fader_moves_a_continuous_control_and_a_pad_does_not() {
         let m = map(
