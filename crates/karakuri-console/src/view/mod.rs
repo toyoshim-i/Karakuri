@@ -441,6 +441,7 @@ pub mod widgets;
 /// [`widgets`]'s, re-exported here so that nothing outside this crate that
 /// already writes `view::FoldGrip` or `view::bay_grip` has to learn a second
 /// path for it.
+pub use widgets::card::{bay_card, popup_card};
 pub use widgets::*;
 #[allow(unused_imports)]
 pub(crate) use widgets::*;
@@ -2445,7 +2446,7 @@ impl View {
                 let rect = to_egui(placed.rect);
                 match placed.region.kind {
                     Kind::Bay { .. } => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         // The inspector is the one bay that is a split, and
                         // its panes' boundary is drawn as the mock's
@@ -2459,7 +2460,7 @@ impl View {
                     // no answer and the card is as empty as every other body
                     // in this pass.
                     Kind::Transport => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         if let Some(row) = transport(ui.ctx(), panel.layout(), values) {
                             transport::transport_into(ui, &pal, &row);
                         }
@@ -2502,7 +2503,7 @@ impl View {
                     // not this pass's: the same call `input::claim` makes, so
                     // the chip that is painted is the chip that is clicked.
                     Kind::Outputs => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         if let Some(row) =
                             outputs(ui.ctx(), panel.layout(), opening).map(|r| r.told(projector))
                         {
@@ -2517,7 +2518,7 @@ impl View {
                     // `mixer`'s answer, not this pass's, so that *no deck
                     // means nothing at all* is decided in one place.
                     Kind::Mixer => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
                             // **Which strip a Set in hand would land on, off
@@ -2569,7 +2570,7 @@ impl View {
                     // too: the same call `input::claim` makes, so the cell
                     // that is painted is the cell a press lands on.
                     Kind::Sequencer => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         // **The one head on this console that is handed a
                         // value**: the bank pills say which of the four the
                         // rows are reading, and that is the armed bank rather
@@ -2591,7 +2592,7 @@ impl View {
                         }
                     }
                     Kind::Master => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(row) = master(ui.ctx(), panel.layout(), out, chain) {
                             master::master_into(ui, &pal, &row);
@@ -2607,7 +2608,7 @@ impl View {
                     // that *nothing said means nothing at all* is decided in
                     // one place.
                     Kind::Library => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) =
                             library(panel.layout(), scopes, sets, opened, pointed, scrolled_to)
@@ -2665,7 +2666,7 @@ impl View {
                     // place. The head takes no pill: the mock's `2 waiting` is
                     // a readout, and a bay head's pills are its controls.
                     Kind::Staging => {
-                        card(ui, &pal, rect);
+                        bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
                         if let Some(bay) = staging(panel.layout(), waiting) {
                             staging::staging_into(ui, &pal, &bay, waiting);
@@ -3002,11 +3003,4 @@ impl View {
             None => {}
         }
     }
-}
-
-/// A bay's card: `.bay`'s panel fill, 11px radius and drop shadow.
-pub(crate) fn card(ui: &Ui, pal: &Palette, rect: Rect) {
-    let radius = CornerRadius::same(size::BAY_RADIUS as u8);
-    ui.painter().add(pal.shadow.as_shape(rect, radius));
-    ui.painter().rect_filled(rect, radius, pal.panel);
 }

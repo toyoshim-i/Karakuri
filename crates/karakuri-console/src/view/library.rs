@@ -3379,14 +3379,7 @@ pub(super) fn library_into(
 /// which is the arrangement menu's own reading of *which of these is in use*.
 pub(super) fn deck_list_into(ui: &Ui, pal: &Palette, load: &Load, at: Target, card: Rect) {
     let painter = ui.painter();
-    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
-    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
-    painter.rect_stroke(
-        card,
-        CornerRadius::same(8),
-        Stroke::new(size::HAIRLINE, pal.line),
-        StrokeKind::Inside,
-    );
+    popup_card(painter, pal, card);
     // `take` rather than a range, because the rows are the letters: a list
     // longer than [`DECK_LETTERS`] is a deck this crate has no letter for, and
     // `View::aim_at` is what stops one being asked for.
@@ -3438,14 +3431,7 @@ pub(super) fn deck_list_into(ui: &Ui, pal: &Palette, load: &Load, at: Target, ca
 /// and the same pixel every other rule on this panel is drawn at.
 pub(super) fn row_menu_into(ui: &Ui, pal: &Palette, menu: &RowMenu) {
     let painter = ui.painter();
-    painter.add(pal.shadow.as_shape(menu.card, CornerRadius::same(8)));
-    painter.rect_filled(menu.card, CornerRadius::same(8), pal.panel);
-    painter.rect_stroke(
-        menu.card,
-        CornerRadius::same(8),
-        Stroke::new(size::HAIRLINE, pal.line),
-        StrokeKind::Inside,
-    );
+    popup_card(painter, pal, menu.card);
     let word = |at: Rect, text: String| {
         let galley = painter.layout_no_wrap(
             text,

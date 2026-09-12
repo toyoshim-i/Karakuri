@@ -4328,14 +4328,7 @@ pub(super) fn pane_list_into(
     card: Rect,
 ) {
     let painter = ui.painter();
-    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
-    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
-    painter.rect_stroke(
-        card,
-        CornerRadius::same(8),
-        Stroke::new(size::HAIRLINE, pal.line),
-        StrokeKind::Inside,
-    );
+    popup_card(painter, pal, card);
     // `take` rather than a range, because the rows are the letters — see
     // [`deck_list_into`], and `View::point_pane` is what stops a deck this
     // crate has no letter for being asked for.
@@ -4383,14 +4376,7 @@ pub(super) fn uses_card_into(
     room: Rect,
 ) {
     let painter = ui.painter();
-    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
-    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
-    painter.rect_stroke(
-        card,
-        CornerRadius::same(8),
-        Stroke::new(size::HAIRLINE, pal.line),
-        StrokeKind::Inside,
-    );
+    popup_card(painter, pal, card);
     let painter = painter.with_clip_rect(card);
     for (index, name) in uses.candidates.iter().enumerate().take(line.rows) {
         let Some(row) = line.row_at(room, index) else {
