@@ -6,6 +6,7 @@ pub mod fader;
 pub mod fold_grip;
 pub mod head;
 pub mod pills;
+pub mod track;
 
 #[allow(unused_imports)]
 pub use card::*;
@@ -19,6 +20,8 @@ pub use fold_grip::*;
 pub use head::*;
 #[allow(unused_imports)]
 pub use pills::*;
+#[allow(unused_imports)]
+pub use track::*;
 
 #[allow(unused_imports)]
 pub(crate) use card::*;
@@ -35,3 +38,5 @@ pub(crate) use pills::{
     head_pills, on_pill_at, pill_at, pill_into, pill_width, ARMED_GLOW, ARMED_WASH, ON_GLOW,
     ON_WASH,
 };
+#[allow(unused_imports)]
+pub(crate) use track::*;
