@@ -1,6 +1,6 @@
-# Architectural Refactoring & Design Smells Report (Phase 3 - Revised)
+# Architectural Refactoring & Design Smells Report (Phase 3 & Phase 4)
 
-This document records the architectural smells, structural friction, and design distortions identified in the **Karakuri** codebase, along with the corrected modernization roadmap for **Phase 3: Architectural Decomposition & Structural Decoupling (P21–P26)**.
+This document records the architectural smells, structural friction, and design distortions identified in the **Karakuri** codebase, along with the completion record for **Phase 3 (P21–P26)** and the implementation roadmap for **Phase 4: UI Componentization, Unified Control Descriptors & Decoupled Interaction (P30–P33)**.
 
 ---
 
@@ -218,13 +218,152 @@ Layer enums are duplicated across `karakuri-operation`, `karakuri-ir`, and `kara
 
 ---
 
-## 4. Execution Matrix & Next Steps
+---
+
+## 4. Phase 3 Modernization Completion (P21–P26)
+
+All initiatives of Phase 3 are 100% complete, verified with full test suites, and documented in `crates/README.md`:
+
+| Initiative | Target Subsystem | Actionable Deliverable | Status |
+|---|---|---|:---:|
+| **P26** | `karakuri-console` | Extracted 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
+| **P25** | `karakuri-mcp` | Extracted tests to `tests/wire.rs` & `src/tests.rs`; decomposed `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
+| **P24** | `karakuri` (GUI) | Decomposed `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **COMPLETED** |
+| **P22** | `karakuri-cli` / GUI | Extracted headless runtime controller; modularized `karakuri-cli` into `app`, `args`, `live`, `aiming`, `replay`, `save` | **COMPLETED** |
+| **P21** | Type Conversions | Centralized layer conversions in `karakuri-environment::meta` as single source of truth | **COMPLETED** |
+| **P23** | `karakuri-environment` | Decomposed monoliths (`setfile`, `mix`), resolved couplings, and isolated test suites | **COMPLETED** |
+
+---
+
+## 5. Phase 4: UI Componentization, Unified Control Descriptors & Decoupled Interaction (P30–P33)
+
+### Analysis of New Structural Smells
+
+#### Smell 6: The Quadruple-Dispatch & Fragile Hit/Tooltip Seam
+- **Phenomenon**: Defining or modifying an interactive control requires updating up to 6 separate places across crates:
+  1. Drawing routine in `view/<bay>.rs` (raw painter calls)
+  2. Hit test probe in `karakuri-console::input::PROBES` (38 manual entries)
+  3. Pointer event translation in `karakuri::readout::Readout::pointer` (1,300 lines of manual sequential dispatch)
+  4. Operation translation & execution in `app.rs` / `handlers.rs`
+  5. Tooltip lookup in `karakuri-console::hover::TIPS` (mapping probes to HTML CSS classes in `console.html`)
+  6. Keyboard shortcut binding in `karakuri::keymap::KEY_BINDINGS` / `live.rs`
+- **Impact**: Heavy duplication of control metadata; adding tooltips, keyboard hotkeys, or MCP inspection requires touching disjointed arrays with risk of subtle drift or missed synchronisation.
+
+#### Smell 7: Console Bay Monoliths and Raw egui Painter Scattering
+- **Phenomenon**: Individual bay files in `karakuri-console/src/view/` remain massive:
+  - `view/inspector.rs`: **4,955 lines**
+  - `view/library.rs`: **4,593 lines**
+  - `view/transport.rs`: **4,130 lines**
+  - `view/mixer.rs`: **2,907 lines**
+  - `view/program.rs`: **1,579 lines**
+- **Impact**: UI elements (chips, badges, context cards, slider tracks, search fields) are reimplemented with low-level `egui::Painter` primitives in each bay rather than using componentized, reusable widgets.
+
+#### Smell 8: Monolithic Event Accumulators (`readout.rs` & `app.rs`)
+- **Phenomenon**:
+  - `karakuri/src/readout.rs` (**4,754 lines**) combines memory allocation profiling, frame time sampling, HUD text generation, layout solving, and a 1,300-line `Readout::pointer` match block.
+  - `karakuri/src/app.rs` (**5,067 lines**) bundles window event loops, key routing, file drop ingestion, audio monitoring, and session persistence threads.
+- **Impact**: High cognitive load, merge conflict friction, and difficulty in testing event handling in isolation.
+
+---
+
+### Phase 4 Modernization Initiatives
+
+```mermaid
+graph TD
+    subgraph Controls ["Unified Control & Action Layer"]
+        Registry["ControlRegistry / Descriptor<br/><i>ID, Legend, Default Key, Tooltip, Operation</i>"]
+    end
+
+    subgraph ConsoleWidgets ["karakuri-console::view::widgets"]
+        Chip["chip.rs<br/><i>Tally, Blend, Scope, Kind chips</i>"]
+        Card["card.rs<br/><i>Popup cards & Context menus</i>"]
+        Track["track.rs<br/><i>Value tracks, Scrub, Exposure</i>"]
+        Field["field.rs<br/><i>Search & Filter input fields</i>"]
+        Existing["fader.rs, head.rs, pills.rs, fold_grip.rs"]
+    end
+
+    subgraph ConsoleBays ["Modular Bay Subdirectories"]
+        InspBay["view/inspector/<br/><i>curves, wiring, params</i>"]
+        LibBay["view/library/<br/><i>listing, search, scopes</i>"]
+        TransBay["view/transport/<br/><i>tempo, grid, readout</i>"]
+        MixBay["view/mixer/<br/><i>strips, crossfader</i>"]
+    end
+
+    subgraph Integration ["Cross-Cutting Consumers"]
+        Hover["hover.rs<br/><i>Direct tooltip lookup from Registry</i>"]
+        Keymap["keymap.rs<br/><i>Declarative bindings from Registry</i>"]
+        MCP["karakuri-mcp<br/><i>Schema & operations from Registry</i>"]
+    end
+
+    Registry --> ConsoleWidgets
+    Registry --> Hover
+    Registry --> Keymap
+    Registry --> MCP
+    ConsoleWidgets --> ConsoleBays
+```
+
+#### P30. Expand Componentized Widget Library (`karakuri-console::view::widgets`)
+Extract recurring visual and interactive elements out of bay modules into `view/widgets/`:
+1. `chip.rs`: Standardized chips and badges (Tally residency chips, Blend mode chips, Scope tabs, Sync source chips).
+2. `card.rs`: Reusable modal card and dropdown popup containers with drop shadow, border, and dismiss-on-outside-click logic (Audio-in card, Arrangement card, Row context menu).
+3. `track.rs`: Continuous slider tracks and scrubbers (Exposure track, Latency offset track, Transport scrubber).
+4. `field.rs`: Reusable interactive text and filter input fields with focus indicators and clear buttons.
+
+#### P31. Modularize Bay Monoliths into Subdirectories
+Decompose bay files exceeding 2,500 lines into focused submodules:
+1. `view/inspector/` (from `inspector.rs`, 4,955 lines):
+   - `mod.rs`: Bay container and layout
+   - `header.rs`: Node header, residency chips, fold state
+   - `params.rs`: Parameter row listing and value faders
+   - `curves.rs`: Modulation curve graph painter
+   - `wiring.rs`: Node connection input/output edges
+2. `view/library/` (from `library.rs`, 4,593 lines):
+   - `mod.rs`: Bay container and layout
+   - `scopes.rs`: Scope tabs (Presets, Sets, History)
+   - `search.rs`: Filter input and query matching
+   - `rows.rs`: File and version rows, star actions
+   - `menu.rs`: Context actions and row menus
+3. `view/transport/` (from `transport.rs`, 4,130 lines):
+   - `mod.rs`: Bay container and layout
+   - `tempo.rs`: Tempo figure and BPM nudging
+   - `grid.rs`: Beat light dots and quantization display
+   - `audio.rs`: Audio input monitoring pill and popup card
+   - `readouts.rs`: Budget and system health status capsules
+4. `view/mixer/` (from `mixer.rs`, 2,907 lines):
+   - `mod.rs`: Bay container and layout
+   - `strip.rs`: Per-deck channel strip layout
+   - `crossfader.rs`: Transition slider and master blend
+   - `tally.rs`: Residency indicators and controls
+
+#### P32. Unified Control Descriptor & Declarative Registry
+Establish a single source of truth for interactive controls:
+1. Define `ControlDescriptor`:
+   - `id: ControlId`: Strongly typed control identifier
+   - `label: &'static str`: Human-readable label / legend
+   - `default_key: Option<BoundKey>`: Default keyboard accelerator
+   - `tooltip: &'static str`: Factual documentation text
+   - `operation: Option<fn(...) -> Operation>`: Target action
+   - `safety_class: Option<Class>`: Operator permission gate
+2. Unify consumers:
+   - `hover.rs`: Render tooltips directly with dynamically embedded shortcut badges (e.g., `"[G] Fold Bay"`).
+   - `keymap.rs`: Derive keyboard legend tables directly from control descriptors.
+   - `karakuri-mcp`: Provide consistent parameter descriptions and action schemas.
+
+#### P33. Decouple `Readout` and Event Dispatch in `karakuri`
+Dismantle `karakuri/src/readout.rs` (4,754 lines) into `karakuri/src/readout/`:
+1. `mod.rs`: `Readout` struct and state container
+2. `costs.rs`: Metric / frame timing / memory allocation measurement (`Costs`, `STILL`, `SAMPLE_CAP`)
+3. `hud.rs`: Legend formatting and status string generation
+4. `dispatch.rs`: Delegate pointer event handling to modular bay dispatchers, replacing the monolithic 1,300-line match block in `Readout::pointer`.
+
+---
+
+## 6. Execution Matrix (Phase 4)
 
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
-| **P26** | `karakuri-console` | Extract 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
-| **P25** | `karakuri-mcp` | Extract tests to `tests/wire.rs` & `src/tests.rs`; decompose `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
-| **P24** | `karakuri` (GUI) | Decompose `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **COMPLETED** |
-| **P22** | `karakuri-cli` / GUI | Extract headless runtime controller; slim `karakuri-cli/src/main.rs` | **COMPLETED** |
-| **P21** | Type Conversions | Centralize layer conversions in `meta.rs`; establish serialization parity test | **COMPLETED** |
-| **P23** | `karakuri-environment` | Decompose monoliths (`setfile`, `mix`), resolve couplings, and isolate test suites | **COMPLETED** |
+| **P30** | `karakuri-console` | Extract reusable widgets: `chip.rs`, `card.rs`, `track.rs`, `field.rs` | **Ready to Execute** |
+| **P31** | `karakuri-console` | Decompose bay monoliths (`inspector/`, `library/`, `transport/`, `mixer/`) | **Ready to Execute** |
+| **P32** | `karakuri-operation` / `console` | Implement `ControlDescriptor` registry linking UI, keys, tooltips, and MCP | **Ready to Execute** |
+| **P33** | `karakuri` (GUI) | Decompose `readout.rs` into `costs`, `hud`, and modular pointer `dispatch` | **Ready to Execute** |
+
