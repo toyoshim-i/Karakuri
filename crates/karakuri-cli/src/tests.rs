@@ -2709,7 +2709,7 @@ mod live_save_tests {
     /// shape `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` set: read
     /// the checked-in source, and carry a floor so the scan cannot silently
     /// match nothing.
-    const SOURCE: &str = include_str!("main.rs");
+    const SOURCE: &str = include_str!("live.rs");
 
     /// How [`BINDINGS`] spells the arms whose pattern is a name rather than a
     /// character. Nothing in `Key::Named(NamedKey::Escape)` says `esc`, so this
@@ -3306,9 +3306,10 @@ mod live_save_tests {
     /// `return`.
     #[test]
     fn a_frame_attends_to_its_saves_before_anything_can_stop_them() {
-        let source = include_str!("main.rs");
+        let source = include_str!("live.rs");
         let body = source
-            .split_once("\n    fn frame(&mut self) {")
+            .split_once("\n    pub(crate) fn frame(&mut self) {")
+            .or_else(|| source.split_once("\n    fn frame(&mut self) {"))
             .expect("`Live::frame` is no longer spelled that way")
             .1;
         let body = body
@@ -4099,7 +4100,7 @@ mod wire_tests {
     /// first, so prose about draining cannot stand in for a drain.
     #[test]
     fn a_frame_takes_the_edges_a_client_asked_for_and_not_only_the_saves() {
-        let source = include_str!("main.rs");
+        let source = include_str!("live.rs");
         let body = source
             .split_once("\n    fn run_requests(&mut self) {")
             .expect("`Live::run_requests` is no longer spelled that way")
