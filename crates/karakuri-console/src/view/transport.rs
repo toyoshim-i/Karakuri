@@ -1721,14 +1721,7 @@ pub(super) fn audio_in_into(ui: &Ui, pal: &Palette, pill: &AudioInPill, audio: &
     let Some(card) = pill.menu else {
         return;
     };
-    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
-    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
-    painter.rect_stroke(
-        card,
-        CornerRadius::same(8),
-        Stroke::new(size::HAIRLINE, pal.line),
-        StrokeKind::Inside,
-    );
+    popup_card(painter, pal, card);
 
     let line = |rect: Rect, text: String, colour: Color32| {
         let galley = painter.layout_no_wrap(
@@ -3338,14 +3331,7 @@ pub(super) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
     let Some(card) = pill.menu else {
         return;
     };
-    painter.add(pal.shadow.as_shape(card, CornerRadius::same(8)));
-    painter.rect_filled(card, CornerRadius::same(8), pal.panel);
-    painter.rect_stroke(
-        card,
-        CornerRadius::same(8),
-        Stroke::new(size::HAIRLINE, pal.line),
-        StrokeKind::Inside,
-    );
+    popup_card(painter, pal, card);
 
     let row_text = |painter: &egui::Painter, rect: Rect, text: String, colour: Color32| {
         let galley = painter.layout_no_wrap(

@@ -326,7 +326,7 @@ pub(crate) fn bank_capsules(ctx: &egui::Context, rect: Rect, head: &Head, open: 
 /// why, so a mark standing in for those would be offering a press that is
 /// refused.
 pub(crate) fn folded_head_into(ui: &Ui, pal: &Palette, at: Rect, title: &str) {
-    card(ui, pal, at);
+    bay_card(ui, pal, at);
     let painter = ui.painter().with_clip_rect(at);
     let mid = at.center().y;
     let job = spaced(
