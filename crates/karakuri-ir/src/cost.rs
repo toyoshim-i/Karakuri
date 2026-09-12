@@ -21,34 +21,34 @@
 //! every operator or statement costs one unit — a stand-in for "one scalar ALU
 //! instruction, roughly." Builtins are weighted relative to that baseline in
 //! [`builtin_weight`]; see the comment there for where the numbers come from.
-//! **All of this is ordinal, not measured.** Nothing here has been run through
-//! a profiler or a WGSL compiler; the numbers encode "this is roughly N times
+//! All of this is ordinal, not measured. Nothing here has been run through a
+//! profiler or a WGSL compiler; the numbers encode "this is roughly N times
 //! more expensive than a multiply," not a nanosecond figure. Replacing them
 //! with real numbers needs GPU timing of each builtin in isolation (a
 //! microbenchmark shader per function, on representative hardware) — exactly
 //! the kind of measurement stage 7's probe does for a whole procedure, just
 //! decomposed per builtin instead.
 //!
-//! **There is no per-element byte figure here, and no version of this pass
-//! could have owned one.** Three of the inputs to the layout the engine
-//! actually allocates are settled after stage 4, and none of them is a rounding
-//! error: an L2's element struct is built from `upstream ∪ emit` rather than
-//! from its own `emit`, the `copy` slot is contributed by whichever amplifier
-//! sits *above* it in the chain, and a derivation's stored slot exists only
-//! because something *downstream* named the attribute. All three are properties
-//! of the Set, which is assembled two stages later — so a figure computed from
-//! one procedure is a floor for **every** kind rather than a measurement of
-//! any. `kaleidoscope` reported 96 bytes an element where its chain allocates
-//! 312, and `swirl_warp` 8 where it allocates 48.
+//! There is no per-element byte figure here, and no version of this pass could
+//! have owned one. Three of the inputs to the layout the engine actually
+//! allocates are settled after stage 4, and none of them is a rounding error:
+//! an L2's element struct is built from `upstream ∪ emit` rather than from its
+//! own `emit`, the `copy` slot is contributed by whichever amplifier sits
+//! *above* it in the chain, and a derivation's stored slot exists only because
+//! something *downstream* named the attribute. All three are properties of the
+//! Set, which is assembled two stages later — so a figure computed from one
+//! procedure is a floor for every kind rather than a measurement of any.
+//! `kaleidoscope` reported 96 bytes an element where its chain allocates 312,
+//! and `swirl_warp` 8 where it allocates 48.
 //!
-//! **The figure belongs to whatever does the allocating, and that is
-//! `karakuri-engine`.** A node there reports the size of the buffers it created,
+//! The figure belongs to whatever does the allocating, and that is
+//! `karakuri-engine`. A node there reports the size of the buffers it created,
 //! not a second expression that happens to agree with them, and a Set totals
 //! those over the capacities it was instantiated at — which is the question the
 //! number was always for, since `capacity` differs per node and an amplifier
 //! multiplies it downstream.
 //!
-//! **What it totals is element storage and not device memory**, which is worth
+//! What it totals is element storage and not device memory, which is worth
 //! saying here because "the memory a Set needs" is what the figure reads as and
 //! is not what it is: render targets, uniform blocks, the counts block and the
 //! compaction scan's own buffers are all outside it, on the grounds that they
@@ -75,12 +75,13 @@ use crate::typed::{Checked, Cost, TExpr, TExprKind, TStmt};
 /// worked examples in `docs/ir-spec.md`: `drift_shell` (spawn + element,
 /// including a `curl` call) estimates at a little under 200 ops/element under
 /// this module's weights, and the `curl`-in-a-4-iteration-loop snippet under
-/// [Statements and expressions](../../../docs/ir-spec.md#statements-and-expressions)
-/// at a little under 500. `4096` leaves roughly an order of magnitude of
-/// headroom above both — enough for a procedure with a few small loops of
-/// noise calls — while still catching the pattern the spec calls out
-/// explicitly as dangerous: loops nested a few levels deep, each multiplying
-/// the estimate rather than adding to it.
+/// [Statements and
+/// expressions](../../../docs/ir-spec.md#statements-and-expressions) at a
+/// little under 500. `4096` leaves roughly an order of magnitude of headroom
+/// above both — enough for a procedure with a few small loops of noise calls —
+/// while still catching the pattern the spec calls out explicitly as dangerous:
+/// loops nested a few levels deep, each multiplying the estimate rather than
+/// adding to it.
 pub const MAX_OPS_PER_ELEMENT: u64 = 4096;
 
 /// Ceiling on [`Cost::ops_per_spawn`]. Looser than the per-frame figure because
@@ -91,17 +92,17 @@ pub const MAX_OPS_PER_ELEMENT: u64 = 4096;
 /// state and then coasts, which is a shape worth allowing.
 pub const MAX_OPS_PER_SPAWN: u64 = 16_384;
 
-/// Ceiling on [`Cost::ops_per_fragment`] for a **per-element** renderer.
-/// Tighter than either of the above, because a fragment is evaluated far more
-/// often than an element: one soft sprite covers tens of pixels, they overlap,
-/// and there are `capacity` of them. Like the others this is ordinal and
-/// untested — stage 7's probe is what actually knows.
+/// Ceiling on [`Cost::ops_per_fragment`] for a per-element renderer. Tighter
+/// than either of the above, because a fragment is evaluated far more often
+/// than an element: one soft sprite covers tens of pixels, they overlap, and
+/// there are `capacity` of them. Like the others this is ordinal and untested —
+/// stage 7's probe is what actually knows.
 pub const MAX_OPS_PER_FRAGMENT: u64 = 512;
 
-/// Ceiling on [`Cost::ops_per_fragment`] for a **fullscreen** renderer.
+/// Ceiling on [`Cost::ops_per_fragment`] for a fullscreen renderer.
 ///
-/// **Higher because the fragment count is known here and unknown there**, which
-/// is the whole reason the two differ. The number above is a stand-in for an
+/// Higher because the fragment count is known here and unknown there, which is
+/// the whole reason the two differ. The number above is a stand-in for an
 /// unbounded quantity: `capacity` sprites times their area times whatever they
 /// overlap. A fullscreen procedure covers the canvas exactly once and nothing
 /// overdraws, so the stand-in has nothing to stand in for — and applying it
@@ -118,8 +119,8 @@ pub const MAX_OPS_PER_FULLSCREEN_FRAGMENT: u64 = MAX_OPS_PER_ELEMENT;
 /// Which fragment ceiling this procedure is held to. See
 /// [`MAX_OPS_PER_FULLSCREEN_FRAGMENT`] for why there are two.
 ///
-/// **It asks the kind as well as the topology**, and the second question is not
-/// a widening of the first: an L5 covers the frame exactly once with nothing
+/// It asks the kind as well as the topology, and the second question is not a
+/// widening of the first: an L5 covers the frame exactly once with nothing
 /// overdrawing, which is the whole of what the fullscreen ceiling is *about* —
 /// and it never declares a topology, because it has no per-element form for the
 /// absence of a `vertex` block to be an answer against. Asking only about
@@ -224,8 +225,8 @@ const W_FRAME_STEP: u64 = 2; // a divide and a multiply against the viewport
 const W_HSV_RGB: u64 = 10; // piecewise-branchy conversion
 const W_SRGB_LINEAR: u64 = W_TRANSCENDENTAL + 2; // a pow-shaped curve
 
-/// Weight of one call to `func`. `args` is only consulted for `fbm`, whose
-/// cost depends on its compile-time octave count.
+/// Weight of one call to `func`. `args` is only consulted for `fbm`, whose cost
+/// depends on its compile-time octave count.
 fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
     match func {
         Builtin::Abs
@@ -375,9 +376,9 @@ fn stmt_cost(
     }
 }
 
-/// Trip count of `start..end`, per the `for i in <start>..<end>` grammar.
-/// Both bounds are integer literals, so this is exact and needs no runtime
-/// value; an empty or backwards range costs nothing.
+/// Trip count of `start..end`, per the `for i in <start>..<end>` grammar. Both
+/// bounds are integer literals, so this is exact and needs no runtime value; an
+/// empty or backwards range costs nothing.
 fn loop_iterations(start: i32, end: i32) -> u64 {
     let n = i64::from(end) - i64::from(start);
     if n <= 0 {
@@ -610,7 +611,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     Ok(cost)
 }
 
-/// **A caller and one of the fields it evaluates, over a ceiling together.**
+/// A caller and one of the fields it evaluates, over a ceiling together.
 ///
 /// Carries the *slot*, because the caller of this function has to say which
 /// field is the expensive one and a procedure may declare several. It is the
@@ -622,25 +623,24 @@ pub struct OverBudget {
     pub errors: Vec<IrError>,
 }
 
-/// **Re-check a caller with the fields it evaluates multiplied in.**
+/// Re-check a caller with the fields it evaluates multiplied in.
 ///
 /// A field call weighs nothing where the caller is estimated, because what one
 /// evaluation costs lives in another file. So the ceiling a caller passed was a
 /// ceiling applied to an incomplete figure, and this is where it is completed —
 /// at the Set, which is the first point holding every procedure at once.
 ///
-/// **Not a nicety.** `examples/field_lens.kir` marches thirty-four steps; a
-/// field of 48 ops/evaluation adds 1632 to a 4096 fragment ceiling. A Set that
+/// Not a nicety. `examples/field_lens.kir` marches thirty-four steps; a field
+/// of 48 ops/evaluation adds 1632 to a 4096 fragment ceiling. A Set that
 /// skipped this would run a shader nobody had costed, and the number it is over
 /// by would be invisible.
 ///
-/// **`per_evaluation` is asked per slot**, and the answers are *added*. A
-/// procedure taking a shape and a cutter pays for both on the same axis, so
-/// checking each slot against the ceiling on its own would let a pair through
-/// that neither half is over with — the same shape of failure this function
-/// exists to close, one level up. What the slot decides is *attribution*: the
-/// refusal names whichever slot contributes most, since that is the one worth
-/// cutting first.
+/// `per_evaluation` is asked per slot, and the answers are *added*. A procedure
+/// taking a shape and a cutter pays for both on the same axis, so checking each
+/// slot against the ceiling on its own would let a pair through that neither
+/// half is over with — the same shape of failure this function exists to close,
+/// one level up. What the slot decides is *attribution*: the refusal names
+/// whichever slot contributes most, since that is the one worth cutting first.
 pub fn check_with_field(
     caller: &Checked,
     per_evaluation: &dyn Fn(&str) -> u64,
@@ -728,8 +728,8 @@ pub fn check_with_field(
 
 /// Build the rejection diagnostic. Per the validation pipeline section, a cost
 /// rejection has to carry the estimate and the ceiling as actual numbers, and
-/// should say what dominated so a regeneration has something to aim at —
-/// "over budget" tells a repair prompt nothing about how much to cut.
+/// should say what dominated so a regeneration has something to aim at — "over
+/// budget" tells a repair prompt nothing about how much to cut.
 fn reject(
     checked: &Checked,
     ops: u64,

@@ -75,7 +75,7 @@ graph TD
 |:---:|:---|:---|:---|:---:|
 | **1** | [`karakuri-signal`](karakuri-signal/README.md) | Clock oscillators, tempo tracking, noise generators, and signal bus | Pure leaf (no workspace deps) | Refactored & Documented |
 | **1** | [`karakuri-operation`](karakuri-operation/README.md) | Unified vocabulary and grammar of operator actions and AI commands | Pure leaf (no workspace deps) | Refactored & Documented |
-| **1** | [`karakuri-ir`](karakuri-ir/README.md) | Intermediate representation (`.kir`), parser, type-checker, and cost estimator | Pure leaf (no workspace deps) | Pending |
+| **1** | [`karakuri-ir`](karakuri-ir/README.md) | Intermediate representation (`.kir`), parser, type-checker, and cost estimator | Pure leaf (no workspace deps) | Refactored & Documented |
 | **1** | [`karakuri-layout`](karakuri-layout/README.md) | Geometry, split ratios, dock arrangements, and pane fold logic | Pure leaf (no workspace deps) | Refactored & Documented |
 | **2** | [`karakuri-audio`](karakuri-audio/README.md) | Audio device input capture, ring buffers, FFT analysis, and metering | `karakuri-signal` | Refactored & Documented |
 | **2** | [`karakuri-midi`](karakuri-midi/README.md) | MIDI controller input decoding, note/CC mapping to operations | `karakuri-operation` | Refactored & Documented |

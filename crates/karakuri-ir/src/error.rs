@@ -1,8 +1,8 @@
 //! Diagnostics.
 //!
-//! Errors carry the stage that produced them, because the validation pipeline is
-//! ordered and a failure at any stage means no artifact. They carry a span so
-//! the message can point at source, and an optional hint, which is where a
+//! Errors carry the stage that produced them, because the validation pipeline
+//! is ordered and a failure at any stage means no artifact. They carry a span
+//! so the message can point at source, and an optional hint, which is where a
 //! known LLM mistake gets its correction: `id` suggesting `seed`, or a signal
 //! name suggesting a `param` plus a `bind` record.
 use serde::{Deserialize, Serialize};
