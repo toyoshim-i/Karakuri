@@ -5,7 +5,7 @@
 //! are `.kir` files now (ADR-0340). They are compiled in rather than read from
 //! disk for one reason: an address has to be the same number on every machine
 //! and in every working directory, and a file read relative to a cwd is not
-//! that. **Putting them in a store is a separate act**, done by whoever is
+//! that. Putting them in a store is a separate act, done by whoever is
 //! recording — `store.put_artifact(source)` — exactly as a Set's sources are,
 //! so a run that records nothing creates nothing.
 
@@ -25,8 +25,8 @@ pub const ALL: [(&str, &str); 3] = [
     ("rgb_shift", RGB_SHIFT),
 ];
 
-/// **The content address of one shipped source**, spelled the way a record
-/// spells one.
+/// The content address of one shipped source, spelled the way a record spells
+/// one.
 pub fn address(source: &str) -> String {
     // `Display` already writes the `sha256:` prefix — see
     // `karakuri_store::hash::Hash`, whose `FromStr` requires it.
@@ -46,10 +46,10 @@ pub fn addresses() -> &'static karakuri_operation_record::Shipped {
 
 /// The source one address names, where it is one of the three.
 ///
-/// **This is the only resolver that needs no store**, which is what lets a
-/// windowed run with no store at all put the shipped presets in its chain.
-/// Anything else is the store's to answer, and a stream naming an address
-/// nothing holds is refused with the address in the message.
+/// This is the only resolver that needs no store, which is what lets a windowed
+/// run with no store at all put the shipped presets in its chain. Anything else
+/// is the store's to answer, and a stream naming an address nothing holds is
+/// refused with the address in the message.
 pub fn source(address_of: &str) -> Option<&'static str> {
     ALL.into_iter()
         .map(|(_, src)| src)

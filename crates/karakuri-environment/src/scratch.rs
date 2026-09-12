@@ -4,7 +4,7 @@
 //!
 //! Where the material lives and who writes each place is
 //! `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`.
-//! **The table is there and not here**, because it was here as well as in
+//! The table is there and not here, because it was here as well as in
 //! [`crate::places`] and the two copies drifted together: both said the
 //! operator's library was written by `--save-set` *"and nothing else"* long
 //! after three other controls were writing it. What this module owns is the row
@@ -15,8 +15,8 @@
 //! operator named, so `--mcp` handed a model write access to the repository's
 //! own examples. It used them: three shipped presets were replaced in one
 //! session, and what saved them was that they happened to be under version
-//! control. **That is not a property of this program**, and a `.kir` an
-//! operator wrote for a show would simply have been gone.
+//! control. That is not a property of this program, and a `.kir` an operator
+//! wrote for a show would simply have been gone.
 //!
 //! So a run that can be edited copies its material here first and runs from the
 //! copy. Nothing downstream needs to know: [`materialise`] rewrites the deck's
@@ -45,48 +45,46 @@
 //!
 //! # A slot runs from its own copy, and the name carries the slot
 //!
-//! **One copy per slot, named `A0-drift_shell.kir`** — the deck letter, the
-//! node's place in that slot, and the material's own name ([`node_name`]). The
-//! same preset in four slots is four files, and that is the requirement rather
-//! than the price of meeting it: a slot is the unit that gets replaced —
+//! One copy per slot, named `A0-drift_shell.kir` — the deck letter, the node's
+//! place in that slot, and the material's own name ([`node_name`]). The same
+//! preset in four slots is four files, and that is the requirement rather than
+//! the price of meeting it: a slot is the unit that gets replaced —
 //! [`crate::watch`]'s *"that is what it means for each slot to own its own
 //! `HotSwap`"* — so a slot whose material is also somebody else's is a slot
 //! that is not a channel.
 //!
-//! **This replaces the opposite rule**, which stood here until 2026-09-01.
-//! It is quoted rather than deleted because it was argued rather than assumed,
-//! and somebody will re-propose it:
+//! This replaces the opposite rule, which stood here until 2026-09-01. It is
+//! quoted rather than deleted because it was argued rather than assumed, and
+//! somebody will re-propose it:
 //!
 //! > Two slots naming one file share it — `watch` documents that as supported,
-//! > and a write through MCP reports the other slots it reached. Copying
-//! > per-slot would quietly end that.
+//! > and a write through MCP reports the other slots it reached. Copying >
+//! per-slot would quietly end that.
 //!
 //! Three things are wrong with it.
 //!
-//! 1. **It is circular.** The report it defends — *this file is also slot 1* —
-//!    exists only to describe the sharing. End the sharing and that sentence is
-//!    not made untrue, it is made **empty**, which is what it should say. What
-//!    is lost is a warning about an accident, not something an operator asked
-//!    for.
-//! 2. **It contradicts the naming rule in the same directory.** [`place`] has
-//!    written `A0-drift.kir` since ADR-0228, whose argument is that
-//!    `<store>/scratch/<name>.kir` **overwrites** what is there, so two decks
-//!    whose material shares a name *"would silently become one file — the
-//!    second load moving the first deck on its watcher's next poll, with
-//!    nothing to say why"*. A copy named after its source alone put that exact
-//!    failure back into the one module written to stop it, and a run with
-//!    `--load-set --watch` used both rules at once, in one directory.
-//! 3. **It costs the thing the slots are for.** Four decks opened on one
-//!    preset are four simulations to be driven apart; one shared file means
-//!    the first edit moves all four and no one of them can be moved alone. In
-//!    `crates/karakuri` it also meant one save rebuilt four slots, four
-//!    candidates entered the Staging lane, and the three that are parked never
-//!    reach a verdict — a lane that fills on the first save and stays full for
-//!    the rest of the run.
+//! 1. It is circular. The report it defends — *this file is also slot 1* —
+//! exists only to describe the sharing. End the sharing and that sentence is
+//! not made untrue, it is made empty, which is what it should say. What is lost
+//! is a warning about an accident, not something an operator asked for. 2. It
+//! contradicts the naming rule in the same directory. [`place`] has written
+//! `A0-drift.kir` since ADR-0228, whose argument is that
+//! `<store>/scratch/<name>.kir` overwrites what is there, so two decks whose
+//! material shares a name *"would silently become one file — the second load
+//! moving the first deck on its watcher's next poll, with nothing to say why"*.
+//! A copy named after its source alone put that exact failure back into the one
+//! module written to stop it, and a run with `--load-set --watch` used both
+//! rules at once, in one directory. 3. It costs the thing the slots are for.
+//! Four decks opened on one preset are four simulations to be driven apart; one
+//! shared file means the first edit moves all four and no one of them can be
+//! moved alone. In `crates/karakuri` it also meant one save rebuilt four slots,
+//! four candidates entered the Staging lane, and the three that are parked
+//! never reach a verdict — a lane that fills on the first save and stays full
+//! for the rest of the run.
 //!
-//! **What survives is the obligation to speak, not the shared file.** An
-//! operator who gave one preset to four decks had an edit reach all four, and
-//! will expect it to. So the surface that writes says what its write reached:
+//! What survives is the obligation to speak, not the shared file. An operator
+//! who gave one preset to four decks had an edit reach all four, and will
+//! expect it to. So the surface that writes says what its write reached:
 //! [`crate::mcp`] still scans the other slots for the path it wrote — a scan
 //! that is normally empty now, and empty *because* of this rule rather than
 //! because nobody shares — and both programs print the per-deck file list at
@@ -100,24 +98,24 @@ pub const DIR: &str = "scratch";
 /// Copy every node of every slot into the scratch and rewrite the paths to
 /// point at the copies. Returns the directory, for printing.
 ///
-/// **Call this only when the run can be edited** — `--watch`, `--mcp`, or a
-/// surface that is permanently both. A run with none of those writes no `.kir`
-/// at all, so there is nothing to protect the originals from, and copying would
-/// leave a directory behind for a render that is supposed to be a function of
-/// its arguments.
+/// Call this only when the run can be edited — `--watch`, `--mcp`, or a surface
+/// that is permanently both. A run with none of those writes no `.kir` at all,
+/// so there is nothing to protect the originals from, and copying would leave a
+/// directory behind for a render that is supposed to be a function of its
+/// arguments.
 ///
 /// Existing scratch files are overwritten and the rest of the directory is left
 /// alone. Not cleared: an operator may have put something here, and deleting a
 /// directory whose name we chose is a bad way to find that out.
 ///
-/// **Takes the slots rather than a flat list of paths**, which is the change
-/// this function exists to carry: the name of a copy is [`node_name`]'s, and
-/// that name is the slot and the node's place in it. A flat list could not
-/// spell one. What is *not* taken is what a slot is — the caller hands over
-/// each slot's paths in node order and keeps the names beside them, because a
-/// node name is the Set file's business and not this module's.
+/// Takes the slots rather than a flat list of paths, which is the change this
+/// function exists to carry: the name of a copy is [`node_name`]'s, and that
+/// name is the slot and the node's place in it. A flat list could not spell
+/// one. What is *not* taken is what a slot is — the caller hands over each
+/// slot's paths in node order and keeps the names beside them, because a node
+/// name is the Set file's business and not this module's.
 ///
-/// **No dedup, and that is the rule rather than an omission.** The same source
+/// No dedup, and that is the rule rather than an omission. The same source
 /// given to four slots becomes four files. See this module's header for why the
 /// opposite rule was there and why it went; the short of it is that a slot is
 /// the unit that gets replaced, so a slot whose file is also somebody else's
@@ -155,7 +153,7 @@ where
     Ok(dir)
 }
 
-/// **The name one node of one slot is filed under**, and the one rule: the deck
+/// The name one node of one slot is filed under, and the one rule: the deck
 /// letter, the node's place in that slot, and the material's own name —
 /// `A0-drift_shell`. [`place`] appends the `.kir`.
 ///
@@ -167,21 +165,21 @@ where
 /// next poll, with nothing to say why."* Nothing in that sentence is about a
 /// *load*: it is about two decks and one directory, which is every run.
 ///
-/// **The material's own name is kept**, disambiguated by the prefix rather than
+/// The material's own name is kept, disambiguated by the prefix rather than
 /// replaced by it, for the reason the counter it replaces gave: *"a scratch of
 /// hashes is a scratch nobody opens in an editor."* An operator has to be able
-/// to see which file is which deck **and** what is in it, and the two questions
-/// are answered by the two halves of this name.
+/// to see which file is which deck and what is in it, and the two questions are
+/// answered by the two halves of this name.
 ///
-/// **No counter and no collision list.** `<letter><at>` is unique by
-/// construction — a slot index and a node index — so two different sources can
-/// no longer land on one file however they are named, which is what the
-/// `unique_name` this replaces was scanning for.
+/// No counter and no collision list. `<letter><at>` is unique by construction —
+/// a slot index and a node index — so two different sources can no longer land
+/// on one file however they are named, which is what the `unique_name` this
+/// replaces was scanning for.
 pub fn node_name(slot: usize, at: usize, name: &str) -> String {
     format!("{}{at}-{}", deck_letter(slot), sanitize(name))
 }
 
-/// **The letter the deck is drawn with**, `A` for slot 0.
+/// The letter the deck is drawn with, `A` for slot 0.
 ///
 /// `karakuri_console::view::DECK_LETTERS` is `["A", "B", "C", "D"]` and is the
 /// answer everywhere a surface *says* which deck; this crate cannot name it —
@@ -267,8 +265,8 @@ mod tests {
             .map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut()).collect())
     }
 
-    /// The claim the module exists for: after this, nothing the deck holds
-    /// points at the file the operator named.
+    /// The claim the module exists for: after this, nothing the deck holds points
+    /// at the file the operator named.
     #[test]
     fn the_deck_runs_from_the_copy_and_the_original_is_untouched() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -300,13 +298,13 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&l1).expect("read"), "original l1");
     }
 
-    /// **The requirement, and the one test this whole change is about.**
+    /// The requirement, and the one test this whole change is about.
     ///
-    /// The same preset in two slots, edited in one place, moves one deck. Under
-    /// the rule this replaces the two slots shared one file, so the edit below
-    /// moved both — silently, with nothing in the program able to say which
-    /// deck the operator had meant. A slot is the unit that gets replaced;
-    /// a slot that cannot be moved on its own is not one.
+    /// The same preset in two slots, edited in one place, moves one deck. Under the
+    /// rule this replaces the two slots shared one file, so the edit below moved
+    /// both — silently, with nothing in the program able to say which deck the
+    /// operator had meant. A slot is the unit that gets replaced; a slot that
+    /// cannot be moved on its own is not one.
     #[test]
     fn the_same_preset_in_two_slots_is_two_files_and_an_edit_moves_one_deck() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -359,9 +357,9 @@ mod tests {
         );
     }
 
-    /// **The name carries the deck and the node's place**, ADR-0228's
-    /// `A0-drift.kir`, because `<store>/scratch/<name>.kir` overwrites what is
-    /// there: a name that carried neither would put two decks on one file.
+    /// The name carries the deck and the node's place, ADR-0228's `A0-drift.kir`,
+    /// because `<store>/scratch/<name>.kir` overwrites what is there: a name that
+    /// carried neither would put two decks on one file.
     #[test]
     fn a_scratch_name_carries_the_deck_and_the_nodes_place() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -387,10 +385,10 @@ mod tests {
         assert_eq!(named(&sets[1].1[0]), "B1-soft_points.kir");
     }
 
-    /// **The letters are the ones the preview cells carry.** This crate cannot
-    /// name `karakuri_console::view::DECK_LETTERS`, so the agreement is
-    /// asserted here over every slot a `Deck` can have rather than assumed by
-    /// two lists that would drift apart in silence.
+    /// The letters are the ones the preview cells carry. This crate cannot name
+    /// `karakuri_console::view::DECK_LETTERS`, so the agreement is asserted here
+    /// over every slot a `Deck` can have rather than assumed by two lists that
+    /// would drift apart in silence.
     #[test]
     fn the_deck_letters_are_the_ones_the_preview_cells_carry() {
         let drawn = ["A", "B", "C", "D"];
@@ -407,8 +405,8 @@ mod tests {
     }
 
     /// Two *different* sources with one basename must not collide — that would
-    /// merge two slots' material into one file, which is worse than any name.
-    /// The prefix is what answers now, and it answers by construction.
+    /// merge two slots' material into one file, which is worse than any name. The
+    /// prefix is what answers now, and it answers by construction.
     #[test]
     fn different_sources_with_the_same_basename_get_different_scratch_files() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -465,8 +463,8 @@ mod tests {
     }
 
     /// A path already in the scratch is the working copy and is left alone —
-    /// otherwise the pass that protects the originals would rewrite the one
-    /// thing that has no original.
+    /// otherwise the pass that protects the originals would rewrite the one thing
+    /// that has no original.
     #[test]
     fn a_path_already_in_the_scratch_is_not_copied_again() {
         let tmp = tempfile::tempdir().expect("tempdir");

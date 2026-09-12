@@ -10,19 +10,19 @@ use super::types::DEFAULT_OCTAVES;
 
 /// Convert one [`Record::Bind`] into the binding the engine applies.
 ///
-/// **The one place a binding's semantics live.** `--bind` reaches here too, so
+/// The one place a binding's semantics live. `--bind` reaches here too, so
 /// the flag and a Set file cannot mean different things by the same fields.
 ///
 /// The two diagnostics the decoder owes are here and
 /// nowhere else:
 ///
-/// - **`signal=bpm` is refused.** A tempo is not a `[0, 1]` signal, so the
+/// - `signal=bpm` is refused. A tempo is not a `[0, 1]` signal, so the
 ///   curve clamps it and the binding sits pinned at the top of its range for
 ///   the whole run. From the outside a pinned binding and a working one are the
 ///   same number on a status line, which is exactly why this cannot be a
 ///   silent clamp. `beat` and `bar` carry the same tempo in the range a binding
 ///   is defined over.
-/// - **`noise.octaves` needs `kind=fbm`.** The other three generators have no
+/// - `noise.octaves` needs `kind=fbm`. The other three generators have no
 ///   layers, so an octave count on one of them is asking for a generator nobody
 ///   named. Refused rather than ignored, for the same reason.
 ///
@@ -30,8 +30,8 @@ use super::types::DEFAULT_OCTAVES;
 /// not `noise` is refused, because accepting it leaves an operator re-reading
 /// the noise fields to find out why the parameter does not move.
 ///
-/// **A fourth refusal is deliberately not here: a binding on a bare vector
-/// key.** A binding resolves to one number and a `vec3` has three places to
+/// A fourth refusal is deliberately not here: a binding on a bare vector
+/// key. A binding resolves to one number and a `vec3` has three places to
 /// put it, so `bind key=glow` names no component — but whether `glow` is a
 /// `vec3` is a fact about the *procedures*, which this function is not handed
 /// and a `--bind` string does not carry. It is refused in [`from_lines`](crate::setfile::from_lines),
@@ -124,10 +124,10 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
 /// Convert one [`Record::Source`]'s attachment into the binding the engine
 /// applies — the session record's road into [`binding_from_record`].
 ///
-/// **One decoder and not two.** A `source` carries a `bind`'s four payload
-/// fields beside a `bind`'s address, so a second reader for it would be a
-/// second answer to *what does `signal=bpm` mean*, *what does `octaves` need*
-/// and *what does an absent `noise` mean* — the three diagnostics
+/// One decoder and not two. A `source` carries a `bind`'s four payload fields
+/// beside a `bind`'s address, so a second reader for it would be a second
+/// answer to *what does `signal=bpm` mean*, *what does `octaves` need* and
+/// *what does an absent `noise` mean* — the three diagnostics
 /// [`binding_from_record`] says it owns and nowhere else. This builds the
 /// `bind` those fields spell and hands it over, so a live attachment and a Set
 /// file's cannot come to mean different things.
@@ -152,12 +152,13 @@ pub fn binding_from_source(
     })
 }
 
-/// **One `param` record as the file wrote it**: where it lands, the key it
-/// names, and the value.
+/// One `param` record as the file wrote it: where it lands, the key it names,
+/// and the value.
 ///
 /// Held rather than turned into a [`ParamWrite`] on sight, because what a
 /// vector value becomes depends on what the procedures declare and they are not
-/// checked until every `slot` record has been met — see [`from_lines`](crate::setfile::from_lines).
+/// checked until every `slot` record has been met — see
+/// [`from_lines`](crate::setfile::from_lines).
 pub type ParamRecord = (Option<(Kind, u32)>, String, Value);
 
 /// A written param's fold key: its address, then its name. `None` sorts first,

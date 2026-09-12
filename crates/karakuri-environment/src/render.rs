@@ -6,15 +6,15 @@
 //! carries the transfer function. That makes this a preview of what is actually
 //! on screen rather than a second rendering path that might disagree with it.
 //!
-//! **With several Sets this renders the mix**, for that reason and no other: it
-//! is what the window shows. A flag that rendered each slot to its own file
-//! would be a different feature — looking at one candidate on its own is what
-//! the console's four deck preview cells do on screen, and the deck draws every
+//! With several Sets this renders the mix, for that reason and no other: it is
+//! what the window shows. A flag that rendered each slot to its own file would
+//! be a different feature — looking at one candidate on its own is what the
+//! console's four deck preview cells do on screen, and the deck draws every
 //! slot into a target of its own on every frame whatever its residency
 //! (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`),
 //! so a per-slot file is `Deck::slot_target` and a second present pass and
-//! changes nothing here. What the mix must not become is
-//! a fourth definition of "the output"; there is one, and this is it.
+//! changes nothing here. What the mix must not become is a fourth definition of
+//! "the output"; there is one, and this is it.
 
 use std::path::Path;
 
@@ -63,28 +63,28 @@ pub fn to_sequence(
 /// Render a session's frames, driven by the stream rather than by a clock.
 ///
 /// `drive` is called once before each frame with its index and the deck, and
-/// returns the step count that frame's `tick` recorded, **the look that frame
-/// is under, and a master chain where the stream just changed one**. There is
-/// no `look` parameter and no `chain` parameter beside it on purpose: see
+/// returns the step count that frame's `tick` recorded, the look that frame is
+/// under, and a master chain where the stream just changed one. There is no
+/// `look` parameter and no `chain` parameter beside it on purpose: see
 /// [`sequence_driven`].
 ///
-/// **The chain is the third for the look's reason exactly.** A `master_chain`
+/// The chain is the third for the look's reason exactly. A `master_chain`
 /// record moves it mid-session, so a run that took it as a parameter would
 /// replay every frame under whatever the stream started with — which is what
 /// happened to the look before it was returned rather than passed, and is the
 /// paragraph `karakuri-cli`'s replay loop writes about its own `look`.
 ///
-/// **`Option`, and the look beside it is not, because the two are not the same
-/// kind of value.** A look is three numbers written to a uniform every frame;
-/// a chain is a list of procedures, and putting one on the `Present` may mean
+/// `Option`, and the look beside it is not, because the two are not the same
+/// kind of value. A look is three numbers written to a uniform every frame; a
+/// chain is a list of procedures, and putting one on the `Present` may mean
 /// compiling them. So the driver hands one over on the frames the stream
 /// changed it and `None` on every other, and a chain that did not move is not
 /// touched (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
 ///
-/// **A description and not a built chain**, because the `Present` a slot is
-/// built against is made inside this module: the driver says what the chain
-/// *is* and `resolve` says what an address's source is —
-/// `crate::mix::resolve_procedure` is what a caller with a store hands in.
+/// A description and not a built chain, because the `Present` a slot is built
+/// against is made inside this module: the driver says what the chain *is* and
+/// `resolve` says what an address's source is — `crate::mix::resolve_procedure`
+/// is what a caller with a store hands in.
 #[allow(clippy::too_many_arguments)]
 pub fn replay(
     gpu: &Gpu,
@@ -127,12 +127,12 @@ fn sequence(
 
 /// A [`Sink`] that writes chosen frames to PNG files.
 ///
-/// **Chosen, not every one.** A sequence renders every frame — the simulation
-/// has to advance through the ones nobody keeps — and writes only the ones
-/// `wanted` names. The draw happens regardless, because the draw is a
-/// fullscreen triangle and skipping it was one more thing that happened on one
-/// path and not the other; what is conditional is the readback, which stalls
-/// the pipeline and is the whole cost.
+/// Chosen, not every one. A sequence renders every frame — the simulation has
+/// to advance through the ones nobody keeps — and writes only the ones `wanted`
+/// names. The draw happens regardless, because the draw is a fullscreen
+/// triangle and skipping it was one more thing that happened on one path and
+/// not the other; what is conditional is the readback, which stalls the
+/// pipeline and is the whole cost.
 pub struct PngSink {
     format: wgpu::TextureFormat,
     target: wgpu::Texture,
@@ -142,8 +142,8 @@ pub struct PngSink {
     height: u32,
     unpadded_row: u32,
     padded_row: u32,
-    /// The path for the frame in flight, `None` when this one is not kept.
-    /// Set by the loop before each frame — see [`PngSink::want`].
+    /// The path for the frame in flight, `None` when this one is not kept. Set by
+    /// the loop before each frame — see [`PngSink::want`].
     writing: Option<std::path::PathBuf>,
 }
 
@@ -200,11 +200,11 @@ impl PngSink {
 
     /// Where the next frame goes, or `None` to render it and keep nothing.
     ///
-    /// **Told rather than counted.** This sink briefly kept its own frame
-    /// counter and asked `wanted(self.index)` itself, which meant two counters
-    /// for one sequence and nothing asserting they agreed — the loop's `i` and
-    /// the sink's. They did agree, and that is not a reason to keep them: the
-    /// agreement had simply stopped being visible.
+    /// Told rather than counted. This sink briefly kept its own frame counter and
+    /// asked `wanted(self.index)` itself, which meant two counters for one sequence
+    /// and nothing asserting they agreed — the loop's `i` and the sink's. They did
+    /// agree, and that is not a reason to keep them: the agreement had simply
+    /// stopped being visible.
     pub fn want(&mut self, path: Option<std::path::PathBuf>) {
         self.writing = path;
     }
@@ -215,10 +215,9 @@ impl PngSink {
 }
 
 impl Sink for PngSink {
-    /// Never skips. An offscreen target is made once and is always there,
-    /// which is exactly the property a live surface does not have — and having
-    /// both behind one trait is what lets a test supply a third that skips on
-    /// demand.
+    /// Never skips. An offscreen target is made once and is always there, which is
+    /// exactly the property a live surface does not have — and having both behind
+    /// one trait is what lets a test supply a third that skips on demand.
     fn acquire(&mut self, _gpu: &Gpu) -> Result<(), Skip> {
         Ok(())
     }
@@ -227,8 +226,8 @@ impl Sink for PngSink {
         &self.view
     }
 
-    /// The attachment **is** the canvas here: an offscreen render has no window
-    /// to fit into, so the viewport is the whole of it and no bars exist.
+    /// The attachment is the canvas here: an offscreen render has no window to fit
+    /// into, so the viewport is the whole of it and no bars exist.
     fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
@@ -287,9 +286,9 @@ impl Sink for PngSink {
 /// the frame index and the deck, applies whatever the stream says belongs
 /// before that frame, and returns what to advance by and under what look.
 ///
-/// **The loop itself is [`frame::compose`]**, which is also what the
-/// window runs. This function is now the offscreen half of the seam and nothing
-/// else: a sink, a driver, and the decision to stop after `frames`.
+/// The loop itself is [`frame::compose`], which is also what the window runs.
+/// This function is now the offscreen half of the seam and nothing else: a
+/// sink, a driver, and the decision to stop after `frames`.
 #[allow(clippy::too_many_arguments)]
 fn sequence_driven(
     gpu: &Gpu,
@@ -378,7 +377,7 @@ fn sequence_driven(
 /// Drop the copy alignment padding from a mapped readback, leaving the rows a
 /// PNG encoder expects.
 ///
-/// **Extracted because the failure is silent and looks like art.** A row stride
+/// Extracted because the failure is silent and looks like art. A row stride
 /// that is one texel out does not error, does not change the file size, and
 /// does not produce anything an eye reads as broken on generative material — it
 /// produces a picture sheared by one texel per row, which on a soft point cloud
@@ -404,9 +403,9 @@ mod tests {
     /// The padded stride is the next multiple of [`COPY_ALIGN`], and an already
     /// aligned width is left alone rather than pushed to the next one.
     ///
-    /// `1920 * 4` is 7680, exactly thirty alignments — so the default canvas
-    /// takes the untouched path, and a test that only used the default would
-    /// never run the padding at all.
+    /// `1920 * 4` is 7680, exactly thirty alignments — so the default canvas takes
+    /// the untouched path, and a test that only used the default would never run
+    /// the padding at all.
     #[test]
     fn a_row_is_padded_only_when_it_needs_to_be() {
         let stride = |width: u32| (width * 4).div_ceil(COPY_ALIGN) * COPY_ALIGN;
@@ -419,9 +418,9 @@ mod tests {
 
     /// Every row comes back whole, in order, with the padding gone.
     ///
-    /// The fixture numbers each row, so a stride that is out by one alignment —
-    /// or by one byte — produces different bytes rather than a different length,
-    /// which is the whole point: a length check passes on a sheared image.
+    /// The fixture numbers each row, so a stride that is out by one alignment — or
+    /// by one byte — produces different bytes rather than a different length, which
+    /// is the whole point: a length check passes on a sheared image.
     #[test]
     fn stripping_the_padding_keeps_every_row_where_it_was() {
         let (unpadded, padded, height) = (12u32, 16u32, 4u32);

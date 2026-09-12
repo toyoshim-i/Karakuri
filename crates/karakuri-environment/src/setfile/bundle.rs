@@ -12,20 +12,19 @@ use super::summary::node_called;
 
 // -- Resolution: the authoring form, into the one a store may hold -------
 
-/// **The extension an authoring Set file wears**, and the whole of how one is
-/// told from a resolved one
+/// The extension an authoring Set file wears, and the whole of how one is told
+/// from a resolved one
 /// ([ADR-0231](../../../docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md)).
 /// `Store::SET_FILE_SUFFIX` is the other half and is the store's, because the
 /// store is the thing that may hold only that one.
 pub const AUTHORING_SUFFIX: &str = ".kset";
 
-/// **Resolve the authoring Set file at `path` into the resolved Set file it
-/// names**: every `part` read from disk relative to *this file's own
-/// directory*, hashed, put in the store as an artifact, and written out as a
-/// `slot` naming that address. Every other record is passed through unchanged
-/// and in place.
+/// Resolve the authoring Set file at `path` into the resolved Set file it
+/// names: every `part` read from disk relative to *this file's own directory*,
+/// hashed, put in the store as an artifact, and written out as a `slot` naming
+/// that address. Every other record is passed through unchanged and in place.
 ///
-/// **This is the missing half of packaging**, and it is the same operation
+/// This is the missing half of packaging, and it is the same operation
 /// [`bundle`] performs at another moment
 /// ([ADR-0229](../../../docs/adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md)
 /// part 4, *"one operation, two moments"*): loading an authoring file *is*
@@ -34,23 +33,24 @@ pub const AUTHORING_SUFFIX: &str = ".kset";
 /// carry what a store already holds; this starts from a file on a disk that has
 /// never been in one.
 ///
-/// **A read, a hash and a store put — never a compile.** A `slot`'s `proc` is
-/// the content address of the `.kir` *source*, so nothing here parses a
-/// procedure or asks a device for anything: the checker runs where a Set is
-/// built, which is [`from_lines`](crate::setfile::from_lines) and [`unbundle`], and running it here as well
-/// would be a second place that decides whether material is admissible.
+/// A read, a hash and a store put — never a compile. A `slot`'s `proc` is the
+/// content address of the `.kir` *source*, so nothing here parses a procedure
+/// or asks a device for anything: the checker runs where a Set is built, which
+/// is [`from_lines`](crate::setfile::from_lines) and [`unbundle`], and running
+/// it here as well would be a second place that decides whether material is
+/// admissible.
 ///
-/// **Lines back rather than a file written**, on [`bundle`]'s terms: where the
+/// Lines back rather than a file written, on [`bundle`]'s terms: where the
 /// result goes is the caller's, and the two callers want different things —
 /// `--package FILE.kset` inlines them and prints, where a load would hand them
 /// to [`from_lines`](crate::setfile::from_lines).
 ///
-/// **The wall is this function and not a later one.** ADR-0229: *"the wall is
-/// not a hardening pass to add afterwards, because the first thing that
-/// resolves an include without one is the defect."* Every path is put through
-/// [`contained`] **before a single byte is read or stored**, so a file with one
-/// escape in it stores nothing at all — a refusal that had already filed three
-/// artifacts would be a refusal an operator has to clean up after.
+/// The wall is this function and not a later one. ADR-0229: *"the wall is not a
+/// hardening pass to add afterwards, because the first thing that resolves an
+/// include without one is the defect."* Every path is put through [`contained`]
+/// before a single byte is read or stored, so a file with one escape in it
+/// stores nothing at all — a refusal that had already filed three artifacts
+/// would be a refusal an operator has to clean up after.
 pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
     // **The extension is checked here and not only by whoever routed us**,
     // because it is the whole of what says which form a file is, and a function
@@ -171,9 +171,9 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
     Ok(out)
 }
 
-/// **Resolve the authoring Set file at `path` and inline every source it
-/// names**: [`resolve`] and then the inlining [`bundle`] does, which is the
-/// packaging step end to end.
+/// Resolve the authoring Set file at `path` and inline every source it names:
+/// [`resolve`] and then the inlining [`bundle`] does, which is the packaging
+/// step end to end.
 ///
 /// The two are separate functions and one call because they are separate facts:
 /// resolution is what turns paths into addresses, and inlining is what makes
@@ -195,44 +195,44 @@ pub fn bundle_authored(store: &Store, path: &Path) -> Result<Vec<Line>, String> 
     with_inlined_source(store, &id, lines)
 }
 
-/// **The wall: the include, resolved, is under the authoring file's own
-/// directory — or it is refused by name.**
+/// The wall: the include, resolved, is under the authoring file's own
+/// directory — or it is refused by name.
 ///
 /// `root` is that directory, already canonical. The answer is the file to read.
 ///
-/// **What transfers from `mcp::checked_id` and `karakuri`'s `checked_name` is
+/// What transfers from `mcp::checked_id` and `karakuri`'s `checked_name` is
 /// where the wall sits, that it refuses rather than repairs, and that the
-/// refusal names what it refused** — not their rule. Those two guard **one path
-/// component** and allow letters, digits, `-` and `_`; an include is a relative
+/// refusal names what it refused — not their rule. Those two guard one path
+/// component and allow letters, digits, `-` and `_`; an include is a relative
 /// *path* and has separators in it by construction, so the charset rule cannot
 /// be copied. The rule here is containment, and ADR-0229's section *The wall
 /// the authoring form needs* is where it was decided.
 ///
-/// **Three spellings of one escape, and the third is the one that gets
-/// missed:**
+/// Three spellings of one escape, and the third is the one that gets
+/// missed:
 ///
-/// - an **absolute** path, which is not relative to anything;
-/// - a **`..` that climbs out**, refused lexically — before the filesystem is
+/// - an absolute path, which is not relative to anything;
+/// - a `..` that climbs out, refused lexically — before the filesystem is
 ///   asked anything — so that `../../etc/passwd` is refused whether or not it
 ///   exists. A `..` that does *not* climb out (`sub/../l1.kir`) is an ordinary
 ///   path and is allowed: what is refused is leaving, not the spelling;
-/// - a **symlink pointing out**, which is why the comparison is between
+/// - a symlink pointing out, which is why the comparison is between
 ///   *canonical* paths. `std::fs::canonicalize` resolves every link in the
 ///   path, so a `parts` directory that is a link to `/etc` is caught along with
 ///   a `passwd.kir` that is a link to a file in it.
 ///
-/// **And the root is canonical for the same reason the target is.** A directory
+/// And the root is canonical for the same reason the target is. A directory
 /// reached *through* a symlink — which is every temporary directory on macOS,
 /// where `/var` is a link to `/private/var` — would otherwise contain none of
 /// its own children by this comparison, and a wall that refuses everything is a
 /// wall somebody switches off.
 ///
-/// **Refused, never repaired**, which is the precedents' rule and this
+/// Refused, never repaired, which is the precedents' rule and this
 /// program's: an include quietly rewritten into one that reads is a rule an
 /// operator can only find by experiment, and a Set that silently drew from
 /// somewhere else is worse than one that did not open.
 ///
-/// **Why it exists at all**: an authoring file is a thing you are *sent*. An
+/// Why it exists at all: an authoring file is a thing you are *sent*. An
 /// include that escapes its own directory means opening a Set somebody handed
 /// you reads any file on your machine and inlines it into a bundle you then
 /// hand on.
@@ -311,17 +311,17 @@ pub(crate) fn part_at(layer: Layer, index: u32, name: Option<&str>, path: &str) 
 
 // -- Bundling: a Set file that carries its own material ------------------
 
-/// **Bundle the Set filed under `id`: the file it already is, with every
-/// source it names inlined after it.**
+/// Bundle the Set filed under `id`: the file it already is, with every source
+/// it names inlined after it.
 ///
-/// The bundled form is `docs/ir-spec.md`'s and it is the one [`from_lines`](crate::setfile::from_lines)
-/// already reads — a run of `src` records per artifact, keyed by hash, which
-/// wins over the store when both could answer. So a bundle loads on a machine
-/// whose store has never held the material, which is the whole of what it is
-/// for.
+/// The bundled form is `docs/ir-spec.md`'s and it is the one
+/// [`from_lines`](crate::setfile::from_lines) already reads — a run of `src`
+/// records per artifact, keyed by hash, which wins over the store when both
+/// could answer. So a bundle loads on a machine whose store has never held the
+/// material, which is the whole of what it is for.
 ///
-/// **Lines back rather than a file written.** Where a bundle goes is the
-/// caller's, and the caller writes it to standard output; see `packaged_set` in
+/// Lines back rather than a file written. Where a bundle goes is the caller's,
+/// and the caller writes it to standard output; see `packaged_set` in
 /// `karakuri-cli`, which is `--package`'s half of this.
 pub fn bundle(store: &Store, id: &str) -> Result<Vec<Line>, String> {
     let lines = store
@@ -402,8 +402,8 @@ fn node_at(layer: Layer, index: u32, name: Option<&str>, hash: &Hash) -> String 
     )
 }
 
-/// What one `slot` record of a bundle says, kept for the sentences
-/// [`unbundle`] owes about it.
+/// What one `slot` record of a bundle says, kept for the sentences [`unbundle`]
+/// owes about it.
 struct Slot {
     layer: Layer,
     index: u32,
@@ -417,32 +417,33 @@ impl Slot {
     }
 }
 
-/// **Take a Set somebody sent you into this store**: its inlined sources as
+/// Take a Set somebody sent you into this store: its inlined sources as
 /// artifacts, a metadata card per artifact that compiles, and its Set file
 /// under the id the file itself carries. `--take-in`'s half of this; the lines
 /// are a `.kbset`'s as read, or an authoring file's already put through
 /// [`bundle_authored`].
 ///
-/// **Nothing is written until every source has been checked.** A store's whole
+/// Nothing is written until every source has been checked. A store's whole
 /// guarantee is that a hash names those bytes and no others, so a `src` run
 /// whose text hashes to something else is refused — naming the node — before
 /// anything reaches the disk. A half-applied bundle would leave the store
 /// holding material nobody can name.
 ///
-/// **The id comes from the file's own `set` record, and a taken one is refused
-/// rather than overwritten.** This is deliberately not [`save`](crate::setfile::save)'s rule, which
-/// `--save-set ID` and the `k` key share: **an id you type is an instruction,
-/// and an id that arrived inside somebody else's file is not.** Overwriting on
-/// a name you chose is you replacing your own preset; overwriting on a name a
-/// stranger's file chose is a preset an operator built disappearing because
-/// somebody they have never met picked the same word. Being annoying about it
-/// costs one rename; the other failure costs work that is gone.
+/// The id comes from the file's own `set` record, and a taken one is refused
+/// rather than overwritten. This is deliberately not
+/// [`save`](crate::setfile::save)'s rule, which `--save-set ID` and the `k` key
+/// share: an id you type is an instruction, and an id that arrived inside
+/// somebody else's file is not. Overwriting on a name you chose is you
+/// replacing your own preset; overwriting on a name a stranger's file chose is
+/// a preset an operator built disappearing because somebody they have never met
+/// picked the same word. Being annoying about it costs one rename; the other
+/// failure costs work that is gone.
 ///
 /// The report says what happened, including the sources this build's checker
-/// will not compile: those are **stored and filed all the same**, because the
-/// Set will then fail on load with the checker's own diagnostics against the
-/// source — which tells an operator which line is wrong, where refusing the
-/// whole file would tell them only that it was.
+/// will not compile: those are stored and filed all the same, because the Set
+/// will then fail on load with the checker's own diagnostics against the source
+/// — which tells an operator which line is wrong, where refusing the whole file
+/// would tell them only that it was.
 pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
     let mut file_id = None;
     let mut slots: Vec<Slot> = Vec::new();

@@ -14,18 +14,18 @@ use crate::meta::put_meta;
 /// A name for every node of a slot, in the shape the procedures themselves are
 /// passed in.
 ///
-/// **Per layer rather than one list in node order**, because the node order is
-/// the engine's — `slot_of` and `nodes_of` decide it — and a caller that
-/// reproduced it here would be a second place for a fact this project has
-/// already been bitten by twice.
+/// Per layer rather than one list in node order, because the node order is the
+/// engine's — `slot_of` and `nodes_of` decide it — and a caller that reproduced
+/// it here would be a second place for a fact this project has already been
+/// bitten by twice.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Names {
     pub l1s: Vec<Option<String>>,
     pub l2s: Vec<Option<String>>,
-    /// **A list, like the renderers'.** A slot holds as many cameras as its
-    /// files declare, and the built-in orbit is a node beside them — one
-    /// nobody can name from the command line, since a name is written beside
-    /// a path and the built-in has none. It is called `orbit`; see
+    /// A list, like the renderers'. A slot holds as many cameras as its files
+    /// declare, and the built-in orbit is a node beside them — one nobody can name
+    /// from the command line, since a name is written beside a path and the
+    /// built-in has none. It is called `orbit`; see
     /// `karakuri_engine::set::BUILTIN_CAMERA`.
     pub l3s: Vec<Option<String>>,
     pub l4s: Vec<Option<String>>,
@@ -33,9 +33,9 @@ pub struct Names {
 }
 
 impl Names {
-    /// Every name that was actually written, which is the only thing worth
-    /// checking for a collision: a derived one is disambiguated where it is
-    /// derived, in `Set::build_many`.
+    /// Every name that was actually written, which is the only thing worth checking
+    /// for a collision: a derived one is disambiguated where it is derived, in
+    /// `Set::build_many`.
     fn written(&self) -> impl Iterator<Item = &String> {
         self.l1s
             .iter()
@@ -46,14 +46,14 @@ impl Names {
             .chain(self.fields.iter().flatten())
     }
 
-    /// **Unique within a slot**, which is the scope a name resolves in: a Set is
-    /// what holds the nodes, so two slots may each have a `near` and neither is
+    /// Unique within a slot, which is the scope a name resolves in: a Set is what
+    /// holds the nodes, so two slots may each have a `near` and neither is
     /// ambiguous.
     ///
-    /// Refused rather than disambiguated. A derived name is disambiguated
-    /// where it is derived — that is what `-2` is for — so a collision reaching
-    /// here is two *written* names, and picking one for the author would leave
-    /// a `--param` pointing at whichever the tie-break preferred.
+    /// Refused rather than disambiguated. A derived name is disambiguated where it
+    /// is derived — that is what `-2` is for — so a collision reaching here is two
+    /// *written* names, and picking one for the author would leave a `--param`
+    /// pointing at whichever the tie-break preferred.
     pub fn check_unique(&self) -> Result<(), String> {
         let mut seen: Vec<&str> = Vec::new();
         for name in self.written() {
@@ -68,7 +68,7 @@ impl Names {
     }
 }
 
-/// **The compiled procedure and the text it was compiled from**, together.
+/// The compiled procedure and the text it was compiled from, together.
 ///
 /// The source is handed back rather than dropped, and that is the whole reason
 /// this returns a pair. A `.kir` is read here exactly once per run, and what
@@ -77,36 +77,35 @@ impl Names {
 /// function of *these* bytes. A second reader asking the path again is a second
 /// answer to "what is this node running", and it is a different answer the
 /// moment anything has rewritten the file in between: an editor, a model over
-/// MCP, a formatter. See [`Placed`], which is where these bytes
-/// are kept — beside the pipeline that read them, since the last slice of
-/// ADR-0214's move brought it here.
+/// MCP, a formatter. See [`Placed`], which is where these bytes are kept —
+/// beside the pipeline that read them, since the last slice of ADR-0214's move
+/// brought it here.
 pub fn load(path: &Path) -> Result<(Checked, String), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let checked = compile(&src).map_err(|report| format!("{}:\n{report}", path.display()))?;
     Ok((checked, src))
 }
 
-/// **Every diagnostic from one refused file, in the two forms it has readers
-/// for.**
+/// Every diagnostic from one refused file, in the two forms it has readers for.
 ///
 /// A terminal takes the whole of it — the message, the line under it and the
 /// caret, and the hint where there is one — and that is what every caller
 /// before this one wanted. A *row* cannot: the Staging lane draws one line per
 /// candidate, so what it can hold is the head of the first diagnostic and a
 /// count of the rest ([`karakuri_engine::swap::Refusal`], and
-/// `docs/principles/0083-…`, whose one-round-trip half is what keeps the
-/// whole report on the terminal and on the MCP surface rather than trimming it
+/// `docs/principles/0083-…`, whose one-round-trip half is what keeps the whole
+/// report on the terminal and on the MCP surface rather than trimming it
 /// everywhere).
 ///
-/// **[`Diagnostics::said`] is the first line of each rendered diagnostic and
-/// not a second rendering of it.** `IrError::render` writes *line:col: stage:
+/// [`Diagnostics::said`] is the first line of each rendered diagnostic and not
+/// a second rendering of it. `IrError::render` writes *line:col: stage:
 /// message* and then the source line, the caret and the hint, so the head of
 /// what a terminal reads and the whole of what a row reads are one derivation
 /// rather than two that can drift
 /// (`docs/principles/0087-name-the-property-never-the-shape.md`).
 pub struct Diagnostics {
-    /// Rendered against the source it came from, diagnostics separated by a
-    /// blank line — what was printed before this type existed, unchanged.
+    /// Rendered against the source it came from, diagnostics separated by a blank
+    /// line — what was printed before this type existed, unchanged.
     pub report: String,
     /// The same diagnostics, one line each: where, which stage, and what.
     pub said: Vec<String>,
@@ -129,11 +128,10 @@ pub fn check(src: &str) -> Result<Checked, String> {
 
 /// [`check`], with the diagnostics kept apart rather than joined.
 ///
-/// **For the one caller that has a row to draw them on**, which is
+/// For the one caller that has a row to draw them on, which is
 /// [`crate::watch::Watch`]: a refusal it used to print and drop is now an
 /// outcome the deck reports and the Staging lane draws, and the lane needs the
-/// first diagnostic on its own. Everything else about the two is the same
-/// call.
+/// first diagnostic on its own. Everything else about the two is the same call.
 pub fn diagnose(src: &str) -> Result<Checked, Diagnostics> {
     compile(src)
 }
@@ -187,14 +185,14 @@ fn render(errors: &[karakuri_ir::IrError], src: &str) -> Diagnostics {
 
 /// A `.kir` named on the command line, with the name the operator gave it.
 ///
-/// **A name belongs to the *use*, not to the procedure** — see `docs/ir-spec.md`,
-/// "Naming a source, on the terms HTML gives an `id`". The same lattice twice is
-/// one `proc` name and two nodes, so the name is written where the file is
+/// A name belongs to the *use*, not to the procedure — see `docs/ir-spec.md`,
+/// "Naming a source, on the terms HTML gives an `id`". The same lattice twice
+/// is one `proc` name and two nodes, so the name is written where the file is
 /// spelled and travels with that mention of it.
 ///
-/// `None` is a path written bare. Something still has to address that node, so a
-/// name is derived from the procedure once it has compiled, and from the moment
-/// it is recorded — derived or written — it *is* the address.
+/// `None` is a path written bare. Something still has to address that node, so
+/// a name is derived from the procedure once it has compiled, and from the
+/// moment it is recorded — derived or written — it *is* the address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Named {
     pub name: Option<String>,
@@ -211,9 +209,9 @@ impl Named {
 
     /// `name=path`, or a bare path.
     ///
-    /// **The separator is `=` and not `:`**, which `--param` and `--publish`
-    /// already use to mean "a layer and an index follow". `=` is not a path
-    /// character anywhere, where `:` is one on Windows.
+    /// The separator is `=` and not `:`, which `--param` and `--publish` already
+    /// use to mean "a layer and an index follow". `=` is not a path character
+    /// anywhere, where `:` is one on Windows.
     pub fn parse(spelled: &str) -> Result<Named, String> {
         let Some((name, path)) = spelled.split_once('=') else {
             return Ok(Named::bare(spelled));
@@ -231,7 +229,7 @@ impl Named {
 
 /// What a node may be called.
 ///
-/// **Refused rather than mangled**, because a name is an address: something
+/// Refused rather than mangled, because a name is an address: something
 /// silently renamed is something a mask or a `--param` written against it stops
 /// finding, and the author is the only one who can pick the replacement.
 fn check_node_name(name: &str) -> Result<(), String> {
@@ -263,20 +261,20 @@ fn check_node_name(name: &str) -> Result<(), String> {
 /// procedure that simulates, the deformations between, and the renderers drawn
 /// over the result.
 ///
-/// **The sorting happens here rather than on the command line**, because every
+/// The sorting happens here rather than on the command line, because every
 /// `.kir` declares its own `kind` — so `--set` is one comma-separated list and
 /// the loader reads which is which off the files. Order *within* a kind is list
 /// order, which is chain order for L2s and draw order for L4s.
 pub struct Material {
-    /// **The geometry sources**, in the order their paths appeared. At least
-    /// one; several is a merge.
+    /// The geometry sources, in the order their paths appeared. At least one;
+    /// several is a merge.
     pub l1s: Vec<karakuri_ir::typed::Checked>,
     pub l2s: Vec<karakuri_ir::typed::Checked>,
-    /// **The cameras, in the order their paths appeared.** Empty leaves the
-    /// slot looking from the built-in orbit, which is a node all the same — so
-    /// a Set has at least one camera however this list comes out.
+    /// The cameras, in the order their paths appeared. Empty leaves the slot
+    /// looking from the built-in orbit, which is a node all the same — so a Set has
+    /// at least one camera however this list comes out.
     pub l3s: Vec<karakuri_ir::typed::Checked>,
-    /// **The fields, in the order their paths appeared.** Empty for a slot that
+    /// The fields, in the order their paths appeared. Empty for a slot that
     /// evaluates none.
     pub fields: Vec<karakuri_ir::typed::Checked>,
     pub l4s: Vec<karakuri_ir::typed::Checked>,
@@ -288,8 +286,8 @@ pub struct Material {
 /// puts it on, and which node of that layer it is, beside the name and path it
 /// was spelled with.
 ///
-/// **Kept beside the compiled [`Material`] rather than worked out again.** A
-/// Set file records a node's layer and its index, and a run that answered "what
+/// Kept beside the compiled [`Material`] rather than worked out again. A Set
+/// file records a node's layer and its index, and a run that answered "what
 /// layer is this file on" once for the engine and once for the file it saves
 /// would hold two answers to one question — the shape this project has been
 /// bitten by twice. See [`crate::setfile::Node`], which is this as the record.
@@ -301,89 +299,86 @@ pub struct Material {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Placed {
     pub named: Named,
-    /// The name the procedure itself declares, which is not the name in
-    /// `named`: that one belongs to the *use* and is `None` for a bare path.
+    /// The name the procedure itself declares, which is not the name in `named`:
+    /// that one belongs to the *use* and is `None` for a bare path.
     ///
-    /// **Read where the file was compiled, not scanned for again.** The edit
-    /// history files a version under the procedure's name and a session's
-    /// `procedure` record carries it, and both of them are looking at a node
-    /// this already knows the layer and index of — asking a second reader would
-    /// be a second answer to a question already settled here.
+    /// Read where the file was compiled, not scanned for again. The edit history
+    /// files a version under the procedure's name and a session's `procedure`
+    /// record carries it, and both of them are looking at a node this already knows
+    /// the layer and index of — asking a second reader would be a second answer to
+    /// a question already settled here.
     pub(crate) proc: String,
     pub layer: karakuri_ir::Kind,
     pub index: u32,
-    /// **The text this node was compiled from**, carried from the read that
-    /// produced the `Checked` beside it.
+    /// The text this node was compiled from, carried from the read that produced
+    /// the `Checked` beside it.
     ///
     /// This is the *one* derivation of "what bytes is this node running", and
-    /// everything downstream is a function of it: [`Placed::hash`] is the
-    /// address a live save writes and a `procedure` record names,
-    /// [`Placed::put`] is how those bytes reach the store, and the edit history
-    /// files this same buffer. It used to be re-read from `named.path` by each
-    /// of them, which made the answer whatever the disk happened to hold at the
-    /// moment they asked — and between the compile and the first frame sit the
-    /// adapter request, the deck build, `measure_slots`, and the audio, MIDI,
-    /// tempo and **MCP server** starts. Anything rewriting a `.kir` in that
-    /// window moved the launch hash onto bytes the deck had never compiled; if
-    /// the rewrite did not compile, no watcher ever corrected it, and `k` wrote
-    /// a Set naming a procedure that had never reached the screen and did not
-    /// load back.
+    /// everything downstream is a function of it: [`Placed::hash`] is the address a
+    /// live save writes and a `procedure` record names, [`Placed::put`] is how
+    /// those bytes reach the store, and the edit history files this same buffer. It
+    /// used to be re-read from `named.path` by each of them, which made the answer
+    /// whatever the disk happened to hold at the moment they asked — and between
+    /// the compile and the first frame sit the adapter request, the deck build,
+    /// `measure_slots`, and the audio, MIDI, tempo and MCP server starts. Anything
+    /// rewriting a `.kir` in that window moved the launch hash onto bytes the deck
+    /// had never compiled; if the rewrite did not compile, no watcher ever
+    /// corrected it, and `k` wrote a Set naming a procedure that had never reached
+    /// the screen and did not load back.
     ///
-    /// **Shared rather than copied**, because a slot's `Placed` list is cloned
-    /// into the surface's `Live::startup` — one crate over — and crosses onto a
-    /// save thread; the bytes
-    /// themselves are read once and never again.
+    /// Shared rather than copied, because a slot's `Placed` list is cloned into the
+    /// surface's `Live::startup` — one crate over — and crosses onto a save thread;
+    /// the bytes themselves are read once and never again.
     pub source: std::sync::Arc<str>,
-    /// **This node's metadata card**, built from the `Checked` the compile
-    /// produced — see [`crate::meta::card`].
+    /// This node's metadata card, built from the `Checked` the compile produced —
+    /// see [`crate::meta::card`].
     ///
-    /// It rides here for the reason `source` does, and it is the same reason
-    /// twice: this is the one compile the run will do of these bytes, and the
-    /// card is a function of it. The alternative was to build it where the
-    /// artifact is written, which would mean **re-compiling the source at save
-    /// time** — a second pass whose answer can differ from the one on screen
-    /// the moment anything about the checker is version-dependent, and a
-    /// compile on the path of a keypress besides. `Checked` itself is not
-    /// carried: what a card says is decided once, and holding the whole checked
-    /// tree per node to re-derive it would be holding the question instead of
-    /// the answer.
+    /// It rides here for the reason `source` does, and it is the same reason twice:
+    /// this is the one compile the run will do of these bytes, and the card is a
+    /// function of it. The alternative was to build it where the artifact is
+    /// written, which would mean re-compiling the source at save time — a second
+    /// pass whose answer can differ from the one on screen the moment anything
+    /// about the checker is version-dependent, and a compile on the path of a
+    /// keypress besides. `Checked` itself is not carried: what a card says is
+    /// decided once, and holding the whole checked tree per node to re-derive it
+    /// would be holding the question instead of the answer.
     ///
     /// Shared, because a slot's list is cloned onto the save thread.
     pub meta: std::sync::Arc<[karakuri_store::ndjson::Line]>,
 }
 
 impl Placed {
-    /// **Where this node's source is addressed**, derived from the bytes above
-    /// and from nothing else.
+    /// Where this node's source is addressed, derived from the bytes above and from
+    /// nothing else.
     ///
     /// A method rather than a field beside `source`, because a hash is a pure
-    /// function of the bytes: computed here it cannot disagree with them, where
-    /// a stored copy would be a second thing to keep true. It is a few
-    /// kilobytes hashed at launch and again per save, which is not a rate
-    /// anything here is bounded by.
+    /// function of the bytes: computed here it cannot disagree with them, where a
+    /// stored copy would be a second thing to keep true. It is a few kilobytes
+    /// hashed at launch and again per save, which is not a rate anything here is
+    /// bounded by.
     pub fn hash(&self) -> karakuri_store::hash::Hash {
         karakuri_store::hash::Hash::of(self.source.as_bytes())
     }
 
-    /// **Put this node's source in `store`**, so that a file or a record naming
+    /// Put this node's source in `store`, so that a file or a record naming
     /// [`Placed::hash`] resolves on the way back in.
     ///
-    /// **Separate from [`Placed::node`], and called later than it.** Knowing
-    /// what a slot is running costs nothing and every windowed run needs it;
-    /// writing the bytes down creates a directory and a file, and only two
-    /// callers need that — a save that actually happened, and a run recording a
-    /// session, whose `procedure` records a replay has to resolve. Folding the
-    /// two together is what made a plain windowed run create a store it was
-    /// never asked for; see the surface's `Running::at_launch`.
+    /// Separate from [`Placed::node`], and called later than it. Knowing what a
+    /// slot is running costs nothing and every windowed run needs it; writing the
+    /// bytes down creates a directory and a file, and only two callers need that —
+    /// a save that actually happened, and a run recording a session, whose
+    /// `procedure` records a replay has to resolve. Folding the two together is
+    /// what made a plain windowed run create a store it was never asked for; see
+    /// the surface's `Running::at_launch`.
     ///
-    /// **The card goes down beside the artifact, and a card that will not write
-    /// does not fail the put.** The artifact is the thing; its metadata is
-    /// derived from the `.kir` plus a compile pass and regenerates on the next
-    /// one, so a store holding the source and no card holds everything that
-    /// cannot be recovered. Failing here instead would mean an operator losing
-    /// a save — or a session losing a `procedure` record's source — over a file
-    /// nothing has read yet. It is still said out loud: silence would leave a
-    /// library quietly thinning out as it grew.
+    /// The card goes down beside the artifact, and a card that will not write does
+    /// not fail the put. The artifact is the thing; its metadata is derived from
+    /// the `.kir` plus a compile pass and regenerates on the next one, so a store
+    /// holding the source and no card holds everything that cannot be recovered.
+    /// Failing here instead would mean an operator losing a save — or a session
+    /// losing a `procedure` record's source — over a file nothing has read yet. It
+    /// is still said out loud: silence would leave a library quietly thinning out
+    /// as it grew.
     pub fn put(
         &self,
         store: &karakuri_store::store::Store,
@@ -396,30 +391,31 @@ impl Placed {
     }
 }
 
-/// **Sort one slot's compiled procedures by the `kind` each declares**, keeping
+/// Sort one slot's compiled procedures by the `kind` each declares, keeping
 /// list order within a kind.
 ///
-/// **The one place that answers "which layer is this file on, and which node of
-/// it".** Both ways into a slot come through here: [`sort_slot`] compiles from
+/// The one place that answers "which layer is this file on, and which node of
+/// it". Both ways into a slot come through here: [`sort_slot`] compiles from
 /// paths at startup, and [`crate::watch::Watch`]'s `poll` compiles from text it
-/// has already read — it needs the bytes for the edit history and for the artifacts
-/// a session stores. Loading is the only thing they do differently, so the seam
-/// is after the compile and this takes procedures rather than paths. The two
-/// used to hold a copy each of this match, and they had already drifted: the
-/// rebuild still took its head for the L1 whatever the file declared.
+/// has already read — it needs the bytes for the edit history and for the
+/// artifacts a session stores. Loading is the only thing they do differently,
+/// so the seam is after the compile and this takes procedures rather than
+/// paths. The two used to hold a copy each of this match, and they had already
+/// drifted: the rebuild still took its head for the L1 whatever the file
+/// declared.
 ///
-/// **The first procedure is the first source**, and every later `kind L1` is
-/// another one. Each simulates independently — its own `seed` from zero, its own
-/// hash salt, its own compaction — and the renderers draw all of them. See
+/// The first procedure is the first source, and every later `kind L1` is
+/// another one. Each simulates independently — its own `seed` from zero, its
+/// own hash salt, its own compaction — and the renderers draw all of them. See
 /// `docs/ir-spec.md`, "Multiple L1 sources".
 ///
 /// The head is sorted by its declaration like everything after it. It used to
 /// be taken as the L1 whatever it said, which cost nothing while the engine was
 /// the only reader — it refuses a non-L1 there with `WrongKind` — and starts
-/// costing as soon as a Set file records the layer: an L2 written down as
-/// `slot L1` is a file that reads back as a Set nobody assembled.
+/// costing as soon as a Set file records the layer: an L2 written down as `slot
+/// L1` is a file that reads back as a Set nobody assembled.
 ///
-/// **`Err` is a sentence and not an exit**, because the two callers answer a
+/// `Err` is a sentence and not an exit, because the two callers answer a
 /// refusal differently and that difference is the only reason there were ever
 /// two of these: a startup that cannot assemble its slot has nothing to run and
 /// stops, while a rebuild that cannot leaves the Set that *is* running alone.
@@ -568,8 +564,8 @@ pub fn sort_compiled(
     ))
 }
 
-/// **Compile one slot's files and sort them**, which is [`sort_compiled`] with
-/// the loading in front of it and the exit behind it.
+/// Compile one slot's files and sort them, which is [`sort_compiled`] with the
+/// loading in front of it and the exit behind it.
 ///
 /// Fatal on anything the sort refuses, and fatal here rather than at the build,
 /// because the file is what an operator can fix. A run that cannot assemble a

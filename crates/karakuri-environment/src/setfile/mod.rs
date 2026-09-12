@@ -23,7 +23,7 @@
 //! played and could not be kept, and `--record-session` refused it for the same
 //! reason, since a session opens with a Set file.
 //!
-//! **Nothing in the format had to change to close that.** A `slot` record has
+//! Nothing in the format had to change to close that. A `slot` record has
 //! carried a layer, an index and a name since the address existed; what was
 //! missing was a writer that put a node's own `kind` into it and a reader that
 //! honoured the index on every layer rather than on one.
@@ -31,13 +31,13 @@
 //! ## Where the flag went
 //!
 //! `--bind`'s fields are `Record::Bind`'s fields, and a debt came with that:
-//! **two diagnostics guarding the flag — a `bpm`
+//! two diagnostics guarding the flag — a `bpm`
 //! binding, and `noise.octaves` on a kind that has no octaves — lived only in
-//! the flag, and the decoder owed them too.** Paying that by writing them a
+//! the flag, and the decoder owed them too. Paying that by writing them a
 //! second time would be two copies of a rule that must not differ.
 //!
-//! So the flag is now what its documentation always claimed: **a way to write
-//! the record**. `parse_bind` turns a `--bind` string into a [`Record::Bind`]
+//! So the flag is now what its documentation always claimed: a way to write
+//! the record. `parse_bind` turns a `--bind` string into a [`Record::Bind`]
 //! and hands it to [`binding_from_record`], which is where every semantic check
 //! lives. One rule, one place, and a Set file and a command line cannot disagree
 //! about what a binding means.
@@ -45,7 +45,7 @@
 //! ## Where the format was finer than the engine, and how each was closed
 //!
 //! A `param` may be a vector where the engine's map holds `f32`, and that used
-//! to be reported and dropped. It is **expanded** now: a parameter is driven
+//! to be reported and dropped. It is expanded now: a parameter is driven
 //! one component at a time
 //! ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
 //! so a `{"t":"param","key":"glow","value":[0.4,0.7,1.0]}` against a `vec3
@@ -63,8 +63,8 @@
 //! from a source's position in `--set` moves when the list is reordered, and one
 //! read back from a file does not.
 //!
-//! **What is still reported rather than carried is the disagreement, not the
-//! width**: a scalar written against a vector declaration names no component, a
+//! What is still reported rather than carried is the disagreement, not the
+//! width: a scalar written against a vector declaration names no component, a
 //! `vec2` written against a `vec3` is not that parameter, and a binding on a
 //! bare vector key resolves to one number with three places to put it. Each is
 //! said with the component keys in the sentence. Loading reports what it could

@@ -22,12 +22,11 @@ fn note(note: u8) -> Message {
     }
 }
 
-/// **A deck's published interface, without a deck.** Positions count from
-/// one, and each answers with the key the Inspector would draw beside it
-/// and the range the Set published it over — which is what [`Decks`] reads
-/// off a real one. A `Deck` takes a device and every decision on this
-/// route is about what arrived, so the trait is what keeps these tests
-/// CPU-only.
+/// A deck's published interface, without a deck. Positions count from one, and
+/// each answers with the key the Inspector would draw beside it and the range
+/// the Set published it over — which is what [`Decks`] reads off a real one. A
+/// `Deck` takes a device and every decision on this route is about what
+/// arrived, so the trait is what keeps these tests CPU-only.
 struct Fake(Vec<Vec<(&'static str, [f32; 2])>>);
 
 impl Interface for Fake {
@@ -44,10 +43,10 @@ impl Interface for Fake {
     }
 }
 
-/// **A deck read back, without a deck.** What [`Lit`] answers off a real
-/// one, as a table a test writes: a value per continuous control and a
-/// state per pad. `None` is a control this stands in for nothing of, which
-/// is what `tap` and a slot past the end of a deck are.
+/// A deck read back, without a deck. What [`Lit`] answers off a real one, as a
+/// table a test writes: a value per continuous control and a state per pad.
+/// `None` is a control this stands in for nothing of, which is what `tap` and a
+/// slot past the end of a deck are.
 #[derive(Default)]
 struct Held(std::collections::HashMap<String, Shown>);
 
@@ -88,8 +87,8 @@ impl Feedback for Held {
     }
 }
 
-/// A deck with nothing published, which is what every test that is not
-/// about parameters wants: it answers `None` to everything.
+/// A deck with nothing published, which is what every test that is not about
+/// parameters wants: it answers `None` to everything.
 struct Nothing;
 
 impl Interface for Nothing {
@@ -115,11 +114,11 @@ fn over(
     out
 }
 
-/// **A message naming a slot the deck does not have is dropped here**, so
-/// the refusal is said once per slot rather than once per message — a
-/// fader sweep into `gain 4` on a deck of four is several hundred of them,
-/// and `cc 1 -> gain 4` is the likeliest typo a map has because the `ch`
-/// on the same line *is* one-based.
+/// A message naming a slot the deck does not have is dropped here, so the
+/// refusal is said once per slot rather than once per message — a fader sweep
+/// into `gain 4` on a deck of four is several hundred of them, and `cc 1 ->
+/// gain 4` is the likeliest typo a map has because the `ch` on the same line
+/// *is* one-based.
 #[test]
 fn an_operation_past_the_end_of_the_deck_is_dropped_rather_than_routed() {
     let mut r = router("cc 1 -> gain 3\ncc 2 -> gain 0");
@@ -131,13 +130,12 @@ fn an_operation_past_the_end_of_the_deck_is_dropped_rather_than_routed() {
     assert_eq!(routed(&mut r, &[cc(1, 127)], 3).len(), 0);
 }
 
-/// **The mask's front is checked here too**, and for a sharper reason than
-/// the other five: a `gain 4` that got past this is refused once by
-/// `mix::change`, where a `mask-position 4` is stopped at `Live::operate`
-/// — which cannot read a mask the deck does not hold, answers
-/// `Owed::NotRead` and **prints it every time**. Left out of `deck_of`,
-/// a fader sweep into a mistyped slot would be a blocking write per
-/// message inside `Live::frame`.
+/// The mask's front is checked here too, and for a sharper reason than the
+/// other five: a `gain 4` that got past this is refused once by `mix::change`,
+/// where a `mask-position 4` is stopped at `Live::operate` — which cannot read
+/// a mask the deck does not hold, answers `Owed::NotRead` and prints it every
+/// time. Left out of `deck_of`, a fader sweep into a mistyped slot would be a
+/// blocking write per message inside `Live::frame`.
 #[test]
 fn a_mask_front_past_the_end_of_the_deck_is_dropped_here_rather_than_printed() {
     let mut r = router("cc 9 -> mask-position 4\ncc 10 -> mask-position 1");
@@ -146,9 +144,9 @@ fn a_mask_front_past_the_end_of_the_deck_is_dropped_here_rather_than_printed() {
     assert!(matches!(out[0], Operation::SetMaskPosition { deck: 1, .. }));
 }
 
-/// **Previous frame's operations do not arrive again.** `out` is a buffer
-/// the caller keeps, and one left unclear would apply every press on it a
-/// second time on a frame nobody touched the surface.
+/// Previous frame's operations do not arrive again. `out` is a buffer the
+/// caller keeps, and one left unclear would apply every press on it a second
+/// time on a frame nobody touched the surface.
 #[test]
 fn a_frame_with_no_messages_produces_no_operations() {
     let mut r = router("note 36 -> residency 0 live");
@@ -159,8 +157,8 @@ fn a_frame_with_no_messages_produces_no_operations() {
     assert!(out.is_empty(), "{out:?}");
 }
 
-/// Every message routes to the operation its line names, and only mapped
-/// ones route at all. The seam this file exists for, end to end.
+/// Every message routes to the operation its line names, and only mapped ones
+/// route at all. The seam this file exists for, end to end.
 #[test]
 fn a_mapped_message_becomes_its_operation_and_an_unmapped_one_becomes_nothing() {
     let mut r = router("cc 1 -> gain 2\nnote 36 -> residency 1 live\nnote 37 -> tap");
@@ -182,11 +180,10 @@ fn a_mapped_message_becomes_its_operation_and_an_unmapped_one_becomes_nothing() 
     );
 }
 
-/// **Said once per control, not once per message.** A fader sweep is
-/// several hundred messages and this runs inside a frame, so a line each
-/// would be a blocking write per message on the render thread. Counted
-/// through the sets rather than by capturing stderr, which is the only
-/// handle a test has on it.
+/// Said once per control, not once per message. A fader sweep is several
+/// hundred messages and this runs inside a frame, so a line each would be a
+/// blocking write per message on the render thread. Counted through the sets
+/// rather than by capturing stderr, which is the only handle a test has on it.
 #[test]
 fn an_unmapped_control_and_a_missing_slot_are_each_reported_once() {
     let mut r = router("cc 1 -> gain 9");
@@ -219,10 +216,10 @@ fn an_unmapped_control_and_a_missing_slot_are_each_reported_once() {
     assert!(said.iter().any(|s| s.contains("cc 2")), "{said:?}");
 }
 
-/// **The dedup key distinguishes everything that is a different control.**
-/// A `cc 1` and a `note 1` are two knobs, and the same number on two
-/// channels is two knobs on two devices — collapsing either would leave an
-/// operator turning something that never prints.
+/// The dedup key distinguishes everything that is a different control. A `cc 1`
+/// and a `note 1` are two knobs, and the same number on two channels is two
+/// knobs on two devices — collapsing either would leave an operator turning
+/// something that never prints.
 #[test]
 fn two_different_controls_are_two_discoveries() {
     let mut r = router("");
@@ -242,13 +239,13 @@ fn two_different_controls_are_two_discoveries() {
     assert_eq!(r.notices().len(), 3, "{:?}", r.notices());
 }
 
-/// **A sweep in one frame is one operation, carrying the value the fader
-/// ended the frame at.** Several hundred messages arrive between two
-/// frames; each one built a record, and on `exposure` and `mask-position`
-/// that record carries a name, which is a heap allocation per message
-/// inside `Live::frame` — the first rule this repository has. The values
-/// before the last were never on screen: the frame draws what the deck
-/// holds once, after all of them have been applied.
+/// A sweep in one frame is one operation, carrying the value the fader ended
+/// the frame at. Several hundred messages arrive between two frames; each one
+/// built a record, and on `exposure` and `mask-position` that record carries a
+/// name, which is a heap allocation per message inside `Live::frame` — the
+/// first rule this repository has. The values before the last were never on
+/// screen: the frame draws what the deck holds once, after all of them have
+/// been applied.
 #[test]
 fn a_sweep_in_one_frame_is_one_operation_carrying_the_last_value() {
     let mut r = router("cc 20 -> exposure");
@@ -259,11 +256,11 @@ fn a_sweep_in_one_frame_is_one_operation_carrying_the_last_value() {
     assert_eq!(out[0], Operation::SetExposure { exposure: 4.0 });
 }
 
-/// **Two presses in one frame are two operations**, and that is the half
-/// of this that must not coalesce: `residency 0 live` then `residency 0
-/// allocated` is not the second one alone in intent, and a note is a press
-/// rather than a position. The same control, so a coalescer that keyed on
-/// the pad would keep one of them.
+/// Two presses in one frame are two operations, and that is the half of this
+/// that must not coalesce: `residency 0 live` then `residency 0 allocated` is
+/// not the second one alone in intent, and a note is a press rather than a
+/// position. The same control, so a coalescer that keyed on the pad would keep
+/// one of them.
 #[test]
 fn two_presses_of_one_pad_in_one_frame_are_two_operations() {
     let mut r = router("note 36 -> residency 0 live\nnote 37 -> residency 0 allocated");
@@ -287,10 +284,9 @@ fn two_presses_of_one_pad_in_one_frame_are_two_operations() {
     assert_eq!(routed(&mut r, &[note(36), note(36)], 4).len(), 2);
 }
 
-/// **Two faders are two controls.** Coalescing is per control, so a frame
-/// in which four of them moved says four things — collapsing to one
-/// operation a frame would leave three faders dead whenever a hand was on
-/// a fourth.
+/// Two faders are two controls. Coalescing is per control, so a frame in which
+/// four of them moved says four things — collapsing to one operation a frame
+/// would leave three faders dead whenever a hand was on a fourth.
 #[test]
 fn two_continuous_controls_in_one_frame_are_one_operation_each() {
     let mut r = router("cc 1 -> gain 0\ncc 2 -> gain 1");
@@ -314,12 +310,11 @@ fn two_continuous_controls_in_one_frame_are_one_operation_each() {
     );
 }
 
-/// **Coalescing is per frame and not a filter on change.** The same value
-/// on the next frame is asked for again, because nothing here holds what a
-/// control last sent and nothing could: MIDI out is not built, so a
-/// transition can move the mask front under a hand that is not moving, and
-/// a fader re-asserting its position is asking for somewhere the deck may
-/// no longer be.
+/// Coalescing is per frame and not a filter on change. The same value on the
+/// next frame is asked for again, because nothing here holds what a control
+/// last sent and nothing could: MIDI out is not built, so a transition can move
+/// the mask front under a hand that is not moving, and a fader re-asserting its
+/// position is asking for somewhere the deck may no longer be.
 #[test]
 fn a_value_repeated_on_the_next_frame_is_not_swallowed() {
     let mut r = router("cc 9 -> mask-position 0");
@@ -334,11 +329,10 @@ fn a_value_repeated_on_the_next_frame_is_not_swallowed() {
     }
 }
 
-/// **A pad hit during a sweep keeps its place in the frame.** The fader
-/// holds the position it first spoke in and carries the value it ended at,
-/// so a press that arrived between two of its messages is still applied
-/// after it — the order a frame's operations are given is the order they
-/// are applied in.
+/// A pad hit during a sweep keeps its place in the frame. The fader holds the
+/// position it first spoke in and carries the value it ended at, so a press
+/// that arrived between two of its messages is still applied after it — the
+/// order a frame's operations are given is the order they are applied in.
 #[test]
 fn a_press_between_two_fader_messages_keeps_its_order() {
     let mut r = router("cc 1 -> gain 0\nnote 36 -> residency 1 live");
@@ -355,10 +349,10 @@ fn a_press_between_two_fader_messages_keeps_its_order() {
     );
 }
 
-/// **The two tiers, in order, and neither of them being there.** The
-/// operator's own map wins, which is the only order that lets a learned
-/// map matter — a preset that shadowed it would make learning a gesture
-/// with no effect the next time the program started.
+/// The two tiers, in order, and neither of them being there. The operator's own
+/// map wins, which is the only order that lets a learned map matter — a preset
+/// that shadowed it would make learning a gesture with no effect the next time
+/// the program started.
 #[test]
 fn the_operators_own_map_wins_over_the_one_that_ships_and_neither_is_a_fault() {
     let store = tempfile::tempdir().expect("store");
@@ -387,18 +381,17 @@ fn the_operators_own_map_wins_over_the_one_that_ships_and_neither_is_a_fault() {
     assert_eq!(map_for(store.path(), None), Some(learned));
 }
 
-/// **A mapped knob lands as the record a press lands**, which is the whole
-/// claim this crate's header makes and the one nothing here checked: the
-/// tests above stop at an [`Operation`], and *a session recorded from a
-/// controller replays with neither controller nor map attached*
-/// (P-0092, P-0090) is about what reaches the stream.
+/// A mapped knob lands as the record a press lands, which is the whole claim
+/// this crate's header makes and the one nothing here checked: the tests above
+/// stop at an [`Operation`], and *a session recorded from a controller replays
+/// with neither controller nor map attached* (P-0092, P-0090) is about what
+/// reaches the stream.
 ///
 /// So this goes one crate further on — through
 /// [`karakuri_operation_record::written`], the one exhaustive match every
-/// surface's operation goes through — and asserts the record itself. A
-/// route that produced its own record beside this one would be two
-/// spellings of a `gain`, and a replay would then depend on which surface
-/// wrote it.
+/// surface's operation goes through — and asserts the record itself. A route
+/// that produced its own record beside this one would be two spellings of a
+/// `gain`, and a replay would then depend on which surface wrote it.
 #[test]
 fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
     use karakuri_operation_record::{written, Current, Written};
@@ -430,14 +423,14 @@ fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
     );
 }
 
-/// **A `param` line is resolved against the deck's published interface**,
-/// and it is the one target the map cannot finish on its own — so this is
-/// the seam that makes *Write a parameter* reachable from a knob at all.
+/// A `param` line is resolved against the deck's published interface, and it is
+/// the one target the map cannot finish on its own — so this is the seam that
+/// makes *Write a parameter* reachable from a knob at all.
 ///
-/// The value is scaled over **the range the Set published**, not over a
-/// default this crate chose: a control declared `0 – 8` reaches 8 at the
-/// top of the fader, and a knob that stopped at 1.0 would be a fader that
-/// cannot reach what the procedure says is in range.
+/// The value is scaled over the range the Set published, not over a default
+/// this crate chose: a control declared `0 – 8` reaches 8 at the top of the
+/// fader, and a knob that stopped at 1.0 would be a fader that cannot reach
+/// what the procedure says is in range.
 #[test]
 fn a_param_line_resolves_to_the_control_at_that_position_over_the_sets_own_range() {
     let deck = Fake(vec![
@@ -478,13 +471,13 @@ fn a_param_line_resolves_to_the_control_at_that_position_over_the_sets_own_range
     assert!(r.notices().is_empty(), "{:?}", r.notices());
 }
 
-/// **Two knobs on two parameters of one deck are two operations.**
+/// Two knobs on two parameters of one deck are two operations.
 ///
 /// The coalescing key is the discriminant and the deck for every other
-/// continuous control, because a deck has one gain and one exposure. It
-/// has as many parameters as its Set published, so the position is in the
-/// key too — without it a hand on one knob would swallow the other, and
-/// the Set's *third* control would be written with the *fifth*'s value.
+/// continuous control, because a deck has one gain and one exposure. It has as
+/// many parameters as its Set published, so the position is in the key too —
+/// without it a hand on one knob would swallow the other, and the Set's *third*
+/// control would be written with the *fifth*'s value.
 #[test]
 fn two_knobs_on_two_parameters_of_one_deck_do_not_coalesce_into_one() {
     let deck = Fake(vec![vec![
@@ -526,14 +519,14 @@ fn two_knobs_on_two_parameters_of_one_deck_do_not_coalesce_into_one() {
     assert_eq!(over(&mut r, &sweep, 4, &deck).len(), 1);
 }
 
-/// **A position the Set has no control at is said once, and it is not the
-/// same sentence a missing slot gets.**
+/// A position the Set has no control at is said once, and it is not the same
+/// sentence a missing slot gets.
 ///
-/// This is the ordinary state after a load rather than a typo: a map
-/// learned against a Set with nine controls has five dead lines against
-/// one with four. A knob that goes quiet with nothing said is what P-0094
-/// rules out, and a sentence per message is the blocking write this router
-/// exists to keep off the frame path.
+/// This is the ordinary state after a load rather than a typo: a map learned
+/// against a Set with nine controls has five dead lines against one with four.
+/// A knob that goes quiet with nothing said is what P-0094 rules out, and a
+/// sentence per message is the blocking write this router exists to keep off
+/// the frame path.
 #[test]
 fn a_position_past_the_end_of_an_interface_is_said_once_and_not_as_a_missing_slot() {
     let deck = Fake(vec![vec![("radius", [0.0, 1.0])]]);
@@ -560,9 +553,9 @@ fn a_position_past_the_end_of_an_interface_is_said_once_and_not_as_a_missing_slo
     );
 }
 
-/// **A learn writes the operator's own map and never the one that ships**,
-/// and it appends rather than rewriting — so the file an operator started
-/// from keeps its comments, and the later line wins on the next load.
+/// A learn writes the operator's own map and never the one that ships, and it
+/// appends rather than rewriting — so the file an operator started from keeps
+/// its comments, and the later line wins on the next load.
 #[test]
 fn a_learn_appends_to_the_operators_map_and_seeds_it_from_what_is_playing() {
     // No port here, so this is the half of a learn that has no device in
@@ -594,18 +587,18 @@ fn a_learn_appends_to_the_operators_map_and_seeds_it_from_what_is_playing() {
     assert_eq!(map.bound("param 0 3"), None);
 }
 
-/// **What a learn leaves in the file**, which is the half of it that has
-/// no device in it.
+/// What a learn leaves in the file, which is the half of it that has no device
+/// in it.
 ///
-/// **It appends and never rewrites.** The shipped map an operator starts
-/// from is two-thirds prose explaining what a line means, and a learn that
-/// rewrote the file from the table would turn the one document that
-/// teaches the format into forty bare lines on the first press.
+/// It appends and never rewrites. The shipped map an operator starts from is
+/// two-thirds prose explaining what a line means, and a learn that rewrote the
+/// file from the table would turn the one document that teaches the format into
+/// forty bare lines on the first press.
 ///
-/// **And a file that is not there yet is seeded with what is playing**,
-/// rather than created holding one line: the lines in force are the ones
-/// the run loaded, and a map that shrank to a single control on a press
-/// would be the map going quiet.
+/// And a file that is not there yet is seeded with what is playing, rather than
+/// created holding one line: the lines in force are the ones the run loaded,
+/// and a map that shrank to a single control on a press would be the map going
+/// quiet.
 #[test]
 fn a_learn_appends_and_seeds_a_file_that_is_not_there_with_what_is_playing() {
     let seed = "# seeded\ncc 1 -> gain 0\n";
@@ -680,9 +673,9 @@ fn a_learn_appends_and_seeds_a_file_that_is_not_there_with_what_is_playing() {
     assert_eq!(out, "# cc 1 -> gain 0\ncc 1 -> tap\n");
 }
 
-/// A release is not a discovery. Every pad acts on the press, so reporting
-/// the release would print the other half of every hit as something the
-/// operator had not mapped.
+/// A release is not a discovery. Every pad acts on the press, so reporting the
+/// release would print the other half of every hit as something the operator
+/// had not mapped.
 #[test]
 fn a_release_is_not_reported_as_unmapped() {
     let mut r = router("note 36 -> residency 0 live");
@@ -703,10 +696,9 @@ fn a_release_is_not_reported_as_unmapped() {
     assert!(r.notices().is_empty(), "{:?}", r.notices());
 }
 
-/// **A 14-bit pair moves the control at 16384 positions**, and the two
-/// halves are two messages with a frame boundary free to fall between
-/// them — so the MSB is held here rather than in the map, which is a pure
-/// function of one message.
+/// A 14-bit pair moves the control at 16384 positions, and the two halves are
+/// two messages with a frame boundary free to fall between them — so the MSB is
+/// held here rather than in the map, which is a pure function of one message.
 #[test]
 fn a_pair_assembles_across_two_messages_and_the_msb_alone_moves_the_control() {
     let mut r = router("cc14 1 33 -> gain 0");
@@ -738,10 +730,10 @@ fn a_pair_assembles_across_two_messages_and_the_msb_alone_moves_the_control() {
     );
 }
 
-/// **A lone LSB moves nothing and is not a discovery.** There is nothing
-/// to refine until an MSB has been seen for that control, and the line
-/// that names it *is* loaded — so reporting it as unmapped would tell an
-/// operator to write a line they have already written.
+/// A lone LSB moves nothing and is not a discovery. There is nothing to refine
+/// until an MSB has been seen for that control, and the line that names it *is*
+/// loaded — so reporting it as unmapped would tell an operator to write a line
+/// they have already written.
 #[test]
 fn a_lone_lsb_moves_nothing_and_is_not_reported_as_unmapped() {
     let mut r = router("cc14 1 33 -> gain 0");
@@ -753,10 +745,9 @@ fn a_lone_lsb_moves_nothing_and_is_not_reported_as_unmapped() {
     );
 }
 
-/// **A deck change writes the mapped control's value to the surface, and
-/// an unmapped one writes nothing.** The map is the list: a control no
-/// line names has no message to send, and MIDI out cannot reach further
-/// than MIDI in does.
+/// A deck change writes the mapped control's value to the surface, and an
+/// unmapped one writes nothing. The map is the list: a control no line names
+/// has no message to send, and MIDI out cannot reach further than MIDI in does.
 #[test]
 fn a_deck_change_shows_a_mapped_control_and_an_unmapped_one_shows_nothing() {
     let mut r = router("cc 1 -> gain 0\nnote 32 -> residency 0 live");
@@ -802,9 +793,9 @@ fn a_deck_change_shows_a_mapped_control_and_an_unmapped_one_shows_nothing() {
     assert_eq!(wire, vec![[0x90, 32, 127]]);
 }
 
-/// **A 14-bit control is shown as a pair, MSB first**, and a move too
-/// small to change its 7-bit half still moves the fine one — which is the
-/// whole of what the second seven bits buy on the way out.
+/// A 14-bit control is shown as a pair, MSB first, and a move too small to
+/// change its 7-bit half still moves the fine one — which is the whole of what
+/// the second seven bits buy on the way out.
 #[test]
 fn a_pair_is_shown_as_two_messages_and_a_fine_move_still_says_something() {
     let mut r = router("cc14 2 34 -> opacity 1");
@@ -823,10 +814,10 @@ fn a_pair_is_shown_as_two_messages_and_a_fine_move_still_says_something() {
     assert_eq!(wire, Vec::<[u8; 3]>::new());
 }
 
-/// **A control this program cannot read is skipped rather than zeroed.**
-/// `tap` is the permanent case — a beat has no state — and darkening a pad
-/// because a value could not be read would be the surface asserting
-/// something about the deck.
+/// A control this program cannot read is skipped rather than zeroed. `tap` is
+/// the permanent case — a beat has no state — and darkening a pad because a
+/// value could not be read would be the surface asserting something about the
+/// deck.
 #[test]
 fn a_control_with_nothing_to_show_is_skipped_rather_than_darkened() {
     let mut r = router("note 61 -> tap\ncc 1 -> gain 0");

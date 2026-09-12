@@ -1,4 +1,4 @@
-//! **An artifact's metadata card**, produced from the compile that already
+//! An artifact's metadata card, produced from the compile that already
 //! happened.
 //!
 //! `docs/ir-spec.md`, "Metadata file format", specifies `<hash>.meta.ndjson` as
@@ -7,8 +7,8 @@
 //! pass can answer: `meta`, `param_decl`, `capacity_decl` and `emit`. Every one
 //! of them is read straight off a [`Checked`] and off nothing else.
 //!
-//! **The five that are not here have no producer, and an empty one would be
-//! worse than none.**
+//! The five that are not here have no producer, and an empty one would be
+//! worse than none.
 //!
 //! - `perf` carries `ns_per_element`, which is a *measurement*. What a compile
 //!   pass can answer is `ops_per_element`, from `karakuri_ir::cost::estimate`,
@@ -16,7 +16,7 @@
 //!   other's name is exactly the shape of number the specification withdrew a
 //!   `bytes_per_element` for — a figure published under a name that reads as a
 //!   measurement, with no way for the record to say which of the two it is. It
-//!   wants the stage-7 probe. **Not `Checked::cost`**, which is the field named
+//!   wants the stage-7 probe. Not `Checked::cost`, which is the field named
 //!   for that number and reads as the place to find it: the check pass sets it
 //!   `None` unconditionally and nothing else fills it, so a writer reaching for
 //!   it here would publish an absence rather than the wrong number — see its
@@ -32,7 +32,7 @@
 //!   `preview` because the deck's `preview` is a different thing under a name
 //!   that was taken; see `Record::is_metadata`.
 //!
-//! **This crate rather than either of the two it joins.** The records are
+//! This crate rather than either of the two it joins. The records are
 //! `karakuri-store`'s and the declarations are `karakuri-ir`'s, and the store
 //! does not depend on the IR — a content-addressed blob store that had to link
 //! a type checker to write a file name would be the wrong shape, and nothing
@@ -128,7 +128,7 @@ pub fn layer_named(name: &str) -> Option<Kind> {
 /// Set file.
 const VERSION: u32 = 1;
 
-/// **What one artifact's metadata file says**, in the order it is written.
+/// What one artifact's metadata file says, in the order it is written.
 ///
 /// `hash` is passed in rather than hashed from the source here, because the
 /// caller has it — it is [`crate::compile::Placed::hash`], derived off the node
@@ -138,7 +138,7 @@ const VERSION: u32 = 1;
 /// the node before it builds the card for exactly that reason. See
 /// `Placed::put`, which puts the source and then this.
 ///
-/// **A `Vec<Line>` and not a written file**: what a card says is decided here,
+/// A `Vec<Line>` and not a written file: what a card says is decided here,
 /// where a `Checked` is, and where it lands is `karakuri-store`'s. That split
 /// is what lets the whole of this be checked without a store, a disk or a GPU.
 pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
@@ -195,7 +195,7 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
     lines
 }
 
-/// **Write an artifact's metadata card, and never let it stop a save.**
+/// Write an artifact's metadata card, and never let it stop a save.
 ///
 /// The one place either put path says this, so that the judgement — the card is
 /// derived and the artifact is not — is made once and the sentence is one
@@ -206,10 +206,10 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
 /// under it, and deriving it again here would be a second answer to which
 /// artifact this card is for.
 ///
-/// **It hands back what it said, and both callers drop it.** The policy — a
-/// card that will not write is reported and does not fail the save — was
-/// asserted in prose and nowhere else, because a sentence that is only printed
-/// is a sentence no test can hold. Returning it costs one `Option` and buys
+/// It hands back what it said, and both callers drop it. The policy — a card
+/// that will not write is reported and does not fail the save — was asserted in
+/// prose and nowhere else, because a sentence that is only printed is a
+/// sentence no test can hold. Returning it costs one `Option` and buys
 /// `karakuri-cli`'s
 /// `live_save_tests::a_card_that_will_not_write_is_said_and_does_not_fail_the_save`,
 /// which reads it back. `None` is a card on disk.

@@ -7,10 +7,10 @@
 //!
 //! With this, `tick` finally has a writer and the record stream is the whole
 //! path — every control ending at the same record
-//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`) stops being a target. What a session
-//! reproduces is the *performance*: the same material, the same frames, the
-//! same fader moves at the same instants, and the same audio, without a
-//! microphone.
+//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`) stops being a
+//! target. What a session reproduces is the *performance*: the same material,
+//! the same frames, the same fader moves at the same instants, and the same
+//! audio, without a microphone.
 //!
 //! ## The render thread writes nothing
 //!
@@ -19,16 +19,16 @@
 //! does — and a rule this instrument has already had to repair once for a
 //! record it built per frame.
 //!
-//! So the frame path only ever **moves a `Record` into a `Vec` that already has
-//! room**, and a writer thread does the serialising and the I/O. An `audio`
+//! So the frame path only ever moves a `Record` into a `Vec` that already has
+//! room, and a writer thread does the serialising and the I/O. An `audio`
 //! record carries a `Vec` of its own, so it is *swapped* for an empty shell
 //! rather than copied — see [`Recorder::push_audio`] — and the writer returns
-//! each band buffer after serialising it so the shells circulate too. The batch is
-//! handed over whole and an empty one comes back on a return channel, so there
-//! is one allocation per batch buffer for the life of the run and none after
-//! the buffers exist.
+//! each band buffer after serialising it so the shells circulate too. The batch
+//! is handed over whole and an empty one comes back on a return channel, so
+//! there is one allocation per batch buffer for the life of the run and none
+//! after the buffers exist.
 //!
-//! **What happens when the writer falls behind is the interesting part.** The
+//! What happens when the writer falls behind is the interesting part. The
 //! channel is bounded. A frame that finds it full does not block, does not
 //! grow, and does not silently skip: it counts the batch as dropped and says so
 //! at the end. A session with a hole in it is not a session, and the honest
@@ -42,8 +42,8 @@
 //! of opening a device — so a binding to `energy` replays at what a microphone
 //! heard rather than at what the bus invents — and applies the mix and
 //! transport records where they sit. That is the whole of it — the arrangement
-//! `audio.rs` and `mix.rs`, both beside this file now, were built for,
-//! with a file on the other end instead of a device and a keyboard.
+//! `audio.rs` and `mix.rs`, both beside this file now, were built for, with a
+//! file on the other end instead of a device and a keyboard.
 
 use std::io::Write;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
@@ -53,9 +53,9 @@ use karakuri_store::ndjson::Line;
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
 
-/// Records per batch. A frame emits at most a handful — a tick, an audio
-/// frame, sometimes a tempo correction — so this is a second or two of a
-/// session at 60 Hz, which is the granularity a crash loses.
+/// Records per batch. A frame emits at most a handful — a tick, an audio frame,
+/// sometimes a tempo correction — so this is a second or two of a session at 60
+/// Hz, which is the granularity a crash loses.
 const BATCH: usize = 256;
 
 /// Batches the writer may be behind by. Two is enough to cover a disk hiccup
@@ -79,31 +79,30 @@ pub struct Recorder {
     /// because it is handed away the moment it is full.
     batch: Vec<Record>,
     /// `None` once the writer has been told to stop. An `Option` so that both
-    /// [`Recorder::finish`] and `Drop` can close it, which a plain field could
-    /// not: moving out of a type that implements `Drop` does not compile.
+    /// [`Recorder::finish`] and `Drop` can close it, which a plain field could not:
+    /// moving out of a type that implements `Drop` does not compile.
     to_writer: Option<SyncSender<Vec<Record>>>,
-    /// Emptied batches coming back. A run steady-state cycles the same
-    /// [`QUEUE`] + 1 buffers forever.
+    /// Emptied batches coming back. A run steady-state cycles the same [`QUEUE`] +
+    /// 1 buffers forever.
     spares: Receiver<Vec<Record>>,
-    /// Emptied `Record::Audio` shells coming back from the writer, with their
-    /// band buffers intact. **The whole reason audio can be recorded at all**:
-    /// its record carries a `Vec`, so cloning one per frame is exactly the
-    /// allocation this module exists to avoid, and swapping needs something to
-    /// swap with.
+    /// Emptied `Record::Audio` shells coming back from the writer, with their band
+    /// buffers intact. The whole reason audio can be recorded at all: its record
+    /// carries a `Vec`, so cloning one per frame is exactly the allocation this
+    /// module exists to avoid, and swapping needs something to swap with.
     audio_shells: Receiver<Record>,
-    /// Frames whose audio was not recorded because no shell was free. Counted
-    /// apart from `dropped_batches`: a stream missing a measurement is a
-    /// different hole from a stream missing a second of everything.
+    /// Frames whose audio was not recorded because no shell was free. Counted apart
+    /// from `dropped_batches`: a stream missing a measurement is a different hole
+    /// from a stream missing a second of everything.
     dropped_audio: u64,
-    /// Batches the writer could not take. **Frames, not bytes**: the number
-    /// that matters is how much of the performance is missing.
+    /// Batches the writer could not take. Frames, not bytes: the number that
+    /// matters is how much of the performance is missing.
     dropped_batches: u64,
     writer: Option<std::thread::JoinHandle<Result<u64, String>>>,
 }
 
 impl Recorder {
-    /// Start recording into `sessions/<id>.ndjson`, beginning with `head` —
-    /// the Set file's records, which are what makes the stream self-contained.
+    /// Start recording into `sessions/<id>.ndjson`, beginning with `head` — the Set
+    /// file's records, which are what makes the stream self-contained.
     pub fn open(store: &Store, id: &str, head: &[Line]) -> Result<Recorder, String> {
         let mut file = store
             .append_session(id)
@@ -193,7 +192,7 @@ impl Recorder {
         })
     }
 
-    /// Put one record in the stream. **Allocates nothing and never blocks.**
+    /// Put one record in the stream. Allocates nothing and never blocks.
     ///
     /// Safe to call from the frame path, which is the only reason any of the
     /// machinery above exists.
@@ -206,7 +205,7 @@ impl Recorder {
         self.batch.push(record);
     }
 
-    /// **Put an audio record in the stream by swapping, never by cloning.**
+    /// Put an audio record in the stream by swapping, never by cloning.
     ///
     /// The caller keeps a record it reuses every frame; this takes that one and
     /// leaves an empty shell in its place, so the band buffer moves rather than
@@ -229,10 +228,10 @@ impl Recorder {
 
     /// Hand this batch to the writer and take an empty one back.
     ///
-    /// Both halves are non-blocking. A writer that cannot take the batch loses
-    /// it, counted; a run with no spare to take reuses this one after clearing
-    /// it, which is the same loss seen from the other side. Neither stalls a
-    /// frame, and both are reported at the end.
+    /// Both halves are non-blocking. A writer that cannot take the batch loses it,
+    /// counted; a run with no spare to take reuses this one after clearing it,
+    /// which is the same loss seen from the other side. Neither stalls a frame, and
+    /// both are reported at the end.
     fn hand_off(&mut self) {
         let spare = self.spares.try_recv().ok();
         let batch = match spare {
@@ -260,9 +259,9 @@ impl Recorder {
         }
     }
 
-    /// Flush what is left and stop the writer. Blocks, and is for the end of a
-    /// run — a stall is free there and losing the last second of a session to
-    /// tidiness would not be.
+    /// Flush what is left and stop the writer. Blocks, and is for the end of a run
+    /// — a stall is free there and losing the last second of a session to tidiness
+    /// would not be.
     pub fn finish(mut self) -> Result<Written, String> {
         if !self.batch.is_empty() {
             let batch = std::mem::take(&mut self.batch);
@@ -288,9 +287,9 @@ impl Recorder {
 }
 
 impl Drop for Recorder {
-    /// A recorder dropped without [`Recorder::finish`] still ends the writer,
-    /// so the file is closed and flushed. What it cannot do is report, which is
-    /// why `finish` exists and is what a surface calls.
+    /// A recorder dropped without [`Recorder::finish`] still ends the writer, so
+    /// the file is closed and flushed. What it cannot do is report, which is why
+    /// `finish` exists and is what a surface calls.
     fn drop(&mut self) {
         self.to_writer = None;
         if let Some(handle) = self.writer.take() {
@@ -302,32 +301,31 @@ impl Drop for Recorder {
 /// A session stream, split into what it says about the material and what it
 /// says about the performance.
 pub struct Session {
-    /// The head: the Set file's records, in order, so the material can be
-    /// built the same way `--load-set` builds it.
+    /// The head: the Set file's records, in order, so the material can be built the
+    /// same way `--load-set` builds it.
     pub head: Vec<Line>,
-    /// One entry per `tick`: what to apply *before* that frame, and how many
-    /// steps the frame advances.
+    /// One entry per `tick`: what to apply *before* that frame, and how many steps
+    /// the frame advances.
     pub frames: Vec<Frame>,
-    /// Records after the last tick. A session that ended between frames has
-    /// them, and dropping them silently would lose the last thing an operator
-    /// did.
+    /// Records after the last tick. A session that ended between frames has them,
+    /// and dropping them silently would lose the last thing an operator did.
     pub trailing: Vec<Record>,
 }
 
 impl Session {
-    /// What the performance rendered at, and how many *later* `canvas` records
-    /// the stream also holds.
+    /// What the performance rendered at, and how many *later* `canvas` records the
+    /// stream also holds.
     ///
-    /// Read before the deck is built rather than applied as the replay reaches
-    /// it, because it decides the size of everything a replay allocates: the
-    /// deck's slot targets, the HDR target, the PNG target and the readback
-    /// buffer are all made once, and honouring this after they exist would mean
-    /// remaking all four mid-run — the allocation the frame path forbids, and
-    /// the reason [`Record::Canvas`] is fixed for a run in the first place.
+    /// Read before the deck is built rather than applied as the replay reaches it,
+    /// because it decides the size of everything a replay allocates: the deck's
+    /// slot targets, the HDR target, the PNG target and the readback buffer are all
+    /// made once, and honouring this after they exist would mean remaking all four
+    /// mid-run — the allocation the frame path forbids, and the reason
+    /// [`Record::Canvas`] is fixed for a run in the first place.
     ///
-    /// **The count is returned rather than swallowed.** A stream with a second
-    /// one was not written by this program, and a replay that quietly obeyed
-    /// the first would look exactly like one that had obeyed all of them.
+    /// The count is returned rather than swallowed. A stream with a second one was
+    /// not written by this program, and a replay that quietly obeyed the first
+    /// would look exactly like one that had obeyed all of them.
     pub fn canvas(&self) -> (Option<(u32, u32)>, usize) {
         let mut found = None;
         let mut extra = 0;
@@ -356,19 +354,19 @@ impl Session {
 
 /// One frame of a replay.
 pub struct Frame {
-    /// The edits that sit between the previous tick and this one. **Applied
-    /// before the frame renders**, which is where they were applied live: a
-    /// key press takes effect on the next frame, not the one already drawn.
+    /// The edits that sit between the previous tick and this one. Applied before
+    /// the frame renders, which is where they were applied live: a key press takes
+    /// effect on the next frame, not the one already drawn.
     pub before: Vec<Record>,
     pub steps: u8,
 }
 
 /// Split a session stream into its head and its frames.
 ///
-/// A record is the head's if [`Record::is_set_state`] says so **and no tick has
-/// happened yet**. The second half matters: a `param` record after the first
-/// tick is an edit made during the performance, and folding it into the head
-/// would apply it before the run started.
+/// A record is the head's if [`Record::is_set_state`] says so and no tick has
+/// happened yet. The second half matters: a `param` record after the first tick
+/// is an edit made during the performance, and folding it into the head would
+/// apply it before the run started.
 pub fn split(lines: Vec<Line>) -> Session {
     let mut head = Vec::new();
     let mut frames = Vec::new();
@@ -408,10 +406,9 @@ mod tests {
         })
     }
 
-    /// **The head stops at the first tick.** A `param` before it is what the
-    /// Set was built with; the same record after it is an edit an operator
-    /// made, and applying that one at the start would be a different
-    /// performance.
+    /// The head stops at the first tick. A `param` before it is what the Set was
+    /// built with; the same record after it is an edit an operator made, and
+    /// applying that one at the start would be a different performance.
     #[test]
     fn state_after_the_first_tick_is_an_edit_and_not_the_head() {
         let param = |v: f32| {
@@ -445,22 +442,21 @@ mod tests {
         assert_eq!(session.frames[1].steps, 2);
     }
 
-    /// **A `tick` is a terminator, not a header**, and that is what decides
-    /// where a frame's own measurements land.
+    /// A `tick` is a terminator, not a header, and that is what decides where a
+    /// frame's own measurements land.
     ///
-    /// Written in the order `Live::frame` emits them — the edits an operator
-    /// made, then the audio that frame heard, then the tick that closes it —
-    /// every record reaches the frame it was produced during. The audio used to
-    /// go out *after* the tick, which put frame N's reading in front of frame
-    /// N+1: live, frame N rendered with what frame N heard; replayed, with what
-    /// N−1 heard. One frame late, every frame, in the two signals every binding
-    /// is driven by.
+    /// Written in the order `Live::frame` emits them — the edits an operator made,
+    /// then the audio that frame heard, then the tick that closes it — every record
+    /// reaches the frame it was produced during. The audio used to go out *after*
+    /// the tick, which put frame N's reading in front of frame N+1: live, frame N
+    /// rendered with what frame N heard; replayed, with what N−1 heard. One frame
+    /// late, every frame, in the two signals every binding is driven by.
     ///
-    /// **What this test cannot see is the writer.** `Live::frame` needs a
-    /// window, so the order it pushes in is checked by reading it and this
-    /// checks only that `split` honours that order once written. Swap the two
-    /// pushes back and nothing here goes red — said out loud rather than left
-    /// for someone to assume otherwise.
+    /// What this test cannot see is the writer. `Live::frame` needs a window, so
+    /// the order it pushes in is checked by reading it and this checks only that
+    /// `split` honours that order once written. Swap the two pushes back and
+    /// nothing here goes red — said out loud rather than left for someone to assume
+    /// otherwise.
     #[test]
     fn a_frames_own_records_land_in_that_frame_and_not_the_next() {
         let audio = |energy: f32| {
@@ -497,10 +493,10 @@ mod tests {
 
     /// The canvas is read out of the stream, not out of the head.
     ///
-    /// It is session state, so `split` puts it in the *first frame's* edits
-    /// rather than in the head — and a replay needs it strictly earlier than
-    /// that, before it allocates anything. The two facts together are why
-    /// [`Session::canvas`] exists instead of a field on the head.
+    /// It is session state, so `split` puts it in the *first frame's* edits rather
+    /// than in the head — and a replay needs it strictly earlier than that, before
+    /// it allocates anything. The two facts together are why [`Session::canvas`]
+    /// exists instead of a field on the head.
     #[test]
     fn the_canvas_is_found_before_the_first_frame_renders() {
         let session = split(vec![
@@ -522,10 +518,10 @@ mod tests {
 
     /// A session that never drew a frame still carries its canvas.
     ///
-    /// The record is written before the first tick, so with no tick at all
-    /// there is no `Frame` to hold it and it lands in `trailing` — the one
-    /// place a scan over frames alone cannot see. A run closed during startup
-    /// produces exactly this stream.
+    /// The record is written before the first tick, so with no tick at all there is
+    /// no `Frame` to hold it and it lands in `trailing` — the one place a scan over
+    /// frames alone cannot see. A run closed during startup produces exactly this
+    /// stream.
     #[test]
     fn a_session_with_no_tick_still_carries_its_canvas() {
         let session = split(vec![
@@ -552,11 +548,11 @@ mod tests {
 
     /// Later ones are counted, not obeyed and not swallowed.
     ///
-    /// This program writes exactly one, at the head — a canvas change would be
-    /// a GPU reallocation mid-run. So a second one means a stream something
-    /// else wrote, and the count is what lets a replay say it did not honour
-    /// it. Silently taking the first would be indistinguishable from a replay
-    /// that had followed every one.
+    /// This program writes exactly one, at the head — a canvas change would be a
+    /// GPU reallocation mid-run. So a second one means a stream something else
+    /// wrote, and the count is what lets a replay say it did not honour it.
+    /// Silently taking the first would be indistinguishable from a replay that had
+    /// followed every one.
     #[test]
     fn later_canvases_are_counted_rather_than_obeyed() {
         let session = split(vec![
@@ -585,8 +581,8 @@ mod tests {
         );
     }
 
-    /// Records after the last tick are kept. A session that ended between
-    /// frames still recorded what the operator last did.
+    /// Records after the last tick are kept. A session that ended between frames
+    /// still recorded what the operator last did.
     #[test]
     fn records_after_the_last_tick_are_not_lost() {
         let session = split(vec![
@@ -601,14 +597,14 @@ mod tests {
         assert_eq!(session.trailing.len(), 1);
     }
 
-    /// **The frame path allocates nothing.** A batch is handed away the moment
-    /// it is full and an empty one comes back, so the buffer's capacity — and
-    /// therefore its pointer — never changes.
+    /// The frame path allocates nothing. A batch is handed away the moment it is
+    /// full and an empty one comes back, so the buffer's capacity — and therefore
+    /// its pointer — never changes.
     ///
-    /// A counting allocator would be the direct assertion and cannot be used
-    /// here: `#[global_allocator]` is per binary and this is one. The capacity
-    /// is the observable consequence, and it is not a proxy — a `Vec` that grew
-    /// would report a larger one.
+    /// A counting allocator would be the direct assertion and cannot be used here:
+    /// `#[global_allocator]` is per binary and this is one. The capacity is the
+    /// observable consequence, and it is not a proxy — a `Vec` that grew would
+    /// report a larger one.
     #[test]
     fn pushing_records_never_grows_the_batch() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -662,13 +658,13 @@ mod tests {
         assert_eq!(w.records, (BATCH * 3) as u64);
     }
 
-    /// **The audio record is swapped, not copied**, which is the whole reason
-    /// it can be recorded from a frame at all.
+    /// The audio record is swapped, not copied, which is the whole reason it can be
+    /// recorded from a frame at all.
     ///
-    /// The caller's record comes back with a *different* band buffer — the
-    /// shell's — and the one it had went into the stream. Pointer identity is
-    /// the observable form of that: a clone would leave the caller's own
-    /// buffer where it was.
+    /// The caller's record comes back with a *different* band buffer — the shell's
+    /// — and the one it had went into the stream. Pointer identity is the
+    /// observable form of that: a clone would leave the caller's own buffer where
+    /// it was.
     #[test]
     fn pushing_audio_takes_the_buffer_rather_than_copying_it() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -712,10 +708,10 @@ mod tests {
         assert_eq!(bands, &[0.1, 0.2, 0.3]);
     }
 
-    /// **Shells circulate.** A frame path that ran out would allocate one per
-    /// frame, which is the thing this whole arrangement exists to prevent — so
-    /// the writer returns each band buffer after serialising it, and a long run
-    /// never asks for a new one.
+    /// Shells circulate. A frame path that ran out would allocate one per frame,
+    /// which is the thing this whole arrangement exists to prevent — so the writer
+    /// returns each band buffer after serialising it, and a long run never asks for
+    /// a new one.
     #[test]
     fn audio_shells_come_back_from_the_writer_and_are_reused() {
         let dir = tempfile::tempdir().expect("tempdir");
