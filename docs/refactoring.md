@@ -19,6 +19,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P24** | `karakuri` (GUI) | Decomposed `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **COMPLETED** |
 | **P25** | `karakuri-mcp` | Extracted test suites to `tests/`; decomposed `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
 | **P26** | `karakuri-console` | Extracted 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
+| **P30** | `karakuri-console::view::widgets` | Componentized `card`, `chip`, `track`, `field` in `view/widgets/` | **COMPLETED** |
 
 ---
 
@@ -89,12 +90,12 @@ graph TD
     ConsoleWidgets --> ConsoleBays
 ```
 
-#### P30. Expand Componentized Widget Library (`karakuri-console::view::widgets`)
-Extract recurring visual and interactive elements out of bay modules into `view/widgets/`:
-1. `chip.rs`: Standardized chips and badges (Tally residency chips, Blend mode chips, Scope tabs, Sync source chips).
-2. `card.rs`: Reusable modal card and dropdown popup containers with drop shadow, border, and dismiss-on-outside-click logic (Audio-in card, Arrangement card, Row context menu).
-3. `track.rs`: Continuous slider tracks and scrubbers (Exposure track, Latency offset track, Transport scrubber).
-4. `field.rs`: Reusable interactive text and filter input fields with focus indicators and clear buttons.
+#### P30. Expand Componentized Widget Library (`karakuri-console::view::widgets`) — **COMPLETED**
+Extracted recurring visual and interactive elements out of bay modules into `view/widgets/`:
+1. `card.rs`: `bay_card`, `popup_card`, `card_row_text`.
+2. `chip.rs`: `Tally` residency enum, `badge`, `toggle_chip`, `scope_tab`, `centre_galley`.
+3. `track.rs`: `slider_track_into` continuous slider tracks.
+4. `field.rs`: `filter_field`, `editable_text_field`, `CARET`.
 
 #### P31. Modularize Bay Monoliths into Subdirectories
 Decompose bay files exceeding 2,500 lines into focused submodules:
