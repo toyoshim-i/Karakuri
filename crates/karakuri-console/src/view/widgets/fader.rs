@@ -204,15 +204,7 @@ pub(crate) fn fader_into(
     live: bool,
     reach: Option<Reach>,
 ) {
-    let track_r = CornerRadius::same((fader.track.width().min(fader.track.height()) * 0.5) as u8);
-    painter.rect_filled(fader.track, track_r, pal.well);
-    painter.rect_stroke(
-        fader.track,
-        track_r,
-        Stroke::new(size::HAIRLINE, pal.hair),
-        StrokeKind::Inside,
-    );
-    gradient(painter, fader.fill, fader.axis, pal.mint, pal.lav, true);
+    slider_track_into(painter, pal, fader.track, fader.fill, fader.axis);
 
     // **The band, over the fill and under the knob**: it is the fill setting
     // off, so it is drawn where the fill is drawn and the truth stays on top

@@ -2301,15 +2301,7 @@ pub(super) fn tracker_into(ui: &Ui, pal: &Palette, group: &TrackerGroup) {
             ),
             pal.faint,
         );
-        let radius = CornerRadius::same((size::FADER_H * 0.5) as u8);
-        painter.rect_filled(offset.track, radius, pal.well);
-        painter.rect_stroke(
-            offset.track,
-            radius,
-            Stroke::new(size::HAIRLINE, pal.hair),
-            StrokeKind::Inside,
-        );
-        gradient(painter, offset.fill, Axis::Row, pal.mint, pal.lav, true);
+        slider_track_into(painter, pal, offset.track, offset.fill, Axis::Row);
         centred(
             offset.value,
             painter.layout_no_wrap(
@@ -3995,15 +3987,7 @@ pub(super) fn look_into(ui: &Ui, pal: &Palette, row: &LookRow) {
         pal.faint,
     );
 
-    let radius = CornerRadius::same((size::FADER_H * 0.5) as u8);
-    painter.rect_filled(row.track, radius, pal.well);
-    painter.rect_stroke(
-        row.track,
-        radius,
-        Stroke::new(size::HAIRLINE, pal.hair),
-        StrokeKind::Inside,
-    );
-    gradient(painter, row.fill, Axis::Row, pal.mint, pal.lav, true);
+    slider_track_into(painter, pal, row.track, row.fill, Axis::Row);
 
     centred(
         row.value,
