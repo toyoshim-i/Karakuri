@@ -37,7 +37,7 @@ use crate::readout::*;
 use crate::session::{Keeping, Sessions};
 use crate::{CANVAS, MAPPED, SERVED, WINDOW};
 
-/// **Open or close the projector window**, and say what happened.
+/// Open or close the projector window, and say what happened.
 ///
 /// The one operation in this file that makes a *window*, which is why it takes
 /// an `&ActiveEventLoop` and why it is reached from `window_event` rather than
@@ -46,18 +46,18 @@ use crate::{CANVAS, MAPPED, SERVED, WINDOW};
 ///
 /// # What each answer is
 ///
-/// - **`Projector(0)` on** opens a window, makes a surface on the device the
+/// - `Projector(0)` on opens a window, makes a surface on the device the
 ///   panel is already using, configures it and puts a [`WindowSink`] over it.
 ///   The next frame's [`render_size`] sees a second output and the frame
 ///   follows the larger of the two.
-/// - **`Projector(0)` off** drops the [`Projector`], which drops the surface
+/// - `Projector(0)` off drops the [`Projector`], which drops the surface
 ///   and the last reference to the window — so the window closes and the sink
 ///   leaves the slice on the same statement. Nothing is torn down in an order
 ///   this file has to remember.
-/// - **`Program`** never arrives: the picture's on and off is the fold, and
+/// - `Program` never arrives: the picture's on and off is the fold, and
 ///   the console performs it where the arrangement is (`Readout::sink`). It is
 ///   an arm here so that the match is exhaustive and says so.
-/// - **`Plugin(n)`** is refused with the sentence that names what is missing,
+/// - `Plugin(n)` is refused with the sentence that names what is missing,
 ///   which is [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
 ///   there is no manifest to read a plugin sink out of, and the console draws
 ///   both plugin chips `no plugin` for that reason, so this is only reachable
@@ -70,7 +70,7 @@ use crate::{CANVAS, MAPPED, SERVED, WINDOW};
 /// hardware's and happens exactly once (P-0064). A surface in another format
 /// would need a second pipeline, which is a *second present pipeline* and is
 /// exactly what ADR-0247 says nothing needs. So this asks the surface for that
-/// format and **refuses to open the window when it is not offered**, naming
+/// format and refuses to open the window when it is not offered, naming
 /// both — a window that opened and drew nothing would be the silent wrong
 /// picture P-0094 refuses, and this is a refusal before the show rather than a
 /// fault during one.
@@ -152,14 +152,14 @@ pub(crate) fn routed(
     ))
 }
 
-/// **What the window loop does about what a press asked for**, for every answer
-/// but the two that reach the store.
+/// What the window loop does about what a press asked for, for every answer but
+/// the two that reach the store.
 ///
 /// `Asked::Scope` and `Asked::Load` are the caller's, because both end in a
 /// directory read or a file write and this function has neither the store nor
 /// the folder; everything else is one operation or one sentence.
 ///
-/// **A refusal is said out loud**, which is the whole of what `Asked::Nothing`
+/// A refusal is said out loud, which is the whole of what `Asked::Nothing`
 /// carries: a key that declines and a key that is not bound are the same
 /// experience, so the console's own sentence is printed rather than swallowed
 /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
@@ -245,16 +245,16 @@ pub(crate) fn answered(
     App::performed(gfx, started, readout, recorder, &acted, Repaint::Never)
 }
 
-/// **A load, performed** — [`loading`] reached from an operation, and `None`
-/// for every operation that is not one.
+/// A load, performed — [`loading`] reached from an operation, and `None` for
+/// every operation that is not one.
 ///
-/// `Operation::LoadSet` writes no record either, so this is [`pointed`]'s
-/// shape one bay along: the surface that names it performs it. What it does
-/// **not** do is touch the deck, which is the whole design — see [`loading`]
-/// and [`Engine::aimed`].
+/// `Operation::LoadSet` writes no record either, so this is [`pointed`]'s shape
+/// one bay along: the surface that names it performs it. What it does not do is
+/// touch the deck, which is the whole design — see [`loading`] and
+/// [`Engine::aimed`].
 ///
-/// Every failure is a sentence and none of them moves anything: a slot the
-/// deck has not got, a store that will not open, a Set that is not there, a
+/// Every failure is a sentence and none of them moves anything: a slot the deck
+/// has not got, a store that will not open, a Set that is not there, a
 /// procedure that no longer checks, or a worker that has gone.
 pub(crate) fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     let Operation::LoadSet { deck, set } = operation else {
@@ -302,37 +302,37 @@ pub(crate) fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     }
 }
 
-/// **A procedure loaded over one layer of what a deck is playing, performed** —
-/// a press on a procedure row's `load`, on one of its row menu's four loads, or
-/// a drag of it onto a strip or a cell, and `None` for every operation that is
+/// A procedure loaded over one layer of what a deck is playing, performed — a
+/// press on a procedure row's `load`, on one of its row menu's four loads, or a
+/// drag of it onto a strip or a cell, and `None` for every operation that is
 /// not one.
 ///
 /// # It is [`played`]'s shape with one file instead of every file
 ///
 /// A Set load re-points the slot at every file that Set names; this re-points
-/// it at **the files it is already on with one of them replaced**, which is the
+/// it at the files it is already on with one of them replaced, which is the
 /// whole of ADR-0338 taken literally. Both are one `Aiming::re_point`, both are
 /// compiled off the render thread and judged at a frame boundary on what one
 /// frame of the result costs, and the Staging lane says which of the three
 /// happened. Nothing is installed and nothing is written where the presets are.
 ///
-/// **`Aim::set` is left where it is**, which is the half of the maintainer's
-/// answer that has a mechanism behind it: the versions this slot writes from
-/// here on go on being filed under the Set it started from, so the `history`
-/// chip keeps listing that deck's versions and the snapshot every compile takes
-/// stays alive (ADR-0304, ADR-0308). It follows from `overlaying` restating the
-/// aim rather than building one.
+/// `Aim::set` is left where it is, which is the half of the maintainer's answer
+/// that has a mechanism behind it: the versions this slot writes from here on
+/// go on being filed under the Set it started from, so the `history` chip keeps
+/// listing that deck's versions and the snapshot every compile takes stays
+/// alive (ADR-0304, ADR-0308). It follows from `overlaying` restating the aim
+/// rather than building one.
 ///
-/// **The strip then reads `<base> + <kir>`**, so what is on air says what it is
+/// The strip then reads `<base> + <kir>`, so what is on air says what it is
 /// made of and never claims to be a Set the library holds. `keep` is what gives
 /// it a name, and it files a new Set exactly as it does for any other deck —
 /// what `Playing` gathers is the aim's own files, which is what this changed.
 ///
-/// **Written on the aim rather than on the swap**, which is [`played`]'s own
-/// choice and its argument word for word: the build may be refused or land and
-/// stop its slot for cost, and a readout that waited for the verdict would name
-/// material that is no longer in the file. The staging lane is the surface built
-/// for that disagreement.
+/// Written on the aim rather than on the swap, which is [`played`]'s own choice
+/// and its argument word for word: the build may be refused or land and stop
+/// its slot for cost, and a readout that waited for the verdict would name
+/// material that is no longer in the file. The staging lane is the surface
+/// built for that disagreement.
 pub(crate) fn overlaid(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     let Operation::LoadProcedure { deck, procedure } = operation else {
         return None;
@@ -376,50 +376,50 @@ pub(crate) fn overlaid(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     }
 }
 
-/// **A version put back** — a row of the Library bay's `history` scope landed
-/// on the node it was a version of, and `None` for every operation that is not
+/// A version put back — a row of the Library bay's `history` scope landed on
+/// the node it was a version of, and `None` for every operation that is not
 /// one.
 ///
 /// # It is a load, and it goes the way every other load goes
 ///
-/// The snapshot's bytes are written over that node's **working copy** under
-/// `<store>/scratch/`, where the slot's watcher is already looking, and
-/// nothing else is touched: no deck, no aim, no channel. So the worker reads
-/// it, compiles it off the render thread, swaps it at a frame boundary and
-/// rolls it back on its own if it cannot hold the budget — which is
-/// [`loading`]'s argument met from the other end, and
+/// The snapshot's bytes are written over that node's working copy under
+/// `<store>/scratch/`, where the slot's watcher is already looking, and nothing
+/// else is touched: no deck, no aim, no channel. So the worker reads it,
+/// compiles it off the render thread, swaps it at a frame boundary and rolls it
+/// back on its own if it cannot hold the budget — which is [`loading`]'s
+/// argument met from the other end, and
 /// `docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md`
 /// is where it is written down. Nothing is installed.
 ///
-/// **The version it replaces is kept by the same act.** The watcher snapshots
-/// at its compile-success point
+/// The version it replaces is kept by the same act. The watcher snapshots at
+/// its compile-success point
 /// (`docs/adr/0089-history-is-gated-on-compiling-not-on-landing.md`), so what
 /// was on the node before this write is the next row of the very listing the
 /// press came off — a landing you did not mean is itself undoable.
 ///
 /// # Finding the file again, and why no path crosses the seam
 ///
-/// The console says a **name** — [`version_row`]'s spelling, the one it was
-/// handed — and this re-asks `history::list` and rebuilds that spelling per
-/// candidate to find the row. That is `SetTransfer::Take`'s arrangement
-/// exactly: *"the panel's route re-asks the listing and finds the row by the
-/// word that was pressed, so no surface spells a path"*.
+/// The console says a name — [`version_row`]'s spelling, the one it was handed
+/// — and this re-asks `history::list` and rebuilds that spelling per candidate
+/// to find the row. That is `SetTransfer::Take`'s arrangement exactly: *"the
+/// panel's route re-asks the listing and finds the row by the word that was
+/// pressed, so no surface spells a path"*.
 ///
-/// **Which node the file is is asked of the aim rather than of the launch
-/// copies.** [`Engine::pointing`] is the run's one `mcp::Slots`, written out of
-/// what each watcher is *pointed at* — `Aiming::at` — so the answer follows a
-/// library load. `Slots::file` is the one walk that turns
-/// `(slot, layer, index)` into a file, and it is asked rather than repeated.
+/// Which node the file is is asked of the aim rather than of the launch copies.
+/// [`Engine::pointing`] is the run's one `mcp::Slots`, written out of what each
+/// watcher is *pointed at* — `Aiming::at` — so the answer follows a library
+/// load. `Slots::file` is the one walk that turns `(slot, layer, index)` into a
+/// file, and it is asked rather than repeated.
 ///
-/// **This used to build a `Slots` of its own here**, because the one the MCP
-/// server held was the launch working copies and went stale on the first load
+/// This used to build a `Slots` of its own here, because the one the MCP server
+/// held was the launch working copies and went stale on the first load
 /// (ADR-0308's *Doubted*). The server reads this same handle now, so the second
 /// one is gone rather than kept beside it.
 ///
 /// # Five refusals, and each says where the deck is still pointed
 ///
-/// A slot the deck has not got, a deck playing no Set at all, a version that
-/// is not one of that Set's, a node the deck does not hold, and a file that is
+/// A slot the deck has not got, a deck playing no Set at all, a version that is
+/// not one of that Set's, a node the deck does not hold, and a file that is
 /// gone or will not be written. `rm -rf history/2026/07` is this store's whole
 /// retention policy, so the fourth is an ordinary state of a working store and
 /// the sentence names the file rather than calling it damaged
@@ -466,21 +466,21 @@ pub(crate) fn restored(gfx: &Gfx, operation: &Operation) -> Option<String> {
     ))
 }
 
-/// **The Set the load pulldown's deck is running**, or `None` for a deck
-/// playing the pair the run was launched with.
+/// The Set the load pulldown's deck is running, or `None` for a deck playing
+/// the pair the run was launched with.
 ///
-/// **It is read off the aim and off nothing else**, which is ADR-0304: the id
-/// rides the `watch::Aim` a load sends, restated by every rewiring, and
+/// It is read off the aim and off nothing else, which is ADR-0304: the id rides
+/// the `watch::Aim` a load sends, restated by every rewiring, and
 /// `Gfx::material` beside it is the mixer strip's *readout* — the pair at
 /// launch, and never an id a listing can match.
 ///
-/// **The pulldown and not the selection**, which is ADR-0305 read on a second
+/// The pulldown and not the selection, which is ADR-0305 read on a second
 /// control: the letter in that foot is what says where a load lands, so it is
 /// what says whose history the `history` scope is showing. A target past the
 /// slots the deck has answers `None`, which `View::aim_at` already refuses and
 /// this does not depend on.
 ///
-/// **Owned, because the caller is about to take `&mut View`.** One `String` per
+/// Owned, because the caller is about to take `&mut View`. One `String` per
 /// press on a path that is about to read a directory.
 pub(crate) fn aimed_set(gfx: &Gfx, view: &View) -> Option<String> {
     gfx.engine
@@ -491,222 +491,214 @@ pub(crate) fn aimed_set(gfx: &Gfx, view: &View) -> Option<String> {
 
 pub(crate) struct App {
     gfx: Option<Gfx>,
-    /// **What the command line asked for**, read before the event loop starts
-    /// and used once, in `resumed`. It is here rather than in [`Gfx`] because
-    /// it is known before there is a device and outlives every remake of one.
+    /// What the command line asked for, read before the event loop starts and used
+    /// once, in `resumed`. It is here rather than in [`Gfx`] because it is known
+    /// before there is a device and outlives every remake of one.
     ///
-    /// **The pair the operator named, and not what any deck runs from** — see
-    /// [`running`](App::running). What this answers is the strips' name, which
-    /// is a question about what was asked for: four decks opened on one preset
-    /// are playing that preset, whatever their four files are called.
+    /// The pair the operator named, and not what any deck runs from — see
+    /// [`running`](App::running). What this answers is the strips' name, which is a
+    /// question about what was asked for: four decks opened on one preset are
+    /// playing that preset, whatever their four files are called.
     sources: Sources,
-    /// **The working copy each deck runs from**, one pair per slot, in slot
-    /// order — [`working_copies`], made in [`main`] before the window.
+    /// The working copy each deck runs from, one pair per slot, in slot order —
+    /// [`working_copies`], made in [`main`] before the window.
     ///
-    /// Beside `sources` rather than replacing it because the two answer
-    /// different questions and always have: this is what a watcher polls and
-    /// what an editor opens, and `sources` is what the operator said. They were
-    /// one field while every slot watched the typed paths, which is the defect
-    /// this pair of fields exists to end.
+    /// Beside `sources` rather than replacing it because the two answer different
+    /// questions and always have: this is what a watcher polls and what an editor
+    /// opens, and `sources` is what the operator said. They were one field while
+    /// every slot watched the typed paths, which is the defect this pair of fields
+    /// exists to end.
     running: Vec<Sources>,
-    /// **Where the library is** — see [`Launch::store`]. Here for `sources`'
-    /// reason, and copied onto [`Gfx::store`] for the readers that are handed
-    /// only a device.
+    /// Where the library is — see [`Launch::store`]. Here for `sources`' reason,
+    /// and copied onto [`Gfx::store`] for the readers that are handed only a
+    /// device.
     store: std::path::PathBuf,
-    /// **The preset library this run resolved**, kept for one purpose: the
-    /// legend says which of the places answered, and it says it by printing
-    /// what the resolution returned rather than a sentence about what it
-    /// probably did. `None` is a machine with no library, which reaches this
-    /// far only on a run that was given its pair by hand.
+    /// The preset library this run resolved, kept for one purpose: the legend says
+    /// which of the places answered, and it says it by printing what the resolution
+    /// returned rather than a sentence about what it probably did. `None` is a
+    /// machine with no library, which reaches this far only on a run that was given
+    /// its pair by hand.
     presets: Option<karakuri_environment::places::Presets>,
-    /// **The directory the Library bay is pointed at**, or `None` until a
-    /// folder has been dropped on this window — which is where every run
-    /// starts, because nothing names one before the run (ADR-0275).
+    /// The directory the Library bay is pointed at, or `None` until a folder has
+    /// been dropped on this window — which is where every run starts, because
+    /// nothing names one before the run (ADR-0275).
     ///
-    /// **Beside [`presets`](App::presets) because it is the same kind of
-    /// thing**: a directory outside this store that a scope of the bay lists.
-    /// The difference is when it is decided — a presets root is resolved
-    /// before the window opens and this arrives during the run — and that is
-    /// why one is on [`Launch`] and this is not.
+    /// Beside [`presets`](App::presets) because it is the same kind of thing: a
+    /// directory outside this store that a scope of the bay lists. The difference
+    /// is when it is decided — a presets root is resolved before the window opens
+    /// and this arrives during the run — and that is why one is on [`Launch`] and
+    /// this is not.
     ///
-    /// **The path is here and the *spelling* is in the console**
-    /// (`view::View::folder`): this side reads the directory and the panel
-    /// draws the line, which is the seam every other library value crosses
-    /// (ADR-0156). Two fields for one fact, and they are written in one place
-    /// — [`folder_dropped`].
+    /// The path is here and the *spelling* is in the console
+    /// (`view::View::folder`): this side reads the directory and the panel draws
+    /// the line, which is the seam every other library value crosses (ADR-0156).
+    /// Two fields for one fact, and they are written in one place —
+    /// [`folder_dropped`].
     folder: Option<std::path::PathBuf>,
     /// A validation fault is said once rather than sixty times a second.
     faulted: bool,
-    /// **Whether shift is held**, which is the whole of what this loop keeps
-    /// of the modifier state and is here for exactly one key.
+    /// Whether shift is held, which is the whole of what this loop keeps of the
+    /// modifier state and is here for exactly one key.
     ///
-    /// `winit`'s `KeyEvent` carries no modifiers, so a key handler that wants
-    /// to tell `Tab` from `shift-Tab` has to have been listening to
-    /// `WindowEvent::ModifiersChanged` — which is why this is a field rather
-    /// than a question asked at the press.
+    /// `winit`'s `KeyEvent` carries no modifiers, so a key handler that wants to
+    /// tell `Tab` from `shift-Tab` has to have been listening to
+    /// `WindowEvent::ModifiersChanged` — which is why this is a field rather than a
+    /// question asked at the press.
     ///
-    /// **It is not a mode and it gives no key a second meaning**, which is the
+    /// It is not a mode and it gives no key a second meaning, which is the
     /// distinction
     /// [ADR-0259](../../../docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
     /// draws when it rejects modifier chords: *"a modifier is a mode with no
-    /// readout"*, and rule 04 is *nothing is hidden quietly*. `shift-Tab`
-    /// survives that rejection because it reverses a traversal that is drawn
-    /// either way — the ring is on a bay whichever direction you arrived from
-    /// — so there is no hidden state to read out.
+    /// readout"*, and rule 04 is *nothing is hidden quietly*. `shift-Tab` survives
+    /// that rejection because it reverses a traversal that is drawn either way —
+    /// the ring is on a bay whichever direction you arrived from — so there is no
+    /// hidden state to read out.
     ///
-    /// **`egui`'s own copy is not readable in time.** `egui_winit::State`
-    /// keeps modifiers privately and stamps them onto the events it queues;
-    /// `Context::input` answers from the last pass, so a `shift` pressed since
-    /// the previous frame would be invisible there. One reader, one writer, one
-    /// event.
+    /// `egui`'s own copy is not readable in time. `egui_winit::State` keeps
+    /// modifiers privately and stamps them onto the events it queues;
+    /// `Context::input` answers from the last pass, so a `shift` pressed since the
+    /// previous frame would be invisible there. One reader, one writer, one event.
     shift: bool,
     readout: Readout,
-    /// **The console's hover layer**, which is `karakuri-console`'s and is
-    /// held here for the reason every other piece of console state is: this
-    /// file owns the window, the pointer and the clock, and that crate owns
-    /// none of the three.
+    /// The console's hover layer, which is `karakuri-console`'s and is held here
+    /// for the reason every other piece of console state is: this file owns the
+    /// window, the pointer and the clock, and that crate owns none of the three.
     ///
-    /// **It is not part of [`Readout`]** because nothing routes into it: a
-    /// tooltip is not an operation, no key reaches it, and MIDI and MCP have
-    /// nothing to say to it. What it takes is a pointer move, the claim
-    /// `input::claim` already answered for that move, and a time — and what it
-    /// gives back is a repaint decision and a box painted after the panel.
+    /// It is not part of [`Readout`] because nothing routes into it: a tooltip is
+    /// not an operation, no key reaches it, and MIDI and MCP have nothing to say to
+    /// it. What it takes is a pointer move, the claim `input::claim` already
+    /// answered for that move, and a time — and what it gives back is a repaint
+    /// decision and a box painted after the panel.
     hover: karakuri_console::hover::Hover,
     costs: Costs,
-    /// Logical size, so the numbers printed are the arrangement's own units
-    /// rather than the display's.
+    /// Logical size, so the numbers printed are the arrangement's own units rather
+    /// than the display's.
     scale: f64,
-    /// **When `egui` asked to be drawn again, kept as the deadline it is.**
+    /// When `egui` asked to be drawn again, kept as the deadline it is.
     ///
-    /// `egui` animates, blinks a text cursor and fades a tooltip in, and it
-    /// says so as a `repaint_delay` on the frame's `ViewportOutput`. Turning
-    /// that into an immediate `request_redraw` would turn a 250 ms animation
-    /// into a spin at whatever rate this loop can manage — which is the cost
-    /// ADR-0164's still-panel clause is about, arrived at from the one direction
-    /// that
-    /// looks like obeying it. So the delay is added to the clock here and
-    /// `about_to_wait` sleeps until it.
+    /// `egui` animates, blinks a text cursor and fades a tooltip in, and it says so
+    /// as a `repaint_delay` on the frame's `ViewportOutput`. Turning that into an
+    /// immediate `request_redraw` would turn a 250 ms animation into a spin at
+    /// whatever rate this loop can manage — which is the cost ADR-0164's
+    /// still-panel clause is about, arrived at from the one direction that looks
+    /// like obeying it. So the delay is added to the clock here and `about_to_wait`
+    /// sleeps until it.
     ///
-    /// `None` where `egui` asked for nothing, which is every frame on a panel
-    /// with nothing on it.
+    /// `None` where `egui` asked for nothing, which is every frame on a panel with
+    /// nothing on it.
     egui_due: Option<Instant>,
-    /// **The origin every animation on the panel is measured from**, and the
-    /// only clock behind `view::Phase`.
+    /// The origin every animation on the panel is measured from, and the only clock
+    /// behind `view::Phase`.
     ///
-    /// It is here because this file owns the window and the clock and `src/`
-    /// owns neither — every `Instant::now` in this crate is in this file, and
-    /// `view::Phase` is a `Duration` for exactly that reason (P-0092). What
-    /// crosses the seam is `now - this`, which is a number.
+    /// It is here because this file owns the window and the clock and `src/` owns
+    /// neither — every `Instant::now` in this crate is in this file, and
+    /// `view::Phase` is a `Duration` for exactly that reason (P-0092). What crosses
+    /// the seam is `now - this`, which is a number.
     ///
-    /// **Where the origin is does not matter**, which is why it is taken at
+    /// Where the origin is does not matter, which is why it is taken at
     /// construction rather than when something first starts moving: every
-    /// presentation is periodic in the phase, so an origin the operator did
-    /// not choose is an origin nobody can see. What would matter is having
-    /// *two*, and there is one.
+    /// presentation is periodic in the phase, so an origin the operator did not
+    /// choose is an origin nobody can see. What would matter is having *two*, and
+    /// there is one.
     started: Instant,
-    /// **When a served run next wakes to take what a model asked for**, and
-    /// `None` for a run without `--mcp` — see [`SERVED`], which is the whole of
-    /// why this deadline exists.
+    /// When a served run next wakes to take what a model asked for, and `None` for
+    /// a run without `--mcp` — see [`SERVED`], which is the whole of why this
+    /// deadline exists.
     ///
-    /// A deadline beside `egui_due` rather than a `ControlFlow::Poll`, because
-    /// this loop has one rule about when it runs and a second one would be a
-    /// second answer to it: [`App::about_to_wait`] takes the soonest of what is
-    /// owed, and this is one of the things owed.
+    /// A deadline beside `egui_due` rather than a `ControlFlow::Poll`, because this
+    /// loop has one rule about when it runs and a second one would be a second
+    /// answer to it: [`App::about_to_wait`] takes the soonest of what is owed, and
+    /// this is one of the things owed.
     served: Option<Instant>,
-    /// **How a thread that is not this one gets this loop to run again**, and
-    /// it exists for exactly one of them: the MIDI callback.
+    /// How a thread that is not this one gets this loop to run again, and it exists
+    /// for exactly one of them: the MIDI callback.
     ///
-    /// Every other thing this window answers arrives as a `winit` event or on
-    /// a deadline [`App::about_to_wait`] already sets. A control surface is
-    /// neither — a hand on a knob is an event nothing in `winit` can see — and
-    /// this loop sleeps in `Wait` between frames (ADR-0164), so without a wake
-    /// a fader would be applied at whatever the operator's next mouse move
-    /// happened to be.
+    /// Every other thing this window answers arrives as a `winit` event or on a
+    /// deadline [`App::about_to_wait`] already sets. A control surface is neither —
+    /// a hand on a knob is an event nothing in `winit` can see — and this loop
+    /// sleeps in `Wait` between frames (ADR-0164), so without a wake a fader would
+    /// be applied at whatever the operator's next mouse move happened to be.
     ///
-    /// **A poll was the alternative and it is the one this rejects.** A third
-    /// deadline beside `egui_due` and `served` would have to run at a hand's
-    /// rate to feel like a fader — a hundred and twenty-five wakes a second,
-    /// for the whole of a run, whether or not anything is plugged in — which
-    /// is `ControlFlow::Poll` with extra steps and is the exact cost the
-    /// still-panel clause is about. [`SERVED`]'s tenth of a second is the
-    /// other end of that trade and is a fader at 10 Hz.
+    /// A poll was the alternative and it is the one this rejects. A third deadline
+    /// beside `egui_due` and `served` would have to run at a hand's rate to feel
+    /// like a fader — a hundred and twenty-five wakes a second, for the whole of a
+    /// run, whether or not anything is plugged in — which is `ControlFlow::Poll`
+    /// with extra steps and is the exact cost the still-panel clause is about.
+    /// [`SERVED`]'s tenth of a second is the other end of that trade and is a fader
+    /// at 10 Hz.
     ///
-    /// **It carries nothing.** The proxy's event type is `()`: the wake says
-    /// *ask again*, [`App::user_event`] asks for a frame, and the drain
-    /// happens where every other drain happens. Handed to
-    /// [`midi::Surface::first`] as a closure, so no crate below this one
-    /// learns that a window exists.
+    /// It carries nothing. The proxy's event type is `()`: the wake says *ask
+    /// again*, [`App::user_event`] asks for a frame, and the drain happens where
+    /// every other drain happens. Handed to [`midi::Surface::first`] as a closure,
+    /// so no crate below this one learns that a window exists.
     waker: EventLoopProxy<()>,
-    /// The sending half of [`watch::Watch::storing_to`]'s channel, handed to
-    /// every watcher [`Engine::new`] makes. Kept because a window remade makes
-    /// them again.
+    /// The sending half of [`watch::Watch::storing_to`]'s channel, handed to every
+    /// watcher [`Engine::new`] makes. Kept because a window remade makes them
+    /// again.
     built_tx: std::sync::mpsc::Sender<watch::Built>,
-    /// **The store the watchers put their builds in**, opened once in [`main`].
+    /// The store the watchers put their builds in, opened once in [`main`].
     ///
     /// An open store rather than the root beside it, because this one is shared
     /// with four worker threads and each of them writes to it on every build.
-    /// [`App::store`] is still the root, and is still what a save, a listing and
-    /// an arrangement are handed: those open per call, which is what keeps a
-    /// listing from creating a directory it only wanted to read.
+    /// [`App::store`] is still the root, and is still what a save, a listing and an
+    /// arrangement are handed: those open per call, which is what keeps a listing
+    /// from creating a directory it only wanted to read.
     held: std::sync::Arc<Store>,
-    /// **Every version that compiles in this run**, seeded in [`main`] from the
-    /// files the decks were about to play and handed to every watcher
-    /// [`Engine::new`] makes.
+    /// Every version that compiles in this run, seeded in [`main`] from the files
+    /// the decks were about to play and handed to every watcher [`Engine::new`]
+    /// makes.
     ///
-    /// **One for the run**, which is [`karakuri_environment::history`]'s own
-    /// requirement rather than a convenience: the seed and the watchers share
-    /// the dedup, and seeded separately the first rebuild would write the
-    /// untouched procedure a second time. That is also why it is here rather
-    /// than on [`Gfx`] — a window remade rebuilds the deck and would rebuild
-    /// the history with it.
+    /// One for the run, which is [`karakuri_environment::history`]'s own
+    /// requirement rather than a convenience: the seed and the watchers share the
+    /// dedup, and seeded separately the first rebuild would write the untouched
+    /// procedure a second time. That is also why it is here rather than on [`Gfx`]
+    /// — a window remade rebuilds the deck and would rebuild the history with it.
     ///
-    /// **What each version is filed under is not here.** That is the Set the
-    /// slot is running, and it lives on the aim, one per slot, moved by a load
-    /// — see [`Aiming`] and [`watch::Aim::set`].
+    /// What each version is filed under is not here. That is the Set the slot is
+    /// running, and it lives on the aim, one per slot, moved by a load — see
+    /// [`Aiming`] and [`watch::Aim::set`].
     snapshots: history::Shared,
-    /// **The run's one published layout**, made in [`main`], handed to
-    /// [`karakuri_mcp::serve`] there and to every [`Engine`] this
-    /// opens — see [`karakuri_mcp::Slots`] and [`Aiming::pointing`].
+    /// The run's one published layout, made in [`main`], handed to
+    /// [`karakuri_mcp::serve`] there and to every [`Engine`] this opens — see
+    /// [`karakuri_mcp::Slots`] and [`Aiming::pointing`].
     ///
-    /// **Here rather than on [`Gfx`]**, for [`App::snapshots`]' reason exactly:
-    /// the server is bound before the window and outlives every window this run
+    /// Here rather than on [`Gfx`], for [`App::snapshots`]' reason exactly: the
+    /// server is bound before the window and outlives every window this run
     /// remakes, so a handle rebuilt with the swapchain would leave the server
     /// reading one nothing writes.
     pointing: karakuri_mcp::Slots,
-    /// **Everything a save and a rewiring need that is not the deck** — see
+    /// Everything a save and a rewiring need that is not the deck — see
     /// [`Keeping`].
     keeping: Keeping,
-    /// **The session recorder, and the two presses that move it** — see
-    /// [`Sessions`].
+    /// The session recorder, and the two presses that move it — see [`Sessions`].
     ///
-    /// It is beside [`App::keeping`] rather than inside it because the two
-    /// hold different things for different moments: that one is what a *save*
-    /// and a rewiring need, and this is a writer thread the frame path pushes
-    /// into. What they share is the arrangement — a press gathers, a thread
-    /// works, and the outcome is said at the frame it arrives.
+    /// It is beside [`App::keeping`] rather than inside it because the two hold
+    /// different things for different moments: that one is what a *save* and a
+    /// rewiring need, and this is a writer thread the frame path pushes into. What
+    /// they share is the arrangement — a press gathers, a thread works, and the
+    /// outcome is said at the frame it arrives.
     recording: Sessions,
-    /// **How far a frame advances the session**, derived from the interval it
-    /// measures — [`karakuri_environment::clock::Clock`], which is the same
-    /// derivation `karakuri-cli` makes because there is one of them.
+    /// How far a frame advances the session, derived from the interval it measures
+    /// — [`karakuri_environment::clock::Clock`], which is the same derivation
+    /// `karakuri-cli` makes because there is one of them.
     ///
-    /// This is P-0092's live half: *"live, the engine derives the step count
-    /// from real time and writes it in"*. The number is read once per composed
-    /// frame, handed to [`measure_audio`] as this frame's advance, committed as
-    /// [`Committed::steps`], and pushed as the `tick` that closes the frame
-    /// where a recording is running — one measurement reaching four places
-    /// rather than four answers to how long a frame was.
+    /// This is P-0092's live half: *"live, the engine derives the step count from
+    /// real time and writes it in"*. The number is read once per composed frame,
+    /// handed to [`measure_audio`] as this frame's advance, committed as
+    /// [`Committed::steps`], and pushed as the `tick` that closes the frame where a
+    /// recording is running — one measurement reaching four places rather than four
+    /// answers to how long a frame was.
     ///
-    /// **It is on [`App`] rather than on [`Gfx`]**, which is [`Sessions`]'
-    /// reason read one field along: a window remade is a display remade, and a
-    /// session's clock is not the surface's. A clock rebuilt with the swapchain
-    /// would restart the count in the middle of a stream that is still being
-    /// written.
+    /// It is on [`App`] rather than on [`Gfx`], which is [`Sessions`]' reason read
+    /// one field along: a window remade is a display remade, and a session's clock
+    /// is not the surface's. A clock rebuilt with the swapchain would restart the
+    /// count in the middle of a stream that is still being written.
     ///
-    /// **The run's first frame is capped**, and that is the cap doing its job
-    /// rather than an accident to correct: this is started before the window
-    /// exists, so everything between here and the first composed frame — the
-    /// device, the compile, the first Sets — is one gap, and a gap is counted
-    /// whole up to `MAX_STEPS` (ADR-0006).
+    /// The run's first frame is capped, and that is the cap doing its job rather
+    /// than an accident to correct: this is started before the window exists, so
+    /// everything between here and the first composed frame — the device, the
+    /// compile, the first Sets — is one gap, and a gap is counted whole up to
+    /// `MAX_STEPS` (ADR-0006).
     clock: Clock,
 }
 
@@ -731,7 +723,8 @@ impl App {
         }
     }
 
-    /// Reaction to a window event regarding event loop termination for this app instance.
+    /// Reaction to a window event regarding event loop termination for this app
+    /// instance.
     pub(crate) fn event_loop_action(&self, id: WindowId, event: &WindowEvent) -> EventLoopAction {
         let is_main_window = self.gfx.as_ref().is_none_or(|g| g.window.id() == id);
         Self::event_loop_action_for(is_main_window, event)
@@ -741,13 +734,12 @@ impl App {
     pub(crate) fn update_modifiers(&mut self, state: &winit::event::Modifiers) {
         self.shift = state.state().shift_key();
     }
-    /// **The opening is handed in rather than made here**, which is the whole of
-    /// what pairing the four pills with a server took: [`main`] gives the same
-    /// handle to [`karakuri_mcp::serve`] and to this, so a press on
-    /// a bay head and the class the server reads are one value. [`Readout::new`]
-    /// makes one of its own — it is constructed from a size and nothing else —
-    /// and this replaces it before the window opens, which is before anything
-    /// can read either.
+    /// The opening is handed in rather than made here, which is the whole of what
+    /// pairing the four pills with a server took: [`main`] gives the same handle to
+    /// [`karakuri_mcp::serve`] and to this, so a press on a bay head and the class
+    /// the server reads are one value. [`Readout::new`] makes one of its own — it
+    /// is constructed from a size and nothing else — and this replaces it before
+    /// the window opens, which is before anything can read either.
     // **Eight, where clippy's line is seven, and it went past it when the
     // window took a control surface.** Every one of them is a thing settled
     // *before* there is a device — the command line, the copies each deck runs
@@ -840,42 +832,40 @@ impl App {
 
     /// Hand an event to `egui`, and nowhere else.
     ///
-    /// Every call site has already asked `claim` where a pointer event
-    /// belongs; this is the other branch. `EventResponse::repaint` is `egui`'s
-    /// own answer for the event it was just given, and it is the reason
-    /// `Change::Pointer(Claim::Egui)` asks for nothing: one answer per event,
-    /// from whoever got it.
+    /// Every call site has already asked `claim` where a pointer event belongs;
+    /// this is the other branch. `EventResponse::repaint` is `egui`'s own answer
+    /// for the event it was just given, and it is the reason
+    /// `Change::Pointer(Claim::Egui)` asks for nothing: one answer per event, from
+    /// whoever got it.
     ///
-    /// **`repaint` is taken out of the `EventResponse` on this line and
-    /// nothing else survives it** (ADR-0259). `egui-winit` 0.36.1 hard-codes
-    /// `EventResponse::consumed` `true` for every `Tab` — *"When pressing the
-    /// Tab key, egui focuses the first focusable element, hence Tab always
-    /// consumes"* — whether or not anything in this program's `egui::Context`
-    /// has focus, so honouring it here would swallow the key that moves focus
-    /// between bays on its first press, with no panic and no diagnostic. This
-    /// program is told about a window event and never asks `egui` for
-    /// permission, so the destructure below is the whole of the fix: past
-    /// this line there is no `EventResponse` left in scope for a future
-    /// `if … .consumed` to be added to by mistake, only the one `bool` this
-    /// function was always allowed to read.
+    /// `repaint` is taken out of the `EventResponse` on this line and nothing else
+    /// survives it (ADR-0259). `egui-winit` 0.36.1 hard-codes
+    /// `EventResponse::consumed` `true` for every `Tab` — *"When pressing the Tab
+    /// key, egui focuses the first focusable element, hence Tab always consumes"* —
+    /// whether or not anything in this program's `egui::Context` has focus, so
+    /// honouring it here would swallow the key that moves focus between bays on its
+    /// first press, with no panic and no diagnostic. This program is told about a
+    /// window event and never asks `egui` for permission, so the destructure below
+    /// is the whole of the fix: past this line there is no `EventResponse` left in
+    /// scope for a future `if … .consumed` to be added to by mistake, only the one
+    /// `bool` this function was always allowed to read.
     ///
-    /// **This used to be a text scan.** `event_response`'s former `#[test]`,
-    /// `the_only_field_read_off_an_event_response_is_repaint`, read this file
-    /// for the word `consumed` and for every `response.` field access above
-    /// the tests. Both questions are unnecessary now rather than merely
-    /// unlikely to trip: `on_window_event` is called nowhere else in this
-    /// program, and the only value this call site keeps a name for is a
-    /// `bool` with no `EventResponse` behind it to add a second field read to.
+    /// This used to be a text scan. `event_response`'s former `#[test]`,
+    /// `the_only_field_read_off_an_event_response_is_repaint`, read this file for
+    /// the word `consumed` and for every `response.` field access above the tests.
+    /// Both questions are unnecessary now rather than merely unlikely to trip:
+    /// `on_window_event` is called nowhere else in this program, and the only value
+    /// this call site keeps a name for is a `bool` with no `EventResponse` behind
+    /// it to add a second field read to.
     ///
-    /// **ADR-0259's second condition is still checked by nothing, as it was
-    /// before this line existed.** The claim above holds *because* the
-    /// console focuses no `egui` widget — no `Button`, `TextEdit`, `Slider`,
-    /// `DragValue`, `.interact(` or `.sense(` anywhere in
-    /// `karakuri-console/src`, so `Memory::focused()` is permanently `None`
-    /// and `consumed` would be reading a flag that means nothing on this
-    /// program's own widgets even where it is read. That was true on
-    /// 2026-09-05 and has not been re-checked since; it is written here
-    /// rather than left to look covered by a module that no longer exists.
+    /// ADR-0259's second condition is still checked by nothing, as it was before
+    /// this line existed. The claim above holds *because* the console focuses no
+    /// `egui` widget — no `Button`, `TextEdit`, `Slider`, `DragValue`, `.interact(`
+    /// or `.sense(` anywhere in `karakuri-console/src`, so `Memory::focused()` is
+    /// permanently `None` and `consumed` would be reading a flag that means nothing
+    /// on this program's own widgets even where it is read. That was true on
+    /// 2026-09-05 and has not been re-checked since; it is written here rather than
+    /// left to look covered by a module that no longer exists.
     fn to_egui(gfx: &mut Gfx, costs: &mut Costs, event: &WindowEvent) {
         let egui_winit::EventResponse { repaint, .. } =
             gfx.egui.on_window_event(&gfx.window, event);
@@ -885,8 +875,8 @@ impl App {
         }
     }
 
-    /// **Perform what a pointer event asked for, and say what frame it is
-    /// owed.** `otherwise` is the answer for an event that acted on nothing —
+    /// Perform what a pointer event asked for, and say what frame it is
+    /// owed. `otherwise` is the answer for an event that acted on nothing —
     /// the claim's, which is the answer this loop had before there were
     /// controls.
     ///
@@ -895,7 +885,7 @@ impl App {
     ///
     /// - The Outputs dot's operation was already performed by the panel, and
     ///   what is owed is what the [`Outcome`] says happened.
-    /// - **A fader's operation is performed here**, because it is the *deck*
+    /// - A fader's operation is performed here, because it is the *deck*
     ///   that moves and the panel has no deck (ADR-0156). It becomes a record
     ///   and the record moves the deck — P-0090, which is what makes this
     ///   fader the same control as a key press and a MIDI knob rather than a
@@ -903,8 +893,8 @@ impl App {
     ///   the deck by [`mixer`], so what the fader shows is what the deck says
     ///   and never what this loop remembered.
     ///
-    /// **What the operation becomes is [`written`]'s answer and not this
-    /// file's**, out of the operation and what [`reading`] read off the deck.
+    /// What the operation becomes is [`written`]'s answer and not this
+    /// file's, out of the operation and what [`reading`] read off the deck.
     /// It used to be a `match` written out here, because there was
     /// nowhere for the conversion to live; ADR-0185 said that function is
     /// deleted the day a home lands, and
@@ -1294,17 +1284,17 @@ impl App {
         }
     }
 
-    /// **Every operation a model has asked for since the last frame, performed
-    /// where a press of the same operation is performed.**
+    /// Every operation a model has asked for since the last frame, performed
+    /// where a press of the same operation is performed.
     ///
-    /// **It is [`Keeping::requests`]'s neighbour and not part of it**, because
+    /// It is [`Keeping::requests`]'s neighbour and not part of it, because
     /// what a save and an edge need is the engine and what an operation needs is
     /// everything a press needs: the window, the readout, the session being
     /// recorded. So the drain is here, beside [`App::performed`], and the two
     /// are called one after the other at the two places this loop takes what a
     /// model asked for.
     ///
-    /// **Nothing decides anything here.** The operation arrived already audited
+    /// Nothing decides anything here. The operation arrived already audited
     /// — `karakuri_operation::gate` ran on the server's own thread, which is the
     /// one call ADR-0235 puts the whole mechanism on — and it is handed to
     /// [`App::performed`] as an `Acted::Emitted`, which is the value a fader
@@ -1313,13 +1303,13 @@ impl App {
     /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
     /// which is the whole of what routing into one vocabulary was for.
     ///
-    /// **Collected out of the borrow before any of it is acted on**, exactly as
+    /// Collected out of the borrow before any of it is acted on, exactly as
     /// [`Keeping::requests`] collects, and for the same reason: the loop below
     /// takes `&mut` of things the reporter is reached through. An empty
     /// `collect` allocates nothing, which is every frame of a run nobody is
     /// driving.
     ///
-    /// **Answered once, at the frame it was performed on.** What a *rebuild*
+    /// Answered once, at the frame it was performed on. What a *rebuild*
     /// the operation started makes of it lands thirty judged frames later and is
     /// `swap_outcome`'s answer, and what a *scheduled* move comes to is the
     /// deck's own reading — so the sentence says where each of those is rather
@@ -1328,8 +1318,8 @@ impl App {
     ///
     /// # The three whose performer is not in [`App::performed`]
     ///
-    /// **Most operations end in `performed` and this function names none of
-    /// them.** Three do not, and each is taken here in the order and by the
+    /// Most operations end in `performed` and this function names none of
+    /// them. Three do not, and each is taken here in the order and by the
     /// call the pointer's button-up arm takes it in — a second route into one
     /// of them would be the second answer
     /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
@@ -1337,24 +1327,24 @@ impl App {
     /// repeating what they do
     /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)).
     ///
-    /// - **A star, refused** — [`favourite`] with [`Asked::Model`], which is
+    /// - A star, refused — [`favourite`] with [`Asked::Model`], which is
     ///   ADR-0301's decision reached by the route that record said it was owed.
     ///   `my sets` is the list of Sets the operator chose, so the refusal is
     ///   the answer and it goes back as one: `Err`, which reaches the client as
     ///   a failed call, carrying the id and where the Set actually is. A
     ///   success reported for an act that had no effect is what that record
     ///   refused, and answering `ok` here would be it.
-    /// - **A projector, opened** — [`routed`], which needs an `ActiveEventLoop`
-    ///   and is why this function takes one. **The drain is already on the
-    ///   event loop's thread**: both call sites are `winit` handlers holding
+    /// - A projector, opened — [`routed`], which needs an `ActiveEventLoop`
+    ///   and is why this function takes one. The drain is already on the
+    ///   event loop's thread: both call sites are `winit` handlers holding
     ///   the loop, so the argument was there to be passed and the row was
     ///   `plan` for want of one parameter.
-    /// - **A recording, started or stopped** — [`Sessions::asked`], which needs
+    /// - A recording, started or stopped — [`Sessions::asked`], which needs
     ///   the store as well and is why this takes that too. Both ends are
     ///   gathered here and written off the render thread, exactly as the `rec`
     ///   pill's press does.
     ///
-    /// **They fall through to `performed` afterwards, as a press does**, so a
+    /// They fall through to `performed` afterwards, as a press does, so a
     /// row that also writes a record writes it once and in one place.
     // **Nine, where clippy's line is seven**, and the two past it are the two
     // the three arms above need: the event loop a window is made on, and the
@@ -1462,47 +1452,45 @@ impl App {
         }
     }
 
-    /// **Every operation a hand on a control surface asked for since the last
-    /// frame, performed where a press of the same operation is performed.**
+    /// Every operation a hand on a control surface asked for since the last frame,
+    /// performed where a press of the same operation is performed.
     ///
-    /// **It is [`App::operated`]'s neighbour**, and the two are one shape: a
-    /// door outside this window hands in an [`Operation`], and it is given to
-    /// [`App::performed`] as an `Acted::Emitted` — the value a fader hands it.
-    /// A knob's `SetGain`, a model's and a hand on the strip are the same
-    /// press from here on
+    /// It is [`App::operated`]'s neighbour, and the two are one shape: a door
+    /// outside this window hands in an [`Operation`], and it is given to
+    /// [`App::performed`] as an `Acted::Emitted` — the value a fader hands it. A
+    /// knob's `SetGain`, a model's and a hand on the strip are the same press from
+    /// here on
     /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
-    /// which is what routing every surface into one vocabulary was for, and it
-    /// is why **a session recorded from this surface replays with neither the
-    /// surface nor the map attached**
+    /// which is what routing every surface into one vocabulary was for, and it is
+    /// why a session recorded from this surface replays with neither the surface
+    /// nor the map attached
     /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)):
     /// what reaches the stream is the record, and no record names a knob.
     ///
-    /// **Nothing decides anything here**, which is the same sentence
-    /// [`App::operated`] carries and is true for a different reason. A model's
-    /// request was audited on the server's thread; a hand needs no audit at
-    /// all — `karakuri_operation::gate` is a model's boundary and not an
-    /// operator's, and
+    /// Nothing decides anything here, which is the same sentence [`App::operated`]
+    /// carries and is true for a different reason. A model's request was audited on
+    /// the server's thread; a hand needs no audit at all —
+    /// `karakuri_operation::gate` is a model's boundary and not an operator's, and
     /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// says a hand cancels whatever automatic thing was writing the control,
-    /// on every route in. A gate over the operator's own surface would be the
+    /// says a hand cancels whatever automatic thing was writing the control, on
+    /// every route in. A gate over the operator's own surface would be the
     /// instrument refusing its player.
     ///
-    /// **The slot check is the router's and is said once per slot per run.**
+    /// The slot check is the router's and is said once per slot per run.
     /// `Surface::take` drops a message naming a slot this deck does not hold,
     /// because `Deck::gain` and its neighbours index directly — see
     /// `karakuri_environment::midi`, where that whole argument lives.
     ///
-    /// **The buffer is [`Gfx::performed_by_hand`] and is cleared by the
-    /// drain**, so nothing here allocates on a frame nobody touched the
-    /// surface — which is every frame of a run with no surface at all, and
-    /// costs one branch.
+    /// The buffer is [`Gfx::performed_by_hand`] and is cleared by the drain, so
+    /// nothing here allocates on a frame nobody touched the surface — which is
+    /// every frame of a run with no surface at all, and costs one branch.
     ///
-    /// **Drained inside the frame rather than on the wake**, which is the
-    /// difference between this and a key press: a key arrives as a `winit`
-    /// event and is performed on it, and a MIDI message arrives on the MIDI
-    /// thread. [`App::user_event`] asks for a frame and this is what that
-    /// frame does about it, so a sweep spanning two wakes is one operation on
-    /// one frame rather than two half-applied ones.
+    /// Drained inside the frame rather than on the wake, which is the difference
+    /// between this and a key press: a key arrives as a `winit` event and is
+    /// performed on it, and a MIDI message arrives on the MIDI thread.
+    /// [`App::user_event`] asks for a frame and this is what that frame does about
+    /// it, so a sweep spanning two wakes is one operation on one frame rather than
+    /// two half-applied ones.
     // **Eight, where clippy's line is seven, and every one is a thing a press
     // needs**: the window, the clock, the readout, the stream being recorded,
     // the layer that knows what the pointer is on, where a learned map is
@@ -1572,25 +1560,24 @@ impl App {
         App::showed(gfx);
     }
 
-    /// **The surface is shown where the deck is** — MIDI out, the other
-    /// direction of [`App::mapped`] and the send beside its drain.
+    /// The surface is shown where the deck is — MIDI out, the other direction of
+    /// [`App::mapped`] and the send beside its drain.
     ///
-    /// **After the frame's operations have been applied**, so a motorised
-    /// fader follows the value the deck holds rather than the one it was asked
-    /// for — and after a learn too, because a knob just bound has never been
-    /// shown and the control it took over may have been lit on another knob.
+    /// After the frame's operations have been applied, so a motorised fader follows
+    /// the value the deck holds rather than the one it was asked for — and after a
+    /// learn too, because a knob just bound has never been shown and the control it
+    /// took over may have been lit on another knob.
     ///
-    /// **Every source is shown and not just this surface's own**, which is the
-    /// whole reason MIDI out is worth having: a key, a model over `--mcp`, the
-    /// pointer on a strip and a transition all move a fader, and *two things
-    /// can move a fader* is the sentence `docs/roadmap.md` gives this row.
+    /// Every source is shown and not just this surface's own, which is the whole
+    /// reason MIDI out is worth having: a key, a model over `--mcp`, the pointer on
+    /// a strip and a transition all move a fader, and *two things can move a fader*
+    /// is the sentence `docs/roadmap.md` gives this row.
     ///
-    /// **It does not wait** (P-0094): `Surface::show` queues into a bounded
-    /// channel and drops when it is full rather than blocking the render
-    /// thread — `karakuri_environment::midi`, where that whole argument lives.
-    /// **And it writes no record**: what changes is the wire, so a session
-    /// recorded from this surface still replays with neither surface nor map
-    /// attached (P-0092).
+    /// It does not wait (P-0094): `Surface::show` queues into a bounded channel and
+    /// drops when it is full rather than blocking the render thread —
+    /// `karakuri_environment::midi`, where that whole argument lives. And it writes
+    /// no record: what changes is the wire, so a session recorded from this surface
+    /// still replays with neither surface nor map attached (P-0092).
     fn showed(gfx: &mut Gfx) {
         let Gfx { midi, engine, .. } = gfx;
         let Some(surface) = midi.as_mut() else {
@@ -1602,39 +1589,37 @@ impl App {
         });
     }
 
-    /// **A knob turned while `learn` is lit binds the control under the
-    /// pointer to it**, and says what happened.
+    /// A knob turned while `learn` is lit binds the control under the pointer to
+    /// it, and says what happened.
     ///
     /// # The gesture is three things and the panel already knew two
     ///
-    /// *Arm, point, turn.* The pill is the arming; [`Hover::resting`] is what
-    /// the pointer is on, which the tooltip layer works out anyway; and
-    /// [`asked_at`] turns that into the operation a press there would ask for,
-    /// which [`target_of`] spells as the right-hand side of a map line. What
-    /// is left is the left-hand side, and that is the message that just
-    /// arrived.
+    /// *Arm, point, turn.* The pill is the arming; [`Hover::resting`] is what the
+    /// pointer is on, which the tooltip layer works out anyway; and [`asked_at`]
+    /// turns that into the operation a press there would ask for, which
+    /// [`target_of`] spells as the right-hand side of a map line. What is left is
+    /// the left-hand side, and that is the message that just arrived.
     ///
     /// # It stays armed until it is pressed again
     ///
-    /// Mapping a surface is *turn every knob once*, a dozen bindings in a row,
-    /// and re-arming between each would be a click per knob. Nothing is hidden
-    /// by that — the pill is lit for exactly as long as this is true.
+    /// Mapping a surface is *turn every knob once*, a dozen bindings in a row, and
+    /// re-arming between each would be a click per knob. Nothing is hidden by that
+    /// — the pill is lit for exactly as long as this is true.
     ///
     /// # Every refusal is out loud
     ///
     /// A knob turned with the pointer on nothing, on a control no map line can
-    /// name, or against a map file that will not open — each says so and
-    /// leaves the arming alone. **A learn that quietly did nothing is the one
-    /// outcome
+    /// name, or against a map file that will not open — each says so and leaves the
+    /// arming alone. A learn that quietly did nothing is the one outcome
     /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// rules out**, and it is the likely one: the operator is looking at the
+    /// rules out, and it is the likely one: the operator is looking at the
     /// controller rather than the screen.
     ///
     /// # And the frame is owed
     ///
-    /// The tip under the pointer has just changed — its last line is read off
-    /// the live map — so the layer is asked for a frame. That is the whole of
-    /// what *the assignment shows at once* takes.
+    /// The tip under the pointer has just changed — its last line is read off the
+    /// live map — so the layer is asked for a frame. That is the whole of what *the
+    /// assignment shows at once* takes.
     fn learned(
         gfx: &mut Gfx,
         readout: &mut Readout,
@@ -1682,15 +1667,15 @@ impl App {
         App::wants(gfx, egui_due, costs, Repaint::Now);
     }
 
-    /// **Act on a repaint decision, and the only place a frame is asked for
-    /// outside `to_egui` and `missed`.**
+    /// Act on a repaint decision, and the only place a frame is asked for outside
+    /// `to_egui` and `missed`.
     ///
-    /// Three answers and three actions: ask for a frame, note a deadline, or
-    /// do nothing at all — and the third is the one ADR-0164's still-panel
-    /// clause is made of.
+    /// Three answers and three actions: ask for a frame, note a deadline, or do
+    /// nothing at all — and the third is the one ADR-0164's still-panel clause is
+    /// made of.
     ///
-    /// It takes the two fields rather than `&mut self` so that a caller
-    /// holding `self.gfx` can still reach `self.egui_due`.
+    /// It takes the two fields rather than `&mut self` so that a caller holding
+    /// `self.gfx` can still reach `self.egui_due`.
     pub(crate) fn wants(
         gfx: &Gfx,
         egui_due: &mut Option<Instant>,
@@ -2073,14 +2058,13 @@ impl ApplicationHandler for App {
         });
     }
 
-    /// **Where a deadline comes due**, which is the start of every iteration
-    /// the loop makes — including the one a `ControlFlow::WaitUntil` woke it
-    /// for.
+    /// Where a deadline comes due, which is the start of every iteration the loop
+    /// makes — including the one a `ControlFlow::WaitUntil` woke it for.
     ///
-    /// Both deadlines are checked whatever the [`StartCause`] rather than only
-    /// on `ResumeTimeReached`: a wait that is cancelled early by a real event
-    /// still has to leave a due deadline serviced, and checking two `Instant`s
-    /// costs nothing.
+    /// Both deadlines are checked whatever the [`StartCause`] rather than only on
+    /// `ResumeTimeReached`: a wait that is cancelled early by a real event still
+    /// has to leave a due deadline serviced, and checking two `Instant`s costs
+    /// nothing.
     // **The loop is used now**, and it stopped being `_event_loop` on
     // 2026-09-10: [`App::operated`] is drained here and a model's
     // `RouteFrame` opens a projector window, which `winit` will not make
@@ -2171,36 +2155,34 @@ impl ApplicationHandler for App {
         }
     }
 
-    /// **The one place the control flow is set, and it is a deadline or
-    /// nothing.**
+    /// The one place the control flow is set, and it is a deadline or nothing.
     ///
     /// `Wait` is a window that costs the machine nothing at all until somebody
-    /// touches it, which is ADR-0164's still-panel clause as the operating
-    /// system sees it. `WaitUntil` is the soonest of the three things that are owed at a
-    /// time rather than on an event: the frame `egui` asked for after a delay,
-    /// the reading `Costs` takes once the window has been still long enough,
-    /// and — on a run with `--mcp` — the wake that takes what a model asked for
-    /// ([`SERVED`]). None is `Poll`, and nothing here asks for a frame in order
-    /// to have something to measure.
+    /// touches it, which is ADR-0164's still-panel clause as the operating system
+    /// sees it. `WaitUntil` is the soonest of the three things that are owed at a
+    /// time rather than on an event: the frame `egui` asked for after a delay, the
+    /// reading `Costs` takes once the window has been still long enough, and — on a
+    /// run with `--mcp` — the wake that takes what a model asked for ([`SERVED`]).
+    /// None is `Poll`, and nothing here asks for a frame in order to have something
+    /// to measure.
     ///
-    /// **The third one is the only one that can be owed forever**, and that is
-    /// what a served run is: something outside this process is driving the
-    /// instrument, so the window is being touched even though nobody is at it.
-    /// **A thread that is not this one said there is something to drain**, and
-    /// there is exactly one of them: the MIDI callback — see [`App::waker`].
+    /// The third one is the only one that can be owed forever, and that is what a
+    /// served run is: something outside this process is driving the instrument, so
+    /// the window is being touched even though nobody is at it. A thread that is
+    /// not this one said there is something to drain, and there is exactly one of
+    /// them: the MIDI callback — see [`App::waker`].
     ///
-    /// **It asks for a frame and does nothing else.** The drain itself is
-    /// [`App::mapped`], at the top of `RedrawRequested` beside the other two,
-    /// which is what makes a sweep spanning several wakes one operation on one
-    /// frame instead of a partial apply per message. The wake carries no
-    /// payload for the same reason: what arrived is the port's to say and this
-    /// loop's only job is to run again.
+    /// It asks for a frame and does nothing else. The drain itself is
+    /// [`App::mapped`], at the top of `RedrawRequested` beside the other two, which
+    /// is what makes a sweep spanning several wakes one operation on one frame
+    /// instead of a partial apply per message. The wake carries no payload for the
+    /// same reason: what arrived is the port's to say and this loop's only job is
+    /// to run again.
     ///
-    /// **`request_redraw` and not a repaint decision**, because there is
-    /// nothing yet to decide about — whether the frame changes anything is
-    /// what `performed` answers on the frame this asks for, and `costs.owes`
-    /// is what says the frame was owed to an event rather than to a still
-    /// panel.
+    /// `request_redraw` and not a repaint decision, because there is nothing yet to
+    /// decide about — whether the frame changes anything is what `performed`
+    /// answers on the frame this asks for, and `costs.owes` is what says the frame
+    /// was owed to an event rather than to a still panel.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _wake: ()) {
         if let Some(gfx) = self.gfx.as_ref() {
             self.costs.owes();
@@ -4209,25 +4191,25 @@ impl ApplicationHandler for App {
 // The room this instrument is listening to
 // ---------------------------------------------------------------------------
 
-/// **What this program opens on, and it is not a flag.**
+/// What this program opens on, and it is not a flag.
 ///
 /// `karakuri-cli` is told which input to take with `--audio-in` and refuses to
 /// start without the one it was told; this program opens the host's default
 /// and, from then on, is told by a hand on the `audio-in` pill. The two are
 /// different on purpose and the difference is the surface:
 ///
-/// - **A flag is a contract made before the run.** Asking for one and getting
+/// - A flag is a contract made before the run. Asking for one and getting
 ///   none is a run that is not the run that was asked for, so
 ///   `karakuri-cli` exits — and it is right to, because a render or a set
 ///   played from a script has nobody standing there to notice.
-/// - **This program has somebody standing there.** It draws a pill that says
+/// - This program has somebody standing there. It draws a pill that says
 ///   which input is open and lists the others, so *which room* is a question
 ///   the panel can both ask and answer while it is running. A second way to
 ///   say it on the command line would be a launch-time answer to a question
 ///   the panel already answers better, and `USAGE` says in as many words that
 ///   this is not `karakuri-cli`'s command line.
 ///
-/// **And it opens something rather than nothing**, which is the choice that
+/// And it opens something rather than nothing, which is the choice that
 /// matters for what this instrument is: material that moves with the room is
 /// what the panel looks like, and an instrument that listens only after being
 /// asked comes up looking like one that cannot. `default` is what a machine
@@ -4235,51 +4217,50 @@ impl ApplicationHandler for App {
 /// has just started is in.
 const LISTEN_ON: &str = "default";
 
-/// **One simulation step**, which is what the audio path has to be told a
-/// frame advances the session by so a beat correction lands on the right one.
+/// One simulation step, which is what the audio path has to be told a frame
+/// advances the session by so a beat correction lands on the right one.
 /// `karakuri-cli` names the same constant for the same reason.
 const DT: f32 = karakuri_engine::set::DT;
 
-/// **Open the input this program listens on, and say what happened.**
+/// Open the input this program listens on, and say what happened.
 ///
-/// Returns the session and one line for the legend — never a refusal that
-/// stops the run, and that is the decision rather than an omission. The three
-/// cases it has to be right about are the three the window can meet, and two
+/// Returns the session and one line for the legend — never a refusal that stops
+/// the run, and that is the decision rather than an omission. The three cases
+/// it has to be right about are the three the window can meet, and two
 /// principles point in different directions across them:
 ///
-/// 1. **No device at all.**
-///    [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
-///    — *a quiet room is not a missing microphone* — and neither is a missing
-///    microphone a fault. Nobody asked for one here: this program opens the
-///    default because that is what an instrument does, and a machine with no
-///    input is a machine where every name goes on answering what it answered
-///    before audio existed and the oscillator free-runs. It is said out loud,
-///    once, and the run continues. Exiting would mean a laptop with its
-///    microphone switched off cannot open the panel at all.
-/// 2. **A device that was named and is not there.** A different case, and
-///    [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-///    is why: somebody said *that one*, and going quietly on with a different
-///    one — or with none — is the silently wrong picture. It cannot happen
-///    *here*, because nothing names an input at launch; it happens at the
-///    pill, where the list an operator picked from was read at the press and a
-///    device can have gone away since. [`attached`] is that case and it is
-///    loud there. **Loud and not fatal**, which is where this program parts
-///    from `karakuri-cli`: a window with a set on it must not close because an
-///    interface was unplugged, and the operator is standing in front of the
-///    refusal.
-/// 3. **A device that goes away mid-set.** Nothing here notices, deliberately,
-///    and that *is* the answer: `karakuri-audio`'s `staleness` takes the
-///    confidence of both the signals and the tempo estimate to zero over half
-///    a second, every bound parameter is handed back to the value it had, and
-///    the grid free-runs from wherever it was. A watchdog that re-opened the
-///    stream would be a second answer to a question that already has one, and
-///    it would re-lock the grid to a room in the middle of a set. What an
-///    operator does about it is pick again on the pill.
+/// 1. No device at all.
+/// [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
+/// — *a quiet room is not a missing microphone* — and neither is a missing
+/// microphone a fault. Nobody asked for one here: this program opens the
+/// default because that is what an instrument does, and a machine with no input
+/// is a machine where every name goes on answering what it answered before
+/// audio existed and the oscillator free-runs. It is said out loud, once, and
+/// the run continues. Exiting would mean a laptop with its microphone switched
+/// off cannot open the panel at all. 2. A device that was named and is not
+/// there. A different case, and
+/// [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+/// is why: somebody said *that one*, and going quietly on with a different one
+/// — or with none — is the silently wrong picture. It cannot happen *here*,
+/// because nothing names an input at launch; it happens at the pill, where the
+/// list an operator picked from was read at the press and a device can have
+/// gone away since. [`attached`] is that case and it is loud there. Loud and
+/// not fatal, which is where this program parts from `karakuri-cli`: a window
+/// with a set on it must not close because an interface was unplugged, and the
+/// operator is standing in front of the refusal. 3. A device that goes away
+/// mid-set. Nothing here notices, deliberately, and that *is* the answer:
+/// `karakuri-audio`'s `staleness` takes the confidence of both the signals and
+/// the tempo estimate to zero over half a second, every bound parameter is
+/// handed back to the value it had, and the grid free-runs from wherever it
+/// was. A watchdog that re-opened the stream would be a second answer to a
+/// question that already has one, and it would re-lock the grid to a room in
+/// the middle of a set. What an operator does about it is pick again on the
+/// pill.
 ///
 /// A free function rather than a step of `resumed`, for the reason
 /// [`sources_from`] is one: `resumed` cannot be called from a test, and a
-/// refusal nobody can reach is a refusal nobody checked. See
-/// [`unopened`], which is the half of it that has no device in it at all.
+/// refusal nobody can reach is a refusal nobody checked. See [`unopened`],
+/// which is the half of it that has no device in it at all.
 fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
     match audio::Audio::open(LISTEN_ON, audio::DEFAULT_LATENCY_OFFSET_MS, DT, session_bpm) {
         Ok(open) => {
@@ -4299,20 +4280,20 @@ fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
     }
 }
 
-/// **What to say about an input that did not open**, and which of the two
-/// kinds of nothing it was.
+/// What to say about an input that did not open, and which of the two kinds of
+/// nothing it was.
 ///
 /// Split out from [`listening`] because it is the whole of the judgement and
 /// none of the device: a machine with no inputs and a machine whose default
 /// vanished are two sentences, and the difference between them is the
 /// difference between P-0084 and P-0094. Being a function of an error and a
-/// string, it is checkable where no input can be opened at all — which is
-/// every machine a test runs on, whatever it happens to have plugged in.
+/// string, it is checkable where no input can be opened at all — which is every
+/// machine a test runs on, whatever it happens to have plugged in.
 ///
-/// **The empty case is not apologetic and the non-empty one is not calm.** A
-/// machine with no inputs is a state; a machine with inputs where the one
-/// asked for is not among them is somebody's mistake or somebody's cable, and
-/// the list is what they need rather than an invitation to go and look.
+/// The empty case is not apologetic and the non-empty one is not calm. A
+/// machine with no inputs is a state; a machine with inputs where the one asked
+/// for is not among them is somebody's mistake or somebody's cable, and the
+/// list is what they need rather than an invitation to go and look.
 pub(crate) fn unopened(selector: &str, why: &audio::AudioError) -> String {
     match why {
         audio::AudioError::NoMatch { available, .. } if available.is_empty() => String::from(
@@ -4345,47 +4326,45 @@ pub(crate) fn unopened(selector: &str, why: &audio::AudioError) -> String {
 // The control surface this instrument is playing from
 // ---------------------------------------------------------------------------
 
-/// **Open the surface this program plays from, and say what happened.**
+/// Open the surface this program plays from, and say what happened.
 ///
-/// Returns the surface and one line for the legend — never a refusal that
-/// stops the run, which is [`listening`]'s decision one door along and it is
-/// the same decision for the same reason. Three cases, and the three are not
-/// the microphone's three:
+/// Returns the surface and one line for the legend — never a refusal that stops
+/// the run, which is [`listening`]'s decision one door along and it is the same
+/// decision for the same reason. Three cases, and the three are not the
+/// microphone's three:
 ///
-/// 1. **Nothing plugged in**, which is most machines and is a state rather
-///    than a fault. Nobody named a port: this program takes whatever is there
-///    because that is what an instrument does, and a run with no surface is a
-///    run played with the pointer and the keyboard, which is every run this
-///    program has had until now. Said out loud, once.
-/// 2. **A port that is there and will not open** — taken by another program,
-///    usually. Said in the port's own words, and the run continues: a window
-///    with a set on it must not fail to start because something else has the
-///    controller.
-/// 3. **A port that goes away mid-set.** Nothing here notices, deliberately.
-///    `midir` holds the connection and a device unplugged stops sending; every
-///    control on this panel is still under the pointer and under a key, and
-///    nothing on the deck moves on its own. What an operator does about it is
-///    plug it back in and restart, which is what the legend says — **there is
-///    no pill to re-open one**, because the transport row's `map` is one of
-///    the two controls the mock draws and this console does not.
+/// 1. Nothing plugged in, which is most machines and is a state rather than a
+/// fault. Nobody named a port: this program takes whatever is there because
+/// that is what an instrument does, and a run with no surface is a run played
+/// with the pointer and the keyboard, which is every run this program has had
+/// until now. Said out loud, once. 2. A port that is there and will not open —
+/// taken by another program, usually. Said in the port's own words, and the run
+/// continues: a window with a set on it must not fail to start because
+/// something else has the controller. 3. A port that goes away mid-set. Nothing
+/// here notices, deliberately. `midir` holds the connection and a device
+/// unplugged stops sending; every control on this panel is still under the
+/// pointer and under a key, and nothing on the deck moves on its own. What an
+/// operator does about it is plug it back in and restart, which is what the
+/// legend says — there is no pill to re-open one, because the transport row's
+/// `map` is one of the two controls the mock draws and this console does not.
 ///
-/// **Which port is the first one there is**, and it is not a flag.
-/// `karakuri-cli` is told with `--midi-in` and refuses the run without the one
-/// it was told; [`USAGE`] declines that flag by name for
+/// Which port is the first one there is, and it is not a flag. `karakuri-cli`
+/// is told with `--midi-in` and refuses the run without the one it was told;
+/// [`USAGE`] declines that flag by name for
 /// [ADR-0220](../../../docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)'s
 /// reason read one column along — this program is the instrument, and a
 /// launch-time answer is one an operator standing in front of the panel cannot
 /// change. So it opens what is there and says which, exactly as `audio-in`
 /// does.
 ///
-/// **Which map is [`midi::map_for`]** — the operator's own under the store,
-/// then the one that ships — and the path is printed rather than described,
-/// for the reason every line of [`Readout::print_legend`] is derived.
+/// Which map is [`midi::map_for`] — the operator's own under the store, then
+/// the one that ships — and the path is printed rather than described, for the
+/// reason every line of [`Readout::print_legend`] is derived.
 ///
-/// A free function rather than a step of `resumed`, for [`listening`]'s
-/// reason: `resumed` cannot be called from a test, and the sentences are the
-/// half of this that has no device in it. See [`surface_line`] and
-/// [`unsurfaced`], which are that half.
+/// A free function rather than a step of `resumed`, for [`listening`]'s reason:
+/// `resumed` cannot be called from a test, and the sentences are the half of
+/// this that has no device in it. See [`surface_line`] and [`unsurfaced`],
+/// which are that half.
 fn surfaced(
     map: Option<&std::path::Path>,
     waker: EventLoopProxy<()>,
@@ -4411,14 +4390,14 @@ fn surfaced(
     }
 }
 
-/// **What the legend says about an open surface**, and it is a function of
-/// four facts and nothing else — so it is checkable on a machine with no MIDI
-/// on it at all, which is every machine a test runs on here.
+/// What the legend says about an open surface, and it is a function of four
+/// facts and nothing else — so it is checkable on a machine with no MIDI on it
+/// at all, which is every machine a test runs on here.
 ///
-/// The map's **path** is printed beside its name because the name alone cannot
-/// say which of the two tiers answered: `default` under the store and
-/// `surface` in the preset library are two different files and an operator
-/// who has just learned one wants to know which of them is loaded.
+/// The map's path is printed beside its name because the name alone cannot say
+/// which of the two tiers answered: `default` under the store and `surface` in
+/// the preset library are two different files and an operator who has just
+/// learned one wants to know which of them is loaded.
 pub(crate) fn surface_line(
     port: &str,
     map_name: Option<&str>,
@@ -4449,12 +4428,12 @@ pub(crate) fn surface_line(
     line
 }
 
-/// **Where a learned map is written** — `<store>/maps/default.map`, the first
-/// of `karakuri_environment::midi::map_for`'s two tiers.
+/// Where a learned map is written — `<store>/maps/default.map`, the first of
+/// `karakuri_environment::midi::map_for`'s two tiers.
 ///
-/// It is **always** this file, whatever map the run loaded: a run playing the
-/// shipped `examples/surface.map` and learning a control writes into the
-/// store, which is
+/// It is always this file, whatever map the run loaded: a run playing the
+/// shipped `examples/surface.map` and learning a control writes into the store,
+/// which is
 /// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
 /// held rather than argued. `default` is the name a program with no way to ask
 /// uses; naming another is the `map` pill, which is a readout.
@@ -4464,25 +4443,25 @@ fn learned_map(store: &std::path::Path) -> std::path::PathBuf {
         .join(format!("{}.{}", midi::DEFAULT_MAP, midi::MAP_SUFFIX))
 }
 
-/// **What a press on the control under the pointer would ask for**, or `None`
-/// where the pointer is on no control at all.
+/// What a press on the control under the pointer would ask for, or `None` where
+/// the pointer is on no control at all.
 ///
-/// **This is learn's half of the pointer question**, and it is deliberately
-/// the *press* derivation rather than a new one: a control's identity is what
-/// a press on it asks the deck for, so a knob learned against it moves exactly
+/// This is learn's half of the pointer question, and it is deliberately the
+/// *press* derivation rather than a new one: a control's identity is what a
+/// press on it asks the deck for, so a knob learned against it moves exactly
 /// what a click moves. The hover layer answers *which* control
-/// ([`karakuri_console::hover::Hover::resting`]) and this answers *what it
-/// is*, and the two walk the same `view::` derivations — a second geometry
-/// here would be a second answer that could disagree with the tip the operator
-/// is reading while they learn.
+/// ([`karakuri_console::hover::Hover::resting`]) and this answers *what it is*,
+/// and the two walk the same `view::` derivations — a second geometry here
+/// would be a second answer that could disagree with the tip the operator is
+/// reading while they learn.
 ///
-/// **The value is a placeholder and is thrown away.** What learn wants is the
+/// The value is a placeholder and is thrown away. What learn wants is the
 /// *address*, which is an operation with its value elided — `LaneTarget`'s own
 /// sentence one route along (ADR-0321). `Knob::operation` is the only way to
 /// get one out of the console, so this asks it at zero and [`target_of`] reads
 /// past the value.
 ///
-/// **The order is the hover layer's**, which is the press order: the controls
+/// The order is the hover layer's, which is the press order: the controls
 /// inside a container before the container. It matters in the Mixer, where a
 /// strip's chips sit inside the strip.
 fn asked_at(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option<Operation> {
@@ -4533,7 +4512,7 @@ fn asked_at(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option
     None
 }
 
-/// **The right-hand side of the map line that reaches this control**, or the
+/// The right-hand side of the map line that reaches this control, or the
 /// sentence saying why there is none.
 ///
 /// # It is `karakuri_midi`'s own list, read the other way
@@ -4546,13 +4525,13 @@ fn asked_at(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option
 ///
 /// # The parameter arm is the whole reason this function exists
 ///
-/// Every other operation carries its own address — a slot number, a word from
-/// a closed list. `WriteParam` carries a **name**, and a map line holds a
-/// **position** (ADR-0268): *knob 3 is knob 3 whatever Set is loaded*, and
-/// binding to the name would make the mapping a cost paid again on every swap.
-/// So this is where the name goes back to being a position, against the Set
-/// that is in the deck — `Set::published()` in order, counting from one, which
-/// is the number the Inspector draws beside the row and the same reading
+/// Every other operation carries its own address — a slot number, a word from a
+/// closed list. `WriteParam` carries a name, and a map line holds a position
+/// (ADR-0268): *knob 3 is knob 3 whatever Set is loaded*, and binding to the
+/// name would make the mapping a cost paid again on every swap. So this is
+/// where the name goes back to being a position, against the Set that is in the
+/// deck — `Set::published()` in order, counting from one, which is the number
+/// the Inspector draws beside the row and the same reading
 /// `karakuri_environment::midi::Decks` makes in the other direction.
 ///
 /// # A refusal is a sentence and not a silence
@@ -4623,14 +4602,14 @@ fn target_of(operation: &Operation, deck: &Deck) -> Result<String, String> {
     }
 }
 
-/// **What to say about a surface that did not open**, and which of the two
-/// kinds of nothing it was — [`unopened`]'s shape one door along, and split
-/// out for its reason.
+/// What to say about a surface that did not open, and which of the two kinds of
+/// nothing it was — [`unopened`]'s shape one door along, and split out for its
+/// reason.
 ///
-/// **The empty case is not apologetic.** A machine with nothing plugged in is
-/// the ordinary state of this program and always has been; saying it as a
-/// failure would read as one. A machine that *has* inputs and would not open
-/// the first is somebody's other program holding the port, and the message
+/// The empty case is not apologetic. A machine with nothing plugged in is the
+/// ordinary state of this program and always has been; saying it as a failure
+/// would read as one. A machine that *has* inputs and would not open the first
+/// is somebody's other program holding the port, and the message
 /// `karakuri-midi` came back with is the only thing that knows which.
 pub(crate) fn unsurfaced(why: &str) -> String {
     if why.contains("there are no MIDI inputs") {
@@ -4643,37 +4622,37 @@ pub(crate) fn unsurfaced(why: &str) -> String {
     )
 }
 
-/// **What the `audio-in` pill reads**, out of the session this program opened.
+/// What the `audio-in` pill reads, out of the session this program opened.
 ///
 /// One line, and it is a function rather than an assignment for the reason
 /// [`transport`] is one: it is the seam, and there is exactly one place the
-/// answer is derived. The card's list is **not** here — it is read on the
-/// press that opens the card and nowhere else (P-0091), so a reading taken
-/// every frame would be a directory read on the frame path with a microphone
-/// in place of the directory.
+/// answer is derived. The card's list is not here — it is read on the press
+/// that opens the card and nowhere else (P-0091), so a reading taken every
+/// frame would be a directory read on the frame path with a microphone in place
+/// of the directory.
 fn told(open: Option<&audio::Audio>) -> AudioIn {
     let mut told = AudioIn::NONE;
     told.device = open.map(|open| open.description().to_owned());
     told
 }
 
-/// **A press on one of the `audio-in` card's rows, performed**, and what this
-/// file says about it. `None` for every operation that is not it, exactly as
+/// A press on one of the `audio-in` card's rows, performed, and what this file
+/// says about it. `None` for every operation that is not it, exactly as
 /// [`arrangement`] and [`pointed`] answer `None` for everything that is not
 /// theirs.
 ///
 /// This is the second of [`listening`]'s three cases and the only one that can
-/// arrive during a set: the card lists what the host had **at the press that
-/// opened it**, and an interface unplugged between that press and this one is
-/// a name the operator picked that is not there any more. P-0094 — the refusal
-/// is printed with the list as it is *now*, and **the input that was already
-/// open stays open**: dropping it would answer a mistyped pick by taking away
-/// the room, which is the one thing nobody asked for.
+/// arrive during a set: the card lists what the host had at the press that
+/// opened it, and an interface unplugged between that press and this one is a
+/// name the operator picked that is not there any more. P-0094 — the refusal is
+/// printed with the list as it is *now*, and the input that was already open
+/// stays open: dropping it would answer a mistyped pick by taking away the
+/// room, which is the one thing nobody asked for.
 ///
-/// **`AttachBeatSource` writes no record** (`written` answers
-/// `Silent(NoRecord)`: no session-stream variant carries what the beat is
-/// taken from), so nothing downstream of this moves the deck. What moves is
-/// this program's own audio session and the pill that reads it.
+/// `AttachBeatSource` writes no record (`written` answers `Silent(NoRecord)`:
+/// no session-stream variant carries what the beat is taken from), so nothing
+/// downstream of this moves the deck. What moves is this program's own audio
+/// session and the pill that reads it.
 ///
 /// A `BeatSource::Process` reaches here and is declined in one sentence: the
 /// panel has no control that names one and `--tempo-source` is
@@ -4732,28 +4711,28 @@ pub(crate) fn attached(
     }
 }
 
-/// **What the offset keys say on a panel with no input attached.**
+/// What the offset keys say on a panel with no input attached.
 ///
 /// `docs/manual/console.html` is the specification and it is plain about it:
-/// *"It only means anything with an audio input attached, and the audio-in
-/// pill is what says whether there is one."* So the press changes nothing,
-/// says why, and names the control that would fix it — [`tapped`]'s and
-/// [`scaled`]'s sentence for the same state, one row along.
+/// *"It only means anything with an audio input attached, and the audio-in pill
+/// is what says whether there is one."* So the press changes nothing, says why,
+/// and names the control that would fix it — [`tapped`]'s and [`scaled`]'s
+/// sentence for the same state, one row along.
 pub(crate) const NO_ROOM_FOR_AN_OFFSET: &str =
     "offset: no audio input — the offset is the delay between \
                                      what a room hears and what it sees, and there is no room. \
                                      open one on the transport row's `audio-in` pill";
 
-/// **What to say about an offset that moved**, out of what was asked for and
+/// What to say about an offset that moved, out of what was asked for and
 /// what the session came back with.
 ///
 /// A function of two numbers and nothing else, so that both halves of
 /// `console.html`'s contract are checkable without a device:
 ///
-/// - **The sign, in words.** *"Negative and the picture waits for the music,
+/// - The sign, in words. *"Negative and the picture waits for the music,
 ///   positive and it leads"* — the page says it in words rather than leaving
 ///   `−15 ms` to be interpreted, and so does this.
-/// - **The bound, when it bit.** The value is *"held inside 200 ms either
+/// - The bound, when it bit. The value is *"held inside 200 ms either
 ///   way"*, which `karakuri_environment::audio` enforces and this reports: a
 ///   press that asked for 205 and got 200 is a control at the end of its
 ///   travel, and a control that answers the same number twice with nothing
@@ -4773,29 +4752,29 @@ pub(crate) fn offset_said(asked: f32, now: f32) -> String {
     format!("  offset: {now:+.0} ms — {sense}{held}")
 }
 
-/// **The latency offset, performed against the session this program opened**,
-/// and `None` for every operation that is not it — [`attached`]'s shape, one
+/// The latency offset, performed against the session this program opened, and
+/// `None` for every operation that is not it — [`attached`]'s shape, one
 /// control along, and beside it in [`App::performed`] for the same reason.
 ///
-/// **`SetLatencyOffset` writes no record** (`written` answers
-/// `Silent(NoRecord)`: nothing in the session stream carries a delay between
-/// two outputs, which is a property of a room and not of a performance), so
-/// nothing downstream of this moves the deck. What moves is the lead every
-/// beat correction is applied with — `Audio::output_lag` — and the frame the
-/// picture is drawn on relative to it.
+/// `SetLatencyOffset` writes no record (`written` answers `Silent(NoRecord)`:
+/// nothing in the session stream carries a delay between two outputs, which is
+/// a property of a room and not of a performance), so nothing downstream of
+/// this moves the deck. What moves is the lead every beat correction is applied
+/// with — `Audio::output_lag` — and the frame the picture is drawn on relative
+/// to it.
 ///
-/// **The operation is absolute and this is where it lands.** It is applied
-/// through `Audio::nudge_latency_offset`, which is the only way in and is the
-/// one that clamps: the offset is held inside `LATENCY_OFFSET_RANGE` there, so
-/// this file states no bound of its own and cannot state a different one. A
-/// *setting* becomes the step that reaches it, which is what lets a fader
-/// emit this operation the day one exists without a second application path.
+/// The operation is absolute and this is where it lands. It is applied through
+/// `Audio::nudge_latency_offset`, which is the only way in and is the one that
+/// clamps: the offset is held inside `LATENCY_OFFSET_RANGE` there, so this file
+/// states no bound of its own and cannot state a different one. A *setting*
+/// becomes the step that reaches it, which is what lets a fader emit this
+/// operation the day one exists without a second application path.
 ///
-/// **With nothing open there is nothing to offset**, and the key arm says so
-/// before an operation is built — see [`NO_ROOM_FOR_AN_OFFSET`]. This arm
-/// answers the case an operation arrives from anywhere else in that state,
-/// because an operation that arrives and does nothing at all is the failure
-/// P-0094 is about.
+/// With nothing open there is nothing to offset, and the key arm says so before
+/// an operation is built — see [`NO_ROOM_FOR_AN_OFFSET`]. This arm answers the
+/// case an operation arrives from anywhere else in that state, because an
+/// operation that arrives and does nothing at all is the failure P-0094 is
+/// about.
 pub(crate) fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
     let Operation::SetLatencyOffset { ms } = *operation else {
         return None;
@@ -4807,7 +4786,7 @@ pub(crate) fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> 
     Some(offset_said(ms, now))
 }
 
-/// **The grid's tempo, named by hand and handed to the room's tracker** — and
+/// The grid's tempo, named by hand and handed to the room's tracker — and
 /// `None` for every operation that is not [`Operation::SetFreeRunTempo`].
 ///
 /// # It does not move the grid, and that is what separates it from [`nudged`]
@@ -4829,12 +4808,12 @@ pub(crate) fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> 
 ///
 /// [`nudged`] refuses out loud with no session — an offset belongs to one, and
 /// an operation that arrives and does nothing at all is what P-0094 is about.
-/// This is the other way round: *what the grid runs at with nothing driving
-/// it* is exactly the case with no device, [`apply`] moves the oscillator and
+/// This is the other way round: *what the grid runs at with nothing driving it*
+/// is exactly the case with no device, [`apply`] moves the oscillator and
 /// prints the line, and a refusal here would be this file talking about a
-/// tracker that is not part of the operation. What it says when there **is**
-/// one is that the set was accepted and the room is still being tracked, which
-/// is the one thing an operator cannot see from the tempo alone.
+/// tracker that is not part of the operation. What it says when there is one is
+/// that the set was accepted and the room is still being tracked, which is the
+/// one thing an operator cannot see from the tempo alone.
 fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
     let Operation::SetFreeRunTempo { bpm } = *operation else {
         return None;
@@ -4847,28 +4826,28 @@ fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<
     ))
 }
 
-/// **One frame's worth of audio**: read the room, and hand the session what it
+/// One frame's worth of audio: read the room, and hand the session what it
 /// said.
 ///
 /// The same three lines `karakuri-cli`'s `measure_audio` is, minus the two
-/// halves this program does not have — there is no session recorder to hand
-/// the record to, and no tempo source to yield the grid to, so the grid is
-/// always this tracker's ([`audio::Grid::Owned`]).
+/// halves this program does not have — there is no session recorder to hand the
+/// record to, and no tempo source to yield the grid to, so the grid is always
+/// this tracker's ([`audio::Grid::Owned`]).
 ///
-/// **The signals are copied out of the deck and back in**, which is what
-/// `Deck::signals` and `set_signals` are for: the bus is a `Copy` value and
-/// the deck is the model of record for it, so an `AudioFrame` reaching a
-/// binding goes through the deck rather than round it.
+/// The signals are copied out of the deck and back in, which is what
+/// `Deck::signals` and `set_signals` are for: the bus is a `Copy` value and the
+/// deck is the model of record for it, so an `AudioFrame` reaching a binding
+/// goes through the deck rather than round it.
 ///
 /// `interval` is how fast frames are actually arriving, which is half the
 /// output lag a beat correction leads by, and `steps` is how much session this
-/// frame is worth. **Both are [`App::clock`]'s one measurement**, which is
+/// frame is worth. Both are [`App::clock`]'s one measurement, which is
 /// `karakuri-cli`'s arrangement of the same call: the interval the step count
 /// was derived from is the interval the lag is built from, so the two cannot
 /// disagree about how long this frame was.
 ///
-/// **It used to be [`Costs::rate_now`] inverted**, on the argument that the
-/// row's `fps` and the lag should be one number. They are not one question.
+/// It used to be [`Costs::rate_now`] inverted, on the argument that the row's
+/// `fps` and the lag should be one number. They are not one question.
 /// `rate_now` is *frames drawn on an untouched window over the stretch since
 /// something touched it* — the still-panel reading — so it is `None` on every
 /// frame near a pointer, a key or a resize, and its stretch counts frames that
@@ -4937,20 +4916,20 @@ fn measure_audio(
     }
 }
 
-/// **What the tracker's three controls read this frame**: the offset the open
+/// What the tracker's three controls read this frame: the offset the open
 /// session is holding, and which way the grid can still be moved an octave.
 ///
 /// [`transport`]'s shape one group along the same row — a function of what this
 /// program can see and of nothing the console could work out for itself.
 ///
-/// **The offset is `None` where nothing is open**, and that is the state rather
+/// The offset is `None` where nothing is open, and that is the state rather
 /// than a default: an offset belongs to a session, and
 /// `karakuri_environment::audio`'s `DEFAULT_LATENCY_OFFSET_MS` is where the
 /// *next* session starts rather than a value anything is holding now. The
 /// console draws no track at all for it, which is `View::audio`'s own rule one
 /// control to the left.
 ///
-/// **The two octave halves are the range against the session tempo**, which is
+/// The two octave halves are the range against the session tempo, which is
 /// exactly what `Audio::octave` refuses on — `BeatLock::octave` is
 /// `BPM_RANGE.contains(&(bpm * factor))` and nothing else — so the chip the
 /// panel draws inert is the press the lock would turn down. The range is asked
@@ -4958,11 +4937,11 @@ fn measure_audio(
 /// program takes its audio through; a `60.0..=200.0` written here would be a
 /// second copy of the tracker's own bound.
 ///
-/// **The tempo is the session's oscillator**, which is the number the transport
-/// row draws and the number the lock multiplies: one reading, so the chip that
-/// is drawn and the press that is refused cannot come apart.
+/// The tempo is the session's oscillator, which is the number the transport row
+/// draws and the number the lock multiplies: one reading, so the chip that is
+/// drawn and the press that is refused cannot come apart.
 ///
-/// **Not `Audio::octave` asked twice**, which is the obvious alternative and is
+/// Not `Audio::octave` asked twice, which is the obvious alternative and is
 /// wrong twice over: it *performs* the move, and it needs a session, where both
 /// halves are drawn on a console with no input open — the refusal that is
 /// *drawn* is the range's, and the one for a room that is not being listened to
@@ -4975,11 +4954,11 @@ pub(crate) fn tracking(open: Option<&audio::Audio>, bpm: f32) -> Tracker {
     }
 }
 
-/// **The two operations that move the room's tracker**, performed against the
+/// The two operations that move the room's tracker, performed against the
 /// session this program opened — and `None` for every operation that is not one
 /// of them.
 ///
-/// [`attached`]'s and [`nudged`]'s shape, and it is deliberately **not** beside
+/// [`attached`]'s and [`nudged`]'s shape, and it is deliberately not beside
 /// them in [`App::performed`]: those two are `Silent(NoRecord)`, so the line
 /// `unwritten` prints after them is true and they fall through to it. These two
 /// are `Owed(NotSettled)`, so the arm that calls this leaves as soon as it
@@ -4987,10 +4966,10 @@ pub(crate) fn tracking(open: Option<&audio::Audio>, bpm: f32) -> Tracker {
 /// is
 /// [ADR-0278](../../../docs/adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md).
 ///
-/// **`Instant::now()` is read here rather than passed in**, because the instant
-/// a tap means is the instant it arrived and this is the last place that is
-/// still true. `started` is the run's own origin and comes from the caller: it
-/// is `App::started`, the one this program measures every tap against, and a
+/// `Instant::now()` is read here rather than passed in, because the instant a
+/// tap means is the instant it arrived and this is the last place that is still
+/// true. `started` is the run's own origin and comes from the caller: it is
+/// `App::started`, the one this program measures every tap against, and a
 /// second origin taken here would put two taps on two clocks.
 fn tracked(gfx: &mut Gfx, started: Instant, operation: &Operation) -> Option<String> {
     match operation {
@@ -5005,25 +4984,25 @@ fn tracked(gfx: &mut Gfx, started: Instant, operation: &Operation) -> Option<Str
     }
 }
 
-/// **A tap on the beat**, performed against the room this program is listening
-/// to, and what to say about it.
+/// A tap on the beat, performed against the room this program is listening to,
+/// and what to say about it.
 ///
 /// # Why it does not go through `written`
 ///
 /// Every other control on this panel emits an `Operation`, `written` turns it
-/// into a `Record` and [`apply`] moves the deck with it — P-0090. A tap
-/// **does** end in a record: `karakuri_environment::audio` writes a
-/// `Record::Tempo` for it and applies it to the session's oscillator, which is
-/// the same record a replay would hand the engine. What it cannot do is come
-/// out of `written`: that function is a pure function of the operation and a
-/// reading, and a tap's record is the *beat lock's* answer — the tapped tempo,
-/// the phase error against the oscillator, the output lag — none of which a
-/// `Current` carries. So `written(TapBeat)` answers `Owed(NotSettled)`, and
-/// routing this key through [`App::performed`] would print *"nothing moved,
-/// and nothing here decides it"* about a press that moved the grid.
+/// into a `Record` and [`apply`] moves the deck with it — P-0090. A tap does
+/// end in a record: `karakuri_environment::audio` writes a `Record::Tempo` for
+/// it and applies it to the session's oscillator, which is the same record a
+/// replay would hand the engine. What it cannot do is come out of `written`:
+/// that function is a pure function of the operation and a reading, and a tap's
+/// record is the *beat lock's* answer — the tapped tempo, the phase error
+/// against the oscillator, the output lag — none of which a `Current` carries.
+/// So `written(TapBeat)` answers `Owed(NotSettled)`, and routing this key
+/// through [`App::performed`] would print *"nothing moved, and nothing here
+/// decides it"* about a press that moved the grid.
 ///
-/// **That is a gap in `karakuri-operation-record` and it is named here rather
-/// than papered over**: the day a `Current` can carry a correction, this key
+/// That is a gap in `karakuri-operation-record` and it is named here rather
+/// than papered over: the day a `Current` can carry a correction, this key
 /// emits like every other control and this function goes. Until then it is
 /// `karakuri-cli`'s own wiring, which is what the panel was asked to use.
 fn tapped(
@@ -5050,13 +5029,13 @@ fn tapped(
     }
 }
 
-/// **The grid, an octave up or down**, performed against the same session, and
-/// what to say about it.
+/// The grid, an octave up or down, performed against the same session, and what
+/// to say about it.
 ///
 /// [`tapped`]'s note about `written` word for word: `ScaleGrid` is the other
 /// half of that `Owed(NotSettled)` arm, and for the same reason.
 ///
-/// **Refused where the result would leave the trackable range**, which is the
+/// Refused where the result would leave the trackable range, which is the
 /// lock's call and not this file's — 60 to 200 BPM is under two octaves wide,
 /// so at most one of the two directions is ever live and a control that undid
 /// itself two seconds later would be worse than one that says no.

@@ -36,22 +36,21 @@ use crate::{
 // What a still panel costs
 // ---------------------------------------------------------------------------
 
-/// How long the window has to go untouched before the reading is taken, and
-/// the stretch every number in it is measured over.
+/// How long the window has to go untouched before the reading is taken, and the
+/// stretch every number in it is measured over.
 ///
-/// **The measurement is the claim now, and it used to be its own opposite.**
-/// What was here drove the window for 180 frames and reported what one of them
-/// cost; the loop had to spin for the sample to fill, so the number described
-/// a program that no longer exists the moment the loop stops spinning.
+/// The measurement is the claim now, and it used to be its own opposite. What
+/// was here drove the window for 180 frames and reported what one of them cost;
+/// the loop had to spin for the sample to fill, so the number described a
+/// program that no longer exists the moment the loop stops spinning.
 /// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
 /// still-panel clause claims that nothing is drawn at all while nothing is
 /// happening, so that is what is counted: frames drawn in three seconds of an
 /// untouched window, and what they allocated.
 ///
-/// **Three seconds** because a 60 Hz spin fills it with 180 frames — the old
-/// sample, to the frame, so the two readings are about the same stretch of
-/// wall clock — and because a twelve-second run has room for it several times
-/// over.
+/// Three seconds because a 60 Hz spin fills it with 180 frames — the old
+/// sample, to the frame, so the two readings are about the same stretch of wall
+/// clock — and because a twelve-second run has room for it several times over.
 pub(crate) const STILL: Duration = Duration::from_secs(3);
 
 /// How many frames the per-frame sample holds.
@@ -62,48 +61,47 @@ pub(crate) const STILL: Duration = Duration::from_secs(3);
 /// measuring.
 pub(crate) const SAMPLE: usize = 240;
 
-/// **What the `egui` pass on this panel last read**, and the day it was read
-/// — the figure the reading below quotes, and the figure it holds the run it
-/// has just taken against.
+/// What the `egui` pass on this panel last read, and the day it was read — the
+/// figure the reading below quotes, and the figure it holds the run it has just
+/// taken against.
 ///
 /// It is a constant rather than a sentence because a number written into prose
 /// reads as current forever, and this one did. The line that quotes it cited
 /// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
-/// 184 allocations and 226.2 kB and said the `egui` pass "is still that",
-/// which stopped being true when the mixer bay landed — 456 there, and 525
-/// once deck B was parked
+/// 184 allocations and 226.2 kB and said the `egui` pass "is still that", which
+/// stopped being true when the mixer bay landed — 456 there, and 525 once deck
+/// B was parked
 /// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)).
 /// Nobody re-checked it for two commits, because nothing was checking it.
 ///
-/// **Taken on 2026-08-31**, over nine runs of this program on an Apple M4 Pro
-/// with nothing touching the window, at the window size [`WINDOW`] opens:
-/// every one of the nine read the same per-frame median, and it is the two
-/// figures below. What the panel had in it while they were taken is the last
-/// paragraph the reading prints. Re-take all three together, several runs at a
-/// time — one run is not a number here — and re-date them.
+/// Taken on 2026-08-31, over nine runs of this program on an Apple M4 Pro with
+/// nothing touching the window, at the window size [`WINDOW`] opens: every one
+/// of the nine read the same per-frame median, and it is the two figures below.
+/// What the panel had in it while they were taken is the last paragraph the
+/// reading prints. Re-take all three together, several runs at a time — one run
+/// is not a number here — and re-date them.
 ///
-/// **The spread was nothing at all, which is a reading and not a guarantee.**
-/// The nine of 2026-08-26 disagreed by 14 allocations and these nine agreed to
-/// the allocation, because an untouched panel tessellates the same work every
-/// frame and nothing in the run varies it. It is not a promise that a tenth
-/// run agrees, and it is not a licence to take one: what makes a number here
+/// The spread was nothing at all, which is a reading and not a guarantee. The
+/// nine of 2026-08-26 disagreed by 14 allocations and these nine agreed to the
+/// allocation, because an untouched panel tessellates the same work every frame
+/// and nothing in the run varies it. It is not a promise that a tenth run
+/// agrees, and it is not a licence to take one: what makes a number here
 /// trustworthy is that several runs were asked, and a single run's median is
 /// what produced the last wrong one.
 ///
-/// **The reading before this one predicted 1.26x and the panel did 2.89x**,
-/// which is kept because it is the argument for the counter rather than
-/// against it. 2026-08-26 read 525, and the note beside it reasoned from
-/// ADR-0191's **69 allocations and 137.4 kB a strip** that the two mixer
-/// strips since would put it near **663 and 969 kB** — inside [`DRIFT`], so
-/// the run would have called the sentence current. It was not two strips that
-/// landed. Three things the last reading's own *what the panel had in it*
-/// paragraph does not mention are on the panel now: the Inspector draws two
-/// panes off the running Set, the transport row draws an armed `audio-in` pill
-/// over an input measured every frame, and it draws the arrangement pill. A
-/// figure predicted from the one change somebody remembered is precisely the
-/// figure that goes stale in silence, and re-taking it needs a window, three
-/// still seconds and several runs, none of which is reachable from
-/// `cargo test`.
+/// The reading before this one predicted 1.26x and the panel did 2.89x, which
+/// is kept because it is the argument for the counter rather than against it.
+/// 2026-08-26 read 525, and the note beside it reasoned from ADR-0191's 69
+/// allocations and 137.4 kB a strip that the two mixer strips since would put
+/// it near 663 and 969 kB — inside [`DRIFT`], so the run would have called the
+/// sentence current. It was not two strips that landed. Three things the last
+/// reading's own *what the panel had in it* paragraph does not mention are on
+/// the panel now: the Inspector draws two panes off the running Set, the
+/// transport row draws an armed `audio-in` pill over an input measured every
+/// frame, and it draws the arrangement pill. A figure predicted from the one
+/// change somebody remembered is precisely the figure that goes stale in
+/// silence, and re-taking it needs a window, three still seconds and several
+/// runs, none of which is reachable from `cargo test`.
 pub(crate) const WRITTEN_ALLOCS: u64 = 1518;
 pub(crate) const WRITTEN_KB: f64 = 1781.6;
 pub(crate) const WRITTEN_ON: &str = "2026-08-31";
@@ -111,28 +109,27 @@ pub(crate) const WRITTEN_ON: &str = "2026-08-31";
 /// How far a run may sit from [`WRITTEN_ALLOCS`] before the reading says the
 /// sentence quoting it has gone stale.
 ///
-/// **A factor, and a generous one, because an allocation count is not a
-/// constant**: a hard equality here would be a guard nobody could keep
-/// passing. The nine runs behind 2026-08-26's figure disagreed by 14
-/// allocations; the nine behind the current one agreed to the allocation, and
-/// one machine's nine agreeing is not a promise the next machine's will. Two
-/// is the smallest factor that still catches what actually happened — 184 to
-/// the mixer bay's 456 is 2.5x, so a band of two would have said so on the
-/// first run after that bay landed, and a band of ten would not have. It is
-/// also what caught 525 going to 1518.
+/// A factor, and a generous one, because an allocation count is not a constant:
+/// a hard equality here would be a guard nobody could keep passing. The nine
+/// runs behind 2026-08-26's figure disagreed by 14 allocations; the nine behind
+/// the current one agreed to the allocation, and one machine's nine agreeing is
+/// not a promise the next machine's will. Two is the smallest factor that still
+/// catches what actually happened — 184 to the mixer bay's 456 is 2.5x, so a
+/// band of two would have said so on the first run after that bay landed, and a
+/// band of ten would not have. It is also what caught 525 going to 1518.
 ///
-/// **Two figures are held and the bytes are not**, which is a distinction
-/// rather than an omission: the bytes move with the allocation count, so a
-/// verdict on them would be the same verdict twice. The second is
-/// [`PANEL_PASS`] — what one update of a live region costs, declared under
+/// Two figures are held and the bytes are not, which is a distinction rather
+/// than an omission: the bytes move with the allocation count, so a verdict on
+/// them would be the same verdict twice. The second is [`PANEL_PASS`] — what
+/// one update of a live region costs, declared under
 /// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
-/// and read by `tests/schedulable.rs` rather than by anything at runtime. It
-/// is a different claim from an allocation count and it is the one a
+/// and read by `tests/schedulable.rs` rather than by anything at runtime. It is
+/// a different claim from an allocation count and it is the one a
 /// schedulability condition is asserted against, so it gets its own verdict.
 pub(crate) const DRIFT: f64 = 2.0;
 
-/// **Has the reading moved away from the sentence that quotes it?** `Some` is
-/// the factor between them, where that factor is past [`DRIFT`] in either
+/// Has the reading moved away from the sentence that quotes it? `Some` is the
+/// factor between them, where that factor is past [`DRIFT`] in either
 /// direction.
 ///
 /// Either direction on purpose: a pass that got cheaper makes the sentence
@@ -143,7 +140,7 @@ pub(crate) fn drifted(measured: u64, written: u64) -> Option<f64> {
     (factor > DRIFT).then_some(factor)
 }
 
-/// [`drifted`] for a figure in milliseconds, which is what a **cost** is.
+/// [`drifted`] for a figure in milliseconds, which is what a cost is.
 ///
 /// The same band and the same both-directions rule, said again for `f64`
 /// because the two numbers are of different kinds and neither is convertible
@@ -155,9 +152,9 @@ pub(crate) fn drifted_ms(measured: f64, written: f64) -> Option<f64> {
     (factor > DRIFT).then_some(factor)
 }
 
-/// The allocator, counting. **Per thread, not per process** — `wgpu` allocates
-/// on threads of its own and a process-wide counter would attribute that to
-/// the `egui` pass, which is the one number this exists to get right.
+/// The allocator, counting. Per thread, not per process — `wgpu` allocates on
+/// threads of its own and a process-wide counter would attribute that to the
+/// `egui` pass, which is the one number this exists to get right.
 pub(crate) struct Counting;
 
 thread_local! {
@@ -207,156 +204,148 @@ pub(crate) static ALLOCATOR: Counting = Counting;
 /// What one frame cost.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Cost {
-    /// **The engine's half**: [`compose`] from its first statement up to the
-    /// moment it hands the encoder back for the panel — the picture's
-    /// `acquire`, the committing closure, the tone-map write,
-    /// `Deck::begin_frame` with every install in it, the deck's render, and
-    /// the present pass into the picture if it took the frame. **One deck
-    /// render and one present pass**, or none when the picture's region is
-    /// folded away and its sink refuses.
+    /// The engine's half: [`compose`] from its first statement up to the moment it
+    /// hands the encoder back for the panel — the picture's `acquire`, the
+    /// committing closure, the tone-map write, `Deck::begin_frame` with every
+    /// install in it, the deck's render, and the present pass into the picture if
+    /// it took the frame. One deck render and one present pass, or none when the
+    /// picture's region is folded away and its sink refuses.
     ///
-    /// **The preview cells are in this number and are inside `finally`**, and
-    /// the two are not in disagreement. [`monitor`]'s [`DECKS`] present passes
-    /// are the first thing `finally` does and the panel's clock is started
-    /// after them, so the cells are recorded here with the rest of the
-    /// engine's work rather than against the panel — which is the split this
-    /// field names. Nothing separates the cells from the picture; if they ever
-    /// want a number of their own it is a field here and not a subtraction.
+    /// The preview cells are in this number and are inside `finally`, and the two
+    /// are not in disagreement. [`monitor`]'s [`DECKS`] present passes are the
+    /// first thing `finally` does and the panel's clock is started after them, so
+    /// the cells are recorded here with the rest of the engine's work rather than
+    /// against the panel — which is the split this field names. Nothing separates
+    /// the cells from the picture; if they ever want a number of their own it is a
+    /// field here and not a subtraction.
     ///
-    /// **Where it stops is the start of [`Cost::paint`] and not a second
-    /// clock**: the panel's half begins on the statement after [`monitor`]
-    /// inside `finally`, so the two are adjacent by construction and no part
-    /// of the frame falls between them. CPU time only, like everything else
-    /// here; what the GPU then does with the command buffer is not on this
-    /// clock, and `docs/contributing.md` §1 says why there is no other one.
+    /// Where it stops is the start of [`Cost::paint`] and not a second clock: the
+    /// panel's half begins on the statement after [`monitor`] inside `finally`, so
+    /// the two are adjacent by construction and no part of the frame falls between
+    /// them. CPU time only, like everything else here; what the GPU then does with
+    /// the command buffer is not on this clock, and `docs/contributing.md` §1 says
+    /// why there is no other one.
     pub(crate) engine: Duration,
     /// `take_egui_input` through `tessellate`: the whole immediate-mode pass,
     /// including this console's own layout walk and every shape it emits.
     pub(crate) ui: Duration,
-    /// Uploading the tessellated geometry, recording the panel's render pass,
-    /// and the one submission that carries both halves — the whole of what
-    /// this program records from inside [`compose`]'s `finally` after
-    /// [`monitor`], plus `compose`'s own tail:
-    /// `Frame::finish`, and the picture's `present`, which for this sink is
-    /// nothing at all. Excludes `Queue::present` on the surface, which is the
-    /// display's pace and not a cost.
+    /// Uploading the tessellated geometry, recording the panel's render pass, and
+    /// the one submission that carries both halves — the whole of what this program
+    /// records from inside [`compose`]'s `finally` after [`monitor`], plus
+    /// `compose`'s own tail: `Frame::finish`, and the picture's `present`, which
+    /// for this sink is nothing at all. Excludes `Queue::present` on the surface,
+    /// which is the display's pace and not a cost.
     pub(crate) paint: Duration,
-    /// **Uploading `egui`'s texture deltas, out of [`Cost::paint`]** — the
-    /// font atlas and its patches. Zero on a steady frame, because the atlas
-    /// is built once.
+    /// Uploading `egui`'s texture deltas, out of [`Cost::paint`] — the font atlas
+    /// and its patches. Zero on a steady frame, because the atlas is built once.
     ///
-    /// This and the two below exist because of what happens when they do not.
-    /// The split was taken once with temporary instrumentation, published as a
-    /// conclusion and removed, and the next machine asked to answer *how much
-    /// of the frame is the cost of moving data to the GPU* could not: the
-    /// question is about `buffers` and the readout stopped at `paint`. A
-    /// measurement that has to be re-instrumented to be repeated is one number
-    /// rather than a series.
+    /// This and the two below exist because of what happens when they do not. The
+    /// split was taken once with temporary instrumentation, published as a
+    /// conclusion and removed, and the next machine asked to answer *how much of
+    /// the frame is the cost of moving data to the GPU* could not: the question is
+    /// about `buffers` and the readout stopped at `paint`. A measurement that has
+    /// to be re-instrumented to be repeated is one number rather than a series.
     pub(crate) textures: Duration,
-    /// **Uploading the tessellated geometry, out of [`Cost::paint`]** — and
-    /// the number the caching decision turns on.
+    /// Uploading the tessellated geometry, out of [`Cost::paint`] — and the number
+    /// the caching decision turns on.
     ///
-    /// **It is not the price of moving bytes**, which took three machines to
-    /// establish and is `docs/adr/0167-the-panel-keeps-re-uploading-what-did-not-change.md`.
-    /// The discrete GPU that has to cross a bus pays 0.022 ms; an APU that
-    /// crosses nothing pays 0.010; this machine, which also crosses nothing,
-    /// pays 0.166 — seven times the one with the bus. It is what a backend's
-    /// upload path costs, and the decision it was printed for is taken: **not
-    /// re-uploading the unchanged panel is worth at most 4% of a frame, and
-    /// the dirty-tracking it needs is not.**
+    /// It is not the price of moving bytes, which took three machines to establish
+    /// and is `docs/adr/0167-the-panel-keeps-re-uploading-what-did-not-change.md`.
+    /// The discrete GPU that has to cross a bus pays 0.022 ms; an APU that crosses
+    /// nothing pays 0.010; this machine, which also crosses nothing, pays 0.166 —
+    /// seven times the one with the bus. It is what a backend's upload path costs,
+    /// and the decision it was printed for is taken: not re-uploading the unchanged
+    /// panel is worth at most 4% of a frame, and the dirty-tracking it needs is
+    /// not.
     pub(crate) buffers: Duration,
-    /// **Recording the panel's render pass, out of [`Cost::paint`]** — the
-    /// view, the pass, and `egui`'s draw calls into it. Recording only; what
-    /// the GPU then does with it is on no clock here.
+    /// Recording the panel's render pass, out of [`Cost::paint`] — the view, the
+    /// pass, and `egui`'s draw calls into it. Recording only; what the GPU then
+    /// does with it is on no clock here.
     pub(crate) record: Duration,
-    /// **The submission alone, out of [`Cost::paint`]** — `Queue::submit` and
-    /// `finish` on the frame's encoder, which is [`compose`]'s last act and is
-    /// why this is measured from inside `finally` to after `compose` returns.
-    /// The only other thing in that window is each sink's `present`, and both
-    /// of this program's are `Ok(())` — it is five sixths of `paint`.
+    /// The submission alone, out of [`Cost::paint`] — `Queue::submit` and `finish`
+    /// on the frame's encoder, which is [`compose`]'s last act and is why this is
+    /// measured from inside `finally` to after `compose` returns. The only other
+    /// thing in that window is each sink's `present`, and both of this program's
+    /// are `Ok(())` — it is five sixths of `paint`.
     ///
-    /// Printed because the whole of the rest of `paint` is what caching a bay
-    /// into a texture would make cheaper, and this is not: it is `wgpu`'s
-    /// per-submission cost, it is proportional to what was recorded rather
-    /// than to what the GPU then does with it, and it is unmoved by a canvas
-    /// 256 times the area. It is host-side work and not a wait — measured
-    /// against `CLOCK_THREAD_CPUTIME_ID` it burns 99% of its wall time on the
-    /// CPU. **The wait is [`Cost::wait`], which is a different number
-    /// entirely.**
+    /// Printed because the whole of the rest of `paint` is what caching a bay into
+    /// a texture would make cheaper, and this is not: it is `wgpu`'s per-submission
+    /// cost, it is proportional to what was recorded rather than to what the GPU
+    /// then does with it, and it is unmoved by a canvas 256 times the area. It is
+    /// host-side work and not a wait — measured against `CLOCK_THREAD_CPUTIME_ID`
+    /// it burns 99% of its wall time on the CPU. The wait is [`Cost::wait`], which
+    /// is a different number entirely.
     pub(crate) submit: Duration,
-    /// **What the frame spent blocked in `get_current_texture`**, waiting for
-    /// the display to free a swapchain image. `PresentMode::Fifo`, so at 60 Hz
-    /// this is most of the 16.6 ms and the frame is not paying for it: on the
-    /// same clock as above it burns under 1% of itself on the CPU.
+    /// What the frame spent blocked in `get_current_texture`, waiting for the
+    /// display to free a swapchain image. `PresentMode::Fifo`, so at 60 Hz this is
+    /// most of the 16.6 ms and the frame is not paying for it: on the same clock as
+    /// above it burns under 1% of itself on the CPU.
     ///
-    /// It is in none of the three numbers above, which is why it is here — a
-    /// reader who sums those three and compares the total to a frame gets an
-    /// answer that is 12% of the truth, and the missing 88% is this doing
-    /// nothing on purpose. Switching to `PresentMode::Immediate`, which this
-    /// adapter does offer, moves it and nothing else.
+    /// It is in none of the three numbers above, which is why it is here — a reader
+    /// who sums those three and compares the total to a frame gets an answer that
+    /// is 12% of the truth, and the missing 88% is this doing nothing on purpose.
+    /// Switching to `PresentMode::Immediate`, which this adapter does offer, moves
+    /// it and nothing else.
     pub(crate) wait: Duration,
-    /// **What the frame cost the window**: the wall clock from the top of one
-    /// `RedrawRequested` to the top of the next, and the one number here with
-    /// the wait, the present and everything this file times nowhere inside it.
+    /// What the frame cost the window: the wall clock from the top of one
+    /// `RedrawRequested` to the top of the next, and the one number here with the
+    /// wait, the present and everything this file times nowhere inside it.
     ///
-    /// **It is the answer to *what did this frame cost*, and the three fields
-    /// above are not.** They are CPU time by construction and [`Cost::whole`]
-    /// leaves [`Cost::wait`] out of them on purpose, so a frame that spent 240
-    /// ms on the GPU and 5 ms on the CPU reads there as a 5 ms frame — which
-    /// is not a rounding error, it is the difference between a loop that is
-    /// idle and a loop that is at its limit. This is measured between two
-    /// identical points of successive frames, so it tiles the run exactly:
-    /// nothing falls between two periods and nothing is in two.
+    /// It is the answer to *what did this frame cost*, and the three fields above
+    /// are not. They are CPU time by construction and [`Cost::whole`] leaves
+    /// [`Cost::wait`] out of them on purpose, so a frame that spent 240 ms on the
+    /// GPU and 5 ms on the CPU reads there as a 5 ms frame — which is not a
+    /// rounding error, it is the difference between a loop that is idle and a loop
+    /// that is at its limit. This is measured between two identical points of
+    /// successive frames, so it tiles the run exactly: nothing falls between two
+    /// periods and nothing is in two.
     ///
-    /// **Host clock, and it cannot be anything else.** GPU timestamps bracket
-    /// work inside a command buffer; most of this is not in one — the block in
+    /// Host clock, and it cannot be anything else. GPU timestamps bracket work
+    /// inside a command buffer; most of this is not in one — the block in
     /// `get_current_texture`, the `egui` pass, `Queue::present` — so the whole
     /// frame is a host-clock figure on any adapter, working timestamps or not.
     /// [`Cost::drained`] is where the GPU's own share is asked for, and
     /// `Costs::clock` is what this program was able to establish about this
     /// adapter's timestamps rather than what it advertises (P-0095).
     ///
-    /// **A period is a cost only while the loop is asking for the next frame
-    /// immediately**, which on this program is whenever something is
-    /// [`live`]. With nothing live the next frame comes off an `egui` deadline
-    /// or an operator, and the interval is then how long the window was left
-    /// alone rather than what a frame cost. The reading says which case it is
-    /// printing.
+    /// A period is a cost only while the loop is asking for the next frame
+    /// immediately, which on this program is whenever something is [`live`]. With
+    /// nothing live the next frame comes off an `egui` deadline or an operator, and
+    /// the interval is then how long the window was left alone rather than what a
+    /// frame cost. The reading says which case it is printing.
     ///
     /// `None` on the first frame of a run, which has no predecessor to be an
     /// interval from.
     pub(crate) period: Option<Duration>,
-    /// **What the GPU still owed when the CPU had finished the frame** —
-    /// `Device::poll` to a drained queue, timed on the host clock, on the
-    /// frames [`Costs::audit`] picks and `None` on every other.
+    /// What the GPU still owed when the CPU had finished the frame — `Device::poll`
+    /// to a drained queue, timed on the host clock, on the frames [`Costs::audit`]
+    /// picks and `None` on every other.
     ///
     /// This is the field the three medians cannot have. They stop at the
-    /// submission; a command buffer that takes a quarter of a second to
-    /// execute costs the same in every one of them as one that takes a
-    /// microsecond, and on a `Fifo` surface the difference surfaces one frame
-    /// later as [`Cost::wait`] — where it is indistinguishable from the vsync
-    /// idle that field is named for.
+    /// submission; a command buffer that takes a quarter of a second to execute
+    /// costs the same in every one of them as one that takes a microsecond, and on
+    /// a `Fifo` surface the difference surfaces one frame later as [`Cost::wait`] —
+    /// where it is indistinguishable from the vsync idle that field is named for.
     ///
-    /// **What it includes, and it is not one pass.** Everything the queue had
-    /// outstanding when the poll started: this frame's whole command buffer —
-    /// four slots stepped and drawn, the composite, the preview presents, the
-    /// picture's present pass and the panel's — plus whatever of the previous
-    /// frame was still in flight, plus the poll's own round trip. It is an
-    /// upper bound on this frame's GPU work and it is biased high, in the same
-    /// direction and for the same reason
-    /// [`karakuri_engine::probe::MeasurementMethod::HostWallClock`] is.
+    /// What it includes, and it is not one pass. Everything the queue had
+    /// outstanding when the poll started: this frame's whole command buffer — four
+    /// slots stepped and drawn, the composite, the preview presents, the picture's
+    /// present pass and the panel's — plus whatever of the previous frame was still
+    /// in flight, plus the poll's own round trip. It is an upper bound on this
+    /// frame's GPU work and it is biased high, in the same direction and for the
+    /// same reason [`karakuri_engine::probe::MeasurementMethod::HostWallClock`] is.
     ///
-    /// **It is not free and it is not taken every frame.** Blocking here
-    /// stands the CPU still until the GPU catches up, which is the one pattern
-    /// the frame path is not allowed to make a habit of; [`Costs::AUDIT`] is
-    /// how rarely it happens and the reading prints what those frames cost
-    /// against the rest rather than asserting it is negligible.
+    /// It is not free and it is not taken every frame. Blocking here stands the CPU
+    /// still until the GPU catches up, which is the one pattern the frame path is
+    /// not allowed to make a habit of; [`Costs::AUDIT`] is how rarely it happens
+    /// and the reading prints what those frames cost against the rest rather than
+    /// asserting it is negligible.
     ///
-    /// **It moves the frame after it, by exactly what it took.** Work waited
-    /// for here is work the next frame's [`Cost::wait`] does not have to wait
-    /// for, so an audited frame shortens its successor's wait — which is the
-    /// same milliseconds counted in a different field rather than any of them
-    /// going missing, and it is one frame in the tens the reading samples.
+    /// It moves the frame after it, by exactly what it took. Work waited for here
+    /// is work the next frame's [`Cost::wait`] does not have to wait for, so an
+    /// audited frame shortens its successor's wait — which is the same milliseconds
+    /// counted in a different field rather than any of them going missing, and it
+    /// is one frame in the tens the reading samples.
     pub(crate) drained: Option<Duration>,
     /// Allocations and bytes during `ui`, on this thread.
     pub(crate) allocs: u64,
@@ -364,58 +353,56 @@ pub(crate) struct Cost {
 }
 
 impl Cost {
-    /// **What three timed stretches of the frame cost on the CPU**: the three
-    /// fields the reading below adds up under *"the whole frame is a median"*,
-    /// for one frame rather than for the median of each.
+    /// What three timed stretches of the frame cost on the CPU: the three fields
+    /// the reading below adds up under *"the whole frame is a median"*, for one
+    /// frame rather than for the median of each.
     ///
     /// The three do not overlap — `engine` ends where `paint` begins, by
-    /// construction, and `ui` is the `egui` pass before either — and
-    /// [`Cost::wait`] is deliberately not in it: blocking in
-    /// `get_current_texture` is the display's pace and not a price, which is
-    /// the sentence that field carries.
+    /// construction, and `ui` is the `egui` pass before either — and [`Cost::wait`]
+    /// is deliberately not in it: blocking in `get_current_texture` is the
+    /// display's pace and not a price, which is the sentence that field carries.
     ///
     /// # This is not what the frame cost, and it used to say it was
     ///
-    /// **It said the three "tile the frame exactly", and they do not.** They
-    /// are three stretches of one redraw with untimed CPU between them — the
-    /// sinks aimed, the Program bay rearranged, the panel solved, a listing
-    /// re-read on the frame a save lands — and untimed CPU after the last of
-    /// them, `Queue::present` included. [`Cost::elsewhere`] is what is left
-    /// over when they and the wait are taken off [`Cost::period`], and it is
-    /// measured rather than argued: the reading prints it, so the claim is now
-    /// a number that this window either produces or does not.
+    /// It said the three "tile the frame exactly", and they do not. They are three
+    /// stretches of one redraw with untimed CPU between them — the sinks aimed, the
+    /// Program bay rearranged, the panel solved, a listing re-read on the frame a
+    /// save lands — and untimed CPU after the last of them, `Queue::present`
+    /// included. [`Cost::elsewhere`] is what is left over when they and the wait
+    /// are taken off [`Cost::period`], and it is measured rather than argued: the
+    /// reading prints it, so the claim is now a number that this window either
+    /// produces or does not.
     ///
-    /// **And it is CPU time whatever the GPU is doing**, which is the more
-    /// expensive half of the same mistake. Every field it sums stops at a
-    /// submission, so a frame whose command buffer takes a quarter of a second
-    /// to execute costs the same here as one that takes a microsecond. A panel
-    /// running at four frames a second was read off these three as a loop
-    /// *idle 97.6% of the time*, and the loop was not idle — it was waiting
-    /// for a shader, one field along in [`Cost::wait`], where nothing
-    /// distinguishes that from the vsync idle the field is named for.
+    /// And it is CPU time whatever the GPU is doing, which is the more expensive
+    /// half of the same mistake. Every field it sums stops at a submission, so a
+    /// frame whose command buffer takes a quarter of a second to execute costs the
+    /// same here as one that takes a microsecond. A panel running at four frames a
+    /// second was read off these three as a loop *idle 97.6% of the time*, and the
+    /// loop was not idle — it was waiting for a shader, one field along in
+    /// [`Cost::wait`], where nothing distinguishes that from the vsync idle the
+    /// field is named for.
     ///
-    /// **It is kept because it answers a different question**: what this
-    /// program's own code costs per frame, which is what a schedule of live
-    /// regions is built from and what `budget::PANEL_PASS` is checked against.
-    /// What a *frame* cost is [`Cost::period`], with [`Cost::drained`] beside
-    /// it for the GPU's share.
+    /// It is kept because it answers a different question: what this program's own
+    /// code costs per frame, which is what a schedule of live regions is built from
+    /// and what `budget::PANEL_PASS` is checked against. What a *frame* cost is
+    /// [`Cost::period`], with [`Cost::drained`] beside it for the GPU's share.
     pub(crate) fn whole(&self) -> Duration {
         self.engine + self.ui + self.paint
     }
 
-    /// **What the frame spent where nothing here is looking**: the period,
-    /// less the wait and less the three stretches [`Cost::whole`] sums.
+    /// What the frame spent where nothing here is looking: the period, less the
+    /// wait and less the three stretches [`Cost::whole`] sums.
     ///
-    /// A residue rather than a measurement, and it is one on purpose — the
-    /// point of it is that a reader can see how much of the frame the timed
-    /// fields did *not* see, without this file having to be trusted about
-    /// where its clocks start and stop. It is the untimed CPU between them and
-    /// after them, plus whatever `winit` does between two redraws.
+    /// A residue rather than a measurement, and it is one on purpose — the point of
+    /// it is that a reader can see how much of the frame the timed fields did *not*
+    /// see, without this file having to be trusted about where its clocks start and
+    /// stop. It is the untimed CPU between them and after them, plus whatever
+    /// `winit` does between two redraws.
     ///
-    /// `None` on the first frame of a run, which has no period. Saturating,
-    /// because the four stretches are read from four separate clocks and a
-    /// residue of a few microseconds either side of zero is those clocks and
-    /// not a negative duration.
+    /// `None` on the first frame of a run, which has no period. Saturating, because
+    /// the four stretches are read from four separate clocks and a residue of a few
+    /// microseconds either side of zero is those clocks and not a negative
+    /// duration.
     pub(crate) fn elsewhere(&self) -> Option<Duration> {
         Some(
             self.period?
@@ -425,7 +412,7 @@ impl Cost {
     }
 }
 
-/// What was drawn while nobody was touching the window. **This is the number**
+/// What was drawn while nobody was touching the window. This is the number
 /// ADR-0164's still-panel clause is about, and the clause says every field of
 /// it is zero.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -443,109 +430,99 @@ pub(crate) struct Costs {
     pub(crate) drawn: usize,
     /// When the window was last touched by anything at all.
     pub(crate) quiet_since: Instant,
-    /// **A frame is owed to something that happened**, and the next one drawn
-    /// is that frame rather than a frame drawn on a still panel.
+    /// A frame is owed to something that happened, and the next one drawn is that
+    /// frame rather than a frame drawn on a still panel.
     ///
-    /// Without it the reading blames the panel for the frame it was asked for:
-    /// an event resets the stretch and the frame it asked for lands a
-    /// millisecond into the new one, so a window that did exactly the right
-    /// thing reports having drawn on an untouched panel.
+    /// Without it the reading blames the panel for the frame it was asked for: an
+    /// event resets the stretch and the frame it asked for lands a millisecond into
+    /// the new one, so a window that did exactly the right thing reports having
+    /// drawn on an untouched panel.
     pub(crate) owed: bool,
     /// What has been drawn since `quiet_since` that nothing asked for.
     pub(crate) still: Still,
-    /// **The frame just drawn**, kept so the transport row can print what it
-    /// cost.
+    /// The frame just drawn, kept so the transport row can print what it cost.
     ///
-    /// Not a second measurement and not a second sample: it is the last
-    /// [`Cost`] [`Costs::push`] was handed, which `frames` stops keeping after
-    /// [`SAMPLE`] of them because that vector is a sample rather than a
-    /// history. A readout wants the last frame and the reading wants the
-    /// sample; both are the same numbers.
+    /// Not a second measurement and not a second sample: it is the last [`Cost`]
+    /// [`Costs::push`] was handed, which `frames` stops keeping after [`SAMPLE`] of
+    /// them because that vector is a sample rather than a history. A readout wants
+    /// the last frame and the reading wants the sample; both are the same numbers.
     pub(crate) last: Option<Cost>,
     pub(crate) said: bool,
-    /// **What ran it**, as the adapter reports it: the backend, the adapter's
-    /// own name, and whether it calls itself discrete.
+    /// What ran it, as the adapter reports it: the backend, the adapter's own name,
+    /// and whether it calls itself discrete.
     ///
     /// Printed because a readout that does not name its backend is how a
     /// measurement gets written into a table as though it were another one's.
     /// `WGPU_BACKEND` was honoured by nothing for months and the failure was
-    /// invisible precisely here — twenty-five runs were recorded as DX12 and
-    /// were Vulkan, and nothing on screen could have said otherwise
+    /// invisible precisely here — twenty-five runs were recorded as DX12 and were
+    /// Vulkan, and nothing on screen could have said otherwise
     /// (`docs/adr/0168-a-backend-override-is-honoured-because-a-no-op-cannot-be-caught.md`).
-    /// The adapter is asked rather than the environment, so an override that
-    /// does not take reads as what it is.
+    /// The adapter is asked rather than the environment, so an override that does
+    /// not take reads as what it is.
     pub(crate) taken_on: String,
-    /// **Whether anything in the Program bay is making texels** — the
-    /// picture, a deck auditioning in a preview cell, or both. [`live`] is the
-    /// rule and this is the frame's answer to it.
+    /// Whether anything in the Program bay is making texels — the picture, a deck
+    /// auditioning in a preview cell, or both. [`live`] is the rule and this is the
+    /// frame's answer to it.
     ///
-    /// It decides which sentence the reading prints about the frames it
-    /// counted, and nothing else: the frames are counted the same way either
-    /// way, which is the point — the number is not adjusted for knowing the
-    /// answer.
+    /// It decides which sentence the reading prints about the frames it counted,
+    /// and nothing else: the frames are counted the same way either way, which is
+    /// the point — the number is not adjusted for knowing the answer.
     pub(crate) live: bool,
-    /// **What the panel declared it needed**, as `View::animating` answered it
-    /// on the last frame: the soonest *move* out of the regions that are
-    /// declaring, and `None` only when none of them is.
+    /// What the panel declared it needed, as `View::animating` answered it on the
+    /// last frame: the soonest *move* out of the regions that are declaring, and
+    /// `None` only when none of them is.
     ///
-    /// **A deadline and not a rate**, which is ADR-0283: a region declares its
-    /// staleness for the motion it has, so a pending region that is at rest
-    /// answers the rest it has left rather than a rate it is not using. The
-    /// beat is the exception and it is the interesting one — the light travels
-    /// on every frame the session advances, so its deadline is its declared
-    /// staleness on every frame there is, and `24.671ms` here is the beat and
-    /// nothing else.
+    /// A deadline and not a rate, which is ADR-0283: a region declares its
+    /// staleness for the motion it has, so a pending region that is at rest answers
+    /// the rest it has left rather than a rate it is not using. The beat is the
+    /// exception and it is the interesting one — the light travels on every frame
+    /// the session advances, so its deadline is its declared staleness on every
+    /// frame there is, and `24.671ms` here is the beat and nothing else.
     ///
-    /// It is here for one sentence, and the sentence was wrong without it.
-    /// With nothing in the Program bay making texels the reading used to blame
-    /// the only other thing it knew about — an `egui` repaint delay answered
-    /// immediately — and on this program that is never the answer: folding the
-    /// picture and the preview row away leaves the window drawing 28.0 to 28.3
-    /// frames a second over two runs on 2026-08-26, which is the roll's
-    /// declared 30 Hz and not a mishandled delay. Folding the mixer bay away
-    /// as well takes it to 0 frames, because the chip that declares the 30 Hz
-    /// is then not laid out (ADR-0193).
-    /// A reading that names the wrong cause is worse than one that names none.
+    /// It is here for one sentence, and the sentence was wrong without it. With
+    /// nothing in the Program bay making texels the reading used to blame the only
+    /// other thing it knew about — an `egui` repaint delay answered immediately —
+    /// and on this program that is never the answer: folding the picture and the
+    /// preview row away leaves the window drawing 28.0 to 28.3 frames a second over
+    /// two runs on 2026-08-26, which is the roll's declared 30 Hz and not a
+    /// mishandled delay. Folding the mixer bay away as well takes it to 0 frames,
+    /// because the chip that declares the 30 Hz is then not laid out (ADR-0193). A
+    /// reading that names the wrong cause is worse than one that names none.
     ///
-    /// **Those two readings were taken before the beat declared**, and the
-    /// beat declares whenever the transport row is drawn and there is an
-    /// engine behind it — 24.7 ms, about forty a second, whether or not
-    /// anything is pending
+    /// Those two readings were taken before the beat declared, and the beat
+    /// declares whenever the transport row is drawn and there is an engine behind
+    /// it — 24.7 ms, about forty a second, whether or not anything is pending
     /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
     /// [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-    /// So this window's `None` now needs the transport row folded away as
-    /// well, which is a **fourth** fold and is the arm below saying so.
+    /// So this window's `None` now needs the transport row folded away as well,
+    /// which is a fourth fold and is the arm below saying so.
     ///
-    /// **And the roll's 30 Hz is no longer 30 Hz**, which is what would make
-    /// the 28.0-to-28.3 reading above unreproducible if it were taken again:
-    /// with the transport row folded and a slot parked, the mixer asks for
-    /// fourteen frames a second rather than thirty-one, because the seventeen
-    /// that fell inside the roll's rest drew the chip in the position it was
-    /// already in
+    /// And the roll's 30 Hz is no longer 30 Hz, which is what would make the
+    /// 28.0-to-28.3 reading above unreproducible if it were taken again: with the
+    /// transport row folded and a slot parked, the mixer asks for fourteen frames a
+    /// second rather than thirty-one, because the seventeen that fell inside the
+    /// roll's rest drew the chip in the position it was already in
     /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md),
     /// `karakuri-console`'s `tests/moving.rs`, which counts both).
     pub(crate) declared: Option<Duration>,
-    /// **The top of the last frame**, which is the one anchor a period is
-    /// measured from — see [`Cost::period`] and [`Costs::tick`].
+    /// The top of the last frame, which is the one anchor a period is measured from
+    /// — see [`Cost::period`] and [`Costs::tick`].
     ///
-    /// It is the *same point* of every redraw, so two consecutive values
-    /// bracket a whole frame with no gap and no overlap. `None` before the
-    /// first one.
+    /// It is the *same point* of every redraw, so two consecutive values bracket a
+    /// whole frame with no gap and no overlap. `None` before the first one.
     pub(crate) began: Option<Instant>,
     /// When the last audited frame was taken — see [`Costs::audit`].
     pub(crate) since_audit: Instant,
-    /// **What this program was able to establish about this adapter's GPU
-    /// timestamps**, as the deck's own probe earned it: `GpuTimestamp` where
-    /// calibration survived and nothing later caught it lying,
-    /// `HostWallClock` where it did not, and `None` where nothing has been
-    /// probed at all.
+    /// What this program was able to establish about this adapter's GPU timestamps,
+    /// as the deck's own probe earned it: `GpuTimestamp` where calibration survived
+    /// and nothing later caught it lying, `HostWallClock` where it did not, and
+    /// `None` where nothing has been probed at all.
     ///
-    /// It is not `Features::TIMESTAMP_QUERY`, and the difference is the whole
-    /// of P-0095: the machine this was written on advertises the feature and
-    /// does not deliver it. The reading prints this beside the frame figures
-    /// so that *why is this a host clock* has an answer taken against a load
-    /// rather than read off a flag — and prints `None` as *nothing asked*
-    /// rather than as a verdict.
+    /// It is not `Features::TIMESTAMP_QUERY`, and the difference is the whole of
+    /// P-0095: the machine this was written on advertises the feature and does not
+    /// deliver it. The reading prints this beside the frame figures so that *why is
+    /// this a host clock* has an answer taken against a load rather than read off a
+    /// flag — and prints `None` as *nothing asked* rather than as a verdict.
     pub(crate) clock: Option<MeasurementMethod>,
 }
 
@@ -573,55 +550,52 @@ impl Costs {
         }
     }
 
-    /// **How rarely a frame is audited** — the frame that blocks on
-    /// `Device::poll` to find out what the GPU still owed
-    /// ([`Cost::drained`]).
+    /// How rarely a frame is audited — the frame that blocks on `Device::poll` to
+    /// find out what the GPU still owed ([`Cost::drained`]).
     ///
-    /// **A stretch of wall clock and not a frame count**, and the reason is
-    /// the case this instrument exists for. Every so many frames sounds
-    /// steadier and is exactly backwards: a loop at four frames a second is
-    /// the loop that most needs the GPU's own number, and one audit in sixty
-    /// frames would take fifteen seconds to produce one — five times the
-    /// [`STILL`] the reading is taken over, so the reading would carry no GPU
-    /// figure precisely where it is the whole answer. Half a second gives six
-    /// samples over a three-second reading whether the window is drawing at
-    /// four frames a second or at sixty.
+    /// A stretch of wall clock and not a frame count, and the reason is the case
+    /// this instrument exists for. Every so many frames sounds steadier and is
+    /// exactly backwards: a loop at four frames a second is the loop that most
+    /// needs the GPU's own number, and one audit in sixty frames would take fifteen
+    /// seconds to produce one — five times the [`STILL`] the reading is taken over,
+    /// so the reading would carry no GPU figure precisely where it is the whole
+    /// answer. Half a second gives six samples over a three-second reading whether
+    /// the window is drawing at four frames a second or at sixty.
     ///
-    /// It costs least where it fires most often, which is the same argument
-    /// from the other side: a frame that is already waiting on the GPU pays
-    /// almost nothing to be told how long, because the wait is one it was
-    /// about to take in `get_current_texture` anyway.
+    /// It costs least where it fires most often, which is the same argument from
+    /// the other side: a frame that is already waiting on the GPU pays almost
+    /// nothing to be told how long, because the wait is one it was about to take in
+    /// `get_current_texture` anyway.
     ///
-    /// **The cost of it is printed rather than assumed.** The reading prints
-    /// what the audited frames' periods were against the rest, so a machine
-    /// where this is not cheap says so on that machine instead of being
-    /// reassured by a sentence written on another one.
+    /// The cost of it is printed rather than assumed. The reading prints what the
+    /// audited frames' periods were against the rest, so a machine where this is
+    /// not cheap says so on that machine instead of being reassured by a sentence
+    /// written on another one.
     pub(crate) const AUDIT: Duration = Duration::from_millis(500);
 
-    /// **The top of a frame**: store the anchor and hand back the interval
-    /// since the previous one, which is [`Cost::period`].
+    /// The top of a frame: store the anchor and hand back the interval since the
+    /// previous one, which is [`Cost::period`].
     ///
-    /// Called from one place, at the same statement of every redraw, because
-    /// that is what makes two consecutive anchors a whole frame. A redraw that
-    /// returns early — a surface to reconfigure, a frame to skip — still ticks
-    /// here, so the frame after one of those carries a period spanning both;
-    /// they are rare, they show up in the tail rather than the median, and the
-    /// alternative is an anchor that moves depending on which branch a frame
-    /// took.
+    /// Called from one place, at the same statement of every redraw, because that
+    /// is what makes two consecutive anchors a whole frame. A redraw that returns
+    /// early — a surface to reconfigure, a frame to skip — still ticks here, so the
+    /// frame after one of those carries a period spanning both; they are rare, they
+    /// show up in the tail rather than the median, and the alternative is an anchor
+    /// that moves depending on which branch a frame took.
     pub(crate) fn tick(&mut self, at: Instant) -> Option<Duration> {
         let period = self.began.map(|began| at - began);
         self.began = Some(at);
         period
     }
 
-    /// **Whether this frame pays for the GPU's answer** — see
-    /// [`Cost::drained`] and [`Costs::AUDIT`].
+    /// Whether this frame pays for the GPU's answer — see [`Cost::drained`] and
+    /// [`Costs::AUDIT`].
     ///
-    /// Reads the clock rather than counting frames, so that the rate the
-    /// answer arrives at does not fall away exactly as the frames get slower.
-    /// It is asked once per frame and it is the ask that resets the stretch,
-    /// so a caller that asks and then declines to measure has thrown a sample
-    /// away rather than deferred one.
+    /// Reads the clock rather than counting frames, so that the rate the answer
+    /// arrives at does not fall away exactly as the frames get slower. It is asked
+    /// once per frame and it is the ask that resets the stretch, so a caller that
+    /// asks and then declines to measure has thrown a sample away rather than
+    /// deferred one.
     pub(crate) fn audit(&mut self) -> bool {
         let now = Instant::now();
         match now.duration_since(self.since_audit) >= Costs::AUDIT {
@@ -633,37 +607,35 @@ impl Costs {
         }
     }
 
-    /// **Something touched the window**, so the stillness starts again from
-    /// here and what was drawn during the last stretch is no longer about a
-    /// still panel.
+    /// Something touched the window, so the stillness starts again from here and
+    /// what was drawn during the last stretch is no longer about a still panel.
     ///
-    /// Every window event that is not a frame this loop asked for itself
-    /// counts, including the ones the operator did not cause — a move, a
-    /// focus, an occlusion. Resetting too eagerly only ever makes the reading
-    /// harder to reach, never easier to pass.
+    /// Every window event that is not a frame this loop asked for itself counts,
+    /// including the ones the operator did not cause — a move, a focus, an
+    /// occlusion. Resetting too eagerly only ever makes the reading harder to
+    /// reach, never easier to pass.
     pub(crate) fn touched(&mut self) {
         self.quiet_since = Instant::now();
         self.still = Still::default();
     }
 
-    /// **A frame was asked for by something that happened**, so the next one
-    /// drawn is not on the panel's account.
+    /// A frame was asked for by something that happened, so the next one drawn is
+    /// not on the panel's account.
     ///
-    /// Every `request_redraw` in this file goes through here except one, and
-    /// the exception is the point of the reading: **the frame `egui` asked for
-    /// after a delay it named.** The distinction is between `egui` saying *I
-    /// have not finished drawing what you just asked me to* — a `repaint_delay`
-    /// of zero, a second pass of a frame already owed, which is what it does
-    /// for a pass or two while the font atlas settles — and `egui` saying
-    /// *wake me in 250 ms*, which is an animation and is per-frame work on a
-    /// panel nobody is touching. The first goes through here and the second
-    /// does not, so a delay mishandled into a spin shows in the reading as the
-    /// frames it actually drew.
+    /// Every `request_redraw` in this file goes through here except one, and the
+    /// exception is the point of the reading: the frame `egui` asked for after a
+    /// delay it named. The distinction is between `egui` saying *I have not
+    /// finished drawing what you just asked me to* — a `repaint_delay` of zero, a
+    /// second pass of a frame already owed, which is what it does for a pass or two
+    /// while the font atlas settles — and `egui` saying *wake me in 250 ms*, which
+    /// is an animation and is per-frame work on a panel nobody is touching. The
+    /// first goes through here and the second does not, so a delay mishandled into
+    /// a spin shows in the reading as the frames it actually drew.
     ///
-    /// The other way it can fail is loud rather than quiet: something asking
-    /// for frames without pause never lets the window be still for [`STILL`],
-    /// and then no reading is printed at all. **A run of this program that
-    /// prints no reading is that failure.**
+    /// The other way it can fail is loud rather than quiet: something asking for
+    /// frames without pause never lets the window be still for [`STILL`], and then
+    /// no reading is printed at all. A run of this program that prints no reading
+    /// is that failure.
     pub(crate) fn owes(&mut self) {
         self.owed = true;
         self.touched();
@@ -683,36 +655,35 @@ impl Costs {
         }
     }
 
-    /// **Frames a second**: what was drawn on the untouched window, over the
-    /// stretch it was drawn in.
+    /// Frames a second: what was drawn on the untouched window, over the stretch it
+    /// was drawn in.
     ///
-    /// The stretch is the caller's because the two callers are at different
-    /// points in it and neither may guess the other's. [`Costs::say`] is taken
-    /// exactly [`STILL`] after `quiet_since` and says so in the sentence
-    /// above the number; the transport row is asked on every frame and its
-    /// stretch is however much of one has elapsed. One quotient, two stretches
-    /// — and a second expression of *frames over seconds* would be the readout
-    /// and the reading disagreeing about the rate of the same window.
+    /// The stretch is the caller's because the two callers are at different points
+    /// in it and neither may guess the other's. [`Costs::say`] is taken exactly
+    /// [`STILL`] after `quiet_since` and says so in the sentence above the number;
+    /// the transport row is asked on every frame and its stretch is however much of
+    /// one has elapsed. One quotient, two stretches — and a second expression of
+    /// *frames over seconds* would be the readout and the reading disagreeing about
+    /// the rate of the same window.
     pub(crate) fn rate_over(&self, stretch: f64) -> f64 {
         self.still.frames as f64 / stretch
     }
 
-    /// **The rate as it stands, for the transport row** — or `None` where
-    /// there is not yet a stretch with a frame in it to divide.
+    /// The rate as it stands, for the transport row — or `None` where there is not
+    /// yet a stretch with a frame in it to divide.
     ///
-    /// `None` is the honest answer twice over. Just after something touched
-    /// the window there is no stretch, and a rate over no time is an infinity.
-    /// And a window with nothing live on it stops asking for frames entirely,
-    /// so the stretch goes on growing while the frames do not — which is a
-    /// rate falling towards zero and is exactly what the window is doing.
+    /// `None` is the honest answer twice over. Just after something touched the
+    /// window there is no stretch, and a rate over no time is an infinity. And a
+    /// window with nothing live on it stops asking for frames entirely, so the
+    /// stretch goes on growing while the frames do not — which is a rate falling
+    /// towards zero and is exactly what the window is doing.
     pub(crate) fn rate_now(&self) -> Option<f64> {
         let stretch = self.quiet_since.elapsed().as_secs_f64();
         (self.still.frames > 0 && stretch > 0.0).then(|| self.rate_over(stretch))
     }
 
-    /// When the reading is due, and `None` once it has been taken. It is also
-    /// what keeps the loop on a deadline until then — see
-    /// [`App::about_to_wait`].
+    /// When the reading is due, and `None` once it has been taken. It is also what
+    /// keeps the loop on a deadline until then — see [`App::about_to_wait`].
     pub(crate) fn due(&self) -> Option<Instant> {
         match self.said {
             true => None,
@@ -720,22 +691,21 @@ impl Costs {
         }
     }
 
-    /// The reading. Median and worst rather than a mean for the per-frame
-    /// figures: a frame path is judged by its tail.
-    /// `capacity` and `material` are the run's, handed in rather than read off
-    /// a constant: this program takes its `.kir` pair from the command line and
-    /// a load can move a slot off it, so what the engine half of this reading
-    /// was taken over is only known at run time — and is every slot's name in
-    /// slot order rather than one. See [`Engine::capacity`],
-    /// [`Sources::material`] and [`Gfx::material`].
-    /// `at` is **what the frame was actually composited at** when the reading
-    /// was taken — `Present::size()`, which is the largest enabled output's
-    /// size and no longer a constant ([`render_size`]). A measurement names
-    /// which resolution it is about
+    /// The reading. Median and worst rather than a mean for the per-frame figures:
+    /// a frame path is judged by its tail. `capacity` and `material` are the run's,
+    /// handed in rather than read off a constant: this program takes its `.kir`
+    /// pair from the command line and a load can move a slot off it, so what the
+    /// engine half of this reading was taken over is only known at run time — and
+    /// is every slot's name in slot order rather than one. See
+    /// [`Engine::capacity`], [`Sources::material`] and [`Gfx::material`]. `at` is
+    /// what the frame was actually composited at when the reading was taken —
+    /// `Present::size()`, which is the largest enabled output's size and no longer
+    /// a constant ([`render_size`]). A measurement names which resolution it is
+    /// about
     /// ([ADR-0303](../../../docs/adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md),
     /// [P-0095](../../../docs/principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)),
-    /// and [`CANVAS`] would now be the wrong one on any run whose Program bay
-    /// is not exactly that size — which is every run.
+    /// and [`CANVAS`] would now be the wrong one on any run whose Program bay is
+    /// not exactly that size — which is every run.
     pub(crate) fn say(
         &mut self,
         capacity: u32,
@@ -1385,57 +1355,56 @@ pub(crate) fn ms(d: Duration) -> f64 {
 pub(crate) struct Readout {
     pub(crate) panel: Panel,
     pub(crate) view: View,
-    /// **What the operator has opened to a model**, and the one piece of state
-    /// in this struct that is neither the panel's nor a reading of the engine.
+    /// What the operator has opened to a model, and the one piece of state in this
+    /// struct that is neither the panel's nor a reading of the engine.
     ///
-    /// It is a handle rather than a value because the whole point of it is that
-    /// a *second* reader has it: `karakuri_mcp::serve` takes a
-    /// clone and reads it on every call, so an opening is live rather than a
-    /// snapshot taken at startup. `View::opening` is this handle read once a
-    /// frame; this is the model of record.
+    /// It is a handle rather than a value because the whole point of it is that a
+    /// *second* reader has it: `karakuri_mcp::serve` takes a clone and reads it on
+    /// every call, so an opening is live rather than a snapshot taken at startup.
+    /// `View::opening` is this handle read once a frame; this is the model of
+    /// record.
     ///
-    /// **This process serves MCP when `--mcp` names a port**, and the server
-    /// is handed this same handle rather than a copy, so the four pills and the
-    /// audit read one value. Without the flag the pills still write it and only
-    /// this program and its tests read it back.
+    /// This process serves MCP when `--mcp` names a port, and the server is handed
+    /// this same handle rather than a copy, so the four pills and the audit read
+    /// one value. Without the flag the pills still write it and only this program
+    /// and its tests read it back.
     pub(crate) opening: Opening,
-    /// **What the last write did**, which the transport row's health capsule
-    /// draws — `view::Transport::health`, kept here because that value is
-    /// rebuilt whole every frame by `transport` and a verdict arrives on one
-    /// frame in a thousand.
+    /// What the last write did, which the transport row's health capsule draws —
+    /// `view::Transport::health`, kept here because that value is rebuilt whole
+    /// every frame by `transport` and a verdict arrives on one frame in a thousand.
     ///
-    /// **The one reading in this struct that is a stream rather than a
-    /// state.** Everything else the row draws is asked of the deck on the
-    /// frame it is drawn on; a `swap::Event` exists once, in the drain
-    /// `staging` makes, and is gone. So the last one is remembered here for
-    /// the same reason `view.staging`'s rows are remembered in the view: it is
-    /// the drain that forces it, not a preference.
+    /// The one reading in this struct that is a stream rather than a state.
+    /// Everything else the row draws is asked of the deck on the frame it is drawn
+    /// on; a `swap::Event` exists once, in the drain `staging` makes, and is gone.
+    /// So the last one is remembered here for the same reason `view.staging`'s rows
+    /// are remembered in the view: it is the drain that forces it, not a
+    /// preference.
     ///
     /// `None` until a build produces a verdict, which is most of most runs.
     pub(crate) health: Option<view::Stage>,
-    /// **The session's four sequencer banks**, and the one piece of state in
-    /// this struct that is neither the panel's nor a reading of the engine —
-    /// `Readout::opening`'s category, over a pattern instead of over what a
-    /// model may reach.
+    /// The session's four sequencer banks, and the one piece of state in this
+    /// struct that is neither the panel's nor a reading of the engine —
+    /// `Readout::opening`'s category, over a pattern instead of over what a model
+    /// may reach.
     ///
-    /// **A pattern is authored state and the engine holds none of it**
-    /// (ADR-0222: a lane is a fifth *route*, so what a lane does reaches the
-    /// deck as `Operation::SetOpacity` like everything else). It is kept here
-    /// because this window is what polls it and what the press arms edit; the
-    /// console draws a copy handed to `View::sequencer` per frame and applies
-    /// nothing to it (ADR-0156).
+    /// A pattern is authored state and the engine holds none of it (ADR-0222: a
+    /// lane is a fifth *route*, so what a lane does reaches the deck as
+    /// `Operation::SetOpacity` like everything else). It is kept here because this
+    /// window is what polls it and what the press arms edit; the console draws a
+    /// copy handed to `View::sequencer` per frame and applies nothing to it
+    /// (ADR-0156).
     ///
-    /// **Nothing saves or loads one yet.** ADR-0227 settles where a pattern is
-    /// kept and ADR-0320 leaves the file form to the record that has something
-    /// to serialise, which is the row that saves one — so these four banks
-    /// live for the run and no longer.
+    /// Nothing saves or loads one yet. ADR-0227 settles where a pattern is kept and
+    /// ADR-0320 leaves the file form to the record that has something to serialise,
+    /// which is the row that saves one — so these four banks live for the run and
+    /// no longer.
     pub(crate) sequencer: karakuri_pattern::Banks,
-    /// **Where the poll left the playhead**, so a lane emits at a step
-    /// boundary and never twice for one step.
+    /// Where the poll left the playhead, so a lane emits at a step boundary and
+    /// never twice for one step.
     ///
-    /// It is not in the pattern, and that is the shape rather than an
-    /// accident: a pattern is a thing that gets saved and where the playhead
-    /// has got to is not (`karakuri_pattern::Playhead`).
+    /// It is not in the pattern, and that is the shape rather than an accident: a
+    /// pattern is a thing that gets saved and where the playhead has got to is not
+    /// (`karakuri_pattern::Playhead`).
     pub(crate) playhead: karakuri_pattern::Playhead,
 }
 
@@ -1466,8 +1435,8 @@ impl Readout {
     }
 
     /// The two regions a boundary is between. A split is often unnamed — the
-    /// console's body row is, deliberately — so `split #0` alone does not say
-    /// which boundary the pointer has hold of, and the pair does.
+    /// console's body row is, deliberately — so `split #0` alone does not say which
+    /// boundary the pointer has hold of, and the pair does.
     pub(crate) fn pair(&self, split: NodeId, index: usize) -> String {
         match self.panel.pair(split, index) {
             Some((a, b)) => format!("{} | {}", self.label(a), self.label(b)),
@@ -1514,9 +1483,9 @@ impl Readout {
         }
     }
 
-    /// A move with something in hand. A boundary drag says what it did here;
-    /// **a fader drag hands its operation back**, because acting on one takes
-    /// the deck and the deck is not the readout's.
+    /// A move with something in hand. A boundary drag says what it did here; a
+    /// fader drag hands its operation back, because acting on one takes the deck
+    /// and the deck is not the readout's.
     pub(crate) fn moved(&mut self, p: Point) -> Option<Operation> {
         match self.panel.moved(p)? {
             boundary @ Dragged::Boundary { .. } => {
@@ -1542,8 +1511,8 @@ impl Readout {
         }
     }
 
-    /// A drag, in words: what was asked, where it landed, what held it, and
-    /// what the pair either side is now.
+    /// A drag, in words: what was asked, where it landed, what held it, and what
+    /// the pair either side is now.
     pub(crate) fn say_drag(&self, d: Dragged) -> String {
         let Dragged::Boundary {
             split,
@@ -1575,16 +1544,16 @@ impl Readout {
         format!("  drag: asked {asked:.1}, landed {landed:.1}{stop} [{sizes}]")
     }
 
-    /// **The pointer went up**, and what the gesture it ended asked for.
+    /// The pointer went up, and what the gesture it ended asked for.
     ///
     /// `onto` is which deck's strip the pointer is over — the caller's answer,
-    /// because a strip's geometry is `karakuri-console`'s view and not its
-    /// model (`Panel::released`). Two of the three drags do not read it.
+    /// because a strip's geometry is `karakuri-console`'s view and not its model
+    /// (`Panel::released`). Two of the three drags do not read it.
     ///
-    /// **It answers an `Acted` where it used to answer nothing**, and the drop
-    /// is why: a boundary coming to rest and a fader being let go both ask for
-    /// nothing — everything either of them wanted was asked for while it was
-    /// moving — and a carry asks for its whole operation here or nowhere.
+    /// It answers an `Acted` where it used to answer nothing, and the drop is why:
+    /// a boundary coming to rest and a fader being let go both ask for nothing —
+    /// everything either of them wanted was asked for while it was moving — and a
+    /// carry asks for its whole operation here or nowhere.
     pub(crate) fn released(&mut self, onto: Option<u8>) -> Acted {
         match self.panel.released(onto) {
             Some(Released::Rests { split, index, at }) => {
@@ -1638,10 +1607,10 @@ impl Readout {
         }
     }
 
-    /// Act, say what happened, and hand the outcome back — **the repaint
-    /// decision is taken from what the operation did, not from the key that
-    /// asked for it.** `p` over an empty panel and `z` with nothing folded
-    /// both reach the model and move nothing.
+    /// Act, say what happened, and hand the outcome back — the repaint decision is
+    /// taken from what the operation did, not from the key that asked for it. `p`
+    /// over an empty panel and `z` with nothing folded both reach the model and
+    /// move nothing.
     pub(crate) fn op(&mut self, op: Op) -> Outcome {
         let outcome = self.panel.op(op);
         // **A reset puts the default arrangement on screen and the default has
@@ -1657,9 +1626,8 @@ impl Readout {
         outcome
     }
 
-    /// What an operation did, in words. The model returns the facts; which
-    /// English they take is the operation that was asked for, which is why
-    /// this has both.
+    /// What an operation did, in words. The model returns the facts; which English
+    /// they take is the operation that was asked for, which is why this has both.
     pub(crate) fn say_op(&self, op: Op, outcome: &Outcome) {
         match outcome {
             Outcome::Folded { id, folded, root } => {
@@ -1738,18 +1706,18 @@ impl Readout {
         println!("room: {}", self.view.room.word());
     }
 
-    /// **The one place a pointer event is routed**, and the only place this
-    /// file decides anything about input.
+    /// The one place a pointer event is routed, and the only place this file
+    /// decides anything about input.
     ///
-    /// Returns who the event belonged to. The caller's whole job with the
-    /// answer is to hand the event to `egui` when it is [`Claim::Egui`] and
-    /// not when it is not — see `karakuri_console::input` for the rule and
-    /// for why it is written there rather than here.
+    /// Returns who the event belonged to. The caller's whole job with the answer is
+    /// to hand the event to `egui` when it is [`Claim::Egui`] and not when it is
+    /// not — see `karakuri_console::input` for the rule and for why it is written
+    /// there rather than here.
     ///
-    /// It is a method rather than four arms in `window_event` so that a
-    /// gesture can be driven without a window: `winit` cannot be asked for an
-    /// `ActiveEventLoop` outside its own loop, so an event handler is not
-    /// something a test can call, and the part worth testing is this.
+    /// It is a method rather than four arms in `window_event` so that a gesture can
+    /// be driven without a window: `winit` cannot be asked for an `ActiveEventLoop`
+    /// outside its own loop, so an event handler is not something a test can call,
+    /// and the part worth testing is this.
     pub(crate) fn pointer(&mut self, ctx: &egui::Context, event: Pointer) -> (Claim, Acted) {
         let at = match event {
             Pointer::Moved(p) => p,
@@ -3048,19 +3016,19 @@ impl Readout {
         (claim, did)
     }
 
-    /// **A press on the audio-in pill or on its card**, and what this
-    /// program does about it.
+    /// A press on the audio-in pill or on its card, and what this program does
+    /// about it.
     ///
-    /// [`Readout::arranged`]'s shape one pill to the left, and the split is
-    /// the same: the two answers that are the *control's* own state are
-    /// performed here, and the one that is an operation leaves as one.
+    /// [`Readout::arranged`]'s shape one pill to the left, and the split is the
+    /// same: the two answers that are the *control's* own state are performed here,
+    /// and the one that is an operation leaves as one.
     ///
-    /// **Opening the card is where the host is read**, and it is the only
-    /// place: a listing of a machine's inputs is a device enumeration, which
-    /// is not a thing to do on a frame path (P-0091) — the same rule under
-    /// which the Library bay's names and the arrangement pill's are read on a
-    /// press. So the list a hand is about to read is the list as of the press
-    /// that opened it, an interface plugged in a minute ago included.
+    /// Opening the card is where the host is read, and it is the only place: a
+    /// listing of a machine's inputs is a device enumeration, which is not a thing
+    /// to do on a frame path (P-0091) — the same rule under which the Library bay's
+    /// names and the arrangement pill's are read on a press. So the list a hand is
+    /// about to read is the list as of the press that opened it, an interface
+    /// plugged in a minute ago included.
     pub(crate) fn listened(&mut self, ask: AudioAsk) -> Acted {
         let Some(audio) = self.view.audio.as_mut() else {
             // A press on a pill that is not drawn, which `audio_in` answers
@@ -3100,23 +3068,21 @@ impl Readout {
         }
     }
 
-    /// **A press on the arrangement pill or on its menu**, and what this
-    /// program does about it.
+    /// A press on the arrangement pill or on its menu, and what this program does
+    /// about it.
     ///
-    /// Five answers and this file decides none of them: which one a press asks
-    /// for is `ArrangementPill::ask`'s, off the same laid-out pill `claim`
-    /// hit-tested, and what arrives here is one of them by name. Two are moves
-    /// of the control's own state and are this program telling the console
-    /// about a press it cannot see; two are operations and go where every
-    /// operation goes; the fifth is the reset, which is an `Op` and not a
-    /// record, exactly as ADR-0208 has it — *"`ResetArrangement` reaches code;
-    /// `RestoreArrangement` reaches a file"*.
+    /// Five answers and this file decides none of them: which one a press asks for
+    /// is `ArrangementPill::ask`'s, off the same laid-out pill `claim` hit-tested,
+    /// and what arrives here is one of them by name. Two are moves of the control's
+    /// own state and are this program telling the console about a press it cannot
+    /// see; two are operations and go where every operation goes; the fifth is the
+    /// reset, which is an `Op` and not a record, exactly as ADR-0208 has it —
+    /// *"`ResetArrangement` reaches code; `RestoreArrangement` reaches a file"*.
     ///
-    /// **The menu shuts on anything that acts.** An operator who has picked an
-    /// item has finished with the list, and a card left standing over the
-    /// console after the thing it was for has happened is the panel arguing
-    /// with itself. It stays open for nothing, because nothing here can be
-    /// picked twice.
+    /// The menu shuts on anything that acts. An operator who has picked an item has
+    /// finished with the list, and a card left standing over the console after the
+    /// thing it was for has happened is the panel arguing with itself. It stays
+    /// open for nothing, because nothing here can be picked twice.
     pub(crate) fn arranged(&mut self, ask: Ask) -> Acted {
         match ask {
             Ask::Open => {
@@ -3161,19 +3127,19 @@ impl Readout {
         }
     }
 
-    /// **What a press on a `uses` line did** — the capsule, or a row of the
-    /// card it puts down (`docs/adr/0329-…`).
+    /// What a press on a `uses` line did — the capsule, or a row of the card it
+    /// puts down (`docs/adr/0329-…`).
     ///
     /// [`App::aimed`]'s shape one bay along and the same division: every arm is
     /// either this console's own state moving or one operation emitted down the
-    /// path every other operation takes. **Nothing is performed here** — a
-    /// `WireInput` is [`wired_input`]'s, which is the same re-aim a model's
-    /// `wire_input` already goes through.
+    /// path every other operation takes. Nothing is performed here — a `WireInput`
+    /// is [`wired_input`]'s, which is the same re-aim a model's `wire_input`
+    /// already goes through.
     ///
-    /// **A press on the capsule of a card that is down shuts it**, because the
-    /// capsule is *outside* the card and every press outside a card that is
-    /// down is the dismissal. Pressing it twice therefore opens and closes, and
-    /// no arm has to special-case it.
+    /// A press on the capsule of a card that is down shuts it, because the capsule
+    /// is *outside* the card and every press outside a card that is down is the
+    /// dismissal. Pressing it twice therefore opens and closes, and no arm has to
+    /// special-case it.
     pub(crate) fn wired(&mut self, ask: Wiring) -> Acted {
         match ask {
             Wiring::Chip { pane, node, input } => {
@@ -3218,18 +3184,18 @@ impl Readout {
         }
     }
 
-    /// **What a press on a pane head's `▾` did** — the mark, or a row of the
-    /// card it puts down (ADR-0338, decision 5).
+    /// What a press on a pane head's `▾` did — the mark, or a row of the card it
+    /// puts down (ADR-0338, decision 5).
     ///
-    /// [`Readout::wired`]'s shape one row up and the same division: every arm
-    /// is either this console's own state moving or one operation emitted down
-    /// the path every other operation takes. **Nothing is performed here** — a
-    /// `PointPane` is [`pointed_pane`]'s, which is where the pane is resolved
-    /// and the deck refused.
+    /// [`Readout::wired`]'s shape one row up and the same division: every arm is
+    /// either this console's own state moving or one operation emitted down the
+    /// path every other operation takes. Nothing is performed here — a `PointPane`
+    /// is [`pointed_pane`]'s, which is where the pane is resolved and the deck
+    /// refused.
     ///
-    /// **A press on the mark of a card that is down shuts it**, for
-    /// [`Readout::wired`]'s reason: the mark is outside the card and every
-    /// press outside a card that is down is the dismissal.
+    /// A press on the mark of a card that is down shuts it, for
+    /// [`Readout::wired`]'s reason: the mark is outside the card and every press
+    /// outside a card that is down is the dismissal.
     pub(crate) fn pointing(&mut self, ask: view::Pointing) -> Acted {
         match ask {
             view::Pointing::Mark(pane) => {
@@ -3253,20 +3219,20 @@ impl Readout {
         }
     }
 
-    /// **What a press on the Library bay's load control did** — the button,
-    /// the pulldown, or a row of the list it puts down (ADR-0305).
+    /// What a press on the Library bay's load control did — the button, the
+    /// pulldown, or a row of the list it puts down (ADR-0305).
     ///
     /// [`Readout::arranged`]'s shape one bay along, and the two are the same
     /// division: every arm is either this console's own state moving or one
-    /// operation emitted down the path every other operation takes. **Nothing
-    /// is performed here**, and in particular nothing writes a file: a
-    /// `LoadSet` is `played`'s, exactly as it is for the key and for the drop.
+    /// operation emitted down the path every other operation takes. Nothing is
+    /// performed here, and in particular nothing writes a file: a `LoadSet` is
+    /// `played`'s, exactly as it is for the key and for the drop.
     ///
-    /// **A pick moves no deck selection**, which is what the record is about:
-    /// `View::aim_at` writes the bay's own mark and never `View::select`, so
-    /// the ring on the strip and the letter in the foot are free to name two
-    /// different decks. It also puts the list away, because a pick is one
-    /// gesture and nothing here is emitted for a caller to end it in.
+    /// A pick moves no deck selection, which is what the record is about:
+    /// `View::aim_at` writes the bay's own mark and never `View::select`, so the
+    /// ring on the strip and the letter in the foot are free to name two different
+    /// decks. It also puts the list away, because a pick is one gesture and nothing
+    /// here is emitted for a caller to end it in.
     pub(crate) fn aimed(&mut self, ask: Aim) -> Acted {
         match ask {
             Aim::Open => {
@@ -3304,22 +3270,22 @@ impl Readout {
         }
     }
 
-    /// **A press on the Sequencer bay's `+ lane`, and what this program does
-    /// about it.**
+    /// A press on the Sequencer bay's `+ lane`, and what this program does about
+    /// it.
     ///
     /// [`Readout::aimed`]'s shape one bay along, and the same division: the two
-    /// answers that are the *console's* own state are performed here, and the
-    /// one that is an operation leaves as one. Nothing appends a lane here —
+    /// answers that are the *console's* own state are performed here, and the one
+    /// that is an operation leaves as one. Nothing appends a lane here —
     /// `sequenced` is where `Operation::PointLane` lands, by the same road the
     /// bay's other four take.
     ///
-    /// **The card is put away before the operation is emitted**, which is
-    /// [`Readout::menued`]'s rule and its reason: a card left standing over a
-    /// lane that has already been asked for would claim the next press on the
-    /// console for a gesture the hand has finished.
+    /// The card is put away before the operation is emitted, which is
+    /// [`Readout::menued`]'s rule and its reason: a card left standing over a lane
+    /// that has already been asked for would claim the next press on the console
+    /// for a gesture the hand has finished.
     ///
-    /// **Opening it says what it is for**, on `aimed`'s precedent: a card that
-    /// went up in silence is a control an operator has to guess the shape of.
+    /// Opening it says what it is for, on `aimed`'s precedent: a card that went up
+    /// in silence is a control an operator has to guess the shape of.
     pub(crate) fn chosen(&mut self, ask: Chose) -> Acted {
         match ask {
             Chose::Open => {
@@ -3357,26 +3323,25 @@ impl Readout {
         }
     }
 
-    /// **A press on a row's menu, and what this program does about it.**
+    /// A press on a row's menu, and what this program does about it.
     ///
-    /// [`Readout::aimed`]'s shape one control along, and the same division:
-    /// the two answers that are the *console's* own state are performed here,
-    /// and the two that are operations leave as ones. **Nothing is performed
-    /// here**, and in particular nothing writes a file: a `LoadSet` is
-    /// `played`'s, exactly as it is for the button, the key and the drop, and
-    /// a send is the window's, because a bundle is a disk read and a file
-    /// written.
+    /// [`Readout::aimed`]'s shape one control along, and the same division: the two
+    /// answers that are the *console's* own state are performed here, and the two
+    /// that are operations leave as ones. Nothing is performed here, and in
+    /// particular nothing writes a file: a `LoadSet` is `played`'s, exactly as it
+    /// is for the button, the key and the drop, and a send is the window's, because
+    /// a bundle is a disk read and a file written.
     ///
-    /// **The menu is put away before either operation is emitted**, and it is
-    /// put away on both arms rather than on one: a card left standing over a
-    /// load that has already been asked for would claim the next press on the
-    /// console for a gesture the hand has finished. That is `Menu::Naming`'s
-    /// own rule at the arrangement pill, one bay along.
+    /// The menu is put away before either operation is emitted, and it is put away
+    /// on both arms rather than on one: a card left standing over a load that has
+    /// already been asked for would claim the next press on the console for a
+    /// gesture the hand has finished. That is `Menu::Naming`'s own rule at the
+    /// arrangement pill, one bay along.
     ///
-    /// **The load moves no mark.** `View::aim_at` is not called and neither is
-    /// `View::select` or the cursor: the item named the deck and the row named
-    /// the Set, so there is nothing left for this press to have moved — which
-    /// is the whole of why the menu is a route worth having.
+    /// The load moves no mark. `View::aim_at` is not called and neither is
+    /// `View::select` or the cursor: the item named the deck and the row named the
+    /// Set, so there is nothing left for this press to have moved — which is the
+    /// whole of why the menu is a route worth having.
     pub(crate) fn menued(&mut self, ask: Picked) -> Acted {
         match ask {
             Picked::Open(row) => {
@@ -3413,20 +3378,20 @@ impl Readout {
         }
     }
 
-    /// **The name is finished**, and what that asks for.
+    /// The name is finished, and what that asks for.
     ///
     /// One operation of the vocabulary, named — the same
-    /// `Operation::SaveArrangement` the menu's *save* asks for with an
-    /// arrangement already in use, so the two ways to reach a save are two
-    /// ways to name one thing rather than two paths to a disk. **The menu is
-    /// shut before the operation is emitted**, whether or not the name is any
-    /// good: a name that is refused is refused out loud by `checked_name`, and
-    /// a card left standing over the refusal would be the panel asking the
-    /// question again without saying the answer.
+    /// `Operation::SaveArrangement` the menu's *save* asks for with an arrangement
+    /// already in use, so the two ways to reach a save are two ways to name one
+    /// thing rather than two paths to a disk. The menu is shut before the operation
+    /// is emitted, whether or not the name is any good: a name that is refused is
+    /// refused out loud by `checked_name`, and a card left standing over the
+    /// refusal would be the panel asking the question again without saying the
+    /// answer.
     ///
-    /// An empty name arrives here as an empty name and is refused there, which
-    /// is the rule this file keeps everywhere: the surface owns the affordance
-    /// and never the authority (P-0090).
+    /// An empty name arrives here as an empty name and is refused there, which is
+    /// the rule this file keeps everywhere: the surface owns the affordance and
+    /// never the authority (P-0090).
     pub(crate) fn named(&mut self) -> Acted {
         let Some(typed) = self.view.arrangement.naming() else {
             return Acted::Nothing;
@@ -3436,28 +3401,26 @@ impl Readout {
         Acted::Emitted(Some(Operation::SaveArrangement { name }))
     }
 
-    /// A press on the Program bay head's `solo`. **The pill says what it
-    /// did** — which of the two operations it asked for — because the whole
-    /// point of the control is that it is the same solo `s` and `u` perform,
-    /// reached from a capsule instead of from the pointer.
+    /// A press on the Program bay head's `solo`. The pill says what it did — which
+    /// of the two operations it asked for — because the whole point of the control
+    /// is that it is the same solo `s` and `u` perform, reached from a capsule
+    /// instead of from the pointer.
     ///
-    /// **The region is the picture's and never the pointer's**, which is the
-    /// one way this differs from `s`: a key solos whatever the pointer is
-    /// over, and this pill names `program-view` because
-    /// `docs/manual/console.html` says what it is for — *"Solo the program
-    /// view: the panel folds away and only the picture is left, which is also
-    /// how you capture this window."*
-    /// A press on the grip in a bay head. **It says what it did**, because the
-    /// point of the control is that it is the fold `f` performs, reached from
-    /// the console's own shape instead of from the keyboard. One operation and
-    /// no toggle: a folded bay has no rectangle, so the grip is not drawn
-    /// afterwards and the way back is `z`.
+    /// The region is the picture's and never the pointer's, which is the one way
+    /// this differs from `s`: a key solos whatever the pointer is over, and this
+    /// pill names `program-view` because `docs/manual/console.html` says what it is
+    /// for — *"Solo the program view: the panel folds away and only the picture is
+    /// left, which is also how you capture this window."* A press on the grip in a
+    /// bay head. It says what it did, because the point of the control is that it
+    /// is the fold `f` performs, reached from the console's own shape instead of
+    /// from the keyboard. One operation and no toggle: a folded bay has no
+    /// rectangle, so the grip is not drawn afterwards and the way back is `z`.
     ///
-    /// **One control and not two.** ADR-0295 gave a pane a band on its outer
-    /// edge and this doc described both; ADR-0300 replaced that half — a pane
-    /// folds by its own boundary being pulled past the narrowest it goes, and
-    /// comes back by that boundary being dragged in, so it needs no press arm
-    /// and its way back is not `z` alone.
+    /// One control and not two. ADR-0295 gave a pane a band on its outer edge and
+    /// this doc described both; ADR-0300 replaced that half — a pane folds by its
+    /// own boundary being pulled past the narrowest it goes, and comes back by that
+    /// boundary being dragged in, so it needs no press arm and its way back is not
+    /// `z` alone.
     pub(crate) fn folded(&mut self, op: Op) -> Outcome {
         let Op::Fold(id) = op else {
             unreachable!("a fold control asked for {op:?}")
@@ -3480,46 +3443,44 @@ impl Readout {
         self.op(op)
     }
 
-    /// **A press on one of the four class pills**, and the one press in this
-    /// program that is neither an operation on the arrangement nor one on the
-    /// mix.
+    /// A press on one of the four class pills, and the one press in this program
+    /// that is neither an operation on the arrangement nor one on the mix.
     ///
     /// # Why it takes a different path from every other press in this file
     ///
-    /// Everything else here ends in one of two places. A control over the
-    /// console's own shape asks for a [`Op`], `Panel` performs it, and what
-    /// comes back is an [`Outcome`]. A control over the mix emits an
-    /// [`Operation`], [`written`] turns it into a `Record` and [`apply`] moves
-    /// the deck with it — P-0090, and every control ends at the same record. A
-    /// reader who has just met those two will reach for the second here,
-    /// because it is the one every new control has taken for a year.
+    /// Everything else here ends in one of two places. A control over the console's
+    /// own shape asks for a [`Op`], `Panel` performs it, and what comes back is an
+    /// [`Outcome`]. A control over the mix emits an [`Operation`], [`written`]
+    /// turns it into a `Record` and [`apply`] moves the deck with it — P-0090, and
+    /// every control ends at the same record. A reader who has just met those two
+    /// will reach for the second here, because it is the one every new control has
+    /// taken for a year.
     ///
-    /// **It must not be routed as an `Operation`, and
+    /// It must not be routed as an `Operation`, and
     /// [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md)
-    /// is explicit about it.** The opening is configuration of the *map* — the
-    /// layer every surface reaches the vocabulary through — and not a member of
-    /// the vocabulary the map addresses. The rule is narrower than *map
-    /// configuration is never an operation*, because `Operation::PointLane`
-    /// already is one: **a setting that decides whether a surface may reach a
-    /// class of operations cannot itself be one of those operations.** Rule 01
-    /// would make such an operation reachable from all four surfaces, MCP
-    /// included, and a permission an actor can grant itself is not a
-    /// permission. There is no 65th row on the operations page for the same
-    /// reason, and ADR-0235's *"the opening setting has no operation"* is
-    /// annotated as settled by exactly this.
+    /// is explicit about it. The opening is configuration of the *map* — the layer
+    /// every surface reaches the vocabulary through — and not a member of the
+    /// vocabulary the map addresses. The rule is narrower than *map configuration
+    /// is never an operation*, because `Operation::PointLane` already is one: a
+    /// setting that decides whether a surface may reach a class of operations
+    /// cannot itself be one of those operations. Rule 01 would make such an
+    /// operation reachable from all four surfaces, MCP included, and a permission
+    /// an actor can grant itself is not a permission. There is no 65th row on the
+    /// operations page for the same reason, and ADR-0235's *"the opening setting
+    /// has no operation"* is annotated as settled by exactly this.
     ///
-    /// So: no `Operation`, no `Record`, no [`Acted::Emitted`]. What a press
-    /// hands over is a value — `McpPill::next`, the opening with one class set
-    /// the other way and the other three written back as they were — and the
-    /// run's `Opening` is where it goes. **Somebody will one day try to fix
-    /// this into the vocabulary**; this paragraph is what it costs them to do
-    /// it, and `Acted::Opened` is the type that will not let it happen quietly.
+    /// So: no `Operation`, no `Record`, no [`Acted::Emitted`]. What a press hands
+    /// over is a value — `McpPill::next`, the opening with one class set the other
+    /// way and the other three written back as they were — and the run's `Opening`
+    /// is where it goes. Somebody will one day try to fix this into the vocabulary;
+    /// this paragraph is what it costs them to do it, and `Acted::Opened` is the
+    /// type that will not let it happen quietly.
     ///
-    /// **The view's copy is written in the same breath as the handle**, not
-    /// left for the next frame's read. `input::claim` and the probe above both
-    /// hit-test against `View::opening`, and the pill is not the same width in
-    /// its two states — so a press that moved the handle and not the view would
-    /// leave the very next press aimed at the capsule that was there before it.
+    /// The view's copy is written in the same breath as the handle, not left for
+    /// the next frame's read. `input::claim` and the probe above both hit-test
+    /// against `View::opening`, and the pill is not the same width in its two
+    /// states — so a press that moved the handle and not the view would leave the
+    /// very next press aimed at the capsule that was there before it.
     pub(crate) fn opened(&mut self, pill: &McpPill) -> Acted {
         // **Annotated**: it says what a press composes — an opening and not a `bool`.
         let next: Open = pill.next(self.view.opening);
@@ -3548,25 +3509,25 @@ impl Readout {
         Acted::Opened
     }
 
-    /// **A press on a scope chip**, and it is the surface performing its own
-    /// pointer — [`pointed`]'s shape one bay along, done here rather than in
-    /// `performed` for the reason the scope key's is done at the key.
+    /// A press on a scope chip, and it is the surface performing its own pointer —
+    /// [`pointed`]'s shape one bay along, done here rather than in `performed` for
+    /// the reason the scope key's is done at the key.
     ///
-    /// `Operation::SelectScope`'s payload is `Undecided`, so a performer
-    /// reading the operation could not tell which library was chosen and would
-    /// have to guess. The press *knows*, because a pointer lands on one
-    /// capsule and no other, and [`Chosen`] is what carries the two halves
-    /// together. **So the mark is moved here and the operation is emitted for
-    /// the record it is owed**, which is `Silent(Surface)` — the same shape as
-    /// the key, which steps first and emits afterwards.
+    /// `Operation::SelectScope`'s payload is `Undecided`, so a performer reading
+    /// the operation could not tell which library was chosen and would have to
+    /// guess. The press *knows*, because a pointer lands on one capsule and no
+    /// other, and [`Chosen`] is what carries the two halves together. So the mark
+    /// is moved here and the operation is emitted for the record it is owed, which
+    /// is `Silent(Surface)` — the same shape as the key, which steps first and
+    /// emits afterwards.
     ///
-    /// **A chip that is already marked is not refused**, and the line says
-    /// which of the two it was. `View::select_scope` answers `false` for it,
-    /// and that is a mark that did not move rather than a press that failed:
-    /// where the key *steps* and would go somewhere else, a press **names**,
-    /// and naming the library you are already reading is asking it again. What
-    /// the caller does with that is re-read the listing, which is where a
-    /// directory read belongs (P-0091) and is not on this side of the seam.
+    /// A chip that is already marked is not refused, and the line says which of the
+    /// two it was. `View::select_scope` answers `false` for it, and that is a mark
+    /// that did not move rather than a press that failed: where the key *steps* and
+    /// would go somewhere else, a press names, and naming the library you are
+    /// already reading is asking it again. What the caller does with that is
+    /// re-read the listing, which is where a directory read belongs (P-0091) and is
+    /// not on this side of the seam.
     ///
     /// It cannot refuse for the other reason either: the chip came out of
     /// `View::scopes`, so it is on the row by construction.
@@ -3591,33 +3552,33 @@ impl Readout {
         Acted::Emitted(Some(chosen.asked(self.view.aimed.as_deref())))
     }
 
-    /// **A press on one of the Library bay's two filter fields**, and it is
+    /// A press on one of the Library bay's two filter fields, and it is
     /// [`Readout::chose`]'s shape one row down: the surface performs its own
     /// pointer and emits the operation for the record it is owed, which is
     /// `Silent(Question)` — *it asks rather than changes*.
     ///
-    /// **The operation carries everything, where `SelectScope` carries
-    /// nothing.** `Operation::ListSets { holds, layer }` is exactly the state
-    /// the two fields are in, so this applies it rather than guessing at it and
-    /// there is no value travelling beside it. `View::narrow` is the one door
-    /// into that state and is where a `holds` this console cannot draw is
-    /// refused — which nothing here can hand it, because the value came out of
-    /// `LibraryBay::filter` stepping the same candidates.
+    /// The operation carries everything, where `SelectScope` carries nothing.
+    /// `Operation::ListSets { holds, layer }` is exactly the state the two fields
+    /// are in, so this applies it rather than guessing at it and there is no value
+    /// travelling beside it. `View::narrow` is the one door into that state and is
+    /// where a `holds` this console cannot draw is refused — which nothing here can
+    /// hand it, because the value came out of `LibraryBay::filter` stepping the
+    /// same candidates.
     ///
-    /// **The listing is not read here.** It is a directory read
+    /// The listing is not read here. It is a directory read
     /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md))
     /// and the store is the window's rather than the readout's, so the caller
     /// re-reads on `Operation::ListSets` exactly as it does on
-    /// `Operation::SelectScope` — one branch, two operations, because a scope
-    /// and a filter are the same question asked of different halves.
+    /// `Operation::SelectScope` — one branch, two operations, because a scope and a
+    /// filter are the same question asked of different halves.
     ///
-    /// **A filter set while the bay is reading something else is said out
-    /// loud**, and it is the one thing about this row that would otherwise be
-    /// silent: the operation is *List what the store holds*, which is `all`
-    /// and the `my sets` starred out of it, and `presets` and `folder` are not
-    /// the store. The press is still a real question — it is answered the
-    /// moment one of those two is marked again — and a press that appears to
-    /// do nothing is what this line exists to prevent.
+    /// A filter set while the bay is reading something else is said out loud, and
+    /// it is the one thing about this row that would otherwise be silent: the
+    /// operation is *List what the store holds*, which is `all` and the `my sets`
+    /// starred out of it, and `presets` and `folder` are not the store. The press
+    /// is still a real question — it is answered the moment one of those two is
+    /// marked again — and a press that appears to do nothing is what this line
+    /// exists to prevent.
     pub(crate) fn narrowed(&mut self, operation: Operation) -> Acted {
         let holds = match &operation {
             Operation::ListSets { holds, .. } => holds.as_deref(),
@@ -3663,22 +3624,22 @@ impl Readout {
         Acted::Emitted(Some(operation))
     }
 
-    /// **A press on the Library bay's `params` chip**, and it is
-    /// [`Readout::narrowed`]'s shape one row down with one difference: only
-    /// one of the two things a press on this chip can mean is an operation.
+    /// A press on the Library bay's `params` chip, and it is
+    /// [`Readout::narrowed`]'s shape one row down with one difference: only one of
+    /// the two things a press on this chip can mean is an operation.
     ///
-    /// **Opening asks for a reading and this file does not answer it**, which
-    /// is [`Readout::narrowed`]'s division exactly: what a Set declares is on
-    /// a disk, the store is the window's rather than the readout's, and a
-    /// press is where this program already reads one. So the operation leaves
-    /// here and the caller answers it with [`read_reading`], on the same
-    /// branch it re-reads a listing on.
+    /// Opening asks for a reading and this file does not answer it, which is
+    /// [`Readout::narrowed`]'s division exactly: what a Set declares is on a disk,
+    /// the store is the window's rather than the readout's, and a press is where
+    /// this program already reads one. So the operation leaves here and the caller
+    /// answers it with [`read_reading`], on the same branch it re-reads a listing
+    /// on.
     ///
-    /// **Closing is performed here and emits nothing.** It changes which rows
-    /// this bay is drawing, which is the console's own state — no more an
-    /// operation than a fold is — and a `ReadSet` emitted to put a reading
-    /// away would say a question was asked at the moment one stopped being.
-    /// See `view::Read`, where the argument is.
+    /// Closing is performed here and emits nothing. It changes which rows this bay
+    /// is drawing, which is the console's own state — no more an operation than a
+    /// fold is — and a `ReadSet` emitted to put a reading away would say a question
+    /// was asked at the moment one stopped being. See `view::Read`, where the
+    /// argument is.
     pub(crate) fn asked_to_read(&mut self, ask: Read) -> Acted {
         match ask {
             Read::Open(operation) => Acted::Emitted(Some(operation)),
@@ -3699,56 +3660,52 @@ impl Readout {
         }
     }
 
-    /// **A press on a row of the Library bay's list**, which takes that Set in
-    /// hand and asks for nothing.
+    /// A press on a row of the Library bay's list, which takes that Set in hand and
+    /// asks for nothing.
     ///
     /// # The mark on the row is the whole of what a carry can draw
     ///
-    /// `docs/manual/console.html` draws no drag affordance and no drop target
-    /// — no ghost under the pointer, no lit strip — and this program draws
-    /// what that page draws. What it *does* draw is `.lib-row.cursor`, and the
-    /// row a hand is on is exactly what that mark is for, so the press moves
-    /// it: the row taken is the row marked, for the length of the carry and
-    /// afterwards.
+    /// `docs/manual/console.html` draws no drag affordance and no drop target — no
+    /// ghost under the pointer, no lit strip — and this program draws what that
+    /// page draws. What it *does* draw is `.lib-row.cursor`, and the row a hand is
+    /// on is exactly what that mark is for, so the press moves it: the row taken is
+    /// the row marked, for the length of the carry and afterwards.
     ///
-    /// **Afterwards is deliberate.** The cursor is the operand a load reads
-    /// (`view::View::cursor_row`), so a drop that landed and a carry that was
-    /// let go over nothing both leave the keyboard aimed at the Set the hand
-    /// last touched — *two ways in, one name*, met at the pointer this bay
-    /// keeps rather than only at the operation.
+    /// Afterwards is deliberate. The cursor is the operand a load reads
+    /// (`view::View::cursor_row`), so a drop that landed and a carry that was let
+    /// go over nothing both leave the keyboard aimed at the Set the hand last
+    /// touched — *two ways in, one name*, met at the pointer this bay keeps rather
+    /// than only at the operation.
     ///
-    /// **It emits nothing, and there is nothing for it to emit.** Moving this
-    /// cursor has no row on `docs/manual/operations.html` and is not owed one,
-    /// and `docs/manual/console.html` is where that is said: *"The cursor
-    /// moves on the arrow keys and gets no row on the operations page, which
-    /// is a decision and not an omission"* — a pointer that names a row
-    /// instead of stepping to it is the same pointer, which is what
-    /// `view::View::point_at` is.
+    /// It emits nothing, and there is nothing for it to emit. Moving this cursor
+    /// has no row on `docs/manual/operations.html` and is not owed one, and
+    /// `docs/manual/console.html` is where that is said: *"The cursor moves on the
+    /// arrow keys and gets no row on the operations page, which is a decision and
+    /// not an omission"* — a pointer that names a row instead of stepping to it is
+    /// the same pointer, which is what `view::View::point_at` is.
     ///
-    /// **And a pointer that is the same pointer owes what the keys owe.**
-    /// `view::View::opened` draws the reading only where the row under the
-    /// cursor is still the Set it was read of, and the rule that keeps that
-    /// honest is the cursor's rather than the keyboard's: *"**the reading
-    /// follows the cursor**: a move with one open is a read of the row it
-    /// arrived at"* (`karakuri-console/src/view.rs`,
-    /// `view::View::reading_open`). So this answers [`Acted::Pointed`] where
-    /// the mark actually moved, exactly as the arrow keys answer
-    /// `Change::Pointed(moved)`, and the window loop re-reads on it the way it
-    /// re-reads on theirs. A carry that discarded the `bool` made the block
-    /// under an open reading vanish for the length of the run, because nothing
-    /// else on this route ever moves the cursor back.
+    /// And a pointer that is the same pointer owes what the keys owe.
+    /// `view::View::opened` draws the reading only where the row under the cursor
+    /// is still the Set it was read of, and the rule that keeps that honest is the
+    /// cursor's rather than the keyboard's: *"the reading follows the cursor: a
+    /// move with one open is a read of the row it arrived at"*
+    /// (`karakuri-console/src/view.rs`, `view::View::reading_open`). So this
+    /// answers [`Acted::Pointed`] where the mark actually moved, exactly as the
+    /// arrow keys answer `Change::Pointed(moved)`, and the window loop re-reads on
+    /// it the way it re-reads on theirs. A carry that discarded the `bool` made the
+    /// block under an open reading vanish for the length of the run, because
+    /// nothing else on this route ever moves the cursor back.
     ///
-    /// **That is still no operation.** `read_reading` reads the store and
-    /// writes the answer into the view; it emits nothing, so the press
-    /// `karakuri_console::input`'s own doc calls *"the one offer on this
-    /// console whose press names no operation"* goes on naming none
-    /// (ADR-0265).
+    /// That is still no operation. `read_reading` reads the store and writes the
+    /// answer into the view; it emits nothing, so the press
+    /// `karakuri_console::input`'s own doc calls *"the one offer on this console
+    /// whose press names no operation"* goes on naming none (ADR-0265).
     ///
-    /// **That sentence is now qualified rather than untrue**: it is about the
-    /// four scopes whose rows are Sets. Under `history` the same rectangle is
-    /// [`Readout::landed`], which names `Operation::RestoreProcedure` outright
-    /// — and this method is not reached there, because `View::sets` hands the
-    /// carry nothing (ADR-0308).
+    /// That sentence is now qualified rather than untrue: it is about the four
+    /// scopes whose rows are Sets. Under `history` the same rectangle is
+    /// [`Readout::landed`], which names `Operation::RestoreProcedure` outright —
+    /// and this method is not reached there, because `View::sets` hands the carry
+    /// nothing (ADR-0308).
     pub(crate) fn took(&mut self, p: Point, taken: Taken) -> Acted {
         let Taken {
             row,
@@ -3775,26 +3732,24 @@ impl Readout {
         }
     }
 
-    /// **A press on a row of the Library bay's `history` scope**, which lands
-    /// that version on the node it was a version of.
+    /// A press on a row of the Library bay's `history` scope, which lands that
+    /// version on the node it was a version of.
     ///
-    /// [`Readout::took`]'s neighbour on the same rectangle, and the two are
-    /// the same press meaning two things: a row of a library is a Set to take
-    /// in hand and a row of a history is a version to put back. Which of them
-    /// answers is decided by which listing went in with the point
-    /// (`view::View::sets`, `view::View::versions`) rather than by an arm here
-    /// asking the scope.
+    /// [`Readout::took`]'s neighbour on the same rectangle, and the two are the
+    /// same press meaning two things: a row of a library is a Set to take in hand
+    /// and a row of a history is a version to put back. Which of them answers is
+    /// decided by which listing went in with the point (`view::View::sets`,
+    /// `view::View::versions`) rather than by an arm here asking the scope.
     ///
-    /// **It emits and performs nothing**, which is [`Readout::asked_to_read`]'s
-    /// division: what a landing does is write a file the store owns, and the
-    /// store is the window's rather than the readout's. [`restored`] is where
-    /// it is done, on the branch every emitted operation already takes.
+    /// It emits and performs nothing, which is [`Readout::asked_to_read`]'s
+    /// division: what a landing does is write a file the store owns, and the store
+    /// is the window's rather than the readout's. [`restored`] is where it is done,
+    /// on the branch every emitted operation already takes.
     ///
-    /// **The cursor is not moved.** A carry moves it because the mark on a row
-    /// is what a drag has to draw and because a load reads it afterwards; a
-    /// landing reads neither — the row is the operand and the deck is the
-    /// pulldown's — so moving the mark would be this press quietly re-aiming
-    /// the key beside it.
+    /// The cursor is not moved. A carry moves it because the mark on a row is what
+    /// a drag has to draw and because a load reads it afterwards; a landing reads
+    /// neither — the row is the operand and the deck is the pulldown's — so moving
+    /// the mark would be this press quietly re-aiming the key beside it.
     pub(crate) fn landed(&mut self, operation: Operation) -> Acted {
         println!(
             "press: {} — the version is written over that node's working copy and its \
@@ -3823,20 +3778,19 @@ impl Readout {
         Acted::Emitted(Some(operation))
     }
 
-    /// **A press on a candidate row**, which keeps that candidate.
+    /// A press on a candidate row, which keeps that candidate.
     ///
-    /// [`Readout::landed`]'s neighbour on the same row, and the two are what
-    /// the lane offers: the capsule steps a node back a version and the row
-    /// around it says *I have looked at this*. **The free act is on the large
-    /// target and the act that writes a file is on the small one**, which is
-    /// the whole of why they are arranged this way round (ADR-0326).
+    /// [`Readout::landed`]'s neighbour on the same row, and the two are what the
+    /// lane offers: the capsule steps a node back a version and the row around it
+    /// says *I have looked at this*. The free act is on the large target and the
+    /// act that writes a file is on the small one, which is the whole of why they
+    /// are arranged this way round (ADR-0326).
     ///
-    /// **It emits and performs nothing here**, which is
-    /// [`Readout::asked_to_read`]'s division: what a keep changes is the lane,
-    /// and the lane is `View::staging`, which this readout owns but the window
-    /// writes — so [`kept`] is where the row is taken off, on the branch every
-    /// emitted operation already takes. `written` answers
-    /// `Silent(Silent::Surface)` for it, which is that division said in the
+    /// It emits and performs nothing here, which is [`Readout::asked_to_read`]'s
+    /// division: what a keep changes is the lane, and the lane is `View::staging`,
+    /// which this readout owns but the window writes — so [`kept`] is where the row
+    /// is taken off, on the branch every emitted operation already takes. `written`
+    /// answers `Silent(Silent::Surface)` for it, which is that division said in the
     /// record vocabulary.
     pub(crate) fn kept(&mut self, operation: Operation) -> Acted {
         println!(
@@ -3854,11 +3808,10 @@ impl Readout {
         Acted::Emitted(Some(operation))
     }
 
-    /// A press on the Outputs row's one control. **The dot says what it did**
-    /// — which of the two operations it asked for, and what the picture is
-    /// now — because the whole point of the control is that it is the same
-    /// fold `f` over the picture performs, reached from the other end of the
-    /// panel.
+    /// A press on the Outputs row's one control. The dot says what it did — which
+    /// of the two operations it asked for, and what the picture is now — because
+    /// the whole point of the control is that it is the same fold `f` over the
+    /// picture performs, reached from the other end of the panel.
     pub(crate) fn sink(&mut self, asked: Operation, op: Op) -> Outcome {
         // Two operations and no third, which is `Outputs::op`'s whole
         // argument: the toggle is the dot choosing between them, and what
@@ -3895,23 +3848,22 @@ impl Readout {
 
     // -- the legend -----------------------------------------------------
 
-    /// **What this program is, said once at startup — and every line of it
-    /// derived.**
+    /// What this program is, said once at startup — and every line of it derived.
     ///
-    /// `presets` and `store` are the two directories this run resolved, and
-    /// they are passed in rather than read here for the reason every other
-    /// number in this function is asked of the thing it is about: a legend
-    /// that described the search instead of printing its answer is exactly the
-    /// defect this function was repaired of, one paragraph along. See the
-    /// paragraph below for what that repair cost to find.
+    /// `presets` and `store` are the two directories this run resolved, and they
+    /// are passed in rather than read here for the reason every other number in
+    /// this function is asked of the thing it is about: a legend that described the
+    /// search instead of printing its answer is exactly the defect this function
+    /// was repaired of, one paragraph along. See the paragraph below for what that
+    /// repair cost to find.
     ///
-    /// `mcp_port` is the port `karakuri_mcp::serve` actually bound
-    /// — `Reporter::port` and not `--mcp`'s argument, so `--mcp 0` prints the
-    /// ephemeral port it got — and `None` is a run that was not asked to serve.
-    /// It is passed in for the same reason `presets` and `store` are: the
-    /// sentence about the `mcp` pills was written unconditionally, said *nothing
-    /// in this process serves MCP yet*, and went on saying it to every run that
-    /// had just printed the address its server was listening on.
+    /// `mcp_port` is the port `karakuri_mcp::serve` actually bound —
+    /// `Reporter::port` and not `--mcp`'s argument, so `--mcp 0` prints the
+    /// ephemeral port it got — and `None` is a run that was not asked to serve. It
+    /// is passed in for the same reason `presets` and `store` are: the sentence
+    /// about the `mcp` pills was written unconditionally, said *nothing in this
+    /// process serves MCP yet*, and went on saying it to every run that had just
+    /// printed the address its server was listening on.
     pub(crate) fn print_legend(
         &mut self,
         budget_ms: Option<f32>,
@@ -4510,7 +4462,7 @@ impl Readout {
     }
 }
 
-/// **Every key this window binds, and the sentence the legend prints for it.**
+/// Every key this window binds, and the sentence the legend prints for it.
 ///
 /// The list an operator reads and the list the tests check are one list.
 /// `key_column::the_keys_this_file_lists_are_the_keys_the_window_loop_binds`
@@ -4519,10 +4471,10 @@ impl Readout {
 /// and not bound — fails there rather than being found by an operator pressing
 /// it and getting nothing.
 ///
-/// **That test was already here and the legend was a second copy of its
-/// list**, which is the copy that drifted: the printed list stayed at nine
-/// keys while ten more were bound, and the operator who read it was told this
-/// program folds, solos, resets and quits.
+/// That test was already here and the legend was a second copy of its list,
+/// which is the copy that drifted: the printed list stayed at nine keys while
+/// ten more were bound, and the operator who read it was told this program
+/// folds, solos, resets and quits.
 ///
 /// The rows of `docs/manual/operations.html` each key reaches are
 /// `key_column::ROWS`, which is keyed off this table and stays in the test
@@ -4534,31 +4486,31 @@ impl Readout {
 /// inside a bay and the rub-out beside them, then the letters that survive
 /// globally.
 ///
-/// **`digit` is one entry and not ten**, because a digit is one key of the
-/// grammar: `1` is the mixer's first strip and the library's first row, so ten
-/// entries would print ten sentences saying the same thing and the page would
-/// still have to name the bay. It is also the one key
+/// `digit` is one entry and not ten, because a digit is one key of the grammar:
+/// `1` is the mixer's first strip and the library's first row, so ten entries
+/// would print ten sentences saying the same thing and the page would still
+/// have to name the bay. It is also the one key
 /// [`key_column::bound`](key_column) cannot read out of this file's text — the
 /// arm is a guard rather than ten literals — so it is contributed by
-/// `karakuri_console::focus::BUILT`, which is the dispatch table the grammar
-/// is written in (ADR-0333).
+/// `karakuri_console::focus::BUILT`, which is the dispatch table the grammar is
+/// written in (ADR-0333).
 ///
-/// **`p` is the latency offset here and was the report until 2026-08-31.**
-/// The page specifies the offset as `o` and `p`; a badge naming two keys with
-/// one of them bound would be a badge that lies, and a panel diagnostic with
-/// no useful shortcut to point at loses the letter rather than keeping it. The
-/// operation it named is still `karakuri_console::panel::Op::Report` and
-/// nothing in this program asks for it.
+/// `p` is the latency offset here and was the report until 2026-08-31. The page
+/// specifies the offset as `o` and `p`; a badge naming two keys with one of
+/// them bound would be a badge that lies, and a panel diagnostic with no useful
+/// shortcut to point at loses the letter rather than keeping it. The operation
+/// it named is still `karakuri_console::panel::Op::Report` and nothing in this
+/// program asks for it.
 ///
-/// **Twelve letters left on 2026-09-10 and five more with the other seven
-/// bays, and none of them was retired before the grammar reached its row.**
-/// `0`–`3` are the Mixer's `1`–`4`, `[ ] \` and `; '` are the arrows and
-/// `space` on the addressed trim and fader, `m` is `space` on the blend chip,
-/// `e` is `space` on the Library's head and `l` is `enter` on one of its rows
-/// (ADR-0259, ADR-0333). Then `f` and `s` went with `Readout::target` — `space`
-/// on a bay is the fold and `space` on the Program head's `solo` is the solo —
-/// `u` with `s`, because one control is both states, and `o` and `p` became
-/// the arrows on the Transport's offset (ADR-0343).
+/// Twelve letters left on 2026-09-10 and five more with the other seven bays,
+/// and none of them was retired before the grammar reached its row. `0`–`3` are
+/// the Mixer's `1`–`4`, `[ ] \` and `; '` are the arrows and `space` on the
+/// addressed trim and fader, `m` is `space` on the blend chip, `e` is `space`
+/// on the Library's head and `l` is `enter` on one of its rows (ADR-0259,
+/// ADR-0333). Then `f` and `s` went with `Readout::target` — `space` on a bay
+/// is the fold and `space` on the Program head's `solo` is the solo — `u` with
+/// `s`, because one control is both states, and `o` and `p` became the arrows
+/// on the Transport's offset (ADR-0343).
 ///
 /// What is left is the seven globals the operand rule keeps, plus `g`, which is
 /// addressed to the focused bay because the grammar reaches no pane, and `k`,
@@ -4651,34 +4603,34 @@ pub(crate) const KEYS: &[(&str, &str)] = &[
 
 /// A pointer event, stripped to what the rule needs.
 ///
-/// **A button is left, or it is the secondary button, or it is not routed at
-/// all.** This said *a button is left or it is not routed* until 2026-09-09,
-/// and it was exact: `window_event` matched `MouseButton::Left` and every
-/// other button fell through its `_ => {}`, so a right press reached nothing
-/// in this program and `egui` was never told about one either.
+/// A button is left, or it is the secondary button, or it is not routed at all.
+/// This said *a button is left or it is not routed* until 2026-09-09, and it
+/// was exact: `window_event` matched `MouseButton::Left` and every other button
+/// fell through its `_ => {}`, so a right press reached nothing in this program
+/// and `egui` was never told about one either.
 ///
-/// **What made it a second variant rather than a field on [`Pointer::Down`]**
-/// is where the answer is wanted. `karakuri_console::input::claim` decides
-/// *whose* an event is from where the pointer is and has never known which
-/// button a press was — rules 1 to 4 are all about position — and nothing
-/// about that changes: a secondary press on a control the console draws is the
-/// console's for the same reason a primary one is. What differs is only what
-/// the press then *asks* for, which is this file's half of the seam. A
-/// `Down { secondary: bool }` would have put the flag through every arm of the
-/// press handler to be read by one of them
+/// What made it a second variant rather than a field on [`Pointer::Down`] is
+/// where the answer is wanted. `karakuri_console::input::claim` decides *whose*
+/// an event is from where the pointer is and has never known which button a
+/// press was — rules 1 to 4 are all about position — and nothing about that
+/// changes: a secondary press on a control the console draws is the console's
+/// for the same reason a primary one is. What differs is only what the press
+/// then *asks* for, which is this file's half of the seam. A `Down { secondary:
+/// bool }` would have put the flag through every arm of the press handler to be
+/// read by one of them
 /// ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
 ///
-/// **There is no `Secondary` release**, and that is the whole of what this
-/// button does here: a secondary press opens a menu and the gesture ends at
-/// the *next* press, which is [`Pointer::Down`]'s or this one's again. Nothing
-/// is taken in hand on a secondary press, so there is nothing for a release to
-/// let go of.
+/// There is no `Secondary` release, and that is the whole of what this button
+/// does here: a secondary press opens a menu and the gesture ends at the *next*
+/// press, which is [`Pointer::Down`]'s or this one's again. Nothing is taken in
+/// hand on a secondary press, so there is nothing for a release to let go of.
 ///
-/// **The wheel carries a distance now, and only one axis of it.** It used to
-/// carry nothing, because nothing on this panel did anything with one — *which
-/// wheel axis it was does not change who gets it* is what this said, and it
-/// was true while the answer was always `egui`'s. An Inspector pane scrolls
-/// down its list ([ADR-0307](../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
+/// The wheel carries a distance now, and only one axis of it. It used to carry
+/// nothing, because nothing on this panel did anything with one — *which wheel
+/// axis it was does not change who gets it* is what this said, and it was true
+/// while the answer was always `egui`'s. An Inspector pane scrolls down its
+/// list
+/// ([ADR-0307](../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
 /// so the vertical distance is now the whole of what the event says; a
 /// horizontal one reaches nothing here and is dropped where the two are pulled
 /// apart, in `window_event`.
@@ -4687,16 +4639,16 @@ pub(crate) enum Pointer {
     Moved(Point),
     Down,
     Up,
-    /// **A press of the secondary button**, which on this panel opens the menu
-    /// on a row of the Library bay's list and does nothing anywhere else.
+    /// A press of the secondary button, which on this panel opens the menu on a row
+    /// of the Library bay's list and does nothing anywhere else.
     Secondary,
-    /// **How far to scroll, in logical pixels, positive down the list** — a
-    /// notch of a mouse wheel converted to `karakuri_console::room::size::WHEEL_STEP` and a
+    /// How far to scroll, in logical pixels, positive down the list — a notch of a
+    /// mouse wheel converted to `karakuri_console::room::size::WHEEL_STEP` and a
     /// trackpad's own pixels passed straight through.
     Wheel(f32),
 }
 
-/// **What routing a pointer event did**, beyond deciding whose it was.
+/// What routing a pointer event did, beyond deciding whose it was.
 ///
 /// A list rather than an `Option<Outcome>`, because the controls on this panel
 /// end in more than one place: the Outputs dot asks for an operation on the
@@ -4711,46 +4663,43 @@ pub(crate) enum Acted {
     Nothing,
     /// The Outputs dot, and what the operation it named did.
     Operated(Outcome),
-    /// **A fader translated a drag into the vocabulary**, or the drag moved
-    /// the pointer over a value that did not change and asked for nothing.
+    /// A fader translated a drag into the vocabulary, or the drag moved the pointer
+    /// over a value that did not change and asked for nothing.
     Emitted(Option<Operation>),
-    /// **A class pill was pressed**, and what it wrote went to the run's
-    /// `Opening` rather than to the arrangement or to the deck.
+    /// A class pill was pressed, and what it wrote went to the run's `Opening`
+    /// rather than to the arrangement or to the deck.
     ///
-    /// **A fourth answer rather than a reuse of `Nothing`**, and the difference
-    /// is the whole of ADR-0236: this press is not an operation and must never
-    /// be made into one, so it cannot be an `Emitted`; and it is not nothing
-    /// either, because a word on the panel changed. See `Readout::opened`.
+    /// A fourth answer rather than a reuse of `Nothing`, and the difference is the
+    /// whole of ADR-0236: this press is not an operation and must never be made
+    /// into one, so it cannot be an `Emitted`; and it is not nothing either,
+    /// because a word on the panel changed. See `Readout::opened`.
     ///
-    /// It carries no payload because there is none to carry: what changed is
-    /// held in the `Opening`, which is a handle another surface reads, and a
-    /// copy of it in this enum would be the second answer to *what is open*.
+    /// It carries no payload because there is none to carry: what changed is held
+    /// in the `Opening`, which is a handle another surface reads, and a copy of it
+    /// in this enum would be the second answer to *what is open*.
     Opened,
-    /// **A press moved the library cursor**, and asked for nothing
-    /// ([`Readout::took`]).
+    /// A press moved the library cursor, and asked for nothing ([`Readout::took`]).
     ///
-    /// It is the console's one pointer a press moves *without* naming an
-    /// operation: the deck selection moves on a press too, and reaches
-    /// [`Acted::Emitted`] through `Operation::SelectDeck` and [`pointed`],
-    /// which is `Change::Pointed`'s note on the same pair.
+    /// It is the console's one pointer a press moves *without* naming an operation:
+    /// the deck selection moves on a press too, and reaches [`Acted::Emitted`]
+    /// through `Operation::SelectDeck` and [`pointed`], which is
+    /// `Change::Pointed`'s note on the same pair.
     ///
-    /// **A fifth answer rather than a reuse of [`Acted::Nothing`]**, which is
+    /// A fifth answer rather than a reuse of [`Acted::Nothing`], which is
     /// [`Acted::Opened`]'s argument one control along: this press names no
     /// operation and must not be made into one (ADR-0265), so it cannot be an
-    /// [`Acted::Emitted`]; and it is not nothing either, because **the reading
-    /// follows the cursor** — a move with one open is a read of the row it
-    /// arrived at (`karakuri_console::view::View::reading_open`), and a caller
-    /// that could not tell this press from a boundary's would leave the block
-    /// drawn nowhere.
+    /// [`Acted::Emitted`]; and it is not nothing either, because the reading
+    /// follows the cursor — a move with one open is a read of the row it arrived at
+    /// (`karakuri_console::view::View::reading_open`), and a caller that could not
+    /// tell this press from a boundary's would leave the block drawn nowhere.
     ///
-    /// **The caller is what owes that read**, and not [`Readout::took`]: a
-    /// reading is a file, and the store is the window's rather than the
-    /// readout's — the division [`Readout::asked_to_read`] is written to.
+    /// The caller is what owes that read, and not [`Readout::took`]: a reading is a
+    /// file, and the store is the window's rather than the readout's — the division
+    /// [`Readout::asked_to_read`] is written to.
     ///
-    /// It carries no payload because there is none to carry: it is answered
-    /// only where the cursor **moved**, which is `View::point_at`'s `bool`,
-    /// and a copy of the row here would be a second answer to
-    /// `View::cursor_row`.
+    /// It carries no payload because there is none to carry: it is answered only
+    /// where the cursor moved, which is `View::point_at`'s `bool`, and a copy of
+    /// the row here would be a second answer to `View::cursor_row`.
     Pointed,
 }
 
@@ -4761,14 +4710,14 @@ pub(crate) fn folding(folded: bool) -> &'static str {
     }
 }
 
-/// **Which deck, in the letter the preview cells are drawn with** — asked of
-/// the view rather than written out again here.
+/// Which deck, in the letter the preview cells are drawn with — asked of the
+/// view rather than written out again here.
 ///
 /// The vocabulary counts decks from zero (`Operation::SetGain { deck: u8 }`)
-/// and the console draws them `A` through `D`, so this is the one place the
-/// two meet. A deck outside the four cannot be built by anything in this file
-/// — a `Deck` holds `MAX_SLOTS` slots and `DECKS` is that number — so an index
-/// past the end is a bug and reads as one rather than wrapping quietly.
+/// and the console draws them `A` through `D`, so this is the one place the two
+/// meet. A deck outside the four cannot be built by anything in this file — a
+/// `Deck` holds `MAX_SLOTS` slots and `DECKS` is that number — so an index past
+/// the end is a bug and reads as one rather than wrapping quietly.
 pub(crate) fn deck_letter(deck: u8) -> &'static str {
     DECK_LETTERS
         .get(usize::from(deck))
@@ -4789,14 +4738,14 @@ pub(crate) fn knob_word(knob: &Knob) -> &'static str {
     }
 }
 
-/// **Whose fader it is**, for a line a reader has to place: a deck by its
-/// letter, and the master out by the bay it is in.
+/// Whose fader it is, for a line a reader has to place: a deck by its letter,
+/// and the master out by the bay it is in.
 ///
 /// The master out names no deck — it is one level on the whole fold
 /// ([ADR-0224](../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md))
-/// — so a line that said *deck A* over it would be naming a slot nothing in
-/// the gesture ever touched. `Knob::deck` is what answers, and this is the
-/// only caller: everything that *acts* takes the deck out of the operation.
+/// — so a line that said *deck A* over it would be naming a slot nothing in the
+/// gesture ever touched. `Knob::deck` is what answers, and this is the only
+/// caller: everything that *acts* takes the deck out of the operation.
 pub(crate) fn knob_where(knob: &Knob) -> String {
     match knob.deck() {
         Some(deck) => format!("deck {}", deck_letter(deck)),

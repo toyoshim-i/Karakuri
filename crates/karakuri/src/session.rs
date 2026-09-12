@@ -4,8 +4,8 @@
 //!
 //! Both halves end on a disk or a watcher rather than on the frame that asked,
 //! so both are the same shape: gather what is known in memory, hand the slow
-//! part to a thread of its own, and read the outcome back at whichever frame
-//! it arrives on. [`Sessions`] is the first of those and [`Keeping`] is the
+//! part to a thread of its own, and read the outcome back at whichever frame it
+//! arrives on. [`Sessions`] is the first of those and [`Keeping`] is the
 //! second, and they are one module because `main.rs`'s own [`KeyCtx`] reaches
 //! both from the same key press.
 //!
@@ -29,7 +29,7 @@ use std::time::Instant;
 // Recording the session
 // ---------------------------------------------------------------------------
 
-/// **Which deck slot's material a session's head describes.**
+/// Which deck slot's material a session's head describes.
 ///
 /// `karakuri-cli`'s `session_head` says why there is a number here at all: *"a
 /// session stream cannot say what a deck held"*, so a head describes one Set
@@ -39,7 +39,7 @@ use std::time::Instant;
 /// selected would make *which slot replays* depend on where a hand was.
 const HEAD_SLOT: usize = 0;
 
-/// **One open recording**: the writer, and the id it is filing under.
+/// One open recording: the writer, and the id it is filing under.
 ///
 /// The id is kept because it is what every sentence about this recording names
 /// and what `--replay` will be typed with, and because [`Sessions`] hands the
@@ -50,22 +50,22 @@ struct Stream {
     recorder: session::Recorder,
 }
 
-/// **What a thread that opened or closed a recording came back with.**
+/// What a thread that opened or closed a recording came back with.
 ///
-/// One channel for both because they are the same kind of answer: a press
-/// asked for something slow, the frame did not wait, and this is what happened.
-/// It is [`Saved`]'s shape one control along.
+/// One channel for both because they are the same kind of answer: a press asked
+/// for something slow, the frame did not wait, and this is what happened. It is
+/// [`Saved`]'s shape one control along.
 enum Ended {
-    /// A recorder that opened, with the id it is filing under and how many
-    /// records of material are at its head.
+    /// A recorder that opened, with the id it is filing under and how many records
+    /// of material are at its head.
     Began {
         id: String,
         head: usize,
         recorder: session::Recorder,
     },
-    /// A start that never opened, in the words it failed with. **Nothing is
-    /// half-started**: the pill goes back to reading `rec` because nothing is
-    /// being recorded, which is the truth.
+    /// A start that never opened, in the words it failed with. Nothing is
+    /// half-started: the pill goes back to reading `rec` because nothing is being
+    /// recorded, which is the truth.
     Failed(String),
     /// A recording flushed and closed, and what the writer made of it.
     Finished {
@@ -74,28 +74,27 @@ enum Ended {
     },
 }
 
-/// **The session recorder this window holds, and the two presses that move
-/// it.**
+/// The session recorder this window holds, and the two presses that move it.
 ///
 /// # A press starts one and a press stops one
 ///
-/// `docs/manual/console.html` draws one capsule at the end of the transport
-/// row and the operations page gives it one row, so it is one control with two
-/// ends — [`karakuri_console::view::TransportRow::record`], which reads the
-/// pill's own state to say which end a press is. Nothing here decides that a
-/// second time.
+/// `docs/manual/console.html` draws one capsule at the end of the transport row
+/// and the operations page gives it one row, so it is one control with two ends
+/// — [`karakuri_console::view::TransportRow::record`], which reads the pill's
+/// own state to say which end a press is. Nothing here decides that a second
+/// time.
 ///
 /// # Neither end happens on the frame, and that is the whole of this type
 ///
-/// **A start creates two files and spawns a thread.** The head a replay
+/// A start creates two files and spawns a thread. The head a replay
 /// reconstructs a session from is a Set file, so beginning one writes that
 /// file, reads it back, opens `sessions/<id>.ndjson` and starts a writer —
 /// which is `karakuri-cli`'s own sentence about the same call, *"opened before
 /// the first frame and never on one"*.
 ///
-/// **A stop blocks on that writer.** [`session::Recorder::finish`] hands the
-/// last batch over and joins the thread, and so does `Drop` — so a recorder
-/// let go of on the frame path stalls the frame just as surely as one that was
+/// A stop blocks on that writer. [`session::Recorder::finish`] hands the last
+/// batch over and joins the thread, and so does `Drop` — so a recorder let go
+/// of on the frame path stalls the frame just as surely as one that was
 /// finished there. `karakuri-cli` finishes in `exiting`, where a stall is free;
 /// a press is not that place
 /// ([P-0094](../../../../docs/principles/0094-a-panel-that-lies-is-worse-than-a-panel-that-is-plain.md)).
@@ -107,25 +106,25 @@ enum Ended {
 ///
 /// # What the pill reads while a thread is out
 ///
-/// **Nothing is being recorded until the recorder exists**, and the pill says
-/// so: [`Sessions::rec`] is `Running` only while [`Sessions::open`] holds a
-/// writer. A start that is still opening reads `rec`, and a stop that is still
-/// flushing reads `rec` too — the stream stopped taking records the instant
-/// the recorder left, and the tail is being written by a thread nobody is
-/// waiting for. A third state on the pill would be this panel drawing a
-/// promise instead of a fact.
+/// Nothing is being recorded until the recorder exists, and the pill says so:
+/// [`Sessions::rec`] is `Running` only while [`Sessions::open`] holds a writer.
+/// A start that is still opening reads `rec`, and a stop that is still flushing
+/// reads `rec` too — the stream stopped taking records the instant the recorder
+/// left, and the tail is being written by a thread nobody is waiting for. A
+/// third state on the pill would be this panel drawing a promise instead of a
+/// fact.
 ///
-/// **A second press while a thread is out is refused and says so**, rather
-/// than opening a second recorder or joining a queue: two recorders would be
-/// two writers over one deck, and a queued press is a gesture whose effect
-/// arrives after the operator has stopped looking at it.
+/// A second press while a thread is out is refused and says so, rather than
+/// opening a second recorder or joining a queue: two recorders would be two
+/// writers over one deck, and a queued press is a gesture whose effect arrives
+/// after the operator has stopped looking at it.
 pub(crate) struct Sessions {
-    /// The recorder, and `None` whenever nothing is being recorded — which
-    /// includes both sides of a start that is still opening.
+    /// The recorder, and `None` whenever nothing is being recorded — which includes
+    /// both sides of a start that is still opening.
     open: Option<Stream>,
-    /// **Whether a thread is out**, which is what makes a second press a
-    /// refusal. One flag for both ends because there is at most one thread and
-    /// what it is doing does not change the answer.
+    /// Whether a thread is out, which is what makes a second press a refusal. One
+    /// flag for both ends because there is at most one thread and what it is doing
+    /// does not change the answer.
     working: bool,
     /// Where a thread's outcome comes back, and the sending half it is given a
     /// clone of.
@@ -144,13 +143,12 @@ impl Sessions {
         }
     }
 
-    /// **What the `rec` pill reads this frame.**
+    /// What the `rec` pill reads this frame.
     ///
-    /// Always a value and never `None` on this side: this program holds a
-    /// store, so *whether a recording is running* is a question it can always
-    /// answer. `None` is the console's word for *nobody said*, and it is what
-    /// a console with no program behind it draws — see
-    /// `karakuri_console::view::Transport::rec`.
+    /// Always a value and never `None` on this side: this program holds a store, so
+    /// *whether a recording is running* is a question it can always answer. `None`
+    /// is the console's word for *nobody said*, and it is what a console with no
+    /// program behind it draws — see `karakuri_console::view::Transport::rec`.
     pub(crate) fn rec(&self) -> view::Rec {
         match self.open {
             Some(_) => view::Rec::Running,
@@ -158,19 +156,19 @@ impl Sessions {
         }
     }
 
-    /// **The open recorder, for the frame path to push into.**
+    /// The open recorder, for the frame path to push into.
     ///
-    /// `None` for the whole of a run nobody pressed the pill on, which is most
-    /// runs and costs one branch.
+    /// `None` for the whole of a run nobody pressed the pill on, which is most runs
+    /// and costs one branch.
     pub(crate) fn recorder(&mut self) -> Option<&mut session::Recorder> {
         self.open.as_mut().map(|stream| &mut stream.recorder)
     }
 
-    /// **A press on the `rec` pill, performed.**
+    /// A press on the `rec` pill, performed.
     ///
     /// The reading of the deck happens here and every byte of I/O happens on a
-    /// thread, which is [`Keeping::save_set`]'s division and its reason: what
-    /// is above the spawn is values already in memory.
+    /// thread, which is [`Keeping::save_set`]'s division and its reason: what is
+    /// above the spawn is values already in memory.
     pub(crate) fn asked(
         &mut self,
         keeping: &Keeping,
@@ -191,38 +189,36 @@ impl Sessions {
         }
     }
 
-    /// **Begin one**, under a stamp.
+    /// Begin one, under a stamp.
     ///
     /// # The id is a stamp and each start takes a fresh one
     ///
-    /// `karakuri_environment::history::stamped_id` is this repository's
-    /// convention for something an operator looks for by *when they made it*,
-    /// and it is what a keep with no typed name already files under. A capsule
-    /// types no name, so a press passes `None` and this is what `None` means.
+    /// `karakuri_environment::history::stamped_id` is this repository's convention
+    /// for something an operator looks for by *when they made it*, and it is what a
+    /// keep with no typed name already files under. A capsule types no name, so a
+    /// press passes `None` and this is what `None` means.
     ///
-    /// **It is also what keeps a second recording from destroying the first.**
-    /// `Store::append_session` appends and `session::split` sets `started` at
-    /// the first tick and never clears it, so a second head written under an id
-    /// that already has a stream lands in the middle of it and is read back as
-    /// edits. A fresh id per start is what makes that unreachable rather than
-    /// merely unlikely — ADR-0289.
+    /// It is also what keeps a second recording from destroying the first.
+    /// `Store::append_session` appends and `session::split` sets `started` at the
+    /// first tick and never clears it, so a second head written under an id that
+    /// already has a stream lands in the middle of it and is read back as edits. A
+    /// fresh id per start is what makes that unreachable rather than merely
+    /// unlikely — ADR-0289.
     ///
-    /// # The head is written from the live deck, and a replay starts from the
-    /// top
+    /// # The head is written from the live deck, and a replay starts from the top
     ///
-    /// A Set file names the material and the values it is holding, which is
-    /// exactly what [`playing_values`] reads off the running Set — so a head
-    /// at an arbitrary frame is producible, and this produces one.
+    /// A Set file names the material and the values it is holding, which is exactly
+    /// what [`playing_values`] reads off the running Set — so a head at an
+    /// arbitrary frame is producible, and this produces one.
     ///
-    /// **What it is not is a resume.** A Set file carries no running state: an
+    /// What it is not is a resume. A Set file carries no running state: an
     /// accumulating renderer's picture is what it has accumulated, and
     /// `docs/manual/console.html` says of one shipped deck that its material
-    /// *accumulates*. So a replay of a recording begun mid-performance
-    /// restarts that material from the top rather than continuing the picture
-    /// that was on screen when the press happened. **It is said out loud at
-    /// the start** rather than left for whoever plays the file back to
-    /// discover, which is the whole of P-0094 applied to a sentence instead of
-    /// to a pixel.
+    /// *accumulates*. So a replay of a recording begun mid-performance restarts
+    /// that material from the top rather than continuing the picture that was on
+    /// screen when the press happened. It is said out loud at the start rather than
+    /// left for whoever plays the file back to discover, which is the whole of
+    /// P-0094 applied to a sentence instead of to a pixel.
     fn begin(
         &mut self,
         keeping: &Keeping,
@@ -266,12 +262,12 @@ impl Sessions {
         });
     }
 
-    /// **End the one running**, and hand the flush to a thread.
+    /// End the one running, and hand the flush to a thread.
     ///
-    /// The recorder is **moved** rather than borrowed, which is the point: it
-    /// blocks on its writer in `Drop` as well as in
-    /// [`session::Recorder::finish`], so a recorder still owned by this frame
-    /// is a frame that can still be stalled by a disk.
+    /// The recorder is moved rather than borrowed, which is the point: it blocks on
+    /// its writer in `Drop` as well as in [`session::Recorder::finish`], so a
+    /// recorder still owned by this frame is a frame that can still be stalled by a
+    /// disk.
     fn end(&mut self) {
         let Some(Stream { id, recorder }) = self.open.take() else {
             return println!("  rec: nothing is being recorded");
@@ -285,18 +281,18 @@ impl Sessions {
         });
     }
 
-    /// **Every start and stop that has landed since the last frame, said.**
+    /// Every start and stop that has landed since the last frame, said.
     ///
-    /// Drained and never waited on, which is [`Keeping::finished_saves`]'
-    /// rule: a frame owes the display a picture and owes a disk nothing.
+    /// Drained and never waited on, which is [`Keeping::finished_saves`]' rule: a
+    /// frame owes the display a picture and owes a disk nothing.
     pub(crate) fn finished(&mut self) {
         while let Ok(ended) = self.done.try_recv() {
             self.took(ended);
         }
     }
 
-    /// One thread's outcome, said. The frame's drain and the quit's wait are
-    /// two ways of *getting* one and this is the one place either acts on it.
+    /// One thread's outcome, said. The frame's drain and the quit's wait are two
+    /// ways of *getting* one and this is the one place either acts on it.
     fn took(&mut self, ended: Ended) {
         self.working = false;
         {
@@ -353,17 +349,17 @@ impl Sessions {
         }
     }
 
-    /// **The recording still open when the window closes, flushed here.**
+    /// The recording still open when the window closes, flushed here.
     ///
-    /// [`Keeping::awaited_saves`]' moment and its argument: a frame owes a
-    /// disk nothing, and the end of the run is the one place where that is the
-    /// wrong trade — a session left to `Drop` would still be flushed, because
-    /// the recorder ends its writer either way, but nothing would say what was
-    /// written or what was lost. **This is where a stall is free**, which is
-    /// `karakuri-cli`'s `exiting` said on this side.
+    /// [`Keeping::awaited_saves`]' moment and its argument: a frame owes a disk
+    /// nothing, and the end of the run is the one place where that is the wrong
+    /// trade — a session left to `Drop` would still be flushed, because the
+    /// recorder ends its writer either way, but nothing would say what was written
+    /// or what was lost. This is where a stall is free, which is `karakuri-cli`'s
+    /// `exiting` said on this side.
     ///
-    /// A stop already in flight is waited for by the same call, because the
-    /// thread it is on is what holds the recorder.
+    /// A stop already in flight is waited for by the same call, because the thread
+    /// it is on is what holds the recorder.
     pub(crate) fn awaited(&mut self) {
         self.finished();
         if self.open.is_some() {
@@ -381,8 +377,8 @@ impl Sessions {
     }
 }
 
-/// **A recording, opened**: the material written, read back, and a writer
-/// started over it.
+/// A recording, opened: the material written, read back, and a writer started
+/// over it.
 ///
 /// A free function because every line of it is on the thread
 /// [`Sessions::begin`] spawned, and none of it may be reachable from a frame.
@@ -423,12 +419,12 @@ fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
     }
 }
 
-/// **Every edge a client asked for on one frame, applied to the run's wiring and
-/// answered.**
+/// Every edge a client asked for on one frame, applied to the run's wiring and
+/// answered.
 ///
-/// This is `karakuri_mcp::WireRequest`'s three points, and it is a
-/// free function so that all three are checkable without a window, a GPU or a
-/// `Deck` — the wiring, the re-aim and the sentence are the whole of what this
+/// This is `karakuri_mcp::WireRequest`'s three points, and it is a free
+/// function so that all three are checkable without a window, a GPU or a `Deck`
+/// — the wiring, the re-aim and the sentence are the whole of what this
 /// decides, and none of them needs one. `karakuri-cli`'s `rewired` is the same
 /// three decisions for the same reasons; it is restated rather than called for
 /// [`number_for`]'s reason.
@@ -437,29 +433,29 @@ fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
 ///
 /// An edge is dropped and the new one appended, keyed on `(node, slot)` — the
 /// node that declares the input and what its procedure calls it. It is forced
-/// rather than chosen: `SetError::SlotBoundTwice` refuses two edges on one input
-/// where the Set is built, so an append would make the *second* call on an input
-/// a refusal and leave a model unable to change its mind.
+/// rather than chosen: `SetError::SlotBoundTwice` refuses two edges on one
+/// input where the Set is built, so an append would make the *second* call on
+/// an input a refusal and leave a model unable to change its mind.
 ///
-/// **The key does not include the deck slot, because the run's wiring does
-/// not.** [`App::edges`] is one list for the whole run and an edge naming a node
-/// a Set has not got is passed over where the Set is built. So a request names a
-/// deck slot to say *which slot rebuilds*, and two slots holding a node of the
-/// same name share one entry in this list.
+/// The key does not include the deck slot, because the run's wiring does not.
+/// [`App::edges`] is one list for the whole run and an edge naming a node a Set
+/// has not got is passed over where the Set is built. So a request names a deck
+/// slot to say *which slot rebuilds*, and two slots holding a node of the same
+/// name share one entry in this list.
 ///
 /// # A slot this deck does not hold
 ///
-/// **Refused, in [`karakuri_environment::no_such_slot`]'s words, and nothing is
-/// rewired** — the decision [`App::save_set`] already makes and for its reason:
+/// Refused, in [`karakuri_environment::no_such_slot`]'s words, and nothing is
+/// rewired — the decision [`App::save_set`] already makes and for its reason:
 /// the server checks the number against its own `Slots` before it sends, and
 /// this is the guard that does not depend on it having.
 ///
 /// # The same input wired twice on one frame
 ///
-/// **Every request is applied, in the order it arrived, and the last one is what
-/// the run is wired with.** One aim per slot goes out after all of them are in
+/// Every request is applied, in the order it arrived, and the last one is what
+/// the run is wired with. One aim per slot goes out after all of them are in
 /// the list, so the rebuild carries the settled wiring rather than an
-/// intermediate one. **A request the same frame overwrote is told so**: its edge
+/// intermediate one. A request the same frame overwrote is told so: its edge
 /// *was* written and then replaced, and a reply saying only "wired" would be a
 /// true sentence about a state the run no longer holds.
 pub(crate) fn rewired(
@@ -552,7 +548,7 @@ pub(crate) fn rewired(
     said.into_iter().map(Option::unwrap).collect()
 }
 
-/// **One slot, with a worker watching its own two files behind it** — which is
+/// One slot, with a worker watching its own two files behind it — which is
 /// what puts a candidate in the Staging lane and is the whole of what that
 /// took.
 ///
@@ -566,25 +562,25 @@ pub(crate) fn rewired(
 /// save — which is the failure `Watch`'s own fields are each documented
 /// against.
 ///
-/// - **`Layering::Overdraw` and no `live`** — `Set::build`'s own, which is
+/// - `Layering::Overdraw` and no `live` — `Set::build`'s own, which is
 ///   what every slot was built with: one target, however many renderers.
-/// - **No `capacity`** — so each geometry is rebuilt at the capacity it
+/// - No `capacity` — so each geometry is rebuilt at the capacity it
 ///   declares, which is [`capacity_of`]'s line asked again on the worker.
 ///   This program has no `--capacity` to override it (see [`USAGE`]), and
 ///   passing the startup reading would pin the slot to a declaration the file
 ///   may have just changed.
-/// - **The slot's own salt, and no per-source salts** — `Set::build` passes
+/// - The slot's own salt, and no per-source salts — `Set::build` passes
 ///   `&[]` and says why: *"A pair assigns nothing, so the one source is salted
 ///   from the Set's seed and its ordinal — which for source 0 is that seed
 ///   unchanged."* So a rebuild is the same simulation of new material rather
 ///   than a new one, and every slot stays at the salt [`slot_salt`] counted
 ///   off for it.
-/// - **The default camera** — `Request::camera` is an `Orbit` rather than an
+/// - The default camera — `Request::camera` is an `Orbit` rather than an
 ///   `Option` because *"a Set holds a built-in camera whatever its files
 ///   declare"*, and this program loads none, so the default is what it is
 ///   running.
-/// - **No overrides, no published controls, no bindings, no edges and no
-///   authorities** — this program has no flag for any of the five and grants
+/// - No overrides, no published controls, no bindings, no edges and no
+///   authorities — this program has no flag for any of the five and grants
 ///   nothing (ADR-0216), so each is the empty list the startup build used.
 ///
 /// # The store, and the two things a watcher is given
@@ -599,11 +595,11 @@ pub(crate) fn rewired(
 /// `Watch::snapshotting_to` keeps every version that compiled under
 /// `<store>/history/`, so an edit can be walked back — a hand at an editor and
 /// a model writing over MCP both reach a file through the same path, and this
-/// is where the version they replaced is kept (P-0096, ADR-0089). **The whole
-/// run shares one `history::Snapshots`** with the launch-time seed, or the
+/// is where the version they replaced is kept (P-0096, ADR-0089). The whole
+/// run shares one `history::Snapshots` with the launch-time seed, or the
 /// first rebuild files the untouched procedure a second time.
 ///
-/// **Every slot launches under no Set**, which is the truth rather than a
+/// Every slot launches under no Set, which is the truth rather than a
 /// placeholder: this program opens on a pair, and a pair somebody typed is not
 /// a Set (ADR-0276). What turns that into an id is a library load — [`loading`]
 /// sends the id on the aim, and the watcher moves it — so the versions written
@@ -741,7 +737,7 @@ pub(crate) fn watched(
 // Keeping what a deck is playing, and rewiring it
 // ---------------------------------------------------------------------------
 
-/// **What this run holds so that a deck can be kept, and rewired.**
+/// What this run holds so that a deck can be kept, and rewired.
 ///
 /// One value rather than seven fields on [`App`], because the seven move
 /// together and every one of them is read by the same three moments: a request
@@ -750,96 +746,93 @@ pub(crate) fn watched(
 /// `self.gfx` and holds it for the length of the handler, so a method on `App`
 /// could not be called there. This is the piece that is passed instead.
 ///
-/// **Every field is `pub(crate)`** rather than reached only through methods:
+/// Every field is `pub(crate)` rather than reached only through methods:
 /// `App::new` builds one whole (its fields come from the same opening that
 /// builds the rest of `App`) and `mod gpu`'s tests build one from nothing, and
 /// both are outside this module — see `crate::App::new` and
 /// `crate::gpu::keeping`.
 pub(crate) struct Keeping {
-    /// **The server's half of the channel, when `--mcp` asked for one**, and the
-    /// whole of what a model reaches this program through.
+    /// The server's half of the channel, when `--mcp` asked for one, and the whole
+    /// of what a model reaches this program through.
     ///
     /// Told what the swap machinery said, handed what a client asked the render
-    /// loop for, and nothing else — see [`karakuri_mcp`]. It is
-    /// bound in [`main`], before the window, for the reason the working copies
-    /// are made there: `serve` binds a socket and can fail, and a failure has to
-    /// be a sentence on a terminal rather than a panic inside a `winit`
-    /// callback, where it aborts with no message at all.
+    /// loop for, and nothing else — see [`karakuri_mcp`]. It is bound in [`main`],
+    /// before the window, for the reason the working copies are made there: `serve`
+    /// binds a socket and can fail, and a failure has to be a sentence on a
+    /// terminal rather than a panic inside a `winit` callback, where it aborts with
+    /// no message at all.
     pub(crate) mcp: Option<mcp::Reporter>,
-    /// **What each deck is playing**, seeded before the first frame and moved by
-    /// every build that lands — see [`Playing`].
+    /// What each deck is playing, seeded before the first frame and moved by every
+    /// build that lands — see [`Playing`].
     pub(crate) playing: Playing,
     /// Where the watchers report what they built and stored — the other end of
     /// [`watch::Watch::storing_to`], drained where a build lands.
     pub(crate) built: std::sync::mpsc::Receiver<watch::Built>,
-    /// **Builds reported but not yet landed**, kept by their build id.
+    /// Builds reported but not yet landed, kept by their build id.
     ///
-    /// The two arrive on two channels and in either order: a watcher stores a
-    /// build on its worker thread and the swap lands at a frame boundary some
-    /// frames later, so a report that came in before its `Swapped` has to wait
-    /// somewhere. **Removed when it lands**, so a build that was refused or that
-    /// the deck never took leaves nothing behind — there is at most one
-    /// outstanding build per slot, which is what `HotSwap` allows.
+    /// The two arrive on two channels and in either order: a watcher stores a build
+    /// on its worker thread and the swap lands at a frame boundary some frames
+    /// later, so a report that came in before its `Swapped` has to wait somewhere.
+    /// Removed when it lands, so a build that was refused or that the deck never
+    /// took leaves nothing behind — there is at most one outstanding build per
+    /// slot, which is what `HotSwap` allows.
     pub(crate) pending: Vec<watch::Built>,
-    /// Where a save that has reached the disk comes back, and the sending half
-    /// each save thread is given a clone of.
+    /// Where a save that has reached the disk comes back, and the sending half each
+    /// save thread is given a clone of.
     pub(crate) saves: std::sync::mpsc::Receiver<Saved>,
     pub(crate) save_tx: std::sync::mpsc::Sender<Saved>,
-    /// **Where a send that has answered the dialog comes back**, and the
-    /// sending half each send thread is given a clone of. [`saves`]' shape one
-    /// act along, and it is a second channel rather than a second arm of the
-    /// first because a send is not a save: it writes outside the store, under
-    /// a name the operator typed into a window this program does not own, and
-    /// nothing is waiting on it over MCP.
+    /// Where a send that has answered the dialog comes back, and the sending half
+    /// each send thread is given a clone of. [`saves`]' shape one act along, and it
+    /// is a second channel rather than a second arm of the first because a send is
+    /// not a save: it writes outside the store, under a name the operator typed
+    /// into a window this program does not own, and nothing is waiting on it over
+    /// MCP.
     ///
-    /// **The run does not wait for these**, where it waits for the saves once
-    /// at the end ([`Keeping::awaited_saves`]). A save is bounded by a disk; a
-    /// send is bounded by a hand that has not answered a dialog yet, and a
-    /// quit that blocked on one would be a program refusing to close because
-    /// it had opened a window over itself. So there is no count kept here: a
-    /// send still waiting on its dialog when the run ends wrote nothing, which
-    /// is the same answer a dismissal gives.
+    /// The run does not wait for these, where it waits for the saves once at the
+    /// end ([`Keeping::awaited_saves`]). A save is bounded by a disk; a send is
+    /// bounded by a hand that has not answered a dialog yet, and a quit that
+    /// blocked on one would be a program refusing to close because it had opened a
+    /// window over itself. So there is no count kept here: a send still waiting on
+    /// its dialog when the run ends wrote nothing, which is the same answer a
+    /// dismissal gives.
     ///
     /// [`saves`]: Self::saves
     pub(crate) sends: std::sync::mpsc::Receiver<Sent>,
     pub(crate) send_tx: std::sync::mpsc::Sender<Sent>,
-    /// **Where a kept procedure's outcome comes back**, and it is a third
-    /// channel beside [`saves`](Self::saves) and [`sends`](Self::sends) for
-    /// their reason: three acts that end on a disk, each answered at the frame
-    /// its answer arrives on, and a queue apiece so that a slow write of one
-    /// cannot delay another's answer.
+    /// Where a kept procedure's outcome comes back, and it is a third channel
+    /// beside [`saves`](Self::saves) and [`sends`](Self::sends) for their reason:
+    /// three acts that end on a disk, each answered at the frame its answer arrives
+    /// on, and a queue apiece so that a slow write of one cannot delay another's
+    /// answer.
     ///
-    /// **It is not the save channel with a flag on it.** A keep writes one
-    /// `.kir` under a name and a save writes a Set file naming every node; the
-    /// two outcomes say different things, land in different directories and
-    /// are refused for different reasons — one of them refuses a name that is
-    /// taken, which a Set save does not — so folding them would be one
-    /// sentence meaning two things.
+    /// It is not the save channel with a flag on it. A keep writes one `.kir` under
+    /// a name and a save writes a Set file naming every node; the two outcomes say
+    /// different things, land in different directories and are refused for
+    /// different reasons — one of them refuses a name that is taken, which a Set
+    /// save does not — so folding them would be one sentence meaning two things.
     pub(crate) keeps: std::sync::mpsc::Receiver<Kept>,
     pub(crate) keep_tx: std::sync::mpsc::Sender<Kept>,
-    /// How many saves are being written right now. The run waits for these once,
-    /// at the end and under a bound — see [`Keeping::awaited_saves`].
+    /// How many saves are being written right now. The run waits for these once, at
+    /// the end and under a bound — see [`Keeping::awaited_saves`].
     pub(crate) in_flight: usize,
 }
 
 impl Keeping {
-    /// **What a model has asked for since the last frame.**
+    /// What a model has asked for since the last frame.
     ///
-    /// `karakuri-cli`'s `Live::run_requests` is this function, and it is at the
-    /// top of the frame for its reason: a surface is polled once and every
-    /// request it produces ends in the method a key press ends in. That is what
-    /// makes `--mcp` a second pair of hands rather than a second way to do
-    /// anything.
+    /// `karakuri-cli`'s `Live::run_requests` is this function, and it is at the top
+    /// of the frame for its reason: a surface is polled once and every request it
+    /// produces ends in the method a key press ends in. That is what makes `--mcp`
+    /// a second pair of hands rather than a second way to do anything.
     ///
-    /// **Collected out of the borrow before any of it is acted on**, because
-    /// both arms below take `&mut self`. Nothing is allocated on a frame that
-    /// was asked for nothing: collecting an empty iterator makes no allocation.
+    /// Collected out of the borrow before any of it is acted on, because both arms
+    /// below take `&mut self`. Nothing is allocated on a frame that was asked for
+    /// nothing: collecting an empty iterator makes no allocation.
     ///
-    /// **Both channels drained before either is acted on**, for that reason and
-    /// for a second one: they are two queues by design — see
-    /// `mcp::Reporter::wires` — so a deck being saved to a slow disk cannot
-    /// delay a rewiring, and taking them in one pass is what keeps that true on
-    /// this side too.
+    /// Both channels drained before either is acted on, for that reason and for a
+    /// second one: they are two queues by design — see `mcp::Reporter::wires` — so
+    /// a deck being saved to a slow disk cannot delay a rewiring, and taking them
+    /// in one pass is what keeps that true on this side too.
     pub(crate) fn requests(&mut self, engine: &mut Engine, root: &std::path::Path) {
         let Some(mcp) = &self.mcp else {
             return;
@@ -859,23 +852,23 @@ impl Keeping {
         self.rewire(engine, wires);
     }
 
-    /// **Every edge asked for since the last frame, written and answered here,
-    /// on this frame.**
+    /// Every edge asked for since the last frame, written and answered here, on
+    /// this frame.
     ///
-    /// The decisions are [`rewired`]'s and are written there, because none of
-    /// them needs a device. What is here is the two things that do: the deck's
-    /// own slot count, which is the only thing that knows how many slots there
-    /// are, and the answer going back to whoever asked.
+    /// The decisions are [`rewired`]'s and are written there, because none of them
+    /// needs a device. What is here is the two things that do: the deck's own slot
+    /// count, which is the only thing that knows how many slots there are, and the
+    /// answer going back to whoever asked.
     ///
-    /// **Answered once, at the frame it was applied on**, which is
-    /// `mcp::WireRequest`'s third point. Not at the swap: what the *build* made
-    /// of the edge is `swap_outcome`'s answer, as it is for every other rebuild,
-    /// and a tool that waited for thirty judged frames would hold a connection
-    /// open across a transition.
+    /// Answered once, at the frame it was applied on, which is `mcp::WireRequest`'s
+    /// third point. Not at the swap: what the *build* made of the edge is
+    /// `swap_outcome`'s answer, as it is for every other rebuild, and a tool that
+    /// waited for thirty judged frames would hold a connection open across a
+    /// transition.
     ///
-    /// **One sentence for both audiences**, which is [`refused`]'s rule: what
-    /// the terminal is told and what the client is handed are the same words, so
-    /// the second cannot be right on the day it is written and wrong at the next
+    /// One sentence for both audiences, which is [`refused`]'s rule: what the
+    /// terminal is told and what the client is handed are the same words, so the
+    /// second cannot be right on the day it is written and wrong at the next
     /// correction.
     fn rewire(&mut self, engine: &mut Engine, asked: Vec<mcp::WireRequest>) {
         if asked.is_empty() {
@@ -901,33 +894,33 @@ impl Keeping {
         }
     }
 
-    /// **Write what a deck is playing as a Set file.**
+    /// Write what a deck is playing as a Set file.
     ///
-    /// `karakuri-cli`'s `Live::save_set` is the same method and says of itself
-    /// that it is *the only save path* in that program; this is that path in
-    /// this one, and every surface here ends in it — the `k` key, the MCP tool,
-    /// and whatever control the Library bay grows. That is what makes a refusal
-    /// and an outcome one sentence each rather than one sentence per surface.
+    /// `karakuri-cli`'s `Live::save_set` is the same method and says of itself that
+    /// it is *the only save path* in that program; this is that path in this one,
+    /// and every surface here ends in it — the `k` key, the MCP tool, and whatever
+    /// control the Library bay grows. That is what makes a refusal and an outcome
+    /// one sentence each rather than one sentence per surface.
     ///
-    /// **The slot is an argument and the key passes the selected deck in.** A
-    /// Set file describes one Set and this deck holds four; the one an
-    /// *operator* means is the deck they have already selected, and a model has
-    /// no selection and names the slot as it names one to read a procedure.
+    /// The slot is an argument and the key passes the selected deck in. A Set file
+    /// describes one Set and this deck holds four; the one an *operator* means is
+    /// the deck they have already selected, and a model has no selection and names
+    /// the slot as it names one to read a procedure.
     ///
-    /// **`id` is what the caller wanted it called, or a stamp.** A key press
-    /// cannot type a name, so it passes `None`; see
+    /// `id` is what the caller wanted it called, or a stamp. A key press cannot
+    /// type a name, so it passes `None`; see
     /// [`karakuri_environment::accepted_save`], whose convention that is.
     ///
-    /// **Read off the live Set, not off the command line.** Every number a Set
-    /// file carries can have moved since this run started — a param through a
-    /// record, a capacity or a salt through a rebuild — so the only reading that
-    /// cannot be stale is the Set's own. See [`playing_values`].
+    /// Read off the live Set, not off the command line. Every number a Set file
+    /// carries can have moved since this run started — a param through a record, a
+    /// capacity or a salt through a rebuild — so the only reading that cannot be
+    /// stale is the Set's own. See [`playing_values`].
     ///
-    /// **Gathered here, written elsewhere.** Everything up to the spawn is a
-    /// read off values already in memory; the store I/O goes to a thread of its
-    /// own — one per save, since saves are rare and a pool would be machinery
-    /// for a rate of a few an hour. The outcome comes back over `saves` and is
-    /// said at the frame it arrives, not at this press.
+    /// Gathered here, written elsewhere. Everything up to the spawn is a read off
+    /// values already in memory; the store I/O goes to a thread of its own — one
+    /// per save, since saves are rare and a pool would be machinery for a rate of a
+    /// few an hour. The outcome comes back over `saves` and is said at the frame it
+    /// arrives, not at this press.
     pub(crate) fn save_set(
         &mut self,
         engine: &Engine,
@@ -1026,37 +1019,34 @@ impl Keeping {
         });
     }
 
-    /// **Write one node's source into a library**, which is the act that makes
-    /// the operator's tier of procedures exist at all
+    /// Write one node's source into a library, which is the act that makes the
+    /// operator's tier of procedures exist at all
     /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
     /// ADR-0338 decision 4).
     ///
-    /// **[`Keeping::save_set`]'s shape one node down**, and every division it
-    /// makes is made here for its reason: the slot is an argument because a
-    /// Set file describes one deck and this deck holds four; the id is what
-    /// the caller wanted it called or a stamp, because the capsule on a node
-    /// head types nothing; an operator-typed name is checked here, because the
-    /// panel owns the affordance and never the authority (P-0090); and
-    /// everything up to the spawn is a read off values already in memory,
-    /// because a disk write is not a thing to do on a frame (P-0091).
+    /// [`Keeping::save_set`]'s shape one node down, and every division it makes is
+    /// made here for its reason: the slot is an argument because a Set file
+    /// describes one deck and this deck holds four; the id is what the caller
+    /// wanted it called or a stamp, because the capsule on a node head types
+    /// nothing; an operator-typed name is checked here, because the panel owns the
+    /// affordance and never the authority (P-0090); and everything up to the spawn
+    /// is a read off values already in memory, because a disk write is not a thing
+    /// to do on a frame (P-0091).
     ///
-    /// **Where it lands is decided by who asked and never by which control
-    /// carried it**: `Asked::Operator` writes `<store>/procedures/` and
-    /// `Asked::Model` writes `<store>/sandbox/`, which is a Set save's own
-    /// division one file kind along (ADR-0261). A model is not refused here
-    /// where its *star* is, because what it keeps is a file and so has a
-    /// sandbox form to land in (ADR-0301).
+    /// Where it lands is decided by who asked and never by which control carried
+    /// it: `Asked::Operator` writes `<store>/procedures/` and `Asked::Model` writes
+    /// `<store>/sandbox/`, which is a Set save's own division one file kind along
+    /// (ADR-0261). A model is not refused here where its *star* is, because what it
+    /// keeps is a file and so has a sandbox form to land in (ADR-0301).
     ///
-    /// **The bytes are this run's rather than the disk's**, which is the whole
-    /// of what [`Playing`] is for: what is kept is the version the node is
-    /// *running*, and a `.kir` rewritten since the compile cannot reach a
-    /// kept file.
+    /// The bytes are this run's rather than the disk's, which is the whole of what
+    /// [`Playing`] is for: what is kept is the version the node is *running*, and a
+    /// `.kir` rewritten since the compile cannot reach a kept file.
     ///
-    /// **Eight arguments, which is [`Keeping::save_set`]'s seven and the
-    /// node.** Grouping them into a request type would be a shape only this
-    /// call site can fill and would hide the one thing worth reading at a
-    /// glance: which of `Asked`'s two this keep is, since that decides the
-    /// directory.
+    /// Eight arguments, which is [`Keeping::save_set`]'s seven and the node.
+    /// Grouping them into a request type would be a shape only this call site can
+    /// fill and would hide the one thing worth reading at a glance: which of
+    /// `Asked`'s two this keep is, since that decides the directory.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn keep_procedure(
         &mut self,
@@ -1137,19 +1127,19 @@ impl Keeping {
         });
     }
 
-    /// **Every kept procedure that has landed since the last frame, said and
-    /// answered.**
+    /// Every kept procedure that has landed since the last frame, said and
+    /// answered.
     ///
     /// [`Keeping::finished_saves`]' drain one act along and on the same terms:
-    /// drained and never waited on, because a frame owes the display a picture
-    /// and owes a disk nothing.
+    /// drained and never waited on, because a frame owes the display a picture and
+    /// owes a disk nothing.
     ///
-    /// **It returns whether any of them landed**, which is what the Library
-    /// bay's listing is re-read on: a keep is the only thing in this program
-    /// that adds a procedure to the operator's tier, and a bay that did not
-    /// list it would be a readout that is wrong and silent. **A model's does
-    /// not count**, for the reason a sandbox save does not: `all` lists the
-    /// operator's library and the sandbox is not in it.
+    /// It returns whether any of them landed, which is what the Library bay's
+    /// listing is re-read on: a keep is the only thing in this program that adds a
+    /// procedure to the operator's tier, and a bay that did not list it would be a
+    /// readout that is wrong and silent. A model's does not count, for the reason a
+    /// sandbox save does not: `all` lists the operator's library and the sandbox is
+    /// not in it.
     pub(crate) fn finished_keeps(&mut self) -> bool {
         let mut landed = false;
         while let Ok(kept) = self.keeps.try_recv() {
@@ -1166,27 +1156,26 @@ impl Keeping {
         landed
     }
 
-    /// **What a session's head is written from**, gathered off the live deck
-    /// and written by whoever is handed it.
+    /// What a session's head is written from, gathered off the live deck and
+    /// written by whoever is handed it.
     ///
-    /// It is [`Keeping::save_set`]'s first half with the answering taken out:
-    /// the same two readings — what slot [`HEAD_SLOT`] is playing, and what
-    /// that Set is holding — put into the same [`Save`], which is what keeps a
-    /// head and a keep one description of a deck rather than two. **The whole
-    /// of the difference is the id**: a keep files under what the caller
-    /// wanted it called, and this files under the session's id with
-    /// `-material` after it, which is `karakuri-cli`'s own spelling for the
-    /// same file.
+    /// It is [`Keeping::save_set`]'s first half with the answering taken out: the
+    /// same two readings — what slot [`HEAD_SLOT`] is playing, and what that Set is
+    /// holding — put into the same [`Save`], which is what keeps a head and a keep
+    /// one description of a deck rather than two. The whole of the difference is
+    /// the id: a keep files under what the caller wanted it called, and this files
+    /// under the session's id with `-material` after it, which is `karakuri-cli`'s
+    /// own spelling for the same file.
     ///
-    /// **`Asked::Operator`, so it lands in the library**: this is the material
-    /// of a run somebody started, kept where they will look for it — and it is
-    /// what `--replay` resolves the stream's nodes through.
+    /// `Asked::Operator`, so it lands in the library: this is the material of a run
+    /// somebody started, kept where they will look for it — and it is what
+    /// `--replay` resolves the stream's nodes through.
     ///
-    /// **Read off the live Set and not off anything this program was told**,
-    /// which is [`playing_values`]' whole argument: every number a Set file
-    /// carries can have moved since this run started, so a head written from
-    /// the launch arguments would describe a deck nobody is looking at. That
-    /// is also what makes a recording begun mid-performance possible at all.
+    /// Read off the live Set and not off anything this program was told, which is
+    /// [`playing_values`]' whole argument: every number a Set file carries can have
+    /// moved since this run started, so a head written from the launch arguments
+    /// would describe a deck nobody is looking at. That is also what makes a
+    /// recording begun mid-performance possible at all.
     fn head_material(
         &self,
         engine: &Engine,
@@ -1219,19 +1208,17 @@ impl Keeping {
         })
     }
 
-    /// **Every save that has landed since the last frame, said and answered.**
+    /// Every save that has landed since the last frame, said and answered.
     ///
-    /// Drained and never waited on: a frame owes the display a picture and owes
-    /// a disk nothing. Called at the top of the frame beside
-    /// [`Keeping::requests`], because a window that has faulted still has saves
-    /// finishing behind it and a run that told nobody about them until it quit
-    /// would be withholding the one answer a waiting client cannot get anywhere
-    /// else.
+    /// Drained and never waited on: a frame owes the display a picture and owes a
+    /// disk nothing. Called at the top of the frame beside [`Keeping::requests`],
+    /// because a window that has faulted still has saves finishing behind it and a
+    /// run that told nobody about them until it quit would be withholding the one
+    /// answer a waiting client cannot get anywhere else.
     ///
-    /// Returns whether any of them landed, which is what the Library bay's
-    /// listing is re-read on: a save is the only thing in this program that adds
-    /// a Set, and a bay that did not list it would be a readout that is wrong
-    /// and silent.
+    /// Returns whether any of them landed, which is what the Library bay's listing
+    /// is re-read on: a save is the only thing in this program that adds a Set, and
+    /// a bay that did not list it would be a readout that is wrong and silent.
     pub(crate) fn finished_saves(&mut self) -> bool {
         let mut landed: Vec<Saved> = Vec::new();
         while let Ok(saved) = self.saves.try_recv() {
@@ -1259,32 +1246,31 @@ impl Keeping {
 
     /// One send's outcome, said.
     ///
-    /// [`Keeping::took_save`]'s shape one act along, with the answering taken
-    /// out: nothing over MCP is waiting on a send — the tool does not exist
-    /// and would be handed the bytes rather than a path
+    /// [`Keeping::took_save`]'s shape one act along, with the answering taken out:
+    /// nothing over MCP is waiting on a send — the tool does not exist and would be
+    /// handed the bytes rather than a path
     /// ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md))
-    /// — so the terminal is the whole audience and there is no second copy of
-    /// the words to keep in step.
+    /// — so the terminal is the whole audience and there is no second copy of the
+    /// words to keep in step.
     ///
-    /// **A dialog that was dismissed is one of the three outcomes and is said
-    /// out loud**, rather than being silence: rule 04 of the manual is that
-    /// nothing is hidden quietly, and a press that opened a window and then
-    /// wrote nothing is exactly the case a reader would otherwise read as a
-    /// fault.
+    /// A dialog that was dismissed is one of the three outcomes and is said out
+    /// loud, rather than being silence: rule 04 of the manual is that nothing is
+    /// hidden quietly, and a press that opened a window and then wrote nothing is
+    /// exactly the case a reader would otherwise read as a fault.
     ///
-    /// **A failure is printed and nothing claims otherwise** — [`Saved`]'s own
-    /// rule: a program saying a file was written when the disk refused is the
-    /// shape of lie this codebase is arranged against.
+    /// A failure is printed and nothing claims otherwise — [`Saved`]'s own rule: a
+    /// program saying a file was written when the disk refused is the shape of lie
+    /// this codebase is arranged against.
     fn took_send(sent: Sent) {
         println!("{}", sent.said());
     }
 
     /// One save's outcome, said and answered.
     ///
-    /// **One sentence for both audiences.** What the terminal is told and what a
+    /// One sentence for both audiences. What the terminal is told and what a
     /// waiting client is handed are the same fact, so the words are formed once
-    /// here and the client gets the ones the operator got. The `Ok`/`Err` split
-    /// is what a tool call's `isError` is built from — see `mcp::Reply::settled`.
+    /// here and the client gets the ones the operator got. The `Ok`/`Err` split is
+    /// what a tool call's `isError` is built from — see `mcp::Reply::settled`.
     fn took_save(&mut self, saved: Saved) -> bool {
         let Saved {
             slot,
@@ -1342,40 +1328,38 @@ impl Keeping {
         written
     }
 
-    /// **Take up what a slot is now playing.**
+    /// Take up what a slot is now playing.
     ///
-    /// `landed` is the id of the build that went in, and there is no other
-    /// case: a swap is the only event that changes what a slot holds
-    /// (ADR-0316). It used to take an `Option`, whose `None` was a rollback,
-    /// and the version that came back had to have been remembered because
-    /// nothing would name it again.
+    /// `landed` is the id of the build that went in, and there is no other case: a
+    /// swap is the only event that changes what a slot holds (ADR-0316). It used to
+    /// take an `Option`, whose `None` was a rollback, and the version that came
+    /// back had to have been remembered because nothing would name it again.
     ///
     /// The `built` channel is drained here rather than per frame: it only has
-    /// anything in it when a build has just been requested, and this runs when
-    /// one has just landed.
+    /// anything in it when a build has just been requested, and this runs when one
+    /// has just landed.
     ///
-    /// # It answers which nodes changed, because this is the only place both
-    /// lists exist
+    /// # It answers which nodes changed, because this is the only place both lists
+    /// exist
     ///
-    /// A build reports a hash per node and this list replaces the one the slot
-    /// was on, so the two are in one hand for exactly the length of this
-    /// function. **The diff is taken here or it is not taken at all** — a
-    /// caller coming back for it afterwards would find one list — and it is
-    /// what the Staging lane's rows are, one per changed node
+    /// A build reports a hash per node and this list replaces the one the slot was
+    /// on, so the two are in one hand for exactly the length of this function. The
+    /// diff is taken here or it is not taken at all — a caller coming back for it
+    /// afterwards would find one list — and it is what the Staging lane's rows are,
+    /// one per changed node
     /// (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
     ///
-    /// **Empty is three states and one answer**, which is deliberate: a build
-    /// whose sources the store would not take has no new list, a slot with no
-    /// baseline has no old one, and a rebuild that restated the stack
-    /// unchanged has a diff with nothing in it. In every one of them there is
-    /// no node this verdict can honestly be pinned to, and the lane draws one
-    /// row on the slot — see [`settle`]. The first two say so at the time, on
-    /// the watcher's own line.
+    /// Empty is three states and one answer, which is deliberate: a build whose
+    /// sources the store would not take has no new list, a slot with no baseline
+    /// has no old one, and a rebuild that restated the stack unchanged has a diff
+    /// with nothing in it. In every one of them there is no node this verdict can
+    /// honestly be pinned to, and the lane draws one row on the slot — see
+    /// [`settle`]. The first two say so at the time, on the watcher's own line.
     ///
-    /// **A node the new list has and the old one does not counts as
-    /// changed**, and one the old list had and the new one does not is not
-    /// reported at all: a lane row is a version somebody has still to rule on,
-    /// and a node a rebuild removed has none.
+    /// A node the new list has and the old one does not counts as changed, and one
+    /// the old list had and the new one does not is not reported at all: a lane row
+    /// is a version somebody has still to rule on, and a node a rebuild removed has
+    /// none.
     pub(crate) fn took_up(
         &mut self,
         aims: &[Aiming],
@@ -1422,21 +1406,20 @@ impl Keeping {
         changed
     }
 
-    /// **Every save still being written, waited for — up to
-    /// [`karakuri_environment::SAVE_WAIT`].**
+    /// Every save still being written, waited for — up to
+    /// [`karakuri_environment::SAVE_WAIT`].
     ///
     /// A frame owes the disk nothing, which is why [`Keeping::finished_saves`]
-    /// drains and never blocks. The end of the run is the one moment where that
-    /// is the wrong trade: a save asked for in the last second reached the disk
-    /// under an id nobody was ever told, so the client that asked for it waits
-    /// out its deadline and the operator is told nothing at all.
+    /// drains and never blocks. The end of the run is the one moment where that is
+    /// the wrong trade: a save asked for in the last second reached the disk under
+    /// an id nobody was ever told, so the client that asked for it waits out its
+    /// deadline and the operator is told nothing at all.
     ///
-    /// **Bounded, because a disk can hang and quitting must not depend on one.**
-    /// Past the bound the run says how many saves it left behind and exits.
+    /// Bounded, because a disk can hang and quitting must not depend on one. Past
+    /// the bound the run says how many saves it left behind and exits.
     ///
-    /// The wait is only ever paid by a run that saved and quit within a few
-    /// frames; the count is zero for every other run and this returns without
-    /// blocking.
+    /// The wait is only ever paid by a run that saved and quit within a few frames;
+    /// the count is zero for every other run and this returns without blocking.
     pub(crate) fn awaited_saves(&mut self) {
         self.finished_saves();
         // **And the keeps, because they raise the same count.** A run that

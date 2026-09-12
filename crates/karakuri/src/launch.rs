@@ -10,55 +10,52 @@ pub(crate) struct Sources {
 }
 
 impl Sources {
-    /// **The pair a run with no paths opens on, under whichever preset library
-    /// answered.**
+    /// The pair a run with no paths opens on, under whichever preset library
+    /// answered.
     ///
     /// This was `Default`, and what it resolved against was
     /// `env!("CARGO_MANIFEST_DIR")` — the build machine's own tree, baked in at
-    /// compile time. That was the only production line in the workspace doing
-    /// it, and it meant a binary installed anywhere else found no presets at
-    /// all: not a wrong pair, no pair, and the Library's `presets` tier a tier
-    /// with no file in it. A POSIX process cannot ask where it is, so the
-    /// answer is to be *told* — `--presets` — or to go looking from
-    /// [`std::env::current_exe`], which is
+    /// compile time. That was the only production line in the workspace doing it,
+    /// and it meant a binary installed anywhere else found no presets at all: not a
+    /// wrong pair, no pair, and the Library's `presets` tier a tier with no file in
+    /// it. A POSIX process cannot ask where it is, so the answer is to be *told* —
+    /// `--presets` — or to go looking from [`std::env::current_exe`], which is
     /// [`karakuri_environment::places::presets`] and not this file's business.
     ///
     /// What is this file's business is the two names, because they are this
     /// program's choice of what to open on rather than a property of a preset
     /// library: a library is a directory with at least one `.kset` in it
-    /// (`karakuri_environment::places`'s `is_a_library`, which asked for a
-    /// `.kir` until the authoring form landed), and these two are the parts
-    /// `examples/star_vortex.kset` names — a funnel of ten thousand flares,
-    /// each one an object with a size and an orientation you can follow with
-    /// your eye.
+    /// (`karakuri_environment::places`'s `is_a_library`, which asked for a `.kir`
+    /// until the authoring form landed), and these two are the parts
+    /// `examples/star_vortex.kset` names — a funnel of ten thousand flares, each
+    /// one an object with a size and an orientation you can follow with your eye.
     ///
-    /// **They were `drift_shell.kir` + `soft_points.kir` until 2026-09-07**,
-    /// which is the pair `examples/drift_cloud.kset` names and what
-    /// `docs/contributing.md` §1 calls the reference workload — 262144
-    /// alpha-blended sprites, a count tuned when this panel drew one canvas,
-    /// where no single element is visible and the picture reads as fog. That
-    /// coincidence has ended rather than been broken: the workload is the
-    /// named Set and not whatever a bare run opens on (ADR-0270), so changing
-    /// these two names is a demo decision and takes no figure with it, and
+    /// They were `drift_shell.kir` + `soft_points.kir` until 2026-09-07, which is
+    /// the pair `examples/drift_cloud.kset` names and what `docs/contributing.md`
+    /// §1 calls the reference workload — 262144 alpha-blended sprites, a count
+    /// tuned when this panel drew one canvas, where no single element is visible
+    /// and the picture reads as fog. That coincidence has ended rather than been
+    /// broken: the workload is the named Set and not whatever a bare run opens on
+    /// (ADR-0270), so changing these two names is a demo decision and takes no
+    /// figure with it, and
     /// [ADR-0271](../../../docs/adr/0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md)
     /// is that decision. See
-    /// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`,
-    /// which pins the Set's capacity by name and checks these two for a
-    /// per-file read — two claims that were one assertion until ADR-0270.
+    /// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`, which
+    /// pins the Set's capacity by name and checks these two for a per-file read —
+    /// two claims that were one assertion until ADR-0270.
     ///
-    /// **Two paths and not the `.kset`**, which is the shape of this type and
-    /// costs the Set's two `bind` records: `star_vortex.kset` binds `energy` to
-    /// the funnel's `scale` and `band0` to its `ripple`, and a bare run gets
-    /// neither. The funnel turns and the pulse still climbs it, because both
-    /// are the L1's own motion; what a bare run does not show is the material
-    /// answering to sound. Loading `star_vortex` off the Library bay is where
-    /// that is, and the same is true of every shipped Set.
+    /// Two paths and not the `.kset`, which is the shape of this type and costs the
+    /// Set's two `bind` records: `star_vortex.kset` binds `energy` to the funnel's
+    /// `scale` and `band0` to its `ripple`, and a bare run gets neither. The funnel
+    /// turns and the pulse still climbs it, because both are the L1's own motion;
+    /// what a bare run does not show is the material answering to sound. Loading
+    /// `star_vortex` off the Library bay is where that is, and the same is true of
+    /// every shipped Set.
     ///
-    /// **Under the root rather than under the working directory**, and the
-    /// asymmetry with a typed path is the one the old `Default` had for the
-    /// same reason: a pair nobody named has to be found wherever the run was
-    /// started from, and a path an operator typed is theirs and is read from
-    /// where they typed it.
+    /// Under the root rather than under the working directory, and the asymmetry
+    /// with a typed path is the one the old `Default` had for the same reason: a
+    /// pair nobody named has to be found wherever the run was started from, and a
+    /// path an operator typed is theirs and is read from where they typed it.
     pub(crate) fn under(presets: &std::path::Path) -> Sources {
         Sources {
             l1: presets.join("coil_vortex.kir"),
@@ -66,21 +63,20 @@ impl Sources {
         }
     }
 
-    /// **What the mixer strip calls what this deck is playing**, and it is this
-    /// file's word rather than the engine's.
+    /// What the mixer strip calls what this deck is playing, and it is this file's
+    /// word rather than the engine's.
     ///
     /// `view::Strip::name` says why there is no other answer: nothing reachable
-    /// from a `Deck` carries a name for the material in a slot. A `Set` names
-    /// its *nodes* and its *published controls* and has no name of its own,
-    /// which is right — a Set is built from a list of `.kir` files, and only
-    /// whoever passed that list knows what to call the result. **This is that
-    /// list**, derived from the two paths rather than typed again.
+    /// from a `Deck` carries a name for the material in a slot. A `Set` names its
+    /// *nodes* and its *published controls* and has no name of its own, which is
+    /// right — a Set is built from a list of `.kir` files, and only whoever passed
+    /// that list knows what to call the result. This is that list, derived from the
+    /// two paths rather than typed again.
     ///
-    /// **It is what every slot *opens* on and not what one is playing**, which
-    /// is [`Gfx::material`]'s distinction: this program builds every slot from
-    /// the one pair, and a load moves one of them to a Set the library names.
-    /// So this answers once, at startup, and the per-slot name is kept and
-    /// rewritten there.
+    /// It is what every slot *opens* on and not what one is playing, which is
+    /// [`Gfx::material`]'s distinction: this program builds every slot from the one
+    /// pair, and a load moves one of them to a Set the library names. So this
+    /// answers once, at startup, and the per-slot name is kept and rewritten there.
     pub(crate) fn material(&self) -> String {
         let stem = |path: &std::path::Path| {
             path.file_stem()
@@ -90,39 +86,39 @@ impl Sources {
     }
 }
 
-/// **The working copy each deck runs from**, one pair per slot, made before the
+/// The working copy each deck runs from, one pair per slot, made before the
 /// window opens.
 ///
 /// # Why a panel copies at all
 ///
-/// `karakuri_environment::scratch` is the one place a live edit may land, and it
-/// exists because before it did a surface was given write access to
-/// whatever path the material came from and **three shipped presets were
-/// replaced in one session** (P-0096). This program had none of it: every slot watched
-/// the two paths the operator typed, so the file an editor opened was the
-/// preset itself, and a run started with no paths at all watched `examples/`.
+/// `karakuri_environment::scratch` is the one place a live edit may land, and
+/// it exists because before it did a surface was given write access to whatever
+/// path the material came from and three shipped presets were replaced in one
+/// session (P-0096). This program had none of it: every slot watched the two
+/// paths the operator typed, so the file an editor opened was the preset
+/// itself, and a run started with no paths at all watched `examples/`.
 ///
 /// # And the panel is not `--render`
 ///
 /// `scratch.rs` gates copying on *a run that can be edited*, because creating a
 /// directory as a side effect of a pure render *"would make a function of its
 /// arguments into one that leaves a mark"*. The gate is a question about this
-/// program rather than about a flag, and the answer is that **this program is a
-/// `--watch` run that cannot be turned off**: every slot is built over a
-/// `watch::Watch` ([`watched`]), the deck's whole way of changing material is an
-/// edit picked up by a poll, and a load off the Library bay writes into this same
-/// directory on a key press ([`loading`]). There is no run of this binary that
-/// opens a file read-only, so the condition is not *checked* here — it is
-/// **true**, and the copies are made once, before the first frame, rather than
-/// on the first press.
+/// program rather than about a flag, and the answer is that this program is a
+/// `--watch` run that cannot be turned off: every slot is built over a
+/// `watch::Watch` ([`watched`]), the deck's whole way of changing material is
+/// an edit picked up by a poll, and a load off the Library bay writes into this
+/// same directory on a key press ([`loading`]). There is no run of this binary
+/// that opens a file read-only, so the condition is not *checked* here — it is
+/// true, and the copies are made once, before the first frame, rather than on
+/// the first press.
 ///
 /// What that costs is the store directory existing on a run that saves nothing,
 /// which is the cost `karakuri-cli --watch` already pays and the manual already
 /// states: *"a run with `--watch` or `--mcp` opens the store at startup either
 /// way — the scratch lives in it."* It is not the cost [`arrangements`] and
-/// [`library`] decline — those two decline to **create** a store in order to
-/// *list* it, and a listing that made a directory would be a read with a side
-/// effect. This is a run that has already decided to write.
+/// [`library`] decline — those two decline to create a store in order to *list*
+/// it, and a listing that made a directory would be a read with a side effect.
+/// This is a run that has already decided to write.
 ///
 /// # One preset in four slots is four files
 ///
@@ -152,19 +148,19 @@ pub(crate) fn working_copies(
     Ok((dir, copies))
 }
 
-/// **What the operator opens, deck by deck**, said once at startup.
+/// What the operator opens, deck by deck, said once at startup.
 ///
 /// `karakuri-cli` prints one line of this — *"the deck runs from copies here,
 /// so the files you named are not written to"* — and one line is not enough
 /// here. Four decks on one preset are four files whose names an operator cannot
 /// guess and cannot tell apart by content, since at startup they are identical;
-/// what makes a file deck B's is its **name**, and the name is this program's
+/// what makes a file deck B's is its name, and the name is this program's
 /// choice. So the directory, then a line per deck.
 ///
-/// **Printed rather than drawn.** The panel has no place for a file path: the
-/// mixer strip names *material* and would be naming the same thing four times
-/// with four spellings, and the Inspector addresses nodes rather than files.
-/// The startup print is where this program already says what it resolved — the
+/// Printed rather than drawn. The panel has no place for a file path: the mixer
+/// strip names *material* and would be naming the same thing four times with
+/// four spellings, and the Inspector addresses nodes rather than files. The
+/// startup print is where this program already says what it resolved — the
 /// preset library, the store, the room — and this belongs with those three.
 ///
 /// A free function over the copies so it can be asserted without a window; see
@@ -196,37 +192,39 @@ pub(crate) fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String 
     said
 }
 
-/// **The run's edit history, with the version every deck starts on already in
-/// it** — one [`karakuri_environment::history::Snapshots`] for the whole run,
-/// handed to every watcher [`Engine::new`] makes.
+/// The run's edit history, with the version every deck starts on already in it
+/// — one [`karakuri_environment::history::Snapshots`] for the whole run, handed
+/// to every watcher [`Engine::new`] makes.
 ///
 /// # Why the seed and the watchers share one
 ///
 /// They share the dedup. Seeded separately, the first rebuild would write the
 /// untouched procedure a second time and the chain an operator walks back
-/// through would begin with a duplicate. It is [`karakuri_environment::history`]'s
-/// own requirement and is why this is made once, here, rather than per window.
+/// through would begin with a duplicate. It is
+/// [`karakuri_environment::history`]'s own requirement and is why this is made
+/// once, here, rather than per window.
 ///
 /// # Why there is a seed at all
 ///
 /// A first edit whose predecessor was never written down is the one edit that
 /// cannot be walked back, so the version a run *starts* on is filed before
-/// anything can edit it (ADR-0089). It is filed from the **working copies**,
-/// which are what the watchers poll and what an editor is pointed at.
+/// anything can edit it (ADR-0089). It is filed from the working copies, which
+/// are what the watchers poll and what an editor is pointed at.
 ///
 /// # Under no Set, which is the answer and not a placeholder
 ///
 /// Every slot of this program launches on the pair the command line settled,
 /// and a pair somebody typed is not a Set. The nearest thing to a name is
 /// [`Sources::material`] — a readout for the mixer strip — and filing versions
-/// under it would put rows in the history under a Set no listing can ever
-/// match (ADR-0276). A library load is what gives a slot an id, and it carries
-/// it on the aim ([`loading`], ADR-0304).
+/// under it would put rows in the history under a Set no listing can ever match
+/// (ADR-0276). A library load is what gives a slot an id, and it carries it on
+/// the aim ([`loading`], ADR-0304).
 ///
 /// A free function over the copies so it can be asserted without a window, the
-/// way [`running_from`] is; see `the_launch_versions_are_filed_before_a_window`.
-/// Failures are reported inside `history::seed` and are never fatal: a history
-/// that could not be written must not stop a run from starting.
+/// way [`running_from`] is; see
+/// `the_launch_versions_are_filed_before_a_window`. Failures are reported
+/// inside `history::seed` and are never fatal: a history that could not be
+/// written must not stop a run from starting.
 pub(crate) fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Shared {
     let shared = history::Snapshots::shared(store);
     history::seed(
@@ -239,8 +237,8 @@ pub(crate) fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Sh
     shared
 }
 
-/// **How this program is called**, printed for `--help` and for anything it
-/// cannot read as a pair.
+/// How this program is called, printed for `--help` and for anything it cannot
+/// read as a pair.
 ///
 /// The two flags are in the second paragraph rather than the first, which is
 /// where they belong: an operator reading this is looking for how to play
@@ -275,8 +273,8 @@ usage: karakuri [--presets DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERE
   It reads the same two directories, and `--store` and `--mcp` mean the same
   thing to both. See `cargo run -p karakuri-cli -- --help`.";
 
-/// **Everything the command line settles**: what plays, and the two
-/// directories this program's data is in.
+/// Everything the command line settles: what plays, and the two directories
+/// this program's data is in.
 ///
 /// One value rather than three returns, because the three are decided together
 /// and one of them decides another: with no preset library there is no default
@@ -290,26 +288,25 @@ pub(crate) struct Launch {
     /// Where the Library bay reads and a save writes — `--store`, or
     /// [`karakuri_environment::places::STORE`].
     pub(crate) store: std::path::PathBuf,
-    /// The preset library, and which of the places it was. `None` is a machine
-    /// with no library on it, which is a state rather than a failure: it is
-    /// fatal only for a run that needed a default pair, and the Library's
-    /// preset tier is simply empty. See
-    /// [`karakuri_environment::places::presets`].
+    /// The preset library, and which of the places it was. `None` is a machine with
+    /// no library on it, which is a state rather than a failure: it is fatal only
+    /// for a run that needed a default pair, and the Library's preset tier is
+    /// simply empty. See [`karakuri_environment::places::presets`].
     pub(crate) presets: Option<karakuri_environment::places::Presets>,
-    /// **The port a model reaches this run on**, or `None` for a run that
-    /// serves nothing — `--mcp PORT`.
+    /// The port a model reaches this run on, or `None` for a run that serves
+    /// nothing — `--mcp PORT`.
     ///
     /// A port and not an open server, because the two are settled in different
-    /// places: this function reads a command line and cannot bind a socket
-    /// without either failing here or handing back something a `--help` run
-    /// would have to close again. [`main`] binds it, before the window, for
-    /// the reason the working copies are made there.
+    /// places: this function reads a command line and cannot bind a socket without
+    /// either failing here or handing back something a `--help` run would have to
+    /// close again. [`main`] binds it, before the window, for the reason the
+    /// working copies are made there.
     pub(crate) mcp: Option<u16>,
 }
 
-/// **The command line, read.** Two paths or none, and two flags that are not
-/// about paths; `--help` or `-h` prints [`USAGE`]; anything else is a refusal
-/// that prints it.
+/// The command line, read. Two paths or none, and two flags that are not about
+/// paths; `--help` or `-h` prints [`USAGE`]; anything else is a refusal that
+/// prints it.
 ///
 /// A free function over an iterator rather than a read of `std::env::args`
 /// inside [`main`], for the reason [`karakuri_environment`]'s refusals are free
@@ -318,8 +315,8 @@ pub(crate) struct Launch {
 /// `a_set_is_two_paths_or_none_and_anything_else_is_refused` and
 /// `the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair`.
 ///
-/// **It reaches a disk now**, which it did not before: resolving a presets root
-/// is existence checks on up to four directories. That is not a purity this
+/// It reaches a disk now, which it did not before: resolving a presets root is
+/// existence checks on up to four directories. That is not a purity this
 /// function had for its own sake — it had it because the answer was a compiled
 /// constant — and the alternative is `main` doing the resolution and this
 /// function returning something that is not yet an answer, which puts the one
@@ -396,19 +393,19 @@ pub(crate) fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<La
     })
 }
 
-/// **The value after a flag, refused rather than defaulted or swallowed.**
+/// The value after a flag, refused rather than defaulted or swallowed.
 ///
-/// `karakuri-cli`'s `value_for` is the same function with the same two
-/// silences written on it, and this is the second surface rather than a copy
-/// with a different opinion: a flag at the end of the line with nothing after
-/// it must not fall back, and a flag whose value is missing must not eat the
-/// next flag — `--presets --store x` reading `--store` as a directory would
-/// then blame `x` for being an unknown option.
+/// `karakuri-cli`'s `value_for` is the same function with the same two silences
+/// written on it, and this is the second surface rather than a copy with a
+/// different opinion: a flag at the end of the line with nothing after it must
+/// not fall back, and a flag whose value is missing must not eat the next flag
+/// — `--presets --store x` reading `--store` as a directory would then blame
+/// `x` for being an unknown option.
 ///
-/// Two of the three flags here take a directory, and a directory beginning
-/// with `-` is a path an operator can still name as `./-odd`. The third takes
-/// a number and reads it through [`number_for`], which is where the parse and
-/// its refusal are — so this function goes on answering one question.
+/// Two of the three flags here take a directory, and a directory beginning with
+/// `-` is a path an operator can still name as `./-odd`. The third takes a
+/// number and reads it through [`number_for`], which is where the parse and its
+/// refusal are — so this function goes on answering one question.
 pub(crate) fn value_for(
     flag: &str,
     rest: &mut impl Iterator<Item = String>,
@@ -422,7 +419,7 @@ pub(crate) fn value_for(
     }
 }
 
-/// **The number after a flag**, refused rather than defaulted, swallowed or
+/// The number after a flag, refused rather than defaulted, swallowed or
 /// clamped.
 ///
 /// [`value_for`] with a parse behind it, which is `karakuri-cli`'s `number_for`
@@ -432,9 +429,9 @@ pub(crate) fn value_for(
 /// not a number — so `--mcp` on this command line and `--mcp` on that one are
 /// wrong in the same words.
 ///
-/// **A port beginning with `-` is caught by the first two rather than by the
-/// parse**, which is the right refusal and not a lucky one: `--mcp -1` is a
-/// line where the value is missing far more often than it is a negative number
+/// A port beginning with `-` is caught by the first two rather than by the
+/// parse, which is the right refusal and not a lucky one: `--mcp -1` is a line
+/// where the value is missing far more often than it is a negative number
 /// somebody meant.
 pub(crate) fn number_for<T: std::str::FromStr>(
     flag: &str,

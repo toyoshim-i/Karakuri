@@ -1,7 +1,7 @@
 use super::*;
 
-/// **What the store holds, summarised**: every Set in it, most recent first,
-/// with what each one is made of.
+/// What the store holds, summarised: every Set in it, most recent first, with
+/// what each one is made of.
 ///
 /// # It asks `setfile::summarise` and not `Store::list_sets`, and that is the
 /// whole of what the filter fields needed
@@ -16,7 +16,7 @@ use super::*;
 /// it. So the reading moves here, one Set file per row on top of the directory
 /// read, and [`narrows`] is the same retain the tool does.
 ///
-/// **Most recent first, which `Store::list_sets` is not.**
+/// Most recent first, which `Store::list_sets` is not.
 /// `docs/manual/operations.html`'s row says the listing is most recent first
 /// and the MCP tool sorts for it; the bay was showing ascending id, so the
 /// panel and the tool answered one operation two ways. The tie-break is the id
@@ -26,31 +26,31 @@ use super::*;
 ///
 /// # Read once, and by the side of the seam that may read a disk
 ///
-/// Called from `resumed`, before the first frame. A listing is a directory
-/// read and a frame path does not do those
+/// Called from `resumed`, before the first frame. A listing is a directory read
+/// and a frame path does not do those
 /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)),
 /// and nothing in `karakuri-console`'s `src/` could do it anyway: opening a
 /// store is `karakuri-store`'s and the crate depends on neither it nor the
 /// engine (ADR-0156). What crosses into the console is a list of names.
 ///
-/// The cost of reading it once is that a Set saved while this window is up
-/// does not appear in the bay until the next run. That is this program's
-/// limitation and not the console's — the field is rewritable per frame like
-/// every other one — and closing it wants a reason to re-read rather than a
-/// timer, which is a decision and not this pass's.
+/// The cost of reading it once is that a Set saved while this window is up does
+/// not appear in the bay until the next run. That is this program's limitation
+/// and not the console's — the field is rewritable per frame like every other
+/// one — and closing it wants a reason to re-read rather than a timer, which is
+/// a decision and not this pass's.
 ///
 /// # A missing store is listed as nothing, and is not created
 ///
 /// [`karakuri_store::store::Store::open`] *"establishes the store layout under
-/// `root`, creating any directories that do not exist yet"*, which is the
-/// right thing for a program that is about to write one and the wrong thing
-/// for one that only wants to read. A program that listed a library by first
-/// making one would change the directory it was run in, so the root is
-/// required to be there already.
+/// `root`, creating any directories that do not exist yet"*, which is the right
+/// thing for a program that is about to write one and the wrong thing for one
+/// that only wants to read. A program that listed a library by first making one
+/// would change the directory it was run in, so the root is required to be
+/// there already.
 ///
 /// Either way the answer is a list, and an empty one is a bay with nothing in
-/// it — which is what `view::library` draws for it, and is honest: a store
-/// this run could not read holds nothing it can name.
+/// it — which is what `view::library` draws for it, and is honest: a store this
+/// run could not read holds nothing it can name.
 pub(crate) fn procedures(root: &std::path::Path) -> Vec<ListedProcedure> {
     if !root.is_dir() {
         // Said once by `library` beside it on the same press, so this one is
@@ -99,15 +99,15 @@ pub(crate) fn procedures(root: &std::path::Path) -> Vec<ListedProcedure> {
     out
 }
 
-/// **What a Set's row is**: the layers its own `slot` records fill, once each
-/// and in the file's own order.
+/// What a Set's row is: the layers its own `slot` records fill, once each and
+/// in the file's own order.
 ///
-/// **Read off the summary the listing already has**, which is why a badge costs
+/// Read off the summary the listing already has, which is why a badge costs
 /// nothing beyond what `all` was already paying: `setfile::summarise` reads a
 /// line per node to answer *what is in my library*, and the layer is one of the
 /// fields it already carries (P-0091, ADR-0338).
 ///
-/// **Once each**, because a badge says *this Set fills that layer* and a Set of
+/// Once each, because a badge says *this Set fills that layer* and a Set of
 /// three renderers fills L4 once for the purpose of reading a row.
 pub(crate) fn set_row(set: &setfile::SetSummary) -> RowKind {
     let mut badges: Vec<karakuri_operation::Layer> = Vec::new();
@@ -123,7 +123,7 @@ pub(crate) fn set_row(set: &setfile::SetSummary) -> RowKind {
     }
 }
 
-/// **What a kept procedure's row is**: its one declared kind, and that it is a
+/// What a kept procedure's row is: its one declared kind, and that it is a
 /// procedure. A file that declares none draws no badge.
 pub(crate) fn kept_row(kept: &ListedProcedure) -> RowKind {
     RowKind {
@@ -140,13 +140,13 @@ pub(crate) fn shipped_row(shipped: &karakuri_environment::places::PresetProcedur
     }
 }
 
-/// **Does this procedure pass the kind row?**
+/// Does this procedure pass the kind row?
 ///
 /// `LibraryKinds::shows_layer` answers it for a file that declares a kind, and
-/// this adds the one case that value cannot carry: **a `.kir` with no `kind`
-/// line shows only while nothing is on**. It is a row of the library either way
-/// — dropping it would answer *what have I kept* with a file missing — and a
-/// chip that named it would be a chip claiming it is of a kind nobody wrote.
+/// this adds the one case that value cannot carry: a `.kir` with no `kind` line
+/// shows only while nothing is on. It is a row of the library either way —
+/// dropping it would answer *what have I kept* with a file missing — and a chip
+/// that named it would be a chip claiming it is of a kind nobody wrote.
 pub(crate) fn shows_kept(
     kinds: karakuri_operation::LibraryKinds,
     kind: Option<karakuri_operation::Layer>,
@@ -157,7 +157,7 @@ pub(crate) fn shows_kept(
     }
 }
 
-/// **What the presets root ships that can go over a layer**, as its rows —
+/// What the presets root ships that can go over a layer, as its rows —
 /// [`presets_listing`]'s shape one extension along and with its failures.
 pub(crate) fn presets_procedures(
     presets: Option<&karakuri_environment::places::Presets>,
@@ -177,15 +177,15 @@ pub(crate) fn presets_procedures(
     }
 }
 
-/// **One procedure the operator has kept**, as [`procedures`] found it: the
-/// name its row is drawn under, when it was written, and the layer it declares.
+/// One procedure the operator has kept, as [`procedures`] found it: the name
+/// its row is drawn under, when it was written, and the layer it declares.
 ///
-/// **`ListedProcedure` and not `Kept`**, which is taken: [`Kept`] is what a
-/// press on the Inspector's `keep` capsule *files*, and this is a row of the
-/// listing that files show up in. One is an act and the other is a listing, and
-/// a name over both would be a name meaning two things.
+/// `ListedProcedure` and not `Kept`, which is taken: [`Kept`] is what a press
+/// on the Inspector's `keep` capsule *files*, and this is a row of the listing
+/// that files show up in. One is an act and the other is a listing, and a name
+/// over both would be a name meaning two things.
 ///
-/// **`kind` is an `Option` and a `None` is a row**, which is
+/// `kind` is an `Option` and a `None` is a row, which is
 /// `places::PresetProcedure::kind`'s own note one tier along: a `.kir` with no
 /// `kind` line is a file somebody kept, and dropping it from the listing would
 /// answer *what have I kept* with a file missing and nothing said. It draws no
@@ -222,24 +222,23 @@ pub(crate) fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
     }
 }
 
-/// **Which Sets this store has starred**, as their ids — the other half of
-/// what the Library bay lists, and the half `my sets` *is* (ADR-0299).
+/// Which Sets this store has starred, as their ids — the other half of what the
+/// Library bay lists, and the half `my sets` *is* (ADR-0299).
 ///
 /// # It is [`library`]'s shape one file along, and its failures are the same
 ///
-/// A store that is not there holds no stars, a store that will not open is
-/// **said out loud** rather than answered with silence, and either way the
-/// answer is a set — because a scope that is empty because a file could not be
-/// read looks exactly like one that is empty. The one difference from
-/// [`library`] is that a missing `favourites.json` is not a failure at all:
-/// `Store::favourites` answers an empty set for it, which is a store nobody
-/// has starred in.
+/// A store that is not there holds no stars, a store that will not open is said
+/// out loud rather than answered with silence, and either way the answer is a
+/// set — because a scope that is empty because a file could not be read looks
+/// exactly like one that is empty. The one difference from [`library`] is that
+/// a missing `favourites.json` is not a failure at all: `Store::favourites`
+/// answers an empty set for it, which is a store nobody has starred in.
 ///
-/// **Nothing is pruned against the listing here.** A mark whose Set a hand
-/// removed from `sets/` stays in the file — that is `Store::favourites`' own
-/// rule and ADR-0299's — and what makes it harmless is that [`listing`] takes
-/// the *intersection* with what the store holds, so an id naming no Set draws
-/// no row and can still have its star taken off.
+/// Nothing is pruned against the listing here. A mark whose Set a hand removed
+/// from `sets/` stays in the file — that is `Store::favourites`' own rule and
+/// ADR-0299's — and what makes it harmless is that [`listing`] takes the
+/// *intersection* with what the store holds, so an id naming no Set draws no
+/// row and can still have its star taken off.
 ///
 /// # Off the frame, on the press that builds a listing
 ///
@@ -264,60 +263,60 @@ pub(crate) fn favourites(root: &std::path::Path) -> std::collections::BTreeSet<S
     }
 }
 
-/// **What one Set declares, read off the cards the store keeps beside its
-/// artifacts** — the answer to
+/// What one Set declares, read off the cards the store keeps beside its
+/// artifacts — the answer to
 /// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet), in the shape
 /// the Library bay draws it in.
 ///
 /// # It is the same reading the MCP tool gives a model, through the same path
 ///
-/// `karakuri_mcp::read_set` renders this for a model, and what it
-/// reads is the Set file's `slot` records and each artifact's metadata card —
+/// `karakuri_mcp::read_set` renders this for a model, and what it reads is the
+/// Set file's `slot` records and each artifact's metadata card —
 /// `Store::read_set`, then `Store::read_meta` per node, then the `param_decl`,
-/// `capacity_decl` and `emit` records on it. **This walks the same records**
-/// rather than a second source: a panel and a model that disagreed about what
-/// a Set declares would be two answers to one question. What differs is the
+/// `capacity_decl` and `emit` records on it. This walks the same records rather
+/// than a second source: a panel and a model that disagreed about what a Set
+/// declares would be two answers to one question. What differs is the
 /// rendering, and it differs because the destinations do: a model is handed
 /// prose it reads in a context window and a bay is handed one line per control
 /// in a column eight characters wide.
 ///
-/// **The prose renderer is not called, and could not be**: it returns one
-/// `String` per Set with its blocks already laid out in sentences, and a
-/// listing row wants the key and the range apart. Lifting a structured reading
-/// into `karakuri-environment` so that both surfaces render one value is the
-/// right shape and is a change to a crate this pass may not touch; what is
-/// here is written against the same records in the same order so that the day
-/// somebody does, this is what moves.
+/// The prose renderer is not called, and could not be: it returns one `String`
+/// per Set with its blocks already laid out in sentences, and a listing row
+/// wants the key and the range apart. Lifting a structured reading into
+/// `karakuri-environment` so that both surfaces render one value is the right
+/// shape and is a change to a crate this pass may not touch; what is here is
+/// written against the same records in the same order so that the day somebody
+/// does, this is what moves.
 ///
 /// # The three blocks the row promises, and the fourth that is not here
 ///
 /// *"Every knob with its range and default, the element count, the attributes
 /// emitted — each read off the artifact's own card, so those three fetch no
-/// source and compile nothing."* The three are each a record on a card.
-/// **The element storage is deliberately absent**: the MCP
-/// tool's `element_storage_block` calls `setfile::load`, which fetches every
-/// source in the Set and runs `compile::check` over it, so a panel that drew
-/// it would be paying exactly the cost that sentence says these three do not.
+/// source and compile nothing."* The three are each a record on a card. The
+/// element storage is deliberately absent: the MCP tool's
+/// `element_storage_block` calls `setfile::load`, which fetches every source in
+/// the Set and runs `compile::check` over it, so a panel that drew it would be
+/// paying exactly the cost that sentence says these three do not.
 /// `docs/manual/console.html`'s note says the same and says where the figure
-/// goes instead — *"A model asking over MCP gets it and pays for it; a press
-/// in a library list is not the place to spend that"* — which the row settles
-/// the same way.
+/// goes instead — *"A model asking over MCP gets it and pays for it; a press in
+/// a library list is not the place to spend that"* — which the row settles the
+/// same way.
 ///
 /// # One control per key, and the range is the one every node agrees to
 ///
 /// A Set publishes one control per *key* and not one per declaration
 /// (`docs/ir-spec.md`, and `karakuri_engine::set::Set::published`), so a name
-/// two nodes declare is one row over the part of the range both of them
-/// accept. That intersection is `Set::declared_range`'s own arithmetic —
-/// `lo.max(min)`, `hi.min(max)` — done here because **a built Set is what this
-/// chip exists to be pressed before**: `published()` needs an engine and a
-/// device, and a reading that took one would be the load it is meant to save.
+/// two nodes declare is one row over the part of the range both of them accept.
+/// That intersection is `Set::declared_range`'s own arithmetic — `lo.max(min)`,
+/// `hi.min(max)` — done here because a built Set is what this chip exists to be
+/// pressed before: `published()` needs an engine and a device, and a reading
+/// that took one would be the load it is meant to save.
 ///
-/// The **default** is the first declarer's, and the order is the file's own —
-/// the same order `read_set` prints its nodes in and the order
-/// `Set::published` walks. A default is one number and two nodes may declare
-/// two; the alternative is drawing neither, which is a blank row and is the
-/// one thing the mock's own tip refuses.
+/// The default is the first declarer's, and the order is the file's own — the
+/// same order `read_set` prints its nodes in and the order `Set::published`
+/// walks. A default is one number and two nodes may declare two; the
+/// alternative is drawing neither, which is a blank row and is the one thing
+/// the mock's own tip refuses.
 pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, String> {
     let store = Store::open(root).map_err(|e| format!("the store at {}: {e}", root.display()))?;
     let lines = store
@@ -410,18 +409,18 @@ pub(crate) fn declared(root: &std::path::Path, id: &str) -> Result<Reading, Stri
     Ok(reading)
 }
 
-/// **A declared range and the default that applies until something turns it**,
-/// in the shape the mock draws every line of a reading in: `0 – 8 · 2`.
+/// A declared range and the default that applies until something turns it, in
+/// the shape the mock draws every line of a reading in: `0 – 8 · 2`.
 ///
-/// **The three marks are the mock's own** — an en dash between the ends of the
+/// The three marks are the mock's own — an en dash between the ends of the
 /// range and a middle dot before the default — and both are in the face the
 /// panel draws with, which is asserted rather than assumed
-/// ([`the_marks_a_reading_is_spelled_with_are_in_the_face`]): the Library
-/// bay's foot read `load → A` with the arrow typed as a U+2192 the default
-/// face does not carry, and drew `load □ A` for a release. The arrow is drawn
-/// rather than typed now, and is a label between two capsules (ADR-0305).
+/// ([`the_marks_a_reading_is_spelled_with_are_in_the_face`]): the Library bay's
+/// foot read `load → A` with the arrow typed as a U+2192 the default face does
+/// not carry, and drew `load □ A` for a release. The arrow is drawn rather than
+/// typed now, and is a label between two capsules (ADR-0305).
 ///
-/// **A default that is not a literal is a word and not a blank.** The card's
+/// A default that is not a literal is a word and not a blank. The card's
 /// `default` is absent where the declaration's expression is not a number this
 /// build can state — never where there is none, since the `.kir` grammar makes
 /// the expression mandatory — so what a blank would say here is false. `expr`
@@ -433,15 +432,15 @@ pub(crate) fn spelled(min: &str, max: &str, default: Option<String>) -> String {
     )
 }
 
-/// **The reading under the cursor, read and written into the view**, and the
+/// The reading under the cursor, read and written into the view, and the
 /// sentence to print about it.
 ///
 /// [`listing`]'s shape one control along, and it is here for that function's
 /// reason: reading a Set file and the cards behind it is a disk read, this is
 /// the side of the seam that owns the store, and `karakuri-console` takes none
-/// of the three (ADR-0156). **On the press and never on a frame** (P-0091) —
-/// which is the press on the `params` chip, and the key that moves the cursor
-/// while a reading is open, because the reading follows the cursor.
+/// of the three (ADR-0156). On the press and never on a frame (P-0091) — which
+/// is the press on the `params` chip, and the key that moves the cursor while a
+/// reading is open, because the reading follows the cursor.
 pub(crate) fn read_reading(view: &mut View, store: &std::path::Path) -> String {
     // **The Sets, which is empty under `history`**: a reading is what a Set
     // declares and a row of that scope is a version, so the cursor has no
@@ -487,38 +486,38 @@ pub(crate) fn read_reading(view: &mut View, store: &std::path::Path) -> String {
     }
 }
 
-/// **The reading follows the cursor, on whichever surface moved it.**
+/// The reading follows the cursor, on whichever surface moved it.
 ///
-/// `karakuri-console/src/view.rs` states the rule on `View::reading_open`:
-/// *"a move with one open is a read of the row it arrived at, and a move with
-/// nothing open is a pointer moving"*. **Two surfaces move that cursor**, the
-/// arrow keys through `View::walk` and a carry's press through
-/// `View::point_at`, and both owe it the same read — this is the one place
-/// that read is written, so there is one implementation of the rule for both
-/// to call rather than two copies that could answer it differently.
+/// `karakuri-console/src/view.rs` states the rule on `View::reading_open`: *"a
+/// move with one open is a read of the row it arrived at, and a move with
+/// nothing open is a pointer moving"*. Two surfaces move that cursor, the arrow
+/// keys through `View::walk` and a carry's press through `View::point_at`, and
+/// both owe it the same read — this is the one place that read is written, so
+/// there is one implementation of the rule for both to call rather than two
+/// copies that could answer it differently.
 ///
-/// `moved` is each caller's own answer to *did this press move the cursor*:
-/// the arrow-key arm compares `View::cursor_row()` before and after the
-/// press, and the carry's arm is `matches!(acted, Acted::Pointed)`. Neither
-/// shape is repeated here, because *what counts as a move* is each surface's
-/// own question and this function's only question is what to do once one
-/// has happened.
+/// `moved` is each caller's own answer to *did this press move the cursor*: the
+/// arrow-key arm compares `View::cursor_row()` before and after the press, and
+/// the carry's arm is `matches!(acted, Acted::Pointed)`. Neither shape is
+/// repeated here, because *what counts as a move* is each surface's own
+/// question and this function's only question is what to do once one has
+/// happened.
 ///
 /// # The defect this rule exists to prevent
 ///
 /// Until ADR-0265, `Readout::took` discarded `View::point_at`'s `moved`. A
-/// carry taken in hand while a reading was open on a **different** row moved
-/// the cursor off it, `View::opened` answered `None` because the row under
-/// the cursor was no longer the Set the reading was of, and the block
-/// vanished with nothing on that route ever walking the cursor back — no
-/// panic, no diagnostic, a reading that stopped being drawn. The arrow keys
-/// never had the bug — they always re-read on `moved && reading_open()` — so
-/// the two call sites already agreed before this function existed; what it
-/// buys is that they cannot silently stop agreeing.
+/// carry taken in hand while a reading was open on a different row moved the
+/// cursor off it, `View::opened` answered `None` because the row under the
+/// cursor was no longer the Set the reading was of, and the block vanished with
+/// nothing on that route ever walking the cursor back — no panic, no
+/// diagnostic, a reading that stopped being drawn. The arrow keys never had the
+/// bug — they always re-read on `moved && reading_open()` — so the two call
+/// sites already agreed before this function existed; what it buys is that they
+/// cannot silently stop agreeing.
 ///
-/// Returns the line to print rather than printing it, so a caller with
-/// nothing to print — the ordinary case, a press with no reading open — pays
-/// for no `println!` and a test can call this with no stdout to capture.
+/// Returns the line to print rather than printing it, so a caller with nothing
+/// to print — the ordinary case, a press with no reading open — pays for no
+/// `println!` and a test can call this with no stdout to capture.
 pub(crate) fn reread_if_open(
     moved: bool,
     view: &mut View,
@@ -527,7 +526,7 @@ pub(crate) fn reread_if_open(
     (moved && view.reading_open()).then(|| read_reading(view, store))
 }
 
-/// **The record's layer a vocabulary layer names.**
+/// The record's layer a vocabulary layer names.
 ///
 /// A third spelling of a list that already has two conversions in
 /// `karakuri-environment` — `setfile::kind_of` and `mcp.rs`'s pair — and it is
@@ -536,8 +535,8 @@ pub(crate) fn reread_if_open(
 /// `karakuri_store::record::Layer`, and what a filter carries is a
 /// `karakuri_operation::Layer`; the comparison has to happen on one side.
 ///
-/// **Exhaustive with no wildcard**, which is what makes it a table rather than
-/// a guess: a sixth layer does not compile until somebody says which it is.
+/// Exhaustive with no wildcard, which is what makes it a table rather than a
+/// guess: a sixth layer does not compile until somebody says which it is.
 pub(crate) fn asked(layer: karakuri_store::record::Layer) -> karakuri_operation::Layer {
     use karakuri_operation::Layer as Asked;
     use karakuri_store::record::Layer as Written;
@@ -551,17 +550,16 @@ pub(crate) fn asked(layer: karakuri_store::record::Layer) -> karakuri_operation:
     }
 }
 
-/// **The word a `kind` line spells a layer with, as the vocabulary's own
-/// value** — `karakuri_environment::history::LAYERS`' six words read back.
+/// The word a `kind` line spells a layer with, as the vocabulary's own value —
+/// `karakuri_environment::history::LAYERS`' six words read back.
 ///
-/// `None` for a word that is not one of the six, which is a `.kir` declaring
-/// no kind at all: `declared_kind` already answers `None` there, and this is
-/// the same absence carried one step further rather than a second reading of
-/// it.
+/// `None` for a word that is not one of the six, which is a `.kir` declaring no
+/// kind at all: `declared_kind` already answers `None` there, and this is the
+/// same absence carried one step further rather than a second reading of it.
 ///
-/// **The wildcard is the risk here and it is why `LAYERS` is the list.** This
-/// match answers a word rather than a value, so a sixth kind does *not* stop
-/// the build — it falls to `None` and a `kind L5` file reads as one declaring
+/// The wildcard is the risk here and it is why `LAYERS` is the list. This match
+/// answers a word rather than a value, so a sixth kind does *not* stop the
+/// build — it falls to `None` and a `kind L5` file reads as one declaring
 /// nothing. That is the failure `setfile::layer_from_ordinal`'s comment names
 /// one layer earlier, arriving through the other door.
 pub(crate) fn kind_of(word: &str) -> Option<karakuri_operation::Layer> {
@@ -577,7 +575,7 @@ pub(crate) fn kind_of(word: &str) -> Option<karakuri_operation::Layer> {
     }
 }
 
-/// **Which kinds the filter row is showing, as a sentence** — the words of the
+/// Which kinds the filter row is showing, as a sentence — the words of the
 /// chips that are on, or *every kind* where none of them is.
 ///
 /// `karakuri_operation::LibraryKinds::narrowing` settles the reading of *none
@@ -608,22 +606,22 @@ pub(crate) fn recorded(layer: karakuri_operation::Layer) -> karakuri_store::reco
     }
 }
 
-/// **Does this Set pass the filter row?** — the same retain
+/// Does this Set pass the filter row? — the same retain
 /// `karakuri-environment`'s MCP `list_sets` applies, and deliberately so: one
 /// operation narrowed two ways is two answers to *what does this store hold*.
 ///
-/// **A Set matches, not a node.** With both filters given the question is
-/// *which of the Sets that hold this also have something on that layer*, so
-/// each half is answered against the whole Set — a Set whose `drift_shell` is a
-/// geometry and whose deformation is called something else is exactly what that
-/// question is looking for.
+/// A Set matches, not a node. With both filters given the question is *which of
+/// the Sets that hold this also have something on that layer*, so each half is
+/// answered against the whole Set — a Set whose `drift_shell` is a geometry and
+/// whose deformation is called something else is exactly what that question is
+/// looking for.
 ///
 /// `holds` is matched case-insensitively against what each node is called,
 /// because an operator who read `drift_shell` in one row and stepped to
-/// `Drift_Shell` in another is not asking a different question. **The fields
-/// step through the names as the store spells them**, so today the fold changes
-/// no answer; it is here because the tool's does and the two must not come
-/// apart the day either field takes letters.
+/// `Drift_Shell` in another is not asking a different question. The fields step
+/// through the names as the store spells them, so today the fold changes no
+/// answer; it is here because the tool's does and the two must not come apart
+/// the day either field takes letters.
 pub(crate) fn narrows(
     set: &setfile::SetSummary,
     holds: Option<&str>,
@@ -640,19 +638,19 @@ pub(crate) fn narrows(
     })
 }
 
-/// **What the `holds` field can be stepped to**: every name a node in this
-/// store's Sets carries, once each and in one order.
+/// What the `holds` field can be stepped to: every name a node in this store's
+/// Sets carries, once each and in one order.
 ///
-/// **The unnarrowed listing's**, which is `view::View::holds`' own instruction
-/// and the reason this takes the summaries before [`narrows`] has been near
-/// them: candidates read off a filtered listing shrink as the filter bites, and
-/// a step would then wander somewhere it could not come back from.
+/// The unnarrowed listing's, which is `view::View::holds`' own instruction and
+/// the reason this takes the summaries before [`narrows`] has been near them:
+/// candidates read off a filtered listing shrink as the filter bites, and a
+/// step would then wander somewhere it could not come back from.
 ///
-/// **Sorted, and not in the order the Sets were written.** The candidates are a
+/// Sorted, and not in the order the Sets were written. The candidates are a
 /// list somebody steps through one press at a time, so the order has to hold
 /// still while they do it — where the rows above are ordered by recency and
-/// move whenever anything is saved. `BTreeSet` is the sort and the deduplication
-/// in one pass.
+/// move whenever anything is saved. `BTreeSet` is the sort and the
+/// deduplication in one pass.
 pub(crate) fn holds_choices(sets: &[setfile::SetSummary]) -> Vec<String> {
     sets.iter()
         .flat_map(|set| set.nodes.iter().map(|node| node.name.clone()))
@@ -661,16 +659,16 @@ pub(crate) fn holds_choices(sets: &[setfile::SetSummary]) -> Vec<String> {
         .collect()
 }
 
-/// **What the filter row is narrowing to, in words**, or `None` where it is
+/// What the filter row is narrowing to, in words, or `None` where it is
 /// narrowing nothing.
 ///
 /// The console draws the two values and this says what they mean, which is the
 /// division every other readout on this panel makes: a field reads `L4` and a
 /// line says the listing under it is the Sets that hold one.
 ///
-/// **`layer` arrives already spelled**, out of `view::Filters::layer_word` —
-/// the word the field itself is drawing. A `{:?}` here would print `Field`
-/// where the field reads `FIELD`, which is a readout and a sentence about it
+/// `layer` arrives already spelled, out of `view::Filters::layer_word` — the
+/// word the field itself is drawing. A `{:?}` here would print `Field` where
+/// the field reads `FIELD`, which is a readout and a sentence about it
 /// disagreeing in the one place a reader can see both.
 pub(crate) fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<String> {
     match (holds, layer) {
@@ -683,44 +681,43 @@ pub(crate) fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<Stri
     }
 }
 
-/// **One row of a scope whose rows are files**: the word the bay draws and the
-/// file behind it.
+/// One row of a scope whose rows are files: the word the bay draws and the file
+/// behind it.
 ///
-/// Two fields because the bay lists **names** and a take-in needs a **path**:
-/// what crosses into the console is a `String` per row
-/// (`view::View::library`), and what this program has to be able to find again
-/// on the press is the file that row came off.
+/// Two fields because the bay lists names and a take-in needs a path: what
+/// crosses into the console is a `String` per row (`view::View::library`), and
+/// what this program has to be able to find again on the press is the file that
+/// row came off.
 ///
-/// **Two scopes have rows of this kind** — `presets`, which is a told
-/// directory (ADR-0230), and `folder`, which is one somebody dropped on this
-/// window (ADR-0275). They are one type because a row of either is a Set file
-/// that is not in this store yet and a press on it is the same two operations
-/// (`docs/manual/operations.html`'s *Send a Set to somebody, and take one
-/// in*): the difference between them is which directory was listed, which is
+/// Two scopes have rows of this kind — `presets`, which is a told directory
+/// (ADR-0230), and `folder`, which is one somebody dropped on this window
+/// (ADR-0275). They are one type because a row of either is a Set file that is
+/// not in this store yet and a press on it is the same two operations
+/// (`docs/manual/operations.html`'s *Send a Set to somebody, and take one in*):
+/// the difference between them is which directory was listed, which is
 /// [`Taking`]'s.
 pub(crate) struct FileRow {
-    /// What the row reads, which is the file's own name without its
-    /// extension. **Not read out of the file**: a listing that opened
-    /// twenty-three files to draw twenty-three rows would be a directory read
-    /// doing a file read's work, and the id a take-in files the Set under is
-    /// the one *inside* the file anyway — read there, on the press, by
-    /// [`taking_in`].
+    /// What the row reads, which is the file's own name without its extension. Not
+    /// read out of the file: a listing that opened twenty-three files to draw
+    /// twenty-three rows would be a directory read doing a file read's work, and
+    /// the id a take-in files the Set under is the one *inside* the file anyway —
+    /// read there, on the press, by [`taking_in`].
     pub(crate) id: String,
     pub(crate) path: std::path::PathBuf,
 }
 
-/// **Every Set the preset library offers**, which is the `.kset` files in the
-/// root this run resolved.
+/// Every Set the preset library offers, which is the `.kset` files in the root
+/// this run resolved.
 ///
 /// # One call, and the reading is not this program's
 ///
 /// The listing is `karakuri_environment::places`', beside the resolution that
-/// answers *where* the presets are: what a `.kset` is and which directory
-/// holds them is that module's business, and a second program wanting the same
-/// list must not read the same directory a second way. So this is the one
-/// place in this program that knows a preset library can be listed at all, and
-/// it knows nothing about how — the shape of a row, the order they come in,
-/// and what a name the layout does not claim does are all answered there.
+/// answers *where* the presets are: what a `.kset` is and which directory holds
+/// them is that module's business, and a second program wanting the same list
+/// must not read the same directory a second way. So this is the one place in
+/// this program that knows a preset library can be listed at all, and it knows
+/// nothing about how — the shape of a row, the order they come in, and what a
+/// name the layout does not claim does are all answered there.
 ///
 /// # What it lists, and why not the `.kir` files beside them
 ///
@@ -730,8 +727,8 @@ pub(crate) struct FileRow {
 /// source addressed by its content and nothing in the vocabulary takes one, so
 /// the parts are not rows — they are what the rows *name*.
 ///
-/// **A root with nothing in it is a library nobody has filled**, and it is not
-/// a failure: the scope lists nothing and the sentence about it is
+/// A root with nothing in it is a library nobody has filled, and it is not a
+/// failure: the scope lists nothing and the sentence about it is
 /// [`why_nothing`]'s. A directory that will not open is said out loud, for
 /// [`library`]'s reason one scope along — a scope empty because a directory
 /// could not be read looks exactly like one that is empty.
@@ -762,31 +759,31 @@ pub(crate) fn presets_listing(
     }
 }
 
-/// **Every Set a dropped folder holds**, which is the Set files directly in
-/// the directory this bay was pointed at (ADR-0275).
+/// Every Set a dropped folder holds, which is the Set files directly in the
+/// directory this bay was pointed at (ADR-0275).
 ///
 /// # What it lists, and why both spellings
 ///
 /// `console.html`'s *A folder scope reads Sets, and a bundle is not a third
-/// thing*: *"A Set file and a bundle are the same file … so the scope draws
-/// one kind of row rather than two"*, and the authored form that names its
-/// parts by relative path *"is a Set file, is one row, and is taken in by the
-/// same operation."* So both suffixes are listed and neither is a second kind
-/// of row — `Store::SET_FILE_SUFFIX` for the resolved form and
+/// thing*: *"A Set file and a bundle are the same file … so the scope draws one
+/// kind of row rather than two"*, and the authored form that names its parts by
+/// relative path *"is a Set file, is one row, and is taken in by the same
+/// operation."* So both suffixes are listed and neither is a second kind of row
+/// — `Store::SET_FILE_SUFFIX` for the resolved form and
 /// `setfile::AUTHORING_SUFFIX` for the authored one, borrowed from the modules
-/// that own them rather than spelled here. A `.kir` is **not** listed: it is
-/// one node's source, nothing in the vocabulary takes one, and *"a directory of
+/// that own them rather than spelled here. A `.kir` is not listed: it is one
+/// node's source, nothing in the vocabulary takes one, and *"a directory of
 /// `.kir` files is a directory of parts"*.
 ///
-/// **A directory that holds `night.kset` and `night.kbset` lists two rows
-/// reading `night`**, and that is deliberate rather than got to by accident:
-/// they are two files, each of which is a Set, and choosing between them here
-/// would be this listing inventing a precedence between the two forms.
-/// **Whichever of them a press means is the take-in's question and it is
-/// answered by refusing**: [`Taking::file`] finds the row by the word that was
-/// pressed, two files wear that word, and a press that took one of them would
-/// be picking for the operator between two rows they cannot tell apart on
-/// screen. See there, where the refusal names both files.
+/// A directory that holds `night.kset` and `night.kbset` lists two rows reading
+/// `night`, and that is deliberate rather than got to by accident: they are two
+/// files, each of which is a Set, and choosing between them here would be this
+/// listing inventing a precedence between the two forms. Whichever of them a
+/// press means is the take-in's question and it is answered by refusing:
+/// [`Taking::file`] finds the row by the word that was pressed, two files wear
+/// that word, and a press that took one of them would be picking for the
+/// operator between two rows they cannot tell apart on screen. See there, where
+/// the refusal names both files.
 ///
 /// # Ascending, one directory deep, and the name is all that is read
 ///
@@ -794,34 +791,33 @@ pub(crate) fn presets_listing(
 /// `read_dir` hands back no order at all, a name the layout does not claim is
 /// skipped rather than repaired, and nothing here opens a file — a malformed
 /// Set is a refusal at the moment it is taken in, where the operator can see
-/// which row they pressed. It is **not** [`library`]'s most-recent-first
-/// (ADR-0263): that order is a store's, where a Set's time is when the
-/// operator wrote it, and a folder full of files somebody copied has mtimes
-/// that are facts about this machine's disk.
+/// which row they pressed. It is not [`library`]'s most-recent-first
+/// (ADR-0263): that order is a store's, where a Set's time is when the operator
+/// wrote it, and a folder full of files somebody copied has mtimes that are
+/// facts about this machine's disk.
 ///
 /// # Where this belongs, and it is not here
 ///
-/// **`karakuri_environment::places` is the right home**, beside
-/// `Presets::list_sets`, which answers the same question about a directory
-/// this run was told about rather than one it was handed: this is that
-/// function with two suffixes and no `Found` behind it, and a second walk of a
-/// directory of Sets is a second answer to *what is a Set file called*. It is
-/// here because ADR-0275's owed work was this file's, and the reason is
-/// written down rather than left to be inferred — `declared`'s own shape one
-/// bay over.
+/// `karakuri_environment::places` is the right home, beside
+/// `Presets::list_sets`, which answers the same question about a directory this
+/// run was told about rather than one it was handed: this is that function with
+/// two suffixes and no `Found` behind it, and a second walk of a directory of
+/// Sets is a second answer to *what is a Set file called*. It is here because
+/// ADR-0275's owed work was this file's, and the reason is written down rather
+/// than left to be inferred — `declared`'s own shape one bay over.
 pub(crate) fn folder_listing(dir: Option<&std::path::Path>) -> Vec<String> {
     folder_files(dir).into_iter().map(|row| row.id).collect()
 }
 
-/// **The same walk with the file names kept**, which is what a take-in needs:
-/// the bay lists words and the press has to find the file the word came off
-/// again ([`FileRow`]).
+/// The same walk with the file names kept, which is what a take-in needs: the
+/// bay lists words and the press has to find the file the word came off again
+/// ([`FileRow`]).
 ///
-/// **One walk and not two**, which is why [`folder_listing`] is a `map` over
-/// this rather than a second `read_dir`: a listing the bay drew and a listing
-/// the press searched that disagreed would be a press acting on a row nobody
-/// saw. It is [`presets_listing`]'s shape one scope along, and that function
-/// answers `FileRow`s for the same reason.
+/// One walk and not two, which is why [`folder_listing`] is a `map` over this
+/// rather than a second `read_dir`: a listing the bay drew and a listing the
+/// press searched that disagreed would be a press acting on a row nobody saw.
+/// It is [`presets_listing`]'s shape one scope along, and that function answers
+/// `FileRow`s for the same reason.
 pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
     let Some(dir) = dir else {
         return Vec::new();
@@ -865,7 +861,7 @@ pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
         .collect()
 }
 
-/// **Why the scope that is marked lists nothing**, in the words that say which
+/// Why the scope that is marked lists nothing, in the words that say which
 /// kind of nothing it is — and among these four chips there are two kinds.
 ///
 /// Two of them are empty as *data*: a store nobody has saved into and a preset
@@ -874,22 +870,22 @@ pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
 /// filled rather than something gone wrong."* Fill either and the rows appear
 /// with nothing else changing.
 ///
-/// **`my sets` is a third kind, and it is neither of those**: the store may
+/// `my sets` is a third kind, and it is neither of those: the store may
 /// hold plenty and nothing be starred, which is a listing that is empty
 /// because of an answer rather than because of an absence (ADR-0299). What to
 /// do about it is press a star, and the sentence says so.
 ///
-/// **The last of them is empty as *machinery*, and it is the one that
-/// changed:**
+/// The last of them is empty as *machinery*, and it is the one that
+/// changed:
 ///
-/// - **A folder nobody has pointed anywhere is empty for want of a gesture**,
+/// - A folder nobody has pointed anywhere is empty for want of a gesture,
 ///   and that is the one of the four that changed on 2026-09-08. It used to be
 ///   empty for want of machinery — this said *"nothing here reads a folder
 ///   dropped on this window yet"* — and [`folder_dropped`] is that machinery.
 ///   `Operation::ListSets` still has nowhere to put a directory and should
 ///   not: both its fields narrow what a store already holds, and which store
-///   is asked at all is [`listing`]'s own answer. **So this scope has two
-///   sentences and `pointed` is which**: no folder has been dropped yet, or
+///   is asked at all is [`listing`]'s own answer. So this scope has two
+///   sentences and `pointed` is which: no folder has been dropped yet, or
 ///   one has and holds no Set file. The second is [`Scope::AllSets`]' kind of
 ///   nothing — a library nobody has filled — read in somebody else's
 ///   directory.
@@ -898,7 +894,7 @@ pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
 /// went quiet and a scope that is empty are the same experience — which is the
 /// rule every other refusal in this file is written to.
 ///
-/// **The fifth is a third kind again, and it has two sentences of its own.**
+/// The fifth is a third kind again, and it has two sentences of its own.
 /// `history` lists the versions of the Set the load pulldown's deck is
 /// running, so it can be empty because that deck is running *no Set* — a run
 /// launched on a pair somebody typed, whose versions are filed under none
@@ -950,22 +946,22 @@ pub(crate) fn why_nothing(scope: Scope, pointed: bool, running: bool) -> &'stati
     }
 }
 
-/// **What a folder over this window reads in the `.path` row**, written into
-/// the console for the pass that is about to draw it.
+/// What a folder over this window reads in the `.path` row, written into the
+/// console for the pass that is about to draw it.
 ///
-/// **The one thing about this bay that is a frame's business**, and it is
-/// `egui`'s doing rather than a choice here: `RawInput::take` *clones*
-/// `hovered_files` where it *moves* `dropped_files`, so a drag over the window
-/// is a fact about every pass while it lasts and there is no event to hang it
-/// off. Nothing is asked of the file system for it — whether the path is a
-/// folder is the drop's question (P-0091, ADR-0275) — and nothing is
-/// allocated on a pass where the answer has not changed.
+/// The one thing about this bay that is a frame's business, and it is `egui`'s
+/// doing rather than a choice here: `RawInput::take` *clones* `hovered_files`
+/// where it *moves* `dropped_files`, so a drag over the window is a fact about
+/// every pass while it lasts and there is no event to hang it off. Nothing is
+/// asked of the file system for it — whether the path is a folder is the drop's
+/// question (P-0091, ADR-0275) — and nothing is allocated on a pass where the
+/// answer has not changed.
 ///
-/// **More than one path over the window reads as none.** The row says *"the
-/// path a release would set"*, a release sets nothing where two arrived
-/// (ADR-0275), and drawing the first of them would be this row picking one out
-/// of a list the desktop happened to build — which is the choice the refusal
-/// below exists to refuse.
+/// More than one path over the window reads as none. The row says *"the path a
+/// release would set"*, a release sets nothing where two arrived (ADR-0275),
+/// and drawing the first of them would be this row picking one out of a list
+/// the desktop happened to build — which is the choice the refusal below exists
+/// to refuse.
 pub(crate) fn folder_over(view: &mut View, hovering: &[karakuri_console::egui::HoveredFile]) {
     let over = match hovering {
         [one] => one.path.as_deref(),
@@ -986,48 +982,48 @@ pub(crate) fn folder_over(view: &mut View, hovering: &[karakuri_console::egui::H
     }
 }
 
-/// **A folder let go on this window**, which is how the `folder` scope is
-/// given a directory — and the three answers ADR-0275 settles, in the words
-/// that record and `console.html` write.
+/// A folder let go on this window, which is how the `folder` scope is given a
+/// directory — and the three answers ADR-0275 settles, in the words that record
+/// and `console.html` write.
 ///
 /// # It is done here, on the pass the drop arrives on, and nothing is put by
 ///
 /// `dropped_files` is visible for exactly one pass and then gone
-/// (`RawInput::take` moves it), so the release does the whole thing rather
-/// than asking a question: it sets the directory **and** marks the `folder`
-/// chip, and the listing under it is the next thing drawn. A bay that had put
-/// the path aside and waited for the chip to be pressed would be waiting on an
-/// operator who has already made the gesture, holding a path nothing will hand
-/// it a second time.
+/// (`RawInput::take` moves it), so the release does the whole thing rather than
+/// asking a question: it sets the directory and marks the `folder` chip, and
+/// the listing under it is the next thing drawn. A bay that had put the path
+/// aside and waited for the chip to be pressed would be waiting on an operator
+/// who has already made the gesture, holding a path nothing will hand it a
+/// second time.
 ///
-/// **So the file system is asked here, on a frame**, which is the one place
-/// this program does that and it is P-0091's rule rather than an exception to
-/// it: what is asked once is asked once, and a drop is one act. A drop is also
-/// the only moment the question can be asked at all — the event carries a path
-/// and nothing else, and *"a file and a directory are indistinguishable at the
+/// So the file system is asked here, on a frame, which is the one place this
+/// program does that and it is P-0091's rule rather than an exception to it:
+/// what is asked once is asked once, and a drop is one act. A drop is also the
+/// only moment the question can be asked at all — the event carries a path and
+/// nothing else, and *"a file and a directory are indistinguishable at the
 /// event"* (ADR-0275).
 ///
 /// # The two refusals, and each is a policy the plumbing does not answer
 ///
-/// **A path that is not a directory is refused, naming what was dropped.** A
-/// file is not read as the folder it sits in — that would point this bay at a
+/// A path that is not a directory is refused, naming what was dropped. A file
+/// is not read as the folder it sits in — that would point this bay at a
 /// directory nobody pointed at, which is the mistake the carry one bay over
-/// refuses when it declines to snap a drop mark to the nearest strip
-/// (ADR-0273) — and a `.kbset` is not taken in where it fell, because taking a
-/// Set in is a press on a row of a listing and a file landing on this window
-/// has no row under it.
+/// refuses when it declines to snap a drop mark to the nearest strip (ADR-0273)
+/// — and a `.kbset` is not taken in where it fell, because taking a Set in is a
+/// press on a row of a listing and a file landing on this window has no row
+/// under it.
 ///
-/// **More than one path is refused, and all of them are.** A multi-item drag
+/// More than one path is refused, and all of them are. A multi-item drag
 /// arrives whole, so three folders let go together are three entries in one
 /// pass and not three drops: there is no first to act on and a rest to ignore,
 /// nothing says which was aimed at, and the order is the desktop's rather than
 /// the operator's. The bay keeps the directory it had and the refusal counts
 /// what arrived.
 ///
-/// **Both name what arrived and what to do instead** (P-0083), and both say
-/// where this library is still pointed — because a refusal that left an
-/// operator wondering whether the bay had moved anyway is a refusal that costs
-/// a second gesture to read.
+/// Both name what arrived and what to do instead (P-0083), and both say where
+/// this library is still pointed — because a refusal that left an operator
+/// wondering whether the bay had moved anyway is a refusal that costs a second
+/// gesture to read.
 ///
 /// `None` where nothing was dropped, which is every pass but one.
 pub(crate) fn folder_dropped(
@@ -1125,13 +1121,13 @@ pub(crate) fn folder_dropped(
     }
 }
 
-/// **Whether a name is one a Set file wears**, which is the two suffixes
+/// Whether a name is one a Set file wears, which is the two suffixes
 /// [`folder_listing`] lists and is asked here for one reason: an operator who
 /// let go of a `.kbset` on this window was trying to take a Set in, and the
 /// refusal owes them the press that does it (P-0083).
 ///
-/// It is a **name** and not a reading: nothing is opened, exactly as nothing
-/// is opened to draw a row.
+/// It is a name and not a reading: nothing is opened, exactly as nothing is
+/// opened to draw a row.
 pub(crate) fn set_file(path: &std::path::Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
@@ -1141,53 +1137,53 @@ pub(crate) fn set_file(path: &std::path::Path) -> bool {
         })
 }
 
-/// **The rows the Library bay lists for the scope that is marked**, written
-/// into the view, and the sentence to print about it.
+/// The rows the Library bay lists for the scope that is marked, written into
+/// the view, and the sentence to print about it.
 ///
 /// # One function, and it is what a scope *is* on this program's side
 ///
-/// The console draws a row of chips and marks one of them; **which listing
-/// belongs under that mark is this side's answer**, because every one of the
-/// four is something outside this process — a store, a told directory, a
-/// filter over the first, a directory somebody names during the run — and
+/// The console draws a row of chips and marks one of them; which listing
+/// belongs under that mark is this side's answer, because every one of the four
+/// is something outside this process — a store, a told directory, a filter over
+/// the first, a directory somebody names during the run — and
 /// `karakuri-console` takes none of them (ADR-0156). So the seam is a `Vec` of
 /// names, and this is the one place it is filled.
 ///
-/// **On the press that changed the scope and at startup, never on a frame.** A
+/// On the press that changed the scope and at startup, never on a frame. A
 /// listing is a directory read (P-0091), which is the same rule [`library`]
 /// states one scope down and the reason this is not called from the frame
 /// handler.
 ///
 /// All five answer with rows now, and each of the five can still answer with
-/// none — [`why_nothing`] is where the sentences are, and it is one
-/// function so that a scope which stops being empty stops being empty in one
-/// place. **Three of them depend on something that happened during the run**:
-/// `folder` is `None` until somebody drops a directory on this window
-/// ([`folder_dropped`]), `my sets` is empty until somebody presses a star
-/// ([`favourite`]), and `history` is empty until the deck the load pulldown
-/// names is running a Set that has been edited.
+/// none — [`why_nothing`] is where the sentences are, and it is one function so
+/// that a scope which stops being empty stops being empty in one place. Three
+/// of them depend on something that happened during the run: `folder` is `None`
+/// until somebody drops a directory on this window ([`folder_dropped`]), `my
+/// sets` is empty until somebody presses a star ([`favourite`]), and `history`
+/// is empty until the deck the load pulldown names is running a Set that has
+/// been edited.
 ///
 /// # `history` is the one scope that is not a directory of Sets
 ///
-/// Its rows are the versions of **one Set** — the one the load pulldown's
-/// deck is running, which `running` carries — and they come off
-/// `karakuri_environment::history::list`, most recent first, in that
-/// function's own order rather than in one applied here (ADR-0263's argument
-/// on a different listing).
+/// Its rows are the versions of one Set — the one the load pulldown's deck is
+/// running, which `running` carries — and they come off
+/// `karakuri_environment::history::list`, most recent first, in that function's
+/// own order rather than in one applied here (ADR-0263's argument on a
+/// different listing).
 ///
-/// **The narrowing is a Set and never a deck**, which is why `running` is an
-/// id rather than a slot: two decks playing one Set have one history between
-/// them, and a version is filed under the Set the slot was running
-/// (ADR-0304). **A `None` row matches no Set** rather than matching every one
-/// of them — a version written where there was no Set is a version of
-/// nothing, and treating it as a wildcard would put another run's edits under
-/// whatever Set happens to be loaded now (ADR-0276's own consequence).
+/// The narrowing is a Set and never a deck, which is why `running` is an id
+/// rather than a slot: two decks playing one Set have one history between them,
+/// and a version is filed under the Set the slot was running (ADR-0304). A
+/// `None` row matches no Set rather than matching every one of them — a version
+/// written where there was no Set is a version of nothing, and treating it as a
+/// wildcard would put another run's edits under whatever Set happens to be
+/// loaded now (ADR-0276's own consequence).
 ///
-/// **The cap is on the walk and not on the Set.** [`HISTORY_MOST`] rows are
-/// asked for and the narrowing happens after, so a store whose day directories
-/// hold several Sets' versions lists fewer of each; `Listing::stopped_short`
-/// is what says the walk stopped with days unread, and it is said out loud
-/// beside the count rather than left for the foot's `n of m` to imply.
+/// The cap is on the walk and not on the Set. [`HISTORY_MOST`] rows are asked
+/// for and the narrowing happens after, so a store whose day directories hold
+/// several Sets' versions lists fewer of each; `Listing::stopped_short` is what
+/// says the walk stopped with days unread, and it is said out loud beside the
+/// count rather than left for the foot's `n of m` to imply.
 pub(crate) fn listing(
     view: &mut View,
     store: &std::path::Path,
@@ -1420,15 +1416,15 @@ pub(crate) fn listing(
     format!("{line}{aside}")
 }
 
-/// **How many rows of the edit history one walk asks for.**
+/// How many rows of the edit history one walk asks for.
 ///
 /// `karakuri_environment::history::list` takes the number from its caller and
 /// has no default, because *"what a bay can afford to draw and what a model can
 /// afford to be handed are different numbers"* (P-0090) — so this is the
 /// panel's answer and nowhere else's.
 ///
-/// **Larger than any bay can draw, and small enough that the walk stops after a
-/// handful of days.** The Library bay's list is one row per
+/// Larger than any bay can draw, and small enough that the walk stops after a
+/// handful of days. The Library bay's list is one row per
 /// `view::size::LIB_ROW_H`, so a full-height bay on a tall display draws a few
 /// tens of them; the cost of the walk is one `read_dir` per day directory
 /// entered and no file opened at all, and it stops entering them once it has
@@ -1437,17 +1433,17 @@ pub(crate) fn listing(
 /// which is the property that matters.
 pub(crate) const HISTORY_MOST: usize = 200;
 
-/// **The rows the `history` scope lists, and the sentence about how they were
-/// found.**
+/// The rows the `history` scope lists, and the sentence about how they were
+/// found.
 ///
-/// Split out of [`listing`] because it is the one arm of that function that
-/// has something to say beside the count: the walk is capped and it is capped
-/// on *days opened* rather than on this Set's rows, so a listing that stopped
+/// Split out of [`listing`] because it is the one arm of that function that has
+/// something to say beside the count: the walk is capped and it is capped on
+/// *days opened* rather than on this Set's rows, so a listing that stopped
 /// short has to say so or it reads as the whole history.
 ///
-/// **A row is the name the store filed the version under**, less the Set id
-/// every row here shares — see [`version_row`], which is also how a landing
-/// finds the file again.
+/// A row is the name the store filed the version under, less the Set id every
+/// row here shares — see [`version_row`], which is also how a landing finds the
+/// file again.
 pub(crate) struct Walked {
     pub(crate) rows: Vec<String>,
     pub(crate) said: String,
@@ -1509,23 +1505,23 @@ pub(crate) fn walked(store: &std::path::Path, running: Option<&str>) -> Walked {
     Walked { rows, said }
 }
 
-/// **One version, as a row of the Library bay's list and as the word a landing
-/// names it by.**
+/// One version, as a row of the Library bay's list and as the word a landing
+/// names it by.
 ///
 /// It is the name [`karakuri_environment::history::Snapshots::record`] wrote,
 /// less the `@<set>` every row of one walk shares and less the `.kir` — when,
 /// which slot, which layer and index, and what the procedure called itself,
 /// which is what `Version`'s own head says a row is for.
 ///
-/// **One spelling, used twice.** The bay is handed this and hands it back at
-/// the press, and [`restored`] rebuilds it per candidate to find the file
-/// again — so the row an operator pressed and the version that is landed
-/// cannot come apart, and no path crosses the seam. That is
-/// `SetTransfer::Take`'s arrangement: the panel re-asks the listing and finds
-/// the row by the word that was pressed.
+/// One spelling, used twice. The bay is handed this and hands it back at the
+/// press, and [`restored`] rebuilds it per candidate to find the file again —
+/// so the row an operator pressed and the version that is landed cannot come
+/// apart, and no path crosses the seam. That is `SetTransfer::Take`'s
+/// arrangement: the panel re-asks the listing and finds the row by the word
+/// that was pressed.
 ///
-/// **The index is spelled only when it is not the first**, which is `record`'s
-/// own rule read back rather than a second one: a `_0` on every L4 of every
+/// The index is spelled only when it is not the first, which is `record`'s own
+/// rule read back rather than a second one: a `_0` on every L4 of every
 /// ordinary run is noise in the way of what a person is scanning for.
 pub(crate) fn version_row(version: &karakuri_environment::history::Version) -> String {
     // **The spelling is the history module's**, since 2026-09-10: a model
@@ -1536,18 +1532,18 @@ pub(crate) fn version_row(version: &karakuri_environment::history::Version) -> S
     version.filed_as()
 }
 
-/// **What a take-in did**: the file it read, the id that file filed itself
-/// under, and the sentence `setfile::unbundle` reported.
+/// What a take-in did: the file it read, the id that file filed itself under,
+/// and the sentence `setfile::unbundle` reported.
 ///
-/// **Three fields because the press has three callers for them and each is a
-/// different question.** The `said` is what the operator reads. The `id` is
-/// what the load that follows names, and it is the file's own rather than the
-/// row's word. The `file` is what the *operation* names —
-/// `Operation::TransferSet`'s `SetTransfer::Take { file }` carries a path,
-/// *"because a file is what the only existing route takes"* — so it is
-/// returned rather than re-derived: the listing is asked once, on the press,
-/// and asking it a second time to name what was already taken in would be two
-/// answers to *which file was this* with a directory read between them.
+/// Three fields because the press has three callers for them and each is a
+/// different question. The `said` is what the operator reads. The `id` is what
+/// the load that follows names, and it is the file's own rather than the row's
+/// word. The `file` is what the *operation* names — `Operation::TransferSet`'s
+/// `SetTransfer::Take { file }` carries a path, *"because a file is what the
+/// only existing route takes"* — so it is returned rather than re-derived: the
+/// listing is asked once, on the press, and asking it a second time to name
+/// what was already taken in would be two answers to *which file was this* with
+/// a directory read between them.
 #[derive(Debug)]
 pub(crate) struct TakenIn {
     pub(crate) file: std::path::PathBuf,
@@ -1555,7 +1551,7 @@ pub(crate) struct TakenIn {
     pub(crate) said: String,
 }
 
-/// **Which listing a take-in's row came off**, and it is the whole of the
+/// Which listing a take-in's row came off, and it is the whole of the
 /// difference between the two scopes that have rows of files.
 ///
 /// # Two scopes, one row, one press
@@ -1563,36 +1559,36 @@ pub(crate) struct TakenIn {
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
 /// *"Taking one in is not a second row — opening a preset is this row"*, and a
 /// folder row is the same row again. `console.html` says the folder side in as
-/// many words — *"a folder row is a **take**"*, *"A row here is taken into the
-/// store and then loaded, which is one press because taking it in is what
-/// gives it a name"* — so the two differ in **which directory was listed** and
-/// in nothing else. That is what this type is, and it is why [`taking_in`]
-/// takes one rather than a presets root.
+/// many words — *"a folder row is a take"*, *"A row here is taken into the
+/// store and then loaded, which is one press because taking it in is what gives
+/// it a name"* — so the two differ in which directory was listed and in nothing
+/// else. That is what this type is, and it is why [`taking_in`] takes one
+/// rather than a presets root.
 ///
-/// **The `folder` half is what landed on 2026-09-08.** It was refused out
-/// loud until then — *"a folder row is a **take**, taking a Set in from a
-/// folder is not built"* — because the scope had no directory to list, which
-/// ADR-0275 gave it.
+/// The `folder` half is what landed on 2026-09-08. It was refused out loud
+/// until then — *"a folder row is a take, taking a Set in from a folder is not
+/// built"* — because the scope had no directory to list, which ADR-0275 gave
+/// it.
 ///
 /// # A path is derived here and never spelled by a surface
 ///
 /// `Operation::TransferSet`'s `SetTransfer::Take { file }` carries a path, and
-/// the rule that admits it is that **every route that fills it derives it from
-/// something the program itself produced**. Both arms obey it the same way:
-/// the listing is asked *again* on the press and the row is found by the word
-/// that was pressed ([`Taking::file`]), so what a surface handed over is a
-/// word off a listing this program read and never a path.
+/// the rule that admits it is that every route that fills it derives it from
+/// something the program itself produced. Both arms obey it the same way: the
+/// listing is asked *again* on the press and the row is found by the word that
+/// was pressed ([`Taking::file`]), so what a surface handed over is a word off
+/// a listing this program read and never a path.
 pub(crate) enum Taking<'a> {
-    /// The preset library this run resolved (ADR-0230) — a told directory,
-    /// and the same one [`presets_listing`] draws the rows of.
+    /// The preset library this run resolved (ADR-0230) — a told directory, and the
+    /// same one [`presets_listing`] draws the rows of.
     Presets(Option<&'a karakuri_environment::places::Presets>),
-    /// The directory somebody dropped on this window (ADR-0275), and `None`
-    /// for a bay that has been pointed nowhere.
+    /// The directory somebody dropped on this window (ADR-0275), and `None` for a
+    /// bay that has been pointed nowhere.
     Folder(Option<&'a std::path::Path>),
 }
 
 impl Taking<'_> {
-    /// The rows this listing holds, **asked again** rather than kept — see
+    /// The rows this listing holds, asked again rather than kept — see
     /// [`taking_in`], where that rule is argued.
     pub(crate) fn rows(&self) -> Vec<FileRow> {
         match self {
@@ -1609,25 +1605,24 @@ impl Taking<'_> {
         }
     }
 
-    /// **The file behind the word that was pressed**, or a sentence saying why
-    /// there is not one.
+    /// The file behind the word that was pressed, or a sentence saying why there is
+    /// not one.
     ///
     /// # Two refusals, and the second is the one a folder brought
     ///
-    /// **A word this listing no longer holds** is the row having gone between
-    /// the listing and the press — a directory this program neither made nor
-    /// writes, which is a folder's ordinary condition and a preset root's
-    /// unusual one.
+    /// A word this listing no longer holds is the row having gone between the
+    /// listing and the press — a directory this program neither made nor writes,
+    /// which is a folder's ordinary condition and a preset root's unusual one.
     ///
-    /// **A word two files wear** is `folder_files`' own note arriving: a
-    /// directory holding `night.kbset` and `night.kset` draws two rows reading
-    /// `night`, and neither the listing nor the bay puts a precedence between
-    /// the two forms. **So the press is refused and both file names go back**
+    /// A word two files wear is `folder_files`' own note arriving: a directory
+    /// holding `night.kbset` and `night.kset` draws two rows reading `night`, and
+    /// neither the listing nor the bay puts a precedence between the two forms. So
+    /// the press is refused and both file names go back
     /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
-    /// because taking one of them would be this program choosing between two
-    /// rows an operator cannot tell apart on screen. A `presets` root can
-    /// hold only `.kset` files, so this arm is a folder's in practice and is
-    /// asked of both because the rule is the row's rather than the scope's.
+    /// because taking one of them would be this program choosing between two rows
+    /// an operator cannot tell apart on screen. A `presets` root can hold only
+    /// `.kset` files, so this arm is a folder's in practice and is asked of both
+    /// because the rule is the row's rather than the scope's.
     pub(crate) fn file(&self, row: &str) -> Result<std::path::PathBuf, String> {
         let mut found: Vec<std::path::PathBuf> = self
             .rows()
@@ -1654,15 +1649,15 @@ impl Taking<'_> {
     }
 }
 
-/// **A row of `presets` or of a `folder`, taken into this store**, and the id
-/// it landed under.
+/// A row of `presets` or of a `folder`, taken into this store, and the id it
+/// landed under.
 ///
 /// # Taking it in is not a second operation, and it is what gives it a name
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
 /// *"Taking one in is not a second row — opening a preset is this row"*, so
-/// opening a preset **is** that row performed. `console.html` reaches it from
-/// the other side: *"loading a preset is a packaging step, and a packaging step
+/// opening a preset is that row performed. `console.html` reaches it from the
+/// other side: *"loading a preset is a packaging step, and a packaging step
 /// writes into the store: `my sets` gains a row you did not make."* That is
 /// what this does, and it is why a preset row is one press rather than two —
 /// the take-in is what gives the Set the id the load needs.
@@ -1671,31 +1666,31 @@ impl Taking<'_> {
 ///
 /// `taken_in_file` resolves a `.kset` with `setfile::bundle_authored` — which
 /// is `setfile::resolve` behind its wall, and then the inlining — and hands the
-/// result to `setfile::unbundle`. **Resolved *and* inlined rather than resolved
-/// alone**, for that function's stated reason: `unbundle` writes a metadata
-/// card for each source the lines carry, and handing it resolved lines with
-/// nothing inlined would file the Set and leave every artifact cardless. Two
-/// routes into one store that reach two different stores is the disagreement a
-/// second spelling always is.
+/// result to `setfile::unbundle`. Resolved *and* inlined rather than resolved
+/// alone, for that function's stated reason: `unbundle` writes a metadata card
+/// for each source the lines carry, and handing it resolved lines with nothing
+/// inlined would file the Set and leave every artifact cardless. Two routes
+/// into one store that reach two different stores is the disagreement a second
+/// spelling always is.
 ///
-/// **Both spellings, and the branch is that function's too.** A `.kbset` has
-/// its sources inside it and is read straight off the disk as lines; a `.kset`
+/// Both spellings, and the branch is that function's too. A `.kbset` has its
+/// sources inside it and is read straight off the disk as lines; a `.kset`
 /// names its parts by relative path and is resolved first. The `presets` scope
 /// lists only the second form, so this branch was not reachable until a folder
 /// row could be pressed — `console.html`: *"A Set file and a bundle are the
 /// same file … so the scope draws one kind of row rather than two"*, and the
 /// difference between them is a property of a file rather than a kind of row.
 ///
-/// **The two binaries have no library target between them**, which is why this
-/// is a second spelling of `karakuri-cli`'s eight lines rather than a call to
-/// them, and it is written down here rather than left to be discovered: the
-/// branch is the same branch and the two must not come apart the day a third
-/// form arrives.
+/// The two binaries have no library target between them, which is why this is a
+/// second spelling of `karakuri-cli`'s eight lines rather than a call to them,
+/// and it is written down here rather than left to be discovered: the branch is
+/// the same branch and the two must not come apart the day a third form
+/// arrives.
 ///
-/// **The wall is `resolve`'s and not this file's**: a part named from outside
-/// the file's own directory is refused, by path, because *"a Set somebody
-/// handed you is not a way of asking this machine for its files"* (ADR-0229).
-/// Nothing here loosens it and nothing here repeats it.
+/// The wall is `resolve`'s and not this file's: a part named from outside the
+/// file's own directory is refused, by path, because *"a Set somebody handed
+/// you is not a way of asking this machine for its files"* (ADR-0229). Nothing
+/// here loosens it and nothing here repeats it.
 ///
 /// # An id this store already holds is refused, and the refusal is not written
 /// # here
@@ -1711,10 +1706,10 @@ impl Taking<'_> {
 /// # The id is the file's own
 ///
 /// Read off the `set` record in the resolved lines rather than taken from the
-/// row's word, because that is the id `unbundle` files it under and the id
-/// `my sets` will list. They are the same word in `examples/`, and a preset
-/// whose file says otherwise would otherwise be loaded by a name the store does
-/// not hold.
+/// row's word, because that is the id `unbundle` files it under and the id `my
+/// sets` will list. They are the same word in `examples/`, and a preset whose
+/// file says otherwise would otherwise be loaded by a name the store does not
+/// hold.
 pub(crate) fn taking_in(
     root: &std::path::Path,
     from: Taking<'_>,
@@ -1754,47 +1749,46 @@ pub(crate) fn taking_in(
     Ok(TakenIn { file, id, said })
 }
 
-/// **The two rows of the vocabulary one press on a `presets` or a `folder` row
-/// performs**, in the order they happen.
+/// The two rows of the vocabulary one press on a `presets` or a `folder` row
+/// performs, in the order they happen.
 ///
 /// # Two operations because they are two rows of the page, and one press
 ///
 /// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
 /// *"Taking one in is not a second row — opening a preset is this row"*, so
-/// loading a Set out of presets or out of a folder **is** that row performed.
-/// The load after it is *Load material into a deck*, which is a different row
-/// with a different operation. **One press, two rows** — `console.html` says
-/// why it is one press: *"That is one press rather than two because taking it
-/// in is what gives it the name the load needs."*
+/// loading a Set out of presets or out of a folder is that row performed. The
+/// load after it is *Load material into a deck*, which is a different row with
+/// a different operation. One press, two rows — `console.html` says why it is
+/// one press: *"That is one press rather than two because taking it in is what
+/// gives it the name the load needs."*
 ///
 /// So the press emits both. Emitting only the load would be a press that
 /// performs two of the page's rows and names one, and the row it dropped would
-/// be the one **nothing in this workspace constructs**.
+/// be the one nothing in this workspace constructs.
 ///
 /// # Naming what a surface performed is the scope's rule, not a new one
 ///
 /// `space` on the Library's head steps the mark itself and emits
-/// `Operation::SelectScope` anyway, *"so that the press is recorded as `Silent(Surface)` rather than as
-/// nothing at all"*. This is that, one key along: `written` answers
-/// `Silent(NoRecord)` for a transfer, nothing in [`App::performed`] performs
-/// one, and the emission is the naming.
+/// `Operation::SelectScope` anyway, *"so that the press is recorded as
+/// `Silent(Surface)` rather than as nothing at all"*. This is that, one key
+/// along: `written` answers `Silent(NoRecord)` for a transfer, nothing in
+/// [`App::performed`] performs one, and the emission is the naming.
 ///
 /// # And it is not the key badge
 ///
 /// `key_column::ROWS` maps `enter` in the Library to *Load material into a
-/// deck* alone, and that
-/// stays true: what an operator reaches from the keyboard is a load, and the
-/// taking-in is what a load off `presets` does on the way. ADR-0213's
-/// distinction is between an operator **reaching** an operation and something
-/// **happening**, and constructing an operation is neither — which is
+/// deck* alone, and that stays true: what an operator reaches from the keyboard
+/// is a load, and the taking-in is what a load off `presets` does on the way.
+/// ADR-0213's distinction is between an operator reaching an operation and
+/// something happening, and constructing an operation is neither — which is
 /// `panel_column.rs`'s own sentence, *"construction is not reachability, and
 /// reachability is the definition."*
 ///
-/// The transfer names the **file**, because that is what
-/// `SetTransfer::Take` carries — *"a path because a file is what the only
-/// existing route takes"* — and the load names the **id**, which is the file's
-/// own `set` record rather than the row's word. They are the two halves of
-/// [`TakenIn`] and neither is derived from the other here.
+/// The transfer names the file, because that is what `SetTransfer::Take`
+/// carries — *"a path because a file is what the only existing route takes"* —
+/// and the load names the id, which is the file's own `set` record rather than
+/// the row's word. They are the two halves of [`TakenIn`] and neither is
+/// derived from the other here.
 pub(crate) fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
     [
         Operation::TransferSet {
@@ -1807,45 +1801,46 @@ pub(crate) fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
     ]
 }
 
-/// **The other direction of that row: a Set out of this store and into a file
-/// the operator names**, asked for and answered without a frame waiting on
-/// either half.
+/// The other direction of that row: a Set out of this store and into a file the
+/// operator names, asked for and answered without a frame waiting on either
+/// half.
 ///
 /// # The dialog is asked for here and awaited nowhere
 ///
 /// `rfd::AsyncFileDialog::save_file` is called on this thread — the main one,
 /// which is where a press handler is — and returns a future at once. On macOS
 /// what that call has already done is `beginSheetModalForWindow:`, an
-/// **asynchronous** sheet hung on this window: the run loop is untouched, so
-/// the frame loop goes on drawing behind it and the panel's continuous motion
-/// goes on saying *this is live*. That is the whole of what
+/// asynchronous sheet hung on this window: the run loop is untouched, so the
+/// frame loop goes on drawing behind it and the panel's continuous motion goes
+/// on saying *this is live*. That is the whole of what
 /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-/// asks of a mechanism that could run during a performance, and it was
-/// **measured** rather than assumed before this was written —
+/// asks of a mechanism that could run during a performance, and it was measured
+/// rather than assumed before this was written —
 /// [ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)
 /// carries the reading and the probe. The synchronous `FileDialog::save_file`
 /// is the thing this must not be: it is `runModal`, a nested run loop, and a
 /// panel that stops drawing.
 ///
-/// **The future is awaited on a worker and so is everything after it**, which
-/// is [`Keeping::save_set`]'s thread one act along and for its reason: a
-/// bundle is a store read and every source inlined, then a file written, and
-/// none of that is a thing to do on a frame (P-0091). The thread is detached
-/// and no frame waits for it; the outcome comes back down a channel and is
-/// said where a keep's is.
+/// The future is awaited on a worker and so is everything after it, which is
+/// [`Keeping::save_set`]'s thread one act along and for its reason: a bundle is
+/// a store read and every source inlined, then a file written, and none of that
+/// is a thing to do on a frame (P-0091). The thread is detached and no frame
+/// waits for it; the outcome comes back down a channel and is said where a
+/// keep's is.
 ///
-/// **The store is opened on the worker rather than handed in**, exactly as
+/// The store is opened on the worker rather than handed in, exactly as
 /// [`Save::run`] does it: a `Store` is not what crosses the thread, a root is.
 ///
 /// # Where the dialog opens, and what it is called
 ///
 /// The name offered is `<id>.kbset` — the store's own naming rule, so nothing
-/// is invented ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md))
+/// is invented
+/// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md))
 /// — and the directory is the one the Library bay is pointed at where a folder
 /// has been dropped on this window (ADR-0275), and the platform's own default
-/// where none has. **A file already there is the dialog's question and never
-/// this program's**: asking again on this side would be two programs asking
-/// one question, and the operator would have answered the wrong one first.
+/// where none has. A file already there is the dialog's question and never this
+/// program's: asking again on this side would be two programs asking one
+/// question, and the operator would have answered the wrong one first.
 pub(crate) fn sending(
     window: &Arc<Window>,
     root: &std::path::Path,
@@ -1868,16 +1863,17 @@ pub(crate) fn sending(
     });
 }
 
-/// **What the dialog's answer comes to**: a file written, or nothing at all.
+/// What the dialog's answer comes to: a file written, or nothing at all.
 ///
 /// Split out of [`sending`]'s thread so that the half with no window in it can
 /// be run without one — the dialog is the platform's and the answer is a
 /// `PathBuf` or it is `None`, which is the whole of what this needs to know.
 ///
-/// **`None` writes nothing and nothing is opened**: the store is not read, no
-/// bundle is built and no path is touched. That is the property `a_dismissed_dialog_writes_nothing_and_says_so`
-/// is watched to fail against, and it is why the early return is here rather
-/// than inside a `map` over the write.
+/// `None` writes nothing and nothing is opened: the store is not read, no
+/// bundle is built and no path is touched. That is the property
+/// `a_dismissed_dialog_writes_nothing_and_says_so` is watched to fail against,
+/// and it is why the early return is here rather than inside a `map` over the
+/// write.
 pub(crate) fn sent(root: &std::path::Path, id: String, to: Option<std::path::PathBuf>) -> Sent {
     let Some(to) = to else {
         return Sent {
@@ -1896,18 +1892,19 @@ pub(crate) fn sent(root: &std::path::Path, id: String, to: Option<std::path::Pat
     }
 }
 
-/// **One Set as the bytes of a `.kbset`**, which is `karakuri-cli`'s
-/// `packaged_set` with the authoring half taken out.
+/// One Set as the bytes of a `.kbset`, which is `karakuri-cli`'s `packaged_set`
+/// with the authoring half taken out.
 ///
 /// This side never packages a `.kset`: the id half is the whole of what a row
 /// of a library listing can name, and the flag's other spelling is *take in
-/// then send in one flag* ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)),
+/// then send in one flag*
+/// ([ADR-0260](../../../docs/adr/0260-sending-a-set-is-a-read-and-a-reads-answer-goes-where-the-surface-that-asked-puts-answers.md)),
 /// which is two presses here and already reached.
 ///
-/// **`setfile::bundle` is where the inlining and its one refusal live**
-/// (ADR-0231): one missing artifact refuses the whole thing and names the
-/// node, because a bundle short of a procedure looks self-contained and is
-/// not. Nothing here repeats that and nothing here loosens it.
+/// `setfile::bundle` is where the inlining and its one refusal live (ADR-0231):
+/// one missing artifact refuses the whole thing and names the node, because a
+/// bundle short of a procedure looks self-contained and is not. Nothing here
+/// repeats that and nothing here loosens it.
 pub(crate) fn bundled(root: &std::path::Path, id: &str) -> Result<String, String> {
     let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
     Ok(setfile::bundle(&store, id)?
@@ -1916,7 +1913,7 @@ pub(crate) fn bundled(root: &std::path::Path, id: &str) -> Result<String, String
         .collect())
 }
 
-/// **Put a library Set on a running deck**, which is the whole of what
+/// Put a library Set on a running deck, which is the whole of what
 /// `Operation::LoadSet` needed and is a re-point rather than an install.
 ///
 /// # It writes files and sends a description, and it builds nothing
@@ -1925,17 +1922,15 @@ pub(crate) fn bundled(root: &std::path::Path, id: &str) -> Result<String, String
 /// is *"deliberately not reachable from a key or a surface: a live run changes
 /// its material by editing a file and letting the worker build it, which is
 /// what the budget watchdog is attached to."* So this does what an operator
-/// with an editor does, in one press: it reads the Set out of the store,
-/// writes every procedure in it into the scratch, and tells that slot's
-/// watcher to look there instead. **Everything after this line is the path a
-/// save already takes** — the worker compiles off the render thread, the swap
-/// lands at a frame boundary, and the watchdog judges it there on what one
-/// frame of that Set costs and rolls it back on its own if that is over the
-/// budget. The
-/// library gets all of that for nothing, and no second route into a slot is
-/// opened.
+/// with an editor does, in one press: it reads the Set out of the store, writes
+/// every procedure in it into the scratch, and tells that slot's watcher to
+/// look there instead. Everything after this line is the path a save already
+/// takes — the worker compiles off the render thread, the swap lands at a frame
+/// boundary, and the watchdog judges it there on what one frame of that Set
+/// costs and rolls it back on its own if that is over the budget. The library
+/// gets all of that for nothing, and no second route into a slot is opened.
 ///
-/// **Nothing here is on the frame path.** A store read, a `setfile::load` that
+/// Nothing here is on the frame path. A store read, a `setfile::load` that
 /// checks every procedure, and up to a handful of small writes — on the press,
 /// which is where this file already reads a directory (`arrangement`), and
 /// never on a frame (P-0091). The compile is the worker's.
@@ -1943,36 +1938,36 @@ pub(crate) fn bundled(root: &std::path::Path, id: &str) -> Result<String, String
 /// # The scratch name carries the slot, and it is the directory's rule now
 ///
 /// `scratch::place` writes `<store>/scratch/<name>.kir` and overwrites what is
-/// there, so two decks loading two Sets whose procedures happen to share a
-/// name would be one file: the second load would move the first deck as well,
-/// on its watcher's next poll, and nothing would say why. The name is
-/// therefore `A0-drift.kir` — the deck letter, the node's place in the Set,
-/// and the procedure's own name — which is unique per slot **and** per node,
-/// stays readable in an editor, and says which deck an open file belongs to.
+/// there, so two decks loading two Sets whose procedures happen to share a name
+/// would be one file: the second load would move the first deck as well, on its
+/// watcher's next poll, and nothing would say why. The name is therefore
+/// `A0-drift.kir` — the deck letter, the node's place in the Set, and the
+/// procedure's own name — which is unique per slot and per node, stays readable
+/// in an editor, and says which deck an open file belongs to.
 ///
-/// **It is `scratch::node_name` rather than a `format!` here**, because that
+/// It is `scratch::node_name` rather than a `format!` here, because that
 /// argument was never about loading. It is about two decks and one directory,
 /// which is every run: every slot is materialised under the same spelling at
-/// startup ([`working_copies`]), so a load writes into a directory already
-/// laid out this way and a second spelling would be a second answer.
+/// startup ([`working_copies`]), so a load writes into a directory already laid
+/// out this way and a second spelling would be a second answer.
 ///
 /// # What the aim states, and why all of it
 ///
 /// [`watch::Aim`] is `Watch::new`'s argument list less the slot, and every
 /// field here is read off the Set file rather than left at this program's
 /// startup value — which is the failure each of `Watch`'s own fields is
-/// documented against, and which would not show on the load at all. A
-/// layering, a fold or a camera left behind is a slot that loads correctly and
-/// then comes back as a different picture on the first later save.
+/// documented against, and which would not show on the load at all. A layering,
+/// a fold or a camera left behind is a slot that loads correctly and then comes
+/// back as a different picture on the first later save.
 ///
 /// The authorities are the one exception and are empty: `Record::Authority` is
 /// deliberately not Set-file state, so a Set carries no grants and a load
 /// starts a slot with none — which is what `--load-set` gives one.
 ///
 /// The `Err` is a sentence for the operator. Every way this fails leaves the
-/// deck exactly as it was: a store that will not open, a Set that is not
-/// there, a procedure in it that no longer checks, a scratch that will not be
-/// written, or a worker that has gone.
+/// deck exactly as it was: a store that will not open, a Set that is not there,
+/// a procedure in it that no longer checks, a scratch that will not be written,
+/// or a worker that has gone.
 pub(crate) fn loading(
     root: &std::path::Path,
     slot: usize,
@@ -2092,20 +2087,20 @@ pub(crate) fn loading(
     ))
 }
 
-/// **Every arrangement the store holds, by name**, for the pill's menu to
-/// list — [`library`] over the fourth directory rather than the first.
+/// Every arrangement the store holds, by name, for the pill's menu to list —
+/// [`library`] over the fourth directory rather than the first.
 ///
 /// Its two rules are this one's, said again because they are the same two: a
-/// store that is not there is listed as nothing and **is not created**, since
-/// a program that listed a menu by first making a store would change the
-/// directory it was run in; and a store that could not be read says so, since
-/// a menu that is empty because the directory would not open looks exactly
-/// like one that is empty because nobody has saved.
+/// store that is not there is listed as nothing and is not created, since a
+/// program that listed a menu by first making a store would change the
+/// directory it was run in; and a store that could not be read says so, since a
+/// menu that is empty because the directory would not open looks exactly like
+/// one that is empty because nobody has saved.
 ///
-/// **Read when it changes rather than per frame.** Once at startup, and again
-/// after a save lands — which is the only thing in this program that adds a
-/// name. `Store::list_arrangements` sorts by name, so the menu draws what it
-/// is handed and sorts nothing.
+/// Read when it changes rather than per frame. Once at startup, and again after
+/// a save lands — which is the only thing in this program that adds a name.
+/// `Store::list_arrangements` sorts by name, so the menu draws what it is
+/// handed and sorts nothing.
 pub(crate) fn arrangements(root: &std::path::Path) -> Vec<String> {
     if !root.is_dir() {
         return Vec::new();
@@ -2119,73 +2114,73 @@ pub(crate) fn arrangements(root: &std::path::Path) -> Vec<String> {
     }
 }
 
-/// **A star put on a Set or taken off it**, and the second route in this
-/// program that both reads an operation and reaches a disk.
+/// A star put on a Set or taken off it, and the second route in this program
+/// that both reads an operation and reaches a disk.
 ///
 /// # It is [`arrangement`]'s shape and sits beside it for its reason
 ///
 /// The panel cannot reach the store (ADR-0156) and the store cannot reach the
 /// panel, so the two halves meet in a third party and this file is it. It
 /// answers `None` for every other operation, which is what lets it sit on the
-/// one path an emitted operation already takes rather than being a second
-/// route into the store.
+/// one path an emitted operation already takes rather than being a second route
+/// into the store.
 ///
 /// # What it writes, and what it deliberately does not
 ///
 /// `Store::set_favourite` — one stat, one atomic write of
 /// `<store>/favourites.json`, and the whole of the layout question is
-/// ADR-0299's rather than this file's. **Nothing here re-lists**: the marks
-/// the bay draws and the rows `my sets` holds are both [`listing`]'s answer,
-/// and a second derivation here would be a second answer to *what is starred*
-/// with a file write between them. The caller re-lists on the same branch it
-/// re-lists a scope press on.
+/// ADR-0299's rather than this file's. Nothing here re-lists: the marks the bay
+/// draws and the rows `my sets` holds are both [`listing`]'s answer, and a
+/// second derivation here would be a second answer to *what is starred* with a
+/// file write between them. The caller re-lists on the same branch it re-lists
+/// a scope press on.
 ///
 /// # Who asked decides where it lands, and for a star there is nowhere else
 ///
+///
 /// [P-0096](../../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
 /// is the actor and not the flag, and `my sets` is by construction the list of
-/// Sets **the operator chose** — so a model's star must not reach
+/// Sets the operator chose — so a model's star must not reach
 /// `<store>/favourites.json`. That much is
 /// [ADR-0261](../../../docs/adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)'s
 /// rule applied one control along, and it is why this branches on [`Asked`]
 /// exactly as `karakuri_environment::filed_as` does for a save.
 ///
-/// **Where the two part company is the second directory.** A model's save
-/// lands in `<store>/sandbox/` because what lands there is *material* — an
-/// edit-history snapshot an operator goes looking for after a show — so
-/// refusing it would lose an evening of work. A star is one bit whose whole
-/// meaning is *this row appears under `my sets`*, so a sandbox favourites file
-/// would be a list no scope lists, no tool reads and the operator never sees,
-/// while the model was told it had succeeded. **So a model's star is refused
-/// out loud** (ADR-0301), and the refusal names the id and says where the Set
-/// is — which is the same shape the class pills' refusals take, so that a
-/// model can tell the person beside it which mark to press.
+/// Where the two part company is the second directory. A model's save lands in
+/// `<store>/sandbox/` because what lands there is *material* — an edit-history
+/// snapshot an operator goes looking for after a show — so refusing it would
+/// lose an evening of work. A star is one bit whose whole meaning is *this row
+/// appears under `my sets`*, so a sandbox favourites file would be a list no
+/// scope lists, no tool reads and the operator never sees, while the model was
+/// told it had succeeded. So a model's star is refused out loud (ADR-0301), and
+/// the refusal names the id and says where the Set is — which is the same shape
+/// the class pills' refusals take, so that a model can tell the person beside
+/// it which mark to press.
 ///
-/// **`Standing::Open` stays and `gate.rs` is untouched.** The refusal is the
+/// `Standing::Open` stays and `gate.rs` is untouched. The refusal is the
 /// performer's and not the gate's, exactly as a model's save is not refused at
 /// the gate but filed somewhere else by whoever performs it.
 ///
-/// **The model arm is written before the route is**, which is [`arrangement`]'s
-/// own position: no tool publishes `SetFavourite` today, the page's MCP badge
-/// is `plan`, and a control that arrives at this function finds the rule
-/// already here rather than adding it.
+/// The model arm is written before the route is, which is [`arrangement`]'s own
+/// position: no tool publishes `SetFavourite` today, the page's MCP badge is
+/// `plan`, and a control that arrives at this function finds the rule already
+/// here rather than adding it.
 ///
 /// # The three things it can say, and each is said out loud
 ///
-/// **The state was already the one asked for**, which is `Ok(false)` and is an
-/// ordinary answer rather than a refusal: the operation names a state and not
-/// a toggle, so a second press of *star this* says the same thing again and
-/// the file's own time is not touched. **The Set is not one this store
-/// holds**, which is `StoreError::NoSet` carrying the id back
+/// The state was already the one asked for, which is `Ok(false)` and is an
+/// ordinary answer rather than a refusal: the operation names a state and not a
+/// toggle, so a second press of *star this* says the same thing again and the
+/// file's own time is not touched. The Set is not one this store holds, which
+/// is `StoreError::NoSet` carrying the id back
 /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md))
 /// — a `presets` or a `folder` row is a file rather than a Set of this
-/// library's, and starring one is refused with the sentence saying so.
-/// **Taking a star off is never refused**, which is the asymmetry that makes a
-/// mark left behind by a file somebody deleted clearable from the row it no
-/// longer draws.
+/// library's, and starring one is refused with the sentence saying so. Taking a
+/// star off is never refused, which is the asymmetry that makes a mark left
+/// behind by a file somebody deleted clearable from the row it no longer draws.
 ///
-/// **Never panics**, for [`arrangement`]'s reason: a panic reachable from an
-/// event handler aborts this process rather than unwinding.
+/// Never panics, for [`arrangement`]'s reason: a panic reachable from an event
+/// handler aborts this process rather than unwinding.
 pub(crate) fn favourite(
     root: &std::path::Path,
     asked: Asked,
@@ -2236,7 +2231,7 @@ pub(crate) fn favourite(
     })
 }
 
-/// **Where a named arrangement is kept and put back**, and the one route in
+/// Where a named arrangement is kept and put back, and the one route in
 /// this program that both reads an operation and reaches a disk.
 ///
 /// # Why it is here, in a package neither side depends on
@@ -2249,28 +2244,28 @@ pub(crate) fn favourite(
 /// name `karakuri-layout`, so it keeps an arrangement as bytes it does not
 /// understand, exactly as it keeps `.kir` source
 /// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
-/// §4). **So the two halves meet in a third party, and this file is the third
-/// party** — the same position it holds for a record, where the vocabulary
+/// §4). So the two halves meet in a third party, and this file is the third
+/// party — the same position it holds for a record, where the vocabulary
 /// says what to write and only somebody holding a `Deck` can apply it
 /// ([`apply`]).
 ///
 /// # The route, and where each half of it is decided
 ///
-/// - **Saving** is `serde_json::to_vec` of [`Panel::layout`] into
+/// - Saving is `serde_json::to_vec` of [`Panel::layout`] into
 ///   `Store::write_arrangement`, which is ADR-0221's own sentence. The format
 ///   is `karakuri-layout`'s hand-written `Serialize`, so an unbounded maximum
 ///   goes out as an explicit absence rather than as an infinity JSON cannot
 ///   spell, and a `NodeId` goes out as the bare number it is.
-/// - **Putting one back** is `Store::read_arrangement`, `serde_json` into a
-///   [`Layout`], and [`Panel::restore`]. **Neither this file nor the panel
-///   checks the arrangement**: `Layout`'s `TryFrom<Wire>` is the one place a
+/// - Putting one back is `Store::read_arrangement`, `serde_json` into a
+///   [`Layout`], and [`Panel::restore`]. Neither this file nor the panel
+///   checks the arrangement: `Layout`'s `TryFrom<Wire>` is the one place a
 ///   file that disagrees with itself is refused rather than repaired
 ///   (ADR-0158), and a check here would be a second answer to a question that
 ///   already has one.
 ///
 /// # What it does with each of the three ways it can fail
 ///
-/// **Says it and moves nothing**, and never panics: a panic reachable from an
+/// Says it and moves nothing, and never panics: a panic reachable from an
 /// event handler aborts this process rather than unwinding (see the module
 /// documentation). The three are a store it could not open or write, a name
 /// nothing is filed under, and a file that will not read back — and the third
@@ -2278,7 +2273,7 @@ pub(crate) fn favourite(
 /// such arrangement* and *the arrangement you saved is broken* send an
 /// operator to two different places.
 ///
-/// **A name nothing is filed under never falls back to the default.**
+/// A name nothing is filed under never falls back to the default.
 /// `Store::read_arrangement` answers `StoreError::NoArrangement(name)` and
 /// that sentence carries the name, which is the whole reason the store has a
 /// fourth error variant rather than reusing `NotFound`: an operator who
@@ -2289,7 +2284,7 @@ pub(crate) fn favourite(
 ///
 /// [`library`] refuses to create one, because *"a program that listed a
 /// library by first making one would change the directory it was run in"*, and
-/// a restore is a read on exactly those terms. A **save** is the case
+/// a restore is a read on exactly those terms. A save is the case
 /// `Store::open` establishing the layout is right for — it is a program that
 /// is about to write — so the two halves below differ, deliberately, and the
 /// restore's guard is what keeps `cargo run -p karakuri` in somebody's home
@@ -2299,7 +2294,7 @@ pub(crate) fn favourite(
 ///
 /// Which is what lets it sit on the one path every emitted operation already
 /// takes ([`App::performed`]) rather than being a second route into the
-/// panel. **The transport row's arrangement pill emits both**, and the
+/// panel. The transport row's arrangement pill emits both, and the
 /// manual's two rows say it is the only one of the four surfaces that can: a
 /// `panel` badge each and three empty ones, because a name is what a key
 /// press, a map line and an unpublished tool each have no way to say. This
@@ -2371,34 +2366,34 @@ pub(crate) fn keep_arrangement(
     }
 }
 
-/// **The one place a typed arrangement name is refused**, and the reason it is
-/// here rather than in the pill that took the letters.
+/// The one place a typed arrangement name is refused, and the reason it is here
+/// rather than in the pill that took the letters.
 ///
 /// `<name>` becomes one path component under `<store>/arrangements/`, and
-/// `karakuri-store` says outright that **nothing there checks it**: *"`<name>`
+/// `karakuri-store` says outright that nothing there checks it: *"`<name>`
 /// becomes one path component and that is the caller's rule to keep"*
 /// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
 /// §1, which names letters, digits, `-` and `_`). So `../../elsewhere` is a
 /// path, and a path never reaches that call from here.
 ///
-/// **The surface owns the affordance and never the authority**
+/// The surface owns the affordance and never the authority
 /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
 /// the pill takes whatever is typed and this is where it meets the wall, so a
-/// name refused by a hand and a name refused by anything else that ever
-/// reaches this operation meet the same one. A pill that silently dropped the
+/// name refused by a hand and a name refused by anything else that ever reaches
+/// this operation meet the same one. A pill that silently dropped the
 /// characters it did not like would be a rule an operator could only find by
 /// experiment — which is the failure the console page names about a control
 /// that quietly declines.
 ///
-/// **It says the same three things `mcp::checked_id` says about a Set id**,
-/// which is [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
+/// It says the same three things `mcp::checked_id` says about a Set id, which
+/// is
+/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
 /// as far as it can be kept today and no further: that function is private to
 /// `karakuri-environment`'s `mcp` module and its sentences say `id` and
-/// `<store>/sets/`, so it cannot be called from here and could not be quoted
-/// if it were. **When an arrangement name gets a second surface — a map line,
-/// an MCP tool, a `--restore-arrangement` flag — the two collapse into one
-/// shared `checked_name`, and this comment is where whoever does it should
-/// start.**
+/// `<store>/sets/`, so it cannot be called from here and could not be quoted if
+/// it were. When an arrangement name gets a second surface — a map line, an MCP
+/// tool, a `--restore-arrangement` flag — the two collapse into one shared
+/// `checked_name`, and this comment is where whoever does it should start.
 pub(crate) fn checked_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err(

@@ -32,9 +32,9 @@ mod gpu;
 mod outputs_row;
 mod press_handler;
 
-/// A store root of this test's own, cleared of whatever a previous run
-/// left — [`a_library_is_the_store_and_a_missing_store_is_not_made`]'s
-/// arrangement, so a keep is written where nothing else is writing.
+/// A store root of this test's own, cleared of whatever a previous run left —
+/// [`a_library_is_the_store_and_a_missing_store_is_not_made`]'s arrangement, so
+/// a keep is written where nothing else is writing.
 fn keep_root(what: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
         "karakuri-keep-{what}-{}-{:?}",
@@ -45,8 +45,8 @@ fn keep_root(what: &str) -> std::path::PathBuf {
     root
 }
 
-/// One keep, gathered as [`Keeping::keep_procedure`] gathers it and run on
-/// this thread rather than on a spawned one.
+/// One keep, gathered as [`Keeping::keep_procedure`] gathers it and run on this
+/// thread rather than on a spawned one.
 fn keep_run(root: &std::path::Path, asked: Asked, name: &str, source: &str) -> Kept {
     Kept {
         asked,
@@ -61,12 +61,12 @@ fn keep_run(root: &std::path::Path, asked: Asked, name: &str, source: &str) -> K
     .run()
 }
 
-/// **The writer puts a node's source under the name it was given**, and
-/// the outcome says where it went — ADR-0338 decision 4, and it is the act
-/// that makes the operator's tier of the library exist at all (P-0096).
+/// The writer puts a node's source under the name it was given, and the outcome
+/// says where it went — ADR-0338 decision 4, and it is the act that makes the
+/// operator's tier of the library exist at all (P-0096).
 ///
-/// A CPU test: the bytes are the run's and the store is a directory, so
-/// nothing here takes a device.
+/// A CPU test: the bytes are the run's and the store is a directory, so nothing
+/// here takes a device.
 #[test]
 fn a_keep_writes_the_nodes_source_into_the_operators_library() {
     let root = keep_root("library");
@@ -90,11 +90,11 @@ fn a_keep_writes_the_nodes_source_into_the_operators_library() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// **A name already kept is refused, and nothing claims otherwise.**
+/// A name already kept is refused, and nothing claims otherwise.
 ///
-/// The second keep leaves the first file exactly as it was — a keep is not
-/// an instruction to replace, which is where it differs from a Set id and
-/// an arrangement's name (`StoreError::ProcedureTaken`).
+/// The second keep leaves the first file exactly as it was — a keep is not an
+/// instruction to replace, which is where it differs from a Set id and an
+/// arrangement's name (`StoreError::ProcedureTaken`).
 #[test]
 fn a_keep_under_a_name_already_there_is_refused() {
     let root = keep_root("taken");
@@ -122,8 +122,8 @@ fn a_keep_under_a_name_already_there_is_refused() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// **A model's keep lands in the sandbox and never in the library**, which
-/// is a Set save's own division one file kind along (ADR-0261, ADR-0301).
+/// A model's keep lands in the sandbox and never in the library, which is a Set
+/// save's own division one file kind along (ADR-0261, ADR-0301).
 #[test]
 fn a_models_keep_lands_in_the_sandbox() {
     let root = keep_root("sandbox");
@@ -152,10 +152,10 @@ fn a_models_keep_lands_in_the_sandbox() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// **A node a build landed has its bytes in the store rather than in
-/// hand**, which is `setfile::SavedNode::source` being `None`: the watcher
-/// put the source there as it built it, so the keep reads it back by the
-/// address it carries and never re-reads the `.kir` on disk.
+/// A node a build landed has its bytes in the store rather than in hand, which
+/// is `setfile::SavedNode::source` being `None`: the watcher put the source
+/// there as it built it, so the keep reads it back by the address it carries
+/// and never re-reads the `.kir` on disk.
 #[test]
 fn a_rebuilt_nodes_keep_reads_its_source_back_out_of_the_store() {
     let root = keep_root("rebuilt");
@@ -180,38 +180,35 @@ fn a_rebuilt_nodes_keep_reads_its_source_back_out_of_the_store() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// **How far one press of the deck head's scrub goes, and the order its
-/// sync chip walks the modes in** — read from the control that has them
-/// rather than written again here: the arrow and the record it becomes
-/// are one number, and `Pane::allows` lines up with `SYNCS` or the cycle
-/// skips the wrong mode.
+/// How far one press of the deck head's scrub goes, and the order its sync chip
+/// walks the modes in — read from the control that has them rather than written
+/// again here: the arrow and the record it becomes are one number, and
+/// `Pane::allows` lines up with `SYNCS` or the cycle skips the wrong mode.
 use karakuri_console::view::{SCRUB_BEATS, SYNCS};
-/// The two answers that are not a record. `Silent` is named only here,
-/// because nothing in the running window reaches that arm; `Owed` is
-/// reachable only by a reading this window failed to take, which is the
-/// mask's accident and the sync chip's missing tempo and is asserted
-/// below. Neither is a gap in the vocabulary any more — the sync chip's
-/// was `Owed::NotSettled` until the conversion took a session tempo, and
-/// [`unwritten`] carries what that was.
+/// The two answers that are not a record. `Silent` is named only here, because
+/// nothing in the running window reaches that arm; `Owed` is reachable only by
+/// a reading this window failed to take, which is the mask's accident and the
+/// sync chip's missing tempo and is asserted below. Neither is a gap in the
+/// vocabulary any more — the sync chip's was `Owed::NotSettled` until the
+/// conversion took a session tempo, and [`unwritten`] carries what that was.
 use karakuri_operation_record::{Owed, Silent};
 
-/// **The two spellings of feedback's ceiling are one number**, and this is
-/// the package that can see both.
+/// The two spellings of feedback's ceiling are one number, and this is the
+/// package that can see both.
 ///
 /// `karakuri_operation::Feedback::MAX` is the reach a fader draws;
-/// `karakuri_engine::master::Chain::FEEDBACK_MAX` is the wall the engine
-/// clamps at, where the record is applied. Two crates state it because
-/// neither may depend on the other, and both say at their own definition
-/// that it is a convention held here — which is `Current::tempo`'s
-/// arrangement one control along, and the shape
-/// `docs/contributing.md` §4 asks for when a guarantee cannot be
-/// structural.
+/// `karakuri_engine::master::Chain::FEEDBACK_MAX` is the wall the engine clamps
+/// at, where the record is applied. Two crates state it because neither may
+/// depend on the other, and both say at their own definition that it is a
+/// convention held here — which is `Current::tempo`'s arrangement one control
+/// along, and the shape `docs/contributing.md` §4 asks for when a guarantee
+/// cannot be structural.
 ///
-/// **Both directions of the cut list too**, for the same reason and by the
-/// same route: `mix::cut` takes the engine's word to the vocabulary's and
-/// `Cut::parse` takes the record's word back, so a cut that survived one
-/// leg and not the other would be a picture a replay draws differently.
-/// The crossing lives in `karakuri-environment` beside `mix::tonemap` and
+/// Both directions of the cut list too, for the same reason and by the same
+/// route: `mix::cut` takes the engine's word to the vocabulary's and
+/// `Cut::parse` takes the record's word back, so a cut that survived one leg
+/// and not the other would be a picture a replay draws differently. The
+/// crossing lives in `karakuri-environment` beside `mix::tonemap` and
 /// `mix::sync`, because this window and `karakuri-cli` both make it.
 #[test]
 fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
@@ -239,27 +236,25 @@ fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
     }
 }
 
-/// **What the legend says about a control surface, and none of it needs
-/// one plugged in.**
+/// What the legend says about a control surface, and none of it needs one
+/// plugged in.
 ///
-/// The same house rule as the room's test below: the half that has no
-/// device in it is [`surface_line`] and [`unsurfaced`], and both are pure
-/// functions of what was found. **What is deliberately not here is that a
-/// real port opens** — nothing in this file can stand in for a controller
-/// on a desk, and `karakuri_environment::midi`'s tests are what hold the
-/// route from a message to a record.
+/// The same house rule as the room's test below: the half that has no device in
+/// it is [`surface_line`] and [`unsurfaced`], and both are pure functions of
+/// what was found. What is deliberately not here is that a real port opens —
+/// nothing in this file can stand in for a controller on a desk, and
+/// `karakuri_environment::midi`'s tests are what hold the route from a message
+/// to a record.
 ///
-/// 1. **The port is named**, because *which surface answered* is the one
-///    thing an operator cannot see from the panel: this program takes the
-///    first input there is (ADR-0220's reason one column along — the
-///    instrument has no `--midi-in`), and a run that took the wrong one of
-///    two would look exactly like a run whose controller is asleep.
-/// 2. **The map is named, and by its path as well as its name.**
-///    `default` under the store and `surface` in the preset library are
-///    two files, and an operator who has just learned one wants to know
-///    which is loaded.
-/// 3. **No map is a state**, with the sentence that tells them what to do
-///    next, and nothing plugged in is not a fault.
+/// 1. The port is named, because *which surface answered* is the one thing an
+/// operator cannot see from the panel: this program takes the first input there
+/// is (ADR-0220's reason one column along — the instrument has no `--midi-in`),
+/// and a run that took the wrong one of two would look exactly like a run whose
+/// controller is asleep. 2. The map is named, and by its path as well as its
+/// name. `default` under the store and `surface` in the preset library are two
+/// files, and an operator who has just learned one wants to know which is
+/// loaded. 3. No map is a state, with the sentence that tells them what to do
+/// next, and nothing plugged in is not a fault.
 #[test]
 fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
     let line = surface_line(
@@ -319,27 +314,25 @@ fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
     );
 }
 
-/// **The three things this program has decided about a room, and none of
-/// them needs a device.**
+/// The three things this program has decided about a room, and none of them
+/// needs a device.
 ///
-/// The house rule for this pass was to say how what could not be opened
-/// was tested. This is it: `listening`'s judgement is [`unopened`], which
-/// is a pure function of an error, and the case that can only happen
-/// during a set — an input picked off a list and gone by the time it is
-/// opened — is reachable on any machine at all by picking a name no device
-/// can have. **What is deliberately not here is that a real input opens**;
-/// that is `karakuri-audio`'s ignored `the_default_input_opens_and_delivers`
-/// and no assertion in this file could stand in for it.
+/// The house rule for this pass was to say how what could not be opened was
+/// tested. This is it: `listening`'s judgement is [`unopened`], which is a pure
+/// function of an error, and the case that can only happen during a set — an
+/// input picked off a list and gone by the time it is opened — is reachable on
+/// any machine at all by picking a name no device can have. What is
+/// deliberately not here is that a real input opens; that is `karakuri-audio`'s
+/// ignored `the_default_input_opens_and_delivers` and no assertion in this file
+/// could stand in for it.
 ///
-/// 1. **No device at all is not a fault** (P-0084): the sentence says
-///    `none` is a state, and says what goes on answering.
-/// 2. **A device that was named and is not there is loud** (P-0094): the
-///    sentence carries the list, so an operator who picked a cable that has
-///    gone is holding the right names rather than an invitation to go and
-///    look.
-/// 3. **And a refused pick does not take the room away.** Nothing is open
-///    in this test, so what is asserted is the half that can be: the answer
-///    says so rather than going quiet.
+/// 1. No device at all is not a fault (P-0084): the sentence says `none` is a
+/// state, and says what goes on answering. 2. A device that was named and is
+/// not there is loud (P-0094): the sentence carries the list, so an operator
+/// who picked a cable that has gone is holding the right names rather than an
+/// invitation to go and look. 3. And a refused pick does not take the room
+/// away. Nothing is open in this test, so what is asserted is the half that can
+/// be: the answer says so rather than going quiet.
 #[test]
 fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusal() {
     let quiet = unopened(
@@ -420,20 +413,20 @@ fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusa
     );
 }
 
-/// **"Five milliseconds a press, down and up"** — `docs/manual/operations.html`'s
-/// row, and the sign `docs/manual/console.html` says is the half that gets
-/// read wrong at two in the morning: *"Negative and the picture waits for
-/// the music, positive and it leads."*
+/// "Five milliseconds a press, down and up" — `docs/manual/operations.html`'s
+/// row, and the sign `docs/manual/console.html` says is the half that gets read
+/// wrong at two in the morning: *"Negative and the picture waits for the music,
+/// positive and it leads."*
 ///
 /// A pair wired the wrong way round reads correct and points backwards. The
 /// letters went on 2026-09-10 and the arithmetic did not: `↑↓` on the
-/// Transport's offset is what `o` and `p` were, and this asks
-/// [`offset_key`] which way each direction goes and that both go by the one
-/// constant the command line's own `o` and `p` use.
+/// Transport's offset is what `o` and `p` were, and this asks [`offset_key`]
+/// which way each direction goes and that both go by the one constant the
+/// command line's own `o` and `p` use.
 ///
-/// **And that `space` on it is the value it was declared at**, which is
-/// ADR-0259's rule for every level and the first way back to no offset at
-/// all this control has had.
+/// And that `space` on it is the value it was declared at, which is ADR-0259's
+/// rule for every level and the first way back to no offset at all this control
+/// has had.
 #[test]
 fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
     assert_eq!(
@@ -465,9 +458,9 @@ fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
     assert_eq!(offset_key(Step::Down, 20.0), 15.0);
 }
 
-/// **The master out steps by the trim's tenth and is held inside `[0, 1]`**,
-/// which is the range `Knob::Out` drags over — so a key and a hand can
-/// reach the same values and no others.
+/// The master out steps by the trim's tenth and is held inside `[0, 1]`, which
+/// is the range `Knob::Out` drags over — so a key and a hand can reach the same
+/// values and no others.
 #[test]
 fn the_master_out_steps_by_a_tenth_and_is_held_inside_the_track() {
     assert!((out_key(Step::Up, 0.5) - 0.6).abs() < 1e-5);
@@ -485,13 +478,13 @@ fn the_master_out_steps_by_a_tenth_and_is_held_inside_the_track() {
     );
 }
 
-/// **The exposure steps a quarter stop**, taken on the console's own track
-/// so that a key and a pointer land on the same forty-eight values —
+/// The exposure steps a quarter stop, taken on the console's own track so that
+/// a key and a pointer land on the same forty-eight values —
 /// `view::EXPOSURE_TRACK_W`'s whole argument, met from the keyboard's end.
 ///
-/// **Four presses are one stop**, which is what a quarter stop means and
-/// the one claim here worth stating as arithmetic rather than as a
-/// constant: a doubling.
+/// Four presses are one stop, which is what a quarter stop means and the one
+/// claim here worth stating as arithmetic rather than as a constant: a
+/// doubling.
 #[test]
 fn the_exposure_steps_a_quarter_stop_and_four_presses_double_it() {
     let mut at = 1.0;
@@ -517,16 +510,16 @@ fn the_exposure_steps_a_quarter_stop_and_four_presses_double_it() {
     );
 }
 
-/// **"Negative and the picture waits for the music, positive and it
-/// leads"**, and **"held inside 200 milliseconds either way"** — the two
-/// halves of `docs/manual/console.html`'s offset contract that a panel can
-/// be held to without a device.
+/// "Negative and the picture waits for the music, positive and it leads", and
+/// "held inside 200 milliseconds either way" — the two halves of
+/// `docs/manual/console.html`'s offset contract that a panel can be held to
+/// without a device.
 ///
-/// The second is the one a control is silent about by default: the value
-/// is clamped in `karakuri_environment::audio` and a press at the end of
-/// the travel would otherwise print the same number as the press before it
-/// with nothing said, which is P-0094's *an instrument says what it did*
-/// read from the far end.
+/// The second is the one a control is silent about by default: the value is
+/// clamped in `karakuri_environment::audio` and a press at the end of the
+/// travel would otherwise print the same number as the press before it with
+/// nothing said, which is P-0094's *an instrument says what it did* read from
+/// the far end.
 #[test]
 fn the_offset_says_which_way_it_points_and_says_when_it_was_held_at_the_bound() {
     let waiting = offset_said(-15.0, -15.0);
@@ -558,16 +551,16 @@ fn the_offset_says_which_way_it_points_and_says_when_it_was_held_at_the_bound() 
     );
 }
 
-/// **"It only means anything with an audio input attached"** —
+/// "It only means anything with an audio input attached" —
 /// `docs/manual/console.html`, and the operations page's row says it too.
 ///
-/// The offset is a term in the lead a beat correction is applied with, so
-/// with no room being listened to there is nothing for the picture to be
-/// early or late against and nothing to read the current value off. A
-/// value dialled against no session would be dropped the moment one opened
-/// — [`attached`] starts a new one at the offset the old one held and at
-/// the default when there was none — so the press changes nothing and says
-/// why, which is [`tapped`]'s and [`scaled`]'s answer to the same state.
+/// The offset is a term in the lead a beat correction is applied with, so with
+/// no room being listened to there is nothing for the picture to be early or
+/// late against and nothing to read the current value off. A value dialled
+/// against no session would be dropped the moment one opened — [`attached`]
+/// starts a new one at the offset the old one held and at the default when
+/// there was none — so the press changes nothing and says why, which is
+/// [`tapped`]'s and [`scaled`]'s answer to the same state.
 #[test]
 fn the_offset_keys_say_so_and_change_nothing_with_no_input_attached() {
     let mut open: Option<audio::Audio> = None;
@@ -589,24 +582,24 @@ fn the_offset_keys_say_so_and_change_nothing_with_no_input_attached() {
     assert_eq!(nudged(&mut open, &Operation::TapBeat), None);
 }
 
-/// **The console's copy of the offset's two ends and its step are this
-/// crate's own**, held against the originals here because this is the one
-/// package that can see both.
+/// The console's copy of the offset's two ends and its step are this crate's
+/// own, held against the originals here because this is the one package that
+/// can see both.
 ///
 /// `karakuri-console` restates `LATENCY_OFFSET_RANGE` and
-/// `LATENCY_OFFSET_STEP_MS` because it depends on nothing that could reach
-/// them (ADR-0156) and a track has to know its own ends to be laid out.
-/// That is `EXPOSURE_STOPS`' arrangement one control along — and it is
-/// **not** its position, which is the reason this test exists: the
-/// exposure's bounds are private to `karakuri-cli` and nothing in the
-/// workspace can compare them, where these two are public and this binary
-/// names both crates. A restatement nobody can check is a copy; one that is
-/// checked is a transcription with a guard, which is
-/// `docs/contributing.md` §4's second way of making a statement hold.
+/// `LATENCY_OFFSET_STEP_MS` because it depends on nothing that could reach them
+/// (ADR-0156) and a track has to know its own ends to be laid out. That is
+/// `EXPOSURE_STOPS`' arrangement one control along — and it is not its
+/// position, which is the reason this test exists: the exposure's bounds are
+/// private to `karakuri-cli` and nothing in the workspace can compare them,
+/// where these two are public and this binary names both crates. A restatement
+/// nobody can check is a copy; one that is checked is a transcription with a
+/// guard, which is `docs/contributing.md` §4's second way of making a statement
+/// hold.
 ///
-/// **And the track's width falls out of the two**, which is what makes one
-/// pixel one press: eighty five-millisecond steps across four hundred
-/// milliseconds, and eighty pixels of track.
+/// And the track's width falls out of the two, which is what makes one pixel
+/// one press: eighty five-millisecond steps across four hundred milliseconds,
+/// and eighty pixels of track.
 #[test]
 fn the_consoles_offset_track_spans_the_sessions_own_range() {
     assert_eq!(
@@ -634,20 +627,20 @@ fn the_consoles_offset_track_spans_the_sessions_own_range() {
     );
 }
 
-/// **Which half of the octave the panel draws live is the half the beat
-/// lock would accept**, and neither number is written down twice.
+/// Which half of the octave the panel draws live is the half the beat lock
+/// would accept, and neither number is written down twice.
 ///
-/// `BeatLock::octave` refuses when `BPM_RANGE` does not contain
-/// `bpm * factor` and nothing else, so [`tracking`] asks the range the same
-/// question before the press. The tempos here are the mock's own and the
-/// two edges of the range: **at 128 only `½` is live**, which is exactly
-/// what `docs/manual/console.html` draws and says — *"128.0 doubled is 256
-/// and the tracker searches 60 to 200 BPM"*.
+/// `BeatLock::octave` refuses when `BPM_RANGE` does not contain `bpm * factor`
+/// and nothing else, so [`tracking`] asks the range the same question before
+/// the press. The tempos here are the mock's own and the two edges of the
+/// range: at 128 only `½` is live, which is exactly what
+/// `docs/manual/console.html` draws and says — *"128.0 doubled is 256 and the
+/// tracker searches 60 to 200 BPM"*.
 ///
-/// **The range is under two octaves wide**, which is the mock's other
-/// claim about this control — *"the two halves are never both
-/// available"* — and it is asserted here rather than assumed, because it is
-/// the whole reason the chip has two faces instead of one.
+/// The range is under two octaves wide, which is the mock's other claim about
+/// this control — *"the two halves are never both available"* — and it is
+/// asserted here rather than assumed, because it is the whole reason the chip
+/// has two faces instead of one.
 #[test]
 fn the_octave_halves_the_panel_draws_live_are_the_ones_the_lock_would_take() {
     let range = audio::BPM_RANGE;
@@ -693,20 +686,20 @@ fn the_octave_halves_the_panel_draws_live_are_the_ones_the_lock_would_take() {
     );
 }
 
-/// **A press on each of the tracker group's three reaches the operation
-/// its key already reaches**, and each of the three leaves this window by
-/// the door its record decides.
+/// A press on each of the tracker group's three reaches the operation its key
+/// already reaches, and each of the three leaves this window by the door its
+/// record decides.
 ///
 /// # Why the three are not one answer
 ///
 /// The offset is `Silent(NoRecord)` and falls through [`App::performed`] to
-/// [`nudged`], which is where every route into the session's offset ends.
-/// The tap and the octave are `Owed(NotSettled)` — a tap's record is the
-/// *beat lock's* answer and no `Current` carries it — so `performed` takes
-/// them out before `unwritten` can print *"nothing moved, and nothing here
-/// decides it"* about a press that moved the grid. **That difference is the
-/// whole of [`tracked`]**, and this is what says the three presses land on
-/// the right side of it.
+/// [`nudged`], which is where every route into the session's offset ends. The
+/// tap and the octave are `Owed(NotSettled)` — a tap's record is the *beat
+/// lock's* answer and no `Current` carries it — so `performed` takes them out
+/// before `unwritten` can print *"nothing moved, and nothing here decides it"*
+/// about a press that moved the grid. That difference is the whole of
+/// [`tracked`], and this is what says the three presses land on the right side
+/// of it.
 ///
 /// It needs no device: `view::tracker_group` is a derivation over numbers,
 /// which is what makes the panel's arithmetic testable at all (ADR-0156).
@@ -801,15 +794,14 @@ fn a_press_on_the_tracker_group_reaches_the_operation_its_key_reaches() {
     );
 }
 
-/// **The legend this window prints for one key**, or a panic naming the
-/// key that is not in it.
+/// The legend this window prints for one key, or a panic naming the key that is
+/// not in it.
 ///
-/// [`KEYS`] is what the loop prints on startup, so it is the one place
-/// this program tells an operator in words what a press does. That makes
-/// it something the three tests below can check a constant *against*: a
-/// step size compared with a second literal is a copy of itself, and a
-/// step size compared with the sentence the operator reads is a
-/// measurement.
+/// [`KEYS`] is what the loop prints on startup, so it is the one place this
+/// program tells an operator in words what a press does. That makes it
+/// something the three tests below can check a constant *against*: a step size
+/// compared with a second literal is a copy of itself, and a step size compared
+/// with the sentence the operator reads is a measurement.
 fn legend(key: &str) -> &'static str {
     KEYS.iter()
         .find(|(name, _)| *name == key)
@@ -817,49 +809,49 @@ fn legend(key: &str) -> &'static str {
         .unwrap_or_else(|| panic!("`{key}` is not in the legend this window prints at all"))
 }
 
-/// Two levels are the same trim, allowing for the arithmetic: a tenth is
-/// not a `f32`, so `0.5 - GAIN_STEP` and `0.4` are two different numbers
-/// and neither of them is wrong.
+/// Two levels are the same trim, allowing for the arithmetic: a tenth is not a
+/// `f32`, so `0.5 - GAIN_STEP` and `0.4` are two different numbers and neither
+/// of them is wrong.
 fn same(got: f32, want: f32) -> bool {
     (got - want).abs() <= 1e-6
 }
 
-/// **"A key steps it"** — `docs/manual/operations.html`'s Gain row, whose
-/// badge reads `&uarr;&darr; space &middot; in the Mixer`. How far a press
-/// goes and what `space` does are decided here rather than there, so both
-/// are worth measuring rather than reading.
+/// "A key steps it" — `docs/manual/operations.html`'s Gain row, whose badge
+/// reads `&uarr;&darr; space &middot; in the Mixer`. How far a press goes and
+/// what `space` does are decided here rather than there, so both are worth
+/// measuring rather than reading.
 ///
-/// **The pair and the tenth are `karakuri-cli`'s, taken whole** —
-/// [`gain_key`]'s own sentence, and the reason they are worth an assertion
-/// at all: two keyboards that disagree about how far one press goes is the
-/// mistake an operator makes in the dark and cannot see. The size is
-/// [`GAIN_STEP`], and the legend [`KEYS`] prints for `up` calls it *a
-/// tenth*, so the constant is checked against something this program says
-/// out loud rather than against a literal written twice.
+/// The pair and the tenth are `karakuri-cli`'s, taken whole — [`gain_key`]'s
+/// own sentence, and the reason they are worth an assertion at all: two
+/// keyboards that disagree about how far one press goes is the mistake an
+/// operator makes in the dark and cannot see. The size is [`GAIN_STEP`], and
+/// the legend [`KEYS`] prints for `up` calls it *a tenth*, so the constant is
+/// checked against something this program says out loud rather than against a
+/// literal written twice.
 ///
-/// **Linear and additive, over several levels rather than one.** A step
-/// written as a proportion of wherever the trim happens to be reads
-/// correct at whichever single level a test picked and is wrong at every
-/// other one, and the levels above 1.0 are where that shows.
+/// Linear and additive, over several levels rather than one. A step written as
+/// a proportion of wherever the trim happens to be reads correct at whichever
+/// single level a test picked and is wrong at every other one, and the levels
+/// above 1.0 are where that shows.
 ///
-/// **The two ends are different ends, and that is the decision in here.**
-/// The floor is real — a negative gain would subtract one slot's light
-/// from another's, which is a blend mode rather than a level — and there
-/// is no ceiling, because the pipeline is HDR
+/// The two ends are different ends, and that is the decision in here. The floor
+/// is real — a negative gain would subtract one slot's light from another's,
+/// which is a blend mode rather than a level — and there is no ceiling, because
+/// the pipeline is HDR
 /// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)),
-/// which the legend for `up` says in as many words: *"the trim is not held
-/// at 1.0, because the mix is HDR"*. A trim clamped at unity here would
-/// look like tidiness and would quietly cap the mix.
+/// which the legend for `up` says in as many words: *"the trim is not held at
+/// 1.0, because the mix is HDR"*. A trim clamped at unity here would look like
+/// tidiness and would quietly cap the mix.
 ///
-/// **Held at the floor it says nothing**, which is where this differs from
-/// the offset three tests up: `offset_said` has a sentence for a press
-/// that asked past the bound and this route has none — what an operator
-/// gets is the absolute value the operation carries, printed twice.
+/// Held at the floor it says nothing, which is where this differs from the
+/// offset three tests up: `offset_said` has a sentence for a press that asked
+/// past the bound and this route has none — what an operator gets is the
+/// absolute value the operation carries, printed twice.
 ///
-/// **It took letters and takes a step since 2026-09-10** (ADR-0333). What
-/// the arrows and `space` reach is the *addressed* trim, which is the
-/// console's answer and `karakuri-console/tests/grammar.rs`'s; this is the
-/// arithmetic at the end of it and is unchanged.
+/// It took letters and takes a step since 2026-09-10 (ADR-0333). What the
+/// arrows and `space` reach is the *addressed* trim, which is the console's
+/// answer and `karakuri-console/tests/grammar.rs`'s; this is the arithmetic at
+/// the end of it and is unchanged.
 #[test]
 fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
     // Every level that says something different: under the default, at it,
@@ -950,29 +942,29 @@ fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
     assert_eq!(gain_key(Step::Default, 4.0), 1.0);
 }
 
-/// **"A key steps it"** one control along, and the difference between the
-/// two is the whole of this test.
+/// "A key steps it" one control along, and the difference between the two is
+/// the whole of this test.
 ///
-/// `docs/manual/operations.html`'s Opacity row carries the same badge as
-/// the Gain row — `&uarr;&darr; space &middot; in the Mixer` — and is
-/// silent about the size for [`gain_key`]'s reason, so the step is
-/// [`OPACITY_STEP`] and it is `karakuri-cli`'s.
+/// `docs/manual/operations.html`'s Opacity row carries the same badge as the
+/// Gain row — `&uarr;&darr; space &middot; in the Mixer` — and is silent about
+/// the size for [`gain_key`]'s reason, so the step is [`OPACITY_STEP`] and it
+/// is `karakuri-cli`'s.
 ///
-/// **The clamp is this surface's and it is the reason for the test.**
-/// Opacity is a proportion of a blend and there is no such thing as 1.4 of
-/// one, where gain is a level into an HDR mix — the legend says as much at
-/// the key: *"the fader is held inside 0 and 1"*. It is clamped here rather
-/// than left to `Deck::set_opacity`, because this decides what the
-/// **record** says: a session replays the value that took effect rather
-/// than one the engine quietly corrected.
+/// The clamp is this surface's and it is the reason for the test. Opacity is a
+/// proportion of a blend and there is no such thing as 1.4 of one, where gain
+/// is a level into an HDR mix — the legend says as much at the key: *"the fader
+/// is held inside 0 and 1"*. It is clamped here rather than left to
+/// `Deck::set_opacity`, because this decides what the record says: a session
+/// replays the value that took effect rather than one the engine quietly
+/// corrected.
 ///
-/// So the two ends are asserted **against the trim's**, which is the shape
-/// a clamp copied from one control to the other would break: at 1.0 the
-/// fader holds and the trim does not.
+/// So the two ends are asserted against the trim's, which is the shape a clamp
+/// copied from one control to the other would break: at 1.0 the fader holds and
+/// the trim does not.
 ///
-/// **The default is new and the two steps are not** (ADR-0333). `\` had no
-/// partner on this control, so `space` on an addressed fader is the first
-/// way back to unity it has ever had.
+/// The default is new and the two steps are not (ADR-0333). `\` had no partner
+/// on this control, so `space` on an addressed fader is the first way back to
+/// unity it has ever had.
 #[test]
 fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() {
     for from in [0.15_f32, 0.3, 0.5, 0.85] {
@@ -1051,22 +1043,22 @@ fn stepping_the_fader_moves_it_a_tenth_each_way_and_holds_inside_zero_and_one() 
     );
 }
 
-/// **Every verdict the engine can report says what it does to the lane,
-/// and a row leaves it only when the file and the picture agree.**
+/// Every verdict the engine can report says what it does to the lane, and a row
+/// leaves it only when the file and the picture agree.
 ///
-/// The six `swap::Event` variants are three answers: four that put a
-/// row on the lane under one of `view::Stage`'s words, one that takes it
-/// off, and one that is not about a version at all. The one worth the
-/// test is `Accepted`: it is the **watchdog's** verdict and not the
-/// operator's, and it is what clears a row because *keep a candidate* has
-/// no control on this panel — see `view::staging`, where that substitution
-/// is argued. A run in which `Accepted` did nothing would be a lane that
-/// fills up and never empties, which is not the lane the manual describes.
+/// The six `swap::Event` variants are three answers: four that put a row on the
+/// lane under one of `view::Stage`'s words, one that takes it off, and one that
+/// is not about a version at all. The one worth the test is `Accepted`: it is
+/// the watchdog's verdict and not the operator's, and it is what clears a row
+/// because *keep a candidate* has no control on this panel — see
+/// `view::staging`, where that substitution is argued. A run in which
+/// `Accepted` did nothing would be a lane that fills up and never empties,
+/// which is not the lane the manual describes.
 ///
-/// **And the rows stay in slot order**, which is the order they are drawn
-/// in: a candidate that lands on deck B and then one on deck A must not
-/// leave the lane reading B over A, because the letter is the only thing
-/// telling two rows of the same material apart.
+/// And the rows stay in slot order, which is the order they are drawn in: a
+/// candidate that lands on deck B and then one on deck A must not leave the
+/// lane reading B over A, because the letter is the only thing telling two rows
+/// of the same material apart.
 ///
 /// A CPU test: an `Event` is a value, and nothing here takes a device.
 #[test]
@@ -1207,24 +1199,22 @@ fn every_verdict_says_what_it_does_to_the_lane() {
     );
 }
 
-/// **One build that changed two nodes draws two rows, and one that
-/// changed one draws one** — the maintainer's decision on 2026-09-09, and
-/// [`settle`] is where it is carried out.
+/// One build that changed two nodes draws two rows, and one that changed one
+/// draws one — the maintainer's decision on 2026-09-09, and [`settle`] is where
+/// it is carried out.
 ///
 /// > 変更ノードごとに 1 行
 ///
-/// **The verdict is repeated on each row rather than standing over
-/// them**, which is the half of that decision a nested shape would have
-/// spent: a row is a row, and both of these carry the same word. What
-/// tells them apart is the address, which is why it is asserted here
-/// beside the count — two rows drawn from one build with one address
-/// between them would be two lines saying one thing.
+/// The verdict is repeated on each row rather than standing over them, which is
+/// the half of that decision a nested shape would have spent: a row is a row,
+/// and both of these carry the same word. What tells them apart is the address,
+/// which is why it is asserted here beside the count — two rows drawn from one
+/// build with one address between them would be two lines saying one thing.
 ///
-/// **And a slot's rows are replaced whole.** A build that changed two and
-/// then a build that changed one leaves one row, not the first build's
-/// second row standing under a verdict that has been superseded. That is
-/// the property `settle` was rewritten for and the one a `find`-and-write
-/// would have missed.
+/// And a slot's rows are replaced whole. A build that changed two and then a
+/// build that changed one leaves one row, not the first build's second row
+/// standing under a verdict that has been superseded. That is the property
+/// `settle` was rewritten for and the one a `find`-and-write would have missed.
 ///
 /// A CPU test: a `Changed` is a value and nothing here takes a device.
 #[test]
@@ -1309,14 +1299,14 @@ fn a_build_that_changed_two_nodes_draws_a_row_each() {
     );
 }
 
-/// **The library is what the store holds, and a store that is not there is
-/// listed as nothing rather than created.**
+/// The library is what the store holds, and a store that is not there is listed
+/// as nothing rather than created.
 ///
 /// Two claims, and the second is the one worth a test: `Store::open`
 /// establishes the layout it is pointed at, so a listing that opened first
-/// would leave a `.karakuri` behind in whatever directory this program was
-/// run from. [`library`] asks whether the root is there before it opens
-/// anything, and this is what says so.
+/// would leave a `.karakuri` behind in whatever directory this program was run
+/// from. [`library`] asks whether the root is there before it opens anything,
+/// and this is what says so.
 ///
 /// A CPU test: nothing here takes a device, and the store is a directory.
 #[test]
@@ -1362,32 +1352,32 @@ fn a_library_is_the_store_and_a_missing_store_is_not_made() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A version, written where `history::list` reads them.**
+/// A version, written where `history::list` reads them.
 ///
-/// The name is `Snapshots::record`'s own — a `HHMMSS-mmm` stamp, the slot,
-/// the layer with its index where it is not the first, the procedure name,
-/// and `@<set>` where there was a Set — and it is spelled here rather than
-/// recorded through that type because what these tests are about is the
-/// *reading*: a version filed under a Set, one filed under none, and the
-/// difference between them.
+/// The name is `Snapshots::record`'s own — a `HHMMSS-mmm` stamp, the slot, the
+/// layer with its index where it is not the first, the procedure name, and
+/// `@<set>` where there was a Set — and it is spelled here rather than recorded
+/// through that type because what these tests are about is the *reading*: a
+/// version filed under a Set, one filed under none, and the difference between
+/// them.
 fn version_file(root: &std::path::Path, day: &str, name: &str, body: &str) {
     let dir = root.join("history").join(day);
     std::fs::create_dir_all(&dir).expect("a day directory");
     std::fs::write(dir.join(name), body).expect("a version");
 }
 
-/// **The `history` scope lists the versions of the Set the load pulldown's
-/// deck is running, and a version filed under no Set is not one of them.**
+/// The `history` scope lists the versions of the Set the load pulldown's deck
+/// is running, and a version filed under no Set is not one of them.
 ///
-/// That last clause is the one ADR-0276 wrote down and ADR-0308 had to
-/// obey: *"a narrowing must treat a `None` row as matching no Set rather
-/// than as a wildcard."* A run launched on a pair somebody typed files
-/// every version it writes under none, so a wildcard would put the whole of
-/// that run's editing under whatever Set the operator loaded afterwards —
-/// silently, in a bay whose rows are names.
+/// That last clause is the one ADR-0276 wrote down and ADR-0308 had to obey:
+/// *"a narrowing must treat a `None` row as matching no Set rather than as a
+/// wildcard."* A run launched on a pair somebody typed files every version it
+/// writes under none, so a wildcard would put the whole of that run's editing
+/// under whatever Set the operator loaded afterwards — silently, in a bay whose
+/// rows are names.
 ///
-/// **And a deck running nothing lists nothing**, with the sentence saying
-/// which nothing it is. A CPU test: `listing` reaches a disk and no device.
+/// And a deck running nothing lists nothing, with the sentence saying which
+/// nothing it is. A CPU test: `listing` reaches a disk and no device.
 #[test]
 fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
     let root = scratch_dir("history-listing");
@@ -1458,23 +1448,22 @@ fn a_history_listing_is_one_sets_versions_and_a_none_row_is_nobodys() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A landing writes the version's bytes over the node's working copy, and
-/// a file that is gone is refused by name.**
+/// A landing writes the version's bytes over the node's working copy, and a
+/// file that is gone is refused by name.
 ///
-/// The write is the whole of what a landing does on this side: nothing
-/// touches a deck, nothing sends an aim, and the watcher already looking at
-/// that file is what builds it — ADR-0228's argument met from the other
-/// end. So what this asserts is the **bytes** and the **path**: the file
-/// the version was of, resolved through the slot's own nodes rather than
-/// through the copies the run launched with.
+/// The write is the whole of what a landing does on this side: nothing touches
+/// a deck, nothing sends an aim, and the watcher already looking at that file
+/// is what builds it — ADR-0228's argument met from the other end. So what this
+/// asserts is the bytes and the path: the file the version was of, resolved
+/// through the slot's own nodes rather than through the copies the run launched
+/// with.
 ///
-/// **The refusal names the file**, because `rm -rf history/2026/07` is this
-/// store's whole retention policy: a row whose file an operator deleted by
-/// hand is an ordinary state, and P-0083 says a refusal carries what the
-/// next attempt needs.
+/// The refusal names the file, because `rm -rf history/2026/07` is this store's
+/// whole retention policy: a row whose file an operator deleted by hand is an
+/// ordinary state, and P-0083 says a refusal carries what the next attempt
+/// needs.
 ///
-/// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no
-/// device.
+/// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no device.
 #[test]
 fn a_landing_writes_the_versions_bytes_over_the_nodes_working_copy() {
     let root = scratch_dir("history-landing");
@@ -1542,31 +1531,28 @@ fn a_landing_writes_the_versions_bytes_over_the_nodes_working_copy() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A step back lands the version before the one the node is running, and
-/// a node with only that one version is refused saying so.**
+/// A step back lands the version before the one the node is running, and a node
+/// with only that one version is refused saying so.
 ///
-/// The Staging lane's arm of `karakuri_operation::Revision`, and the whole
-/// of what it adds over the Library bay's: the surface says the **node**,
-/// and which version that is, is worked out here — the history walked for
-/// that node of that Set, most recent first, with the entry after the
-/// newest taken (ADR-0326). The newest is what the slot is running,
-/// because the history is gated on **compiling** and not on landing, so a
-/// version stopped for cost is filed too and is the one an operator most
-/// wants to step away from.
+/// The Staging lane's arm of `karakuri_operation::Revision`, and the whole of
+/// what it adds over the Library bay's: the surface says the node, and which
+/// version that is, is worked out here — the history walked for that node of
+/// that Set, most recent first, with the entry after the newest taken
+/// (ADR-0326). The newest is what the slot is running, because the history is
+/// gated on compiling and not on landing, so a version stopped for cost is
+/// filed too and is the one an operator most wants to step away from.
 ///
-/// **Three versions and not two**, so that *the one before the one
-/// running* is a different answer from *the oldest*: a resolver that took
-/// the last row of the chain would pass a two-version fixture and land the
-/// wrong file here.
+/// Three versions and not two, so that *the one before the one running* is a
+/// different answer from *the oldest*: a resolver that took the last row of the
+/// chain would pass a two-version fixture and land the wrong file here.
 ///
-/// **And the chain is narrowed by the node as well as by the Set**, which
-/// is the assertion the L1 version beside them makes: a version of another
-/// node of the same Set is a newer row of the same listing, so a walk that
-/// narrowed only by the Set would call it *the one running* and land the
-/// L4's own newest as the step back.
+/// And the chain is narrowed by the node as well as by the Set, which is the
+/// assertion the L1 version beside them makes: a version of another node of the
+/// same Set is a newer row of the same listing, so a walk that narrowed only by
+/// the Set would call it *the one running* and land the L4's own newest as the
+/// step back.
 ///
-/// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no
-/// device.
+/// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no device.
 #[test]
 fn a_step_back_lands_the_version_before_the_one_running() {
     let root = scratch_dir("history-step-back");
@@ -1678,22 +1664,21 @@ fn a_step_back_lands_the_version_before_the_one_running() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A keep takes its own row off the lane and leaves every other row
-/// standing.**
+/// A keep takes its own row off the lane and leaves every other row standing.
 ///
 /// The half of the press that is not the operation: [`kept`] is where a
 /// `KeepCandidate` is performed, because `written` answers
-/// `Silent(Silent::Surface)` for it and there is no record for `apply` to
-/// move a deck with. What it changes is one line in one list.
+/// `Silent(Silent::Surface)` for it and there is no record for `apply` to move
+/// a deck with. What it changes is one line in one list.
 ///
-/// **Two rows of one slot is the case worth the test**, and it is what
-/// ADR-0326 made possible: a build that changed two nodes draws two rows on
-/// one deck, so a keep that retired by *slot* would take a node nobody
-/// ruled on off the lane with the one they did.
+/// Two rows of one slot is the case worth the test, and it is what ADR-0326
+/// made possible: a build that changed two nodes draws two rows on one deck, so
+/// a keep that retired by *slot* would take a node nobody ruled on off the lane
+/// with the one they did.
 ///
-/// **And a keep on a node with no row says so** rather than reporting a
-/// press that did nothing — no control on this panel can ask it, so the
-/// line is for the day a map or a model reaches this row.
+/// And a keep on a node with no row says so rather than reporting a press that
+/// did nothing — no control on this panel can ask it, so the line is for the
+/// day a map or a model reaches this row.
 ///
 /// A CPU test: a `View` takes no device.
 #[test]
@@ -1773,8 +1758,8 @@ fn a_keep_takes_its_own_row_off_the_lane() {
     );
 }
 
-/// A temporary directory of this test's own, named after the test that
-/// wants it — the shape every other CPU test in this file uses.
+/// A temporary directory of this test's own, named after the test that wants it
+/// — the shape every other CPU test in this file uses.
 pub(crate) fn scratch_dir(what: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
         "karakuri-{what}-{}-{:?}",
@@ -1795,15 +1780,15 @@ fn shipped_presets() -> karakuri_environment::places::Presets {
     }
 }
 
-/// **The `presets` scope lists the Set files and not the parts beside
-/// them**, which is `console.html`'s *"a directory of `.kir` files is a
-/// directory of parts, and a library lists what you can put on a deck"*.
+/// The `presets` scope lists the Set files and not the parts beside them, which
+/// is `console.html`'s *"a directory of `.kir` files is a directory of parts,
+/// and a library lists what you can put on a deck"*.
 ///
 /// It is asserted against `examples/`, which is the directory this program
-/// actually opens on: thirty-five parts and twenty-three Set files in one
-/// place is exactly the mixture the rule is about, and a listing that took
-/// the parts would draw fifty-eight rows of which thirty-five name nothing
-/// this vocabulary can load.
+/// actually opens on: thirty-five parts and twenty-three Set files in one place
+/// is exactly the mixture the rule is about, and a listing that took the parts
+/// would draw fifty-eight rows of which thirty-five name nothing this
+/// vocabulary can load.
 ///
 /// A CPU test: a preset library is a directory.
 #[test]
@@ -1853,24 +1838,24 @@ fn the_presets_scope_lists_the_kset_files_and_not_the_parts_beside_them() {
     assert!(presets_listing(None).is_empty());
 }
 
-/// **A folder row is taken into the store and then loaded**, which is the
-/// half of *Send a Set to somebody, and take one in* the folder scope was
-/// refused for until it had a directory.
+/// A folder row is taken into the store and then loaded, which is the half of
+/// *Send a Set to somebody, and take one in* the folder scope was refused for
+/// until it had a directory.
 ///
-/// **It is the preset press over somebody else's directory** — ADR-0267's
-/// *"the bay is already a file browser"* reached from the taking-in side,
-/// and ADR-0275 is what gave the scope a directory to be pointed at. The
-/// two arms are one arm in the press handler and [`Taking`] is the whole
-/// of the difference, so this asserts the difference rather than the
-/// shared half: the same `taking_in`, pointed at a folder.
+/// It is the preset press over somebody else's directory — ADR-0267's *"the bay
+/// is already a file browser"* reached from the taking-in side, and ADR-0275 is
+/// what gave the scope a directory to be pointed at. The two arms are one arm
+/// in the press handler and [`Taking`] is the whole of the difference, so this
+/// asserts the difference rather than the shared half: the same `taking_in`,
+/// pointed at a folder.
 ///
-/// **Both spellings, because a folder holds both and a presets root holds
-/// one.** `examples/` is a directory of `.kset` files, which is the
-/// authored form; the store the first take-in wrote is a directory of
-/// `.kbset` files, which is the bundle — so pointing a second store's
-/// folder scope at the first store's `sets/` is a take-in of a form the
-/// `presets` scope could never have offered. That is the branch this row
-/// gained and the one `karakuri-cli`'s `--take-in` has always had.
+/// Both spellings, because a folder holds both and a presets root holds one.
+/// `examples/` is a directory of `.kset` files, which is the authored form; the
+/// store the first take-in wrote is a directory of `.kbset` files, which is the
+/// bundle — so pointing a second store's folder scope at the first store's
+/// `sets/` is a take-in of a form the `presets` scope could never have offered.
+/// That is the branch this row gained and the one `karakuri-cli`'s `--take-in`
+/// has always had.
 ///
 /// A CPU test: a store, a directory, and no window.
 #[test]
@@ -1959,19 +1944,18 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
     std::fs::remove_dir_all(&sent).expect("clean up");
 }
 
-/// **A word two files in a folder wear is refused, and both names come
-/// back.**
+/// A word two files in a folder wear is refused, and both names come back.
 ///
 /// `folder_listing` draws one row per *file*, so a directory holding
-/// `night.kbset` and `night.kset` draws two rows reading `night` — that is
-/// its own decision and it is deliberate, because choosing between the two
-/// forms in a listing would be inventing a precedence between them. What
-/// it left open was which of them a press means, and the answer is that
-/// nothing here answers it: a row names a word, two files wear the word,
-/// and taking one would be this program choosing for an operator between
-/// two rows they cannot tell apart on screen.
+/// `night.kbset` and `night.kset` draws two rows reading `night` — that is its
+/// own decision and it is deliberate, because choosing between the two forms in
+/// a listing would be inventing a precedence between them. What it left open
+/// was which of them a press means, and the answer is that nothing here answers
+/// it: a row names a word, two files wear the word, and taking one would be
+/// this program choosing for an operator between two rows they cannot tell
+/// apart on screen.
 ///
-/// **So the refusal carries both file names**
+/// So the refusal carries both file names
 /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
 /// which is what the next attempt needs: rename or move one of them.
 ///
@@ -1999,20 +1983,20 @@ fn a_folder_row_two_files_wear_is_refused_with_both_names() {
     std::fs::remove_dir_all(&dir).expect("clean up");
 }
 
-/// **Loading a preset takes it into the store, so `all` gains a row
-/// nobody made** — `console.html`'s *"which is why opening a preset leaves
-/// one of your own behind"*. It gains no row under `my sets`, which is
-/// ADR-0299's answer to the roadmap's symptom: a preset packaged on load
-/// is a Set of the operator's and is not one they chose to keep.
+/// Loading a preset takes it into the store, so `all` gains a row nobody made —
+/// `console.html`'s *"which is why opening a preset leaves one of your own
+/// behind"*. It gains no row under `my sets`, which is ADR-0299's answer to the
+/// roadmap's symptom: a preset packaged on load is a Set of the operator's and
+/// is not one they chose to keep.
 ///
 /// The whole of the press is asserted here except the aim, which is
 /// [`loading`]'s and has its own test below: what a preset row adds is the
-/// packaging in front of it, and the claim is that after it the id is one
-/// the store holds and one `my sets` lists — which is what makes the load
-/// after it the same route a `my sets` row takes rather than a second one.
+/// packaging in front of it, and the claim is that after it the id is one the
+/// store holds and one `my sets` lists — which is what makes the load after it
+/// the same route a `my sets` row takes rather than a second one.
 ///
-/// A CPU test: a store is a directory, and resolving a `.kset` is a read,
-/// a hash and a store put.
+/// A CPU test: a store is a directory, and resolving a `.kset` is a read, a
+/// hash and a store put.
 #[test]
 fn loading_a_preset_takes_it_in_and_leaves_it_under_my_sets() {
     let root = scratch_dir("preset-take-in");
@@ -2052,16 +2036,16 @@ fn loading_a_preset_takes_it_in_and_leaves_it_under_my_sets() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A take-in names the file it read, because that is what the operation
-/// carries** — `SetTransfer::Take`'s own sentence, *"a path because a file
-/// is what the only existing route takes"*.
+/// A take-in names the file it read, because that is what the operation carries
+/// — `SetTransfer::Take`'s own sentence, *"a path because a file is what the
+/// only existing route takes"*.
 ///
-/// The id and the file are two different answers and the row needs both:
-/// the load after the press names the id, and the transfer names the file.
-/// The claim here is that the file is the row's own `.kset` in the preset
-/// library and not something re-derived afterwards — asking the listing a
-/// second time to name what was already taken in would be two answers to
-/// *which file was this* with a directory read between them.
+/// The id and the file are two different answers and the row needs both: the
+/// load after the press names the id, and the transfer names the file. The
+/// claim here is that the file is the row's own `.kset` in the preset library
+/// and not something re-derived afterwards — asking the listing a second time
+/// to name what was already taken in would be two answers to *which file was
+/// this* with a directory read between them.
 ///
 /// A CPU test, for the test above's reason.
 #[test]
@@ -2093,21 +2077,20 @@ fn a_take_in_names_the_file_it_read_because_that_is_what_the_operation_carries()
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A press on a `presets` row is *Send a Set to somebody, and take one
-/// in* performed at the second of its two moments, and then the load** —
-/// so it emits both, in that order.
+/// A press on a `presets` row is *Send a Set to somebody, and take one in*
+/// performed at the second of its two moments, and then the load — so it emits
+/// both, in that order.
 ///
-/// `docs/manual/operations.html`: *"Taking one in is not a second row —
-/// opening a preset is this row"*, and `console.html`: *"That is one press
-/// rather than two because taking it in is what gives it the name the load
-/// needs."*
-/// **Two rows of the page and one press**, and what this defends is that
-/// the press names both of them: emitting only the load would be a press
-/// that performs two rows and names one, and the row it dropped is the one
-/// nothing else in this workspace constructs.
+/// `docs/manual/operations.html`: *"Taking one in is not a second row — opening
+/// a preset is this row"*, and `console.html`: *"That is one press rather than
+/// two because taking it in is what gives it the name the load needs."* Two
+/// rows of the page and one press, and what this defends is that the press
+/// names both of them: emitting only the load would be a press that performs
+/// two rows and names one, and the row it dropped is the one nothing else in
+/// this workspace constructs.
 ///
-/// The titles are asked of [`Operation::title`] rather than written out
-/// here, so a heading that moves on the page moves in one place.
+/// The titles are asked of [`Operation::title`] rather than written out here,
+/// so a heading that moves on the page moves in one place.
 ///
 /// A CPU test: it builds two values.
 #[test]
@@ -2151,17 +2134,16 @@ fn a_press_on_a_preset_row_names_the_take_in_and_then_the_load() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The take-in the press names writes no record, and that is settled** —
-/// which is why emitting it is a naming rather than a second route into
-/// anything.
+/// The take-in the press names writes no record, and that is settled — which is
+/// why emitting it is a naming rather than a second route into anything.
 ///
 /// `karakuri-operation-record` answers `Silent(NoRecord)` for a transfer:
-/// nothing in the session vocabulary carries a Set arriving from
-/// somewhere else. So [`App::performed`] performs nothing for it, exactly
-/// as it performs nothing for the scope step `space` emits, and
-/// [`unwritten`] is what an operator reads. **If that ever became
-/// `Owed`**, the press would be emitting a gap rather than a settled
-/// silence and this file would be the place to say so.
+/// nothing in the session vocabulary carries a Set arriving from somewhere
+/// else. So [`App::performed`] performs nothing for it, exactly as it performs
+/// nothing for the scope step `space` emits, and [`unwritten`] is what an
+/// operator reads. If that ever became `Owed`, the press would be emitting a
+/// gap rather than a settled silence and this file would be the place to say
+/// so.
 ///
 /// A CPU test: it is a `match` on an operation.
 #[test]
@@ -2184,14 +2166,14 @@ fn the_take_in_the_press_names_writes_no_record_and_that_is_settled() {
     );
 }
 
-/// **An id this store already holds is refused rather than overwritten,
-/// and the operator is told which of the two acts failed.**
+/// An id this store already holds is refused rather than overwritten, and the
+/// operator is told which of the two acts failed.
 ///
-/// The refusal is `setfile::unbundle`'s and is not written twice —
-/// *"an id already taken is refused rather than overwritten"* — so what is
-/// asserted here is that the press goes through it: a second press on the
-/// same preset row leaves the store exactly as the first one left it, and
-/// the sentence names the id rather than the file.
+/// The refusal is `setfile::unbundle`'s and is not written twice — *"an id
+/// already taken is refused rather than overwritten"* — so what is asserted
+/// here is that the press goes through it: a second press on the same preset
+/// row leaves the store exactly as the first one left it, and the sentence
+/// names the id rather than the file.
 ///
 /// A CPU test, for the test above's reason.
 #[test]
@@ -2229,20 +2211,20 @@ fn a_preset_whose_id_this_store_holds_is_refused_rather_than_overwritten() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A scope is a listing on this side, and stepping to one answers it** —
-/// two of the four with rows here, and two with nothing and a sentence
-/// saying which kind of nothing it is.
+/// A scope is a listing on this side, and stepping to one answers it — two of
+/// the four with rows here, and two with nothing and a sentence saying which
+/// kind of nothing it is.
 ///
-/// The two that answer nothing are the whole point of the test: they are
-/// empty for two *different* reasons — nothing in this store is starred,
-/// and this console has not been pointed at a folder — and a program that
-/// said the same thing about both would be hiding one of them.
+/// The two that answer nothing are the whole point of the test: they are empty
+/// for two *different* reasons — nothing in this store is starred, and this
+/// console has not been pointed at a folder — and a program that said the same
+/// thing about both would be hiding one of them.
 ///
-/// **`folder` is here because of the console and not because of the
-/// scope**: it answers with rows the moment one is dropped on the window,
-/// which is `a_folder_dropped_on_the_window_points_the_bay_at_it`, and the
-/// sentence it answers with here is the third of the three — a scope
-/// nobody has pointed anywhere.
+/// `folder` is here because of the console and not because of the scope: it
+/// answers with rows the moment one is dropped on the window, which is
+/// `a_folder_dropped_on_the_window_points_the_bay_at_it`, and the sentence it
+/// answers with here is the third of the three — a scope nobody has pointed
+/// anywhere.
 ///
 /// A CPU test: a `View` takes no device.
 #[test]
@@ -2383,19 +2365,17 @@ fn every_scope_is_answered_and_the_two_that_answer_nothing_say_which_nothing() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A folder let go on this window points the bay at it, marks the chip
-/// and lists what is in it — all three on the pass the drop arrives on.**
+/// A folder let go on this window points the bay at it, marks the chip and
+/// lists what is in it — all three on the pass the drop arrives on.
 ///
-/// The three are one act by ADR-0275's third policy: `dropped_files` is
-/// visible for one pass and then gone, so a bay that had set the directory
-/// and waited for the chip to be pressed would be holding a path nothing
-/// will hand it again. It is asserted as three outcomes of one call for
-/// that reason.
+/// The three are one act by ADR-0275's third policy: `dropped_files` is visible
+/// for one pass and then gone, so a bay that had set the directory and waited
+/// for the chip to be pressed would be holding a path nothing will hand it
+/// again. It is asserted as three outcomes of one call for that reason.
 ///
-/// **And what the listing holds is Sets and not parts**, which is the
-/// `presets` scope's rule one chip along: both spellings of a Set file are
-/// rows, a `.kir` is not, and a subdirectory named like a Set file belongs
-/// to whoever made it.
+/// And what the listing holds is Sets and not parts, which is the `presets`
+/// scope's rule one chip along: both spellings of a Set file are rows, a `.kir`
+/// is not, and a subdirectory named like a Set file belongs to whoever made it.
 ///
 /// A CPU test: a directory and a `View`.
 #[test]
@@ -2474,18 +2454,18 @@ fn a_folder_dropped_on_the_window_points_the_bay_at_it() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The two refusals ADR-0275 writes, and what they leave behind.**
+/// The two refusals ADR-0275 writes, and what they leave behind.
 ///
-/// - **One path, and it has to be a directory.** A file is refused naming
+/// - One path, and it has to be a directory. A file is refused naming
 ///   what was dropped rather than read as the folder it sits in, which
 ///   would point this bay at a directory nobody pointed at; a `.kbset` is
 ///   refused with the press that *does* take a Set in, because a file
 ///   landing on this window has no row under it.
-/// - **More than one path is refused, and all of them are**, counting what
+/// - More than one path is refused, and all of them are, counting what
 ///   arrived: a multi-item drag is one pass with several entries, so there
 ///   is no first to act on and nothing says which was aimed at.
 ///
-/// **Every one of them says where the library is still pointed**, which is
+/// Every one of them says where the library is still pointed, which is
 /// the half that makes a refusal readable at a glance (P-0083): a bay that
 /// went on listing what it listed and a bay that quietly moved are the
 /// same drawing.
@@ -2574,14 +2554,12 @@ fn a_drop_that_is_not_one_folder_is_refused_and_the_bay_keeps_what_it_had() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A folder over the window reads in the `.path` row, and two read as
-/// none.**
+/// A folder over the window reads in the `.path` row, and two read as none.
 ///
-/// The hover is the one thing about this bay that a frame does — `egui`
-/// clones the hovered files onto every pass while a drag lasts — so this
-/// is the whole of what a pass owes it: the path where there is one to
-/// draw, nothing where a release would set nothing, and no allocation
-/// where neither has changed.
+/// The hover is the one thing about this bay that a frame does — `egui` clones
+/// the hovered files onto every pass while a drag lasts — so this is the whole
+/// of what a pass owes it: the path where there is one to draw, nothing where a
+/// release would set nothing, and no allocation where neither has changed.
 ///
 /// A CPU test: a `View` and a list of paths.
 #[test]
@@ -2623,28 +2601,27 @@ fn a_folder_over_the_window_reads_in_the_path_row_and_two_read_as_none() {
     );
 }
 
-/// **A load writes the Set's procedures where the slot's watcher is
-/// looking and aims it there, and it touches no deck at all.**
+/// A load writes the Set's procedures where the slot's watcher is looking and
+/// aims it there, and it touches no deck at all.
 ///
-/// This is the whole of what `Operation::LoadSet` needed, and what it is
-/// *not* is the claim: `Deck::install` is the one function that puts a
-/// built Set in a slot and is documented as deliberately unreachable from
-/// a key or a surface, because *"a live run changes its material by
-/// editing a file and letting the worker build it, which is what the
-/// budget watchdog is attached to"*. So this asserts files and an aim.
-/// A load that built a Set here would be a picture nothing measured, in a
-/// slot the watchdog never got to judge.
+/// This is the whole of what `Operation::LoadSet` needed, and what it is *not*
+/// is the claim: `Deck::install` is the one function that puts a built Set in a
+/// slot and is documented as deliberately unreachable from a key or a surface,
+/// because *"a live run changes its material by editing a file and letting the
+/// worker build it, which is what the budget watchdog is attached to"*. So this
+/// asserts files and an aim. A load that built a Set here would be a picture
+/// nothing measured, in a slot the watchdog never got to judge.
 ///
-/// **Three things beyond *it happened*, and each is a wrong load that
-/// looks right.** The scratch name carries the deck letter and the node's
-/// place, because `scratch::place` overwrites by name and two decks
-/// loading Sets whose procedures share one would silently become one file
-/// — the second load moving the first deck on its watcher's next poll.
-/// The aim restates the layering, the fold, the capacity and the salts the
-/// *file* recorded rather than the ones the slot was running at, because
-/// that is the failure every `Watch` field is documented against and it
-/// does not show on the load: it shows on the first save afterwards. And
-/// the node names are the file's, because an `edge` resolves against them.
+/// Three things beyond *it happened*, and each is a wrong load that looks
+/// right. The scratch name carries the deck letter and the node's place,
+/// because `scratch::place` overwrites by name and two decks loading Sets whose
+/// procedures share one would silently become one file — the second load moving
+/// the first deck on its watcher's next poll. The aim restates the layering,
+/// the fold, the capacity and the salts the *file* recorded rather than the
+/// ones the slot was running at, because that is the failure every `Watch`
+/// field is documented against and it does not show on the load: it shows on
+/// the first save afterwards. And the node names are the file's, because an
+/// `edge` resolves against them.
 ///
 /// A CPU test: a store is a directory, and nothing here takes a device.
 #[test]
@@ -2840,36 +2817,33 @@ fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() 
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A load moves what the MCP server resolves an address against, and it
-/// moves nothing else's.**
+/// A load moves what the MCP server resolves an address against, and it moves
+/// nothing else's.
 ///
-/// This program built the `mcp::Slots` it handed the server out of the
-/// **launch** working copies and never wrote it again. A library load
-/// writes new scratch files and re-points that slot's watcher at them
-/// (ADR-0228), so from the first load onwards every address the server
-/// resolved was the layout the deck had stopped running: `read_procedure`
-/// answered about the wrong material, `write_procedure` wrote a file no
-/// watcher was polling and reported that it was being built, and a node the
-/// loaded Set does hold was refused for not existing. None of the three
-/// fails — they are plausible wrong answers on the surface whose reader is
-/// a program in a loop (`docs/principles/0094-…`). ADR-0308 recorded it and
-/// worked around it for the landing alone.
+/// This program built the `mcp::Slots` it handed the server out of the launch
+/// working copies and never wrote it again. A library load writes new scratch
+/// files and re-points that slot's watcher at them (ADR-0228), so from the
+/// first load onwards every address the server resolved was the layout the deck
+/// had stopped running: `read_procedure` answered about the wrong material,
+/// `write_procedure` wrote a file no watcher was polling and reported that it
+/// was being built, and a node the loaded Set does hold was refused for not
+/// existing. None of the three fails — they are plausible wrong answers on the
+/// surface whose reader is a program in a loop (`docs/principles/0094-…`).
+/// ADR-0308 recorded it and worked around it for the landing alone.
 ///
-/// **The assertion is `Slots::file`, which is the walk the server writes
-/// through**: `write_procedure` and `read_procedure` resolve an address with
-/// `Slots::path`, and `file` is that same private walk with the layer taken
-/// as a word. So the path asserted here is the path the server would write
-/// to.
+/// The assertion is `Slots::file`, which is the walk the server writes through:
+/// `write_procedure` and `read_procedure` resolve an address with
+/// `Slots::path`, and `file` is that same private walk with the layer taken as
+/// a word. So the path asserted here is the path the server would write to.
 ///
-/// **Three things.** The loaded slot resolves to the new scratch file and
-/// not to the launch copy; a renderer the launch pair had and the loaded Set
-/// has not is refused **naming what the slot holds now** (P-0083); and the
-/// slot nobody loaded onto has not moved, because a publication per slot
-/// that overwrote the deck would be a worse defect than the one being
-/// fixed.
+/// Three things. The loaded slot resolves to the new scratch file and not to
+/// the launch copy; a renderer the launch pair had and the loaded Set has not
+/// is refused naming what the slot holds now (P-0083); and the slot nobody
+/// loaded onto has not moved, because a publication per slot that overwrote the
+/// deck would be a worse defect than the one being fixed.
 ///
-/// A CPU test: a store and a scratch are directories, and nothing here takes
-/// a device.
+/// A CPU test: a store and a scratch are directories, and nothing here takes a
+/// device.
 #[test]
 fn a_load_moves_what_the_mcp_server_resolves_against() {
     use karakuri_environment::setfile;
@@ -3021,40 +2995,39 @@ fn a_load_moves_what_the_mcp_server_resolves_against() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The requirement this program was failing**: the same preset loaded
-/// into every slot, and each deck watching its own separate copy in its own
-/// place.
+/// The requirement this program was failing: the same preset loaded into every
+/// slot, and each deck watching its own separate copy in its own place.
 ///
-/// Every slot used to be handed [`Sources`] itself — the two paths the
-/// operator typed — so four watchers polled two files. One save rebuilt
-/// four slots, and since a parked slot's trial never reaches a verdict,
-/// three of the four rows it put in the Staging lane stayed there for the
-/// rest of the run. That symptom is this defect's, not the lane's.
+/// Every slot used to be handed [`Sources`] itself — the two paths the operator
+/// typed — so four watchers polled two files. One save rebuilt four slots, and
+/// since a parked slot's trial never reaches a verdict, three of the four rows
+/// it put in the Staging lane stayed there for the rest of the run. That
+/// symptom is this defect's, not the lane's.
 ///
-/// **Four things, and the third is the one the requirement is about.** The
-/// copies are under the scratch and not where the operator pointed; the
-/// four decks hold eight distinct files rather than two shared ones; an
-/// edit made through deck B's L1 moves deck B and **no other deck**; and
-/// the file the operator named is not written to at all.
+/// Four things, and the third is the one the requirement is about. The copies
+/// are under the scratch and not where the operator pointed; the four decks
+/// hold eight distinct files rather than two shared ones; an edit made through
+/// deck B's L1 moves deck B and no other deck; and the file the operator named
+/// is not written to at all.
 ///
-/// **The version every deck starts on is in the history before the window
-/// opens, and it is filed under no Set.**
+/// The version every deck starts on is in the history before the window opens,
+/// and it is filed under no Set.
 ///
-/// Two claims, and the second is the one that is a decision. That there is
-/// a seed at all is ADR-0089's — a first edit whose predecessor was never
-/// written down cannot be walked back — and this program had **no history
-/// at all** until it was given one, so a run's whole night of edits was
-/// kept nowhere. That every row reads `None` is ADR-0276's: the material is
-/// a pair somebody typed, and filing it under `Sources::material` would put
-/// rows under a Set no listing can ever match.
+/// Two claims, and the second is the one that is a decision. That there is a
+/// seed at all is ADR-0089's — a first edit whose predecessor was never written
+/// down cannot be walked back — and this program had no history at all until it
+/// was given one, so a run's whole night of edits was kept nowhere. That every
+/// row reads `None` is ADR-0276's: the material is a pair somebody typed, and
+/// filing it under `Sources::material` would put rows under a Set no listing
+/// can ever match.
 ///
-/// **Every node of every slot**, and the count is derived from the copies
-/// rather than written here — a slot is an L1 and a renderer, and each deck
-/// runs from its own pair, so a seed that filed one deck or one node would
-/// leave the others' first edits with nothing behind them.
+/// Every node of every slot, and the count is derived from the copies rather
+/// than written here — a slot is an L1 and a renderer, and each deck runs from
+/// its own pair, so a seed that filed one deck or one node would leave the
+/// others' first edits with nothing behind them.
 ///
-/// A CPU test: a store and a scratch are directories, and nothing here
-/// takes a device.
+/// A CPU test: a store and a scratch are directories, and nothing here takes a
+/// device.
 #[test]
 fn the_launch_versions_are_filed_before_a_window() {
     let root = scratch_dir("seeded");
@@ -3179,10 +3152,10 @@ fn every_deck_runs_from_its_own_copy_and_an_edit_moves_one_deck() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The program has to say it.** Four decks on one preset are four files
-/// whose names an operator cannot guess and cannot tell apart by content —
-/// at startup they hold the same bytes — so the startup print names the
-/// directory and then one file pair per deck.
+/// The program has to say it. Four decks on one preset are four files whose
+/// names an operator cannot guess and cannot tell apart by content — at startup
+/// they hold the same bytes — so the startup print names the directory and then
+/// one file pair per deck.
 #[test]
 fn the_startup_print_names_one_file_per_deck() {
     let root = scratch_dir("own-copy-said");
@@ -3262,16 +3235,16 @@ fn arranged(width: f32, height: f32) -> Panel {
     panel
 }
 
-/// **The bytes are at the path `karakuri-store`'s own header claims**, read
-/// off that path and not through the store that wrote them.
+/// The bytes are at the path `karakuri-store`'s own header claims, read off
+/// that path and not through the store that wrote them.
 ///
-/// This is the assertion ADR-0221 §4 says the store's suite had to spell
-/// out rather than leave to a round trip: *"a format test is not a location
-/// test"*, because a defect that files the arrangement in the wrong
-/// directory entirely is invisible to a test that writes and reads through
-/// the same wrong path. The same hole is open one layer up — this file
-/// chooses the name it hands over — so the same assertion is made here,
-/// about `arrangements/<name>.arrangement.json` under the store's root.
+/// This is the assertion ADR-0221 §4 says the store's suite had to spell out
+/// rather than leave to a round trip: *"a format test is not a location test"*,
+/// because a defect that files the arrangement in the wrong directory entirely
+/// is invisible to a test that writes and reads through the same wrong path.
+/// The same hole is open one layer up — this file chooses the name it hands
+/// over — so the same assertion is made here, about
+/// `arrangements/<name>.arrangement.json` under the store's root.
 #[test]
 fn an_arrangement_is_kept_at_the_path_the_stores_header_names() {
     let root = arrangement_root("kept");
@@ -3318,14 +3291,14 @@ fn an_arrangement_is_kept_at_the_path_the_stores_header_names() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **What comes back is the arrangement that was kept, in the window it
-/// arrives in** — which is `Op::Reset` carrying the viewport across, with
-/// the arrangement handed in rather than built.
+/// What comes back is the arrangement that was kept, in the window it arrives
+/// in — which is `Op::Reset` carrying the viewport across, with the arrangement
+/// handed in rather than built.
 ///
-/// The two viewports differ in both axes on purpose: an arrangement
-/// carries the viewport it was saved at, so a restore that took the file's
-/// would open a console arranged on a desktop inside a smaller window with
-/// every rectangle past the edge.
+/// The two viewports differ in both axes on purpose: an arrangement carries the
+/// viewport it was saved at, so a restore that took the file's would open a
+/// console arranged on a desktop inside a smaller window with every rectangle
+/// past the edge.
 #[test]
 fn an_arrangement_put_back_arrives_in_the_window_this_one_already_has() {
     let root = arrangement_root("back");
@@ -3371,15 +3344,13 @@ fn an_arrangement_put_back_arrives_in_the_window_this_one_already_has() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A name nothing is filed under is said back, and the console does not
-/// move.**
+/// A name nothing is filed under is said back, and the console does not move.
 ///
-/// The refusal that matters most in this family: `read_arrangement` never
-/// falls back to the built-in, so an operator who mistyped a name is told
-/// the name rather than watching their console reset (ADR-0221 §2). Asked
-/// three ways, because the three failures send an operator to three
-/// different places — no store at all, no such name, and a file that will
-/// not read back.
+/// The refusal that matters most in this family: `read_arrangement` never falls
+/// back to the built-in, so an operator who mistyped a name is told the name
+/// rather than watching their console reset (ADR-0221 §2). Asked three ways,
+/// because the three failures send an operator to three different places — no
+/// store at all, no such name, and a file that will not read back.
 #[test]
 fn a_name_nothing_is_filed_under_is_said_back_and_nothing_resets() {
     let root = arrangement_root("refused");
@@ -3473,13 +3444,13 @@ fn a_name_nothing_is_filed_under_is_said_back_and_nothing_resets() {
 
 // -- the arrangement pill's half of the family ----------------------
 
-/// **A name that is not one path component is refused here**, which is the
+/// A name that is not one path component is refused here, which is the
 /// authority the pill deliberately does not hold (P-0090).
 ///
-/// The negative control is the point: a check that refused everything
-/// would pass an assertion that only ever looked for a refusal, so the
-/// names that must be *accepted* are asserted beside the ones that must
-/// not (`docs/contributing.md` §3).
+/// The negative control is the point: a check that refused everything would
+/// pass an assertion that only ever looked for a refusal, so the names that
+/// must be *accepted* are asserted beside the ones that must not
+/// (`docs/contributing.md` §3).
 #[test]
 fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
     for good in ["night", "four_deck", "set-2", "A9"] {
@@ -3507,13 +3478,12 @@ fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
     }
 }
 
-/// **The name in use follows the file and never the press.**
+/// The name in use follows the file and never the press.
 ///
-/// A save that landed and a restore that landed each make that arrangement
-/// the one in use, so the pill names it; a save that was refused leaves
-/// the pill saying what it said, because nothing under that name is on the
-/// disk. And the menu's listing gains the new name only where a file
-/// appeared.
+/// A save that landed and a restore that landed each make that arrangement the
+/// one in use, so the pill names it; a save that was refused leaves the pill
+/// saying what it said, because nothing under that name is on the disk. And the
+/// menu's listing gains the new name only where a file appeared.
 #[test]
 fn the_pill_names_the_arrangement_only_once_the_file_is_there() {
     let root = arrangement_root("in-use");
@@ -3581,12 +3551,12 @@ fn the_pill_names_the_arrangement_only_once_the_file_is_there() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A reset takes the name off the pill, whichever surface asked.**
+/// A reset takes the name off the pill, whichever surface asked.
 ///
-/// `r` and the menu's *start a new one* are one operation and `Readout::op`
-/// is where both arrive, so this is asserted through the method rather than
-/// through either control: the default arrangement is what is on screen and
-/// the default has no name.
+/// `r` and the menu's *start a new one* are one operation and `Readout::op` is
+/// where both arrive, so this is asserted through the method rather than
+/// through either control: the default arrangement is what is on screen and the
+/// default has no name.
 #[test]
 fn a_reset_leaves_the_pill_naming_no_file() {
     let mut readout = Readout::new(1280.0, 720.0);
@@ -3605,18 +3575,18 @@ fn a_reset_leaves_the_pill_naming_no_file() {
     );
 }
 
-/// **What the load control's five asks do to this program**, and that a
-/// pick moves this bay's mark and nothing else (ADR-0305).
+/// What the load control's five asks do to this program, and that a pick moves
+/// this bay's mark and nothing else (ADR-0305).
 ///
-/// [`every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu`]'s shape one
-/// bay along, and it is here rather than in `karakuri-console` for the
-/// reason that test is: `Readout::aimed` is the host's half of the seam,
-/// and the console's own tests cannot reach it.
+/// [`every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu`]'s shape one bay
+/// along, and it is here rather than in `karakuri-console` for the reason that
+/// test is: `Readout::aimed` is the host's half of the seam, and the console's
+/// own tests cannot reach it.
 ///
-/// **The claim a reader will doubt is the third one.** *Surely picking a
-/// deck selects it* — and it must not: `Operation::SelectDeck` moves the
-/// keys, and this mark is the one that is allowed to name another deck. So
-/// the selection is read before and after.
+/// The claim a reader will doubt is the third one. *Surely picking a deck
+/// selects it* — and it must not: `Operation::SelectDeck` moves the keys, and
+/// this mark is the one that is allowed to name another deck. So the selection
+/// is read before and after.
 #[test]
 fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() {
     let mut readout = Readout::new(1440.0, 900.0);
@@ -3679,8 +3649,8 @@ fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() 
     );
 }
 
-/// **What the menu's five asks do to this program**, and that every one of
-/// them that acts shuts the card.
+/// What the menu's five asks do to this program, and that every one of them
+/// that acts shuts the card.
 #[test]
 fn every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu() {
     let mut readout = Readout::new(1280.0, 720.0);
@@ -3723,14 +3693,14 @@ fn every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu() {
     assert!(!readout.view.arrangement.open());
 }
 
-/// **The four presses the Sequencer bay performs**, and the one thing this
-/// window does with a pattern that no test in `karakuri-console` can see:
-/// that bay hands back an operation and applies nothing, so this is the
-/// other side of that seam.
+/// The four presses the Sequencer bay performs, and the one thing this window
+/// does with a pattern that no test in `karakuri-console` can see: that bay
+/// hands back an operation and applies nothing, so this is the other side of
+/// that seam.
 ///
-/// **A press names a bank, and a bank this session does not have is
-/// refused and said out loud** — [`pointed`]'s rule, and the reason each
-/// arm answers a sentence rather than `None`.
+/// A press names a bank, and a bank this session does not have is refused and
+/// said out loud — [`pointed`]'s rule, and the reason each arm answers a
+/// sentence rather than `None`.
 #[test]
 fn a_sequencer_press_moves_the_pattern_it_names() {
     let mut banks = demonstration_banks();
@@ -3837,14 +3807,14 @@ fn a_sequencer_press_moves_the_pattern_it_names() {
     assert_eq!(banks.armed(), 3, "and a refused press moves nothing");
 }
 
-/// **A lane arrives with its two levels filled in from the range the
-/// console was published**, and it arrives muted.
+/// A lane arrives with its two levels filled in from the range the console was
+/// published, and it arrives muted.
 ///
-/// This is the half of `+ lane` no test in `karakuri-console` can see: that
-/// bay hands back `Operation::PointLane { pattern, target }` and appends
-/// nothing, and the payload carries no levels — a fader's are 1.0 and 0.0
-/// and a parameter's are the range `View::inspector` holds, which is the
-/// same reading the chooser drew its items from (ADR-0320, ADR-0327).
+/// This is the half of `+ lane` no test in `karakuri-console` can see: that bay
+/// hands back `Operation::PointLane { pattern, target }` and appends nothing,
+/// and the payload carries no levels — a fader's are 1.0 and 0.0 and a
+/// parameter's are the range `View::inspector` holds, which is the same reading
+/// the chooser drew its items from (ADR-0320, ADR-0327).
 #[test]
 fn a_pointed_lane_takes_its_levels_from_the_published_range() {
     let mut banks = karakuri_pattern::Banks::default();
@@ -3954,10 +3924,10 @@ fn a_pointed_lane_takes_its_levels_from_the_published_range() {
     );
 }
 
-/// **A finished name is one operation of the vocabulary**, and the card is
-/// gone before it is emitted — whether or not the name is any good, since
-/// the refusal is said out loud by `checked_name` and a card left standing
-/// over it would be the panel asking again without saying the answer.
+/// A finished name is one operation of the vocabulary, and the card is gone
+/// before it is emitted — whether or not the name is any good, since the
+/// refusal is said out loud by `checked_name` and a card left standing over it
+/// would be the panel asking again without saying the answer.
 #[test]
 fn a_finished_name_is_the_save_the_menu_would_have_asked_for() {
     let mut readout = Readout::new(1280.0, 720.0);
@@ -3990,9 +3960,9 @@ fn a_finished_name_is_the_save_the_menu_would_have_asked_for() {
     );
 }
 
-/// **The menu's list is the store's, and a store that is not there is
-/// listed as nothing and is not created** — `library`'s two rules over the
-/// fourth directory.
+/// The menu's list is the store's, and a store that is not there is listed as
+/// nothing and is not created — `library`'s two rules over the fourth
+/// directory.
 #[test]
 fn the_menu_lists_the_store_and_makes_none() {
     let root = arrangement_root("listing");
@@ -4021,9 +3991,9 @@ fn the_menu_lists_the_store_and_makes_none() {
 }
 
 /// Nothing that comes back from `get_current_texture` is dropped without a
-/// decision. The loop waits for events, so an outcome that neither
-/// reconfigures nor asks for another frame is a window that never draws
-/// again and says nothing about it.
+/// decision. The loop waits for events, so an outcome that neither reconfigures
+/// nor asks for another frame is a window that never draws again and says
+/// nothing about it.
 #[test]
 fn every_frame_that_could_not_be_acquired_is_acted_on() {
     use wgpu::CurrentSurfaceTexture as Acquired;
@@ -4039,21 +4009,21 @@ fn every_frame_that_could_not_be_acquired_is_acted_on() {
     assert_eq!(missed(&Acquired::Validation), Some(Missed::Fault));
 }
 
-/// **A figure quoted in prose is held against the run that was just
-/// taken**, so a panel that grows says so instead of leaving a sentence
-/// that was true of a smaller one.
+/// A figure quoted in prose is held against the run that was just taken, so a
+/// panel that grows says so instead of leaving a sentence that was true of a
+/// smaller one.
 ///
-/// This is the failure the guard exists for, and it is not hypothetical:
-/// the line above the reading cited ADR-0164's 184 allocations and said
-/// the `egui` pass "is still that" through the mixer bay landing at 456
-/// and the parked deck at 525 — two commits of a present-tense claim
-/// nobody re-checked, because nothing re-checked it.
+/// This is the failure the guard exists for, and it is not hypothetical: the
+/// line above the reading cited ADR-0164's 184 allocations and said the `egui`
+/// pass "is still that" through the mixer bay landing at 456 and the parked
+/// deck at 525 — two commits of a present-tense claim nobody re-checked,
+/// because nothing re-checked it.
 ///
-/// **What can be asserted here is the verdict, not the reading.** A
-/// reading needs a device, a window and three seconds of nobody touching
-/// it, so it cannot be taken from `cargo test`; what this file can do is
-/// make the figure in the sentence and the figure under the verdict one
-/// constant, and hold [`drifted`] to catching what actually went wrong.
+/// What can be asserted here is the verdict, not the reading. A reading needs a
+/// device, a window and three seconds of nobody touching it, so it cannot be
+/// taken from `cargo test`; what this file can do is make the figure in the
+/// sentence and the figure under the verdict one constant, and hold [`drifted`]
+/// to catching what actually went wrong.
 #[test]
 fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
     // The band a run has to stay inside to say nothing. The nine runs
@@ -4088,16 +4058,16 @@ fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
     assert!(drifted(WRITTEN_ALLOCS / 10, WRITTEN_ALLOCS).is_some());
 }
 
-/// **A frame nobody asked for is the one the reading is about.**
+/// A frame nobody asked for is the one the reading is about.
 ///
-/// The measurement carries the claim now, so what it counts has to be
-/// asserted rather than eyeballed on stdout. The failure it exists for is
-/// the one that made the first run of this read `3 frames` on a window
-/// that had behaved perfectly: an event resets the stretch, and the frame
-/// that event asked for lands a millisecond into the new one and gets
-/// blamed on the panel. The other direction is worse and is asserted too —
-/// a `push` that never counts anything reads `0 frames` whatever the
-/// window is doing, which is a measurement that cannot fail.
+/// The measurement carries the claim now, so what it counts has to be asserted
+/// rather than eyeballed on stdout. The failure it exists for is the one that
+/// made the first run of this read `3 frames` on a window that had behaved
+/// perfectly: an event resets the stretch, and the frame that event asked for
+/// lands a millisecond into the new one and gets blamed on the panel. The other
+/// direction is worse and is asserted too — a `push` that never counts anything
+/// reads `0 frames` whatever the window is doing, which is a measurement that
+/// cannot fail.
 #[test]
 fn a_frame_nobody_asked_for_is_the_one_counted_against_a_still_panel() {
     let frame = Cost {
@@ -4134,15 +4104,15 @@ fn a_frame_nobody_asked_for_is_the_one_counted_against_a_still_panel() {
     assert_eq!(costs.still, Still::default());
 }
 
-/// **The defect this instrument was built for, stated as an assertion.**
+/// The defect this instrument was built for, stated as an assertion.
 ///
-/// A frame that spent 200 ms blocked and 3 ms on the CPU is a 203 ms
-/// frame. [`Cost::whole`] answers 3 ms, and that is not an error in it —
-/// it is CPU time and says so — but it is what a reader who wants *what
-/// did this frame cost* used to be handed, and what a loop at four frames
-/// a second was read off as *idle 97.6% of the time*. The number with the
-/// wait in it is [`Cost::period`], and the frame's own arithmetic is here
-/// so that a later widening of `whole` fails rather than passes.
+/// A frame that spent 200 ms blocked and 3 ms on the CPU is a 203 ms frame.
+/// [`Cost::whole`] answers 3 ms, and that is not an error in it — it is CPU
+/// time and says so — but it is what a reader who wants *what did this frame
+/// cost* used to be handed, and what a loop at four frames a second was read
+/// off as *idle 97.6% of the time*. The number with the wait in it is
+/// [`Cost::period`], and the frame's own arithmetic is here so that a later
+/// widening of `whole` fails rather than passes.
 #[test]
 fn a_frames_cost_has_the_wait_in_it_and_the_three_cpu_stretches_do_not() {
     let frame = Cost {
@@ -4172,12 +4142,12 @@ fn a_frames_cost_has_the_wait_in_it_and_the_three_cpu_stretches_do_not() {
     assert_eq!(Cost::default().elsewhere(), None);
 }
 
-/// **A period is an interval and needs two frames**, and an audit happens
-/// at most once per [`Costs::AUDIT`] however many frames go by.
+/// A period is an interval and needs two frames, and an audit happens at most
+/// once per [`Costs::AUDIT`] however many frames go by.
 ///
-/// Both are the same rule from two sides: the instrument reads the clock
-/// rather than counting frames, so nothing about how fast this window
-/// draws changes what either answers.
+/// Both are the same rule from two sides: the instrument reads the clock rather
+/// than counting frames, so nothing about how fast this window draws changes
+/// what either answers.
 #[test]
 fn the_first_frame_has_no_period_and_an_audit_does_not_repeat() {
     let mut costs = Costs::new();
@@ -4204,21 +4174,20 @@ fn the_first_frame_has_no_period_and_an_audit_does_not_repeat() {
     assert!(!costs.audit(), "two frames in a row were audited");
 }
 
-/// **A whole drag, through the window loop's own routing.**
+/// A whole drag, through the window loop's own routing.
 ///
-/// `karakuri_console::input`'s tests are about the rule; this is about
-/// this file obeying it, which is a different claim and the one that
-/// actually reaches an operator. It drives the gesture a hand makes —
-/// press on the boundary between the left pane and the centre, run the
-/// pointer well past it and across two bays, let go — through
-/// `Readout::pointer`, which is the method `window_event` calls, and
-/// asserts two things: **the boundary moved**, so the drag works with a
-/// toolkit in the loop, and **`egui` was never told about any of it**, so
-/// the two never both think they are dragging.
+/// `karakuri_console::input`'s tests are about the rule; this is about this
+/// file obeying it, which is a different claim and the one that actually
+/// reaches an operator. It drives the gesture a hand makes — press on the
+/// boundary between the left pane and the centre, run the pointer well past it
+/// and across two bays, let go — through `Readout::pointer`, which is the
+/// method `window_event` calls, and asserts two things: the boundary moved, so
+/// the drag works with a toolkit in the loop, and `egui` was never told about
+/// any of it, so the two never both think they are dragging.
 ///
-/// It cannot be a real pointer: synthesising one takes an Accessibility
-/// grant this process does not have, and a test that needs a human to
-/// click is not a test.
+/// It cannot be a real pointer: synthesising one takes an Accessibility grant
+/// this process does not have, and a test that needs a human to click is not a
+/// test.
 #[test]
 fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
     let ctx = drawn_once();
@@ -4351,22 +4320,22 @@ fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Egui);
 }
 
-/// **A wheel over an Inspector pane scrolls that pane, and no other.**
+/// A wheel over an Inspector pane scrolls that pane, and no other.
 ///
 /// # Why it is here and can be nowhere else
 ///
 /// `karakuri-console` holds the position and the derivation, and
-/// `input::wheeled` answers *which pane* — but nothing in that crate joins
-/// the two, because joining them is routing a window event and there is no
-/// window there. `Readout::pointer` is the join, and it is a method rather
-/// than four arms of `window_event` for exactly this reason: `winit` hands
-/// out no `ActiveEventLoop` outside its own loop, so the handler is not
-/// something a test can call and the part worth testing is this
+/// `input::wheeled` answers *which pane* — but nothing in that crate joins the
+/// two, because joining them is routing a window event and there is no window
+/// there. `Readout::pointer` is the join, and it is a method rather than four
+/// arms of `window_event` for exactly this reason: `winit` hands out no
+/// `ActiveEventLoop` outside its own loop, so the handler is not something a
+/// test can call and the part worth testing is this
 /// ([ADR-0307](../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
 ///
-/// Four things, and the third is the one a single-pane inspector would
-/// have hidden: the wheel is aimed with the pointer, so two panes are two
-/// positions and turning one must leave the other where it was.
+/// Four things, and the third is the one a single-pane inspector would have
+/// hidden: the wheel is aimed with the pointer, so two panes are two positions
+/// and turning one must leave the other where it was.
 #[test]
 fn a_wheel_over_an_inspector_pane_scrolls_that_pane() {
     let ctx = drawn_once();
@@ -4445,9 +4414,9 @@ fn a_wheel_over_an_inspector_pane_scrolls_that_pane() {
     );
 }
 
-/// **A pane with more in it than any pane on this panel can hold** — four
-/// node groups of six rows each, which is 4 x (26.5 + 6 x 22.5) = 646 and
-/// is taller than the Inspector bay at the window this test opens.
+/// A pane with more in it than any pane on this panel can hold — four node
+/// groups of six rows each, which is 4 x (26.5 + 6 x 22.5) = 646 and is taller
+/// than the Inspector bay at the window this test opens.
 fn deep_pane(deck: usize) -> view::Pane {
     view::Pane {
         deck,
@@ -4498,25 +4467,24 @@ fn deep_pane(deck: usize) -> view::Pane {
     }
 }
 
-/// The left pane's width, solved. A helper because the test asks three
-/// times and the chain is four calls long.
+/// The left pane's width, solved. A helper because the test asks three times
+/// and the chain is four calls long.
 fn pane_width(readout: &Readout) -> f32 {
     let layout = readout.panel.layout();
     layout.rect(layout.find("left-pane").expect("left-pane")).w
 }
 
-/// **A context that has drawn once**, which is what routing a pointer
-/// takes: the claim rule asks where the Outputs row's control is, that is
-/// the width of the type in it, and `egui`'s fonts are not valid until a
-/// pass has run. The window loop has drawn long before a hand arrives;
-/// a test has to say so.
+/// A context that has drawn once, which is what routing a pointer takes: the
+/// claim rule asks where the Outputs row's control is, that is the width of the
+/// type in it, and `egui`'s fonts are not valid until a pass has run. The
+/// window loop has drawn long before a hand arrives; a test has to say so.
 ///
 /// The texture delta is cleared because `epaint` panics if one is dropped
-/// unapplied — there is no renderer here to apply it to, which is the
-/// whole of what makes this a test and not a window.
+/// unapplied — there is no renderer here to apply it to, which is the whole of
+/// what makes this a test and not a window.
 ///
-/// `mod gpu` uses it too: a strip is laid out with the type in it, and a
-/// device does not make fonts valid.
+/// `mod gpu` uses it too: a strip is laid out with the type in it, and a device
+/// does not make fonts valid.
 pub(super) fn drawn_once() -> egui::Context {
     let ctx = egui::Context::default();
     let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
@@ -4524,45 +4492,42 @@ pub(super) fn drawn_once() -> egui::Context {
     ctx
 }
 
-/// **The whole of what the four class pills are for: an operation the gate
-/// refuses becomes one it allows, because a hand pressed a capsule.**
+/// The whole of what the four class pills are for: an operation the gate
+/// refuses becomes one it allows, because a hand pressed a capsule.
 ///
 /// # Why it is here and can be nowhere else
 ///
 /// It crosses three crates and no two of them can see the third.
-/// `karakuri-console` draws the pill and hands back a value; it must not
-/// name `karakuri-environment` at all (ADR-0156), so it cannot reach the
-/// handle. `karakuri-environment` holds the `Opening` and cannot see a
-/// console. `karakuri-operation`'s gate holds the audit and the refusal and
-/// depends on neither. **This file is the only place all three are in
-/// scope**, which is the same reason `key_column` is a unit test in this
-/// binary: a surface is where the buck stops, nothing may depend on this
-/// package, and the checks that need everything at once live in it.
+/// `karakuri-console` draws the pill and hands back a value; it must not name
+/// `karakuri-environment` at all (ADR-0156), so it cannot reach the handle.
+/// `karakuri-environment` holds the `Opening` and cannot see a console.
+/// `karakuri-operation`'s gate holds the audit and the refusal and depends on
+/// neither. This file is the only place all three are in scope, which is the
+/// same reason `key_column` is a unit test in this binary: a surface is where
+/// the buck stops, nothing may depend on this package, and the checks that need
+/// everything at once live in it.
 ///
 /// # What it asserts, in the order an operator's afternoon goes
 ///
-/// 1. `SetGain` is in the mix-fader class, which is the classification
-///    ADR-0235 drew — asserted against `standing` rather than assumed, so
-///    that a row moved out of the class fails here rather than making this
-///    test quietly vacuous.
-/// 2. On a run nobody has touched it is **refused**, and the sentence is
-///    `gate::refusal`'s own **by equality** — P-0090, *a refusal a person
-///    can reach from two surfaces is one sentence*, asserted against the
-///    function rather than with a `contains`. It names the Mixer bay,
-///    because a model that is told only *no* reports the instrument as
-///    incapable instead of as closed.
-/// 3. A press on the Mixer bay's pill — through `Readout::pointer`, which
-///    is the same routing a hand goes through, and not by calling `set`
-///    here — opens the class.
-/// 4. **The same call, the same audit, now allowed.** Nothing about the
-///    operation changed and nothing about the vocabulary changed; the list
-///    a model reads never shortened at any point.
-/// 5. **And exactly that class.** The other three are still shut and an
-///    operation in one of them is still refused, which is the property the
-///    console's own `a_press_opens_exactly_one_class_and_leaves_the_other_three_shut`
-///    makes about the value and this one makes about the run.
-/// 6. A second press shuts it, and the call is refused again — the other
-///    half of the page's *"click again to shut it"*, seen from the gate.
+/// 1. `SetGain` is in the mix-fader class, which is the classification ADR-0235
+/// drew — asserted against `standing` rather than assumed, so that a row moved
+/// out of the class fails here rather than making this test quietly vacuous. 2.
+/// On a run nobody has touched it is refused, and the sentence is
+/// `gate::refusal`'s own by equality — P-0090, *a refusal a person can reach
+/// from two surfaces is one sentence*, asserted against the function rather
+/// than with a `contains`. It names the Mixer bay, because a model that is told
+/// only *no* reports the instrument as incapable instead of as closed. 3. A
+/// press on the Mixer bay's pill — through `Readout::pointer`, which is the
+/// same routing a hand goes through, and not by calling `set` here — opens the
+/// class. 4. The same call, the same audit, now allowed. Nothing about the
+/// operation changed and nothing about the vocabulary changed; the list a model
+/// reads never shortened at any point. 5. And exactly that class. The other
+/// three are still shut and an operation in one of them is still refused, which
+/// is the property the console's own
+/// `a_press_opens_exactly_one_class_and_leaves_the_other_three_shut` makes
+/// about the value and this one makes about the run. 6. A second press shuts
+/// it, and the call is refused again — the other half of the page's *"click
+/// again to shut it"*, seen from the gate.
 #[test]
 fn the_gate_lets_a_refused_operation_through_once_the_class_is_open() {
     use karakuri_operation::gate::{audit, refusal, standing, Running, Standing};
@@ -4665,10 +4630,10 @@ fn the_gate_lets_a_refused_operation_through_once_the_class_is_open() {
     );
 }
 
-/// **All four pills are reachable through the window loop's routing**, not
-/// the Mixer's alone — three of them are in a bay head and the fourth is in
-/// a row that has none, and the one this file could most easily have got
-/// wrong is the one with no head to hang it in.
+/// All four pills are reachable through the window loop's routing, not the
+/// Mixer's alone — three of them are in a bay head and the fourth is in a row
+/// that has none, and the one this file could most easily have got wrong is the
+/// one with no head to hang it in.
 #[test]
 fn each_of_the_four_pills_opens_its_own_class_through_a_press() {
     let ctx = drawn_once();
@@ -4693,26 +4658,23 @@ fn each_of_the_four_pills_opens_its_own_class_through_a_press() {
     }
 }
 
-/// **A reading is read off the cards, one row per key, and never off a
-/// compile.**
+/// A reading is read off the cards, one row per key, and never off a compile.
 ///
-/// The claim `docs/manual/operations.html` makes for this row — *"each
-/// read off the artifact's own card, so those three fetch no source and
-/// compile nothing"* — and the four things [`declared`] has to get right,
-/// each of which a plainer reading would get wrong:
+/// The claim `docs/manual/operations.html` makes for this row — *"each read off
+/// the artifact's own card, so those three fetch no source and compile
+/// nothing"* — and the four things [`declared`] has to get right, each of which
+/// a plainer reading would get wrong:
 ///
-/// 1. **One control per key.** `exposure` is declared by two nodes here,
-///    exactly as it is in the mock's own reading, and it is one row.
-/// 2. **Over the part of the range both of them accept**, which is
-///    `Set::published`'s intersection done off the cards: `[0, 1]` and
-///    `[0.2, 0.8]` is one control over `[0.2, 0.8]`.
-/// 3. **A node with no card is counted and not skipped in silence**, which
-///    is the foot's `n without a card` and the one thing that keeps a knob
-///    missing for want of a card from being a knob missing.
-/// 4. **Nothing was compiled.** The artifacts here are not `.kir` at all —
-///    they are three bytes each — so a reading that fetched and checked a
-///    source could not have answered at all, which is the strongest form
-///    this claim can be put in.
+/// 1. One control per key. `exposure` is declared by two nodes here, exactly as
+/// it is in the mock's own reading, and it is one row. 2. Over the part of the
+/// range both of them accept, which is `Set::published`'s intersection done off
+/// the cards: `[0, 1]` and `[0.2, 0.8]` is one control over `[0.2, 0.8]`. 3. A
+/// node with no card is counted and not skipped in silence, which is the foot's
+/// `n without a card` and the one thing that keeps a knob missing for want of a
+/// card from being a knob missing. 4. Nothing was compiled. The artifacts here
+/// are not `.kir` at all — they are three bytes each — so a reading that
+/// fetched and checked a source could not have answered at all, which is the
+/// strongest form this claim can be put in.
 ///
 /// A CPU test: a store is a directory and no adapter is opened.
 #[test]
@@ -4849,16 +4811,15 @@ fn a_reading_is_read_off_the_cards_and_never_off_a_compile() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The answer is written into the view, under the row the cursor is
-/// on**, and a Set that cannot be read says so and draws nothing.
+/// The answer is written into the view, under the row the cursor is on, and a
+/// Set that cannot be read says so and draws nothing.
 ///
-/// [`read_reading`] is the glue the window loop runs on a press that asked
-/// for a reading — [`listing`]'s shape one control along — and the two
-/// halves worth a test are the ones a caller cannot see: that what is
-/// opened is the row under the cursor rather than the first row, and that
-/// a failure **closes** the block. A reading that failed to read and a Set
-/// that declares nothing must not draw the same, which is `library`'s own
-/// rule one bay up.
+/// [`read_reading`] is the glue the window loop runs on a press that asked for
+/// a reading — [`listing`]'s shape one control along — and the two halves worth
+/// a test are the ones a caller cannot see: that what is opened is the row
+/// under the cursor rather than the first row, and that a failure closes the
+/// block. A reading that failed to read and a Set that declares nothing must
+/// not draw the same, which is `library`'s own rule one bay up.
 ///
 /// A CPU test: a store is a directory and a `View` takes no device.
 #[test]
@@ -4906,18 +4867,18 @@ fn a_reading_is_written_into_the_view_under_the_row_the_cursor_is_on() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **[`reread_if_open`] re-reads on a move with a reading open, and does
-/// nothing on any other press** — ADR-0265's rule, as a check on the one
-/// function both `App::window_event` call sites share, rather than on the
-/// two copies of it the window loop used to carry.
+/// [`reread_if_open`] re-reads on a move with a reading open, and does nothing
+/// on any other press — ADR-0265's rule, as a check on the one function both
+/// `App::window_event` call sites share, rather than on the two copies of it
+/// the window loop used to carry.
 ///
-/// Until 2026-09-11 the two call sites were two verbatim statements, held
-/// equal to each other only by a text scan
+/// Until 2026-09-11 the two call sites were two verbatim statements, held equal
+/// to each other only by a text scan
 /// (`reading_follows_the_cursor::both_surfaces_re_read_the_row_the_cursor_arrived_at`)
-/// that read this file and matched each one whole. Now there is one
-/// statement and not two to keep in step, and this presses it directly:
-/// three presses, only the middle one of which is a move, and only the
-/// third of which should read anything.
+/// that read this file and matched each one whole. Now there is one statement
+/// and not two to keep in step, and this presses it directly: three presses,
+/// only the middle one of which is a move, and only the third of which should
+/// read anything.
 ///
 /// A CPU test: a store is a directory and a `View` takes no device.
 #[test]
@@ -4976,21 +4937,19 @@ fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A press on the `params` chip asks for the Set under the cursor, and a
-/// second press puts the reading away.**
+/// A press on the `params` chip asks for the Set under the cursor, and a second
+/// press puts the reading away.
 ///
-/// The seam, driven the way an operator drives it: the pointer arrives,
-/// the panel claims it, and what comes back is
-/// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet) naming
-/// the row the cursor is on. **`press_handler` cannot see this** — it
-/// reads text and asks whether the control is asked — and
-/// `karakuri-console`'s own tests cannot see it either, because the press
-/// handler is here.
+/// The seam, driven the way an operator drives it: the pointer arrives, the
+/// panel claims it, and what comes back is
+/// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet) naming the
+/// row the cursor is on. `press_handler` cannot see this — it reads text and
+/// asks whether the control is asked — and `karakuri-console`'s own tests
+/// cannot see it either, because the press handler is here.
 ///
-/// **The close emits nothing**, which is the half worth a test: a second
-/// press changes which rows the bay draws and asks no question, so a
-/// `ReadSet` here would be this program saying a Set was read at the
-/// moment one stopped being.
+/// The close emits nothing, which is the half worth a test: a second press
+/// changes which rows the bay draws and asks no question, so a `ReadSet` here
+/// would be this program saying a Set was read at the moment one stopped being.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -5053,8 +5012,8 @@ fn a_press_on_the_params_chip_asks_for_the_set_under_the_cursor() {
     );
 }
 
-/// A strip, as far as the Library bay cares: something for a deck to be
-/// named on. Every reading in it is beside the point here.
+/// A strip, as far as the Library bay cares: something for a deck to be named
+/// on. Every reading in it is beside the point here.
 fn bare_strip() -> view::Strip {
     view::Strip {
         name: String::new(),
@@ -5071,23 +5030,22 @@ fn bare_strip() -> view::Strip {
     }
 }
 
-/// **A secondary press on a Library row puts that row's menu down, and a
-/// primary press on the same row does not.**
+/// A secondary press on a Library row puts that row's menu down, and a primary
+/// press on the same row does not.
 ///
-/// **This is the one thing neither crate could assert on its own.**
-/// `karakuri-console` has never known which button a press was — rules 1
-/// to 4 of `input::claim` are all about where the pointer is — so the
-/// distinction lives here, in the arm that turns a `winit` button into a
-/// [`Pointer`]. Both halves are asserted because a handler that opened the
-/// menu on either button would pass a test made only of the first, and
-/// would take the row's ordinary press away: a primary press picks a Set
-/// up to carry it, which is what the drag onto a strip is.
+/// This is the one thing neither crate could assert on its own.
+/// `karakuri-console` has never known which button a press was — rules 1 to 4
+/// of `input::claim` are all about where the pointer is — so the distinction
+/// lives here, in the arm that turns a `winit` button into a [`Pointer`]. Both
+/// halves are asserted because a handler that opened the menu on either button
+/// would pass a test made only of the first, and would take the row's ordinary
+/// press away: a primary press picks a Set up to carry it, which is what the
+/// drag onto a strip is.
 ///
-/// **And the item is picked with either button**, which is the other half
-/// of the same seam: once the card is down it is `input::claim`'s rule 2,
-/// and that rule is about a card being down rather than about what put it
-/// there. So the pick here is a *primary* press on a card a secondary
-/// press opened.
+/// And the item is picked with either button, which is the other half of the
+/// same seam: once the card is down it is `input::claim`'s rule 2, and that
+/// rule is about a card being down rather than about what put it there. So the
+/// pick here is a *primary* press on a card a secondary press opened.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -5225,23 +5183,22 @@ fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
     );
 }
 
-/// **A send that reached the disk says where it went, and a dismissed
-/// dialog writes nothing and says so.**
+/// A send that reached the disk says where it went, and a dismissed dialog
+/// writes nothing and says so.
 ///
-/// Three outcomes, one sentence each, and the third is the one worth the
-/// test: a press that opened a window over the panel and then wrote
-/// nothing is exactly the case a reader would otherwise read as a fault,
-/// and rule 04 of the manual is that nothing is hidden quietly.
+/// Three outcomes, one sentence each, and the third is the one worth the test:
+/// a press that opened a window over the panel and then wrote nothing is
+/// exactly the case a reader would otherwise read as a fault, and rule 04 of
+/// the manual is that nothing is hidden quietly.
 ///
-/// **The dialog is not driven here and does not need to be.** What a save
-/// dialog answers is a path or nothing, so [`sent`] takes that answer and
-/// the platform stays outside the test — the same split
-/// [`Save::run`] is on one act along, where the thread is the caller's and
-/// the write is a function.
+/// The dialog is not driven here and does not need to be. What a save dialog
+/// answers is a path or nothing, so [`sent`] takes that answer and the platform
+/// stays outside the test — the same split [`Save::run`] is on one act along,
+/// where the thread is the caller's and the write is a function.
 ///
-/// **`None` is asserted to have written nothing at all**, by counting the
-/// directory rather than by trusting the sentence: a `sent` that bundled
-/// first and threw the bytes away would print the same words.
+/// `None` is asserted to have written nothing at all, by counting the directory
+/// rather than by trusting the sentence: a `sent` that bundled first and threw
+/// the bytes away would print the same words.
 ///
 /// A CPU test: a store read and a file written.
 #[test]
@@ -5316,20 +5273,19 @@ fn a_send_says_where_it_went_and_a_dismissed_dialog_writes_nothing_and_says_so()
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The marks a reading is spelled with are in the face the panel draws
-/// with.**
+/// The marks a reading is spelled with are in the face the panel draws with.
 ///
-/// [`spelled`] writes `0 – 8 · 2` with an en dash and a middle dot, and
-/// the Library bay's old `load → A` pill is what this test exists because
-/// of: its arrow was typed with a U+2192 `egui`'s default face does not
-/// carry, and the panel drew `load □ A` for a release — *a readout of
-/// where a press lands, with a tofu where the lands was*. A range with a tofu in it would be the same
-/// failure on every row of every reading.
+/// [`spelled`] writes `0 – 8 · 2` with an en dash and a middle dot, and the
+/// Library bay's old `load → A` pill is what this test exists because of: its
+/// arrow was typed with a U+2192 `egui`'s default face does not carry, and the
+/// panel drew `load □ A` for a release — *a readout of where a press lands,
+/// with a tofu where the lands was*. A range with a tofu in it would be the
+/// same failure on every row of every reading.
 ///
-/// **The minus is here too**, because a declared range can start below
-/// zero — the mock's own `twist` is `−2 – 2 · 0` — and it is the sign
-/// `format!` writes rather than the typographic one, which is asserted so
-/// that the two are not quietly swapped.
+/// The minus is here too, because a declared range can start below zero — the
+/// mock's own `twist` is `−2 – 2 · 0` — and it is the sign `format!` writes
+/// rather than the typographic one, which is asserted so that the two are not
+/// quietly swapped.
 ///
 /// A CPU test: fonts are `egui`'s and take no device.
 #[test]
@@ -5350,17 +5306,17 @@ fn the_marks_a_reading_is_spelled_with_are_in_the_face() {
     }
 }
 
-/// **A press on the outputs dot, through the window loop's own routing.**
+/// A press on the outputs dot, through the window loop's own routing.
 ///
-/// The other half of the test above: that one is a boundary the panel
-/// claims and `egui` never sees, and this is the console's one control,
-/// which the panel claims for a different reason — `egui` owns no widget
-/// anywhere here, so a press routed to it would reach nothing at all.
+/// The other half of the test above: that one is a boundary the panel claims
+/// and `egui` never sees, and this is the console's one control, which the
+/// panel claims for a different reason — `egui` owns no widget anywhere here,
+/// so a press routed to it would reach nothing at all.
 ///
 /// What is asserted is the round trip an operator makes: the picture is on
-/// screen, a click on the dot folds it away by name, and a click on the
-/// same dot brings it back. The dot is where it is drawn and the press is
-/// the panel's at every step.
+/// screen, a click on the dot folds it away by name, and a click on the same
+/// dot brings it back. The dot is where it is drawn and the press is the
+/// panel's at every step.
 #[test]
 fn a_press_on_the_outputs_dot_folds_the_picture_and_unfolds_it() {
     let ctx = drawn_once();
@@ -5420,30 +5376,29 @@ fn a_press_on_the_outputs_dot_folds_the_picture_and_unfolds_it() {
     );
 }
 
-/// **A press on a scope chip, through the window loop's own routing** —
-/// which is what ADR-0213 makes the *panel* badge mean.
+/// A press on a scope chip, through the window loop's own routing — which is
+/// what ADR-0213 makes the *panel* badge mean.
 ///
 /// `karakuri-console`'s `tests/library.rs` asserts everything up to the
-/// operation with no window anywhere: that the chips answer a press, that
-/// a press names the chip it landed on, and that nothing else in the bay
-/// takes one. **This is the half that badge is actually about** — *"the
-/// row is claimed the day a person who launched the instrument can perform
-/// that operation from the panel in front of them"* — and a control
-/// demonstrated in that crate and never wired here would pass there and be
-/// a lie this page tells on its own authority.
+/// operation with no window anywhere: that the chips answer a press, that a
+/// press names the chip it landed on, and that nothing else in the bay takes
+/// one. This is the half that badge is actually about — *"the row is claimed
+/// the day a person who launched the instrument can perform that operation from
+/// the panel in front of them"* — and a control demonstrated in that crate and
+/// never wired here would pass there and be a lie this page tells on its own
+/// authority.
 ///
-/// **What is asserted is the whole press and not the routing alone**: the
-/// mark moves to the chip that was pressed, the operation that leaves is
-/// `SelectScope` with the payload it is specified to carry, and the
-/// library cursor goes back to the top — because the listing under a new
-/// scope is a listing this cursor has never seen, and a cursor left where
-/// it was would sit on a Set nobody chose under a pill saying a press will
-/// load it.
+/// What is asserted is the whole press and not the routing alone: the mark
+/// moves to the chip that was pressed, the operation that leaves is
+/// `SelectScope` with the payload it is specified to carry, and the library
+/// cursor goes back to the top — because the listing under a new scope is a
+/// listing this cursor has never seen, and a cursor left where it was would sit
+/// on a Set nobody chose under a pill saying a press will load it.
 ///
-/// **And the chip that is already marked is pressed too**, because that is
-/// the case a step cannot reach: a step would go somewhere else, and a
-/// pointer names — so the press is answered rather than refused, and the
-/// mark stays where it is.
+/// And the chip that is already marked is pressed too, because that is the case
+/// a step cannot reach: a step would go somewhere else, and a pointer names —
+/// so the press is answered rather than refused, and the mark stays where it
+/// is.
 #[test]
 fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
     let ctx = drawn_once();
@@ -5524,27 +5479,25 @@ fn a_press_on_a_scope_chip_names_the_library_the_bay_reads() {
     );
 }
 
-/// **A press on the star at the left of a library row, through the window
-/// loop's own routing** — the half of the badge ADR-0213 makes a badge
-/// mean, beside
+/// A press on the star at the left of a library row, through the window loop's
+/// own routing — the half of the badge ADR-0213 makes a badge mean, beside
 /// [`a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing`].
 ///
-/// `karakuri-console`'s `tests/library.rs` says where the mark is and that
-/// it answers a press; **this says an operator reaches it** — a control
-/// demonstrated in that crate and never wired here would pass there and be
-/// a lie the page tells on its own authority.
+/// `karakuri-console`'s `tests/library.rs` says where the mark is and that it
+/// answers a press; this says an operator reaches it — a control demonstrated
+/// in that crate and never wired here would pass there and be a lie the page
+/// tells on its own authority.
 ///
-/// **What is asserted is that the press names a state and not a step**
-/// (ADR-0299): the same mark pressed twice asks for two different things,
-/// because the control reads the row's present mark and asks for the other
-/// one. That is the failure a toggle hides completely — a press that
-/// always emitted `true` would pass every assertion about the first press
-/// and never take a star off.
+/// What is asserted is that the press names a state and not a step (ADR-0299):
+/// the same mark pressed twice asks for two different things, because the
+/// control reads the row's present mark and asks for the other one. That is the
+/// failure a toggle hides completely — a press that always emitted `true` would
+/// pass every assertion about the first press and never take a star off.
 ///
-/// **And that the star has not swallowed the row it sits in**: a press on
-/// the row's own ground still takes the Set in hand and names no
-/// operation, which is rule 4's *a control claims what it acts on and no
-/// more* asked of the two boxes that overlap.
+/// And that the star has not swallowed the row it sits in: a press on the row's
+/// own ground still takes the Set in hand and names no operation, which is rule
+/// 4's *a control claims what it acts on and no more* asked of the two boxes
+/// that overlap.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -5635,29 +5588,27 @@ fn a_press_on_a_star_names_the_state_the_row_is_not_in() {
     readout.pointer(&ctx, Pointer::Up);
 }
 
-/// **A press on one of the Library bay's two filter fields, through the
-/// window loop's own routing** — the half of the badge ADR-0213 makes a
-/// badge mean, one row under
-/// [`a_press_on_a_scope_chip_names_the_library_the_bay_reads`].
+/// A press on one of the Library bay's two filter fields, through the window
+/// loop's own routing — the half of the badge ADR-0213 makes a badge mean, one
+/// row under [`a_press_on_a_scope_chip_names_the_library_the_bay_reads`].
 ///
 /// `karakuri-console`'s `tests/library.rs` asserts everything up to the
-/// operation with no window anywhere: where the two fields are, that each
-/// steps its own cycle, that the operation names where it arrived and
-/// carries the other field untouched, and that nothing between them takes a
-/// press. **This is the half that says an operator reaches it** — a control
-/// demonstrated in that crate and never wired here would pass there and be
-/// a lie the page tells on its own authority, which is exactly what
-/// `press_handler` was written after.
+/// operation with no window anywhere: where the two fields are, that each steps
+/// its own cycle, that the operation names where it arrived and carries the
+/// other field untouched, and that nothing between them takes a press. This is
+/// the half that says an operator reaches it — a control demonstrated in that
+/// crate and never wired here would pass there and be a lie the page tells on
+/// its own authority, which is exactly what `press_handler` was written after.
 ///
-/// **What is asserted is the whole press.** The operation that leaves is
-/// `ListSets` carrying the step; `View::narrow` has been called, so the
-/// field the panel draws next frame reads the new value; and the library
-/// cursor is back at the top, because the listing under a narrower filter
-/// is one this cursor has never seen.
+/// What is asserted is the whole press. The operation that leaves is `ListSets`
+/// carrying the step; `View::narrow` has been called, so the field the panel
+/// draws next frame reads the new value; and the library cursor is back at the
+/// top, because the listing under a narrower filter is one this cursor has
+/// never seen.
 ///
-/// **Both fields, because the operation carries both halves**: the press on
-/// `layer` has to come back with the `holds` the press before it set, and a
-/// route that rebuilt the operation from one field would lose it.
+/// Both fields, because the operation carries both halves: the press on `layer`
+/// has to come back with the `holds` the press before it set, and a route that
+/// rebuilt the operation from one field would lose it.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -5766,30 +5717,30 @@ fn a_press_on_a_filter_field_asks_the_store_for_a_narrower_listing() {
     assert_eq!(readout.view.filters().holds, Some("drift_shell"));
 }
 
-/// **A press on a strip's ground addresses the keys to that deck** — the
-/// whole route, through the same `Readout::pointer` a hand goes through.
+/// A press on a strip's ground addresses the keys to that deck — the whole
+/// route, through the same `Readout::pointer` a hand goes through.
 ///
 /// # Why it is here and can be nowhere else
 ///
 /// `karakuri-console` owns both halves and cannot put them together:
 /// `input::claim` there says a press on a strip is the panel's, and
-/// `Mixer::select` says which deck it names, and **nothing in that crate
-/// joins the two**. This file's press arm is the join, and the defect this
-/// was written against lived exactly in the gap: `on_strip` asked four
-/// questions where the bay has five, so every press on a strip's ground
-/// was routed to `egui`, the `(Pointer::Down, Claim::Panel)` arm never ran,
-/// and the `bay.select(at)` call at the end of it was unreachable —
-/// while `operations.html`'s *"click a strip"*, `console.html`'s strip tip,
-/// `Mixer::select` and that call all said it worked.
+/// `Mixer::select` says which deck it names, and nothing in that crate joins
+/// the two. This file's press arm is the join, and the defect this was written
+/// against lived exactly in the gap: `on_strip` asked four questions where the
+/// bay has five, so every press on a strip's ground was routed to `egui`, the
+/// `(Pointer::Down, Claim::Panel)` arm never ran, and the `bay.select(at)` call
+/// at the end of it was unreachable — while `operations.html`'s *"click a
+/// strip"*, `console.html`'s strip tip, `Mixer::select` and that call all said
+/// it worked.
 ///
-/// **Deleting `|| bay.select(p).is_some()` from `input::on_strip` is the
-/// injection this was watched to fail against**: the claim comes back
-/// `Egui` and the press asks for nothing.
+/// Deleting `|| bay.select(p).is_some()` from `input::on_strip` is the
+/// injection this was watched to fail against: the claim comes back `Egui` and
+/// the press asks for nothing.
 ///
-/// **The point is the strip's name box**, which is the affordance's own
-/// words — *"a press anywhere on this strip that no knob under the pointer
-/// claimed"* — and the four that could have claimed it are asked here so
-/// that the press under test is the leftover rather than a chip.
+/// The point is the strip's name box, which is the affordance's own words — *"a
+/// press anywhere on this strip that no knob under the pointer claimed"* — and
+/// the four that could have claimed it are asked here so that the press under
+/// test is the leftover rather than a chip.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -5860,48 +5811,43 @@ fn a_press_on_a_strips_ground_selects_that_deck() {
     assert_eq!(readout.view.selection(), 2);
 }
 
-/// **A Set dragged from a library row onto a mixer strip loads the strip
-/// it was let go over** — the whole gesture, through the same
-/// `Readout::pointer` a hand goes through.
+/// A Set dragged from a library row onto a mixer strip loads the strip it was
+/// let go over — the whole gesture, through the same `Readout::pointer` a hand
+/// goes through.
 ///
 /// # Why it is here and can be nowhere else
 ///
 /// `karakuri-console` has both halves of the gesture and cannot put them
 /// together: `carry.rs` there presses the model and the view directly, and
-/// hands the destination in itself, because that crate has no press
-/// handler to ask. **The property that matters is which *moment* resolves
-/// the deck**, and that is this file's: the press is over the Library bay,
-/// where there is no strip at all, and the release is over one. So a
-/// destination taken at the press names nothing and the drop is cancelled,
-/// and a destination taken at the release names the strip under the hand.
+/// hands the destination in itself, because that crate has no press handler to
+/// ask. The property that matters is which *moment* resolves the deck, and that
+/// is this file's: the press is over the Library bay, where there is no strip
+/// at all, and the release is over one. So a destination taken at the press
+/// names nothing and the drop is cancelled, and a destination taken at the
+/// release names the strip under the hand.
 ///
-/// **Deleting the `Mixer::dropped` ask from the release arm is the
-/// injection this was watched to fail against**, and moving it into the
-/// press arm is the second — the first answers `Nowhere` for every drop
-/// and the second answers it for every drop that began in the library,
-/// which is all of them.
+/// Deleting the `Mixer::dropped` ask from the release arm is the injection this
+/// was watched to fail against, and moving it into the press arm is the second
+/// — the first answers `Nowhere` for every drop and the second answers it for
+/// every drop that began in the library, which is all of them.
 ///
 /// # What it asserts, in the order a hand does it
 ///
-/// 1. A press on the third row is the panel's, and it emits nothing:
-///    half a gesture names one operand.
-/// 2. **The cursor mark follows the hand**, and `Acted::Pointed` is the
-///    press saying so. It is no longer the whole of what this console
-///    draws for a carry — the rectangle under the pointer is ringed and
-///    the pointer is a grab, which is `View::draw`'s and is held by
-///    `karakuri-console/tests/carry.rs`; the mock still draws no ghost.
-///    What is
-///    owed on that answer when a reading is open is
-///    [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`];
-///    here it is the mark alone, and `Acted::Nothing` in its place would
-///    be a press that moved the cursor and told nobody.
-/// 3. Every move on the way is `Acted::Nothing`, over two strips that are
-///    not the one it lands on.
-/// 4. The release over strip C asks for `LoadSet` naming **deck C** and
-///    the Set from row 2 — not the selection, which is deck A throughout,
-///    and not the row the cursor started on.
-/// 5. **A second carry let go over nothing asks for nothing**, which is
-///    the outcome no other drag on this panel has.
+/// 1. A press on the third row is the panel's, and it emits nothing: half a
+/// gesture names one operand. 2. The cursor mark follows the hand, and
+/// `Acted::Pointed` is the press saying so. It is no longer the whole of what
+/// this console draws for a carry — the rectangle under the pointer is ringed
+/// and the pointer is a grab, which is `View::draw`'s and is held by
+/// `karakuri-console/tests/carry.rs`; the mock still draws no ghost. What is
+/// owed on that answer when a reading is open is
+/// [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`]; here it is
+/// the mark alone, and `Acted::Nothing` in its place would be a press that
+/// moved the cursor and told nobody. 3. Every move on the way is
+/// `Acted::Nothing`, over two strips that are not the one it lands on. 4. The
+/// release over strip C asks for `LoadSet` naming deck C and the Set from row 2
+/// — not the selection, which is deck A throughout, and not the row the cursor
+/// started on. 5. A second carry let go over nothing asks for nothing, which is
+/// the outcome no other drag on this panel has.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -6017,29 +5963,29 @@ fn a_drop_on_a_strip_loads_the_strip_it_was_let_go_over() {
     );
 }
 
-/// **A Set let go on a deck preview cell loads that cell's deck**, through
-/// the same `Readout::pointer` a hand goes through — and a cell whose
-/// letter names no slot loads nothing.
+/// A Set let go on a deck preview cell loads that cell's deck, through the same
+/// `Readout::pointer` a hand goes through — and a cell whose letter names no
+/// slot loads nothing.
 ///
 /// # Why it is here and not in `karakuri-console`
 ///
 /// `carry.rs` there asks the two bays itself and hands the destination to
-/// `Panel::released`. **What this file owns is that the release asks the
-/// second bay at all**: the press handler resolved the drop against
-/// `Mixer::dropped` alone until ADR-0273, so a carry that crossed to the
-/// centre column and let go on a cell was answered `Nowhere` — the panel
-/// drawing a ring round a rectangle the release then declined to use.
-/// **Deleting the `ProgramBay::dropped` ask from the release arm is the
-/// injection this was watched to fail against.**
+/// `Panel::released`. What this file owns is that the release asks the second
+/// bay at all: the press handler resolved the drop against `Mixer::dropped`
+/// alone until ADR-0273, so a carry that crossed to the centre column and let
+/// go on a cell was answered `Nowhere` — the panel drawing a ring round a
+/// rectangle the release then declined to use. Deleting the
+/// `ProgramBay::dropped` ask from the release arm is the injection this was
+/// watched to fail against.
 ///
 /// # And the slot count is asked with it
 ///
-/// The deck here has **three** slots and the row is four cells, so cell D
-/// is drawn with nothing behind the letter on it. A release there names no
-/// deck, which is the refusal `3` already gets from the keyboard —
-/// `pointed`, off the same `View::mixer` length. Passing `DECKS` instead
-/// of that length is the second injection, and it asks for
-/// `LoadSet { deck: 3 }` on a deck that has no slot 3.
+/// The deck here has three slots and the row is four cells, so cell D is drawn
+/// with nothing behind the letter on it. A release there names no deck, which
+/// is the refusal `3` already gets from the keyboard — `pointed`, off the same
+/// `View::mixer` length. Passing `DECKS` instead of that length is the second
+/// injection, and it asks for `LoadSet { deck: 3 }` on a deck that has no slot
+/// 3.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -6129,54 +6075,49 @@ fn a_drop_on_a_preview_cell_loads_the_deck_its_letter_names() {
     );
 }
 
-/// **A carry that moves the library cursor re-reads the row it arrived
-/// at**, which is the rule the cursor states rather than the keyboard:
-/// *"the reading follows the cursor: a move with one open is a read of the
-/// row it arrived at"* (`karakuri-console/src/view.rs`,
-/// `View::reading_open`).
+/// A carry that moves the library cursor re-reads the row it arrived at, which
+/// is the rule the cursor states rather than the keyboard: *"the reading
+/// follows the cursor: a move with one open is a read of the row it arrived
+/// at"* (`karakuri-console/src/view.rs`, `View::reading_open`).
 ///
 /// # The defect it was written for
 ///
-/// `Readout::took` discarded `View::point_at`'s `moved`. So taking a row
-/// in hand while a reading was open on a **different** row moved the
-/// cursor off that row, `View::opened` answered `None` because the row
-/// under the cursor was no longer the Set the reading was of, and the
-/// block disappeared — for the rest of the run, because nothing on this
-/// route ever walks the cursor back. The arrow keys never had it: they
-/// re-read on `moved && reading_open()`.
+/// `Readout::took` discarded `View::point_at`'s `moved`. So taking a row in
+/// hand while a reading was open on a different row moved the cursor off that
+/// row, `View::opened` answered `None` because the row under the cursor was no
+/// longer the Set the reading was of, and the block disappeared — for the rest
+/// of the run, because nothing on this route ever walks the cursor back. The
+/// arrow keys never had it: they re-read on `moved && reading_open()`.
 ///
 /// # Why it is here and can be nowhere else
 ///
-/// It needs all three of a press handler, a store on a disk, and the
-/// glue between them, and this file is the only place that has any two.
-/// `carry.rs` in `karakuri-console` presses the bay and the view directly
-/// and that crate reaches no disk at all (ADR-0156), so the half it can
-/// hold is `the_row_a_hand_takes_is_the_row_the_cursor_marks` — that
-/// `point_at` answers the move — and not that anything acts on the answer.
+/// It needs all three of a press handler, a store on a disk, and the glue
+/// between them, and this file is the only place that has any two. `carry.rs`
+/// in `karakuri-console` presses the bay and the view directly and that crate
+/// reaches no disk at all (ADR-0156), so the half it can hold is
+/// `the_row_a_hand_takes_is_the_row_the_cursor_marks` — that `point_at` answers
+/// the move — and not that anything acts on the answer.
 ///
 /// # What it asserts, and what each one fails against
 ///
 /// 1. The press answers `Acted::Pointed`, which is the whole of what
-///    `Readout::took` can do about it: the readout holds no store, so the
-///    press says *the cursor moved* and the caller reads the file. A
-///    `took` that drops the `bool` again answers `Acted::Nothing` here.
-/// 2. **The block is gone until it is re-read**, which is the defect
-///    itself, asserted so that step 3 cannot pass by the reading never
-///    having moved.
-/// 3. `read_reading` — the call the window loop makes on that answer —
-///    puts the reading under the row the hand took, naming that row's Set.
-/// 4. **A press on the row the cursor is already on answers
-///    `Acted::Nothing`**, so a carry that moved nothing costs no file
-///    read.
+/// `Readout::took` can do about it: the readout holds no store, so the press
+/// says *the cursor moved* and the caller reads the file. A `took` that drops
+/// the `bool` again answers `Acted::Nothing` here. 2. The block is gone until
+/// it is re-read, which is the defect itself, asserted so that step 3 cannot
+/// pass by the reading never having moved. 3. `read_reading` — the call the
+/// window loop makes on that answer — puts the reading under the row the hand
+/// took, naming that row's Set. 4. A press on the row the cursor is already on
+/// answers `Acted::Nothing`, so a carry that moved nothing costs no file read.
 ///
-/// **What it cannot see is that the window loop makes the call**, because
-/// `winit` cannot be asked for an `ActiveEventLoop` outside its own loop
-/// and an event handler is not something a test can drive —
-/// `Readout::pointer`'s own doc. `App::window_event`'s carry arm calls
-/// [`reread_if_open`] with `matches!(acted, Acted::Pointed)`, the same
-/// function [`reread_if_open_re_reads_only_on_a_move_with_a_reading_open`]
-/// presses directly, below — this test is the two halves either side of
-/// that call, and neither reaches the call itself.
+/// What it cannot see is that the window loop makes the call, because `winit`
+/// cannot be asked for an `ActiveEventLoop` outside its own loop and an event
+/// handler is not something a test can drive — `Readout::pointer`'s own doc.
+/// `App::window_event`'s carry arm calls [`reread_if_open`] with
+/// `matches!(acted, Acted::Pointed)`, the same function
+/// [`reread_if_open_re_reads_only_on_a_move_with_a_reading_open`] presses
+/// directly, below — this test is the two halves either side of that call, and
+/// neither reaches the call itself.
 ///
 /// A CPU test: a store is a directory and a `Readout` takes no device.
 #[test]
@@ -6265,15 +6206,15 @@ fn a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **The filter row narrows what the bay lists, through the summary.**
+/// The filter row narrows what the bay lists, through the summary.
 ///
 /// The other half of the same press: `a_press_on_a_filter_field_…` says the
-/// operation reaches `View::narrow`, and this says the listing that comes
-/// back afterwards is a narrower one — which is the whole point, and was
-/// impossible while this side asked `Store::list_sets` for names.
+/// operation reaches `View::narrow`, and this says the listing that comes back
+/// afterwards is a narrower one — which is the whole point, and was impossible
+/// while this side asked `Store::list_sets` for names.
 ///
-/// **A procedure is a row of `all` and of `presets`, with its kind on it —
-/// and of neither `my sets` nor `folder`** (ADR-0338, decision 1).
+/// A procedure is a row of `all` and of `presets`, with its kind on it — and of
+/// neither `my sets` nor `folder` (ADR-0338, decision 1).
 ///
 /// A CPU test: two tiers on a disk, a `View`, and no window.
 #[test]
@@ -6430,14 +6371,13 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **What it narrows is the store's own listing**, which is `all` and is
-/// what *List what the store holds* lists. `my sets` is that listing
-/// starred (ADR-0299), so the same retain applies to it and the row is not
-/// a control over one chip.
+/// What it narrows is the store's own listing, which is `all` and is what *List
+/// what the store holds* lists. `my sets` is that listing starred (ADR-0299),
+/// so the same retain applies to it and the row is not a control over one chip.
 ///
-/// **It is the same retain the MCP tool applies**, over the same
-/// `setfile::summarise`, which is what keeps one operation from being
-/// answered two ways by two surfaces.
+/// It is the same retain the MCP tool applies, over the same
+/// `setfile::summarise`, which is what keeps one operation from being answered
+/// two ways by two surfaces.
 ///
 /// A CPU test: a store, a `View`, and no window.
 #[test]
@@ -6540,23 +6480,23 @@ fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// **A press on the Program bay's `solo` pill, through the window loop's
-/// own routing.**
+/// A press on the Program bay's `solo` pill, through the window loop's own
+/// routing.
 ///
-/// `karakuri-console`'s `tests/solo_pill.rs` and `tests/vocabulary.rs`
-/// assert everything up to the operation with no window anywhere; this is
-/// the half ADR-0213 makes the badge mean — *"the row is claimed the day a
-/// person who launched the instrument can perform that operation from the
-/// panel in front of them"* — and a control demonstrated in that crate and
-/// never wired here would pass there and be a lie the page tells.
+/// `karakuri-console`'s `tests/solo_pill.rs` and `tests/vocabulary.rs` assert
+/// everything up to the operation with no window anywhere; this is the half
+/// ADR-0213 makes the badge mean — *"the row is claimed the day a person who
+/// launched the instrument can perform that operation from the panel in front
+/// of them"* — and a control demonstrated in that crate and never wired here
+/// would pass there and be a lie the page tells.
 ///
-/// **Both directions, because the pill is both.** A solo takes every other
-/// control off the screen, so the pill is the only thing left to press and
-/// the undo has to come from it. What is asserted is the round trip an
-/// operator makes: the picture is one region among many, a click on the
-/// pill leaves it holding the window, and a click on the same pill —
-/// **found again where it is now drawn**, because the solo moved every
-/// rectangle on the console — puts everything back.
+/// Both directions, because the pill is both. A solo takes every other control
+/// off the screen, so the pill is the only thing left to press and the undo has
+/// to come from it. What is asserted is the round trip an operator makes: the
+/// picture is one region among many, a click on the pill leaves it holding the
+/// window, and a click on the same pill — found again where it is now drawn,
+/// because the solo moved every rectangle on the console — puts everything
+/// back.
 #[test]
 fn a_press_on_the_solo_pill_solos_the_picture_and_undoes_it() {
     let ctx = drawn_once();
@@ -6623,28 +6563,26 @@ fn a_press_on_the_solo_pill_solos_the_picture_and_undoes_it() {
         "undoing the solo left the library folded"
     );
 }
-/// **A control's operation becomes the record every other surface's
-/// control ends in**, and this is the half of that which needs no device.
+/// A control's operation becomes the record every other surface's control ends
+/// in, and this is the half of that which needs no device.
 ///
-/// **This test is older than the conversion it now checks, and that is the
-/// point of it.** It was written against the hand-written `record` this
-/// file used to carry, asserting term for term what `karakuri-cli`'s
-/// `mix::gain_record` and `mix::opacity_record` already wrote. That
-/// function is deleted and [`written`] answers instead (ADR-0185's promise,
-/// kept where ADR-0194 put the home) — **every expectation below is
-/// unchanged**, so if the crate's conversion disagreed with the one that
-/// was deleted, this is what says so.
+/// This test is older than the conversion it now checks, and that is the point
+/// of it. It was written against the hand-written `record` this file used to
+/// carry, asserting term for term what `karakuri-cli`'s `mix::gain_record` and
+/// `mix::opacity_record` already wrote. That function is deleted and
+/// [`written`] answers instead (ADR-0185's promise, kept where ADR-0194 put the
+/// home) — every expectation below is unchanged, so if the crate's conversion
+/// disagreed with the one that was deleted, this is what says so.
 ///
-/// **`mix::gain_record` is deleted too**, by the same record and for the
-/// stronger reason: the conversion *is* the derivation now, and two of
-/// them is the drift `mix.rs` exists to end. The comments below name it
-/// where it stood, because what this test compares against is the record
-/// that function wrote rather than the function.
+/// `mix::gain_record` is deleted too, by the same record and for the stronger
+/// reason: the conversion *is* the derivation now, and two of them is the drift
+/// `mix.rs` exists to end. The comments below name it where it stood, because
+/// what this test compares against is the record that function wrote rather
+/// than the function.
 ///
-/// And the other direction: an operation this program has no control for
-/// writes no record here either, and the answer says *which* kind of
-/// nothing rather than a bare `None` — which is the whole of what the
-/// three answers buy.
+/// And the other direction: an operation this program has no control for writes
+/// no record here either, and the answer says *which* kind of nothing rather
+/// than a bare `None` — which is the whole of what the three answers buy.
 #[test]
 fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
     assert_eq!(
@@ -6745,21 +6683,21 @@ fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
     );
 }
 
-/// **The one record an operation writes**, for the tests that know there
-/// is exactly one.
+/// The one record an operation writes, for the tests that know there is exactly
+/// one.
 ///
-/// **For the four whose record needs no reading at all**, which is where
-/// `Current::default()` — *I read nothing* — is the honest answer. A
-/// conversion that answered anything but a single record for one of those
-/// four is this file's assumption breaking rather than a test needing a
-/// helper, which is why the panic says so.
+/// For the four whose record needs no reading at all, which is where
+/// `Current::default()` — *I read nothing* — is the honest answer. A conversion
+/// that answered anything but a single record for one of those four is this
+/// file's assumption breaking rather than a test needing a helper, which is why
+/// the panic says so.
 ///
-/// **The mask's operation is not one of them** and must not be passed
-/// here: its record is written out of the operation *and* a reading of the
-/// running mask (ADR-0201), so it would come back `Owed(NotRead)` and this
-/// would panic — correctly, and saying which operation. What the mask's
-/// tests hand in is a reading, through [`reading`] where there is a deck
-/// and by hand where there is not.
+/// The mask's operation is not one of them and must not be passed here: its
+/// record is written out of the operation *and* a reading of the running mask
+/// (ADR-0201), so it would come back `Owed(NotRead)` and this would panic —
+/// correctly, and saying which operation. What the mask's tests hand in is a
+/// reading, through [`reading`] where there is a deck and by hand where there
+/// is not.
 pub(super) fn only_record(operation: &Operation) -> Record {
     match written(operation, &Current::default()) {
         Written::Records(records) if records.len() == 1 => records.into_iter().next().unwrap(),
@@ -6770,25 +6708,24 @@ pub(super) fn only_record(operation: &Operation) -> Record {
     }
 }
 
-/// **A refused wipe says which refusal it was and where the next attempt
-/// is made**, rather than *refused*.
+/// A refused wipe says which refusal it was and where the next attempt is made,
+/// rather than *refused*.
 ///
 /// `karakuri_console::view::Go` answers which of the two it is because the
 /// console is what can see it; the sentence is this window's, and
 /// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
-/// is what it owes: the constraint and the numbers, never a bare no. A
-/// press on `go` that printed nothing would read exactly like a press on
-/// the card beside it, which is the failure the whole `Go` type exists to
-/// prevent.
+/// is what it owes: the constraint and the numbers, never a bare no. A press on
+/// `go` that printed nothing would read exactly like a press on the card beside
+/// it, which is the failure the whole `Go` type exists to prevent.
 ///
-/// **The two are asserted to be different sentences**, for
-/// [`an_operation_whose_record_is_owed_is_said_rather_than_swallowed`]'s
-/// reason one test up: a window that printed one line for both would tell
-/// an operator with four decks and no shape that they need a second deck.
+/// The two are asserted to be different sentences, for
+/// [`an_operation_whose_record_is_owed_is_said_rather_than_swallowed`]'s reason
+/// one test up: a window that printed one line for both would tell an operator
+/// with four decks and no shape that they need a second deck.
 ///
-/// **Not word for word.** What has to hold is that each names what would
-/// have to change — the shape pill for one, a second deck for the other —
-/// and that the count is in the one whose count is the constraint.
+/// Not word for word. What has to hold is that each names what would have to
+/// change — the shape pill for one, a second deck for the other — and that the
+/// count is in the one whose count is the constraint.
 #[test]
 fn a_refused_wipe_says_which_refusal_it_was_and_where_to_go_next() {
     let no_shape = refusal(&Go::NoShape, 4);
@@ -6825,55 +6762,53 @@ fn a_refused_wipe_says_which_refusal_it_was_and_where_to_go_next() {
     );
 }
 
-/// **An operation whose record nobody can write yet does not silently do
-/// nothing**, and it is not the same event as one that writes no record on
-/// purpose.
+/// An operation whose record nobody can write yet does not silently do nothing,
+/// and it is not the same event as one that writes no record on purpose.
 ///
-/// This is what the third answer is *for*, and the cheap harness is the
-/// one that treats *not `Records`* as a no-op. A press that emitted
-/// `TapBeat` would then look exactly like a press that emitted
-/// `SelectDeck` — nothing printed and nothing moved — and an operator
-/// would read the first as *the tap did not take* when what happened is
-/// *nobody has decided what a tap writes* (`Owed` is a question, not an
-/// error: ADR-0194).
+/// This is what the third answer is *for*, and the cheap harness is the one
+/// that treats *not `Records`* as a no-op. A press that emitted `TapBeat` would
+/// then look exactly like a press that emitted `SelectDeck` — nothing printed
+/// and nothing moved — and an operator would read the first as *the tap did not
+/// take* when what happened is *nobody has decided what a tap writes* (`Owed`
+/// is a question, not an error: ADR-0194).
 ///
-/// **The operation this names has had to change twice**, which is the test
-/// doing what it says on the line below. It was `FadeDeck`, which stopped
-/// being owed the day the transition settings became a reading; it was
-/// then `Wipe`, which stopped the day the front shape went over with them
-/// and the soft edge turned out to be the arriving deck's. It is now
-/// `Operation::TapBeat` — and that one is a different shape rather than
-/// the next in a queue: what a tap owes is the beat lock's answer and not
-/// a value any surface holds, so no reading added to `Current` closes it.
+/// The operation this names has had to change twice, which is the test doing
+/// what it says on the line below. It was `FadeDeck`, which stopped being owed
+/// the day the transition settings became a reading; it was then `Wipe`, which
+/// stopped the day the front shape went over with them and the soft edge turned
+/// out to be the arriving deck's. It is now `Operation::TapBeat` — and that one
+/// is a different shape rather than the next in a queue: what a tap owes is the
+/// beat lock's answer and not a value any surface holds, so no reading added to
+/// `Current` closes it.
 ///
-/// **The second half has been re-pointed once, and the reason is worth
-/// reading.** It was `FadeDeck`, on the grounds that this panel held no
-/// transition settings to hand over — and the day the transition row was
-/// wired into this window that stopped being true, without this test going
-/// red: it builds a `Current::default()` by hand, so it went on passing
-/// while its own sentence had become false. That is the failure mode
-/// `docs/contributing.md` §3 is about, met from the wrong side.
+/// The second half has been re-pointed once, and the reason is worth reading.
+/// It was `FadeDeck`, on the grounds that this panel held no transition
+/// settings to hand over — and the day the transition row was wired into this
+/// window that stopped being true, without this test going red: it builds a
+/// `Current::default()` by hand, so it went on passing while its own sentence
+/// had become false. That is the failure mode `docs/contributing.md` §3 is
+/// about, met from the wrong side.
 ///
-/// **It is `Operation::SetMaskPosition` against a reading nobody took**,
-/// and the second half stopped being about this window on 2026-09-10. Its
-/// record is `Record::Mask` written whole and it needs the shape, the angle
-/// and the softness it does not name (ADR-0201). Until that day
-/// [`reading`]'s mask arm answered for `SetMaskShape` and for a wipe's
-/// arriving deck and for nothing else, so this *was* a gap in this file —
-/// which is what ADR-0334 recorded and ADR-0341 closed with one arm.
+/// It is `Operation::SetMaskPosition` against a reading nobody took, and the
+/// second half stopped being about this window on 2026-09-10. Its record is
+/// `Record::Mask` written whole and it needs the shape, the angle and the
+/// softness it does not name (ADR-0201). Until that day [`reading`]'s mask arm
+/// answered for `SetMaskShape` and for a wipe's arriving deck and for nothing
+/// else, so this *was* a gap in this file — which is what ADR-0334 recorded and
+/// ADR-0341 closed with one arm.
 ///
-/// **What it asserts now is the third answer itself**, which is why the
-/// operation did not have to change a third time: handed a `Current` with
-/// no mask in it — a reading that was not taken, whatever the reason —
-/// the conversion says *which* reading is missing rather than sending a
-/// front back to wherever a default put it, mid-wipe. That the real
-/// reading is now taken is asserted where there *is* a deck,
-/// `gpu::the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on`,
-/// which is the half a test with no device cannot make.
+/// What it asserts now is the third answer itself, which is why the operation
+/// did not have to change a third time: handed a `Current` with no mask in it —
+/// a reading that was not taken, whatever the reason — the conversion says
+/// *which* reading is missing rather than sending a front back to wherever a
+/// default put it, mid-wipe. That the real reading is now taken is asserted
+/// where there *is* a deck,
+/// `gpu::the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on`, which is
+/// the half a test with no device cannot make.
 ///
-/// **Neither sentence is asserted word for word.** What has to hold is
-/// that the window says something, that it names the operation and the
-/// reason, and that the two answers are two different sentences.
+/// Neither sentence is asserted word for word. What has to hold is that the
+/// window says something, that it names the operation and the reason, and that
+/// the two answers are two different sentences.
 #[test]
 fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
     // Owed, and `NotSettled` is the reason: a tap's record is the beat
@@ -7001,23 +6936,20 @@ fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
     );
 }
 
-/// **The deck head's two operations, as far as this program can take them
-/// without a device** — and they go the same distance now, which is the
-/// point.
+/// The deck head's two operations, as far as this program can take them without
+/// a device — and they go the same distance now, which is the point.
 ///
-/// They used to go different distances: a scrub became a record and a sync
-/// mode did not, and the second half of that is what
-/// `tests/panel_column.rs`'s one exemption rested on — the chip's badge
-/// stayed `plan` because an operator who pressed it reached the emission
-/// and not the move. That test said the day it stopped being true it would
-/// stop being true here, and this is here.
+/// They used to go different distances: a scrub became a record and a sync mode
+/// did not, and the second half of that is what `tests/panel_column.rs`'s one
+/// exemption rested on — the chip's badge stayed `plan` because an operator who
+/// pressed it reached the emission and not the move. That test said the day it
+/// stopped being true it would stop being true here, and this is here.
 ///
-/// **The two are still not the same conversion, and that is what the
-/// second half asserts.** A scrub is relative and reads the transport it
-/// moves from; a mode is absolute and reads the session tempo, replacing
-/// the anchor and clearing the scrub. A sync mode that came out carrying
-/// the position the slot was scrubbed to would be the two conversions
-/// having been made one.
+/// The two are still not the same conversion, and that is what the second half
+/// asserts. A scrub is relative and reads the transport it moves from; a mode
+/// is absolute and reads the session tempo, replacing the anchor and clearing
+/// the scrub. A sync mode that came out carrying the position the slot was
+/// scrubbed to would be the two conversions having been made one.
 #[test]
 fn the_deck_heads_two_operations_go_different_distances() {
     // **The scrub is relative, so the record is where the slot is plus
@@ -7122,13 +7054,13 @@ fn the_deck_heads_two_operations_go_different_distances() {
     );
 }
 
-/// **The two crates walk the sync modes in one order**, which is what
-/// makes `view::Pane::allows` line up with the field it fills.
+/// The two crates walk the sync modes in one order, which is what makes
+/// `view::Pane::allows` line up with the field it fills.
 ///
-/// [`inspector`] builds that array by mapping `EngineSync::ALL` and the
-/// console reads it by indexing [`SYNCS`], so the two orders are one order
-/// or the panel skips the wrong mode — silently, and only on material that
-/// refuses something. Two arrays cannot be made one by a comment.
+/// [`inspector`] builds that array by mapping `EngineSync::ALL` and the console
+/// reads it by indexing [`SYNCS`], so the two orders are one order or the panel
+/// skips the wrong mode — silently, and only on material that refuses
+/// something. Two arrays cannot be made one by a comment.
 #[test]
 fn the_two_crates_walk_the_sync_modes_in_one_order() {
     assert_eq!(EngineSync::ALL.len(), SYNCS.len());
@@ -7145,8 +7077,8 @@ fn the_two_crates_walk_the_sync_modes_in_one_order() {
 }
 
 /// [`tally`] the other way round, for the assertion above alone — the
-/// vocabulary's residency as the engine's, so that the round trip through
-/// the wire name can be compared against something.
+/// vocabulary's residency as the engine's, so that the round trip through the
+/// wire name can be compared against something.
 fn residency_back(residency: karakuri_operation::Residency) -> Residency {
     match residency {
         karakuri_operation::Residency::Live => Residency::Live,
@@ -7155,10 +7087,10 @@ fn residency_back(residency: karakuri_operation::Residency) -> Residency {
     }
 }
 
-/// [`blend_mode`] the other way round, for the assertion above alone —
-/// which is why it is here and not beside it: nothing the program *runs*
-/// needs to go this direction, and a conversion in `src` with one test as
-/// its only caller would be an abstraction with no second call site.
+/// [`blend_mode`] the other way round, for the assertion above alone — which is
+/// why it is here and not beside it: nothing the program *runs* needs to go
+/// this direction, and a conversion in `src` with one test as its only caller
+/// would be an abstraction with no second call site.
 fn blend_mode_back(blend: BlendMode) -> Blend {
     match blend {
         BlendMode::Add => Blend::Add,
@@ -7167,24 +7099,22 @@ fn blend_mode_back(blend: BlendMode) -> Blend {
     }
 }
 
-/// **Anything that makes texels this frame keeps the loop awake, and the
-/// list is closed.**
+/// Anything that makes texels this frame keeps the loop awake, and the list is
+/// closed.
 ///
-/// [`live`] decides whether the loop asks for another frame, and it is the
-/// one decision in this file that has already been got wrong twice in the
-/// same direction. The first time it was set once and never cleared, so
-/// folding the picture away left the window drawing at full rate — found
-/// by an operator on another machine following this file's own
-/// instructions, which said the window goes quiet, and getting 270 frames.
-/// The second time it was **the picture alone**, which is the same failure
-/// with a preview under it: fold the picture and deck A goes on
-/// auditioning while the loop stops asking for frames, so the panel keeps
-/// changing and nothing draws it.
+/// [`live`] decides whether the loop asks for another frame, and it is the one
+/// decision in this file that has already been got wrong twice in the same
+/// direction. The first time it was set once and never cleared, so folding the
+/// picture away left the window drawing at full rate — found by an operator on
+/// another machine following this file's own instructions, which said the
+/// window goes quiet, and getting 270 frames. The second time it was the
+/// picture alone, which is the same failure with a preview under it: fold the
+/// picture and deck A goes on auditioning while the loop stops asking for
+/// frames, so the panel keeps changing and nothing draws it.
 ///
-/// So the assertion is over every sink, not over the one this program
-/// fills: a cell nobody has wired up yet is asserted live all the same,
-/// because the failure is a sink left out of the list rather than a sink
-/// that is off.
+/// So the assertion is over every sink, not over the one this program fills: a
+/// cell nobody has wired up yet is asserted live all the same, because the
+/// failure is a sink left out of the list rather than a sink that is off.
 ///
 /// It needs no device: an `egui::TextureId` is a number, and what is being
 /// asserted is a rule about `Option`s.
@@ -7235,15 +7165,14 @@ fn anything_that_makes_texels_keeps_the_loop_awake() {
     );
 }
 
-/// **Two paths or none, and anything else is a refusal rather than a
-/// guess.**
+/// Two paths or none, and anything else is a refusal rather than a guess.
 ///
 /// [`sources_from`] is the whole of this program's command line and this is
-/// what stops it growing a second one. The mistake it will actually be
-/// given is *one* path — a Set is two files and reads like one thing — and
-/// that is refused by name rather than paired with a default renderer,
-/// because a program that silently supplied half the material would draw
-/// something nobody asked for and say nothing about it.
+/// what stops it growing a second one. The mistake it will actually be given is
+/// *one* path — a Set is two files and reads like one thing — and that is
+/// refused by name rather than paired with a default renderer, because a
+/// program that silently supplied half the material would draw something nobody
+/// asked for and say nothing about it.
 ///
 /// A CPU test: nothing here opens a file, and a path that does not exist is
 /// still a path. What is behind one is [`checked`]'s to complain about.
@@ -7294,16 +7223,16 @@ fn a_set_is_two_paths_or_none_and_anything_else_is_refused() {
     );
 }
 
-/// **`--mcp` takes a port, and it is refused in the three ways a flag with a
-/// value is refused.**
+/// `--mcp` takes a port, and it is refused in the three ways a flag with a
+/// value is refused.
 ///
 /// The first two are [`value_for`]'s and are the two the other flags already
-/// meet — a flag at the end of the line does not fall back to a default, and
-/// a flag whose value is the next flag does not eat it. The third is
+/// meet — a flag at the end of the line does not fall back to a default, and a
+/// flag whose value is the next flag does not eat it. The third is
 /// [`number_for`]'s and is new here, because this is the first flag on this
-/// command line that takes a number: a port that is not a port is a mistake
-/// on the command line, and a run that started serving on some other number
-/// would be the wrong kind of helpful.
+/// command line that takes a number: a port that is not a port is a mistake on
+/// the command line, and a run that started serving on some other number would
+/// be the wrong kind of helpful.
 #[test]
 fn the_mcp_flag_takes_a_port_and_is_refused_the_three_ways_a_valued_flag_is() {
     let read = |args: &[&str]| sources_from(args.iter().map(|a| a.to_string()).collect::<Vec<_>>());
@@ -7351,21 +7280,21 @@ fn the_mcp_flag_takes_a_port_and_is_refused_the_three_ways_a_valued_flag_is() {
     );
 }
 
-/// **A wire request reaches the slot's watcher, and the rest of that
-/// watcher's aim is restated with it.**
+/// A wire request reaches the slot's watcher, and the rest of that watcher's
+/// aim is restated with it.
 ///
-/// The three points `mcp::WireRequest` owes, checked without a window: the
-/// edge is replaced rather than appended and keyed on the input, the slot is
+/// The three points `mcp::WireRequest` owes, checked without a window: the edge
+/// is replaced rather than appended and keyed on the input, the slot is
 /// re-aimed with the run's whole wiring, and a slot this deck has not got is
 /// refused in the one sentence every surface refuses one in.
 ///
-/// **The other fields are the point of the second assertion.** An `Aim` is
-/// every field of a slot's identity, and a rewiring that restated only the
-/// edges would come back with the outgoing slot's camera, fold and salts —
-/// a defect that shows on the *next* build rather than on the rewiring,
-/// which is why it is asserted here rather than left to be seen. **The Set
-/// the slot is running is among them**, and it is the one whose symptom is
-/// not a picture at all: versions filed under the wrong Set, or under none.
+/// The other fields are the point of the second assertion. An `Aim` is every
+/// field of a slot's identity, and a rewiring that restated only the edges
+/// would come back with the outgoing slot's camera, fold and salts — a defect
+/// that shows on the *next* build rather than on the rewiring, which is why it
+/// is asserted here rather than left to be seen. The Set the slot is running is
+/// among them, and it is the one whose symptom is not a picture at all:
+/// versions filed under the wrong Set, or under none.
 #[test]
 fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() {
     let edge = |node: &str, slot: &str, to: &str| karakuri_engine::set::Edge {
@@ -7478,39 +7407,38 @@ fn a_wire_request_reaches_the_slots_watcher_with_the_rest_of_its_aim_restated() 
     );
 }
 
-/// **A press on the Inspector deck head's fold re-aims the slot, and the
-/// rest of that watcher's aim is restated with it.**
+/// A press on the Inspector deck head's fold re-aims the slot, and the rest of
+/// that watcher's aim is restated with it.
 ///
-/// The test above one operation along, and it is the same property for the
-/// same reason: a `watch::Aim` is every field of a slot's identity, so an
-/// arm that changed the layering and left the rest behind would come back
-/// with the outgoing slot's fold, capacity, salts, camera and Set — on the
-/// *next* build rather than on the press, which is the hardest version of
-/// it to see (ADR-0228, ADR-0314).
+/// The test above one operation along, and it is the same property for the same
+/// reason: a `watch::Aim` is every field of a slot's identity, so an arm that
+/// changed the layering and left the rest behind would come back with the
+/// outgoing slot's fold, capacity, salts, camera and Set — on the *next* build
+/// rather than on the press, which is the hardest version of it to see
+/// (ADR-0228, ADR-0314).
 ///
-/// **`Aiming::at` is what the second half asserts against.** A press that
-/// sent an aim and left `at` behind would leave the next re-aim restating
-/// the layering the run launched with, so the third assertion here is that
-/// a *second* press comes back to where the first one put it rather than to
-/// where the run started.
+/// `Aiming::at` is what the second half asserts against. A press that sent an
+/// aim and left `at` behind would leave the next re-aim restating the layering
+/// the run launched with, so the third assertion here is that a *second* press
+/// comes back to where the first one put it rather than to where the run
+/// started.
 ///
-/// No window, no device and no `Deck` — `composited` is a free function
-/// over the aims for exactly this.
-/// **A procedure loaded over a layer re-aims the slot with exactly one file
-/// replaced, and leaves `Aim::set` where it is** — ADR-0338's decision 3,
-/// at the seam it crosses.
+/// No window, no device and no `Deck` — `composited` is a free function over
+/// the aims for exactly this. A procedure loaded over a layer re-aims the slot
+/// with exactly one file replaced, and leaves `Aim::set` where it is —
+/// ADR-0338's decision 3, at the seam it crosses.
 ///
-/// Three things it would be wrong about silently: the position it lands on
-/// (the **first node of that kind**), the file it puts there (the
-/// procedure's own bytes, in the deck's scratch), and everything else about
-/// the aim, which has to come back restated rather than defaulted. The
-/// fourth is the one the maintainer answered: the versions this slot writes
-/// from here on go on being filed under the Set it started from.
+/// Three things it would be wrong about silently: the position it lands on (the
+/// first node of that kind), the file it puts there (the procedure's own bytes,
+/// in the deck's scratch), and everything else about the aim, which has to come
+/// back restated rather than defaulted. The fourth is the one the maintainer
+/// answered: the versions this slot writes from here on go on being filed under
+/// the Set it started from.
 ///
-/// No window, no device and no `Deck` — `overlaying` takes the aim.
-/// **The strip reads `<base> + <kir>` once a layer has been written over
-/// what a deck is playing**, and the base is the Set it is filed under —
-/// or the launch pair where it is filed under none (ADR-0338).
+/// No window, no device and no `Deck` — `overlaying` takes the aim. The strip
+/// reads `<base> + <kir>` once a layer has been written over what a deck is
+/// playing, and the base is the Set it is filed under — or the launch pair
+/// where it is filed under none (ADR-0338).
 #[test]
 fn the_strip_reads_the_base_and_the_procedure_written_over_it() {
     assert_eq!(
@@ -7828,25 +7756,25 @@ fn a_composite_press_re_aims_the_slot_and_restates_the_rest_of_its_aim() {
     assert!(composited(&mut aims, &Operation::Quit).is_none());
 }
 
-/// **The two flags say where this program's data is, and either may sit on
-/// either side of the pair.**
+/// The two flags say where this program's data is, and either may sit on either
+/// side of the pair.
 ///
-/// The order half is the one an operator meets: they type the flags in
-/// whatever order they think of them, and `karakuri-cli` accepts `--store`
-/// before or after its own command for exactly this reason
+/// The order half is the one an operator meets: they type the flags in whatever
+/// order they think of them, and `karakuri-cli` accepts `--store` before or
+/// after its own command for exactly this reason
 /// (`list_sets_prints_and_is_never_a_run`). A parser that matched on the
-/// argument slice — which is what this one was — can only ever accept one
-/// of the two spellings.
+/// argument slice — which is what this one was — can only ever accept one of
+/// the two spellings.
 ///
-/// **And the pair still wins**, which is the claim [`Sources`]'s doc makes
-/// about these flags not being a second material vocabulary: `--presets`
-/// moves what a run with *no* paths opens on and reaches nothing else, so
-/// a line with both a library and a pair plays the pair.
+/// And the pair still wins, which is the claim [`Sources`]'s doc makes about
+/// these flags not being a second material vocabulary: `--presets` moves what a
+/// run with *no* paths opens on and reaches nothing else, so a line with both a
+/// library and a pair plays the pair.
 ///
-/// Not quite a CPU test, and this is what changed: resolving a presets
-/// root is existence checks on real directories. The library it names is
-/// this workspace's own `examples/`, which is on the disk whenever these
-/// tests run at all.
+/// Not quite a CPU test, and this is what changed: resolving a presets root is
+/// existence checks on real directories. The library it names is this
+/// workspace's own `examples/`, which is on the disk whenever these tests run
+/// at all.
 #[test]
 fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() {
     let of = |args: &[&str]| sources_from(args.iter().map(|a| (*a).to_string()));
@@ -7958,26 +7886,24 @@ fn the_two_flags_say_where_the_data_is_and_may_sit_on_either_side_of_the_pair() 
     );
 }
 
-/// **The capacity is the L1's own declaration, read off the `Checked`.**
+/// The capacity is the L1's own declaration, read off the `Checked`.
 ///
-/// It was `const CAPACITY: u32 = 262144` here — `drift_shell.kir`'s
-/// declared default, transcribed — for as long as this file could only ever
-/// load that one file. It takes a path now, so a transcription would be
-/// right about one `.kir` and silently wrong about every other: a procedure
-/// written for 131072 elements would run at 262144 and nothing would say
-/// so.
+/// It was `const CAPACITY: u32 = 262144` here — `drift_shell.kir`'s declared
+/// default, transcribed — for as long as this file could only ever load that
+/// one file. It takes a path now, so a transcription would be right about one
+/// `.kir` and silently wrong about every other: a procedure written for 131072
+/// elements would run at 262144 and nothing would say so.
 ///
-/// **It is not `karakuri_ir::DEFAULT_CAPACITY` either**, which is the
-/// language default for a file that declared nothing and is what
-/// `check_header` makes unreachable for an L1 that passed checking. The
-/// number below is asserted rather than derived on purpose, and **it is the
-/// reference workload's rather than this program's**: `docs/contributing.md`
-/// §1 names `examples/drift_cloud.kset` at 1280x720, and 262144 is what that
-/// Set's L1 declares. It used to be asserted of whatever a bare `cargo run
-/// -p karakuri` opened on, which coupled the workload to the demo and is
-/// ADR-0270. What is still asserted of the shipped pair is that its capacity
-/// is read from its own file, which is a different property and the one this
-/// test is named for.
+/// It is not `karakuri_ir::DEFAULT_CAPACITY` either, which is the language
+/// default for a file that declared nothing and is what `check_header` makes
+/// unreachable for an L1 that passed checking. The number below is asserted
+/// rather than derived on purpose, and it is the reference workload's rather
+/// than this program's: `docs/contributing.md` §1 names
+/// `examples/drift_cloud.kset` at 1280x720, and 262144 is what that Set's L1
+/// declares. It used to be asserted of whatever a bare `cargo run -p karakuri`
+/// opened on, which coupled the workload to the demo and is ADR-0270. What is
+/// still asserted of the shipped pair is that its capacity is read from its own
+/// file, which is a different property and the one this test is named for.
 #[test]
 fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
     let sources = shipped();
@@ -8047,7 +7973,7 @@ fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
     );
 }
 
-/// **The pair a bare run plays, for the tests that need one on the disk.**
+/// The pair a bare run plays, for the tests that need one on the disk.
 ///
 /// [`Sources::under`] takes a preset library and does not go looking for one;
 /// this is the going-looking, and in a test binary the answer is always the
@@ -8056,24 +7982,25 @@ fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
 /// it is for, and it is why these tests can assert the pair is on the disk
 /// without an install anywhere.
 ///
-/// A function rather than an `impl Default` on [`Sources`], because a
-/// `Default` is what baked the build machine's own tree into a shipped binary:
-/// a type whose default value is a search of the filesystem invites exactly
-/// that call from production, and a production caller now has to say which
-/// library it means.
+/// A function rather than an `impl Default` on [`Sources`], because a `Default`
+/// is what baked the build machine's own tree into a shipped binary: a type
+/// whose default value is a search of the filesystem invites exactly that call
+/// from production, and a production caller now has to say which library it
+/// means.
 ///
-/// **One `.kir`, parsed and checked, for the tests that need a `Checked` and no window.**
+/// One `.kir`, parsed and checked, for the tests that need a `Checked` and no
+/// window.
 ///
 /// Reachable from test modules because it is at the file's own scope.
 ///
-/// **`karakuri-environment`'s own five stages and not a sixth spelling.** This
-/// used to be a hand-rolled parse-then-check, which is what the run itself used
-/// to build a slot from; the run compiles through
+/// `karakuri-environment`'s own five stages and not a sixth spelling. This used
+/// to be a hand-rolled parse-then-check, which is what the run itself used to
+/// build a slot from; the run compiles through
 /// [`karakuri_environment::compile::sort_slot`] now, because that is the one
 /// place that keeps the bytes a node's address is derived from
 /// ([`karakuri_environment::compile::Placed::source`]). What is left here is a
-/// test helper, and a test helper with its own compiler would be a second answer
-/// to *does this file check* the day either moved.
+/// test helper, and a test helper with its own compiler would be a second
+/// answer to *does this file check* the day either moved.
 #[cfg(test)]
 pub(crate) fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
     match karakuri_environment::compile::load(path) {
@@ -8093,7 +8020,7 @@ pub(crate) fn shipped() -> Sources {
     Sources::under(&presets.dir)
 }
 
-/// **The shipped pair in every slot**, for the tests that build an [`Engine`].
+/// The shipped pair in every slot, for the tests that build an [`Engine`].
 ///
 /// A *run* may not do this — [`working_copies`] is what a run calls, and its
 /// whole point is that no two slots watch one file — and this helper is not a
@@ -8107,24 +8034,25 @@ pub(crate) fn shipped_slots() -> Vec<Sources> {
     std::iter::repeat_n(shipped(), SLOTS).collect()
 }
 
-/// **The reference workload's pair**, for the tests whose claim is about a cost
+/// The reference workload's pair, for the tests whose claim is about a cost
 /// rather than about what this program opens on.
 ///
 /// `docs/contributing.md` §1 names `examples/drift_cloud.kset` —
-/// `drift_shell.kir` at the 262144 elements it declares, with
-/// `soft_points.kir` — and this resolves those two out of the same preset
-/// library [`shipped`] answers from. It is deliberately **not**
-/// [`shipped_slots`], and the two were one value until 2026-09-07.
+/// `drift_shell.kir` at the 262144 elements it declares, with `soft_points.kir`
+/// — and this resolves those two out of the same preset library [`shipped`]
+/// answers from. It is deliberately not [`shipped_slots`], and the two were one
+/// value until 2026-09-07.
 ///
-/// **What separated them is a test going quiet rather than red.**
+/// What separated them is a test going quiet rather than red.
 /// [`ADR-0271`](../../../docs/adr/0271-the-panel-opens-on-the-demo-rather-than-on-the-reference-workloads-pair.md)
 /// moved the default pair to `examples/star_vortex.kset`'s two parts, which are
-/// closed-form and 10240 elements. `gpu::the_budget_parks_a_deck_and_the_strip_carries_both_residencies`
-/// then measured 1.8 ms a slot against a 2.7 ms headroom and the governor
-/// answered `NoPrimingNeeded` — a closed-form Set with nothing to warm — so the
-/// park the test is named for was still a park and no longer the budget's. Which
-/// pair a bare run opens on is a demo decision (ADR-0270); whether the budget
-/// refuses a second Live slot is not, and it needs material chosen for its cost.
+/// closed-form and 10240 elements.
+/// `gpu::the_budget_parks_a_deck_and_the_strip_carries_both_residencies` then
+/// measured 1.8 ms a slot against a 2.7 ms headroom and the governor answered
+/// `NoPrimingNeeded` — a closed-form Set with nothing to warm — so the park the
+/// test is named for was still a park and no longer the budget's. Which pair a
+/// bare run opens on is a demo decision (ADR-0270); whether the budget refuses
+/// a second Live slot is not, and it needs material chosen for its cost.
 #[cfg(test)]
 pub(crate) fn reference() -> Sources {
     let shipped = shipped();

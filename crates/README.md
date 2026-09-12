@@ -88,7 +88,7 @@ graph TD
 | **4** | [`karakuri-mcp`](karakuri-mcp/README.md) | Model Context Protocol JSON-RPC server exposing AI pair-programming tools | `karakuri-environment` | Refactored & Documented |
 | **5** | [`karakuri-console`](karakuri-console/README.md) | VJ performance console UI (egui): Program, Staging, Master, Sequencer, Library | `karakuri-layout`, `operation` | Refactored & Documented |
 | **5** | [`karakuri-cli`](karakuri-cli/README.md) | Headless session player, offscreen batch PNG renderer, and benchmarks | `engine`, `environment`, `audio` | Refactored & Documented |
-| **5** | [`karakuri`](karakuri/README.md) | Primary desktop GUI application: winit windowing and bridge coordination | `console`, `engine`, `environment` | Pending |
+| **5** | [`karakuri`](karakuri/README.md) | Primary desktop GUI application: winit windowing and bridge coordination | `console`, `engine`, `environment` | Refactored & Documented |
 
 ---
 
