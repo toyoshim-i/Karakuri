@@ -1,73 +1,31 @@
-//! The L5 mix: several textures folded into one, each through its own edge.
+//! Compositing for L5 mix and merge passes.
 //!
-//! **One node kind, one shader, two roles** — `docs/ir-spec.md`, "L5". The
-//! top-level mix is what an operator sees and rides, with a surface wired to
-//! every input; a [`crate::node::Merge`] is the same thing inside a Set,
-//! folding several renderers into the one `Texture` a Set has to produce.
-//! Nothing about the compositing differs between them, and this module is the
-//! part that is the same.
+//! Combines multiple texture inputs into a single output texture according to
+//! per-edge properties (gain, opacity, blend mode, and mask).
 //!
-//! # What belongs to the edge, and what belongs to the performance
-//!
-//! [`Input`] is the whole of an edge into an L5: `gain`, `opacity`, `blend`,
-//! `mask`, and whether the input contributes at all. Those travel with the edge
-//! wherever it is nested.
-//!
-//! `residency`, priming, hot swap, budget governance, `transport` and
-//! metering are properties of **a Set being played**. They sit beside the
-//! top-level mix in [`crate::deck`] because that is where a performance happens,
-//! not because they belong to L5 — which is why `live` here is a plain flag
-//! rather than a `Residency`: the deck decides what silence and residency mean
-//! and hands down the answer, and a nested merge has neither question.
-//!
-//! **The master out is a third thing and is neither of those**, which is why it
-//! is an argument to [`Composite::write_uniform`] rather than a field of
-//! [`Input`] or a member of [`crate::deck::Deck`]'s slots. It belongs to
-//! nothing being played and to no edge: it is the level the *folded frame*
-//! leaves this pass at, which is the entry to the master chain. It is applied
-//! here because here is where that frame is written, and because the alternative
-//! — the present pass, where `exposure` already multiplies — is downstream of
-//! every master effect that will ever be built and is therefore the wrong end
-//! of the chain. See
-//! `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
-//!
-//! # Why a skip rather than a blend at zero
-//!
-//! An input that does not contribute is skipped. `0.0 * x` is only zero for
-//! finite `x`, and an HDR target is allowed to hold an infinity or a NaN — a
-//! generated L4 that divides by zero is a compiling procedure, not a broken
-//! build. Blending that at zero would put a NaN in every channel, so a fader
-//! pulled to silence would take the whole mix down with it. See
-//! `shaders/composite.wgsl`, which says the same thing from the other side.
+//! Inputs that do not contribute (for example, silenced inputs or masked-out regions)
+//! are skipped to avoid propagating NaNs or infinities from HDR targets.
 
 use crate::deck::{Blend, Mask, MAX_SLOTS};
 use crate::present::Present;
 
-/// Byte size of the `Mix` uniform: eight `vec4`s, one field per column and one
-/// input per lane, and the master out as a ninth column holding one scalar —
-/// 132 bytes rounded up to the 16 a uniform struct is sized in.
+/// Byte size of the `Mix` uniform buffer: eight vec4s for input columns and one scalar for master out.
 const UNIFORM_SIZE: u64 = 144;
 
-/// Where the master out sits in that block, immediately after the eight
-/// per-input columns. A named constant because the write and the shader's
-/// struct have to agree and only one of them is Rust.
+/// Byte offset where the master output level is stored in the uniform buffer.
 const MASTER_OUT_AT: usize = 128;
 
-/// **One edge into an L5.** Everything the mix knows about an input, and
-/// nothing about where it came from.
+/// Configuration for a single input edge into an L5 compositing pass.
 #[derive(Debug, Clone, Copy)]
 pub struct Input {
-    /// The level the material arrives at. Colour only.
+    /// Input gain factor.
     pub gain: f32,
-    /// The fader across the blend, `[0, 1]`. The only one of the two that
-    /// touches what this input covers.
+    /// Blend opacity in the range [0, 1].
     pub opacity: f32,
     pub blend: Blend,
-    /// What shape of the frame this input reaches.
+    /// Spatial mask configuration for this input.
     pub mask: Mask,
-    /// Whether it contributes to this frame at all. **The caller's answer, not
-    /// this module's** — the deck folds residency and silence into it; a merge
-    /// inside a Set has only silence to fold.
+    /// Whether this input contributes to the current frame.
     pub live: bool,
 }
 
@@ -84,43 +42,20 @@ impl Default for Input {
 }
 
 impl Input {
-    /// **Unity: one term, at full level, under `add`.** `0.0 + 1.0 * src` is
-    /// `src` exactly, so a mix of one input at unity hands on the material
-    /// rather than a rendering of it — which is what makes an audition, and a
-    /// merge nobody has touched, bit-exact.
+    /// Returns an input configured with unity gain and opacity under additive blend.
     pub fn unity() -> Input {
         Input::default()
     }
 
-    /// Whether this edge contributes, folding in the two ways a control can be
-    /// silence. Separate from the flag because *which* settings count is the
-    /// blend mode's answer: `opacity` at zero silences under every mode, and
-    /// `gain` at zero does not silence `over` — a black card covers.
+    /// Returns whether this edge actively contributes to the composite output.
     fn contributes(&self) -> bool {
         self.live && !self.blend.silent_at(self.gain, self.opacity) && !self.mask.hides_everything()
     }
 }
 
-/// **Make one edge live and the rest not**, in place.
+/// Sets the edge at index `at` to live and all other edges to inactive in place.
 ///
-/// Selecting among alternatives, which is what a set of edges into one L5 is
-/// for once several of them draw the same thing differently. `false` if `at`
-/// names no edge, and **nothing is written when it does not**: a selection
-/// nobody can honour must not leave a mix half-silenced on the way to finding
-/// that out.
-///
-/// **A slice rather than a method on whatever owns the edges**, because the
-/// rule is about the list and not about the owner: exactly one live, whoever
-/// is holding them. [`crate::set::Set::select_renderer`] is the one caller,
-/// and this is the half that can be read without a device.
-///
-/// **`live` and not `opacity`**, which is the difference between selecting and
-/// fading. The flag is what `Input::contributes` folds and what the shader
-/// skips on, so an unselected input is not read at all — where an opacity of
-/// zero is still a texel fetch and a multiply. Neither of them saves the
-/// *draw*: the renderer behind an unselected edge fills its own target this
-/// frame like every other. See [`crate::set::Set::select_renderer`] for what
-/// that costs.
+/// Returns `true` if `at` is valid, or `false` if `at` is out of bounds (leaving edges unchanged).
 pub fn select(edges: &mut [Input], at: usize) -> bool {
     if at >= edges.len() {
         return false;
@@ -131,7 +66,7 @@ pub fn select(edges: &mut [Input], at: usize) -> bool {
     true
 }
 
-/// The mix pass: one fullscreen triangle folding up to [`MAX_SLOTS`] textures.
+/// Fullscreen render pass for compositing up to [`MAX_SLOTS`] input textures.
 pub(crate) struct Composite {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
@@ -161,9 +96,7 @@ impl Composite {
                 binding: 1 + slot as u32,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    // Not filterable, because the mix does not sample: it
-                    // loads the texel under the fragment. No sampler is bound
-                    // here at all, which is what keeps a mix of one exact.
+                    // Non-filterable: texels are loaded directly per fragment without sampling.
                     sample_type: wgpu::TextureSampleType::Float { filterable: false },
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
@@ -196,12 +129,7 @@ impl Composite {
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    // Linear HDR out. The mix is folded in the shader, in input
-                    // order, so there is no blend state here: hardware
-                    // blending would put the order in the hands of whatever
-                    // sequence the passes happened to be recorded in — and
-                    // `over` makes that order visible in the picture rather
-                    // than only in the last bits.
+                    // Linear HDR output with shader-level compositing order.
                     format: Present::HDR_FORMAT,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
@@ -230,12 +158,7 @@ impl Composite {
         }
     }
 
-    /// The shader binds [`MAX_SLOTS`] textures whatever the caller's size is, so
-    /// a mix of fewer inputs fills the spare bindings with input 0's view. The
-    /// live flag for those is zero and the shader skips them, so nothing is
-    /// read through them; binding a view twice is cheaper and simpler than a
-    /// second pipeline per size, and far simpler than allocating four targets
-    /// for a mix of one.
+    /// Binds textures to pipeline slots, padding spare bindings with the first view.
     fn bind(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
@@ -263,35 +186,10 @@ impl Composite {
         self.bind_group = Composite::bind(device, &self.layout, &self.uniform, views);
     }
 
-    /// Write this frame's edges.
-    ///
-    /// **Separate from [`Composite::record`]**, on the same terms every node in
-    /// this engine separates them: a uniform is a queue write and a pass is an
-    /// encoder recording, and a Set writes its uniforms in `prepare` and records
-    /// in `draw`. The deck calls the two back to back because it has both in
-    /// hand at once.
-    ///
-    /// **`out` is not an edge**, and it is the one argument here that is not.
-    /// It is the master chain's entry level — one gain on the folded frame,
-    /// applied where this pass writes it and not where the tone mapper reads
-    /// it, with the master effects between the two. Nothing about it travels
-    /// with an input, so it is an argument rather than a field of [`Input`],
-    /// and a nested [`crate::node::Merge`] is inside a Set rather than at the
-    /// head of a master chain and passes 1.0. See
-    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`.
-    ///
-    /// Written every frame with the rest of the block rather than once when it
-    /// changes: a uniform half of which is refreshed and half of which is
-    /// remembered is one more thing that can go stale, and this costs 16 more
-    /// bytes on a write that was already happening.
-    ///
-    /// The write is a fixed 144 bytes off the stack — the render thread does not
-    /// allocate, and this is the render thread.
+    /// Writes uniform data for input edges and master output level.
     pub(crate) fn write_uniform(&self, queue: &wgpu::Queue, inputs: &[Input], out: f32) {
         let mut bytes = [0u8; UNIFORM_SIZE as usize];
         for (i, input) in inputs.iter().enumerate().take(MAX_SLOTS) {
-            // The blend mode is the shader's index rather than its name; the
-            // name is what a record carries.
             let fields = [
                 input.gain.to_le_bytes(),
                 input.opacity.to_le_bytes(),
@@ -311,8 +209,7 @@ impl Composite {
         queue.write_buffer(&self.uniform, 0, &bytes);
     }
 
-    /// Fold the inputs into `target`, from whatever [`Composite::write_uniform`]
-    /// last wrote.
+    /// Records the compositing pass into the command encoder.
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
         crate::pass::record_fullscreen_pass(
             encoder,
@@ -334,9 +231,6 @@ impl crate::pass::RenderPassNode for Composite {
 mod tests {
     use super::*;
 
-    /// **Exactly one live, and it is the one asked for.** The whole claim of a
-    /// selection: not "the chosen one is live", which a fold that turned
-    /// nothing off would also satisfy, but that everything else stopped.
     #[test]
     fn selecting_one_edge_leaves_exactly_one_live() {
         let mut edges = vec![Input::unity(); 3];
@@ -352,10 +246,6 @@ mod tests {
         }
     }
 
-    /// **Everything else about an edge survives being unselected**, which is
-    /// what makes a selection reversible in principle and what keeps it from
-    /// being a fader in disguise: a renderer selected away and back is at the
-    /// gain, opacity, blend and mask it was set to.
     #[test]
     fn a_selection_moves_the_flag_and_nothing_else() {
         let quiet = Input {
@@ -372,10 +262,6 @@ mod tests {
         assert_eq!((edges[0].gain, edges[0].opacity), (0.25, 0.5));
     }
 
-    /// **An edge that is not there writes nothing.** The refusal has to come
-    /// before the loop rather than out of it: silencing two renderers on the
-    /// way to discovering there is no third would take the picture away and
-    /// report the mistake at the same time.
     #[test]
     fn selecting_an_edge_that_is_not_there_leaves_every_edge_alone() {
         let mut edges = vec![Input::unity(); 2];
