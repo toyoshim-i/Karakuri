@@ -352,9 +352,7 @@ pub(crate) fn list_sets(
     // [`listing`], because it is a decision about *matching* and an operation
     // carries what it was asked for.
     let holds = holds.map(str::to_ascii_lowercase);
-    // The vocabulary's layer into the record's, which is the third spelling of
-    // this list and the one a Set file is written in — see [`layer_of`].
-    let layer = layer.map(|layer| karakuri_environment::setfile::layer_of(kind_of(layer)));
+    let layer = layer.map(karakuri_environment::meta::op_to_record);
     let opened = |e: StoreError| format!("the store at `{}`: {e}", state.store.display());
     let store = Store::open(&state.store).map_err(opened)?;
     let mut sets = karakuri_environment::setfile::summarise(&store).map_err(opened)?;

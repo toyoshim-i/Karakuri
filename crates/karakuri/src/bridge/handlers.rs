@@ -3292,9 +3292,9 @@ pub(crate) fn apply(
                     false => {
                         return Some(format!(
                             "  slot {slot}: no node {}:{index} to speak for",
-                            karakuri_environment::setfile::layer_name(
-                                karakuri_environment::setfile::layer_of(layer)
-                            )
+                            karakuri_environment::meta::layer_name(
+                                karakuri_environment::meta::layer_of(layer),
+                            ),
                         ))
                     }
                 },

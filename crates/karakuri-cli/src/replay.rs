@@ -657,8 +657,8 @@ fn apply_replayed(
             if !deck.set_authority(EngineSlot(slot as u8), layer, index, authority) {
                 eprintln!(
                     "  slot {slot}: no node {}:{index} to make {} — skipped",
-                    karakuri_environment::setfile::layer_name(
-                        karakuri_environment::setfile::layer_of(layer)
+                    karakuri_environment::meta::layer_name(
+                        karakuri_environment::meta::layer_of(layer),
                     ),
                     authority.name()
                 );

@@ -521,6 +521,6 @@ pub(crate) fn layer_spelled(layer: Layer) -> &'static str {
     LAYERS
         .iter()
         .copied()
-        .find(|kind| karakuri_environment::setfile::layer_of(*kind) == layer)
+        .find(|kind| karakuri_environment::meta::layer_of(*kind) == layer)
         .map_or("unknown", layer_name)
 }

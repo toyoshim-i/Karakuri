@@ -2535,8 +2535,8 @@ impl Live {
                 {
                     eprintln!(
                         "slot {slot}: no node {}:{index} to make {}",
-                        karakuri_environment::setfile::layer_name(
-                            karakuri_environment::setfile::layer_of(layer)
+                        karakuri_environment::meta::layer_name(
+                            karakuri_environment::meta::layer_of(layer),
                         ),
                         authority.name()
                     );

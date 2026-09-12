@@ -1093,7 +1093,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             value,
         } => {
             let slot = in_range(*slot)?;
-            let at = at.map(|node| (crate::setfile::kind_of(node.layer), node.index));
+            let at = at.map(|node| (crate::meta::kind_of(node.layer), node.index));
             let writes = match value {
                 karakuri_store::record::Value::Scalar(v) => vec![karakuri_engine::ParamWrite {
                     at,
@@ -1131,7 +1131,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             };
             Ok(Some(Change::Source {
                 slot,
-                layer: crate::setfile::kind_of(*layer),
+                layer: crate::meta::kind_of(*layer),
                 index: *index,
                 key: key.clone(),
                 binding,
@@ -1159,7 +1159,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Authority {
                 slot,
-                layer: crate::setfile::kind_of(at.layer),
+                layer: crate::meta::kind_of(at.layer),
                 index: at.index,
                 authority: level,
             }))
