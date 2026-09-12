@@ -68,28 +68,18 @@ struct Node {
     /// Folded by the operator: what [`Layout::collapse`] writes, what a
     /// [`Spec`] can start a node with, and what a saved arrangement carries.
     collapsed: bool,
-    /// **Declared**: a fold on this node leaves its edge behind rather than
-    /// taking it out of its parent's layout — [`Spec::keeps_its_edge`], and
-    /// [`Layout::is_closed`] for what the two of them together mean.
+    /// Indicates whether a fold on this node preserves its divider edge rather
+    /// than removing it from its parent's layout.
     ///
-    /// It is part of the arrangement in the sense `min` and `max` are — a
-    /// property of the tree the [`Spec`] built, not a state anything writes —
-    /// so it is on the wire with them. `default` rather than required,
-    /// because a file written before this existed says nothing about it and
-    /// what it means is *false*: every node in it folds the way every node
-    /// used to.
+    /// Corresponds to [`Spec::keeps_its_edge`] and [`Layout::is_closed`]. This
+    /// property is structural and serialized alongside bounds constraints.
     #[serde(default)]
     edge: bool,
     /// Set aside by whoever is drawing, because it has put that region
     /// somewhere else or has nowhere to put it.
     ///
-    /// **Never saved**, which is the whole of what `skip` says here and the
-    /// reason the wire format did not have to grow a field. It is a function
-    /// of the geometry the caller has in front of it, so the value that holds
-    /// after a load is derived on the next solve rather than remembered — and
-    /// a file that carried one could only disagree with the frame that read
-    /// it, which is a disagreement no loader could adjudicate because the file
-    /// does not know the size of the window it is opening into.
+    /// Ephemeral state skipped during serialization. Derived dynamically from
+    /// caller geometry on the next solve rather than persisted across sessions.
     #[serde(skip)]
     aside: bool,
     parent: Option<NodeId>,
@@ -124,13 +114,10 @@ mod unbounded {
     }
 }
 
-/// The arrangement itself: what the operator arranged, and nothing that is
-/// derived from it.
+/// The immutable arrangement definition, separate from derived layout solutions.
 ///
-/// **This half is what a solve may not write.** It is a separate struct so
-/// that saying so is the compiler's job rather than a comment's: the solve
-/// takes `&Arrangement`, so every node in it is read-only for the whole of the
-/// solve, and no amount of care is required to keep it that way.
+/// Kept distinct from solved layout state so that solver routines borrow
+/// `&Arrangement` immutably, guaranteeing that solving never mutates model nodes.
 #[derive(Debug, Clone)]
 struct Arrangement {
     nodes: Vec<Node>,
@@ -158,41 +145,24 @@ struct Solved {
     /// any child, so one buffer serves the whole recursion.
     sizes: Vec<f32>,
     frozen: Vec<bool>,
-    /// Parallel to the arena's nodes, like `rects`: how much extent each node
-    /// **can use** along its parent's axis, written by [`measure`] at the top
-    /// of every solve and read while the split above it hands out sizes.
+    /// Usable extent per node along its parent's axis, computed bottom-up by
+    /// [`measure`] at the start of each solve.
     ///
-    /// **It is here, and not on a node, because it is derived.** It is the one
-    /// thing in the solve that is computed bottom-up, so the next reader will
-    /// expect it to have been written into the tree — it is not, and cannot
-    /// be: [`measure`] takes the arrangement by shared reference like the rest
-    /// of the solve, so P-0082 holds for it by the same construction. Nothing
-    /// here survives the solve that computed it; every entry is rewritten
-    /// before it is read again.
+    /// Stored in scratch buffers rather than on nodes to preserve immutability
+    /// of the arrangement during layout passes.
     usable: Vec<f32>,
 }
 
 /// An arrangement of regions, and the rectangles it currently solves to.
 ///
-/// `serde` on this is the whole of saving and restoring an operator's
-/// arrangement: the stored sizes, the collapsed flags and the viewport are all
-/// here, and the solved rectangles are not — they are derived, and a derived
-/// value on disk is a second answer waiting to disagree with the first.
+/// Transient states like [`set_aside`](Layout::set_aside) are excluded from
+/// serialization. Saved arrangements preserve operator intentions, while
+/// transient layout omissions are re-evaluated by callers upon display.
 ///
-/// **[`set_aside`](Layout::set_aside) is on the derived side of that line and
-/// is not written either**, which is why the wire format is the same one it
-/// was: a saved arrangement is what the operator arranged, and a node the
-/// caller has taken out of the layout is a fact about the geometry it was
-/// drawing at the time. A load leaves every node laid out, and the first
-/// caller to draw the loaded arrangement says otherwise where it still holds.
-///
-/// **A file that deserialises without error is one that can be solved, hit
-/// tested and operated.** Loading it is where that is established, and it is
-/// the only place it has to be: a truncated, hand-edited or older file whose
-/// arena is not a tree — an index addressing no node, a node in two places, a
-/// parent pointer that disagrees with the list holding it — is refused with a
-/// sentence saying which node and what is wrong with it, rather than loading
-/// and panicking, aborting or hanging later. See `check_structure`.
+/// Any arrangement that deserializes successfully is structurally validated to
+/// form a well-formed tree suitable for solving, hit-testing, and interaction.
+/// Structural errors (such as cycles or broken parent links) are rejected during
+/// deserialization with descriptive errors. See `check_structure`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "Wire")]
 pub struct Layout {
@@ -282,20 +252,10 @@ fn duplicate_name(nodes: &[Node]) -> Option<&str> {
     })
 }
 
-/// Why a saved arrangement was refused: one variant per rule the file broke.
+/// Detailed reasons for rejecting a serialized layout arrangement.
 ///
-/// **Every number in a message is an index into the file's own `nodes` array**,
-/// because that is what a person looking at a saved session has in front of
-/// them — a `NodeId` is written on the wire as the bare number it is, so
-/// "node 7" is the eighth entry of `nodes` and nothing has to be counted twice.
-///
-/// It is deliberately not public, and could not usefully be: `serde` turns it
-/// into the deserialiser's own error by way of `Display` before any caller of
-/// `from_str` sees it, so the sentence *is* the whole of what reaches anyone.
-/// It is a type rather than a `format!` at each site so that the nine
-/// sentences sit together where they can be read as one voice, and so that
-/// adding a rule to [`check_structure`] is adding a variant here rather than
-/// another string somewhere else.
+/// Error messages report node numbers matching raw indices in the serialized
+/// `nodes` array for straightforward debugging of saved files.
 #[derive(Debug, thiserror::Error)]
 enum LoadError {
     /// A file truncated to nothing still parses as a `Layout` with an empty
@@ -371,57 +331,18 @@ fn records(parent: Option<usize>) -> String {
     }
 }
 
-/// Everything a saved arrangement has to be before any of it can be solved,
-/// hit-tested or operated, checked in one pass on the load path.
+/// Validates tree structure and invariants for deserialized arrangements in a single pass.
 ///
-/// **The arena's invariants, and what each of them costs when it is missing:**
+/// Ensures the following invariants:
+/// 1. The arena has at least one node and `root` addresses a valid node.
+/// 2. The root has no parent, and every other node's `parent` correctly matches the split holding it.
+/// 3. Every child index addresses a valid node in the arena.
+/// 4. No node is referenced more than once (preventing sharing and cycles).
+/// 5. Every node in the arena is reachable from the root.
+/// 6. A recorded solo target addresses a valid node.
 ///
-/// 1. There is at least one node, and `root` addresses one. Otherwise the first
-///    line of [`Layout::solve`] indexes past the rectangle buffer.
-/// 2. The root has no parent, and every other node's `parent` is exactly the
-///    split whose children list holds it. This is the one that matters most:
-///    [`Layout::visible`] and [`Arrangement::is_ancestor`] walk *up*, and a
-///    parent chain that closes into a loop makes them **hang**, which is the
-///    worst of these failures because there is no panic to read afterwards.
-///    Deriving the parents from the walk instead would hide the disagreement
-///    rather than report it, and the file would still be a file that disagrees
-///    with itself.
-/// 3. Every child index addresses a node. Otherwise the first solve indexes
-///    past the arena.
-/// 4. No node is reached twice. A children list that points at a node already
-///    in the tree is either one node in two places or a cycle, and
-///    [`solve_subtree`] recurses on children — so a cycle is a stack overflow
-///    at load, which aborts the process rather than returning an error.
-/// 5. Every node is reached. This one is a decision rather than a crash: an
-///    orphan solves to nothing, draws nothing, and cannot be reached by a fold
-///    or a solo above it, so it is a region that exists in the file and nowhere
-///    else. A loader that accepted it would be accepting a file it has already
-///    read as a tree plus some debris.
-/// 6. A recorded solo addresses a node. It is an index like any other, and
-///    [`Layout::soloed`] hands it to a caller that will ask for its rectangle
-///    or its name — so an out-of-range one indexes past the arena at whatever
-///    later moment a status line is drawn.
-///
-/// **What [`Layout::set_aside`] carries is not checked, because it is not
-/// here.** It is not on the wire at all, so a file cannot disagree with itself
-/// about it and there is no rule for this to enforce: every node of a loaded
-/// arrangement is laid out until the caller says otherwise, whatever the file
-/// says and whatever the arena it was assembled into had been carrying. A
-/// check would need a second copy of the bit to compare against, and putting
-/// one in the file to check it is precisely what not saving it avoids.
-///
-/// **[`Layout::new`] needs none of this**, and does not pay for it: [`build`]
-/// pushes each node once, hands it the parent it was built under, and fills a
-/// split's children with the ids it just created, so 1 to 5 hold of anything a
-/// [`Spec`] can express. Only a file can be wrong in these ways, so only the
-/// file is checked.
-///
-/// Not every disagreement is refused. A `min` above a `max`, a negative or NaN
-/// size, a split with no children — a [`Spec`] can express all of those and
-/// [`Layout::new`] accepts them, so refusing them here would make a file and
-/// the code that writes it disagree about what an arrangement is. The solve is
-/// total over them: it clamps at zero, iterates a bounded number of passes and
-/// leaves the discrepancy as trailing space.
+/// Note that programmatic specs built via [`Layout::new`] guarantee these
+/// invariants by construction.
 fn check_structure(nodes: &[Node], root: NodeId, soloed: Option<NodeId>) -> Result<(), LoadError> {
     let len = nodes.len();
     if len == 0 {
@@ -499,19 +420,10 @@ impl Layout {
     /// The viewport starts empty, so every rectangle is zero until
     /// [`set_viewport`](Layout::set_viewport) says otherwise.
     ///
-    /// # Names are unique, and this is where that is checked
+    /// # Panics
     ///
-    /// **Panics if two nodes carry the same name**, whether they are views,
-    /// splits or one of each. A name is how every surface that is not a
-    /// pointer — the keyboard, a MIDI map, MCP — reaches a region, so a name
-    /// that answers to two regions is an arrangement that cannot be operated,
-    /// and [`find`](Layout::find) resolving whichever came first would make it
-    /// look like it could. It is a mistake in a [`Spec`], which is code, so it
-    /// is caught at the earliest moment it exists rather than at the first
-    /// operation aimed at the wrong pane.
-    ///
-    /// Deserialising a layout whose names collide fails with the same message
-    /// instead of panicking: a file is data, and data is rejected.
+    /// Panics if two nodes carry the same name. Names must be globally unique
+    /// across views and splits within the layout.
     pub fn new(spec: Spec) -> Layout {
         let mut nodes = Vec::new();
         let root = build(&mut nodes, spec, None);
@@ -587,31 +499,12 @@ impl Layout {
         }
     }
 
-    /// A split's **placed** children in order: the ones it tiles, which is
-    /// what a divider index counts and what
-    /// [`set_divider`](Layout::set_divider) and [`Hit::Divider`] mean by one.
+    /// Returns an iterator over placed children of `id` in layout order.
     ///
-    /// **This is the distinction most easily got wrong**, and it was stated
-    /// only in prose on `set_divider` while every caller reconstructed the
-    /// filter for itself. Boundary 1 of a split whose second child is folded
-    /// is between its third and fourth children, and a caller counting
-    /// [`children`](Layout::children) would move the wrong pair.
-    ///
-    /// An iterator rather than a `Vec`, because this is on the frame path: a
-    /// view asking which children a split is laying out does it per split per
-    /// frame, and it must not allocate to do it.
-    ///
-    /// # It was `visible_children`, and the name had to move
-    ///
-    /// Only the children's own flags are read, so a child inside a folded
-    /// split has always been listed here while [`visible`](Layout::visible)
-    /// answered no for it — the two questions were never the same one, and
-    /// calling both of them *visible* was already a name doing two jobs. A
-    /// **closed** child settles it: it is folded, it is not drawn, it takes no
-    /// extent, and it is still one of the children this split tiles, because
-    /// keeping its divider is the whole of the edge it keeps
-    /// ([`is_closed`](Layout::is_closed)). *Placed* is the question a divider
-    /// index asks and this is its name.
+    /// Placed children are those currently tiled by the split (non-collapsed,
+    /// or closed nodes keeping their edge). Divider indices in
+    /// [`set_divider`](Layout::set_divider) and [`Hit::Divider`] address
+    /// boundaries between placed children.
     pub fn placed_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
         self.children(id)
             .iter()
@@ -619,14 +512,7 @@ impl Layout {
             .filter(|c| self.arrangement.placed(c.0))
     }
 
-    /// The split `id` hangs from, or `None` for the root.
-    ///
-    /// **Upward, which nothing else here answers.** A [`hit`](Layout::hit)
-    /// only ever resolves to a leaf or to a divider, so *fold the split
-    /// enclosing what is under the pointer* has no route without this, and a
-    /// caller that keeps its own parent per node has a second copy of the
-    /// arena to keep in step — which the console did, and had to rebuild
-    /// whenever the layout was replaced.
+    /// Returns the split `id` hangs from, or `None` for the root.
     pub fn parent(&self, id: NodeId) -> Option<NodeId> {
         self.node(id.0).parent
     }
@@ -681,11 +567,9 @@ impl Layout {
         self.viewport
     }
 
-    /// Give the layout the space it has. Marks it dirty; nothing is recomputed
-    /// until [`solve`](Layout::solve).
+    /// Sets the viewport extent for solving layout.
     ///
-    /// **This is not an edit.** No stored size changes, however small the
-    /// viewport gets — see the crate documentation.
+    /// Does not mutate stored node sizes. Marks the layout as dirty.
     pub fn set_viewport(&mut self, viewport: Rect) {
         let viewport = sane(viewport);
         if viewport != self.viewport {
@@ -703,17 +587,9 @@ impl Layout {
         self.solved.rects[id.0]
     }
 
-    /// Whether `id` is drawn: false if it or any ancestor is out of the
-    /// layout, either folded by the operator or
-    /// [`set_aside`](Layout::set_aside) by whoever is drawing.
+    /// Returns true if `id` and all its ancestors are currently in layout.
     ///
-    /// **This is the question every reader that lays something out asks**, and
-    /// it is the disjunction rather than either bit. A node is out of the
-    /// layout for two independent reasons that arrive from two different
-    /// places and are cleared by two different callers, and code that asks
-    /// only one of them is correct right up until the other one happens —
-    /// which is a defect that appears as an empty strip where a region used to
-    /// be, at a moment nobody was editing the arrangement.
+    /// Returns false if `id` or any ancestor is collapsed or set aside.
     pub fn visible(&self, id: NodeId) -> bool {
         let mut cur = Some(id);
         while let Some(NodeId(i)) = cur {
@@ -725,15 +601,8 @@ impl Layout {
         true
     }
 
-    /// Whether `id` itself is collapsed — **folded by the operator**,
-    /// regardless of its ancestors.
-    ///
-    /// This is [`collapse`](Layout::collapse)'s bit and only it: the answer to
-    /// *did someone fold this*, which is what an operation that unfolds asks
-    /// and what is written down when the arrangement is saved. It is **not**
-    /// the answer to *is this laid out* — a node nobody folded may still have
-    /// been [`set_aside`](Layout::set_aside) — and
-    /// [`visible`](Layout::visible) is what answers that.
+    /// Returns true if `id` itself is collapsed by the operator, regardless of
+    /// ancestor visibility or `set_aside` status.
     pub fn is_collapsed(&self, id: NodeId) -> bool {
         self.node(id.0).collapsed
     }
@@ -760,23 +629,11 @@ impl Layout {
         self.arrangement.placed(id.0)
     }
 
-    /// Whether `id` is **closed**: folded by the operator, and left in its
-    /// parent's line at zero extent with its divider still beside it.
+    /// Returns true if `id` is closed: collapsed while preserving its divider
+    /// edge, with no active solo in effect.
     ///
-    /// **A reading rather than a state**, and it is the whole of what this
-    /// crate adds for a fold that can be undone with a pointer: it is
-    /// [`is_collapsed`](Layout::is_collapsed) and
-    /// [`keeps_its_edge`](Layout::keeps_its_edge) and no solo in force. There
-    /// is no third bit to save, to restore, or to disagree with the fold — see
-    /// [`Spec::keeps_its_edge`] for why the declaration is the node's and
-    /// [`solo`](Layout::solo) for why a solo takes the edge with everything
-    /// else.
-    ///
-    /// **A closed node is not [`visible`](Layout::visible)**, and nothing
-    /// under it is: there is nothing of it on screen, which is the point. What
-    /// is on screen is the gap beside it, and
-    /// [`hit`](Layout::hit) answers that gap with a
-    /// [`Hit::Divider`] like any other.
+    /// Closed nodes have zero visible extent, but their divider remains
+    /// placed and hit-testable.
     pub fn is_closed(&self, id: NodeId) -> bool {
         self.arrangement.is_closed(id.0)
     }
@@ -791,14 +648,7 @@ impl Layout {
         self.node(id.0).edge
     }
 
-    /// What a [`solo`](Layout::solo) is holding, or `None` where none is in
-    /// force.
-    ///
-    /// **Which, not whether.** A status line saying *soloed* and not what is
-    /// soloed is telling an operator the one thing they can already see, and
-    /// the collapsed flags a solo leaves behind do not say which node it was
-    /// aimed at — a split with a single child produces exactly the flags its
-    /// child does — so it is stored rather than recovered.
+    /// Returns the active solo target node, if one is currently in effect.
     pub fn soloed(&self) -> Option<NodeId> {
         self.arrangement.soloed
     }
@@ -812,20 +662,12 @@ impl Layout {
 
     // -- operations ------------------------------------------------------
 
-    /// Fold `id` away: zero extent, and no divider beside it — **unless the
-    /// node [`keeps_its_edge`](Layout::keeps_its_edge)**, in which case the
-    /// divider stays and the node is [`closed`](Layout::is_closed) rather than
-    /// gone.
+    /// Collapses `id`, removing its extent.
     ///
-    /// Its stored size is untouched either way, which is the whole of why
-    /// [`expand`](Layout::expand) can restore it exactly. Folding a split
-    /// folds everything inside it: nothing under a collapsed node is
-    /// [`visible`](Layout::visible), and none of it takes any space.
-    ///
-    /// **There is one fold and not two**, and that is deliberate: which of the
-    /// two a fold turns out to be is read off the node rather than chosen by
-    /// whoever is folding, so a key, a pointer, a map and a restored file
-    /// cannot disagree about it.
+    /// If `id` was configured with [`Spec::keeps_its_edge`], its divider edge
+    /// remains placed ([`is_closed`](Layout::is_closed)). Ancestor collapse
+    /// transitively hides all descendant nodes. Stored size is preserved for
+    /// subsequent [`expand`](Layout::expand).
     pub fn collapse(&mut self, id: NodeId) {
         self.set_collapsed(id, true);
     }
@@ -849,38 +691,11 @@ impl Layout {
         }
     }
 
-    /// Take `id` out of the layout, or put it back, for a reason that is not
-    /// the operator's: whoever is drawing has put that region somewhere else,
-    /// or has nowhere to put it.
+    /// Sets or clears the transient `aside` flag for `id`.
     ///
-    /// The effect on the solve is exactly a fold's — zero extent, no divider
-    /// beside it, nothing under it [`visible`](Layout::visible), and no stored
-    /// size touched. **What differs is whose bit it is**, and that is why it
-    /// is a second bit rather than the same one:
-    ///
-    /// - A fold is the operator's. It is written by
-    ///   [`collapse`](Layout::collapse), it is saved with the arrangement, and
-    ///   a load brings it back.
-    /// - This is a function of the geometry, and of nothing the operator did.
-    ///   It is **never saved**, because the next caller to draw the
-    ///   arrangement re-derives it from the space it actually has.
-    ///
-    /// One bit for both makes the two indistinguishable, and both directions
-    /// of that cost something an operator sees: unfolding while a region is
-    /// set aside would put an empty strip back where the caller had already
-    /// drawn that region elsewhere, and a fold the operator never made would
-    /// be written into their saved arrangement.
-    ///
-    /// So the two are independent in both directions.
-    /// [`expand`](Layout::expand) does not lay out a node that is set aside,
-    /// this does not unfold one the operator folded, and a node that is both
-    /// needs both cleared. Each bit is cleared by whoever set it.
-    ///
-    /// **Writing the value a node already carries marks nothing dirty**, which
-    /// is what makes this safe to call every frame for every node: a caller
-    /// re-stating the arrangement it stated last frame costs a comparison per
-    /// node and no solve at all. A layout that went dirty on every frame would
-    /// cost a still panel the price of a moving one.
+    /// Used by rendering callers when a region is temporarily displayed elsewhere
+    /// or unavailable. This state is not serialized and is evaluated dynamically
+    /// per frame. Writing identical values avoids marking the layout dirty.
     pub fn set_aside(&mut self, id: NodeId, aside: bool) {
         if self.node(id.0).aside != aside {
             self.node_mut(id.0).aside = aside;
@@ -888,23 +703,10 @@ impl Layout {
         }
     }
 
-    /// Collapse everything that is neither `id`, nor on the path from the root
-    /// to it, nor inside it — so `id` is left holding the whole viewport.
+    /// Isolates `id` to occupy the full viewport by collapsing all sibling subtrees.
     ///
-    /// The collapsed state it replaces is kept whole, panes that were already
-    /// collapsed included, and [`unsolo`](Layout::unsolo) puts it back. A solo
-    /// while already soloed re-aims without saving again: however many times it
-    /// is called, one `unsolo` returns to the arrangement before the first.
-    ///
-    /// **It saves and writes the operator's fold, and only that.** A solo is
-    /// an operation on the arrangement, and what
-    /// [`set_aside`](Layout::set_aside) carries is not part of the
-    /// arrangement: saving it would mean restoring, at the unsolo, a bit the
-    /// caller has since rewritten from a geometry that changed *because* of
-    /// the solo. So a node that was set aside is still set aside through a
-    /// solo and after the unsolo — including the soloed node itself, which is
-    /// left holding the viewport and still not laid out until whoever set it
-    /// aside decides otherwise. This crate does not guess that for it.
+    /// Preserves prior collapsed states so [`unsolo`](Layout::unsolo) can restore
+    /// them exactly. Does not alter transient `aside` states.
     pub fn solo(&mut self, id: NodeId) {
         let a = &mut self.arrangement;
         if a.soloed.is_none() {
@@ -933,33 +735,12 @@ impl Layout {
         self.dirty = true;
     }
 
-    /// Move the boundary between visible children `index` and `index + 1` of
-    /// `split` to `position`, an **absolute coordinate along the split's
-    /// axis**, and return where it actually landed.
+    /// Moves the boundary between placed children `index` and `index + 1` of
+    /// `split` to `position` (an absolute coordinate along the split's axis).
     ///
-    /// Absolute rather than a delta on purpose. A pointer drag that runs past a
-    /// stop and comes back would accumulate drift under deltas — every frame
-    /// past the stop contributes a difference the clamp throws away, and the
-    /// pointer comes back to find the boundary somewhere it was never dragged
-    /// to. With an absolute position there is nothing to accumulate: the same
-    /// pointer coordinate always names the same boundary position.
-    ///
-    /// **A drag stops at the first constraint and never pushes through to a
-    /// further neighbour.** Only the two children either side of the boundary
-    /// change; their combined extent is what it was.
-    ///
-    /// The boundary is the *far edge of child `index`* — the near edge of the
-    /// divider drawn between them, which is also where [`hit`](Layout::hit)
-    /// centres that divider's grab area.
-    ///
-    /// **This is an edit, and it edits what is on screen.** It reads the
-    /// solved rectangles, so a drag made while the viewport is too small to
-    /// show the pair — which a pointer cannot do, since
-    /// [`hit`](Layout::hit) finds no divider there, but a keyboard or a remote
-    /// caller can — writes the sizes that viewport implies. That is not the
-    /// viewport writing back into the model; it is a caller asking for a
-    /// boundary to be somewhere, at a moment when everywhere is the same
-    /// place.
+    /// Returns the clamped coordinate where the divider actually settled.
+    /// Boundary adjustments stop at the immediate bounds of the adjacent pair
+    /// and do not cascade into outer siblings.
     pub fn set_divider(&mut self, split: NodeId, index: usize, position: f32) -> f32 {
         self.solve();
         let (axis, _) = match self.arrangement.split_of(split.0) {
@@ -974,15 +755,8 @@ impl Layout {
             _ => return position,
         };
 
-        // **A boundary beside a closed node does not move**, and this is the
-        // one place that has to say so. A closed node's extent is zero and is
-        // not the boundary's to give away: the arithmetic below would write a
-        // size the solve then caps back to zero, and the size it would
-        // overwrite is the one [`expand`](Layout::expand) exists to restore —
-        // so a drag against a closed pane would quietly forget how wide that
-        // pane used to be. What a drag there means instead is *open it*, and
-        // that is the caller's: it is a gesture with a threshold in it, and
-        // this crate has no hand. See `karakuri_console::panel::Panel::moved`.
+        // A boundary adjacent to a closed node cannot be dragged. Closed nodes
+        // maintain zero extent and require explicit reopening.
         if self.arrangement.is_closed(a) || self.arrangement.is_closed(b) {
             return axis.far(self.solved.rects[a]);
         }
@@ -1040,23 +814,10 @@ impl Layout {
         }
     }
 
-    /// Give flexible child `c` the weight that makes it solve to `size`, given
-    /// what its siblings now claim.
+    /// Gives flexible child `c` the weight that solves to `size`, given remaining sibling claims.
     ///
-    /// Its siblings' flexible weights total `others` and share the pool with
-    /// it, so `size = pool * w / (others + w)` inverts to the line below. With
-    /// no flexible sibling the child takes the whole pool whatever its weight
-    /// is, and the weight is left alone.
-    ///
-    /// **A fixed sibling is counted at its stored size here, and the solve may
-    /// claim less of it** — see [`measure`]. Capping it here instead would be
-    /// reading a measurement taken before [`resize_pair`](Layout::resize_pair)
-    /// wrote the very sizes this is inverting, which for a fixed *view* is the
-    /// size it used to store. So the pool can be understated where a split
-    /// holds a capped fixed child *and* more than one flexible one, and the
-    /// drag lands a little short of where it was aimed —
-    /// [`set_divider`](Layout::set_divider) re-solves and returns where it
-    /// actually landed, so what a caller is told is still true.
+    /// Fixed siblings are accounted at stored size. Recomputes flexible weight
+    /// proportionally from available pool.
     fn reweight(&mut self, split: usize, c: usize, size: f32) {
         let Some((axis, _)) = self.arrangement.split_of(split) else {
             return;
@@ -1119,24 +880,14 @@ impl Layout {
     ///    fixed child scales from its stored size rather than its capped
     ///    claim: only a `max` stops it growing there, which is ADR-0157
     ///    unchanged.
-    /// 5. If the viewport is smaller than the sum of the minima, everything
-    ///    scales down in proportion, floored at zero. A minimum is a
-    ///    preference, not a licence to overflow, and **a rectangle is never
-    ///    negative.**
+    /// 5. If the viewport is smaller than the sum of minima, layout scales
+    ///    down proportionally, floored at zero. Rectangles are never negative.
     ///
-    /// The one case where children do not account for their parent exactly is
-    /// the mirror of step 5: where *every* visible child is sitting at its
-    /// maximum and there is still room, the remainder is left as empty space
-    /// after the last of them. A maximum is honoured rather than overridden —
-    /// a pane that says it is never wider than 480 is not made 1280 wide by
-    /// being the only one left on screen — so the alternative would be to hand
-    /// the space to whichever child the code happened to reach last, which is
-    /// an arrangement nobody asked for and no operator can undo.
+    /// If all visible children are constrained by maxima and leftover space remains,
+    /// trailing space is left empty to preserve maximum bounds.
     ///
-    /// **None of it can write a size back into the arrangement**, and that is
-    /// structural rather than careful: the two lines below split this layout
-    /// into the arrangement and the buffers, and everything past them holds the
-    /// arrangement by shared reference.
+    /// Solvers access the arrangement strictly via immutable references,
+    /// ensuring that solving never mutates model definitions.
     pub fn solve(&mut self) {
         if !self.dirty {
             return;
@@ -1163,33 +914,9 @@ impl Layout {
 
     // -- boundaries ------------------------------------------------------
 
-    /// The gap between visible children `index` and `index + 1` of `split` —
-    /// the boundary a [`set_divider`](Layout::set_divider) with the same
-    /// `index` moves, and the one a [`Hit::Divider`] with the same `index`
-    /// names. `None` where `split` is a view, or where either of that pair is
-    /// not there.
+    /// Returns the rectangle for the divider gap between placed children `index` and `index + 1` of `split`.
     ///
-    /// **A rectangle rather than a coordinate**, because both callers want it
-    /// that way. A view has to *draw* the divider, and what it draws is
-    /// exactly this rectangle — the space between two children, which is what
-    /// [`divider`](Layout::divider) is thick and spans the split across its
-    /// axis. A caller that wants the coordinate `set_divider` speaks in takes
-    /// [`Axis::origin`] of it, which is the far edge of the child before it.
-    ///
-    /// That is what a press needs and had no way to ask for: `set_divider`
-    /// says where a drag *landed* and nothing said where a boundary already
-    /// is, so a caller could not work out where along the boundary the pointer
-    /// took hold — and a divider that does not know that jumps to the pointer
-    /// the moment it is picked up.
-    ///
-    /// **Both sides of the pair are required, and that is the point.** The
-    /// console's own version of this checked only that child `index` existed
-    /// and returned that child's far edge, so folding the far side of a
-    /// boundary mid-drag handed back the split's own far edge — a position for
-    /// a boundary that is no longer there. Here the rectangle *is* the space
-    /// between the two, so there is nothing to return without both.
-    ///
-    /// Reads the solved rectangles: [`solve`](Layout::solve) first.
+    /// Returns `None` if `split` is a leaf view or if either child in the pair is absent.
     pub fn boundary(&self, split: NodeId, index: usize) -> Option<Rect> {
         debug_assert!(
             !self.dirty,
@@ -1207,12 +934,6 @@ impl Layout {
     /// addresses it, splits in the order [`children`](Layout::children) walks
     /// them.
     ///
-    /// A window has a pointer to find a boundary with; **a view has this** —
-    /// it is what a frame iterates to draw the dividers, and what a caller
-    /// with no pointer at all iterates to reach them by name. It was a test
-    /// helper first, which is what it looks like when a question the crate
-    /// should answer is answered somewhere it cannot be reached from.
-    ///
     /// An iterator rather than a `Vec`, because a frame that drew the dividers
     /// would otherwise allocate to find them. Nothing here reads a rectangle,
     /// so it does not need a solve; a boundary inside a folded split is listed
@@ -1226,37 +947,11 @@ impl Layout {
 
     // -- hit testing -----------------------------------------------------
 
-    /// What is under `p`, with a divider's grab area widened by `grab` on each
-    /// side.
+    /// Hit-tests point `p` against the layout, applying `grab` margin around dividers.
     ///
-    /// **A divider's grab area is wider than the divider it draws.** A boundary
-    /// drawn one pixel wide is not a target a hand can find, and widening what
-    /// is drawn instead would spend the panel's space on something that is
-    /// there to be dragged rather than to be seen. So a point inside the grab
-    /// area belongs to the divider, not to the view under it.
-    ///
-    /// **A node that is not laid out is not hit-testable**, and that includes
-    /// the root. The descent below tests a node's *children* against
-    /// `out_of_layout` and never the node it starts from, so the root was the
-    /// one node nothing asked about — and a folded root keeps the viewport
-    /// while everything under it is solved as usual, since a fold takes its
-    /// extent out of its *parent* and the root has none. The pointer therefore
-    /// went on resolving to bays and dividers on a panel drawing nothing at
-    /// all, [`visible`](Layout::visible) having answered no for every one of
-    /// them. It is
-    /// [P-0073](../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
-    /// and [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
-    /// on the pointer axis: a region that is not laid out claims no space,
-    /// declares no staleness, and is under nobody's pointer.
-    ///
-    /// **The way back goes through here for exactly one kind of fold.** A
-    /// folded region has no rectangle, so a pointer cannot reach it —
-    /// [`expand`](Layout::expand) and a solo's undo take a node or no argument
-    /// at all. A [`closed`](Layout::is_closed) one has no rectangle either,
-    /// and it still has its **divider**: the gap beside it answers
-    /// [`Hit::Divider`] like any other boundary, so a pointer can take hold of
-    /// the edge of a region that is not on screen. What that press then means
-    /// is the caller's, because it is a gesture and this crate has no hand.
+    /// Dividers take priority within `grab` distance of their boundary. Non-laid-out
+    /// or folded nodes return [`Hit::Nothing`]. Closed nodes are hit-testable via
+    /// their preserved divider.
     pub fn hit(&self, p: Point, grab: f32) -> Hit {
         debug_assert!(!self.dirty, "hit() read a stale solve; call solve() first");
         if !self.viewport.contains(p) {
@@ -1362,50 +1057,19 @@ impl Arrangement {
         }
     }
 
-    /// Whether node `i` is out of the layout on its own account: folded by
-    /// the operator, or set aside by whoever is drawing.
-    ///
-    /// **The one place the disjunction is written**, so that *should this be
-    /// laid out* is one question with one answer rather than a condition every
-    /// reader assembles for itself — which is how the two would come apart,
-    /// one reader at a time, the first time a third reason was added or a bit
-    /// was renamed. Nothing below reads either flag directly.
+    /// Returns true if node `i` is omitted from layout (either collapsed or set aside).
     fn out_of_layout(&self, i: usize) -> bool {
         self.nodes[i].collapsed || self.nodes[i].aside
     }
 
-    /// Whether node `i` is folded **and keeps its edge**: zero extent like any
-    /// other fold, and still one of the children its parent tiles, so the
-    /// divider beside it is still drawn and still hit-testable.
-    ///
-    /// **Three things and no fourth bit.** The operator's fold
-    /// ([`Layout::collapse`]), the node's own declaration
-    /// ([`Spec::keeps_its_edge`]), and *no solo in force*. Nothing here is
-    /// written by an operation: a closed node is a folded node read against
-    /// what its arrangement says folding it does, so there is no third state
-    /// to save, to restore, or to disagree with the first two.
-    ///
-    /// **The solo term is the whole of why this is not simply the declaration
-    /// and the bit.** [`Layout::solo`] collapses every node off the solo's
-    /// path, and what a solo promises is that one region holds the **whole**
-    /// viewport — an edge left behind is a divider's width of that viewport it
-    /// does not hold, twice over on a console with two panes. So a solo folds
-    /// everything the old way, whatever a node declares, and an unsolo puts
-    /// back exactly the folds it replaced — edges and all.
+    /// Returns true if node `i` is collapsed with [`Spec::keeps_its_edge`] and
+    /// no solo is active, preserving its divider edge.
     fn is_closed(&self, i: usize) -> bool {
         self.nodes[i].collapsed && self.nodes[i].edge && self.soloed.is_none()
     }
 
-    /// Whether node `i` is one of the children its parent **tiles**: what a
-    /// divider index counts, what a gap is drawn beside, and what
-    /// [`Layout::set_divider`] moves.
-    ///
-    /// **This is not [`Layout::visible`] and it never was.** That one walks
-    /// ancestors and answers *is this drawn*; this one reads a node's own two
-    /// flags and answers *does its parent lay it out in the line*. A child
-    /// inside a folded split has always been placed here and invisible there.
-    /// What is new is the other direction: a **closed** node is placed here
-    /// and takes no extent, which is exactly the edge it keeps.
+    /// Returns true if node `i` is placed in its parent's layout line (non-collapsed,
+    /// or closed while keeping its edge).
     fn placed(&self, i: usize) -> bool {
         !self.nodes[i].aside && (!self.nodes[i].collapsed || self.is_closed(i))
     }
@@ -1467,39 +1131,12 @@ impl Arrangement {
     }
 }
 
-/// How much extent node `i` **can use** along its parent's axis, written into
-/// `s.usable` for every node and returned for the caller that is summing it.
-/// `parent` is the axis the node is being laid out along, and `None` for the
-/// root, which is the viewport and is never asked.
+/// Computes the usable extent for node `i` bottom-up along `parent` axis,
+/// writing the result into `s.usable[i]` and returning it.
 ///
-/// **This is the one pass that runs bottom-up, and it still writes nothing
-/// into the arrangement.** It takes `&Arrangement` exactly as the rest of the
-/// solve does and puts its answer in the [`Solved`] buffers, so P-0082 is
-/// enforced here by the same borrow that enforces it everywhere else — the
-/// direction of the pass is not the direction of the writes. Said explicitly
-/// because a bottom-up pass is the shape a reader expects to see mutating
-/// nodes, and this one cannot.
-///
-/// The rule, which is short:
-///
-/// - a [`Sizing::Flex`] leaf can use any amount at all;
-/// - a [`Sizing::Fixed`] leaf can use exactly the size it stores;
-/// - a split can use the sum of its **visible** children's, plus the dividers
-///   that would go between them — infinite if any of them is, and **zero when
-///   none of them is visible**, since a split showing nothing needs no room to
-///   show it in;
-/// - and a node's own `max` caps all of the above, which is also what carries
-///   a maximum stated deep in a subtree up to the split that hands out the
-///   extent.
-///
-/// **A split laid out across its parent's axis is unbounded rather than a
-/// sum.** Every constraint inside it is stated along *its* axis, so its
-/// children's sizes are heights where the parent is handing out widths and
-/// adding them up would be arithmetic on two different questions. This crate
-/// measures one axis per node, so the honest answer there is "no cap", which
-/// is what `f32::INFINITY` says. The `visible` count is still consulted
-/// first: nothing is drawn inside a fully folded split whichever way it lays
-/// its children out.
+/// Flex leaves are unbounded; fixed leaves use their stored size; splits sum
+/// the usable sizes and dividers of visible children. If a split runs orthogonal
+/// to its parent's axis, it is treated as unbounded (`f32::INFINITY`).
 fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f32 {
     let content = match a.split_of(i) {
         None => match a.nodes[i].sizing {
@@ -1512,10 +1149,8 @@ fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f
             for k in 0..a.child_count(i) {
                 let c = a.child(i, k);
                 let child = measure(a, s, c, Some(axis));
-                // **Two questions, and a closed child answers them
-                // differently**: it can use nothing, so it adds nothing to the
-                // sum, and it is still tiled, so the divider beside it is
-                // still one of the gaps this split needs room for.
+                // Closed children contribute zero extent, but their divider is
+                // counted in tiled gap calculations.
                 if !a.out_of_layout(c) {
                     sum += child;
                 }

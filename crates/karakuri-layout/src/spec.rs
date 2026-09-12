@@ -1,15 +1,6 @@
-//! The declarative form an arrangement is written in.
+//! Declarative specification format for constructing panel arrangements.
 //!
-//! A [`Spec`] is a nested tree; a [`Layout`](crate::Layout) is the flat arena
-//! it builds into. Tests and the panel's default arrangement are written here
-//! because a nested literal is readable in a way an arena of parent pointers is
-//! not.
-//!
-//! **`Spec` is deliberately not serialisable.** Saving an operator's
-//! arrangement is `serde` on the whole `Layout`, which already carries the
-//! sizes a drag produced and the flags a collapse set; a second serialisable
-//! tree would be a second on-disk format for the same thing, and the two would
-//! disagree the first time one of them grew a field.
+//! A [`Spec`] is a nested builder tree that compiles into a flat [`Layout`](crate::Layout) arena.
 
 use crate::{Axis, Sizing};
 
@@ -34,12 +25,7 @@ pub enum Spec {
     },
     /// An axis, a divider thickness, and children laid out along it.
     ///
-    /// **A split may carry a name too, and most do not.** A region that can be
-    /// operated has to be addressable by name — the console's left pane *is* a
-    /// split, and "fold the left pane away" is an operation the keyboard, a
-    /// MIDI map and MCP all reach by that name. The rest are structure nobody
-    /// addresses, so the name is a [`named`](Spec::named) away rather than a
-    /// requirement.
+    /// An optional name allows the container to be addressed directly (e.g. for folding entire panes).
     Split {
         name: Option<String>,
         axis: Axis,
@@ -93,12 +79,9 @@ impl Spec {
         Spec::split(Axis::Column, divider, children)
     }
 
-    /// Name this node, so [`Layout::find`](crate::Layout::find) resolves it and
-    /// every surface can address it.
+    /// Names this node for resolution via [`Layout::find`](crate::Layout::find).
     ///
-    /// On a split this gives it the name it did not have; on a view it replaces
-    /// the one it was built with. **A name is used once in an arrangement** —
-    /// [`Layout::new`](crate::Layout::new) refuses one that is not.
+    /// Node names must be unique within an arrangement; duplicates are refused during layout construction.
     pub fn named(self, name: impl Into<String>) -> Spec {
         let mut spec = self;
         match &mut spec {
@@ -138,31 +121,10 @@ impl Spec {
         self.with(|_, _, _, c| *c = true)
     }
 
-    /// **A fold on this node leaves its edge behind.**
+    /// Configures the node to retain its divider boundary when collapsed.
     ///
-    /// A node that is folded normally leaves its parent's layout entirely: no
-    /// extent, and **no divider beside it**, so nothing about it is on screen
-    /// and the only way back is
-    /// [`expand`](crate::Layout::expand). A node that keeps its edge is folded
-    /// to zero extent and stays one of the children its parent tiles, so the
-    /// divider beside it is still drawn and still
-    /// [`hit`](crate::Layout::hit)-testable — which is a **pointer route back
-    /// in**, on a region that has no rectangle to press.
-    ///
-    /// **It is declared on the node rather than chosen by whoever folds it**,
-    /// because two callers deciding it apart is two answers to *what does
-    /// folding this do* — the mistake
-    /// [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
-    /// records one field along. A key, a pointer, a MIDI map, a restored
-    /// arrangement and MCP all fold the same node the same way.
-    ///
-    /// **A solo folds nothing this way**, whatever a node declares: a solo
-    /// leaves one region holding the whole viewport, and an edge left behind
-    /// is a strip of that viewport it does not hold. See
-    /// [`Layout::is_closed`](crate::Layout::is_closed).
-    ///
-    /// It costs the divider: a parent with a closed child still spends one
-    /// divider on it, where a fold that took the node out spends none.
+    /// When collapsed, the node is reduced to zero extent while remaining in its parent's
+    /// placed children, keeping the divider visible and hit-testable for mouse drag expansion.
     pub fn keeps_its_edge(self) -> Spec {
         let mut spec = self;
         match &mut spec {
