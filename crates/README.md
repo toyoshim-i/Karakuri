@@ -78,7 +78,7 @@ graph TD
 | **1** | [`karakuri-ir`](karakuri-ir/README.md) | Intermediate representation (`.kir`), parser, type-checker, and cost estimator | Pure leaf (no workspace deps) | Pending |
 | **1** | [`karakuri-layout`](karakuri-layout/README.md) | Geometry, split ratios, dock arrangements, and pane fold logic | Pure leaf (no workspace deps) | Refactored & Documented |
 | **2** | [`karakuri-audio`](karakuri-audio/README.md) | Audio device input capture, ring buffers, FFT analysis, and metering | `karakuri-signal` | Refactored & Documented |
-| **2** | [`karakuri-midi`](karakuri-midi/README.md) | MIDI controller input decoding, note/CC mapping to operations | `karakuri-operation` | Pending |
+| **2** | [`karakuri-midi`](karakuri-midi/README.md) | MIDI controller input decoding, note/CC mapping to operations | `karakuri-operation` | Refactored & Documented |
 | **2** | [`karakuri-pattern`](karakuri-pattern/README.md) | Algorithmic parameter sequences and modulation generators | `karakuri-operation` | Refactored & Documented |
 | **2** | [`karakuri-codegen`](karakuri-codegen/README.md) | Compiles checked `.kir` IR into optimized WGSL shader modules | `karakuri-ir` | Refactored & Documented |
 | **2** | [`karakuri-store`](karakuri-store/README.md) | Content-addressed storage (CAS) and append-only session journals | `sha2`, `memmap2` | Pending |
