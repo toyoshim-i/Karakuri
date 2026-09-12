@@ -15,30 +15,30 @@
 //! favourites.json                   the ids of the Sets that are starred
 //! ```
 //!
-//! `<hash>` is the artifact's content address rendered as bare lowercase
-//! hex (no `sha256:` prefix and no colon) so it is safe as a path component
-//! on every platform the store might run on.
+//! `<hash>` is the artifact's content address rendered as bare lowercase hex
+//! (no `sha256:` prefix and no colon) so it is safe as a path component on
+//! every platform the store might run on.
 //!
-//! **`arrangements/` is the fourth thing here and it is the operator's own.**
-//! An artifact is material, a Set is a projection of material, a session is a
+//! `arrangements/` is the fourth thing here and it is the operator's own. An
+//! artifact is material, a Set is a projection of material, a session is a
 //! timeline of material — and an arrangement is none of those: it is the shape
 //! of the console the operator plays them on, with no artifact in it. It is
-//! filed under a **name the operator picked**, because a name is the one handle
+//! filed under a name the operator picked, because a name is the one handle
 //! that does not move when something unrelated moves
-//! (`docs/principles/0087-name-the-property-never-the-shape.md`),
-//! and the name rule is a Set id's rule for the same reason it is a Set id's:
-//! it becomes one path component. See
+//! (`docs/principles/0087-name-the-property-never-the-shape.md`), and the name
+//! rule is a Set id's rule for the same reason it is a Set id's: it becomes one
+//! path component. See
 //! `docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md`.
 //!
-//! **What this module does not do is parse one.** The bytes are handed over
-//! whole, exactly as `<hash>.kir` source is: the format belongs to
-//! `karakuri-layout`, whose loader refuses an arrangement that disagrees with
-//! itself rather than repairing it
+//! What this module does not do is parse one. The bytes are handed over whole,
+//! exactly as `<hash>.kir` source is: the format belongs to `karakuri-layout`,
+//! whose loader refuses an arrangement that disagrees with itself rather than
+//! repairing it
 //! (`docs/adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md`),
 //! and a check here would be a second answer to a question that already has
 //! one.
 //!
-//! **`sandbox/` is `sets/`'s shape and not its meaning.** It holds Set files
+//! `sandbox/` is `sets/`'s shape and not its meaning. It holds Set files
 //! written the same way, refused on the same three terms and named the same
 //! way, and it is a second directory for one reason: `sets/` is the operator's
 //! library and is written by an operator's own act, so a save asked for over
@@ -48,32 +48,32 @@
 //! Which of the two a save goes to is decided by whoever asked and never here:
 //! [`Store::write_set`] and [`Store::write_sandbox_set`] are two methods so
 //! that no caller can reach the library by leaving an argument at its default.
-//! **It holds a kept procedure the same way** — [`Store::write_procedure`] and
+//! It holds a kept procedure the same way — [`Store::write_procedure`] and
 //! [`Store::write_sandbox_procedure`] are the same pair one file kind along,
 //! and a `.kir` under `sandbox/` is a model's keep rather than a row of
 //! anybody's library.
 //!
-//! **`procedures/` is the fifth thing here and it is a library rather than the
-//! artifacts.** Every build already puts its sources under `<hash>.kir` at the
+//! `procedures/` is the fifth thing here and it is a library rather than the
+//! artifacts. Every build already puts its sources under `<hash>.kir` at the
 //! root, and that population is the *edit history's*: one file per compile,
 //! under a name that is an address. A procedure here is the other thing — one
-//! node's source that an operator **kept**, under a name they typed, so that it
-//! can be a row of a library and loaded over a layer of what a deck is playing
+//! node's source that an operator kept, under a name they typed, so that it can
+//! be a row of a library and loaded over a layer of what a deck is playing
 //! (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
 //! It is `arrangements/`' shape a second time — a name that is one path
 //! component, a place of its own under the root, bytes handed over whole — and
 //! it is written only by an operator's own act
 //! (`docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`).
 //!
-//! **And nothing here reads what is in one.** [`Store::list_procedures`]
-//! answers names and nothing else, exactly as [`Store::list_sets`] does: what
-//! layer a `.kir` declares is a fact about the *language*, which
+//! And nothing here reads what is in one. [`Store::list_procedures`] answers
+//! names and nothing else, exactly as [`Store::list_sets`] does: what layer a
+//! `.kir` declares is a fact about the *language*, which
 //! `karakuri_environment::history::declared_kind` scans off a source and is the
 //! one answer to it. A second scan here would be this module parsing a file it
 //! holds, which is the line `arrangements/` above already draws.
 //!
-//! **`favourites.json` is the sixth thing here and it is beside the Sets on
-//! purpose.** A star is not part of a Set: putting it in the file would make it
+//! `favourites.json` is the sixth thing here and it is beside the Sets on
+//! purpose. A star is not part of a Set: putting it in the file would make it
 //! travel to whoever the Set is sent to, and would have to be *written*, so a
 //! starred Set would jump to the top of a listing ordered by when it was made.
 //! Putting it in a session would make it an event rather than something that is
@@ -106,33 +106,33 @@ pub enum StoreError {
     NotFound(Hash),
     /// No arrangement is filed under that name.
     ///
-    /// A variant of its own rather than [`StoreError::NotFound`], which carries
-    /// a [`Hash`] and could not say this: an arrangement is addressed by a name
+    /// A variant of its own rather than [`StoreError::NotFound`], which carries a
+    /// [`Hash`] and could not say this: an arrangement is addressed by a name
     /// somebody typed, and the sentence an operator needs is the name back.
     #[error("no arrangement named `{0}`")]
     NoArrangement(String),
     /// No procedure is filed under that name.
     ///
-    /// [`StoreError::NoArrangement`]'s sibling and for its reason: a procedure
-    /// is addressed by a name somebody typed, and the sentence whoever asked
-    /// needs back is that name
+    /// [`StoreError::NoArrangement`]'s sibling and for its reason: a procedure is
+    /// addressed by a name somebody typed, and the sentence whoever asked needs
+    /// back is that name
     /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
-    /// A row of the Library bay that has gone since the listing was built is
-    /// the ordinary way to meet it, and it is exactly the sentence a load has
-    /// to say rather than swallow.
+    /// A row of the Library bay that has gone since the listing was built is the
+    /// ordinary way to meet it, and it is exactly the sentence a load has to say
+    /// rather than swallow.
     #[error("no procedure named `{0}`")]
     NoProcedure(String),
-    /// **A keep was asked for under a name `procedures/` already holds.**
+    /// A keep was asked for under a name `procedures/` already holds.
     ///
-    /// **Refused rather than overwritten, where an arrangement and a Set id are
-    /// not**, and the difference is what each name is over. An arrangement's
-    /// name is a *place an operator keeps coming back to* — saving `four_deck`
-    /// again is what an operator who has just moved a divider means (ADR-0221)
-    /// — and a Set id typed twice replaces what is under it because the caller
-    /// typed it (ADR-0128). A kept procedure is neither: the name arrives from
-    /// a capsule that types nothing and takes a stamp, or from a head that
-    /// typed one once, and what is under it is **somebody's part of a library**
-    /// that a later keep of a different node would silently replace.
+    /// Refused rather than overwritten, where an arrangement and a Set id are not,
+    /// and the difference is what each name is over. An arrangement's name is a
+    /// *place an operator keeps coming back to* — saving `four_deck` again is what
+    /// an operator who has just moved a divider means (ADR-0221) — and a Set id
+    /// typed twice replaces what is under it because the caller typed it
+    /// (ADR-0128). A kept procedure is neither: the name arrives from a capsule
+    /// that types nothing and takes a stamp, or from a head that typed one once,
+    /// and what is under it is somebody's part of a library that a later keep of a
+    /// different node would silently replace.
     ///
     /// The sentence carries the name back, which is the whole of what the next
     /// attempt needs
@@ -143,34 +143,34 @@ pub enum StoreError {
          one something else"
     )]
     ProcedureTaken(String),
-    /// **A star was asked for on an id `sets/` does not hold.**
+    /// A star was asked for on an id `sets/` does not hold.
     ///
-    /// Its own variant beside [`StoreError::NoArrangement`] and for that
-    /// variant's reason: [`StoreError::NotFound`] carries a [`Hash`] and could
-    /// not say this, and what an operator needs back is the id they named
+    /// Its own variant beside [`StoreError::NoArrangement`] and for that variant's
+    /// reason: [`StoreError::NotFound`] carries a [`Hash`] and could not say this,
+    /// and what an operator needs back is the id they named
     /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
     ///
-    /// **Only starring is refused.** Taking a star *off* an id the store no
-    /// longer holds is how a stale mark is cleared, so
-    /// [`Store::set_favourite`] asks this question in one direction only.
+    /// Only starring is refused. Taking a star *off* an id the store no longer
+    /// holds is how a stale mark is cleared, so [`Store::set_favourite`] asks this
+    /// question in one direction only.
     #[error("no Set named `{0}` in this store, so there is nothing to star")]
     NoSet(String),
-    /// **The favourites file is on disk and is not a list of ids.**
+    /// The favourites file is on disk and is not a list of ids.
     ///
     /// Said rather than swallowed: a file somebody hand-edited into something
-    /// unparseable would otherwise read exactly like a library nobody has
-    /// starred in, and the whole of `my sets` would go quiet with nothing to
-    /// notice. A missing file is *not* this — that is a store nobody has
-    /// starred in, and [`Store::favourites`] answers it with an empty set.
+    /// unparseable would otherwise read exactly like a library nobody has starred
+    /// in, and the whole of `my sets` would go quiet with nothing to notice. A
+    /// missing file is *not* this — that is a store nobody has starred in, and
+    /// [`Store::favourites`] answers it with an empty set.
     #[error("`{}` is not a list of Set ids: {source}", Store::FAVOURITES_FILE)]
     Favourites {
         #[source]
         source: serde_json::Error,
     },
-    /// A Set file carries no time — see `docs/ir-spec.md`, Set file format.
-    /// `tick` was the only such record when this was named; `audio` and `tempo`
-    /// are the same kind of thing, so the check is `Record::is_set_state` and the
-    /// message says so rather than naming one of the three.
+    /// A Set file carries no time — see `docs/ir-spec.md`, Set file format. `tick`
+    /// was the only such record when this was named; `audio` and `tempo` are the
+    /// same kind of thing, so the check is `Record::is_set_state` and the message
+    /// says so rather than naming one of the three.
     #[error(
         "set files cannot contain a tick, audio or tempo record — a Set file carries no time \
          (offending record at index {index})"
@@ -179,35 +179,34 @@ pub enum StoreError {
     /// A Set file says what a Set's values *are*; a `meta`, `param_decl`,
     /// `capacity_decl` or `emit` record says what an artifact *declares*, and
     /// belongs in `<hash>.meta.ndjson`. Refused on the same terms as a session
-    /// record and with a different sentence, because the reason differs: the
-    /// check is `Record::is_metadata` rather than `!Record::is_set_state`, and
-    /// running the two together under one message would tell an operator a
-    /// declaration was rejected for carrying time.
+    /// record and with a different sentence, because the reason differs: the check
+    /// is `Record::is_metadata` rather than `!Record::is_set_state`, and running
+    /// the two together under one message would tell an operator a declaration was
+    /// rejected for carrying time.
     #[error(
         "set files cannot contain a meta, param_decl, capacity_decl or emit record — those \
          describe what an artifact declares and belong in its `<hash>.meta.ndjson` \
          (offending record at index {index})"
     )]
     MetaInSet { index: usize },
-    /// **A `part` record, which is the authoring form's way of naming a node**
-    /// — by relative path, resolved against the Set file's own directory — in a
-    /// file that is about to be written under `sets/` as a `.kbset`.
+    /// A `part` record, which is the authoring form's way of naming a node — by
+    /// relative path, resolved against the Set file's own directory — in a file
+    /// that is about to be written under `sets/` as a `.kbset`.
     ///
-    /// A third sentence for a third reason, on [`StoreError::MetaInSet`]'s
-    /// terms: the check is `Record::is_authoring`, and running it under either
-    /// of the other two messages would tell an operator their authoring file
-    /// carries time, or declares an artifact. It does neither. It says exactly
-    /// what a `slot` says and has not been resolved yet, and the fix is to
-    /// resolve it — `karakuri_environment::setfile`'s `resolve`, or
-    /// `karakuri-cli --package FILE.kset` (or `--take-in FILE.kset`, which
-    /// resolves it the same way and keeps the result).
+    /// A third sentence for a third reason, on [`StoreError::MetaInSet`]'s terms:
+    /// the check is `Record::is_authoring`, and running it under either of the
+    /// other two messages would tell an operator their authoring file carries time,
+    /// or declares an artifact. It does neither. It says exactly what a `slot` says
+    /// and has not been resolved yet, and the fix is to resolve it —
+    /// `karakuri_environment::setfile`'s `resolve`, or `karakuri-cli --package
+    /// FILE.kset` (or `--take-in FILE.kset`, which resolves it the same way and
+    /// keeps the result).
     ///
-    /// **What this makes structural is the extension's promise.** `.kbset`
-    /// asserts that reading the file resolves nothing against the filesystem
-    /// around it, which is what lets a swap be a swap
-    /// (`docs/adr/0231-…`); a `part` written into `sets/` would be a file
-    /// disagreeing with its own name, and the disagreement would surface on a
-    /// frame boundary rather than here.
+    /// What this makes structural is the extension's promise. `.kbset` asserts that
+    /// reading the file resolves nothing against the filesystem around it, which is
+    /// what lets a swap be a swap (`docs/adr/0231-…`); a `part` written into
+    /// `sets/` would be a file disagreeing with its own name, and the disagreement
+    /// would surface on a frame boundary rather than here.
     #[error(
         "set files cannot contain a part record — a `part` names its `.kir` by relative path \
          and belongs to the authoring form (`.kset`), where `sets/` holds the resolved form \
@@ -222,15 +221,15 @@ pub struct Store {
     root: PathBuf,
 }
 
-/// **What a Set file may not hold**, asked once for both directories a Set file
-/// is written into.
+/// What a Set file may not hold, asked once for both directories a Set file is
+/// written into.
 ///
 /// A free function rather than a method because it touches no root: what may be
 /// in the file is a property of the format, and both [`Store::write_set`] and
 /// [`Store::write_sandbox_set`] owe the same three answers. Written once so
-/// that the two cannot drift into accepting different files under one
-/// extension — see [`Store::write_set`], where each of the three sentences and
-/// the order they are asked in is argued.
+/// that the two cannot drift into accepting different files under one extension
+/// — see [`Store::write_set`], where each of the three sentences and the order
+/// they are asked in is argued.
 fn refuse_what_is_not_a_set(lines: &[Line]) -> Result<(), StoreError> {
     if let Some(index) = lines.iter().position(|l| l.record().is_metadata()) {
         return Err(StoreError::MetaInSet { index });
@@ -249,8 +248,8 @@ fn refuse_what_is_not_a_set(lines: &[Line]) -> Result<(), StoreError> {
 }
 
 impl Store {
-    /// Establish the store layout under `root`, creating any directories
-    /// that do not exist yet. Safe to call repeatedly on the same root.
+    /// Establish the store layout under `root`, creating any directories that do
+    /// not exist yet. Safe to call repeatedly on the same root.
     pub fn open(root: impl Into<PathBuf>) -> Result<Store, StoreError> {
         let root = root.into();
         fs::create_dir_all(&root)?;
@@ -288,84 +287,80 @@ impl Store {
         self.root.join(format!("{}.kir", hash.short(64)))
     }
 
-    /// Where an artifact's regenerated metadata lives: beside the `.kir` and
-    /// under the same bare hex, so the two are one `ls` apart and a card can
-    /// never be filed under a name its artifact does not have.
+    /// Where an artifact's regenerated metadata lives: beside the `.kir` and under
+    /// the same bare hex, so the two are one `ls` apart and a card can never be
+    /// filed under a name its artifact does not have.
     fn meta_path(&self, hash: &Hash) -> PathBuf {
         self.root.join(format!("{}.meta.ndjson", hash.short(64)))
     }
 
-    /// **What a stored Set file is called**, and the one place the suffix is
-    /// spelled. `Store::set_path` builds the name and [`Store::list_sets`]
-    /// derives an id back off it **by stripping this**, so two literals could
-    /// drift into a store that writes files it cannot list — and an id that
-    /// exists on disk under one spelling and nowhere in the listing is the
-    /// worst shape that disagreement can take, because neither side is wrong
-    /// on its own.
+    /// What a stored Set file is called, and the one place the suffix is spelled.
+    /// `Store::set_path` builds the name and [`Store::list_sets`] derives an id
+    /// back off it by stripping this, so two literals could drift into a store that
+    /// writes files it cannot list — and an id that exists on disk under one
+    /// spelling and nowhere in the listing is the worst shape that disagreement can
+    /// take, because neither side is wrong on its own.
     ///
-    /// **`.kbset` rather than `.set.ndjson`, and the reason is atomicity
-    /// rather than tidiness.** A Set file has two forms: an authoring one,
-    /// which names its parts by **relative path** and lives beside them, and
-    /// this one, which names them by content address and needs nothing from the
-    /// filesystem around it. A swap happens on a frame boundary and an
-    /// over-budget Set rolls back on its own
+    /// `.kbset` rather than `.set.ndjson`, and the reason is atomicity rather than
+    /// tidiness. A Set file has two forms: an authoring one, which names its parts
+    /// by relative path and lives beside them, and this one, which names them by
+    /// content address and needs nothing from the filesystem around it. A swap
+    /// happens on a frame boundary and an over-budget Set rolls back on its own
     /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`),
-    /// and that holds only because **nothing is left to resolve at the moment
-    /// of the swap**. Let the authoring form into the store and a load walks
-    /// the filesystem while swapping: a neighbour may be missing, may have
-    /// changed since the file was written, may fail halfway — and a swap that
-    /// can partially fail is not a swap. So the store's invariant is that
-    /// everything in it is already resolved, and **the extension is what makes
-    /// that invariant checkable**.
+    /// and that holds only because nothing is left to resolve at the moment of the
+    /// swap. Let the authoring form into the store and a load walks the filesystem
+    /// while swapping: a neighbour may be missing, may have changed since the file
+    /// was written, may fail halfway — and a swap that can partially fail is not a
+    /// swap. So the store's invariant is that everything in it is already resolved,
+    /// and the extension is what makes that invariant checkable.
     ///
-    /// **This is not a new check.** The suffix was always stripped to find an
-    /// id, so an id could never exist without it; what changed is that the
-    /// check now means something. The authoring form's own spelling is
-    /// `.kset`, and it is deliberately not a constant *here*: it is
-    /// `karakuri_environment::setfile::AUTHORING_SUFFIX`, beside the resolver
-    /// that is the only thing which reads one. This crate never opens a `.kset`
-    /// and could not — a store that held one would be the thing the suffix
-    /// above exists to make impossible — so a name for it here would be this
-    /// module describing a file it has no business with. (Until the resolver
-    /// landed there was no constant anywhere, and this comment said so; a name
-    /// nothing reads is a claim about a design rather than part of one.) See
+    /// This is not a new check. The suffix was always stripped to find an id, so an
+    /// id could never exist without it; what changed is that the check now means
+    /// something. The authoring form's own spelling is `.kset`, and it is
+    /// deliberately not a constant *here*: it is
+    /// `karakuri_environment::setfile::AUTHORING_SUFFIX`, beside the resolver that
+    /// is the only thing which reads one. This crate never opens a `.kset` and
+    /// could not — a store that held one would be the thing the suffix above exists
+    /// to make impossible — so a name for it here would be this module describing a
+    /// file it has no business with. (Until the resolver landed there was no
+    /// constant anywhere, and this comment said so; a name nothing reads is a claim
+    /// about a design rather than part of one.) See
     /// `docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md`.
     pub const SET_FILE_SUFFIX: &str = ".kbset";
 
-    /// **The directory a save asked for by a model lands in**, and the one
-    /// place it is spelled.
+    /// The directory a save asked for by a model lands in, and the one place it is
+    /// spelled.
     ///
-    /// Public because a refusal and an accept both have to say where a file
-    /// went — a model told only that a set was kept, in a store whose `sets/`
-    /// does not hold it, would go looking in the wrong directory and report the
-    /// instrument as broken
+    /// Public because a refusal and an accept both have to say where a file went —
+    /// a model told only that a set was kept, in a store whose `sets/` does not
+    /// hold it, would go looking in the wrong directory and report the instrument
+    /// as broken
     /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
     pub const SANDBOX: &str = "sandbox";
 
-    /// **Where the operator's kept procedures live**, and the one place the
-    /// directory is spelled — [`Store::open`] makes it,
-    /// [`Store::list_procedures`] reads it and [`Store::read_procedure`] opens
-    /// a file in it, and three literals could drift into a store that writes
-    /// where it does not list.
+    /// Where the operator's kept procedures live, and the one place the directory
+    /// is spelled — [`Store::open`] makes it, [`Store::list_procedures`] reads it
+    /// and [`Store::read_procedure`] opens a file in it, and three literals could
+    /// drift into a store that writes where it does not list.
     ///
-    /// Public for [`Store::SANDBOX`]'s reason: a refusal and an accept both
-    /// have to be able to say where a file went, and *kept* with no directory
-    /// named is a sentence that sends somebody looking.
+    /// Public for [`Store::SANDBOX`]'s reason: a refusal and an accept both have to
+    /// be able to say where a file went, and *kept* with no directory named is a
+    /// sentence that sends somebody looking.
     pub const PROCEDURES: &str = "procedures";
 
-    /// **What a kept procedure's file is called**, which is the extension every
-    /// `.kir` in this workspace carries — one node's source, in the language
+    /// What a kept procedure's file is called, which is the extension every `.kir`
+    /// in this workspace carries — one node's source, in the language
     /// `docs/ir-spec.md` specifies.
     ///
-    /// Named here for [`Store::SET_FILE_SUFFIX`]'s reason rather than its
-    /// argument: this one says nothing about resolution, since a procedure is
-    /// one file and names no parts. What it does is the same job — the listing
-    /// derives a name back **by stripping this**, so two literals could drift
-    /// into a store that holds a file under a name it cannot list.
+    /// Named here for [`Store::SET_FILE_SUFFIX`]'s reason rather than its argument:
+    /// this one says nothing about resolution, since a procedure is one file and
+    /// names no parts. What it does is the same job — the listing derives a name
+    /// back by stripping this, so two literals could drift into a store that holds
+    /// a file under a name it cannot list.
     pub const PROCEDURE_FILE_SUFFIX: &str = ".kir";
 
-    /// [`Store::arrangement_path`]'s sibling under [`Store::PROCEDURES`], built
-    /// the same way and off the same suffix.
+    /// [`Store::arrangement_path`]'s sibling under [`Store::PROCEDURES`], built the
+    /// same way and off the same suffix.
     fn procedure_path(&self, name: &str) -> PathBuf {
         self.root
             .join(Store::PROCEDURES)
@@ -378,10 +373,10 @@ impl Store {
             .join(format!("{id}{}", Store::SET_FILE_SUFFIX))
     }
 
-    /// [`Store::set_path`]'s sibling under [`Store::SANDBOX`], built the same
-    /// way and off the same suffix: what lands here is a Set file, and a second
-    /// spelling of the extension is the drift [`Store::SET_FILE_SUFFIX`] exists
-    /// to prevent.
+    /// [`Store::set_path`]'s sibling under [`Store::SANDBOX`], built the same way
+    /// and off the same suffix: what lands here is a Set file, and a second
+    /// spelling of the extension is the drift [`Store::SET_FILE_SUFFIX`] exists to
+    /// prevent.
     fn sandbox_path(&self, id: &str) -> PathBuf {
         self.root
             .join(Store::SANDBOX)
@@ -392,28 +387,28 @@ impl Store {
         self.root.join("sessions").join(format!("{stamp}.ndjson"))
     }
 
-    /// **`<name>.arrangement.json`, ending in a suffix the layout owns the way
-    /// `<id>.kbset` does**: the operator's name, what kind of thing it is, and
-    /// the format it is in. That suffix is what lets
-    /// [`Store::list_arrangements`] tell an arrangement from an editor's backup
-    /// or a half-written `.tmp` without opening either, which is the same trick
-    /// `sets/` turns with [`Store::SET_FILE_SUFFIX`] — there in one component
-    /// rather than two, because a Set's extension has a second job this one
-    /// does not: it says the file is already resolved.
+    /// `<name>.arrangement.json`, ending in a suffix the layout owns the way
+    /// `<id>.kbset` does: the operator's name, what kind of thing it is, and the
+    /// format it is in. That suffix is what lets [`Store::list_arrangements`] tell
+    /// an arrangement from an editor's backup or a half-written `.tmp` without
+    /// opening either, which is the same trick `sets/` turns with
+    /// [`Store::SET_FILE_SUFFIX`] — there in one component rather than two, because
+    /// a Set's extension has a second job this one does not: it says the file is
+    /// already resolved.
     ///
-    /// **`.json` and not `.ndjson`.** An arrangement is one document rather
-    /// than a stream of records — there is no line to append and nothing to
-    /// project — so it does not go through [`crate::ndjson`]'s reader at all.
+    /// `.json` and not `.ndjson`. An arrangement is one document rather than a
+    /// stream of records — there is no line to append and nothing to project — so
+    /// it does not go through [`crate::ndjson`]'s reader at all.
     fn arrangement_path(&self, name: &str) -> PathBuf {
         self.root
             .join("arrangements")
             .join(format!("{name}.arrangement.json"))
     }
 
-    /// Store `.kir` source, content-addressed by its SHA-256. Writing the
-    /// same source twice is a no-op the second time: the artifact already
-    /// on disk is never rewritten, so it can never be corrupted by a
-    /// concurrent or repeated `put`.
+    /// Store `.kir` source, content-addressed by its SHA-256. Writing the same
+    /// source twice is a no-op the second time: the artifact already on disk is
+    /// never rewritten, so it can never be corrupted by a concurrent or repeated
+    /// `put`.
     pub fn put_artifact(&self, source: &[u8]) -> Result<Hash, StoreError> {
         let hash = Hash::of(source);
         let path = self.artifact_path(&hash);
@@ -433,28 +428,27 @@ impl Store {
         })
     }
 
-    /// **Write an artifact's metadata file** (`<hash>.meta.ndjson`).
+    /// Write an artifact's metadata file (`<hash>.meta.ndjson`).
     ///
-    /// **Overwrites, where [`Store::put_artifact`] refuses to.** An artifact is
+    /// Overwrites, where [`Store::put_artifact`] refuses to. An artifact is
     /// immutable and its bytes are its address, so rewriting one can only ever
     /// corrupt it; metadata is *derived* — regenerated from the `.kir` plus a
-    /// compile pass — so a later build that knows more writes a better card and
-    /// the old one has no claim. The write is atomic all the same, so a reader
-    /// meeting it mid-regeneration sees the whole of one version or the whole
-    /// of the other.
+    /// compile pass — so a later build that knows more writes a better card and the
+    /// old one has no claim. The write is atomic all the same, so a reader meeting
+    /// it mid-regeneration sees the whole of one version or the whole of the other.
     ///
-    /// Nothing here checks that the artifact exists. The caller puts the source
-    /// and then the card, and a card with no artifact is a stray file rather
-    /// than a corruption — where a check would make every writer pay a read to
-    /// prove something it just did.
+    /// Nothing here checks that the artifact exists. The caller puts the source and
+    /// then the card, and a card with no artifact is a stray file rather than a
+    /// corruption — where a check would make every writer pay a read to prove
+    /// something it just did.
     pub fn write_meta(&self, hash: &Hash, lines: &[Line]) -> Result<(), StoreError> {
         ndjson::write(&self.meta_path(hash), lines)
     }
 
-    /// **Read an artifact's metadata file.** `StoreError::NotFound` where no
-    /// card has been written for that hash — which is an ordinary state, not a
-    /// damaged store: metadata is derived, and an artifact put by an older
-    /// build has none until something regenerates it.
+    /// Read an artifact's metadata file. `StoreError::NotFound` where no card has
+    /// been written for that hash — which is an ordinary state, not a damaged
+    /// store: metadata is derived, and an artifact put by an older build has none
+    /// until something regenerates it.
     pub fn read_meta(&self, hash: &Hash) -> Result<Vec<Line>, StoreError> {
         let path = self.meta_path(hash);
         if !path.exists() {
@@ -468,51 +462,49 @@ impl Store {
         ndjson::read(&self.set_path(id))
     }
 
-    /// Write a Set file. Rejects any line carrying a `Tick` record — a Set
-    /// file is a state projection and carries no time — rather than
-    /// trusting the caller to have stripped ticks already.
+    /// Write a Set file. Rejects any line carrying a `Tick` record — a Set file is
+    /// a state projection and carries no time — rather than trusting the caller to
+    /// have stripped ticks already.
     ///
-    /// **And rejects an artifact's metadata on the same terms**, by the same
-    /// scan and with a sentence of its own: a `param_decl` says what a
-    /// procedure declares and a `param` says what this Set turned it to, and a
-    /// Set file holding the first would be describing an artifact rather than a
-    /// Set. Two questions asked rather than one predicate widened — see
+    /// And rejects an artifact's metadata on the same terms, by the same scan and
+    /// with a sentence of its own: a `param_decl` says what a procedure declares
+    /// and a `param` says what this Set turned it to, and a Set file holding the
+    /// first would be describing an artifact rather than a Set. Two questions asked
+    /// rather than one predicate widened — see
     /// [`Record::is_set_state`](crate::record::Record::is_set_state), whose one
-    /// answer already stands on three different reasons, and whose sentence
-    /// names a tick. **Two questions and one classification**: both are read
-    /// off the same exhaustive match, so a record cannot be metadata to one of
-    /// them and Set state to the other.
+    /// answer already stands on three different reasons, and whose sentence names a
+    /// tick. Two questions and one classification: both are read off the same
+    /// exhaustive match, so a record cannot be metadata to one of them and Set
+    /// state to the other.
     ///
-    /// **And rejects a `part`, which is where the two forms of a Set file are
-    /// held apart.** `sets/<id>.kbset` asserts that everything in it is already
-    /// resolved; a `part` names its `.kir` by a relative path and is the
-    /// authoring form's record, so this is the wall between a `.kset` and a
-    /// store. Three questions now, one classification, and a third sentence
-    /// because a third thing is owed — see
-    /// [`Record::is_authoring`](crate::record::Record::is_authoring) and
+    /// And rejects a `part`, which is where the two forms of a Set file are held
+    /// apart. `sets/<id>.kbset` asserts that everything in it is already resolved;
+    /// a `part` names its `.kir` by a relative path and is the authoring form's
+    /// record, so this is the wall between a `.kset` and a store. Three questions
+    /// now, one classification, and a third sentence because a third thing is owed
+    /// — see [`Record::is_authoring`](crate::record::Record::is_authoring) and
     /// [`StoreError::PartInSet`].
     pub fn write_set(&self, id: &str, lines: &[Line]) -> Result<(), StoreError> {
         refuse_what_is_not_a_set(lines)?;
         ndjson::write(&self.set_path(id), lines)
     }
 
-    /// **Write a Set file into [`Store::SANDBOX`]** — [`Store::write_set`]'s
-    /// sibling, refusing exactly what it refuses.
+    /// Write a Set file into [`Store::SANDBOX`] — [`Store::write_set`]'s sibling,
+    /// refusing exactly what it refuses.
     ///
     /// A method of its own rather than an argument on `write_set`, because the
     /// directory is decided by *who asked* and that is not something a caller
-    /// should be able to leave at a default: a save asked for over MCP lands
-    /// here and an operator's own act lands in the library
+    /// should be able to leave at a default: a save asked for over MCP lands here
+    /// and an operator's own act lands in the library
     /// (`docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`).
-    /// A `bool` or an `Option` here would make the operator's library the value
-    /// a caller gets by saying nothing, which is the wrong way round.
+    /// A `bool` or an `Option` here would make the operator's library the value a
+    /// caller gets by saying nothing, which is the wrong way round.
     ///
-    /// **The three refusals are shared rather than re-stated.** What may be in
-    /// a Set file is a property of the format and not of the directory — a
-    /// `part` under `sandbox/` would be a file disagreeing with its own name in
-    /// exactly the way [`StoreError::PartInSet`] describes — so both writers go
-    /// through one scan and neither can drift into accepting what the other
-    /// refuses.
+    /// The three refusals are shared rather than re-stated. What may be in a Set
+    /// file is a property of the format and not of the directory — a `part` under
+    /// `sandbox/` would be a file disagreeing with its own name in exactly the way
+    /// [`StoreError::PartInSet`] describes — so both writers go through one scan
+    /// and neither can drift into accepting what the other refuses.
     pub fn write_sandbox_set(&self, id: &str, lines: &[Line]) -> Result<(), StoreError> {
         refuse_what_is_not_a_set(lines)?;
         ndjson::write(&self.sandbox_path(id), lines)
@@ -523,20 +515,20 @@ impl Store {
         ndjson::read(&self.session_path(stamp))
     }
 
-    /// Write a session stream. Unlike [`Store::write_set`], ticks are
-    /// expected here — a session is the timeline, ticks and all.
+    /// Write a session stream. Unlike [`Store::write_set`], ticks are expected here
+    /// — a session is the timeline, ticks and all.
     pub fn write_session(&self, stamp: &str, lines: &[Line]) -> Result<(), StoreError> {
         ndjson::write(&self.session_path(stamp), lines)
     }
 
-    /// **Open a session stream for appending**, for a writer that produces the
-    /// timeline as it happens rather than holding a whole set in memory.
+    /// Open a session stream for appending, for a writer that produces the timeline
+    /// as it happens rather than holding a whole set in memory.
     ///
     /// Not atomic, and deliberately not: [`Store::write_session`] renames a
     /// complete file into place, which is right for something written once and
-    /// wrong for something written for an hour. A session appended to is
-    /// readable up to its last complete line at every moment, and a run that
-    /// dies mid-set leaves the set up to that point rather than nothing.
+    /// wrong for something written for an hour. A session appended to is readable
+    /// up to its last complete line at every moment, and a run that dies mid-set
+    /// leaves the set up to that point rather than nothing.
     pub fn append_session(&self, stamp: &str) -> Result<fs::File, StoreError> {
         Ok(fs::OpenOptions::new()
             .create(true)
@@ -544,50 +536,49 @@ impl Store {
             .open(self.session_path(stamp))?)
     }
 
-    /// Save a live session as a Set: the session stream with ticks dropped
-    /// and the state folded down, last write wins per layer and key. See
+    /// Save a live session as a Set: the session stream with ticks dropped and the
+    /// state folded down, last write wins per layer and key. See
     /// [`project::project`] and `docs/ir-spec.md`, Session stream format.
     pub fn save_session_as_set(&self, set_id: &str, session: &[Line]) -> Result<(), StoreError> {
         self.write_set(set_id, &project::project(session))
     }
 
-    /// **Write a saved arrangement** (`arrangements/<name>.arrangement.json`).
+    /// Write a saved arrangement (`arrangements/<name>.arrangement.json`).
     ///
-    /// The bytes are `karakuri-layout`'s, not this crate's: a `Layout`
-    /// serialises to one JSON document and that document is what lands here,
-    /// byte for byte and with nothing appended. Handing it over whole is the
-    /// same contract [`Store::put_artifact`] has with `.kir` source, and for
-    /// the same reason — the store keeps files it does not have to understand,
-    /// and the one place that understands this format is the loader that
-    /// refuses a broken one (ADR-0158).
+    /// The bytes are `karakuri-layout`'s, not this crate's: a `Layout` serialises
+    /// to one JSON document and that document is what lands here, byte for byte and
+    /// with nothing appended. Handing it over whole is the same contract
+    /// [`Store::put_artifact`] has with `.kir` source, and for the same reason —
+    /// the store keeps files it does not have to understand, and the one place that
+    /// understands this format is the loader that refuses a broken one (ADR-0158).
     ///
-    /// **Overwrites, like [`Store::write_set`] and unlike
-    /// [`Store::put_artifact`].** A name is an instruction: saving over
-    /// `four_deck` is what an operator who has just moved a divider means by
-    /// saving `four_deck`, and `--save-set ID` has always obeyed the same way.
-    /// Atomic all the same, so a reader never meets half a document, and a
-    /// crash mid-write leaves the previous arrangement rather than nothing.
+    /// Overwrites, like [`Store::write_set`] and unlike [`Store::put_artifact`]. A
+    /// name is an instruction: saving over `four_deck` is what an operator who has
+    /// just moved a divider means by saving `four_deck`, and `--save-set ID` has
+    /// always obeyed the same way. Atomic all the same, so a reader never meets
+    /// half a document, and a crash mid-write leaves the previous arrangement
+    /// rather than nothing.
     ///
-    /// **Nothing here checks the name**, exactly as nothing checks a Set id:
-    /// `<name>` becomes one path component and that is the caller's rule to
-    /// keep. Where the caller is a protocol rather than a person it is kept —
-    /// `karakuri-environment`'s `mcp::checked_id` is where a name that is not
-    /// one path component is refused rather than sanitised, and an arrangement
-    /// name reached from a model belongs behind the same gate.
+    /// Nothing here checks the name, exactly as nothing checks a Set id: `<name>`
+    /// becomes one path component and that is the caller's rule to keep. Where the
+    /// caller is a protocol rather than a person it is kept —
+    /// `karakuri-environment`'s `mcp::checked_id` is where a name that is not one
+    /// path component is refused rather than sanitised, and an arrangement name
+    /// reached from a model belongs behind the same gate.
     pub fn write_arrangement(&self, name: &str, arrangement: &[u8]) -> Result<(), StoreError> {
         ndjson::write_atomic(&self.arrangement_path(name), arrangement)
     }
 
-    /// **Read a saved arrangement back**, as the bytes that were written.
+    /// Read a saved arrangement back, as the bytes that were written.
     ///
-    /// `StoreError::NoArrangement` where nothing is filed under that name,
-    /// which is an ordinary answer rather than a damaged store: an operator
-    /// asking for an arrangement they have not saved is a person to tell, and
-    /// the name they asked for is what the sentence carries.
+    /// `StoreError::NoArrangement` where nothing is filed under that name, which is
+    /// an ordinary answer rather than a damaged store: an operator asking for an
+    /// arrangement they have not saved is a person to tell, and the name they asked
+    /// for is what the sentence carries.
     ///
-    /// **This never returns the built-in.** Resetting the console is a
-    /// different operation reaching different code — the default arrangement is
-    /// what ships, and what ships is not a file anything here can write
+    /// This never returns the built-in. Resetting the console is a different
+    /// operation reaching different code — the default arrangement is what ships,
+    /// and what ships is not a file anything here can write
     /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)).
     /// A fallback here would make an operator who mistyped a name watch their
     /// console reset instead of being told the name is wrong.
@@ -598,18 +589,17 @@ impl Store {
         })
     }
 
-    /// **List the arrangements the store holds**, in ascending name order, each
-    /// with the time its file was last written.
+    /// List the arrangements the store holds, in ascending name order, each with
+    /// the time its file was last written.
     ///
-    /// Everything [`Store::list_sets`] says about its listing holds here and
-    /// for the same reasons: the time comes from the filesystem because the
-    /// document carries none; the order is the name's rather than recency's,
-    /// because two files written inside one tick of a coarse clock tie and a
-    /// tied sort is not an order; a name the layout does not claim is skipped
-    /// rather than repaired, so an editor's backup and a `.tmp` left by a write
-    /// that died are not offered as arrangements [`Store::read_arrangement`]
-    /// cannot open; and an empty store lists nothing while a missing directory
-    /// is an error.
+    /// Everything [`Store::list_sets`] says about its listing holds here and for
+    /// the same reasons: the time comes from the filesystem because the document
+    /// carries none; the order is the name's rather than recency's, because two
+    /// files written inside one tick of a coarse clock tie and a tied sort is not
+    /// an order; a name the layout does not claim is skipped rather than repaired,
+    /// so an editor's backup and a `.tmp` left by a write that died are not offered
+    /// as arrangements [`Store::read_arrangement`] cannot open; and an empty store
+    /// lists nothing while a missing directory is an error.
     pub fn list_arrangements(&self) -> Result<Vec<ArrangementEntry>, StoreError> {
         let mut out = Vec::new();
         for entry in fs::read_dir(self.root.join("arrangements"))? {
@@ -633,35 +623,34 @@ impl Store {
         Ok(out)
     }
 
-    /// **List the procedures the operator has kept**, in ascending name order,
-    /// each with the time its file was last written.
+    /// List the procedures the operator has kept, in ascending name order, each
+    /// with the time its file was last written.
     ///
-    /// [`Store::list_arrangements`]'s shape one directory along, and every
-    /// sentence that method carries holds here: the time comes from the
-    /// filesystem because a `.kir` carries none; the order is the name's rather
-    /// than recency's, because two files written inside one tick of a coarse
-    /// clock tie and a tied sort is not an order; a name the layout does not
-    /// claim is skipped rather than repaired, so an editor's backup and a
-    /// `.tmp` left by a write that died are not offered as procedures
-    /// [`Store::read_procedure`] cannot open; and an empty directory lists
-    /// nothing while a missing one is an error.
+    /// [`Store::list_arrangements`]'s shape one directory along, and every sentence
+    /// that method carries holds here: the time comes from the filesystem because a
+    /// `.kir` carries none; the order is the name's rather than recency's, because
+    /// two files written inside one tick of a coarse clock tie and a tied sort is
+    /// not an order; a name the layout does not claim is skipped rather than
+    /// repaired, so an editor's backup and a `.tmp` left by a write that died are
+    /// not offered as procedures [`Store::read_procedure`] cannot open; and an
+    /// empty directory lists nothing while a missing one is an error.
     ///
-    /// **What layer a row implements is not answered here**, and that is the
-    /// one thing a caller may expect and not get. The badge on a library row is
-    /// a procedure's `kind`, which is a line of the *language* — this module
-    /// keeps files it does not parse, exactly as it keeps an arrangement's
-    /// bytes without reading them (ADR-0158's rule met a second time), and
-    /// `karakuri_environment::history::declared_kind` is the one scanner for
-    /// it. So a caller that wants badges pairs this listing with
-    /// [`Store::read_procedure`] and that scan, which is one small read per
-    /// row, on the press that builds a listing and never on a frame
+    /// What layer a row implements is not answered here, and that is the one thing
+    /// a caller may expect and not get. The badge on a library row is a procedure's
+    /// `kind`, which is a line of the *language* — this module keeps files it does
+    /// not parse, exactly as it keeps an arrangement's bytes without reading them
+    /// (ADR-0158's rule met a second time), and
+    /// `karakuri_environment::history::declared_kind` is the one scanner for it. So
+    /// a caller that wants badges pairs this listing with [`Store::read_procedure`]
+    /// and that scan, which is one small read per row, on the press that builds a
+    /// listing and never on a frame
     /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
     ///
-    /// **These are not the artifacts, and the difference is the whole of why
-    /// this method exists.** [`Store::list_artifacts`] answers every `.kir` any
-    /// build has ever put at the root, under a name that is a content address:
-    /// that population is the edit history's, one row per compile. A procedure
-    /// here is one a person kept and named
+    /// These are not the artifacts, and the difference is the whole of why this
+    /// method exists. [`Store::list_artifacts`] answers every `.kir` any build has
+    /// ever put at the root, under a name that is a content address: that
+    /// population is the edit history's, one row per compile. A procedure here is
+    /// one a person kept and named
     /// (`docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`).
     pub fn list_procedures(&self) -> Result<Vec<ProcedureEntry>, StoreError> {
         let mut out = Vec::new();
@@ -690,16 +679,16 @@ impl Store {
         Ok(out)
     }
 
-    /// **Read a kept procedure back**, as the bytes that were written.
+    /// Read a kept procedure back, as the bytes that were written.
     ///
-    /// [`StoreError::NoProcedure`] where nothing is filed under that name,
-    /// which is an ordinary answer rather than a damaged store — the row a
-    /// hand pressed may have been deleted since the listing was built — and
-    /// the name asked for is what the sentence carries.
+    /// [`StoreError::NoProcedure`] where nothing is filed under that name, which is
+    /// an ordinary answer rather than a damaged store — the row a hand pressed may
+    /// have been deleted since the listing was built — and the name asked for is
+    /// what the sentence carries.
     ///
-    /// **Bytes and not a parse**, which is [`Store::get_artifact`]'s contract:
-    /// what a `.kir` says is the checker's question and the compiler's, and
-    /// this module answers neither.
+    /// Bytes and not a parse, which is [`Store::get_artifact`]'s contract: what a
+    /// `.kir` says is the checker's question and the compiler's, and this module
+    /// answers neither.
     pub fn read_procedure(&self, name: &str) -> Result<Vec<u8>, StoreError> {
         fs::read(self.procedure_path(name)).map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => StoreError::NoProcedure(name.to_string()),
@@ -707,37 +696,35 @@ impl Store {
         })
     }
 
-    /// **Keep one node's source under a name** (`procedures/<name>.kir`), and
-    /// answer where it went.
+    /// Keep one node's source under a name (`procedures/<name>.kir`), and answer
+    /// where it went.
     ///
-    /// This is the one thing that writes the operator's tier of the library,
-    /// and it exists so that the tier exists at all
+    /// This is the one thing that writes the operator's tier of the library, and it
+    /// exists so that the tier exists at all
     /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
-    /// `docs/adr/0338-…`). What ships under the presets root is written by
-    /// nothing, and the `<hash>.kir` artifacts at the root are the edit
-    /// history's rather than anybody's shelf.
+    /// `docs/adr/0338-…`). What ships under the presets root is written by nothing,
+    /// and the `<hash>.kir` artifacts at the root are the edit history's rather
+    /// than anybody's shelf.
     ///
-    /// **It refuses a name that is taken**, where [`Store::write_set`] and
-    /// [`Store::write_arrangement`] overwrite — see
-    /// [`StoreError::ProcedureTaken`], which is where that difference is
-    /// argued. The check is a race with anybody else writing the same path and
-    /// is a check all the same: the two callers of this are one hand and one
-    /// model on one frame loop, and what it stops is the ordinary case rather
-    /// than a concurrent one.
+    /// It refuses a name that is taken, where [`Store::write_set`] and
+    /// [`Store::write_arrangement`] overwrite — see [`StoreError::ProcedureTaken`],
+    /// which is where that difference is argued. The check is a race with anybody
+    /// else writing the same path and is a check all the same: the two callers of
+    /// this are one hand and one model on one frame loop, and what it stops is the
+    /// ordinary case rather than a concurrent one.
     ///
-    /// **Bytes handed over whole**, which is [`Store::put_artifact`]'s
-    /// contract and `arrangements/`': what a `.kir` says is the compiler's
-    /// question and this module answers none of it.
+    /// Bytes handed over whole, which is [`Store::put_artifact`]'s contract and
+    /// `arrangements/`': what a `.kir` says is the compiler's question and this
+    /// module answers none of it.
     ///
-    /// **Nothing here checks the name**, exactly as nothing checks a Set id or
-    /// an arrangement's: `<name>` becomes one path component and that is the
-    /// caller's rule to keep —
-    /// `karakuri_environment::mcp::checked_id` is where a name that is not one
-    /// is refused rather than sanitised.
+    /// Nothing here checks the name, exactly as nothing checks a Set id or an
+    /// arrangement's: `<name>` becomes one path component and that is the caller's
+    /// rule to keep — `karakuri_environment::mcp::checked_id` is where a name that
+    /// is not one is refused rather than sanitised.
     ///
-    /// The path comes back because a keep's outcome has to say where the file
-    /// went: *kept* with no directory named is a sentence that sends somebody
-    /// looking (P-0083).
+    /// The path comes back because a keep's outcome has to say where the file went:
+    /// *kept* with no directory named is a sentence that sends somebody looking
+    /// (P-0083).
     pub fn write_procedure(&self, name: &str, source: &[u8]) -> Result<PathBuf, StoreError> {
         let path = self.procedure_path(name);
         if path.exists() {
@@ -747,21 +734,21 @@ impl Store {
         Ok(path)
     }
 
-    /// **Keep one node's source in the sandbox** (`sandbox/<name>.kir`) —
-    /// [`Store::write_procedure`]'s sibling under [`Store::SANDBOX`], and the
-    /// one a model's keep goes to.
+    /// Keep one node's source in the sandbox (`sandbox/<name>.kir`) —
+    /// [`Store::write_procedure`]'s sibling under [`Store::SANDBOX`], and the one a
+    /// model's keep goes to.
     ///
     /// A method of its own rather than an argument, which is
-    /// [`Store::write_sandbox_set`]'s rule and its reason: the directory is
-    /// decided by *who asked*, and a `bool` here would make the operator's
-    /// library what a caller gets by saying nothing
+    /// [`Store::write_sandbox_set`]'s rule and its reason: the directory is decided
+    /// by *who asked*, and a `bool` here would make the operator's library what a
+    /// caller gets by saying nothing
     /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md),
     /// `docs/adr/0261-…`).
     ///
-    /// **It refuses a taken name too**, on [`Store::write_procedure`]'s terms:
-    /// a model's keep is stamped, so meeting one is a clock that has not moved
-    /// rather than a name somebody chose, and overwriting there would lose the
-    /// earlier of two keeps a model made in the same millisecond.
+    /// It refuses a taken name too, on [`Store::write_procedure`]'s terms: a
+    /// model's keep is stamped, so meeting one is a clock that has not moved rather
+    /// than a name somebody chose, and overwriting there would lose the earlier of
+    /// two keeps a model made in the same millisecond.
     pub fn write_sandbox_procedure(
         &self,
         name: &str,
@@ -778,54 +765,53 @@ impl Store {
         Ok(path)
     }
 
-    /// **List the Sets the store holds**, in ascending id order, each with the
-    /// time its file was last written.
+    /// List the Sets the store holds, in ascending id order, each with the time its
+    /// file was last written.
     ///
-    /// **The time comes from the filesystem because the file has none.** A Set
-    /// file is a state projection and carries no time at all — that is what
-    /// [`StoreError::TickInSet`] exists to enforce — so there is nothing inside
-    /// one to sort by, and the mtime is not a second-best here but the only
-    /// record that exists of when a Set was saved. [`Store::write_set`] renames
-    /// a complete file into place, so what that mtime marks is the moment the
-    /// Set became readable rather than the moment some writer opened a file.
+    /// The time comes from the filesystem because the file has none. A Set file is
+    /// a state projection and carries no time at all — that is what
+    /// [`StoreError::TickInSet`] exists to enforce — so there is nothing inside one
+    /// to sort by, and the mtime is not a second-best here but the only record that
+    /// exists of when a Set was saved. [`Store::write_set`] renames a complete file
+    /// into place, so what that mtime marks is the moment the Set became readable
+    /// rather than the moment some writer opened a file.
     ///
-    /// **Ordered by id and not by recency**, though "the one I saved last" is
-    /// the question this method is mostly asked. Two Sets written within one
-    /// tick of a coarse filesystem clock carry the same mtime, and a sort whose
-    /// keys tie falls back to whatever `read_dir` handed us — which is not an
-    /// order, and would differ between two calls on an unchanged store. Ids are
-    /// unique by construction, so ordering on them is total and repeatable;
-    /// recency is a `sort_by_key(|e| e.written)` away, and the field to do it
-    /// with is on every entry.
+    /// Ordered by id and not by recency, though "the one I saved last" is the
+    /// question this method is mostly asked. Two Sets written within one tick of a
+    /// coarse filesystem clock carry the same mtime, and a sort whose keys tie
+    /// falls back to whatever `read_dir` handed us — which is not an order, and
+    /// would differ between two calls on an unchanged store. Ids are unique by
+    /// construction, so ordering on them is total and repeatable; recency is a
+    /// `sort_by_key(|e| e.written)` away, and the field to do it with is on every
+    /// entry.
     ///
-    /// **A name the layout does not claim is skipped, not repaired.** The
-    /// directory holds `<id>`[`SET_FILE_SUFFIX`](Store::SET_FILE_SUFFIX); an
-    /// editor's backup, a `.tmp` left by a write that died, a subdirectory
-    /// someone made — those belong to whoever put them there, and reporting one
-    /// as a Set under a truncated id would invent a library entry
-    /// [`Store::read_set`] cannot open.
+    /// A name the layout does not claim is skipped, not repaired. The directory
+    /// holds `<id>`[`SET_FILE_SUFFIX`](Store::SET_FILE_SUFFIX); an editor's backup,
+    /// a `.tmp` left by a write that died, a subdirectory someone made — those
+    /// belong to whoever put them there, and reporting one as a Set under a
+    /// truncated id would invent a library entry [`Store::read_set`] cannot open.
     ///
-    /// **So a file under `sets/` that does not carry that suffix has no id at
-    /// all**, and an id is the only route a Set has to a deck: nothing can ask
-    /// for what cannot be named. That is what keeps a swap atomic
-    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`) —
-    /// the authoring form of a Set names its parts by relative path, so loading
+    /// So a file under `sets/` that does not carry that suffix has no id at all,
+    /// and an id is the only route a Set has to a deck: nothing can ask for what
+    /// cannot be named. That is what keeps a swap atomic
+    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`)
+    /// — the authoring form of a Set names its parts by relative path, so loading
     /// one would resolve against the filesystem mid-swap, and a swap that can
-    /// partially fail is not a swap. The listing is where that wall stands,
-    /// and it stands by naming rather than by opening anything.
+    /// partially fail is not a swap. The listing is where that wall stands, and it
+    /// stands by naming rather than by opening anything.
     ///
-    /// **The concrete cost, because it is paid silently.** A Set written by a
-    /// build that spelled the suffix `.set.ndjson` is still on disk, still
-    /// readable text, and simply **stops appearing here** — no error, no
-    /// warning, nothing to notice but an id that used to be in the list and is
-    /// not. Nothing repairs it and nothing should: renaming a file this store
-    /// did not write would be guessing that its contents are already resolved,
-    /// which is the one thing the extension exists to stop being a guess.
+    /// The concrete cost, because it is paid silently. A Set written by a build
+    /// that spelled the suffix `.set.ndjson` is still on disk, still readable text,
+    /// and simply stops appearing here — no error, no warning, nothing to notice
+    /// but an id that used to be in the list and is not. Nothing repairs it and
+    /// nothing should: renaming a file this store did not write would be guessing
+    /// that its contents are already resolved, which is the one thing the extension
+    /// exists to stop being a guess.
     ///
-    /// An empty store lists nothing, and that is not an error. A `sets/`
-    /// directory removed under the store *is* one: the caller asked what is
-    /// there and we have no answer, and an empty `Vec` would say "nothing is
-    /// kept" to a question we could not read.
+    /// An empty store lists nothing, and that is not an error. A `sets/` directory
+    /// removed under the store *is* one: the caller asked what is there and we have
+    /// no answer, and an empty `Vec` would say "nothing is kept" to a question we
+    /// could not read.
     pub fn list_sets(&self) -> Result<Vec<SetEntry>, StoreError> {
         let mut out = Vec::new();
         for entry in fs::read_dir(self.root.join("sets"))? {
@@ -852,51 +838,48 @@ impl Store {
         Ok(out)
     }
 
-    /// **What the file of starred ids is called**, and the one place it is
-    /// spelled — [`Store::favourites`] reads it and [`Store::set_favourite`]
-    /// writes it, and two literals could drift into a store that writes stars
-    /// it cannot read back.
+    /// What the file of starred ids is called, and the one place it is spelled —
+    /// [`Store::favourites`] reads it and [`Store::set_favourite`] writes it, and
+    /// two literals could drift into a store that writes stars it cannot read back.
     ///
-    /// **`.json` and not `.ndjson`, for `arrangements/`'s reason.** It is one
-    /// document rather than a stream of records: there is no line to append —
-    /// taking a star off is a removal, and a stream would need a tombstone and
-    /// a projection to express one — and nothing here is a [`Record`], because
-    /// the session vocabulary carrying a favourite is exactly what
-    /// `docs/manual/console.html` refused. It never goes through
-    /// [`crate::ndjson`]'s reader.
+    /// `.json` and not `.ndjson`, for `arrangements/`'s reason. It is one document
+    /// rather than a stream of records: there is no line to append — taking a star
+    /// off is a removal, and a stream would need a tombstone and a projection to
+    /// express one — and nothing here is a [`Record`], because the session
+    /// vocabulary carrying a favourite is exactly what `docs/manual/console.html`
+    /// refused. It never goes through [`crate::ndjson`]'s reader.
     ///
-    /// **A file rather than a directory of markers.** Both keep the same fact
-    /// and both leave the same stale entries behind; this one is a single read
-    /// and a single atomic write, and the whole answer is one `BTreeSet` a
-    /// caller can hold.
+    /// A file rather than a directory of markers. Both keep the same fact and both
+    /// leave the same stale entries behind; this one is a single read and a single
+    /// atomic write, and the whole answer is one `BTreeSet` a caller can hold.
     pub const FAVOURITES_FILE: &str = "favourites.json";
 
     fn favourites_path(&self) -> PathBuf {
         self.root.join(Store::FAVOURITES_FILE)
     }
 
-    /// **The ids of the Sets that are starred**, which is what `my sets` lists.
+    /// The ids of the Sets that are starred, which is what `my sets` lists.
     ///
-    /// **A missing file is an empty set and not an error**, which is
+    /// A missing file is an empty set and not an error, which is
     /// [`Store::list_sets`]'s rule about an empty store read one file along: a
-    /// store nobody has starred in has nothing to say, and it says it by having
-    /// no file. A file that will not parse *is* an error — see
-    /// [`StoreError::Favourites`], which is where the difference between those
-    /// two is argued.
+    /// store nobody has starred in has nothing to say, and it says it by having no
+    /// file. A file that will not parse *is* an error — see
+    /// [`StoreError::Favourites`], which is where the difference between those two
+    /// is argued.
     ///
-    /// **Ids the store no longer holds are returned as they are.** This is a
-    /// question and a question writes nothing, so nothing is pruned here; what
-    /// makes a stale mark harmless is that a listing is the intersection of
-    /// this with [`Store::list_sets`], so an id naming no Set lists no row. Put
-    /// a Set back under the same id and its star is back with it, which is the
-    /// right answer when the id is a name an operator typed.
+    /// Ids the store no longer holds are returned as they are. This is a question
+    /// and a question writes nothing, so nothing is pruned here; what makes a stale
+    /// mark harmless is that a listing is the intersection of this with
+    /// [`Store::list_sets`], so an id naming no Set lists no row. Put a Set back
+    /// under the same id and its star is back with it, which is the right answer
+    /// when the id is a name an operator typed.
     ///
-    /// **A `BTreeSet` rather than a `Vec`.** The question a caller asks is *is
-    /// this row starred*, once per row of a listing, and the order stars were
-    /// written in is not an order anything draws: `my sets` is the Set listing
-    /// narrowed, so the rows keep the listing's own order.
+    /// A `BTreeSet` rather than a `Vec`. The question a caller asks is *is this row
+    /// starred*, once per row of a listing, and the order stars were written in is
+    /// not an order anything draws: `my sets` is the Set listing narrowed, so the
+    /// rows keep the listing's own order.
     ///
-    /// **Off the frame**, like every other directory or file read here
+    /// Off the frame, like every other directory or file read here
     /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)):
     /// it is read when a listing is built, which is at startup and on the press
     /// that changes the scope, and never per pass.
@@ -911,7 +894,7 @@ impl Store {
         Ok(ids.into_iter().collect())
     }
 
-    /// **Star a Set, or take the star off**, and say whether the file moved.
+    /// Star a Set, or take the star off, and say whether the file moved.
     ///
     /// `false` back is the state already being the one asked for, which is an
     /// ordinary answer rather than a refusal: an operation names a state rather
@@ -919,30 +902,28 @@ impl Store {
     /// same thing (`karakuri_operation::Operation::SetFavourite`). Nothing is
     /// written in that case, so a star does not touch the file's own time.
     ///
-    /// **Starring an id `sets/` does not hold is refused** —
-    /// [`StoreError::NoSet`] — because a star is a control on a row, and a row
-    /// is a Set this store holds. **Unstarring one is not**, and that asymmetry
-    /// is the whole answer to a stale mark: a Set that left the library outside
-    /// this program leaves its id behind, the listing already ignores it, and
-    /// this is the way to be rid of it without opening the file in an editor.
+    /// Starring an id `sets/` does not hold is refused — [`StoreError::NoSet`] —
+    /// because a star is a control on a row, and a row is a Set this store holds.
+    /// Unstarring one is not, and that asymmetry is the whole answer to a stale
+    /// mark: a Set that left the library outside this program leaves its id behind,
+    /// the listing already ignores it, and this is the way to be rid of it without
+    /// opening the file in an editor.
     ///
-    /// **One stat and one atomic write.** The check is
-    /// [`Store::set_path`]'s existence and not [`Store::list_sets`]: pruning
-    /// the whole file against a directory read would make a star that lands
-    /// while `sets/` is briefly unreadable delete every other star, and losing
-    /// what somebody chose is a worse failure than keeping an id that names
-    /// nothing.
+    /// One stat and one atomic write. The check is [`Store::set_path`]'s existence
+    /// and not [`Store::list_sets`]: pruning the whole file against a directory
+    /// read would make a star that lands while `sets/` is briefly unreadable delete
+    /// every other star, and losing what somebody chose is a worse failure than
+    /// keeping an id that names nothing.
     ///
-    /// **The file is written sorted**, which costs nothing and makes two stores
-    /// starred in the same order the same bytes — the same reason
-    /// [`Store::list_sets`] orders on the id rather than on what `read_dir`
-    /// handed back.
+    /// The file is written sorted, which costs nothing and makes two stores starred
+    /// in the same order the same bytes — the same reason [`Store::list_sets`]
+    /// orders on the id rather than on what `read_dir` handed back.
     ///
-    /// **Nothing here checks the id**, exactly as nothing checks it in
+    /// Nothing here checks the id, exactly as nothing checks it in
     /// [`Store::write_set`]: what may be a Set id is the caller's rule, and
     /// `karakuri_environment`'s `mcp::checked_id` is where one reached from a
-    /// protocol is refused rather than sanitised. An id that is not one names
-    /// no file, so starring it is refused above by the check that is here.
+    /// protocol is refused rather than sanitised. An id that is not one names no
+    /// file, so starring it is refused above by the check that is here.
     pub fn set_favourite(&self, id: &str, favourite: bool) -> Result<bool, StoreError> {
         if favourite && !self.set_path(id).is_file() {
             return Err(StoreError::NoSet(id.to_string()));
@@ -962,34 +943,33 @@ impl Store {
         Ok(true)
     }
 
-    /// **List the artifacts the store holds, and say which of them have a
-    /// metadata card**, in ascending hash order.
+    /// List the artifacts the store holds, and say which of them have a metadata
+    /// card, in ascending hash order.
     ///
-    /// **One listing and not two.** The layout puts `<hash>.kir` and
+    /// One listing and not two. The layout puts `<hash>.kir` and
     /// `<hash>.meta.ndjson` in the same directory, so the pass that finds the
-    /// artifacts has already seen the cards; a separate `list_carded` would
-    /// read the directory a second time to recover what this one would have
-    /// thrown away. Carded and uncarded are then the same list read two ways —
-    /// filter one way to ask which artifacts a search index can already
-    /// describe, the other to ask what a regeneration pass has left to do.
+    /// artifacts has already seen the cards; a separate `list_carded` would read
+    /// the directory a second time to recover what this one would have thrown away.
+    /// Carded and uncarded are then the same list read two ways — filter one way to
+    /// ask which artifacts a search index can already describe, the other to ask
+    /// what a regeneration pass has left to do.
     ///
-    /// **A card is not an artifact.** A `<hash>.meta.ndjson` with no `.kir`
-    /// beside it is exactly the stray file [`Store::write_meta`] declines to
-    /// prevent, and it does not appear here: the `.kir` files are the
-    /// population and the cards only decorate them. A directory is not an
-    /// artifact either, whatever it happens to be named.
+    /// A card is not an artifact. A `<hash>.meta.ndjson` with no `.kir` beside it
+    /// is exactly the stray file [`Store::write_meta`] declines to prevent, and it
+    /// does not appear here: the `.kir` files are the population and the cards only
+    /// decorate them. A directory is not an artifact either, whatever it happens to
+    /// be named.
     ///
-    /// **And a name has to be one this store would have written**, not merely
-    /// one that parses. `<UPPERCASE HEX>.kir` decodes to a perfectly good
-    /// address — whose `.kir` path is then the *lowercase* name, so listing it
-    /// would hand back a hash [`Store::get_artifact`] cannot find. Rendering the
-    /// parsed address out again and requiring it to equal the stem costs one
-    /// string compare and makes every hash listed a hash the rest of this API
-    /// works on.
+    /// And a name has to be one this store would have written, not merely one that
+    /// parses. `<UPPERCASE HEX>.kir` decodes to a perfectly good address — whose
+    /// `.kir` path is then the *lowercase* name, so listing it would hand back a
+    /// hash [`Store::get_artifact`] cannot find. Rendering the parsed address out
+    /// again and requiring it to equal the stem costs one string compare and makes
+    /// every hash listed a hash the rest of this API works on.
     ///
     /// Ordering is by the address itself, which for hex is the order a reader
-    /// scanning the column expects. As with [`Store::list_sets`], an empty
-    /// store lists nothing and a missing root is an error.
+    /// scanning the column expects. As with [`Store::list_sets`], an empty store
+    /// lists nothing and a missing root is an error.
     pub fn list_artifacts(&self) -> Result<Vec<ArtifactEntry>, StoreError> {
         let mut sources = BTreeSet::new();
         let mut cards = BTreeSet::new();
@@ -1053,12 +1033,12 @@ pub struct SetEntry {
 /// what to hand [`Store::read_arrangement`], and when that file was last
 /// written.
 ///
-/// **`name` rather than `id`**, where [`SetEntry`] says `id`. A Set is
-/// ordinarily filed under a stamp nobody chose — `history::stamped_id`, because
-/// a key press cannot type a name — and an arrangement never is: it is saved by
-/// an operator who is telling the console what to call this shape. The two
-/// words are the difference, and carrying `id` here would say a stamp is the
-/// expected case when it is the fallback.
+/// `name` rather than `id`, where [`SetEntry`] says `id`. A Set is ordinarily
+/// filed under a stamp nobody chose — `history::stamped_id`, because a key
+/// press cannot type a name — and an arrangement never is: it is saved by an
+/// operator who is telling the console what to call this shape. The two words
+/// are the difference, and carrying `id` here would say a stamp is the expected
+/// case when it is the fallback.
 ///
 /// The time is a field for the reason it is one on [`SetEntry`]: a name an
 /// operator typed sorts nowhere near when they typed it.
@@ -1071,14 +1051,14 @@ pub struct ArrangementEntry {
 /// A procedure the operator has kept, as [`Store::list_procedures`] found it:
 /// what to hand [`Store::read_procedure`], and when that file was last written.
 ///
-/// **`name` rather than `id`**, which is [`ArrangementEntry`]'s own word and
+/// `name` rather than `id`, which is [`ArrangementEntry`]'s own word and
 /// carries its argument: a Set is ordinarily filed under a stamp nobody chose,
 /// and a procedure never is — it is here because somebody pressed `keep` on a
 /// node and said what to call it.
 ///
-/// **No `kind` field**, and it is left off rather than dropped: what layer the
-/// file declares is a line of the language, and [`Store::list_procedures`] is
-/// where the reason this module does not read one is written.
+/// No `kind` field, and it is left off rather than dropped: what layer the file
+/// declares is a line of the language, and [`Store::list_procedures`] is where
+/// the reason this module does not read one is written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcedureEntry {
     pub name: String,

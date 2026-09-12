@@ -53,8 +53,8 @@ impl<'a> Iterator for RawLines<'a> {
 
 impl<'a> std::iter::FusedIterator for RawLines<'a> {}
 
-/// Memory-mapped stream reader providing zero-copy line iteration, fast tick scanning,
-/// and record deserialization.
+/// Memory-mapped stream reader providing zero-copy line iteration, fast tick
+/// scanning, and record deserialization.
 pub struct MmapStreamReader {
     mmap: Option<memmap2::Mmap>,
 }
@@ -103,19 +103,22 @@ impl MmapStreamReader {
         self.as_bytes().is_empty()
     }
 
-    /// Zero-allocation line slicing yielding borrowed `&[u8]` line slices without copying.
+    /// Zero-allocation line slicing yielding borrowed `&[u8]` line slices without
+    /// copying.
     pub fn lines_raw(&self) -> RawLines<'_> {
         RawLines {
             slice: self.as_bytes(),
         }
     }
 
-    /// Zero-allocation line slicing yielding borrowed `&[u8]` line slices (alias for `lines_raw`).
+    /// Zero-allocation line slicing yielding borrowed `&[u8]` line slices (alias
+    /// for `lines_raw`).
     pub fn lines_bytes(&self) -> RawLines<'_> {
         self.lines_raw()
     }
 
-    /// Zero-allocation line slicing yielding borrowed `&str` line slices without copying.
+    /// Zero-allocation line slicing yielding borrowed `&str` line slices without
+    /// copying.
     pub fn lines(&self) -> impl Iterator<Item = &str> + '_ {
         self.lines_raw()
             .filter_map(|line| std::str::from_utf8(line).ok())
@@ -123,7 +126,8 @@ impl MmapStreamReader {
 
     /// Detect the schema version from line 0.
     ///
-    /// Reports the header version if present, otherwise returns 1 (legacy unversioned).
+    /// Reports the header version if present, otherwise returns 1 (legacy
+    /// unversioned).
     pub fn schema_version(&self) -> u32 {
         match self.lines_raw().next() {
             Some(first_line) => {
@@ -148,8 +152,9 @@ impl MmapStreamReader {
         })
     }
 
-    /// Fast tick indexing / scanning: scans byte slices for tick markers and extracts
-    /// tick timestamps/counters without full JSON object deserialization of intermediate lines.
+    /// Fast tick indexing / scanning: scans byte slices for tick markers and
+    /// extracts tick timestamps/counters without full JSON object deserialization
+    /// of intermediate lines.
     pub fn iter_ticks(&self) -> impl Iterator<Item = TickIndexEntry> + '_ {
         let base_ptr = self.as_bytes().as_ptr() as usize;
         let mut tick_counter: usize = 0;
@@ -245,7 +250,8 @@ fn extract_steps(line: &[u8]) -> u8 {
     1
 }
 
-/// Extract optional timestamp / pts / time from a tick byte slice without full JSON parsing.
+/// Extract optional timestamp / pts / time from a tick byte slice without full
+/// JSON parsing.
 fn extract_timestamp(line: &[u8]) -> Option<u64> {
     for pattern in &[
         b"\"timestamp\"".as_slice(),

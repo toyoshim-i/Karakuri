@@ -6,7 +6,7 @@
 //! artifact with one hash, because capacity is a performance dial turned per
 //! Set rather than part of a procedure's identity.
 //!
-//! **The rest of that sentence is not repeated here.** `docs/ir-spec.md`,
+//! The rest of that sentence is not repeated here. `docs/ir-spec.md`,
 //! "`capacity` is not part of a procedure's identity", counts the stored assets
 //! one identity gets as well — "one hash and one thumbnail" — and this file
 //! carried a word-for-word copy of it that went on saying `preview` for a whole
