@@ -1,13 +1,7 @@
-//! Transient Render Graph (DAG) with Memory Aliasing and Dead Pass Culling.
+//! Declarative transient render graph with memory aliasing and dead pass culling.
 //!
-//! Provides a declarative pass graph representation:
-//! - **Virtual Resource System**: [`ResourceId`], [`TextureDesc`], [`BufferDesc`], and [`GraphResource`].
-//! - **Pass Scheduling**: Directed acyclic graph with dependency analysis,
-//!   topological sorting, and cycle detection.
-//! - **Dead Pass Culling**: Backward reachability from output targets and passes with side effects.
-//! - **Transient Memory Aliasing**: Automatic interval-based physical texture reuse for
-//!   non-overlapping transient resources via [`TransientMemoryPool`].
-//! - **Execution**: Headless mock execution as well as full GPU recording via [`wgpu::CommandEncoder`].
+//! Manages virtual resources, pass dependencies, topological execution ordering,
+//! dead pass elimination, and transient texture memory reuse across render passes.
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt;

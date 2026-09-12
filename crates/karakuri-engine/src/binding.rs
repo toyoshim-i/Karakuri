@@ -1,73 +1,11 @@
-//! Signal bindings: what turns a `bind` record into a uniform write.
+//! Signal binding evaluation and parameter mapping.
 //!
-//! A binding maps one signal onto one `param` of one procedure, every frame.
-//! Five steps, and the fourth is the one that carries the design:
+//! Evaluates mappings between continuous signals (such as oscillator phase, audio features,
+//! or procedural noise generators) and shader/simulation parameters.
 //!
-//! 1. sample the signal **by name**, from a bus that is always complete;
-//! 2. put the sample's value through the binding's [`Curve`];
-//! 3. map that onto the binding's `range`;
-//! 4. **blend against the param's own value by the sample's confidence**;
-//! 5. write the result as a uniform, on the path a `--param` override takes.
-//!
-//! ## Confidence, and why the demo is quiet
-//!
-//! `Sample`'s own documentation asks for step 4: confidence "is never a flag:
-//! a consumer blends on it rather than testing it". The consequence is worth
-//! following rather than softening. `beat`, `bar` and `bpm` come off the local
-//! oscillator, which is the single source of truth for phase and tempo,
-//! so they carry confidence 1.0 and a binding to them takes full effect today.
-//! `energy` and the bands are invented when nothing is measuring, so they carry
-//! 0.1 and move a parameter by a tenth of what the same number from a real
-//! provider would. That is the system being honest about what it knows. A demo
-//! made livelier by ignoring confidence would be a lie that has to be
-//! unwritten.
-//!
-//! Audio has landed, and this is what "with nothing else changed" turned out to
-//! mean: [`Signals::set_audio`] puts one frame's measurements on the session
-//! once per frame, `sample` layers them over the synthesized bus, and every
-//! step below — curve, range, blend, write — is untouched. The same `energy`
-//! binding that moved a tenth of the way now moves all of it, because the same
-//! name came back with confidence 1.0 instead of 0.1.
-//!
-//! Nothing here asks whether a provider exists. [`SignalBus::sample`] cannot
-//! fail and does not return an `Option`; a name nobody has ever heard of comes
-//! back with confidence 0.0, and step 4 then writes the param's own value
-//! unchanged. The absence of a provider is not a branch, it is a coefficient.
-//!
-//! ## Range, and why the input is clamped
-//!
-//! Steps 2 and 3 assume the sample is in `[0, 1]`, which is what makes `range`
-//! mean what it says. Two signals are not:
-//!
-//! - **`bpm`** is a tempo in beats per minute. It clamps to 1.0 and a binding
-//!   to it is therefore pinned at the top of its range. Bind `beat` or `bar`
-//!   instead; this is recorded in `docs/ir-spec.md` rather than papered over
-//!   with an invented normalisation range.
-//! - **noise** is signed, in `[-1, 1)`. A binding maps it to `[0, 1]` before
-//!   the curve ([`Signals::noise`]), because clamping would throw away the
-//!   half of the signal below zero — a `spawn_rate` bound to noise would sit
-//!   at the bottom of its range half the time.
-//!
-//! Anything else out of range is clamped rather than extrapolated: `range` is
-//! also what keeps a bound value inside what the artifact declared.
-//!
-//! ## One oscillator, one session
-//!
-//! [`Signals`] is that oscillator plus the seed every noise stream comes from,
-//! and there is one per session — `Deck` owns it, advances it once per frame
-//! by the same `steps` every Live slot advances by, and hands it to each Set.
-//! Two oscillators would be two truths about phase and tempo. A binding is
-//! therefore a pure function of the tick sequence and the seed, which is what
-//! puts it inside the determinism invariant rather than beside it.
-//!
-//! **One grid, read at more than one position along it.** A slot warming off
-//! air steps on some frames and not others, so its `t` is behind the session's,
-//! and it reads this same oscillator through [`Signals::at`] — same tempo, same
-//! anchor, same corrections, its own position. That is not a second truth about
-//! phase; it is the one truth asked what it says at another instant. A slot on
-//! air always reads the session's position, because a picture in the room has
-//! to be on the room's beat. `Set::prepare_warming` carries the argument and
-//! the two things it does not fix.
+//! Each binding samples a signal, applies a shaping [`Curve`], maps the normalized value
+//! to a target range, and blends against any manual parameter setting according to
+//! the signal's confidence value.
 
 use karakuri_ir::Kind;
 use karakuri_signal::{
@@ -75,74 +13,33 @@ use karakuri_signal::{
     VectorSample,
 };
 
-/// The tempo a session runs at until something corrects it. There is no tempo
-/// record in the v0.2 vocabulary and no external sync yet, so this is a
-/// starting value rather than a measurement — the same status `BEATS_PER_BAR`
-/// has in `karakuri-signal`.
+/// Default tempo in beats per minute for new sessions.
 pub const DEFAULT_BPM: f32 = 120.0;
 
-/// The signal name that means "the generator this binding declares".
-///
-/// It is deliberately not a lookup on the bus: [`SynthesizedBus`]'s own
-/// `"noise"` is a parameterless stand-in, while a binding always has kind,
-/// rate, stream and octaves to say — and a `&str` cannot carry four fields
-/// without a grammar to take them apart again.
+/// Special signal name designating the procedural noise generator declared by the binding.
 pub const NOISE_SIGNAL: &str = "noise";
 
-/// A `signal` beginning with this names **a control the Set published** rather
-/// than anything on the bus — `signal: "control:twist"`.
-///
-/// **This is the whole of what a macro is**, and it needed no new record and no
-/// new semantics: `docs/ir-spec.md` says a macro is one published control moving
-/// several internal ones, each through its own curve and range, which is a
-/// `bind` with a different source. A bus signal arrives with a confidence and is
-/// blended by it; a published control is the operator's hand and its confidence
-/// is 1.
-///
-/// Resolved by [`crate::set::Set`] and not by the bus, because a published
-/// control is the *Set's* and the bus is the deck's — four Sets publishing
-/// `twist` are four controls, and a name shared across a session is exactly what
-/// a signal is and a control is not.
+/// Prefix designating a published set macro control (for example, `"control:twist"`).
 pub const CONTROL_PREFIX: &str = "control:";
 
-/// The shape a signal is put through before it reaches `range`.
-///
-/// Four, and four is the number of distinct shapes a monotone `[0,1] -> [0,1]`
-/// map has: flat, floor-weighted, peak-weighted, and eased at both ends. A
-/// fifth would be a re-parameterisation of one of these — `pow3` is `pow2`
-/// with a steeper knee, `cbrt` is `sqrt` with a steeper one — adding a name
-/// without adding a behaviour, which is the kind of vocabulary growth an LLM
-/// generating against a specification pays for twice.
+/// Transfer function applied to normalized signal samples prior to range mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Curve {
-    /// Identity. The signal as it is. `docs/ir-spec.md` uses this name.
+    /// Linear identity function.
     Lin,
-    /// `x^2`. **Emphasises the peak**: the bottom of the signal is flattened
-    /// towards the floor, so the param only moves near the top. This is what
-    /// a percussive binding wants — a `beat` pulse through `pow2` reads as a
-    /// hit rather than as a wobble. `docs/ir-spec.md` uses this name.
+    /// Quadratic curve emphasizing peak values.
     Pow2,
-    /// `sqrt(x)`. **Emphasises the floor**, and is the exact complement of
-    /// [`Curve::Pow2`]: it rises fast off zero and flattens at the top, so a
-    /// signal that spends its life near the bottom — which every low-confidence
-    /// invented signal does, once confidence has scaled it — still produces
-    /// visible movement, and the top compresses instead of clipping.
+    /// Square-root curve emphasizing low values.
     Sqrt,
-    /// Smoothstep, `x^2 (3 - 2x)`. **Eases both ends**: the derivative is zero
-    /// at 0 and at 1, so the param neither jumps off the floor nor slams into
-    /// the ceiling. The one to use when the param is a position rather than an
-    /// intensity, where a discontinuity in velocity is visible and a
-    /// discontinuity in brightness is not.
+    /// Smoothstep curve providing eased transitions at both bounds.
     Smooth,
 }
 
-/// Every curve name, in the order they are documented. One list, so the
-/// parser, the error message and the spec cannot drift apart.
+/// All available transfer curve variants.
 pub const CURVES: [Curve; 4] = [Curve::Lin, Curve::Pow2, Curve::Sqrt, Curve::Smooth];
 
 impl Curve {
-    /// The name a `bind` record spells. `None` for anything else — an
-    /// unrecognised curve is a diagnostic, not a silent fallback to `lin`.
+    /// Parses a curve name, returning `None` if unrecognized.
     pub fn parse(name: &str) -> Option<Curve> {
         CURVES.into_iter().find(|c| c.name() == name)
     }
@@ -156,10 +53,7 @@ impl Curve {
         }
     }
 
-    /// Apply the curve. The input is clamped into `[0, 1]` first, so the
-    /// output is in `[0, 1]` for every curve and `range` is a range rather
-    /// than a suggestion. `sqrt` of a negative would be NaN otherwise, which
-    /// is one bad sample away from a NaN in a uniform.
+    /// Applies the transfer curve to `x`, clamping `x` to [0, 1].
     pub fn apply(self, x: f32) -> f32 {
         let x = if x.is_nan() { 0.0 } else { x.clamp(0.0, 1.0) };
         match self {
@@ -171,39 +65,15 @@ impl Curve {
     }
 }
 
-/// The session's signal source: one local oscillator, one seed, and whatever
-/// the record stream last said was measured.
-///
-/// **One per session.** `Deck` owns it and advances it once per frame; see the
-/// module doc. Everything a binding can read comes from here, so a binding's
-/// whole input is `(bpm, elapsed steps, seed, this frame's measurements)` and
-/// nothing else — no clock, no interior mutability, nothing thread-derived. The
-/// last of those is plain data that is *handed in* once per frame, exactly as
-/// `steps` is: see [`Signals::set_audio`].
-///
-/// `Copy`, so that a caller can take the session's signals, put this frame's
-/// measurement on them, and hand them back without the phase moving.
+/// Session signal generator and measurement container.
 #[derive(Clone, Copy)]
 pub struct Signals {
     oscillator: Oscillator,
-    /// The explicit seed every noise stream is derived from. The determinism
-    /// invariant is "all randomness comes from an explicit seed stream", and
-    /// this is that seed for the signal side.
     seed: u64,
-    /// This frame's measured signals, or `None` when nothing is measuring.
-    ///
-    /// `None` is not a case any consumer sees: it decides which bus is built
-    /// below, and a `None` builds one that answers every name exactly as it did
-    /// before audio existed. Someone has to know whether a provider exists —
-    /// the invariant is that it is not the consumer, and it is not the bus's
-    /// callers.
     audio: Option<AudioFrame>,
 }
 
 impl Default for Signals {
-    /// [`DEFAULT_BPM`], seed 0, phase zero. What a `Deck` comes up with, and
-    /// what a caller driving a `Set` with no bindings on it passes: the bus is
-    /// still complete and still answers every name, and nothing reads it.
     fn default() -> Signals {
         Signals::new(DEFAULT_BPM, 0)
     }
@@ -247,21 +117,7 @@ impl Signals {
     /// **The same signals, with the oscillator read `seconds` earlier.** For a
     /// caller whose clock is behind the session's; `0.0` returns `self`
     /// unchanged, bit for bit. See [`Oscillator::behind`].
-    ///
-    /// **Which signals move with it is not uniform, and the split is the
-    /// interesting part.** A *synthesized* signal is a function of the
-    /// oscillator — `energy` and the bands are, when nothing is measuring — so
-    /// it moves, and it should: it is generated on that clock and reading it on
-    /// another would be reading it out of step with itself. A *measured* one
-    /// does not move, because there is nothing to move it to. Whatever
-    /// [`Signals::set_audio`] installed is this frame's, and there is no past
-    /// `energy` to give: nothing keeps one.
-    ///
-    /// So `energy` means the room's sound on the session's clock with audio
-    /// connected, and a synthesized wobble on the caller's own clock without —
-    /// two different things behind one name, which is what a bus that invents
-    /// what it cannot measure buys and pays for. The confidence says which one
-    /// is speaking: 1.0 measured, 0.1 invented.
+    /// Returns signals with the local oscillator evaluated `seconds` in the past.
     pub fn behind(self, seconds: f64) -> Signals {
         Signals {
             oscillator: self.oscillator.behind(seconds),
@@ -269,15 +125,7 @@ impl Signals {
         }
     }
 
-    /// Correct the session's tempo and phase — a new tempo, and a phase shift
-    /// in beats.
-    ///
-    /// **Once per frame at most, before the frame is rendered**, from the same
-    /// place `steps` and the measured frame come from: a tracker live, a
-    /// `tempo` record on replay. Nothing is measured here and no clock is read;
-    /// two numbers arrive and the oscillator applies them, which is what keeps
-    /// "rendering reads only the local oscillator" true while an external tempo
-    /// source exists at all.
+    /// Updates oscillator tempo and applies a phase correction in beats.
     pub fn correct(&mut self, bpm: f32, shift_beats: f32) {
         self.oscillator.correct(bpm, shift_beats);
     }
@@ -290,106 +138,58 @@ impl Signals {
         self.seed
     }
 
-    /// Sample a signal by pre-resolved [`SignalId`]. Never fails, never returns an `Option`.
+    /// Samples a signal by pre-resolved [`SignalId`].
     pub fn sample_id(&self, id: SignalId) -> Sample {
         MeasuredBus::new(self.audio.as_ref(), SynthesizedBus::new(&self.oscillator)).sample_id(id)
     }
 
-    /// Sample a vectorized signal by its ID.
+    /// Samples a vectorized signal by its pre-resolved ID.
     pub fn sample_vector(&self, id: SignalId) -> VectorSample {
         MeasuredBus::new(self.audio.as_ref(), SynthesizedBus::new(&self.oscillator))
             .sample_vector(id)
     }
 
-    /// Sample a signal by name. Never fails, never returns an `Option`.
-    ///
-    /// The bus is constructed per call and holds the oscillator and the frame
-    /// by reference, so there is nothing to keep in sync and nothing to
-    /// allocate — this is a few words on the stack, which matters because it is
-    /// called per binding per frame on the render thread.
-    ///
-    /// Two layers: whatever was measured this frame, over the synthesized bus.
-    /// A measured name answers with its own confidence; every other name — and
-    /// every name at all, when nothing is measuring — falls through unchanged.
-    /// This is the whole of "a binding starts working when audio lands":
-    /// `energy` is the same name, sampled by the same call, and only the
-    /// confidence that comes back is different.
+    /// Samples a signal by name across measured and synthesized sources.
     pub fn sample(&self, name: &str) -> Sample {
         self.sample_id(SignalId::resolve(name))
     }
 
-    /// Sample a generator the caller declares, mapped from the generator's
-    /// signed `[-1, 1)` into the `[0, 1]` a curve and a range expect.
-    ///
-    /// **Certain**, unlike the bus's parameterless `"noise"` name. A noise
-    /// binding is not a guess at something unobserved: the binding declares
-    /// the generator, the generator is deterministic, and its value is exactly
-    /// what it claims to be — the same reason the local oscillator's own
-    /// signals are certain. `docs/ir-spec.md`'s Spawn timing rests on this:
-    /// irregular spawning is available *only* by binding noise to
-    /// `spawn_rate`, and a binding that took a tenth effect would not be an
-    /// alternative to the Poisson option that section rejects.
+    /// Samples a procedural noise generator mapped to the unit range [0, 1].
     pub fn noise(&self, config: &NoiseConfig) -> Sample {
         Sample::certain(config.sample(self.seed, &self.oscillator) * 0.5 + 0.5)
     }
 }
 
-/// One signal, attached to one `param` of one layer.
-///
-/// Field for field a `Record::Bind`, so that loading a Set file is a decode
-/// rather than a translation.
+/// Configuration for binding a signal source to a procedure parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binding {
-    /// Which procedure declares the `param`. L1 and L4 params are packed into
-    /// separate uniform buffers, so this is what says which one is written.
+    /// Target layer kind whose parameter is being driven.
     pub layer: Kind,
-    /// **Which node of that layer**, or `None` for every node declaring the
-    /// name.
-    ///
-    /// A Set draws with one L1 and a list of renderers, so a layer alone stops
-    /// naming a node the moment there are two. `None` is not a default index —
-    /// it is a *wildcard*, and the useful one: "the Set's `exposure`", one knob
-    /// moving every renderer that has one, which is what a bare `--param` means
-    /// and what a console would offer as one published control.
-    ///
-    /// An address is `(layer, index)` and it is present or absent as a unit.
+    /// Specific node index within the layer, or `None` to target all nodes.
     pub index: Option<u32>,
     pub key: String,
     pub signal: String,
-    /// Pre-resolved signal identifier for zero-lookup hot path sampling.
+    /// Pre-resolved signal identifier for fast lookup.
     pub signal_id: SignalId,
     pub curve: Curve,
     pub range: [f32; 2],
-    /// The generator, for a `signal` of [`NOISE_SIGNAL`]. `None` means the
-    /// default generator, not the absence of one: there is nothing else for the
-    /// name to mean.
+    /// Configuration for generator-driven noise bindings.
     pub noise: Option<NoiseConfig>,
-    /// What the last [`Binding::resolve`] produced. Cached rather than
-    /// recomputed per read because a param is written into two places in a
-    /// frame — the uniform and, for `spawn_rate`, the spawn accumulator — and
-    /// two evaluations of one binding in one frame is two values.
+    /// Cached value from the most recent evaluation.
     value: f32,
 }
 
-/// A parameter value and the node it was written at.
-///
-/// What a `param` record and a `--param` carry, once the address exists. Kept
-/// beside [`Binding`] because the two answer the same question about the same
-/// name — one with a signal behind it and one with a number — and an address
-/// that meant different things in the two would be worse than no address.
+/// Manual parameter override targeted at a specific node or layer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamWrite {
-    /// `None` writes **every node declaring `key`**, which is what a bare name
-    /// has always meant and is the useful default: one knob moving every
-    /// renderer that has an `exposure`. `Some((layer, index))` writes one node.
-    /// See [`Binding::index`] — present or absent as a unit, on the same terms.
+    /// Target node address `(layer, index)`, or `None` to target all nodes declaring `key`.
     pub at: Option<(Kind, u32)>,
     pub key: String,
     pub value: f32,
 }
 
 impl ParamWrite {
-    /// Every node that declares `key`.
+    /// Targets all nodes declaring `key`.
     pub fn everywhere(key: impl Into<String>, value: f32) -> ParamWrite {
         ParamWrite {
             at: None,
@@ -398,7 +198,7 @@ impl ParamWrite {
         }
     }
 
-    /// One node.
+    /// Targets a specific node within a layer.
     pub fn at(layer: Kind, index: u32, key: impl Into<String>, value: f32) -> ParamWrite {
         ParamWrite {
             at: Some((layer, index)),
@@ -427,9 +227,6 @@ impl Binding {
             curve,
             range,
             noise: None,
-            // Overwritten by the first `resolve`, which happens in `prepare`
-            // before anything reads it. Not `NaN`: a value that leaked would
-            // then poison a whole render target rather than being visibly odd.
             value: range[0],
         }
     }
@@ -439,68 +236,47 @@ impl Binding {
         self
     }
 
-    /// Narrow this binding to one node of its layer. Without it a binding is
-    /// the layer's — see [`Binding::index`].
+    /// Restricts this binding to a specific node index.
     pub fn at(mut self, index: u32) -> Binding {
         self.index = Some(index);
         self
     }
 
-    /// Whether this binding writes the node at `index` of its layer.
+    /// Returns whether this binding targets the node at `index`.
     pub fn covers(&self, index: usize) -> bool {
         self.index.is_none_or(|i| i as usize == index)
     }
 
-    /// What this binding wrote on the last frame.
+    /// Returns the resolved value from the most recent evaluation.
     pub fn value(&self) -> f32 {
         self.value
     }
 
-    /// Sample, curve, map, and blend against `manual`. Returns what the param
-    /// is written with this frame, and remembers it.
-    ///
-    /// `manual` is the param's own value — its `.kir` default, or whatever a
-    /// `param` record or a `--param` override last set. It is never
-    /// overwritten: a binding blends *from* it, so a param that is both bound
-    /// and set by hand has an answer that does not depend on which of the two
-    /// happened last.
+    /// Evaluates the binding against `signals` and blends with `manual`.
     pub fn resolve(&mut self, signals: &Signals, manual: f32) -> f32 {
         let sample = self.sample(signals);
         self.value = blend(manual, self.map(sample.value), sample.confidence);
         self.value
     }
 
-    /// **Driven by a published control**, whose position is `[0, 1]` and whose
-    /// confidence is 1 — it is the operator's hand and not a guess at something
-    /// unobserved, so there is nothing for a manual value to blend against. See
-    /// [`CONTROL_PREFIX`].
+    /// Sets the value directly from a normalized published control position.
     pub fn drive(&mut self, position: f32) -> f32 {
         self.value = self.map(position);
         self.value
     }
 
-    /// **Nothing is driving this**, so the param's own value stands. What a
-    /// binding on a published control that is not there resolves to — see
-    /// [`CONTROL_PREFIX`].
+    /// Holds the parameter at its manual value without modulation.
     pub fn hold(&mut self, manual: f32) -> f32 {
         self.value = manual;
         self.value
     }
 
-    /// The curve and the range, without the confidence blend. Public so that
-    /// "what this binding would write if the signal were certain" is a value a
-    /// test can name rather than a number copied out of an implementation.
+    /// Maps a normalized input value through the curve and target range.
     pub fn map(&self, x: f32) -> f32 {
         let (low, high) = (self.range[0], self.range[1]);
         low + (high - low) * self.curve.apply(x)
     }
 
-    /// Where the value comes from. A `signal` of [`NOISE_SIGNAL`] reads the
-    /// generator the binding carries rather than the bus's parameterless
-    /// `"noise"` name: the bus takes a `&str` and there is no collision-free
-    /// grammar for four fields inside one, which is exactly why the record
-    /// carries a `noise` object instead. Every other name goes to the bus, and
-    /// the bus answers every name.
     fn sample(&self, signals: &Signals) -> Sample {
         if self.signal == NOISE_SIGNAL {
             signals.noise(&self.noise.unwrap_or_default())
@@ -510,14 +286,7 @@ impl Binding {
     }
 }
 
-/// `lerp(manual, mapped, confidence)` — the whole of "consumers branch only on
-/// confidence".
-///
-/// Written as a weighted sum rather than `manual + (mapped - manual) * c` so
-/// that both ends are exact: a confidence of 1.0 writes `mapped` bit for bit
-/// and a confidence of 0.0 writes `manual` bit for bit, which is what makes
-/// "an unknown signal leaves the param alone" a thing to assert rather than to
-/// approximate.
+/// Linearly blends between `manual` and `mapped` according to `confidence` clamped to [0, 1].
 pub fn blend(manual: f32, mapped: f32, confidence: f32) -> f32 {
     let c = if confidence.is_nan() {
         0.0
@@ -621,9 +390,6 @@ mod tests {
 
     // -- confidence ---------------------------------------------------------
 
-    /// The rule most likely to be quietly dropped. `energy` is invented and
-    /// carries 0.1, so **from the same sample value** it must move a param a
-    /// tenth as far as a provider that is tracking would.
     #[test]
     fn an_invented_signal_moves_a_param_a_tenth_as_far_as_a_certain_one() {
         let signals = advanced(128.0, 5, 40);
@@ -647,19 +413,11 @@ mod tests {
         );
     }
 
-    /// **One name, one meaning.** `docs/ir-spec.md` requires two vocabularies
-    /// that meet in one decoder to be "disjoint by name" rather than merely
-    /// disjoint in practice. A binding's `signal` is one name resolved two
-    /// ways — [`NOISE_SIGNAL`] reads the generator the binding declares,
-    /// everything else reads the bus — so for the rule to hold, no name may be
-    /// answerable by both. What a binding writes has to be what the bus says
-    /// that name is, for every name the bus provides.
     #[test]
     fn no_signal_name_means_one_thing_to_the_bus_and_another_to_a_binding() {
         let signals = advanced(120.0, 42, 37);
         let manual = 0.5;
 
-        // Every name the bus provides resolves through the bus, unchanged.
         for name in ["bpm", "beat", "bar", "energy", "band", "band3"] {
             let bus = signals.sample(name);
             assert!(bus.confidence > 0.0, "`{name}` is supposed to be provided");
@@ -671,11 +429,6 @@ mod tests {
             );
         }
 
-        // And the one name that does not is not on the bus at all. A binding
-        // reads its declared generator, certain; if the bus answered the same
-        // name it would answer with a different number at a different
-        // confidence, and which one a caller got would depend on which door it
-        // came in by.
         let bus = signals.sample(NOISE_SIGNAL);
         assert_eq!(
             bus.confidence, 0.0,
@@ -690,8 +443,6 @@ mod tests {
         );
     }
 
-    /// A name no provider has ever heard of. Not an error, not a panic, and
-    /// not a change: the param keeps its manual value, bit for bit.
     #[test]
     fn a_signal_nobody_has_ever_heard_of_leaves_the_param_at_its_manual_value() {
         let signals = advanced(128.0, 5, 40);
@@ -706,37 +457,25 @@ mod tests {
         }
     }
 
-    /// Both ends of the blend are exact, which is what lets the two tests
-    /// above assert equality rather than a tolerance.
     #[test]
     fn confidence_one_writes_the_mapped_value_and_zero_writes_the_manual_one() {
         assert_eq!(blend(2.6, 9.1, 1.0), 9.1);
         assert_eq!(blend(2.6, 9.1, 0.0), 2.6);
         assert_eq!(blend(2.0, 4.0, 0.5), 3.0);
-        // A confidence outside [0, 1] cannot extrapolate past either end.
         assert_eq!(blend(2.6, 9.1, 5.0), 9.1);
         assert_eq!(blend(2.6, 9.1, -5.0), 2.6);
         assert_eq!(blend(2.6, 9.1, f32::NAN), 2.6);
     }
 
-    /// A param that is bound *and* set by hand. The manual value is the blend
-    /// base and nothing else, so the answer does not depend on which of the
-    /// two was written last.
     #[test]
     fn a_manual_value_is_the_base_of_the_blend_not_a_competitor_for_the_write() {
         let signals = advanced(120.0, 3, 17);
         let mut certain = binding("beat", Curve::Lin, [0.0, 4.0]);
-        // Two very different manual values, one certain signal: the write is
-        // the same either way, because confidence 1.0 leaves the base no
-        // weight at all.
         assert_eq!(
             certain.resolve(&signals, 0.5),
             certain.resolve(&signals, 400.0)
         );
 
-        // And with an invented signal the manual value is most of the answer,
-        // so moving it moves the write — a `--param` on a bound param is not
-        // ignored, it is outvoted in proportion.
         let mut invented = binding("energy", Curve::Lin, [0.0, 4.0]);
         let a = invented.resolve(&signals, 0.5);
         let b = invented.resolve(&signals, 1.5);
@@ -747,15 +486,8 @@ mod tests {
         );
     }
 
-    // -- phase --------------------------------------------------------------
-
-    /// A `beat` binding moves *in time with the oscillator*, not merely over
-    /// time. Two things are asserted, because either alone would pass against
-    /// a number that changes for the wrong reason: the value is the beat
-    /// signal at the session's own phase, and it repeats a beat later.
     #[test]
     fn a_beat_binding_tracks_the_oscillators_phase() {
-        // 120 bpm at dt = 1/60 is exactly 30 frames to the beat.
         let bpm = 120.0;
         let frames_per_beat = 30;
         let mut signals = Signals::new(bpm, 1);
@@ -766,19 +498,14 @@ mod tests {
             signals.advance(1, DT);
             let manual = 3.0;
             let got = b.resolve(&signals, manual);
-            // It is the beat signal at this instant, mapped — `beat` is
-            // certain, so the manual value has no weight.
             assert_eq!(got, b.map(signals.sample("beat").value));
             values.push(got);
         }
 
-        // It moves at all...
         let min = values.iter().cloned().fold(f32::INFINITY, f32::min);
         let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         assert!(max - min > 4.0, "a beat binding barely moved: {min}..{max}");
 
-        // ...and it moves *periodically*, at the oscillator's period rather
-        // than at some rate of its own.
         for i in 0..frames_per_beat {
             let a = values[i];
             let b = values[i + frames_per_beat];
@@ -788,9 +515,6 @@ mod tests {
             );
         }
 
-        // The peak lands *on the beat*, and it is the top of the range. A
-        // sample is taken after the advance, so the frame with phase zero is
-        // the last of each window of 30 rather than the first.
         let beat = &values[frames_per_beat..frames_per_beat * 2];
         let (peak, peak_value) = beat
             .iter()
@@ -802,25 +526,14 @@ mod tests {
             frames_per_beat - 1,
             "the peak of a beat is not on the beat"
         );
-        // Not exactly 8.0: `t` is a sum of `steps * dt` and `dt` is 1/60,
-        // which is not representable, so the frame the beat lands on is a few
-        // ULP short of phase zero rather than on it.
         assert!(
             (peak_value - 8.0).abs() < 1e-4,
             "the beat instant should reach the top of the range, reached {peak_value}"
         );
     }
 
-    // -- determinism --------------------------------------------------------
-
-    /// The same tick sequence and the same seed reproduce every bound value
-    /// bit for bit, noise included. A binding is part of the record stream's
-    /// output now, so it is inside the determinism invariant.
     #[test]
     fn the_same_ticks_and_seed_reproduce_every_bound_value_bit_for_bit() {
-        // Deliberately ragged: different step counts per frame, so that a
-        // binding that depended on the call count rather than on elapsed time
-        // would have to agree with one that did not.
         let ticks = [1u8, 2, 1, 4, 1, 1, 3, 2];
 
         let run = |seed: u64| {
@@ -852,15 +565,10 @@ mod tests {
         let b = run(19_274);
         assert_eq!(a, b, "two identical runs disagreed");
 
-        // And the noise bindings are actually seeded rather than constant, or
-        // the equality above would be worth nothing.
         let other = run(19_275);
         assert_ne!(a, other, "changing the seed changed nothing");
     }
 
-    /// The noise generator is reachable, all of it: two bindings differing
-    /// only in `stream` decorrelate, and one with no `noise` object is the
-    /// default generator rather than a dead signal.
     #[test]
     fn a_noise_binding_reaches_kind_rate_and_stream() {
         let signals = advanced(120.0, 42, 37);
@@ -899,9 +607,6 @@ mod tests {
         );
     }
 
-    /// Noise is certain, so a `spawn_rate` bound to it actually spans its
-    /// range — which is the whole of the ir-spec's argument against baking a
-    /// Poisson distribution into the engine.
     #[test]
     fn a_noise_binding_takes_full_effect_rather_than_a_tenth_of_one() {
         let mut b = binding(NOISE_SIGNAL, Curve::Lin, [0.0, 1.0]);
@@ -915,10 +620,6 @@ mod tests {
             min = min.min(v);
             max = max.max(v);
         }
-        // A tenth-effect binding starting from a manual 0.0 could not exceed
-        // 0.1 at all, let alone span more than that. One-dimensional perlin
-        // does not use its whole amplitude, so the bar is where a tenth
-        // becomes impossible rather than at full scale.
         assert!(
             min > 0.1 && max - min > 0.3,
             "a noise binding spanned only {min}..{max} of [0, 1], which a \
@@ -926,8 +627,6 @@ mod tests {
         );
     }
 
-    /// Signed noise reaches the whole range rather than sitting on the floor
-    /// for the half of its life it spends below zero.
     #[test]
     fn noise_is_mapped_into_the_unit_range_not_clamped_at_zero() {
         let mut signals = Signals::new(120.0, 11);
@@ -955,9 +654,6 @@ mod tests {
         );
     }
 
-    /// `bpm` is not a unit-range signal and a binding to it saturates. Asserted
-    /// rather than fixed: an invented normalisation range would be a number
-    /// nobody could justify, and `docs/ir-spec.md` says to bind `beat` instead.
     #[test]
     fn a_bpm_binding_saturates_because_bpm_is_not_a_unit_range_signal() {
         let signals = advanced(128.0, 0, 10);
