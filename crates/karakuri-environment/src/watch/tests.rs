@@ -20,8 +20,8 @@ fn watch_on(dir: &std::path::Path) -> Watch {
 }
 
 /// A save that changed no bytes is not an edit. Under an mtime comparison
-/// `touch`, a formatter, or a `git checkout` of the branch already checked
-/// out each restarts the visual from `t` zero for nothing.
+/// `touch`, a formatter, or a `git checkout` of the branch already checked out
+/// each restarts the visual from `t` zero for nothing.
 #[test]
 fn rewriting_identical_bytes_is_not_a_change() {
     // **A directory of its own, not a fixed name under `/tmp`.** Two runs
@@ -44,13 +44,13 @@ fn rewriting_identical_bytes_is_not_a_change() {
     assert_ne!(before, w.stamp(), "a real edit read as unchanged");
 }
 
-/// The examples this suite sorts, copied into a directory of their own so
-/// that a watcher can be built over paths that do not exist yet.
+/// The examples this suite sorts, copied into a directory of their own so that
+/// a watcher can be built over paths that do not exist yet.
 ///
-/// **Built before the files are written**, which is what makes writing them
-/// the edit it wakes on: a missing file stamps as `None`, and appearing is
-/// a change like any other. The alternative is editing a file's text, which
-/// would make the two paths sort different bytes.
+/// Built before the files are written, which is what makes writing them the
+/// edit it wakes on: a missing file stamps as `None`, and appearing is a change
+/// like any other. The alternative is editing a file's text, which would make
+/// the two paths sort different bytes.
 fn watch_over(dir: &std::path::Path, files: &[&str]) -> (Watch, Vec<PathBuf>) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let paths: Vec<PathBuf> = files.iter().map(|f| dir.join(f)).collect();
@@ -80,9 +80,9 @@ fn watch_over(dir: &std::path::Path, files: &[&str]) -> (Watch, Vec<PathBuf>) {
     (watch, paths)
 }
 
-/// Polled until it answers, or four intervals, whichever is first. One
-/// poll sees the change and the next acts on it — see "Debouncing" — so
-/// nothing by the fourth is nothing at all.
+/// Polled until it answers, or four intervals, whichever is first. One poll
+/// sees the change and the next acts on it — see "Debouncing" — so nothing by
+/// the fourth is nothing at all.
 fn polled(watch: &mut Watch) -> Option<Polled> {
     std::iter::repeat_with(|| watch.poll())
         .take(4)
@@ -92,10 +92,10 @@ fn polled(watch: &mut Watch) -> Option<Polled> {
 
 /// [`polled`], for the tests that are about what a build states.
 ///
-/// **A refusal panics with its diagnostics rather than reading as
-/// nothing.** A watcher that stopped compiling would otherwise turn every
-/// assertion below into `expect("a build")` on a `None`, which says the
-/// files never settled and is the wrong end of the failure entirely.
+/// A refusal panics with its diagnostics rather than reading as nothing. A
+/// watcher that stopped compiling would otherwise turn every assertion below
+/// into `expect("a build")` on a `None`, which says the files never settled and
+/// is the wrong end of the failure entirely.
 fn rebuild(watch: &mut Watch) -> Option<Request> {
     match polled(watch)? {
         Polled::Build(request) => Some(request),
@@ -107,26 +107,24 @@ fn rebuild(watch: &mut Watch) -> Option<Request> {
     }
 }
 
-/// **A `.kir` the checker turns down is an answer and not a silence**, and
-/// the answer carries every diagnostic the checker had.
+/// A `.kir` the checker turns down is an answer and not a silence, and the
+/// answer carries every diagnostic the checker had.
 ///
-/// This watcher printed its diagnostics and returned `None` until
-/// 2026-09-08, and `None` is what a poll that saw nothing returns — so the
-/// operator's newest edit disagreeing with the picture was said on a
-/// terminal and reached no surface at all
-/// (`docs/adr/0310-…`). The assertion is
-/// therefore about the *shape* of the answer first and its contents
-/// second: a refusal, with the file it is about and with what the checker
-/// said in it.
+/// This watcher printed its diagnostics and returned `None` until 2026-09-08,
+/// and `None` is what a poll that saw nothing returns — so the operator's
+/// newest edit disagreeing with the picture was said on a terminal and reached
+/// no surface at all (`docs/adr/0310-…`). The assertion is therefore about the
+/// *shape* of the answer first and its contents second: a refusal, with the
+/// file it is about and with what the checker said in it.
 ///
-/// **The negative control is the same watcher afterwards.** A version that
-/// refused everything would pass every assertion above the repair; the
-/// repair is what says the refusal was about the bytes.
+/// The negative control is the same watcher afterwards. A version that refused
+/// everything would pass every assertion above the repair; the repair is what
+/// says the refusal was about the bytes.
 ///
-/// **The fixture is prepended to rather than substituted in.** Both files
-/// are ones this product can rewrite — `write_procedure` reaches them over
-/// MCP — so what is written here has to break them whatever they contain,
-/// which a line that is not a declaration does and a substitution does not
+/// The fixture is prepended to rather than substituted in. Both files are ones
+/// this product can rewrite — `write_procedure` reaches them over MCP — so what
+/// is written here has to break them whatever they contain, which a line that
+/// is not a declaration does and a substitution does not
 /// (`docs/contributing.md` §3).
 #[test]
 fn a_file_the_checker_turns_down_is_a_refusal_carrying_its_diagnostics() {
@@ -183,15 +181,15 @@ fn a_file_the_checker_turns_down_is_a_refusal_carrying_its_diagnostics() {
     );
 }
 
-/// **A rebuild restates the salts the slot is running at**, rather than
-/// leaving them to be derived where the Set is built.
+/// A rebuild restates the salts the slot is running at, rather than leaving
+/// them to be derived where the Set is built.
 ///
 /// A slot filled by `--load-set` runs at the salts its file recorded, and
-/// nothing in a `.kir` says what they are. A request that left them out
-/// hands `Set::build_many` an empty list, which derives from the ordinal —
-/// so every element in the slot would change colour on the next save of a
-/// file that had nothing to do with the geometry, and the Set an operator
-/// loaded would stop being the Set they loaded partway through an edit.
+/// nothing in a `.kir` says what they are. A request that left them out hands
+/// `Set::build_many` an empty list, which derives from the ordinal — so every
+/// element in the slot would change colour on the next save of a file that had
+/// nothing to do with the geometry, and the Set an operator loaded would stop
+/// being the Set they loaded partway through an edit.
 #[test]
 fn a_rebuild_restates_the_salts_the_slot_is_running_at() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -235,25 +233,24 @@ fn a_rebuild_restates_the_salts_the_slot_is_running_at() {
     );
 }
 
-/// **The values a slot was aimed with are stated once, and a later rebuild
-/// states none of them** — which is the whole of what
+/// The values a slot was aimed with are stated once, and a later rebuild states
+/// none of them — which is the whole of what
 /// `karakuri_engine::Set::carry_moved_from` needed from this side.
 ///
-/// It is the one field on a request that stopped being restated, and the
-/// reason is that it is the one the engine does not re-derive: a salt, a
-/// camera, a fold and an edge all come back at some default the moment a
-/// request stops naming them, and a parameter value does not — the outgoing
-/// Set is holding it. Restating them made a knob unturnable, and worst
-/// exactly where an operator is most likely to be turning one: a slot
-/// pointed at a Set file carries **every declaration of every node** here,
-/// because that is what a live save writes, so every parameter went back to
-/// the file on the next save of any `.kir` and nothing an operator did to a
-/// live Set survived it.
+/// It is the one field on a request that stopped being restated, and the reason
+/// is that it is the one the engine does not re-derive: a salt, a camera, a
+/// fold and an edge all come back at some default the moment a request stops
+/// naming them, and a parameter value does not — the outgoing Set is holding
+/// it. Restating them made a knob unturnable, and worst exactly where an
+/// operator is most likely to be turning one: a slot pointed at a Set file
+/// carries every declaration of every node here, because that is what a live
+/// save writes, so every parameter went back to the file on the next save of
+/// any `.kir` and nothing an operator did to a live Set survived it.
 ///
-/// **Both halves are asserted from one watcher**, because either alone is
-/// the wrong rule: a watcher that never stated them would build the aimed
-/// Set without the values it was aimed with, and one that always stated them
-/// is what this replaces.
+/// Both halves are asserted from one watcher, because either alone is the wrong
+/// rule: a watcher that never stated them would build the aimed Set without the
+/// values it was aimed with, and one that always stated them is what this
+/// replaces.
 #[test]
 fn the_values_a_slot_was_aimed_with_are_stated_once() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -335,16 +332,15 @@ fn read(path: &std::path::Path) -> String {
     std::fs::read_to_string(path).expect("read back")
 }
 
-/// **A rebuild restates the camera the slot is aimed with**, rather than
-/// leaving the Set it builds to start from `Orbit::default()`.
+/// A rebuild restates the camera the slot is aimed with, rather than leaving
+/// the Set it builds to start from `Orbit::default()`.
 ///
-/// Nothing in a `.kir` says where the built-in orbit is pointing — a
-/// `camera` record does, and `--load-set` is what brings one in. So a
-/// request that left this out handed `Set::build_many` a Set aimed at the
-/// defaults, and the first save of any file in the slot re-aimed a camera
-/// the operator had loaded, with nothing said. The live save then recorded
-/// `Set::camera` faithfully, which is how a wrong picture turned into a
-/// wrong file.
+/// Nothing in a `.kir` says where the built-in orbit is pointing — a `camera`
+/// record does, and `--load-set` is what brings one in. So a request that left
+/// this out handed `Set::build_many` a Set aimed at the defaults, and the first
+/// save of any file in the slot re-aimed a camera the operator had loaded, with
+/// nothing said. The live save then recorded `Set::camera` faithfully, which is
+/// how a wrong picture turned into a wrong file.
 #[test]
 fn a_rebuild_restates_the_camera_the_slot_is_aimed_with() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -397,21 +393,20 @@ fn a_rebuild_restates_the_camera_the_slot_is_aimed_with() {
     );
 }
 
-/// **A rebuild restates the layering and the fold the slot was loaded
-/// with**, rather than leaving either to be worked out again.
+/// A rebuild restates the layering and the fold the slot was loaded with,
+/// rather than leaving either to be worked out again.
 ///
-/// A Set file records both — a `merge` record and its `live` — so a slot
-/// filled by `--load-set` can be compositing, and folded to one renderer,
-/// without `--merge` ever having been typed. A rebuild that re-derived the
-/// layering from the flag would drop the slot to overdraw on the first save
-/// of any `.kir` in it: the L5 gone, every renderer back over one
-/// attachment, and the selection with it. That is `Watch::camera`'s failure
-/// in a register where the picture does not come back — and a request that
-/// carried the layering but not the fold would be half of it, a slot
-/// compositing every alternative at once.
+/// A Set file records both — a `merge` record and its `live` — so a slot filled
+/// by `--load-set` can be compositing, and folded to one renderer, without
+/// `--merge` ever having been typed. A rebuild that re-derived the layering
+/// from the flag would drop the slot to overdraw on the first save of any
+/// `.kir` in it: the L5 gone, every renderer back over one attachment, and the
+/// selection with it. That is `Watch::camera`'s failure in a register where the
+/// picture does not come back — and a request that carried the layering but not
+/// the fold would be half of it, a slot compositing every alternative at once.
 ///
-/// Both are asserted from one rebuild, because both travel on one request
-/// and either alone is not the Set that was loaded.
+/// Both are asserted from one rebuild, because both travel on one request and
+/// either alone is not the Set that was loaded.
 #[test]
 fn a_rebuild_restates_the_layering_and_the_fold_the_slot_was_loaded_with() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -461,16 +456,16 @@ fn a_rebuild_restates_the_layering_and_the_fold_the_slot_was_loaded_with() {
     );
 }
 
-/// **A rebuild restates the names and the edges the slot is wired with.**
+/// A rebuild restates the names and the edges the slot is wired with.
 ///
 /// A watcher used to be handed bare paths, so every rebuild called each node
 /// whatever its procedure declared — harmless while a name only printed. It
-/// stops being harmless twice over now: an `edge` names the node that
-/// declares a slot and the node bound to it, so a rebuild that dropped the
-/// names resolves against spellings that are no longer there, and one that
-/// dropped the edges leaves the slot unbound — which is refused outright.
-/// Either way the save that lands is a build that will not build, with the
-/// picture frozen at whatever startup produced.
+/// stops being harmless twice over now: an `edge` names the node that declares
+/// a slot and the node bound to it, so a rebuild that dropped the names
+/// resolves against spellings that are no longer there, and one that dropped
+/// the edges leaves the slot unbound — which is refused outright. Either way
+/// the save that lands is a build that will not build, with the picture frozen
+/// at whatever startup produced.
 #[test]
 fn a_rebuild_restates_the_names_and_edges_the_slot_is_wired_with() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -530,25 +525,25 @@ fn a_rebuild_restates_the_names_and_edges_the_slot_is_wired_with() {
     );
 }
 
-/// **A rebuild restates the authority the slot's nodes were handed.**
+/// A rebuild restates the authority the slot's nodes were handed.
 ///
-/// The failure this is against is the one every field beside it is against,
-/// and it is the quietest of them: an operator grants a node to an agent,
-/// somebody saves a `.kir` in that slot, and the rebuild hands back a Set
-/// where every node is `Authority::Manual` again — the default, and the
-/// only default it could be. Nothing refuses it, because a rebuild is not a
-/// surface, and nothing looks wrong, because an arrangement about who may
-/// write a param does not draw. The grant is simply gone.
+/// The failure this is against is the one every field beside it is against, and
+/// it is the quietest of them: an operator grants a node to an agent, somebody
+/// saves a `.kir` in that slot, and the rebuild hands back a Set where every
+/// node is `Authority::Manual` again — the default, and the only default it
+/// could be. Nothing refuses it, because a rebuild is not a surface, and
+/// nothing looks wrong, because an arrangement about who may write a param does
+/// not draw. The grant is simply gone.
 ///
-/// **Asserted over a request rather than over a Set**, which is as far as
-/// this side goes: applying the list is `HotSwap`'s, tested where it lives,
-/// and reaching a built Set from here would want a device. What is this
-/// watcher's to get wrong is whether the list survives the rebuild at all,
-/// and that is exactly what this reads.
+/// Asserted over a request rather than over a Set, which is as far as this side
+/// goes: applying the list is `HotSwap`'s, tested where it lives, and reaching
+/// a built Set from here would want a device. What is this watcher's to get
+/// wrong is whether the list survives the rebuild at all, and that is exactly
+/// what this reads.
 ///
-/// **Two levels and two layers, neither of them the default.** A test that
-/// granted one node `Manual` would pass against a request that dropped the
-/// list entirely, since that is where the build would land anyway.
+/// Two levels and two layers, neither of them the default. A test that granted
+/// one node `Manual` would pass against a request that dropped the list
+/// entirely, since that is where the build would land anyway.
 #[test]
 fn a_rebuild_restates_the_authority_the_slots_nodes_were_handed() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -601,17 +596,17 @@ fn a_rebuild_restates_the_authority_the_slots_nodes_were_handed() {
     );
 }
 
-/// **The startup path and the rebuild path answer "which layer is this file
-/// on, and which node of that layer" identically**, which is the whole
-/// reason [`crate::compile::sort_compiled`] is one function rather than a match in
+/// The startup path and the rebuild path answer "which layer is this file on,
+/// and which node of that layer" identically, which is the whole reason
+/// [`crate::compile::sort_compiled`] is one function rather than a match in
 /// each of them.
 ///
-/// The two used to hold a copy each and had already drifted: the rebuild
-/// took its head for the L1 whatever the file declared, so a slot spelled
-/// with a deformer first sorted one way at startup and another way on the
-/// first save. Asserted as agreement rather than as two expected answers,
-/// because what has to hold is that they are the same answer — an expected
-/// answer written twice is the drift again, in the tests.
+/// The two used to hold a copy each and had already drifted: the rebuild took
+/// its head for the L1 whatever the file declared, so a slot spelled with a
+/// deformer first sorted one way at startup and another way on the first save.
+/// Asserted as agreement rather than as two expected answers, because what has
+/// to hold is that they are the same answer — an expected answer written twice
+/// is the drift again, in the tests.
 #[test]
 fn a_rebuild_addresses_a_slot_exactly_as_startup_did() {
     // A whole stack, head first and deliberately not an L1: every layer, and
@@ -694,10 +689,10 @@ fn a_rebuild_addresses_a_slot_exactly_as_startup_did() {
     );
 }
 
-/// **A rebuild that cannot be assembled leaves the running Set alone.** This
-/// is the one thing the two sorting paths do differently, and the reason
-/// [`crate::compile::sort_compiled`] hands back a sentence rather than exiting: a
-/// startup with no picture has nothing to keep showing, and an operator
+/// A rebuild that cannot be assembled leaves the running Set alone. This is the
+/// one thing the two sorting paths do differently, and the reason
+/// [`crate::compile::sort_compiled`] hands back a sentence rather than exiting:
+/// a startup with no picture has nothing to keep showing, and an operator
 /// editing a slot into an illegal shape has a picture on stage.
 #[test]
 fn a_slot_that_cannot_be_assembled_leaves_the_running_set_alone() {
@@ -763,26 +758,24 @@ fn a_slot_that_cannot_be_assembled_leaves_the_running_set_alone() {
     }
 }
 
-/// A missing file is stable rather than a change every interval, so
-/// deleting one does not put the watcher into a recompile loop against a
-/// path that is not there.
-/// **A re-point builds the material it was aimed at, on the poll it
-/// arrives, and the new files are not then seen as an edit.**
+/// A missing file is stable rather than a change every interval, so deleting
+/// one does not put the watcher into a recompile loop against a path that is
+/// not there. A re-point builds the material it was aimed at, on the poll it
+/// arrives, and the new files are not then seen as an edit.
 ///
-/// This is how a Set reaches a *running* deck, and the whole reason it is
-/// a re-point rather than an install: `Deck::install` is documented as
+/// This is how a Set reaches a *running* deck, and the whole reason it is a
+/// re-point rather than an install: `Deck::install` is documented as
 /// deliberately unreachable from a key or a surface, because *"a live run
-/// changes its material by editing a file and letting the worker build
-/// it, which is what the budget watchdog is attached to"*. So the failure
-/// this catches is a load that goes nowhere — an aim taken and no request
-/// made — and the deck goes on playing what it was with nothing said.
+/// changes its material by editing a file and letting the worker build it,
+/// which is what the budget watchdog is attached to"*. So the failure this
+/// catches is a load that goes nowhere — an aim taken and no request made — and
+/// the deck goes on playing what it was with nothing said.
 ///
-/// **The second half is the debounce not eating it.** A save is acted on
-/// the poll *after* the one that saw it, because an editor writing in
-/// place leaves a file truncated for a moment. An aim has no such moment,
-/// and a re-point that went through the debounce would then be seen a
-/// second time as a change and built twice — so the poll after the build
-/// has to be quiet.
+/// The second half is the debounce not eating it. A save is acted on the poll
+/// *after* the one that saw it, because an editor writing in place leaves a
+/// file truncated for a moment. An aim has no such moment, and a re-point that
+/// went through the debounce would then be seen a second time as a change and
+/// built twice — so the poll after the build has to be quiet.
 #[test]
 fn an_aim_points_the_slot_at_what_it_names_and_is_not_debounced() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -874,20 +867,19 @@ fn an_aim_points_the_slot_at_what_it_names_and_is_not_debounced() {
     );
 }
 
-/// **A library load moves which Set the versions after it are filed
-/// under**, which is the half of `ADR-0276` a re-point owes.
+/// A library load moves which Set the versions after it are filed under, which
+/// is the half of `ADR-0276` a re-point owes.
 ///
 /// The failure this is written against is silent and is only readable
-/// afterwards: a watcher that took the aim's files and left its Set id
-/// behind goes on filing every later version under the Set the slot was
-/// running *before* the load — a name, and nothing in the layout to say it
-/// is wrong, so *what versions has this Set had* answers with somebody
-/// else's edits.
+/// afterwards: a watcher that took the aim's files and left its Set id behind
+/// goes on filing every later version under the Set the slot was running
+/// *before* the load — a name, and nothing in the layout to say it is wrong, so
+/// *what versions has this Set had* answers with somebody else's edits.
 ///
-/// **The aim points at the files already being watched**, on purpose: the
-/// bytes do not change, so the only thing that can make this version a new
-/// one is the id in the dedup key. It is the `record` clause that says a
-/// chain is a node *of a Set*, asserted from the watcher's side.
+/// The aim points at the files already being watched, on purpose: the bytes do
+/// not change, so the only thing that can make this version a new one is the id
+/// in the dedup key. It is the `record` clause that says a chain is a node *of
+/// a Set*, asserted from the watcher's side.
 #[test]
 fn a_re_point_files_the_versions_after_it_under_the_set_it_loaded() {
     let tmp = tempfile::tempdir().expect("temp dir");

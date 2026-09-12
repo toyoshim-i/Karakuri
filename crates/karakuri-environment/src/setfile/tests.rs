@@ -50,8 +50,8 @@ proc points {
 }
 "#;
 
-/// The rest of the chain a `--set` can spell, minimal for the reason the
-/// pair above is: what is under test is the file, not the picture.
+/// The rest of the chain a `--set` can spell, minimal for the reason the pair
+/// above is: what is under test is the file, not the picture.
 const L2: &str = r#"
 proc warp {
   kind L2
@@ -109,18 +109,18 @@ fn beside(dir: &tempfile::TempDir, file: &str, src: &str) -> std::path::PathBuf 
     path
 }
 
-/// **A fixture's source, in the store, as [`save`] now wants it.** The
-/// tests here are written against files on disk, because a file is what a
-/// fixture is; the writer takes hashes. This is the one line that bridges
-/// them, rather than every test growing its own `put`.
+/// A fixture's source, in the store, as [`save`] now wants it. The tests here
+/// are written against files on disk, because a file is what a fixture is; the
+/// writer takes hashes. This is the one line that bridges them, rather than
+/// every test growing its own `put`.
 fn stored(store: &Store, path: &std::path::Path) -> Hash {
     store
         .put_artifact(&std::fs::read(path).expect("read"))
         .expect("put")
 }
 
-/// The nodes of an ordinary Set — one geometry, and the renderers over it
-/// in draw order.
+/// The nodes of an ordinary Set — one geometry, and the renderers over it in
+/// draw order.
 fn ordinary(store: &Store, l1: &std::path::Path, l4s: &[std::path::PathBuf]) -> Vec<Node> {
     std::iter::once(Node {
         hash: stored(store, l1),
@@ -137,9 +137,9 @@ fn ordinary(store: &Store, l1: &std::path::Path, l4s: &[std::path::PathBuf]) -> 
     .collect()
 }
 
-/// The whole set file as bytes, which is what a compatibility claim is
-/// about. `read` keeps each line's text verbatim, so this is what is on
-/// disk rather than a re-serialisation of it.
+/// The whole set file as bytes, which is what a compatibility claim is about.
+/// `read` keeps each line's text verbatim, so this is what is on disk rather
+/// than a re-serialisation of it.
 fn written(store: &Store, id: &str) -> String {
     store
         .read_set(id)
@@ -149,10 +149,10 @@ fn written(store: &Store, id: &str) -> String {
         .collect()
 }
 
-/// A Set file's text, through the file reader — so the bytes a test writes
-/// out are genuinely parsed, rather than hand-built into records that could
-/// not have been written. The file is gone by the time this returns; the
-/// lines are in memory.
+/// A Set file's text, through the file reader — so the bytes a test writes out
+/// are genuinely parsed, rather than hand-built into records that could not
+/// have been written. The file is gone by the time this returns; the lines are
+/// in memory.
 fn parsed(text: &str) -> Vec<Line> {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("hand_written.kbset");
@@ -161,8 +161,8 @@ fn parsed(text: &str) -> Vec<Line> {
 }
 
 /// A Set with nothing but its material and whatever bindings are given.
-/// `Orbit::default()` is not `const`, so this is the one place a test names
-/// its fields; `LazyLock` keeps that to one place rather than one per call.
+/// `Orbit::default()` is not `const`, so this is the one place a test names its
+/// fields; `LazyLock` keeps that to one place rather than one per call.
 static DEFAULT_CAMERA: std::sync::LazyLock<Orbit> = std::sync::LazyLock::new(Orbit::default);
 
 fn plain<'a>(nodes: &'a [Node], bindings: &'a [Binding]) -> Saving<'a> {
@@ -179,14 +179,14 @@ fn plain<'a>(nodes: &'a [Node], bindings: &'a [Binding]) -> Saving<'a> {
     }
 }
 
-/// **The edge survives the file, and so do the names it points with.**
+/// The edge survives the file, and so do the names it points with.
 ///
 /// The two halves are one fact: an edge is between *names*, and a file that
-/// carried the edge and dropped the names would come back naming nodes that
-/// are no longer called that. What makes it round-trip at all is that the
-/// names it points with are either written down beside the node — as `far`
-/// is here — or derived from the procedure, which is a function of the
-/// artifact the `slot` record already references.
+/// carried the edge and dropped the names would come back naming nodes that are
+/// no longer called that. What makes it round-trip at all is that the names it
+/// points with are either written down beside the node — as `far` is here — or
+/// derived from the procedure, which is a function of the artifact the `slot`
+/// record already references.
 #[test]
 fn an_edge_and_the_names_it_points_with_survive_the_file() {
     let (dir, store, l1, l4) = fixture();
@@ -284,13 +284,13 @@ proc dissolve {
 }
 "#;
 
-/// **A Source-slot edge survives the file**, with the name it points with.
+/// A Source-slot edge survives the file, with the name it points with.
 ///
-/// The record is the same `edge` a geometry slot writes — node, slot, and
-/// the node it is bound to — because what an edge says is one fact whatever
-/// type the slot was declared with. That is the claim: the fourth slot type
-/// cost this file nothing, and a Set whose mask names a source can be saved
-/// and loaded like any other.
+/// The record is the same `edge` a geometry slot writes — node, slot, and the
+/// node it is bound to — because what an edge says is one fact whatever type
+/// the slot was declared with. That is the claim: the fourth slot type cost
+/// this file nothing, and a Set whose mask names a source can be saved and
+/// loaded like any other.
 #[test]
 fn a_source_slot_edge_survives_the_file() {
     let (dir, store, l1, l4) = fixture();
@@ -375,9 +375,9 @@ fn a_binding() -> Binding {
     Binding::new(Kind::L1, "spin", "beat", Curve::Pow2, [0.5, 3.0])
 }
 
-/// **Everything a Set file is for, in one assertion**: what went in comes
-/// back out. A format that carried the material and lost the parameters
-/// would still load, still render, and still be the wrong Set.
+/// Everything a Set file is for, in one assertion: what went in comes back out.
+/// A format that carried the material and lost the parameters would still load,
+/// still render, and still be the wrong Set.
 #[test]
 fn a_saved_set_loads_back_as_what_was_saved() {
     let (_dir, store, l1, l4) = fixture();
@@ -432,10 +432,9 @@ fn a_saved_set_loads_back_as_what_was_saved() {
     );
 }
 
-/// **The material is resolved by hash out of the store**, which is what
-/// makes a Set file a few dozen lines rather than a copy of the source. A
-/// file whose artifacts are missing says so instead of loading something
-/// else.
+/// The material is resolved by hash out of the store, which is what makes a Set
+/// file a few dozen lines rather than a copy of the source. A file whose
+/// artifacts are missing says so instead of loading something else.
 #[test]
 fn a_set_whose_artifacts_are_missing_says_which_and_why() {
     let (_dir, store, l1, l4) = fixture();
@@ -457,9 +456,9 @@ fn a_set_whose_artifacts_are_missing_says_which_and_why() {
     assert!(err.contains("inlined"), "{err}");
 }
 
-/// The bundled form: a file carrying its own source reads on a machine
-/// whose store has never seen the artifact. **Inlined source wins over the
-/// store**, so a bundle is self-contained rather than half-resolved.
+/// The bundled form: a file carrying its own source reads on a machine whose
+/// store has never seen the artifact. Inlined source wins over the store, so a
+/// bundle is self-contained rather than half-resolved.
 #[test]
 fn inlined_source_loads_without_a_store_that_knows_the_artifact() {
     let (_dir, store, l1, l4) = fixture();
@@ -497,19 +496,19 @@ fn inlined_source_loads_without_a_store_that_knows_the_artifact() {
     assert_eq!(loaded.l4s[0].name, "points");
 }
 
-/// **A file written before the address existed still means what it meant.**
+/// A file written before the address existed still means what it meant.
 ///
 /// `layer` on a `param` record was a placeholder: the writer put `L1` on
-/// everything and said so in a comment, and the loader ignored it. So
-/// honouring `layer` now would silently retarget every Set file ever
-/// written — an `exposure` that reached the renderer would start reaching
-/// the L1 and doing nothing.
+/// everything and said so in a comment, and the loader ignored it. So honouring
+/// `layer` now would silently retarget every Set file ever written — an
+/// `exposure` that reached the renderer would start reaching the L1 and doing
+/// nothing.
 ///
-/// What stops that is the address being `(layer, index)` present or absent
-/// **as a unit**: no `index`, no address, whatever `layer` says. This reads
-/// a hand-written old-style file to prove it, rather than one this build
-/// produced — a round trip through the new writer would agree with itself
-/// however wrong both halves were.
+/// What stops that is the address being `(layer, index)` present or absent as a
+/// unit: no `index`, no address, whatever `layer` says. This reads a
+/// hand-written old-style file to prove it, rather than one this build produced
+/// — a round trip through the new writer would agree with itself however wrong
+/// both halves were.
 #[test]
 fn a_param_record_without_an_index_is_a_wildcard_whatever_its_layer_says() {
     let (_dir, store, l1, l4) = fixture();
@@ -543,11 +542,11 @@ fn a_param_record_without_an_index_is_a_wildcard_whatever_its_layer_says() {
     );
 }
 
-/// **What could not be carried is said, not dropped.** Three shapes, and
-/// each is a real disagreement between what the format can address and what
-/// the engine has: a salt and a capacity belong to a *geometry*, so one
-/// written against a renderer names something that does not exist, and a
-/// vector param has no `f32` to become.
+/// What could not be carried is said, not dropped. Three shapes, and each is a
+/// real disagreement between what the format can address and what the engine
+/// has: a salt and a capacity belong to a *geometry*, so one written against a
+/// renderer names something that does not exist, and a vector param has no
+/// `f32` to become.
 #[test]
 fn what_the_engine_cannot_carry_is_reported_rather_than_dropped() {
     let (_dir, store, l1, l4) = fixture();
@@ -587,8 +586,8 @@ fn what_the_engine_cannot_carry_is_reported_rather_than_dropped() {
     assert_eq!(loaded.capacities, vec![Some(4096)]);
 }
 
-/// A renderer with a vector `param`, which the pair above has none of.
-/// The declaration is `docs/ir-spec.md`'s own `param` example.
+/// A renderer with a vector `param`, which the pair above has none of. The
+/// declaration is `docs/ir-spec.md`'s own `param` example.
 const GLOWING: &str = r#"
 proc glowing {
   kind  L4
@@ -609,8 +608,8 @@ proc glowing {
 }
 "#;
 
-/// A store holding the ordinary L1 and [`GLOWING`], and the nodes naming
-/// them. Every vector-param test below starts here.
+/// A store holding the ordinary L1 and [`GLOWING`], and the nodes naming them.
+/// Every vector-param test below starts here.
 fn glowing_fixture() -> (tempfile::TempDir, Store, Vec<Node>) {
     let (dir, store, l1, _l4) = fixture();
     let glowing = beside(&dir, "glowing.kir", GLOWING);
@@ -618,8 +617,8 @@ fn glowing_fixture() -> (tempfile::TempDir, Store, Vec<Node>) {
     (dir, store, nodes)
 }
 
-/// The lines a `plain` save writes for [`glowing_fixture`], plus whatever
-/// the test appends.
+/// The lines a `plain` save writes for [`glowing_fixture`], plus whatever the
+/// test appends.
 fn glowing_lines(store: &Store, nodes: &[Node], extra: Vec<Record>) -> Vec<Line> {
     save(store, Asked::Operator, "g1", plain(nodes, &[])).expect("save");
     let mut lines = store.read_set("g1").expect("read");
@@ -627,20 +626,20 @@ fn glowing_lines(store: &Store, nodes: &[Node], extra: Vec<Record>) -> Vec<Line>
     lines
 }
 
-/// **A vector `param` line becomes one write per component.**
+/// A vector `param` line becomes one write per component.
 ///
-/// This is where the wide `Value` earns its keep: a file — or a model
-/// through one MCP call — says the vector once, and the reader expands it
-/// into the three writes the engine can carry, because a parameter is
-/// driven one component at a time
+/// This is where the wide `Value` earns its keep: a file — or a model through
+/// one MCP call — says the vector once, and the reader expands it into the
+/// three writes the engine can carry, because a parameter is driven one
+/// component at a time
 /// (`docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`).
-/// It used to be reported and dropped, with *"the engine holds scalar
-/// parameter values only"*.
+/// It used to be reported and dropped, with *"the engine holds scalar parameter
+/// values only"*.
 ///
-/// **The order is the components' own**, not the file's and not a map's:
-/// `glow.x` then `glow.y` then `glow.z`, carrying `0.4`, `0.7`, `1.0` in
-/// the order the line wrote them. A reversal here would be a Set that
-/// loads and is the wrong colour.
+/// The order is the components' own, not the file's and not a map's: `glow.x`
+/// then `glow.y` then `glow.z`, carrying `0.4`, `0.7`, `1.0` in the order the
+/// line wrote them. A reversal here would be a Set that loads and is the wrong
+/// colour.
 #[test]
 fn a_vector_param_record_is_expanded_into_its_components() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -673,14 +672,14 @@ fn a_vector_param_record_is_expanded_into_its_components() {
     );
 }
 
-/// **One component, written and read back as itself — and the same three
-/// numbers however the file spells them.**
+/// One component, written and read back as itself — and the same three numbers
+/// however the file spells them.
 ///
-/// What a `save` puts on the line is components, one `param` record each,
-/// which is what lets a Set file record the single component an operator
-/// moved. What a *person or a model* writes is the vector, once. The last
-/// assertion is that the two spellings load to the same list: the wide
-/// value earns its keep on the line and nowhere past it.
+/// What a `save` puts on the line is components, one `param` record each, which
+/// is what lets a Set file record the single component an operator moved. What
+/// a *person or a model* writes is the vector, once. The last assertion is that
+/// the two spellings load to the same list: the wide value earns its keep on
+/// the line and nowhere past it.
 #[test]
 fn a_component_write_round_trips_through_the_file() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -751,11 +750,11 @@ fn a_component_write_round_trips_through_the_file() {
     );
 }
 
-/// **A single number against a `vec3` names no component**, and the note
-/// says which keys would — the refusal carries what the next attempt needs
+/// A single number against a `vec3` names no component, and the note says which
+/// keys would — the refusal carries what the next attempt needs
 /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
-/// Reported and skipped rather than landed on a component this reader
-/// picked, which would be inventing an address the file did not write.
+/// Reported and skipped rather than landed on a component this reader picked,
+/// which would be inventing an address the file did not write.
 #[test]
 fn a_scalar_against_a_vector_declaration_is_reported_with_its_components() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -780,17 +779,16 @@ fn a_scalar_against_a_vector_declaration_is_reported_with_its_components() {
     }
 }
 
-/// **A `bind` on a bare vector key is refused, and the sentence spells the
-/// components.**
+/// A `bind` on a bare vector key is refused, and the sentence spells the
+/// components.
 ///
-/// A binding resolves to one number and a `vec3` has three places to put
-/// it. `Set::bind` would answer `Bound::NoSuchParam`, which says the
-/// parameter does not exist — not what is wrong, and not what the next
-/// attempt needs.
+/// A binding resolves to one number and a `vec3` has three places to put it.
+/// `Set::bind` would answer `Bound::NoSuchParam`, which says the parameter does
+/// not exist — not what is wrong, and not what the next attempt needs.
 ///
-/// **Paired with the binding that must be accepted**, because a reader that
-/// refused every binding would pass a test made only of refusals: one
-/// component is an ordinary key and binds like any scalar.
+/// Paired with the binding that must be accepted, because a reader that refused
+/// every binding would pass a test made only of refusals: one component is an
+/// ordinary key and binds like any scalar.
 #[test]
 fn a_binding_on_a_bare_vector_key_is_refused_with_the_component_spelling() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -832,9 +830,9 @@ fn a_binding_on_a_bare_vector_key_is_refused_with_the_component_spelling() {
     }
 }
 
-/// **A binding the engine cannot honour is reported and skipped**, and the
-/// load still succeeds. One unusable binding is not a reason to refuse the
-/// material, and the note names the parameter that will not move.
+/// A binding the engine cannot honour is reported and skipped, and the load
+/// still succeeds. One unusable binding is not a reason to refuse the material,
+/// and the note names the parameter that will not move.
 #[test]
 fn an_unusable_binding_is_named_and_the_rest_of_the_set_still_loads() {
     let (_dir, store, l1, l4) = fixture();
@@ -866,8 +864,8 @@ fn an_unusable_binding_is_named_and_the_rest_of_the_set_still_loads() {
     assert!(notes.contains("skipped"), "{notes}");
 }
 
-/// The two diagnostics the decoder owes, asserted
-/// against the decoder rather than against the flag that used to hold them.
+/// The two diagnostics the decoder owes, asserted against the decoder rather
+/// than against the flag that used to hold them.
 #[test]
 fn the_decoder_carries_the_diagnostics_the_flag_used_to_hold_alone() {
     let bpm = Record::Bind {
@@ -899,13 +897,13 @@ fn the_decoder_carries_the_diagnostics_the_flag_used_to_hold_alone() {
     assert!(err.contains("fbm"), "{err}");
 }
 
-/// **Two `slot L1` lines are two geometries, and one address is one node.**
+/// Two `slot L1` lines are two geometries, and one address is one node.
 ///
-/// The index used to be destructured and thrown away on this arm: every
-/// `slot L1` landed in the same entry, so a file describing two sources
-/// loaded as one. Index 1 is now the second geometry it always described,
-/// and what is left to report is the collision — two lines claiming index
-/// 0, which the projection folds to one whatever this loader does.
+/// The index used to be destructured and thrown away on this arm: every `slot
+/// L1` landed in the same entry, so a file describing two sources loaded as
+/// one. Index 1 is now the second geometry it always described, and what is
+/// left to report is the collision — two lines claiming index 0, which the
+/// projection folds to one whatever this loader does.
 #[test]
 fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
     let (_dir, store, l1, l4) = fixture();
@@ -946,14 +944,14 @@ fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
     assert_eq!(loaded.l1s[0].name, "ring_two");
 }
 
-/// **A name the file recorded comes back, where it used to be reported and
-/// dropped.**
+/// A name the file recorded comes back, where it used to be reported and
+/// dropped.
 ///
-/// "Nothing this build points at a node by name" was true until an `edge`
-/// did: an edge names the node that declares a slot and the node bound to
-/// it, so a load that dropped the names is a load whose edges resolve
-/// against the wrong spellings — or, for a name nobody wrote, against the
-/// procedure's own and by luck.
+/// "Nothing this build points at a node by name" was true until an `edge` did:
+/// an edge names the node that declares a slot and the node bound to it, so a
+/// load that dropped the names is a load whose edges resolve against the wrong
+/// spellings — or, for a name nobody wrote, against the procedure's own and by
+/// luck.
 #[test]
 fn a_name_the_file_recorded_comes_back_with_the_node() {
     let (_dir, store, l1, l4) = fixture();
@@ -991,14 +989,14 @@ fn a_name_the_file_recorded_comes_back_with_the_node() {
     );
 }
 
-/// **The whole chain, through the file and back.**
+/// The whole chain, through the file and back.
 ///
-/// A Set file recorded an L1 and its renderers: [`save`] refused an L2, an
-/// L3 or a `kind Field` outright, so a cube morphing into a sphere was a
-/// Set that could be played and not kept — and `--record-session` refused
-/// it with the same message, because a session opens with a Set file. Every
-/// layer is asserted separately, because writing them all as `L4` slots is
-/// exactly what used to happen and a count would not have noticed.
+/// A Set file recorded an L1 and its renderers: [`save`] refused an L2, an L3
+/// or a `kind Field` outright, so a cube morphing into a sphere was a Set that
+/// could be played and not kept — and `--record-session` refused it with the
+/// same message, because a session opens with a Set file. Every layer is
+/// asserted separately, because writing them all as `L4` slots is exactly what
+/// used to happen and a count would not have noticed.
 #[test]
 fn the_whole_chain_survives_the_file_it_is_written_to() {
     let (dir, store, l1, l4) = fixture();
@@ -1104,18 +1102,17 @@ fn the_whole_chain_survives_the_file_it_is_written_to() {
     assert_eq!(loaded.names.l2s, [None]);
 }
 
-/// **Two fields, each at its own index, through the file and back.**
+/// Two fields, each at its own index, through the file and back.
 ///
 /// The format could always say it — a `slot` record carries a layer and an
-/// index, and Field is a layer like any other — and the loader would not:
-/// it took `field_srcs.first()` and filed the rest under a note. So a Set
-/// whose marcher took a shape and a cutter saved as a Set that came back
-/// with one of them, and the edge naming the missing one no longer
-/// resolved.
+/// index, and Field is a layer like any other — and the loader would not: it
+/// took `field_srcs.first()` and filed the rest under a note. So a Set whose
+/// marcher took a shape and a cutter saved as a Set that came back with one of
+/// them, and the edge naming the missing one no longer resolved.
 ///
-/// **Index as well as count**, because a pair that came back in the other
-/// order is a Set whose `--param Field:1:…` moves the wrong shape, and a
-/// count would not have noticed.
+/// Index as well as count, because a pair that came back in the other order is
+/// a Set whose `--param Field:1:…` moves the wrong shape, and a count would not
+/// have noticed.
 #[test]
 fn two_fields_come_back_at_their_own_indices() {
     let (dir, store, l1, l4) = fixture();
@@ -1198,10 +1195,10 @@ fn two_fields_come_back_at_their_own_indices() {
     assert_eq!(loaded.edges.len(), 1, "the edge that binds the second");
 }
 
-/// **Each geometry runs at the number written against it.**
+/// Each geometry runs at the number written against it.
 ///
-/// The capacity was keyed by node in the format and by Set in this loader:
-/// a `capacity` on L1 index 1 was reported and dropped, so a Set whose two
+/// The capacity was keyed by node in the format and by Set in this loader: a
+/// `capacity` on L1 index 1 was reported and dropped, so a Set whose two
 /// sources were sized differently came back with the second at whatever its
 /// `.kir` declared. The engine takes one per source and now so does this.
 #[test]
@@ -1251,16 +1248,16 @@ fn each_geometry_keeps_the_capacity_it_was_saved_with() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// **A salt is recorded per geometry and comes back per geometry**, which
-/// is what makes a saved Set reproduce its colours whatever order its
-/// records are in — `docs/ir-spec.md`, "A `source` value is assigned and
-/// recorded, never derived". This wrote one `seed` for the whole Set and
-/// read node 0's, so the second geometry's randomness was a function of
-/// where its path sat on the command line and of nothing in the file.
+/// A salt is recorded per geometry and comes back per geometry, which is what
+/// makes a saved Set reproduce its colours whatever order its records are in —
+/// `docs/ir-spec.md`, "A `source` value is assigned and recorded, never
+/// derived". This wrote one `seed` for the whole Set and read node 0's, so the
+/// second geometry's randomness was a function of where its path sat on the
+/// command line and of nothing in the file.
 ///
-/// **The bytes are asserted, not just the round trip.** Index 0 is absent
-/// and index 1 is written, which is the whole of what keeps the file a Set
-/// of one geometry has always written unchanged.
+/// The bytes are asserted, not just the round trip. Index 0 is absent and index
+/// 1 is written, which is the whole of what keeps the file a Set of one
+/// geometry has always written unchanged.
 #[test]
 fn each_geometry_keeps_the_salt_it_was_saved_with() {
     let (dir, store, l1, l4) = fixture();
@@ -1315,15 +1312,15 @@ fn each_geometry_keeps_the_salt_it_was_saved_with() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// **A Set file written when a seed salted the whole Set still loads**, and
-/// says so by carrying one salt for the geometry it was written against.
+/// A Set file written when a seed salted the whole Set still loads, and says so
+/// by carrying one salt for the geometry it was written against.
 ///
 /// That is the older file's shape: one `seed` record, no index on it, and
 /// however many geometries. The geometry it names keeps the colours it was
-/// saved with; the ones it does not are salted the way an unsaved run is,
-/// which is what `None` in [`Loaded::salts`] asks the engine for. Refusing
-/// or defaulting either half would be a file that loads and draws something
-/// nobody saved.
+/// saved with; the ones it does not are salted the way an unsaved run is, which
+/// is what `None` in [`Loaded::salts`] asks the engine for. Refusing or
+/// defaulting either half would be a file that loads and draws something nobody
+/// saved.
 #[test]
 fn a_file_that_salted_the_whole_set_still_loads() {
     let (dir, store, l1, l4) = fixture();
@@ -1356,21 +1353,21 @@ fn a_file_that_salted_the_whole_set_still_loads() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// **A one-geometry Set is byte for byte the file it has always been**,
-/// except for the one field the format has grown since.
+/// A one-geometry Set is byte for byte the file it has always been, except for
+/// the one field the format has grown since.
 ///
-/// Every Set file ever written is one L1 and its renderers, and the fields
-/// that carry a chain — `index` on every layer, `name` on a slot — are
-/// absent rather than defaulted for exactly this reason. A literal, not a
-/// re-save compared against itself: a round trip through one writer agrees
-/// with itself however far both halves have drifted.
+/// Every Set file ever written is one L1 and its renderers, and the fields that
+/// carry a chain — `index` on every layer, `name` on a slot — are absent rather
+/// than defaulted for exactly this reason. A literal, not a re-save compared
+/// against itself: a round trip through one writer agrees with itself however
+/// far both halves have drifted.
 ///
-/// **`height` on the `camera` line is the exception, and it is a decision
-/// rather than drift** (ADR-0318, 2026-09-09): the record carried two of
-/// the orbit's three placement numbers, so a camera saved looking down came
-/// back looking along the equator. This literal grew the field; a file
-/// written without it still reads as the 2.0 it meant. What this test is
-/// for is that nothing grows one *silently*, and it did its job.
+/// `height` on the `camera` line is the exception, and it is a decision rather
+/// than drift (ADR-0318, 2026-09-09): the record carried two of the orbit's
+/// three placement numbers, so a camera saved looking down came back looking
+/// along the equator. This literal grew the field; a file written without it
+/// still reads as the 2.0 it meant. What this test is for is that nothing grows
+/// one *silently*, and it did its job.
 #[test]
 fn a_one_geometry_set_is_byte_for_byte_the_file_it_always_was() {
     let (_dir, store, l1, l4) = fixture();
@@ -1402,16 +1399,16 @@ fn a_one_geometry_set_is_byte_for_byte_the_file_it_always_was() {
     );
 }
 
-/// **A composited Set is saved as one and comes back as one**, folded to
-/// the renderer it was folded to.
+/// A composited Set is saved as one and comes back as one, folded to the
+/// renderer it was folded to.
 ///
-/// This is the round trip the `merge` record exists for. A Set file could
-/// not say that a slot composites, so a variant pool written out came back
+/// This is the round trip the `merge` record exists for. A Set file could not
+/// say that a slot composites, so a variant pool written out came back
 /// overdrawing: no L5, no edges into one, and `Set::select_renderer` with
-/// nothing to select between. Both halves are asserted here because either
-/// one alone is useless — a layering that survived without its selection
-/// comes up folding every alternative at once, which is a different picture
-/// from the one that was saved.
+/// nothing to select between. Both halves are asserted here because either one
+/// alone is useless — a layering that survived without its selection comes up
+/// folding every alternative at once, which is a different picture from the one
+/// that was saved.
 #[test]
 fn a_composited_set_comes_back_composited_and_still_folded_where_it_was() {
     let (dir, store, l1, l4) = fixture();
@@ -1460,14 +1457,14 @@ fn a_composited_set_comes_back_composited_and_still_folded_where_it_was() {
     );
 }
 
-/// **A Set that overdraws writes no `merge` line at all**, and loads back
+/// A Set that overdraws writes no `merge` line at all, and loads back
 /// overdrawing.
 ///
-/// The record's absence is how overdraw has always been spelled — there is
-/// no boolean field, because a record that could say `false` would be a
-/// second spelling of not writing one. So this asserts the *bytes*: a Set
-/// that overdraws is byte for byte the file it was before the record
-/// existed, and every file written by an older build reads as what it was.
+/// The record's absence is how overdraw has always been spelled — there is no
+/// boolean field, because a record that could say `false` would be a second
+/// spelling of not writing one. So this asserts the *bytes*: a Set that
+/// overdraws is byte for byte the file it was before the record existed, and
+/// every file written by an older build reads as what it was.
 #[test]
 fn an_overdrawing_set_writes_no_merge_line_and_loads_back_overdrawing() {
     let (dir, store, l1, l4) = fixture();
@@ -1494,21 +1491,21 @@ fn an_overdrawing_set_writes_no_merge_line_and_loads_back_overdrawing() {
     assert_eq!(loaded.live, None, "a Set with no merge recorded a fold");
 }
 
-/// **A save a model asked for lands in the sandbox and never in the
-/// operator's library.**
+/// A save a model asked for lands in the sandbox and never in the operator's
+/// library.
 ///
 /// This is
 /// `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`
-/// at the one line that decides it — [`save`]'s match on [`Asked`] — and
-/// the property it holds is a *negative* one: the file that must not be
-/// there. Delete the `Asked::Model` arm and the sandbox assertion still
-/// passes on nothing, so the assertion that matters is the second: `sets/`
-/// is where the operator's presets are, and a model writing an id one of
-/// them already has is the loss P-0096 exists against.
+/// at the one line that decides it — [`save`]'s match on [`Asked`] — and the
+/// property it holds is a *negative* one: the file that must not be there.
+/// Delete the `Asked::Model` arm and the sandbox assertion still passes on
+/// nothing, so the assertion that matters is the second: `sets/` is where the
+/// operator's presets are, and a model writing an id one of them already has is
+/// the loss P-0096 exists against.
 ///
-/// **The control is the same call with the other actor**, which is what
-/// stops this passing against a `save` that had stopped writing anywhere
-/// the library can see.
+/// The control is the same call with the other actor, which is what stops this
+/// passing against a `save` that had stopped writing anywhere the library can
+/// see.
 #[test]
 fn a_save_a_model_asked_for_lands_in_the_sandbox_and_never_in_the_library() {
     let (dir, store, l1, l4) = fixture();
@@ -1540,16 +1537,16 @@ fn a_save_a_model_asked_for_lands_in_the_sandbox_and_never_in_the_library() {
     load(&store, "night01").expect("and the library loads it back");
 }
 
-/// **Two saves a model asked for under one name are two files.**
+/// Two saves a model asked for under one name are two files.
 ///
 /// `filed_as` is where this is decided and the reason is written there: the
-/// sandbox holds snapshots, and a snapshot a later snapshot can replace is
-/// not one. Asserted here rather than beside that function because the
-/// property is about what is on the disk afterwards — a rule about an id
-/// that never reached a store would be a rule about a string.
+/// sandbox holds snapshots, and a snapshot a later snapshot can replace is not
+/// one. Asserted here rather than beside that function because the property is
+/// about what is on the disk afterwards — a rule about an id that never reached
+/// a store would be a rule about a string.
 ///
-/// **The control is the operator's own name, which overwrites**, and that
-/// is ADR-0128 unchanged: an id an operator types is an instruction.
+/// The control is the operator's own name, which overwrites, and that is
+/// ADR-0128 unchanged: an id an operator types is an instruction.
 #[test]
 fn two_saves_a_model_asked_for_under_one_name_are_two_files() {
     let (dir, store, l1, l4) = fixture();
@@ -1599,13 +1596,12 @@ fn two_saves_a_model_asked_for_under_one_name_are_two_files() {
     );
 }
 
-/// **A composited Set nobody selected in writes no `live`**, and comes back
-/// with every renderer live.
+/// A composited Set nobody selected in writes no `live`, and comes back with
+/// every renderer live.
 ///
-/// Absent is *not* renderer 0. Read that way it would silence every
-/// renderer but the first in every composited Set ever saved without a
-/// selection — a picture nobody asked for, from a file that said nothing
-/// had changed.
+/// Absent is *not* renderer 0. Read that way it would silence every renderer
+/// but the first in every composited Set ever saved without a selection — a
+/// picture nobody asked for, from a file that said nothing had changed.
 #[test]
 fn a_composited_set_nobody_selected_in_writes_no_live() {
     let (dir, store, l1, l4) = fixture();
@@ -1641,14 +1637,13 @@ fn a_composited_set_nobody_selected_in_writes_no_live() {
     );
 }
 
-/// **A fold naming a renderer the file does not have is said and dropped.**
+/// A fold naming a renderer the file does not have is said and dropped.
 ///
 /// A hand-written or hand-edited file can name one; the Set is whole either
-/// way, so the honest answer is to load it with every renderer live — the
-/// state it would have come up in — and say which line was not honoured.
-/// Checked where the `camera` index is checked and for its reason: how many
-/// renderers a file names is only known once every `slot` record has been
-/// met.
+/// way, so the honest answer is to load it with every renderer live — the state
+/// it would have come up in — and say which line was not honoured. Checked
+/// where the `camera` index is checked and for its reason: how many renderers a
+/// file names is only known once every `slot` record has been met.
 #[test]
 fn a_fold_naming_a_renderer_that_is_not_there_is_reported_and_dropped() {
     let (_dir, store, l1, l4) = fixture();
@@ -1675,11 +1670,11 @@ fn a_fold_naming_a_renderer_that_is_not_there_is_reported_and_dropped() {
     );
 }
 
-/// **Refused rather than written into a file that cannot be read back.**
+/// Refused rather than written into a file that cannot be read back.
 ///
-/// What [`save`] refuses is no longer a layer — it has a slot for every one
-/// — but the two shapes that are not a Set, and the two a projection keyed
-/// by address cannot fold: a repeat, and a gap.
+/// What [`save`] refuses is no longer a layer — it has a slot for every one —
+/// but the two shapes that are not a Set, and the two a projection keyed by
+/// address cannot fold: a repeat, and a gap.
 #[test]
 fn what_the_file_cannot_hold_is_refused_rather_than_written() {
     let (_dir, store, l1, l4) = fixture();
@@ -1753,18 +1748,17 @@ fn what_the_file_cannot_hold_is_refused_rather_than_written() {
     }
 }
 
-/// **A gap in a layer is refused on the way in too**, and on every layer:
-/// index 2 with no index 1 says a chain with a hole in it, and closing it up
-/// would silently change what deforms what — or, on L4, draw order.
-/// **The built-in camera's three are written once, and the `camera` record
-/// is where.**
+/// A gap in a layer is refused on the way in too, and on every layer: index 2
+/// with no index 1 says a chain with a hole in it, and closing it up would
+/// silently change what deforms what — or, on L4, draw order. The built-in
+/// camera's three are written once, and the `camera` record is where.
 ///
 /// They are that node's parameters since ADR-0318, so `Set::params` reports
-/// them and a writer that took the list whole would put `radius` in the
-/// file twice — once as a `param` at `L3:0` and once on the `camera` line.
-/// Two spellings of one fact leave a reader asking which a writer meant by
-/// choosing the other, so the `param` run leaves that node to the record
-/// that describes it, exactly as the `slot` run already does.
+/// them and a writer that took the list whole would put `radius` in the file
+/// twice — once as a `param` at `L3:0` and once on the `camera` line. Two
+/// spellings of one fact leave a reader asking which a writer meant by choosing
+/// the other, so the `param` run leaves that node to the record that describes
+/// it, exactly as the `slot` run already does.
 #[test]
 fn the_built_in_cameras_three_are_written_as_the_camera_record_and_not_as_params() {
     let (_dir, store, l1, l4) = fixture();
@@ -1816,12 +1810,12 @@ fn the_built_in_cameras_three_are_written_as_the_camera_record_and_not_as_params
     );
 }
 
-/// **A file written before `height` reads as the default it meant**, and
-/// that default is the engine's own.
+/// A file written before `height` reads as the default it meant, and that
+/// default is the engine's own.
 ///
 /// `karakuri-store` restates `Orbit::default().height` because it depends on
-/// nothing and cannot ask for it; this is the test that holds the two
-/// together, here because this crate is where a Set file meets an `Orbit`.
+/// nothing and cannot ask for it; this is the test that holds the two together,
+/// here because this crate is where a Set file meets an `Orbit`.
 #[test]
 fn a_camera_line_without_a_height_reads_as_the_engines_default() {
     let (_dir, store, l1, l4) = fixture();
@@ -1877,11 +1871,11 @@ fn a_gap_in_a_chain_is_refused_rather_than_closed_up() {
     );
 }
 
-/// **A second camera is a second camera.** The format could address one
-/// all along and this loader used to read the first and report the rest as
-/// skipped — a refusal about the plumbing, which took a `Vec` here and in
-/// the engine to lift. Which renderer draws from which is an `edge`, so
-/// there is nothing here to arbitrate.
+/// A second camera is a second camera. The format could address one all along
+/// and this loader used to read the first and report the rest as skipped — a
+/// refusal about the plumbing, which took a `Vec` here and in the engine to
+/// lift. Which renderer draws from which is an `edge`, so there is nothing here
+/// to arbitrate.
 #[test]
 fn a_second_camera_loads_beside_the_first() {
     let (dir, store, l1, l4) = fixture();
@@ -1922,16 +1916,15 @@ fn a_second_camera_loads_beside_the_first() {
     );
 }
 
-/// **A `camera` record with no index is node 0's**, which is what every
-/// file ever written means by it: a Set held one camera, so there was one
-/// node for the record to describe, and a file that names no camera
-/// procedure still has the built-in at `L3:0`.
+/// A `camera` record with no index is node 0's, which is what every file ever
+/// written means by it: a Set held one camera, so there was one node for the
+/// record to describe, and a file that names no camera procedure still has the
+/// built-in at `L3:0`.
 ///
-/// The index exists because the L3 layer holds several now. The built-in
-/// orbit is the node after the procedures, and the only one a `camera`
-/// record can be about — a camera that is a procedure writes its own six
-/// numbers every frame — so an index naming one of those is said rather
-/// than applied to it.
+/// The index exists because the L3 layer holds several now. The built-in orbit
+/// is the node after the procedures, and the only one a `camera` record can be
+/// about — a camera that is a procedure writes its own six numbers every frame
+/// — so an index naming one of those is said rather than applied to it.
 #[test]
 fn a_camera_record_with_no_index_is_node_zeros() {
     let (_dir, store, l1, l4) = fixture();
@@ -2011,9 +2004,9 @@ fn a_camera_record_with_no_index_is_node_zeros() {
     );
 }
 
-/// A `bind` record and a `Binding` are the same thing in two shapes, and
-/// `save` writes one from the other. **Every generator kind survives**, so
-/// a saved `fbm` does not come back as the perlin the default would give.
+/// A `bind` record and a `Binding` are the same thing in two shapes, and `save`
+/// writes one from the other. Every generator kind survives, so a saved `fbm`
+/// does not come back as the perlin the default would give.
 #[test]
 fn every_noise_generator_survives_the_record_it_is_written_as() {
     for kind in [
@@ -2036,10 +2029,10 @@ fn every_noise_generator_survives_the_record_it_is_written_as() {
 }
 // -- Bundling --------------------------------------------------------
 
-/// The text a bundle is written out as, back through the reader — so a
-/// test round-trips through the *file*, which is what `--package >` writes
-/// and what `--take-in` reads, rather than through records held in memory
-/// that could not have survived a serialisation.
+/// The text a bundle is written out as, back through the reader — so a test
+/// round-trips through the *file*, which is what `--package >` writes and what
+/// `--take-in` reads, rather than through records held in memory that could not
+/// have survived a serialisation.
 fn as_a_file(lines: &[Line]) -> Vec<Line> {
     parsed(
         &lines
@@ -2049,20 +2042,20 @@ fn as_a_file(lines: &[Line]) -> Vec<Line> {
     )
 }
 
-/// **The round trip both flags exist for**: a bundle written out of one
-/// store loads in a store that has never held its artifacts.
+/// The round trip both flags exist for: a bundle written out of one store loads
+/// in a store that has never held its artifacts.
 ///
-/// `inlined_source_loads_without_a_store_that_knows_the_artifact` above
-/// proves the *reader* does that, from `src` records a test hand-built.
-/// This is the writing half beside it: nothing here spells a record out —
-/// [`bundle`] produces the file and [`unbundle`] takes it in, and the
-/// material arrives on the far side as procedures with their own names.
+/// `inlined_source_loads_without_a_store_that_knows_the_artifact` above proves
+/// the *reader* does that, from `src` records a test hand-built. This is the
+/// writing half beside it: nothing here spells a record out — [`bundle`]
+/// produces the file and [`unbundle`] takes it in, and the material arrives on
+/// the far side as procedures with their own names.
 ///
-/// **And the cards come with it.** An artifact whose card is missing is an
-/// ordinary store rather than a damaged one, so this is not the difference
-/// between a bundle that works and one that does not — but a bundle that
-/// dropped them would leave every library taken in thinner than the one it
-/// came from, silently.
+/// And the cards come with it. An artifact whose card is missing is an ordinary
+/// store rather than a damaged one, so this is not the difference between a
+/// bundle that works and one that does not — but a bundle that dropped them
+/// would leave every library taken in thinner than the one it came from,
+/// silently.
 #[test]
 fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
     let (_dir, store, l1, l4) = fixture();
@@ -2092,11 +2085,11 @@ fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
     }
 }
 
-/// **A bundle missing one procedure is refused whole, naming it.**
+/// A bundle missing one procedure is refused whole, naming it.
 ///
 /// The alternative is a file that looks self-contained and is not, whose
-/// failure surfaces on somebody else's machine — where the artifact it
-/// wants is not, and never was.
+/// failure surfaces on somebody else's machine — where the artifact it wants is
+/// not, and never was.
 #[test]
 fn a_bundle_is_refused_when_the_store_lacks_a_source() {
     let (_dir, store, l1, _l4) = fixture();
@@ -2115,10 +2108,10 @@ fn a_bundle_is_refused_when_the_store_lacks_a_source() {
     assert!(e.contains(&missing.short(12)), "{e}");
 }
 
-/// **Two nodes over one artifact inline it once.** The reader keys `src` by
-/// hash, so a second run would be a second copy of the same bytes that
-/// nothing ever reads — and this Set is one geometry drawn twice by the
-/// same renderer, which is the ordinary way that happens.
+/// Two nodes over one artifact inline it once. The reader keys `src` by hash,
+/// so a second run would be a second copy of the same bytes that nothing ever
+/// reads — and this Set is one geometry drawn twice by the same renderer, which
+/// is the ordinary way that happens.
 #[test]
 fn one_artifact_referenced_twice_is_inlined_once() {
     let (_dir, store, l1, l4) = fixture();
@@ -2154,14 +2147,14 @@ fn one_artifact_referenced_twice_is_inlined_once() {
     assert_eq!(run, L4.split('\n').count());
 }
 
-/// **A source that does not hash to the address its `slot` names is
-/// refused, and nothing is stored.**
+/// A source that does not hash to the address its `slot` names is refused, and
+/// nothing is stored.
 ///
-/// This is the check that makes a bundle worth trusting at all: without it
-/// a `src` run is a way to file arbitrary text under an address the
-/// operator on the far side recognises, and every guarantee content
-/// addressing makes is gone. Refusing *after* storing some of it would be
-/// nearly as bad — the store would hold half a stranger's file.
+/// This is the check that makes a bundle worth trusting at all: without it a
+/// `src` run is a way to file arbitrary text under an address the operator on
+/// the far side recognises, and every guarantee content addressing makes is
+/// gone. Refusing *after* storing some of it would be nearly as bad — the store
+/// would hold half a stranger's file.
 #[test]
 fn an_unbundle_refuses_a_source_that_does_not_hash_to_its_address() {
     let (_dir, store, l1, l4) = fixture();
@@ -2208,13 +2201,13 @@ fn an_unbundle_refuses_a_source_that_does_not_hash_to_its_address() {
     );
 }
 
-/// **An id already taken is refused, and the Set that was there is left
-/// exactly as it was.**
+/// An id already taken is refused, and the Set that was there is left exactly
+/// as it was.
 ///
-/// Deliberately not `--save-set`'s rule, which overwrites: an id you type
-/// is an instruction, and an id that arrived inside somebody else's file is
-/// not. The bytes are compared before and after, because "it refused" and
-/// "it refused without having written" are two different claims.
+/// Deliberately not `--save-set`'s rule, which overwrites: an id you type is an
+/// instruction, and an id that arrived inside somebody else's file is not. The
+/// bytes are compared before and after, because "it refused" and "it refused
+/// without having written" are two different claims.
 #[test]
 fn an_unbundle_refuses_an_id_already_taken_and_leaves_the_set_alone() {
     let (dir, store, l1, l4) = fixture();
@@ -2260,14 +2253,14 @@ fn an_unbundle_refuses_an_id_already_taken_and_leaves_the_set_alone() {
     assert_eq!(before, written(&theirs, "s1"), "the preset was overwritten");
 }
 
-/// **A source this build cannot compile is stored, keeps its slot, and is
-/// reported.**
+/// A source this build cannot compile is stored, keeps its slot, and is
+/// reported.
 ///
-/// Refusing the whole file would tell an operator that *something* is
-/// wrong. Storing it means `--load-set` fails against the source itself,
-/// with the checker's span and hint on the line that is wrong — which is a
-/// thing they can fix. So the note says which node and what the checker
-/// said, and the artifact is on disk to be read and edited.
+/// Refusing the whole file would tell an operator that *something* is wrong.
+/// Storing it means `--load-set` fails against the source itself, with the
+/// checker's span and hint on the line that is wrong — which is a thing they
+/// can fix. So the note says which node and what the checker said, and the
+/// artifact is on disk to be read and edited.
 #[test]
 fn an_unbundle_stores_a_source_that_does_not_compile_and_says_so() {
     let broken = "proc veil {\n  kind L4\n  this is not a renderer\n}\n";
@@ -2336,11 +2329,11 @@ fn an_unbundle_stores_a_source_that_does_not_compile_and_says_so() {
 
 // -- The authoring form: resolution, and the wall around it -----------
 
-/// An authoring Set file beside the two `.kir` the fixture wrote, naming
-/// them by the relative paths they actually have.
+/// An authoring Set file beside the two `.kir` the fixture wrote, naming them
+/// by the relative paths they actually have.
 ///
-/// Written by hand rather than by a writer, because there is no writer:
-/// a `.kset` is a file a person authors, and what these tests are about is
+/// Written by hand rather than by a writer, because there is no writer: a
+/// `.kset` is a file a person authors, and what these tests are about is
 /// reading one somebody else wrote.
 fn authored(dir: &tempfile::TempDir, name: &str, parts: &str) -> std::path::PathBuf {
     let path = dir.path().join(name);
@@ -2352,15 +2345,14 @@ fn authored(dir: &tempfile::TempDir, name: &str, parts: &str) -> std::path::Path
     path
 }
 
-/// **A `.kset` resolves to the `.kbset` it names, with its parts in the
-/// store as artifacts.**
+/// A `.kset` resolves to the `.kbset` it names, with its parts in the store as
+/// artifacts.
 ///
-/// The whole of what resolution is, checked as three separate facts because
-/// two of them can hold while the third does not: every `part` has become a
-/// `slot`, each `slot` names the content address of the bytes on disk, and
-/// the store can hand those bytes back. A resolver that emitted the right
-/// records and stored nothing would pass the first two and produce a file
-/// nobody can load.
+/// The whole of what resolution is, checked as three separate facts because two
+/// of them can hold while the third does not: every `part` has become a `slot`,
+/// each `slot` names the content address of the bytes on disk, and the store
+/// can hand those bytes back. A resolver that emitted the right records and
+/// stored nothing would pass the first two and produce a file nobody can load.
 #[test]
 fn a_kset_resolves_to_the_kbset_it_names_with_its_parts_in_the_store() {
     let (dir, store, l1, l4) = fixture();
@@ -2419,17 +2411,15 @@ fn a_kset_resolves_to_the_kbset_it_names_with_its_parts_in_the_store() {
     }
 }
 
-/// **A `.kbset` made from a `.kset` loads with the authoring file deleted,
-/// and with the parts it named deleted too** — which is the whole point of
-/// the form.
+/// A `.kbset` made from a `.kset` loads with the authoring file deleted, and
+/// with the parts it named deleted too — which is the whole point of the form.
 ///
-/// An authoring file is only readable beside its neighbours; the resolved
-/// one is readable anywhere its material is, and a bundle carries the
-/// material with it. So this deletes the entire directory the `.kset` and
-/// its `.kir` files lived in, takes it into a store that has never held
-/// any of it, and loads. Nothing that resolves a path could survive that,
-/// which is what makes it the test of the difference rather than of the
-/// pipeline.
+/// An authoring file is only readable beside its neighbours; the resolved one
+/// is readable anywhere its material is, and a bundle carries the material with
+/// it. So this deletes the entire directory the `.kset` and its `.kir` files
+/// lived in, takes it into a store that has never held any of it, and loads.
+/// Nothing that resolves a path could survive that, which is what makes it the
+/// test of the difference rather than of the pipeline.
 #[test]
 fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -2463,13 +2453,13 @@ fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
     assert_eq!(loaded.l4s[0].name, "points");
 }
 
-/// **A `part` in a `.kbset` refuses the load**, because it is a file
-/// disagreeing with its own extension.
+/// A `part` in a `.kbset` refuses the load, because it is a file disagreeing
+/// with its own extension.
 ///
 /// Not skipped with a note, which is what this reader does with every other
-/// line it cannot honour: a `part` is a *node*, and skipping one hands back
-/// a Set that is a geometry short. The refusal names the node and the path
-/// it wanted.
+/// line it cannot honour: a `part` is a *node*, and skipping one hands back a
+/// Set that is a geometry short. The refusal names the node and the path it
+/// wanted.
 #[test]
 fn a_part_in_a_resolved_set_file_refuses_the_load() {
     let (_dir, store, l1, _l4) = fixture();
@@ -2484,12 +2474,11 @@ fn a_part_in_a_resolved_set_file_refuses_the_load() {
     assert!(refused.contains("content address"), "{refused}");
 }
 
-/// **A part naming an absolute path is refused**, and the refusal names the
-/// path.
+/// A part naming an absolute path is refused, and the refusal names the path.
 ///
-/// The first of the three spellings of one escape. It is refused without
-/// the filesystem being asked anything, which is why the path here need not
-/// exist — and why a machine where it *does* exist gets the same answer.
+/// The first of the three spellings of one escape. It is refused without the
+/// filesystem being asked anything, which is why the path here need not exist —
+/// and why a machine where it *does* exist gets the same answer.
 #[test]
 fn a_part_naming_an_absolute_path_is_refused() {
     let (dir, store, _l1, _l4) = fixture();
@@ -2507,12 +2496,12 @@ fn a_part_naming_an_absolute_path_is_refused() {
     );
 }
 
-/// **A part that climbs out of the Set file's own directory is refused**,
-/// naming what it climbed out of.
+/// A part that climbs out of the Set file's own directory is refused, naming
+/// what it climbed out of.
 ///
 /// The second spelling. The `.kset` is one level down so that `..` has
-/// somewhere to go, and the file it reaches for genuinely exists — a wall
-/// that only refuses paths that were not there anyway is not a wall.
+/// somewhere to go, and the file it reaches for genuinely exists — a wall that
+/// only refuses paths that were not there anyway is not a wall.
 #[test]
 fn a_part_that_climbs_out_of_the_set_files_directory_is_refused() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -2543,13 +2532,13 @@ fn a_part_that_climbs_out_of_the_set_files_directory_is_refused() {
     );
 }
 
-/// **A `..` that lands back inside is an ordinary path and is allowed.**
+/// A `..` that lands back inside is an ordinary path and is allowed.
 ///
-/// What the wall refuses is *leaving*, not the spelling — a rule that
-/// refused every `..` would refuse `parts/../l1.kir`, which names a file in
-/// the directory the Set file is in, and an operator would learn that by
-/// experiment. This is the test that keeps the check on containment rather
-/// than on characters.
+/// What the wall refuses is *leaving*, not the spelling — a rule that refused
+/// every `..` would refuse `parts/../l1.kir`, which names a file in the
+/// directory the Set file is in, and an operator would learn that by
+/// experiment. This is the test that keeps the check on containment rather than
+/// on characters.
 #[test]
 fn a_dotdot_that_lands_back_inside_is_a_path_and_is_allowed() {
     let (dir, store, l1, _l4) = fixture();
@@ -2568,16 +2557,15 @@ fn a_dotdot_that_lands_back_inside_is_a_path_and_is_allowed() {
     );
 }
 
-/// **A part that is a symlink out of the directory is refused**, which is
-/// the spelling that gets missed.
+/// A part that is a symlink out of the directory is refused, which is the
+/// spelling that gets missed.
 ///
-/// Lexically this include is one plain component with no `..` and no
-/// leading `/`; every character in it is one the other two rules allow. It
-/// is only an escape once the link is followed, which is why the comparison
-/// is between canonical paths — and why the fixture's own directory is
-/// canonicalised too, since on macOS a temporary directory is itself
-/// reached through a symlink and a naive comparison would refuse
-/// everything.
+/// Lexically this include is one plain component with no `..` and no leading
+/// `/`; every character in it is one the other two rules allow. It is only an
+/// escape once the link is followed, which is why the comparison is between
+/// canonical paths — and why the fixture's own directory is canonicalised too,
+/// since on macOS a temporary directory is itself reached through a symlink and
+/// a naive comparison would refuse everything.
 #[test]
 fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
     let elsewhere = tempfile::tempdir().expect("tempdir");
@@ -2612,13 +2600,13 @@ fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
     );
 }
 
-/// **A directory reached through a symlink still contains its own parts.**
+/// A directory reached through a symlink still contains its own parts.
 ///
 /// The other half of the sentence above, and the failure the first
-/// implementation of a containment check makes: canonicalise the target and
-/// not the root, and every part of every Set authored under `/var/folders`
-/// on macOS — or under any linked path anywhere — is refused as an escape.
-/// A wall that refuses everything is a wall somebody switches off.
+/// implementation of a containment check makes: canonicalise the target and not
+/// the root, and every part of every Set authored under `/var/folders` on macOS
+/// — or under any linked path anywhere — is refused as an escape. A wall that
+/// refuses everything is a wall somebody switches off.
 #[test]
 fn a_directory_reached_through_a_symlink_still_contains_its_own_parts() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -2639,8 +2627,8 @@ fn a_directory_reached_through_a_symlink_still_contains_its_own_parts() {
         .expect("the file's own directory contains the file's own parts, link or no link");
 }
 
-/// **A file that is not a `.kset` is not resolved**, because the extension
-/// is the whole of what says which of a Set's two forms a file is.
+/// A file that is not a `.kset` is not resolved, because the extension is the
+/// whole of what says which of a Set's two forms a file is.
 #[test]
 fn a_file_that_is_not_a_kset_is_not_resolved() {
     let (dir, store, _l1, _l4) = fixture();
@@ -2653,13 +2641,13 @@ fn a_file_that_is_not_a_kset_is_not_resolved() {
     assert!(refused.contains(".kset"), "{refused}");
 }
 
-/// **A part naming a file that is not there says so**, rather than saying
-/// it escaped.
+/// A part naming a file that is not there says so, rather than saying it
+/// escaped.
 ///
-/// The two are different mistakes and an operator fixes them differently:
-/// one is a typo or a part left behind, the other is a file that was trying
-/// to leave. A wall that answered "refused" to both would send whoever
-/// mistyped `l1.kir` looking for a security problem.
+/// The two are different mistakes and an operator fixes them differently: one
+/// is a typo or a part left behind, the other is a file that was trying to
+/// leave. A wall that answered "refused" to both would send whoever mistyped
+/// `l1.kir` looking for a security problem.
 #[test]
 fn a_part_naming_a_file_that_is_not_there_says_so() {
     let (dir, store, _l1, _l4) = fixture();

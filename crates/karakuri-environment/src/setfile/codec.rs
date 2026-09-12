@@ -21,13 +21,13 @@ use super::binding::{
 use super::bundle::part_at;
 use super::types::{Loaded, Node, Saving, VERSION};
 
-/// **Refused rather than written into a file that cannot be read back.**
+/// Refused rather than written into a file that cannot be read back.
 ///
 /// This used to refuse an L2, an L3 or a `kind Field` outright, because a Set
 /// file recorded "the L1, and every other path": everything else went out as an
-/// `L4` slot, and reloading as `slot L4 needs a L4 procedure, got Field` was the
-/// *good* case — the bad one was an L2 whose `deform` the loader handed to a
-/// renderer. The format has always had a slot per layer, so a chain is now
+/// `L4` slot, and reloading as `slot L4 needs a L4 procedure, got Field` was
+/// the *good* case — the bad one was an L2 whose `deform` the loader handed to
+/// a renderer. The format has always had a slot per layer, so a chain is now
 /// written as the chain it is and none of that is left to refuse.
 ///
 /// What is left is what a Set *is*, and what the projection can fold. A file
@@ -102,19 +102,19 @@ fn refuse_unwritable(nodes: &[Node], capacities: &[u32], seeds: &[u32]) -> Resul
     Ok(())
 }
 
-/// **Write a Set file.**
+/// Write a Set file.
 ///
 /// The file references its sources by hash rather than carrying them, so a Set
 /// file is a few dozen lines a human can read rather than a copy of the
 /// material. Content addressing means saving the same procedure twice stores it
 /// once.
 ///
-/// **Putting them there is the caller's** — see [`Node`] for why the writer
-/// stopped reading files. What this owes is that every hash it writes was
-/// already stored, and it cannot check that without reading the store back,
-/// which is the caller's promise instead.
+/// Putting them there is the caller's — see [`Node`] for why the writer stopped
+/// reading files. What this owes is that every hash it writes was already
+/// stored, and it cannot check that without reading the store back, which is
+/// the caller's promise instead.
 ///
-/// **`asked` is who the save belongs to, and it decides the directory.** An
+/// `asked` is who the save belongs to, and it decides the directory. An
 /// operator's own act writes the library; a save asked for over MCP writes
 /// `<store>/sandbox/` — [`crate::Asked`] and
 /// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md).
@@ -306,7 +306,7 @@ pub fn save(store: &Store, asked: Asked, id: &str, set: Saving<'_>) -> Result<()
     .map_err(|e| format!("writing set `{id}`: {e}"))
 }
 
-/// **Read a Set file back into what the engine takes.**
+/// Read a Set file back into what the engine takes.
 ///
 /// A source is resolved from the inlined `src` records when the file carries
 /// them — the bundled form — and from the store otherwise. Bundling wins

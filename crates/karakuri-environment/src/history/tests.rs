@@ -20,15 +20,14 @@ fn files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// **Every word in [`LAYERS`] is a word [`declared_kind`] reads back**, and
-/// the sixth is the one that would have gone quietly wrong.
+/// Every word in [`LAYERS`] is a word [`declared_kind`] reads back, and the
+/// sixth is the one that would have gone quietly wrong.
 ///
-/// The layer a snapshot is filed under has to be the layer an agent
-/// addresses it by; `declared_kind` answers off `LAYERS` rather than off a
-/// match written out here for exactly that reason, and this is the
-/// assertion that the indirection holds — including for a `kind` line with
-/// a trailing comment, which is the shape the scan's *first token after the
-/// space* rule exists for.
+/// The layer a snapshot is filed under has to be the layer an agent addresses
+/// it by; `declared_kind` answers off `LAYERS` rather than off a match written
+/// out here for exactly that reason, and this is the assertion that the
+/// indirection holds — including for a `kind` line with a trailing comment,
+/// which is the shape the scan's *first token after the space* rule exists for.
 #[test]
 fn declared_kind_reads_back_every_layer_including_l5() {
     for layer in LAYERS {
@@ -72,10 +71,10 @@ fn a_snapshot_holds_the_source_it_was_given() {
     assert_eq!(std::fs::read(&written).expect("read"), b"the first version");
 }
 
-/// A rebuild recompiles both layers whichever one was saved. Without this
-/// the untouched layer's chain is a row of identical files, and the one
-/// question a history has to answer — what changed — is the one it stops
-/// being able to answer.
+/// A rebuild recompiles both layers whichever one was saved. Without this the
+/// untouched layer's chain is a row of identical files, and the one question a
+/// history has to answer — what changed — is the one it stops being able to
+/// answer.
 #[test]
 fn an_unchanged_source_is_not_written_again() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -95,9 +94,9 @@ fn an_unchanged_source_is_not_written_again() {
     assert_eq!(files(tmp.path()).len(), 1);
 }
 
-/// And "unchanged" is per slot and per layer, not global — two slots
-/// holding the same source are two chains, and an edit to one must not be
-/// mistaken for the other having already been recorded.
+/// And "unchanged" is per slot and per layer, not global — two slots holding
+/// the same source are two chains, and an edit to one must not be mistaken for
+/// the other having already been recorded.
 #[test]
 fn each_slot_and_layer_has_its_own_chain() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -124,18 +123,18 @@ fn each_slot_and_layer_has_its_own_chain() {
     assert_eq!(files(tmp.path()).len(), 3);
 }
 
-/// **And per renderer, which is the one this was actually wrong about.**
+/// And per renderer, which is the one this was actually wrong about.
 ///
-/// A slot draws with a list of L4s. Keyed by layer alone, every renderer of
-/// a stack shared one chain and one `last`, so two renderers holding
-/// different sources recorded one snapshot per save — each overwriting the
-/// other's memory of what it had last written, and each then looking
-/// changed on the next save. The chain a surface walks back through was
-/// alternating between two procedures neither of which had been edited.
+/// A slot draws with a list of L4s. Keyed by layer alone, every renderer of a
+/// stack shared one chain and one `last`, so two renderers holding different
+/// sources recorded one snapshot per save — each overwriting the other's memory
+/// of what it had last written, and each then looking changed on the next save.
+/// The chain a surface walks back through was alternating between two
+/// procedures neither of which had been edited.
 ///
 /// Both halves are asserted: two renderers are two chains, and the second
-/// renderer's own repeat is still skipped, so fixing the collision did not
-/// cost the "unchanged is not written again" property it was hiding.
+/// renderer's own repeat is still skipped, so fixing the collision did not cost
+/// the "unchanged is not written again" property it was hiding.
 #[test]
 fn each_renderer_of_a_stack_has_its_own_chain() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -169,10 +168,10 @@ fn each_renderer_of_a_stack_has_its_own_chain() {
     assert_eq!(files(tmp.path()).len(), 2);
 }
 
-/// **A renderer's index is in the name only when it is not the first**, so
-/// every file a one-renderer run has ever written keeps the name it had. A
-/// history is read by a person looking for what they changed, and a `_0` on
-/// every L4 of every ordinary run is noise in the way of that.
+/// A renderer's index is in the name only when it is not the first, so every
+/// file a one-renderer run has ever written keeps the name it had. A history is
+/// read by a person looking for what they changed, and a `_0` on every L4 of
+/// every ordinary run is noise in the way of that.
 #[test]
 fn only_a_renderer_past_the_first_carries_its_index_in_the_name() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -200,8 +199,8 @@ fn only_a_renderer_past_the_first_carries_its_index_in_the_name() {
     );
 }
 
-/// The name has to say which slot and which layer it came from, or a
-/// directory of a night's work is unreadable.
+/// The name has to say which slot and which layer it came from, or a directory
+/// of a night's work is unreadable.
 #[test]
 fn the_name_carries_the_day_the_slot_the_layer_and_the_procedure() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -241,9 +240,8 @@ fn the_name_carries_the_day_the_slot_the_layer_and_the_procedure() {
     );
 }
 
-/// **What makes the first edit undoable.** Without the seed, the first
-/// rebuild records the version that replaced the original and the original
-/// is nowhere.
+/// What makes the first edit undoable. Without the seed, the first rebuild
+/// records the version that replaced the original and the original is nowhere.
 #[test]
 fn seeding_writes_the_version_a_run_starts_with() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -267,12 +265,11 @@ fn seeding_writes_the_version_a_run_starts_with() {
     assert!(names.iter().any(|n| n.contains("draw_one")), "{names:?}");
 }
 
-/// **A chain's starting version is filed under the layer its file
-/// declares.** Every path after the first was filed as `L4`, so an L2's
-/// first snapshot landed under a name the watcher does not use for the
-/// later ones — and the chain an operator walks back through began at the
-/// second edit, with the version the run started from unreachable under
-/// any name they would think to look for.
+/// A chain's starting version is filed under the layer its file declares. Every
+/// path after the first was filed as `L4`, so an L2's first snapshot landed
+/// under a name the watcher does not use for the later ones — and the chain an
+/// operator walks back through began at the second edit, with the version the
+/// run started from unreachable under any name they would think to look for.
 #[test]
 fn a_seeded_chain_is_filed_under_the_layer_its_file_declares() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -318,9 +315,9 @@ fn a_seeded_chain_is_filed_under_the_layer_its_file_declares() {
     assert!(has("L41_far"), "{names:?}");
 }
 
-/// And the seed shares the dedup with the watcher, or the first rebuild
-/// writes the untouched procedure all over again — which is the duplicate
-/// this arrangement exists to avoid.
+/// And the seed shares the dedup with the watcher, or the first rebuild writes
+/// the untouched procedure all over again — which is the duplicate this
+/// arrangement exists to avoid.
 #[test]
 fn a_rebuild_after_seeding_does_not_rewrite_an_untouched_procedure() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -352,19 +349,19 @@ fn a_rebuild_after_seeding_does_not_rewrite_an_untouched_procedure() {
     );
 }
 
-/// **Two saves inside one millisecond get two ids**, so the second does not
-/// write over the first.
+/// Two saves inside one millisecond get two ids, so the second does not write
+/// over the first.
 ///
-/// The clock is the only thing a live save can be named by — a key press
-/// cannot type a name — and it resolves to a millisecond, which is finer
-/// than a hand and not finer than a program. `Live::save_set` prints the id
-/// and reports that the file was kept, so a collision is not a lost save
-/// but a save reported as kept and then overwritten by the next one.
+/// The clock is the only thing a live save can be named by — a key press cannot
+/// type a name — and it resolves to a millisecond, which is finer than a hand
+/// and not finer than a program. `Live::save_set` prints the id and reports
+/// that the file was kept, so a collision is not a lost save but a save
+/// reported as kept and then overwritten by the next one.
 ///
 /// Driven through [`unused`] with a fixed stamp rather than by calling
 /// `stamped_id` in a tight loop: this is about the rule, and a test that
-/// depended on two calls landing in the same millisecond would pass by
-/// accident on a slow machine.
+/// depended on two calls landing in the same millisecond would pass by accident
+/// on a slow machine.
 #[test]
 fn two_ids_taken_off_one_millisecond_are_two_ids() {
     let mut issued = std::collections::HashSet::new();
@@ -393,8 +390,8 @@ fn two_ids_taken_off_one_millisecond_are_two_ids() {
 }
 
 /// A procedure name reaches this from a file somebody else wrote. It is an
-/// identifier by the time it gets here, and a path component is not where
-/// to discover that the parser and this module disagree about that.
+/// identifier by the time it gets here, and a path component is not where to
+/// discover that the parser and this module disagree about that.
 #[test]
 fn a_procedure_name_cannot_escape_the_history_directory() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -420,13 +417,13 @@ fn a_procedure_name_cannot_escape_the_history_directory() {
 // the way neither would notice — the tests would go on passing against a
 // layout nothing writes.
 
-/// Put a snapshot the writer produced under another day, keeping the name
-/// the writer gave it.
+/// Put a snapshot the writer produced under another day, keeping the name the
+/// writer gave it.
 ///
-/// The clock is the one argument `record` does not take — the day comes
-/// from `Local::now()` — so a history spanning two days is built by moving
-/// what the writer wrote rather than by typing a file name this module
-/// might no longer spell that way.
+/// The clock is the one argument `record` does not take — the day comes from
+/// `Local::now()` — so a history spanning two days is built by moving what the
+/// writer wrote rather than by typing a file name this module might no longer
+/// spell that way.
 fn on(day: &str, store: &Path, path: &Path) -> PathBuf {
     let dir = store.join(DIR).join(day);
     std::fs::create_dir_all(&dir).expect("the day directory");
@@ -435,11 +432,11 @@ fn on(day: &str, store: &Path, path: &Path) -> PathBuf {
     moved
 }
 
-/// **A store nothing has edited lists nothing, and does not fail.**
+/// A store nothing has edited lists nothing, and does not fail.
 ///
 /// `Store::open` does not create `history/` — `record` does, on the first
-/// snapshot — so *no directory* is the ordinary state of a store that has
-/// never been edited, and of every store a panel run filled, because only
+/// snapshot — so *no directory* is the ordinary state of a store that has never
+/// been edited, and of every store a panel run filled, because only
 /// `karakuri-cli` builds a `Snapshots` today. An error here would report a
 /// damaged store for the commonest case there is.
 #[test]
@@ -449,13 +446,13 @@ fn a_store_that_has_never_been_edited_lists_no_versions() {
     assert_eq!(listing, Listing::default());
 }
 
-/// **A row carries the address the snapshot was recorded under**, all four
-/// fields of it, and the file it names is the one that was written.
+/// A row carries the address the snapshot was recorded under, all four fields
+/// of it, and the file it names is the one that was written.
 ///
-/// This is the anti-drift test: `record`'s arguments go in and the same
-/// numbers come back out of the name, including the two the name spells
-/// oddly — a renderer index that is left off when it is zero, and a
-/// multi-digit index that runs into the layer word (`L410`).
+/// This is the anti-drift test: `record`'s arguments go in and the same numbers
+/// come back out of the name, including the two the name spells oddly — a
+/// renderer index that is left off when it is zero, and a multi-digit index
+/// that runs into the layer word (`L410`).
 #[test]
 fn a_row_reads_back_the_address_the_snapshot_was_recorded_under() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -513,21 +510,21 @@ fn a_row_reads_back_the_address_the_snapshot_was_recorded_under() {
     );
 }
 
-/// **What a row is called is the file's own name**, less the `.kir` and
-/// less the `@<set>` every row of one walk shares.
+/// What a row is called is the file's own name, less the `.kir` and less the
+/// `@<set>` every row of one walk shares.
 ///
-/// [`Version::filed_as`] is the one spelling of it, because two surfaces
-/// hand it to each other: the Library bay draws it and hands it back at the
-/// press, a model reads it out of `walk_history` and hands it back in
-/// `Revision::Picked`, and whoever lands one rebuilds it per candidate to
-/// find the file again. So it is checked against the **name on disk**
-/// rather than against a second `format!` — a copy of the spelling asserted
-/// against itself would agree with anything
+/// [`Version::filed_as`] is the one spelling of it, because two surfaces hand
+/// it to each other: the Library bay draws it and hands it back at the press, a
+/// model reads it out of `walk_history` and hands it back in
+/// `Revision::Picked`, and whoever lands one rebuilds it per candidate to find
+/// the file again. So it is checked against the name on disk rather than
+/// against a second `format!` — a copy of the spelling asserted against itself
+/// would agree with anything
 /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
 ///
-/// **Watched to fail** with the index spelled on every row, which is the
-/// difference between `…_L4_beat_strokes` and `…_L40_beat_strokes` and is
-/// a landing that finds no file.
+/// Watched to fail with the index spelled on every row, which is the difference
+/// between `…_L4_beat_strokes` and `…_L40_beat_strokes` and is a landing that
+/// finds no file.
 #[test]
 fn a_rows_name_is_the_snapshots_own_name_without_the_suffix_or_the_set() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -594,9 +591,9 @@ fn a_rows_name_is_the_snapshots_own_name_without_the_suffix_or_the_set() {
     );
 }
 
-/// **Most recent first, and across the day directories rather than within
-/// one.** A walk starts at the newest version, and the newest version is in
-/// yesterday's directory as often as in today's.
+/// Most recent first, and across the day directories rather than within one. A
+/// walk starts at the newest version, and the newest version is in yesterday's
+/// directory as often as in today's.
 #[test]
 fn versions_are_listed_most_recent_first_across_two_days() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -646,14 +643,13 @@ fn versions_are_listed_most_recent_first_across_two_days() {
     );
 }
 
-/// **What the layout does not claim is skipped and counted**, at every
-/// level, and never repaired into a row that points at somebody else's
-/// file.
+/// What the layout does not claim is skipped and counted, at every level, and
+/// never repaired into a row that points at somebody else's file.
 ///
 /// A day directory is a place an operator is invited into — `rm -rf
 /// history/2026/07` is the whole retention policy — so things that are not
-/// snapshots turn up in it as a matter of course, and the count is what
-/// stops the listing being the only party who knew.
+/// snapshots turn up in it as a matter of course, and the count is what stops
+/// the listing being the only party who knew.
 #[test]
 fn a_name_the_layout_does_not_claim_is_counted_and_not_listed() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -704,13 +700,13 @@ fn a_name_the_layout_does_not_claim_is_counted_and_not_listed() {
     );
 }
 
-/// **A version carries the Set the slot was running, and the reader gets it
-/// back off the name.**
+/// A version carries the Set the slot was running, and the reader gets it back
+/// off the name.
 ///
 /// The load-bearing half of *a version is filed under the Set*: `record`'s
-/// argument goes in and the same string comes out of `list`, which opens
-/// no file — so the id is in the layout rather than in something a reader
-/// would have to fetch.
+/// argument goes in and the same string comes out of `list`, which opens no
+/// file — so the id is in the layout rather than in something a reader would
+/// have to fetch.
 #[test]
 fn a_version_written_under_a_set_reads_back_under_it() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -748,18 +744,17 @@ fn a_version_written_under_a_set_reads_back_under_it() {
     assert_eq!(row.file, written);
 }
 
-/// **Two Sets on one slot are two chains, and the second is not swallowed
-/// as the first's unchanged source.**
+/// Two Sets on one slot are two chains, and the second is not swallowed as the
+/// first's unchanged source.
 ///
-/// This is the whole gap. A library load moves a slot to different
-/// material, and the two sides of it were indistinguishable: one chain,
-/// one `last`, and the incoming Set's first version skipped whenever its
-/// source happened to match what the outgoing one had — so that Set's
-/// history began at its first *edit*, which is the hole `seed` exists to
-/// close one level up.
+/// This is the whole gap. A library load moves a slot to different material,
+/// and the two sides of it were indistinguishable: one chain, one `last`, and
+/// the incoming Set's first version skipped whenever its source happened to
+/// match what the outgoing one had — so that Set's history began at its first
+/// *edit*, which is the hole `seed` exists to close one level up.
 ///
-/// **Byte-identical on purpose.** Different sources would pass under the
-/// old key too and would prove nothing about it.
+/// Byte-identical on purpose. Different sources would pass under the old key
+/// too and would prove nothing about it.
 #[test]
 fn two_sets_on_one_slot_are_two_chains() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -815,17 +810,16 @@ fn two_sets_on_one_slot_are_two_chains() {
     assert_ne!(listing.versions[0].file, listing.versions[1].file);
 }
 
-/// **A run with no Set files versions under none, and a save does not go
-/// back and re-file them.**
+/// A run with no Set files versions under none, and a save does not go back and
+/// re-file them.
 ///
 /// Both of the cases where there is no id, in the order they happen. A run
-/// launched with a pair on the command line has none at all — there is
-/// nothing to write, and `Option` is what says so rather than a word an
-/// operator is free to name a Set. Then something saves what is playing,
-/// and from that point the answer to *what is this slot running* may be a
-/// Set — but the versions already filed were versions of what the slot was
-/// running when they were written, and nothing renames a file this module
-/// has already written.
+/// launched with a pair on the command line has none at all — there is nothing
+/// to write, and `Option` is what says so rather than a word an operator is
+/// free to name a Set. Then something saves what is playing, and from that
+/// point the answer to *what is this slot running* may be a Set — but the
+/// versions already filed were versions of what the slot was running when they
+/// were written, and nothing renames a file this module has already written.
 #[test]
 fn a_run_with_no_set_files_under_none_and_a_later_id_does_not_reach_back() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -873,8 +867,8 @@ fn a_run_with_no_set_files_under_none_and_a_later_id_does_not_reach_back() {
 }
 
 /// A Set id reaches this from a name an operator typed, and `mcp`'s
-/// `checked_id` is not on every route in. A path component is not where to
-/// find out that the two disagree about what an id is.
+/// `checked_id` is not on every route in. A path component is not where to find
+/// out that the two disagree about what an id is.
 #[test]
 fn a_set_id_cannot_escape_the_history_directory() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -892,13 +886,13 @@ fn a_set_id_cannot_escape_the_history_directory() {
     assert!(!path.to_string_lossy().contains(".."), "{}", path.display());
 }
 
-/// **The cap bounds the walk, and the listing says it stopped.**
+/// The cap bounds the walk, and the listing says it stopped.
 ///
-/// The history grows with every save an operator makes and nothing prunes
-/// it, so a listing on a path an operator can press has to have a price
-/// (P-0091). The bound is on **days opened**: with nothing asked for,
-/// nothing is opened, which is what the `unclaimed` count proves here —
-/// the stray file in the day directory is only seen by a walk that went in.
+/// The history grows with every save an operator makes and nothing prunes it,
+/// so a listing on a path an operator can press has to have a price (P-0091).
+/// The bound is on days opened: with nothing asked for, nothing is opened,
+/// which is what the `unclaimed` count proves here — the stray file in the day
+/// directory is only seen by a walk that went in.
 #[test]
 fn the_cap_bounds_the_walk_and_a_short_listing_says_so() {
     let tmp = tempfile::tempdir().expect("tempdir");

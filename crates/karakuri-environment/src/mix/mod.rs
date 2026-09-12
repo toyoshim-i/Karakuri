@@ -16,7 +16,7 @@
 //!                  Record::Look      ─┘
 //! ```
 //!
-//! **Built and read back, never applied directly**, which is the same
+//! Built and read back, never applied directly, which is the same
 //! arrangement `karakuri-environment`'s `audio.rs` has and is there for the
 //! same reason: the path the
 //! engine is driven through is the record's rather than one that happens to
@@ -32,7 +32,7 @@
 //! `Live::frame`"* — so a swept control's record is built once per message, on
 //! the render thread.
 //!
-//! **What allocates is the record and nothing either side of it.**
+//! What allocates is the record and nothing either side of it.
 //! `karakuri_midi::map` says of its own routing that nothing there allocates,
 //! every operation a map line can name carrying scalars only, and
 //! `session::Recorder::push` allocates nothing and never blocks. Of the four
@@ -44,7 +44,7 @@
 //! the record for the recorder, so with `--record-session` attached it is two
 //! such allocations per message and otherwise one.
 //!
-//! **What bounds it is the message count, not the value range.** A control
+//! What bounds it is the message count, not the value range. A control
 //! change is 7-bit, so a sweep passes through at most 128 *distinct* values —
 //! but nothing between the port and here drops a repeat, and a knob held
 //! against its stop keeps sending, so what arrives is however many messages the
@@ -53,13 +53,13 @@
 //! twice that while recording, each freed in the same frame or on the writer
 //! thread, with no lock and nothing unbounded in it.
 //!
-//! **Bounded is not the same as allowed, and it is the message count that is
-//! now gone.** The figures above are what a sweep *would* cost and are why:
+//! Bounded is not the same as allowed, and it is the message count that is
+//! now gone. The figures above are what a sweep *would* cost and are why:
 //! [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
 //! says the frame path allocates no heap memory, with no clause for a small
 //! one, so the question a byte-sized allocation per message raised was settled
 //! by taking away the *per message* rather than by writing the clause.
-//! `crate::midi`'s router **coalesces a continuous control per frame** — the
+//! `crate::midi`'s router coalesces a continuous control per frame — the
 //! last value a fader sent within a frame is the one that becomes an
 //! operation — so a sweep builds one of these records a frame, and two only
 //! while recording. A pad is untouched, because two presses in one frame are
@@ -77,30 +77,30 @@
 //!
 //! ## What of this moved to the vocabulary, and what did not
 //!
-//! **`gain_record` and `preview_record` are gone**, and they are gone rather
+//! `gain_record` and `preview_record` are gone, and they are gone rather
 //! than deprecated: their whole content was `Record::Gain { slot, value }` and
 //! a `preview` record, and the first is now what
 //! `karakuri_operation_record::written` answers for `Operation::SetGain`. Two
 //! derivations of one record is the drift this module was written to end, in
-//! miniature, so the second one went. **The preview half went further**:
+//! miniature, so the second one went. The preview half went further:
 //! ADR-0240 retired *Choose what the output shows* and the record with it —
 //! switching a preview is a bay-internal move rather than an engine one, so
 //! there is nothing to record and no `Change` to decode into.
 //!
-//! **`opacity_record`, `blend_record` and `residency_record` went the same way,
+//! `opacity_record`, `blend_record` and `residency_record` went the same way,
 //! and what moved was not a conversion but a reading of what a gesture is made
-//! of.** They were the last three records this program built twice, and their
+//! of. They were the last three records this program built twice, and their
 //! second caller was `crossfade` and `wipe` — one operation each and four or
 //! five records each. That count is why the *gestures* cannot convert; it was
-//! never a reason their **parts** could not. Silencing the incoming deck is
+//! never a reason their parts could not. Silencing the incoming deck is
 //! `Operation::SetOpacity`, forcing `over` is `Operation::SetBlendMode` and
 //! putting it on air is `Operation::SetResidency`, whatever the gesture around
 //! them still owes. So each gesture asks `Live::operate` for the parts that are
 //! decided and builds only the parts that are not, and the second derivation is
 //! gone rather than kept in step by a test.
 //!
-//! **`mask_record` went the same way, and it is the one that needed a page
-//! change first.** It was `wipe`'s and had no operation at all; the mask now
+//! `mask_record` went the same way, and it is the one that needed a page
+//! change first. It was `wipe`'s and had no operation at all; the mask now
 //! has two — a shape and a position, because a row carrying both could only
 //! ever be reached by a press
 //! (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`)
@@ -108,28 +108,28 @@
 //! record is gone. It writes two `Record::Mask` where it wrote one, which is
 //! what routing it honestly costs: each row writes the record whole.
 //!
-//! **`select_record` and `transition_record` went the same way, and the
-//! second of them went in two steps.** They were `cycle_renderer`'s,
+//! `select_record` and `transition_record` went the same way, and the
+//! second of them went in two steps. They were `cycle_renderer`'s,
 //! `fade_slot`'s and `wipe`'s, held while `Operation::FadeDeck`,
 //! `Operation::Crossfade` and `Operation::SelectRenderer` needed the grid
 //! quantised onto a musical instant plus the quantum and the length
-//! `Operation::SetTransition` sets and no record carries. **The quantum and
-//! the length turned out not to be missing but unassigned**, and they are the
+//! `Operation::SetTransition` sets and no record carries. The quantum and
+//! the length turned out not to be missing but unassigned, and they are the
 //! surface's: `karakuri_operation_record::Current` carries them the way it
 //! carries the look and the mask, [`current_transition`] is the reading that
 //! hands them over, and the three operations write their own records now. A
 //! selection is one record, so `select_record` had nothing left to be and went
 //! then; `transition_record` stayed one caller longer, because
 //! `Operation::Wipe` was still owed the shape its front takes and its soft
-//! edge. **Those turned out to be unassigned too.** The shape is the same
+//! edge. Those turned out to be unassigned too. The shape is the same
 //! operation's third setting and travels the same road — [`current_transition`]
 //! carries it, which is why that function takes a `MaskKind` and an angle — and
 //! the soft edge is read off the deck by [`current_mask`], which was already
 //! the reading `Operation::SetMaskShape` takes. So `wipe` is one `operate` call
 //! and this function has no caller left.
 //!
-//! **What `wipe` did keep is the one decision a gesture was making rather than
-//! a record it was building**, and it kept it for a moment: it wrote the blend
+//! What `wipe` did keep is the one decision a gesture was making rather than
+//! a record it was building, and it kept it for a moment: it wrote the blend
 //! mode only where the slot was still at the mode a slot starts in, and the
 //! put-on-air only where the slot was not already live, so `m` in front of `c`
 //! left the operator's mode alone. Routing the gesture took a deck to ask away
@@ -141,12 +141,12 @@
 //! an ask. `canvas_record` names a record no operation writes. Each of them
 //! goes the day its operation's conversion is settled — see ADR-0194.
 //!
-//! **`transport_record` is the one that has already gone, and it did not get
-//! deleted.** It was `cycle_sync`'s, for an anchor clamp the vocabulary was
+//! `transport_record` is the one that has already gone, and it did not get
+//! deleted. It was `cycle_sync`'s, for an anchor clamp the vocabulary was
 //! thought to have no way to apply; `Operation::SetSync` now converts, so `y`
 //! routes through `Live::operate` like every other settled key and this
-//! function has no gesture behind it. What it is now is the **engine's side of
-//! that record** — a `Transport` as the `Record::Transport` that carries it —
+//! function has no gesture behind it. What it is now is the engine's side of
+//! that record — a `Transport` as the `Record::Transport` that carries it —
 //! which is exactly what [`current_tempo`]'s test needs to hold the conversion
 //! against `Transport::engaged`. A derivation kept as the thing a second
 //! derivation is checked against is not a second derivation.
@@ -156,7 +156,7 @@
 //! `Deck::set_opacity` existed with no key, no flag and no record, and this
 //! module said so: a record type for a control the operator cannot move is one
 //! more record nobody writes, which is the condition it exists to end rather
-//! than extend. **It got a record when it got a control**, and it got a control
+//! than extend. It got a record when it got a control, and it got a control
 //! when [`karakuri_engine::deck::Blend`] made it mean something a gain does not
 //! — the fader across the blend rather than the level the material arrives at.
 //! Under `add` the two multiply together and a stream carrying either would
@@ -180,7 +180,7 @@ use karakuri_store::record::{DeckSlot, Record};
 /// string it was spelled with, a [`Look`] rather than three loose fields. That
 /// is where the decode ends and it is the whole of what the caller applies.
 ///
-/// **Not `Copy`, and it stopped being so when a change first named a parameter.**
+/// Not `Copy`, and it stopped being so when a change first named a parameter.
 /// Every variant here moves the deck *around* a Set — a fader, a mode, a
 /// residency, a look — and all of those are numbers and small enums.
 /// [`Change::Ride`] reaches inside one, and a parameter is addressed by name:
@@ -193,8 +193,8 @@ pub enum Change {
         slot: usize,
         value: f32,
     },
-    /// The fader. Separate from `Gain` because the blend mode makes them
-    /// separate — see [`Blend`].
+    /// The fader. Separate from `Gain` because the blend mode makes them separate —
+    /// see [`Blend`].
     Opacity {
         slot: usize,
         value: f32,
@@ -218,16 +218,15 @@ pub enum Change {
         beats: f64,
         curve: Curve,
     },
-    /// **Which renderer of a slot's Set becomes the live one**, at a musical
-    /// instant. Carried as its parts rather than as a
-    /// `karakuri_engine::transition::Selection` for [`Change::Transition`]'s
-    /// reason — the applier is the one holding the deck.
+    /// Which renderer of a slot's Set becomes the live one, at a musical instant.
+    /// Carried as its parts rather than as a
+    /// `karakuri_engine::transition::Selection` for [`Change::Transition`]'s reason
+    /// — the applier is the one holding the deck.
     ///
-    /// **The renderer is not checked here.** This decoder knows how many slots
-    /// the deck has and nothing about what is in them; how many renderers a
-    /// slot draws with is a property of the Set it is playing, which the
-    /// applier has in hand and this does not. It is checked there, in
-    /// [`crate::no_such_renderer`]'s words.
+    /// The renderer is not checked here. This decoder knows how many slots the deck
+    /// has and nothing about what is in them; how many renderers a slot draws with
+    /// is a property of the Set it is playing, which the applier has in hand and
+    /// this does not. It is checked there, in [`crate::no_such_renderer`]'s words.
     Select {
         slot: usize,
         renderer: usize,
@@ -237,61 +236,58 @@ pub enum Change {
         slot: usize,
         level: Residency,
     },
-    /// **A parameter an operator moved on a slot that is playing.** The one
-    /// change here that reaches inside a Set rather than moving the deck around
-    /// it, and the one that takes a `Vec`.
+    /// A parameter an operator moved on a slot that is playing. The one change here
+    /// that reaches inside a Set rather than moving the deck around it, and the one
+    /// that takes a `Vec`.
     ///
-    /// **One record, one or three writes**, because a parameter is driven one
-    /// component at a time and a `vec3` value is one line that names three of
-    /// them
+    /// One record, one or three writes, because a parameter is driven one component
+    /// at a time and a `vec3` value is one line that names three of them
     /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
-    /// Expanded here rather than by the applier for the reason every other
-    /// variant is decoded here: two appliers would be two answers. Expanded
-    /// **without asking what the Set declares**, which is where this parts
-    /// company with `setfile::from_lines` — that reader has just read the
-    /// `slot` records and has the procedures in hand, and this one is looking
-    /// at a Set that is already on air and holds none of them. A component key
-    /// nothing declares lands as `Ok(0)` from
-    /// `karakuri_engine::deck::Deck::write_param`, which the applier says out
-    /// loud; the width the record wrote is the only thing that could name the
-    /// components, and it does.
+    /// Expanded here rather than by the applier for the reason every other variant
+    /// is decoded here: two appliers would be two answers. Expanded without asking
+    /// what the Set declares, which is where this parts company with
+    /// `setfile::from_lines` — that reader has just read the `slot` records and has
+    /// the procedures in hand, and this one is looking at a Set that is already on
+    /// air and holds none of them. A component key nothing declares lands as
+    /// `Ok(0)` from `karakuri_engine::deck::Deck::write_param`, which the applier
+    /// says out loud; the width the record wrote is the only thing that could name
+    /// the components, and it does.
     Ride {
         slot: usize,
         writes: Vec<karakuri_engine::ParamWrite>,
     },
-    /// **What drives one parameter of a slot that is playing, or nothing** —
-    /// the attachment and the take-back, which are one record and are one
-    /// change here for the same reason.
+    /// What drives one parameter of a slot that is playing, or nothing — the
+    /// attachment and the take-back, which are one record and are one change here
+    /// for the same reason.
     ///
-    /// **The address is carried and the binding is decoded.** A
-    /// `karakuri_engine::binding::Binding` already holds the layer, the index
-    /// and the key, so an attachment needs nothing beside it; a take-back has
-    /// no binding to hold them, so they are fields here. That is one address
-    /// written twice in the attach case and it is the honest arrangement —
-    /// the alternative is an applier that reaches inside a `Binding` to find
-    /// out what to remove, which is the same fields read from a worse place.
+    /// The address is carried and the binding is decoded. A
+    /// `karakuri_engine::binding::Binding` already holds the layer, the index and
+    /// the key, so an attachment needs nothing beside it; a take-back has no
+    /// binding to hold them, so they are fields here. That is one address written
+    /// twice in the attach case and it is the honest arrangement — the alternative
+    /// is an applier that reaches inside a `Binding` to find out what to remove,
+    /// which is the same fields read from a worse place.
     ///
-    /// **Decoded through `setfile::binding_from_source`**, which builds the
-    /// `bind` the payload spells and hands it to `binding_from_record` — so
-    /// `signal=bpm`, an `octaves` without `fbm`, and a `noise` object on a
-    /// binding that is not to `noise` are refused here in the words a Set file
-    /// and a `--bind` are refused in, and there is one decoder rather than
-    /// two.
+    /// Decoded through `setfile::binding_from_source`, which builds the `bind` the
+    /// payload spells and hands it to `binding_from_record` — so `signal=bpm`, an
+    /// `octaves` without `fbm`, and a `noise` object on a binding that is not to
+    /// `noise` are refused here in the words a Set file and a `--bind` are refused
+    /// in, and there is one decoder rather than two.
     Source {
         slot: usize,
         layer: karakuri_ir::Kind,
         index: Option<u32>,
         key: String,
-        /// **`None` is *Take a parameter back*.**
+        /// `None` is *Take a parameter back*.
         binding: Option<karakuri_engine::binding::Binding>,
     },
-    /// **Who may move one node of a slot's Set.** The writer ADR-0211 said the
-    /// engine owed and `Record::Authority` has been waiting for.
+    /// Who may move one node of a slot's Set. The writer ADR-0211 said the engine
+    /// owed and `Record::Authority` has been waiting for.
     ///
     /// Addressed `(layer, index)` with no wildcard, on
-    /// `karakuri_engine::swap::AuthorityAt`'s terms: a bare name means *every
-    /// node declaring it*, and there is no such thing as an authority every
-    /// node happens to declare.
+    /// `karakuri_engine::swap::AuthorityAt`'s terms: a bare name means *every node
+    /// declaring it*, and there is no such thing as an authority every node happens
+    /// to declare.
     Authority {
         slot: usize,
         layer: karakuri_ir::Kind,
@@ -299,28 +295,28 @@ pub enum Change {
         authority: karakuri_engine::set::Authority,
     },
     Look(Look),
-    /// **The level at the master chain's entry**, which names no slot: it is
-    /// what the fold *produced*, after every deck's edge has been applied.
-    /// `karakuri_engine::deck::Deck::set_out` is what it decodes to, and says
-    /// *"Not per slot"* at the setter (ADR-0224).
+    /// The level at the master chain's entry, which names no slot: it is what the
+    /// fold *produced*, after every deck's edge has been applied.
+    /// `karakuri_engine::deck::Deck::set_out` is what it decodes to, and says *"Not
+    /// per slot"* at the setter (ADR-0224).
     MasterOut(f32),
-    /// **What the master chain is**, whole — the ordered list of its slots,
-    /// and it names no deck slot for [`Change::MasterOut`]'s reason, one pass
-    /// downstream of it.
+    /// What the master chain is, whole — the ordered list of its slots, and it
+    /// names no deck slot for [`Change::MasterOut`]'s reason, one pass downstream
+    /// of it.
     ///
-    /// **A description and not a built chain**: each entry is an address, a cut
-    /// and a map of params, because a compiled chain is pipelines and buffers
-    /// and this decoder holds no device. [`build_chain`] is what turns one into
-    /// a `karakuri_engine::master::Chain`, and
+    /// A description and not a built chain: each entry is an address, a cut and a
+    /// map of params, because a compiled chain is pipelines and buffers and this
+    /// decoder holds no device. [`build_chain`] is what turns one into a
+    /// `karakuri_engine::master::Chain`, and
     /// `karakuri_engine::present::Present::set_chain` is what installs it.
     ///
-    /// Carried whole for [`Change::Transport`]'s reason: the record says every
-    /// slot and a replay must not fill one of them in from the build it is
-    /// running on (ADR-0340).
+    /// Carried whole for [`Change::Transport`]'s reason: the record says every slot
+    /// and a replay must not fill one of them in from the build it is running on
+    /// (ADR-0340).
     MasterChain(Vec<SlotSpec>),
-    /// What a slot's clock does with the session's. Carried as a value rather
-    /// than applied as a mode change, because the record says all three and a
-    /// replay must not recompute one of them from the machine it is on.
+    /// What a slot's clock does with the session's. Carried as a value rather than
+    /// applied as a mode change, because the record says all three and a replay
+    /// must not recompute one of them from the machine it is on.
     Transport {
         slot: usize,
         sync: Sync,
@@ -329,28 +325,28 @@ pub enum Change {
     },
 }
 
-/// **The three procedures this repository ships as the master chain's presets**,
+/// The three procedures this repository ships as the master chain's presets,
 /// and their content addresses.
 ///
 /// They were `master.wgsl`'s three fragment entry points until 2026-09-10 and
 /// are `.kir` files now (ADR-0340). They are compiled in rather than read from
 /// disk for one reason: an address has to be the same number on every machine
 /// and in every working directory, and a file read relative to a cwd is not
-/// that. **Putting them in a store is a separate act**, done by whoever is
+/// that. Putting them in a store is a separate act, done by whoever is
 /// recording — `store.put_artifact(source)` — exactly as a Set's sources are,
 /// so a run that records nothing creates nothing.
 pub mod shipped;
 
-/// **Compile a described chain into one the engine can run.**
+/// Compile a described chain into one the engine can run.
 ///
 /// `resolve` answers what an address's source is — the shipped three without a
 /// store, anything else out of one — and a slot whose address nothing holds is
-/// refused **with the address in the message**, which is what ADR-0340 asks of
-/// a replay meeting a procedure the store does not have.
+/// refused with the address in the message, which is what ADR-0340 asks of a
+/// replay meeting a procedure the store does not have.
 ///
-/// **Where the work happens is the caller's answer and not this function's.**
-/// It compiles and it builds pipelines, so it belongs off the render thread —
-/// a Set's build runs on `HotSwap`'s worker for exactly this reason
+/// Where the work happens is the caller's answer and not this function's. It
+/// compiles and it builds pipelines, so it belongs off the render thread — a
+/// Set's build runs on `HotSwap`'s worker for exactly this reason
 /// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`,
 /// `docs/adr/0033-…`) — and the built list is installed at a frame boundary by
 /// `Present::set_chain`.
@@ -381,11 +377,11 @@ pub fn build_chain(
     Ok(Chain::new(built))
 }
 
-/// **What an address resolves to**, for [`apply_chain`] and [`build_chain`].
+/// What an address resolves to, for [`apply_chain`] and [`build_chain`].
 ///
 /// The shipped three first and without a store at all — a windowed run that has
 /// never saved anything can still put a preset in its chain — and then whatever
-/// store the caller has. **A store is optional and that is the point**: a run
+/// store the caller has. A store is optional and that is the point: a run
 /// recording nothing creates nothing (`Placed::put`'s own division).
 pub fn resolve_procedure(
     store: Option<&karakuri_store::store::Store>,
@@ -399,11 +395,11 @@ pub fn resolve_procedure(
     String::from_utf8(bytes).ok()
 }
 
-/// **Put a described chain on a `Present`**, building a list only where the
-/// list itself changed.
+/// Put a described chain on a `Present`, building a list only where the list
+/// itself changed.
 ///
-/// **Two paths, and which one is taken is P-0091's question rather than a
-/// convenience.** `Record::MasterChain` is written whole — a stream that moved
+/// Two paths, and which one is taken is P-0091's question rather than a
+/// convenience. `Record::MasterChain` is written whole — a stream that moved
 /// one slot without saying where the others stood describes a chain a replay
 /// cannot put back — so the ordinary case of applying one is a record whose
 /// *shape* is the shape already running with one number different. That is a
@@ -411,8 +407,8 @@ pub fn resolve_procedure(
 /// is a build: sources resolved, procedures compiled, pipelines made, targets
 /// allocated.
 ///
-/// **The build is on the caller's thread and this says so rather than hiding
-/// it.** A Set's build runs on `HotSwap`'s worker
+/// The build is on the caller's thread and this says so rather than hiding it.
+/// A Set's build runs on `HotSwap`'s worker
 /// (`docs/adr/0033-freeing-on-the-render-thread-is-the-same-invariant-as-allocating.md`);
 /// a chain's runs here, at the point in the frame loop where a record is
 /// applied, which is before the frame's encoder exists on every path that calls
@@ -439,27 +435,27 @@ pub fn apply_chain(
     Ok(())
 }
 
-/// **The engine's list, as the vocabulary's** — one function per list, and
-/// the one place the two copies of each are made to agree.
+/// The engine's list, as the vocabulary's — one function per list, and the one
+/// place the two copies of each are made to agree.
 ///
 /// `karakuri-operation` owns a copy of every list a destination is drawn from,
 /// which is the cost P-0090 says the vocabulary pays: *"The two rules — be
-/// engine-neutral, and have no toggles — are not jointly satisfiable unless
-/// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
-/// this is that place: this package is where the two are seen together,
-/// because a record is what the engine is driven through here and the
-/// vocabulary is what every surface asks in.
+/// engine-neutral, and have no toggles — are not jointly satisfiable unless the
+/// vocabulary owns the lists."* A copy needs somewhere the two meet, and this
+/// is that place: this package is where the two are seen together, because a
+/// record is what the engine is driven through here and the vocabulary is what
+/// every surface asks in.
 ///
-/// **`From` impls, which is what ADR-0180 said, are not available here.** Both
+/// `From` impls, which is what ADR-0180 said, are not available here. Both
 /// types are foreign to this package — `Blend` is `karakuri-engine`'s and
 /// `BlendMode` is `karakuri-operation`'s — so the orphan rule refuses the impl
 /// and there is nothing to be done about it short of one of those two crates
 /// depending on the other, which is the thing neither of them may do. Plain
-/// functions, then, exactly as the panel program's own
-/// `blend_mode` already is. See ADR-0194.
+/// functions, then, exactly as the panel program's own `blend_mode` already is.
+/// See ADR-0194.
 ///
-/// **A match apiece, so a value added to the engine stops the build here**
-/// rather than reaching a surface that draws a chip nothing can read. That is
+/// A match apiece, so a value added to the engine stops the build here rather
+/// than reaching a surface that draws a chip nothing can read. That is
 /// `Blend::name`'s argument and `residency_wire_name`'s, applied to a list
 /// instead of to a spelling.
 pub fn blend_mode(blend: Blend) -> karakuri_operation::BlendMode {
@@ -488,9 +484,9 @@ pub fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
     }
 }
 
-/// The engine's sync mode, as the vocabulary's. See [`blend_mode`].
-/// **The engine's curve as the vocabulary's**, for the one of these lists that
-/// had no wire to reach until a fade converted.
+/// The engine's sync mode, as the vocabulary's. See [`blend_mode`]. The
+/// engine's curve as the vocabulary's, for the one of these lists that had no
+/// wire to reach until a fade converted.
 ///
 /// `karakuri_operation::Curve` has existed since the vocabulary did —
 /// `Operation::AttachSignal` carries one — and nothing ever needed its name,
@@ -527,8 +523,8 @@ pub fn tonemap(op: TonemapOp) -> karakuri_operation::Tonemap {
 
 /// The engine's feedback cut, as the vocabulary's. See [`blend_mode`].
 ///
-/// **There is no function the other way**, and that is not an omission: a
-/// press carries the vocabulary's cut into a record as a *word*, and
+/// There is no function the other way, and that is not an omission: a press
+/// carries the vocabulary's cut into a record as a *word*, and
 /// `karakuri_engine::master::Cut::parse` is what reads the word back — so the
 /// return leg goes through the record rather than around it, which is where
 /// every other closed list's does. [`change`]'s `master_chain` arm is that
@@ -542,14 +538,14 @@ pub fn cut(cut: Cut) -> karakuri_operation::Cut {
 
 /// The engine's authority level, as the vocabulary's. See [`blend_mode`].
 ///
-/// **Written before there is a reader for it**, which is why the lint has to be
+/// Written before there is a reader for it, which is why the lint has to be
 /// told, and it is here anyway for the reason the five above it are here at
 /// all: the two spellings have to be *checked* against each other somewhere,
 /// this is the only crate that can see both, and the check below needs a
 /// conversion to check. Nothing on the CLI's paths reads `Set::authority` yet —
 /// the console's `man / sug / auto` chip and a live save that writes a
-/// `Record::Authority` were the two readers this waited for, and **the chip
-/// arrived on 2026-08-29** — the Inspector bay draws a node's authority, so this
+/// `Record::Authority` were the two readers this waited for, and the chip
+/// arrived on 2026-08-29 — the Inspector bay draws a node's authority, so this
 /// has a caller outside the tests and the attribute it carried is gone.
 pub fn authority(level: Authority) -> karakuri_operation::Authority {
     match level {
@@ -559,7 +555,7 @@ pub fn authority(level: Authority) -> karakuri_operation::Authority {
     }
 }
 
-/// **The look that is running, as the reading the conversion needs.**
+/// The look that is running, as the reading the conversion needs.
 ///
 /// `Operation::SetExposure` carries an exposure and nothing else, because that
 /// is what a control change can say; `Record::Look` carries all three because
@@ -573,19 +569,19 @@ pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
     }
 }
 
-/// **The master chain that is running, as the reading the conversion needs.**
+/// The master chain that is running, as the reading the conversion needs.
 ///
 /// [`current_look`]'s function one pass upstream and its argument with one more
 /// row in it: `Operation::SetBloom` carries an amount and nothing else, because
 /// that is what a row of the Master bay can say, and `Record::MasterChain`
-/// carries all four because that is what a replay can reconstruct a chain
-/// from — the same 0.5 is a one-frame echo under `mix` and a compounding trail
-/// under `exit`, so an amount without its cut is not a picture. See
+/// carries all four because that is what a replay can reconstruct a chain from
+/// — the same 0.5 is a one-frame echo under `mix` and a compounding trail under
+/// `exit`, so an amount without its cut is not a picture. See
 /// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
 ///
-/// **The amount is the engine's and not a track position.** A fader draws where
-/// it is along its own travel and divides by `Feedback::MAX` to do it; a
-/// reading is what the pass is *at*, which is what the record carries.
+/// The amount is the engine's and not a track position. A fader draws where it
+/// is along its own travel and divides by `Feedback::MAX` to do it; a reading
+/// is what the pass is *at*, which is what the record carries.
 pub fn current_chain(slots: &[SlotSpec]) -> karakuri_operation_record::Chain {
     let shipped = shipped::addresses();
     // **The three rows read the three shipped slots**, and a row whose slot is
@@ -619,18 +615,18 @@ pub fn current_chain(slots: &[SlotSpec]) -> karakuri_operation_record::Chain {
     }
 }
 
-/// **The shape every scheduled fade takes**, which is what [`current_transition`]
+/// The shape every scheduled fade takes, which is what [`current_transition`]
 /// is handed and what `Record::Transition`'s `curve` ends up spelling.
 ///
 /// `smooth` rather than `lin`, and the reason is in `binding.rs`: its
 /// derivative is zero at both ends, so a fade neither jumps off the floor nor
 /// slams into the ceiling. A crossfade of two linear ramps has a visible corner
-/// at each end; two smooth ones do not. **On no control anywhere**, because the
+/// at each end; two smooth ones do not. On no control anywhere, because the
 /// other three curves are for *signals* — a fade wants easing and nothing else,
 /// and a fourth cycling key for a choice nobody would revisit is a key in the
 /// way.
 ///
-/// **It is here rather than in each surface**, and that is the one thing that
+/// It is here rather than in each surface, and that is the one thing that
 /// changed about it: `karakuri-cli` held it as a private const of its own, and
 /// the day `crates/karakuri`'s window began scheduling moves too there would
 /// have been two copies of one decision with nothing holding them together —
@@ -639,7 +635,7 @@ pub fn current_chain(slots: &[SlotSpec]) -> karakuri_operation_record::Chain {
 /// [`current_transition`], so this is where the one copy goes.
 pub const FADE_CURVE: Curve = Curve::Smooth;
 
-/// **What one slot's clock is doing, as the reading the conversion needs.**
+/// What one slot's clock is doing, as the reading the conversion needs.
 /// `Operation::ScrubDeck` moves the scrub by an amount and `Record::Transport`
 /// is absolute, so the conversion reads where the slot is.
 pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Transport {
@@ -650,31 +646,29 @@ pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Tr
     }
 }
 
-/// **The tempo the room is going at, as the reading the conversion needs.**
+/// The tempo the room is going at, as the reading the conversion needs.
 ///
-/// `Operation::SetSync` anchors a slot at the session tempo, because engaging
-/// a mode must not move the picture: the material is at 1x at that instant and
+/// `Operation::SetSync` anchors a slot at the session tempo, because engaging a
+/// mode must not move the picture: the material is at 1x at that instant and
 /// stays there until the room's tempo does. `karakuri-operation-record` cannot
 /// reach the oscillator any more than it can reach the engine, so the tempo is
 /// handed in, and this is the fourth of these.
 ///
-/// **It takes the oscillator rather than an `f32`, and that is the whole of
-/// the function.** `Transport::engaged` clamps the anchor into
-/// [`karakuri_signal::oscillator::BPM_RANGE`] and the conversion does not
-/// clamp at all; the two agree because an `Oscillator`'s tempo is already
-/// inside that range — `Oscillator::new` and `Oscillator::correct` are its
-/// only writers and both clamp — so a caller cannot reach a value where the
-/// clamp would fire without first writing down a tempo no session ever
-/// reported. Asking for the grid rather than a number is what makes that
-/// structural instead of a hope
-/// (`docs/contributing.md` §4),
-/// and what is left over is held by
+/// It takes the oscillator rather than an `f32`, and that is the whole of the
+/// function. `Transport::engaged` clamps the anchor into
+/// [`karakuri_signal::oscillator::BPM_RANGE`] and the conversion does not clamp
+/// at all; the two agree because an `Oscillator`'s tempo is already inside that
+/// range — `Oscillator::new` and `Oscillator::correct` are its only writers and
+/// both clamp — so a caller cannot reach a value where the clamp would fire
+/// without first writing down a tempo no session ever reported. Asking for the
+/// grid rather than a number is what makes that structural instead of a hope
+/// (`docs/contributing.md` §4), and what is left over is held by
 /// [`tests::a_sync_mode_writes_exactly_what_the_engine_would_engage`].
 pub fn current_tempo(grid: &Oscillator) -> f32 {
     grid.bpm()
 }
 
-/// **The mask a slot is wearing, as the reading the conversion needs.**
+/// The mask a slot is wearing, as the reading the conversion needs.
 ///
 /// `Operation::SetMaskShape` carries a shape and `Operation::SetMaskPosition`
 /// carries a position, because those are the two things a surface can say
@@ -698,44 +692,43 @@ pub fn current_mask(mask: Mask) -> karakuri_operation_record::Mask {
     }
 }
 
-/// **What the next scheduled move means, as the reading the conversion
-/// needs.**
+/// What the next scheduled move means, as the reading the conversion needs.
 ///
-/// `Operation::FadeDeck` carries a deck and a destination, because that is
-/// what a control can say; `Record::Transition` carries the instant, the
-/// length and the shape too, because that is what a replay can reconstruct a
-/// move from. The three that are missing are `Operation::SetTransition`'s —
-/// a surface's own setting deciding what the *next* fade means — so they are
-/// handed in, and this is the fifth of these.
+/// `Operation::FadeDeck` carries a deck and a destination, because that is what
+/// a control can say; `Record::Transition` carries the instant, the length and
+/// the shape too, because that is what a replay can reconstruct a move from.
+/// The three that are missing are `Operation::SetTransition`'s — a surface's
+/// own setting deciding what the *next* fade means — so they are handed in, and
+/// this is the fifth of these.
 ///
-/// **It takes the grid and a quantum rather than a start, and that is the
-/// whole of the function.** `karakuri_engine::transition::quantise` is where
-/// the next musical instant is decided, once, at the moment the operator
-/// asked; `karakuri-operation-record` cannot reach it any more than it can
-/// reach the oscillator, and a conversion that divided by a quantum of its own
-/// would be a second grid. Asking for the oscillator and the quantum instead
-/// of a beat count is what makes that structural rather than a hope
-/// (`docs/contributing.md` §4),
-/// which is [`current_tempo`]'s arrangement exactly.
+/// It takes the grid and a quantum rather than a start, and that is the whole
+/// of the function. `karakuri_engine::transition::quantise` is where the next
+/// musical instant is decided, once, at the moment the operator asked;
+/// `karakuri-operation-record` cannot reach it any more than it can reach the
+/// oscillator, and a conversion that divided by a quantum of its own would be a
+/// second grid. Asking for the oscillator and the quantum instead of a beat
+/// count is what makes that structural rather than a hope
+/// (`docs/contributing.md` §4), which is [`current_tempo`]'s arrangement
+/// exactly.
 ///
-/// **A caller with no opinion about the grid gives a quantum of 0**, which
+/// A caller with no opinion about the grid gives a quantum of 0, which
 /// `quantise` documents as *"now"* and answers with the beat count it was
 /// handed — so ASAP is a setting a surface already has rather than anything
 /// this signature had to invent. See
 /// [`tests::a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on`].
 ///
-/// **The wipe shape is the fourth setting to come through here, and it is the
-/// third of `Operation::SetTransition`'s three.** `mask` and `angle` are what
-/// the `z` key holds — the shape the *next* wipe takes, never the shape a
-/// deck's layer is wearing — and they arrive by this route for the reason the
-/// quantum and the length do: all three are one operation's, that operation
-/// writes no record, and a surface is the only thing holding them.
-/// `Operation::Wipe` is the one conversion that reads them, and it reads the
-/// soft edge off the deck instead, through [`current_mask`].
+/// The wipe shape is the fourth setting to come through here, and it is the
+/// third of `Operation::SetTransition`'s three. `mask` and `angle` are what the
+/// `z` key holds — the shape the *next* wipe takes, never the shape a deck's
+/// layer is wearing — and they arrive by this route for the reason the quantum
+/// and the length do: all three are one operation's, that operation writes no
+/// record, and a surface is the only thing holding them. `Operation::Wipe` is
+/// the one conversion that reads them, and it reads the soft edge off the deck
+/// instead, through [`current_mask`].
 ///
-/// **The engine's `MaskKind` as the vocabulary's, on the way in.** The caller
-/// hands over what it is holding and [`wipe_kind`] is the one place the two
-/// lists are made to agree, exactly as [`curve`] is for the shape of the move.
+/// The engine's `MaskKind` as the vocabulary's, on the way in. The caller hands
+/// over what it is holding and [`wipe_kind`] is the one place the two lists are
+/// made to agree, exactly as [`curve`] is for the shape of the move.
 pub fn current_transition(
     grid: &Oscillator,
     quantum: f64,
@@ -753,26 +746,25 @@ pub fn current_transition(
     }
 }
 
-/// **Where a slot already sits in the mix, as the reading the conversion
-/// needs** — the sixth of these, and the one that is read so a record can be
-/// left *out*.
+/// Where a slot already sits in the mix, as the reading the conversion needs —
+/// the sixth of these, and the one that is read so a record can be left *out*.
 ///
-/// `Operation::Wipe` puts the deck it reveals under `over` and on air, and
-/// both of those are a state the deck may be in already. Under `add` or under
-/// `max` the same gesture is a wipe *on* rather than a wipe *over* — a
-/// different picture and a legitimate one — so a wipe writes the blend mode
-/// only where the slot is still at the mode a slot starts in, and the
-/// put-on-air only where the slot is not already live. That is the decision
-/// `karakuri-cli`'s `c` made for itself while it built those records by hand;
-/// the conversion has no deck to ask, so what it needs is this
+/// `Operation::Wipe` puts the deck it reveals under `over` and on air, and both
+/// of those are a state the deck may be in already. Under `add` or under `max`
+/// the same gesture is a wipe *on* rather than a wipe *over* — a different
+/// picture and a legitimate one — so a wipe writes the blend mode only where
+/// the slot is still at the mode a slot starts in, and the put-on-air only
+/// where the slot is not already live. That is the decision `karakuri-cli`'s
+/// `c` made for itself while it built those records by hand; the conversion has
+/// no deck to ask, so what it needs is this
 /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
 /// safety is never bought with the operator's authority).
 ///
-/// **What the deck reports, not what it was asked for.** `Deck::residency`
-/// answers the level the slot is at — the governor may hold one below the
-/// request — which is the same value the surface reading this used to compare
-/// against, and the right one: what a wipe needs to know is whether the
-/// put-on-air it is about to write would change anything.
+/// What the deck reports, not what it was asked for. `Deck::residency` answers
+/// the level the slot is at — the governor may hold one below the request —
+/// which is the same value the surface reading this used to compare against,
+/// and the right one: what a wipe needs to know is whether the put-on-air it is
+/// about to write would change anything.
 ///
 /// Both values cross into the vocabulary's lists on the way, through
 /// [`blend_mode`] and [`residency`], which is [`current_transition`]'s
@@ -827,8 +819,8 @@ pub const LEVELS: [Residency; 3] = [Residency::Live, Residency::Priming, Residen
 /// compile until it has a spelling. [`parse_residency`] is derived from this
 /// one over [`LEVELS`], so the two directions cannot disagree — the remaining
 /// hand-written thing is `LEVELS` itself, and a level missing from it is a
-/// record that fails to decode with a message naming what was available,
-/// rather than one that decodes as the wrong level.
+/// record that fails to decode with a message naming what was available, rather
+/// than one that decodes as the wrong level.
 pub fn residency_wire_name(level: Residency) -> &'static str {
     match level {
         Residency::Live => "live",
@@ -837,10 +829,10 @@ pub fn residency_wire_name(level: Residency) -> &'static str {
     }
 }
 
-/// **A wire spelling back to the engine's residency** — [`residency_wire_name`]
+/// A wire spelling back to the engine's residency — [`residency_wire_name`]
 /// read the other way, over [`LEVELS`], so the two directions cannot disagree.
 ///
-/// **`pub` for a second surface.** [`change`] below is the one caller in this
+/// `pub` for a second surface. [`change`] below is the one caller in this
 /// crate; the other is the panel program, whose `apply` decodes a
 /// `Record::Residency` a control just wrote. That program transcribed these
 /// three words for as long as they lived in a package with no library target
@@ -866,9 +858,9 @@ fn residency_wire_names() -> String {
 ///
 /// Three answers, and they are three different things:
 ///
-/// - `Ok(None)` — **not a mix record.** A `tick` or an `audio` is not this
+/// - `Ok(None)` — not a mix record. A `tick` or an `audio` is not this
 ///   module's to act on and not an error either.
-/// - `Err(_)` — **a mix record this build cannot obey.** An unknown residency
+/// - `Err(_)` — a mix record this build cannot obey. An unknown residency
 ///   level, an unknown tone map operator, a slot the deck does not have. The
 ///   decoder does not reject these; it reports them, because what a name is
 ///   allowed to be is the engine's business and only the engine can say what
@@ -1235,7 +1227,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
     }
 }
 
-/// **A wide value as one write per component**, under the keys ADR-0268 made:
+/// A wide value as one write per component, under the keys ADR-0268 made:
 /// `glow.x`, `glow.y`, `glow.z`.
 ///
 /// `karakuri_ir::component_key` and not a `format!` here, because that function
@@ -1269,9 +1261,8 @@ const MASK_SOFTNESS: f32 = 0.02;
 
 /// Every tone map operator there is. The one list, and its length is in its
 /// type, so adding an operator to it is a deliberate act rather than an
-/// oversight in a `Vec`.
-/// The record's own vocabulary for the output look, which is why it is here
-/// rather than with the keys that cycle it.
+/// oversight in a `Vec`. The record's own vocabulary for the output look, which
+/// is why it is here rather than with the keys that cycle it.
 pub const TONEMAPS: [TonemapOp; 4] = [
     TonemapOp::Clamp,
     TonemapOp::Reinhard,
@@ -1282,7 +1273,7 @@ pub const TONEMAPS: [TonemapOp; 4] = [
 /// Both of an operator's spellings: the one a stream and a flag use, and the
 /// one a human reads.
 ///
-/// **An exhaustive match, and that is the point.** There were two hand-written
+/// An exhaustive match, and that is the point. There were two hand-written
 /// lists — `--tonemap`'s parser and `op_name`'s display arm — and the `look`
 /// record wanted a third. A lookup over a table would have been one list but
 /// would still answer for an operator missing from it, by falling back to
@@ -1298,8 +1289,8 @@ fn spellings(op: TonemapOp) -> (&'static str, &'static str) {
     }
 }
 
-/// How a human reads it. Free to be capitalised the way the papers are,
-/// because nothing parses it.
+/// How a human reads it. Free to be capitalised the way the papers are, because
+/// nothing parses it.
 pub fn op_name(op: TonemapOp) -> &'static str {
     spellings(op).1
 }
