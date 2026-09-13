@@ -1607,10 +1607,6 @@ impl Taking<'_> {
 
     /// Whose file a row of this listing is, which decides whether an id the
     /// store already holds is refused or replaced (ADR-0347).
-    ///
-    /// The first thing that reads these two variants apart for anything but a
-    /// noun in a sentence: `unbundle` used to be handed the file with the
-    /// difference dropped.
     pub(crate) fn came_from(&self) -> karakuri_environment::setfile::CameFrom {
         match self {
             Taking::Presets(_) => karakuri_environment::setfile::CameFrom::TheShippedLibrary,
