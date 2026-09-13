@@ -459,7 +459,7 @@ pub fn retired_as(id: &str) -> String {
 /// picked the same word. Being annoying about it costs one rename; the other
 /// failure costs work that is gone.
 ///
-/// **That argument is about a stranger, and the preset library is not one.** So
+/// That reasoning covers a file from elsewhere, not the preset library, so
 /// [`CameFrom::TheShippedLibrary`] replaces instead: what is there is kept under
 /// [`retired_as`] first, and a take-in whose records match the ones already
 /// filed writes nothing and says so. ADR-0347.
