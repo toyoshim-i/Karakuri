@@ -23,81 +23,112 @@ Why each is the way it is — and what was rejected to get there — is in
 
 ---
 
-## 2. Workspace & Crate Architecture
+## 2. Hierarchical Documentation Architecture (The 3-Tier Model)
 
-Karakuri is structured as a Cargo workspace with 14 dedicated crates under [crates/](../crates):
+To avoid documentation drift and provide clear conceptual layering across a 16-crate codebase, Karakuri organizes all architecture and technical specifications into a **3-tier documentation hierarchy**:
+
+- **Tier 1: System Concept & High-Level Map**
+  - [`docs/architecture.md`](architecture.md) (this document): The central system guide, multi-crate topology, 8-stage pipeline overview, threading model, and contributor guide.
+  - [`docs/architecture/README.md`](architecture/README.md): Navigational directory, 5-layer dependency map, and crate catalog.
+- **Tier 2: Subsystem Architectures**
+  - [`docs/architecture/console.md`](architecture/console.md): Layout calculation arithmetic (`karakuri-layout`), componentized widget library (`card`, `chip`, `track`, `field`, `fader`, `head`, `pills`, `fold_grip`), modular bay architecture (`mixer/`, `transport/`, `library/`, `inspector/`), unified 38-probe `ControlDescriptor` registry, and hover/focus graphs.
+  - [`docs/architecture/engine.md`](architecture/engine.md): The 8-stage `.kir` compilation pipeline, Deck and Set composition graphs, 4-tier residency model (`Live`, `Priming`, `Allocated`, `Parked`), 3-clock timing model, and infallible signal bus.
+  - [`docs/architecture/runtime.md`](architecture/runtime.md): Desktop GUI coordinator (`karakuri` readout & bridge subsystems), modular headless CLI runner (`karakuri-cli`), environmental services (`karakuri-environment`), and content-addressed persistence (`karakuri-store`).
+  - [`docs/architecture/operations.md`](architecture/operations.md): Unified operation command vocabulary (`karakuri-operation`), zero-allocation session recording, operator permission gates (`gate.rs`, `man`/`sug`/`auto`), sequencer patterns (`karakuri-pattern`), and Model Context Protocol AI tools (`karakuri-mcp`).
+- **Tier 3: Invariants, Decisions & Specifications**
+  - [`docs/principles/`](principles/): Active, non-negotiable architectural invariants (one file per principle).
+  - [`docs/adr/`](adr/): Append-only Architectural Decision Records documenting historical context and rejected alternatives.
+  - [`docs/ir-spec.md`](ir-spec.md): Formal grammar, type system, and static contracts of the `.kir` procedural shading language.
+
+---
+
+## 3. Workspace & Crate Architecture
+
+Karakuri is structured as a Cargo workspace with **16 dedicated crates** under [crates/](../crates), organized into five distinct architectural layers:
 
 ```mermaid
 graph TD
-    APP[karakuri] --> CONSOLE
-    APP --> ENV
-    APP --> ENGINE
-    APP --> OPRECORD
-    APP --> OPERATION
-    APP --> STORE
-    APP --> IR
-    APP --> LAYOUT
-    APP --> SIGNAL
+    subgraph Layer5 ["Layer 5: Applications & Presentation"]
+        KarakuriApp["karakuri<br/><i>Desktop GUI Entry Point</i>"]
+        Console["karakuri-console<br/><i>VJ Console Panels & Widgets</i>"]
+        CLI["karakuri-cli<br/><i>Headless Runner & Replay</i>"]
+    end
 
-    CLI[karakuri-cli] --> ENV[karakuri-environment]
-    CLI --> ENGINE[karakuri-engine]
-    CLI --> OPRECORD[karakuri-operation-record]
-    CLI --> OPERATION
-    CLI --> AUDIO[karakuri-audio]
-    CLI --> STORE[karakuri-store]
-    CLI --> IR[karakuri-ir]
-    CLI --> SIGNAL[karakuri-signal]
+    subgraph Layer4 ["Layer 4: Environment & Services"]
+        Env["karakuri-environment<br/><i>Setfiles, Watcher, Mix & Presets</i>"]
+        MCP["karakuri-mcp<br/><i>Model Context Protocol Server</i>"]
+    end
 
-    ENV --> ENGINE
-    ENV --> AUDIO
-    ENV --> MIDI[karakuri-midi]
-    ENV --> STORE
-    ENV --> IR
-    ENV --> SIGNAL
-    ENV --> OPERATION
-    ENV --> OPRECORD
+    subgraph Layer3 ["Layer 3: Core GPU Runtime"]
+        Engine["karakuri-engine<br/><i>Deck, Set, HotSwap, Governor</i>"]
+    end
 
-    OPRECORD --> OPERATION
-    OPRECORD --> STORE
+    subgraph Layer2 ["Layer 2: Domain Extensions & Storage"]
+        Audio["karakuri-audio<br/><i>Audio Input & FFT</i>"]
+        Midi["karakuri-midi<br/><i>MIDI In & Control Maps</i>"]
+        Pattern["karakuri-pattern<br/><i>Modulation Patterns</i>"]
+        Codegen["karakuri-codegen<br/><i>WGSL Shader Generator</i>"]
+        Store["karakuri-store<br/><i>CAS & Session Journal</i>"]
+        OpRecord["karakuri-operation-record<br/><i>Operation Serialization</i>"]
+    end
 
-    MIDI --> OPERATION
+    subgraph Layer1 ["Layer 1: Pure Foundations (Zero/Minimal Dependencies)"]
+        Op["karakuri-operation<br/><i>Unified Command Vocabulary</i>"]
+        Signal["karakuri-signal<br/><i>Clock, Oscillator & Noise</i>"]
+        IR["karakuri-ir<br/><i>Procedure AST, Types & Costs</i>"]
+        Layout["karakuri-layout<br/><i>Pane Splitting & Geometries</i>"]
+    end
 
-    CONSOLE[karakuri-console] --> LAYOUT[karakuri-layout]
-    CONSOLE --> OPERATION[karakuri-operation]
-    CONSOLE --> PATTERN[karakuri-pattern]
-
-    PATTERN --> OPERATION
-
-    APP --> PATTERN
-
-    ENGINE --> CODEGEN[karakuri-codegen]
-    ENGINE --> IR
-    ENGINE --> SIGNAL
-
-    CODEGEN --> IR
-
-    AUDIO --> SIGNAL
+    KarakuriApp --> Console
+    KarakuriApp --> Engine
+    KarakuriApp --> Env
+    CLI --> Engine
+    CLI --> Env
+    CLI --> Audio
+    Console --> Layout
+    Console --> Op
+    Console --> Pattern
+    MCP --> Env
+    Env --> Engine
+    Env --> Audio
+    Env --> Midi
+    Env --> Store
+    Env --> IR
+    Env --> Signal
+    Env --> Op
+    Env --> OpRecord
+    Engine --> Codegen
+    Engine --> Signal
+    Engine --> Store
+    Engine --> IR
+    Audio --> Signal
+    Midi --> Op
+    Pattern --> Op
+    Codegen --> IR
+    OpRecord --> Op
+    OpRecord --> Store
 ```
 
 ### Crate Breakdown
 
-| Crate | Path | Responsibility |
-|---|---|---|
-| [karakuri-ir](../crates/karakuri-ir) | `crates/karakuri-ir` | DSL (`.kir`) parsing, lexing, type checking, contract verification, and static cost estimation |
-| [karakuri-codegen](../crates/karakuri-codegen) | `crates/karakuri-codegen` | WGSL shader code generation from typed AST (`Checked`), uniform struct layout computation |
-| [karakuri-engine](../crates/karakuri-engine) | `crates/karakuri-engine` | `wgpu` pipeline management, `Deck`/`Set` composition, `HotSwap`, `Governor`, OIT, `Present`, and the one frame loop (`compose` over a slice of `Sink`s) |
-| [karakuri-signal](../crates/karakuri-signal) | `crates/karakuri-signal` | Complete signal bus (`SignalBus`), signal `confidence` tracking, local `Oscillator` |
-| [karakuri-audio](../crates/karakuri-audio) | `crates/karakuri-audio` | Real-time audio capture (`cpal`), FFT band analysis, beat tracking, latency offset management |
-| [karakuri-midi](../crates/karakuri-midi) | `crates/karakuri-midi` | MIDI input event parsing and the operator's map. `Map::operation` is a pure function of one message and answers a `karakuri_operation::Operation` — a map line names a state (`residency 0 live`), never a step, and a line in the older grammar is refused with the line to write instead (ADR-0196). Depends on `midir` and on `karakuri-operation`, which has no dependencies of its own |
-| [karakuri-store](../crates/karakuri-store) | `crates/karakuri-store` | Content-addressed artifact storage (keyed by `.kir` hash), `.kbset` Set files (`Store::SET_FILE_SUFFIX`; the store holds the resolved form and only that one, ADR-0231), `.ndjson` session logs |
-| [karakuri-operation](../crates/karakuri-operation) | `crates/karakuri-operation` | **The operation vocabulary**: every named operation `docs/manual/operations.html` specifies, which every surface is to route into (ADR-0180). **The total is not transcribed here** — `grep -c '<h3' docs/manual/operations.html` is the count, and a number written into prose has gone stale four times in this repository already. A leaf crate with **no dependencies at all** — `std` only — because the surfaces that must reach it share nothing. `karakuri-console`, `karakuri-midi`, `karakuri-operation-record` and `karakuri-cli` depend on it; the mixer's faders were its first customer, the CLI's mix controls its second, and the MIDI map its third — which took `Action` away with it (ADR-0196). The console's `panel::Op` has not moved and what blocks it is the operations page rather than the code (ADR-0197); the CLI's key handler is surveyed and partly moved — a key whose operation converts to a record routes through `Live::operate`, the beat tracker's three (`b`, `,`, `.`) keep their own path because their record is `Owed::NotSettled`, a key naming a `Silent` operation cannot route at all, and the rest name nothing in the vocabulary; **which key is in which group is not counted here** — `Live::key`'s survey in `crates/karakuri-cli/src/main.rs` names every one beside the handler (ADR-0198, and ADR-0232 for the five that moved when the transition settings became a reading; `c` followed them when the wipe's front shape turned out to be a third such setting and its soft edge the arriving deck's). The fourth surface is the MCP server — `karakuri-environment`'s since ADR-0215 — whose seven tools name seven of these operations and **perform them here** rather than through `Live::operate`: all seven are `Silent` — four ask, two owe a record written where the work lands, and `WireInput` has nothing in the session vocabulary to carry it — and there is no `Live` on a connection thread anyway (ADR-0199, ADR-0235). It is the only surface that can say a node address, so `NodeAt` and `Layer` have no other caller. **`gate` is the second thing in this crate**: one exhaustive match, with no wildcard arm, saying for every operation whether it is open to a model or closed until an operator opens its class, which class, which bay's head holds the indicator, and the sentence a refusal is said in (ADR-0235). **How the split falls is not transcribed here** — `gate.rs`'s `the_classification_is_the_split_adr_0235_states` asserts the closed, open and total counts, so the number is held by a test rather than by a sentence. It is the map's audit rather than a member of the vocabulary, which is why opening a class is no operation of its own (ADR-0236) |
-| [karakuri-operation-record](../crates/karakuri-operation-record) | `crates/karakuri-operation-record` | **Where an operation becomes a record** — the step P-0090 needs and the one place it happens (ADR-0194). Depends on `karakuri-operation` and `karakuri-store` and on nothing else, because neither of those two may depend on the other. The conversion is not pure: it takes an operation **and a reading of what is running**, since `Record::Look` carries a tone map operator no exposure control can name. One exhaustive match over every operation, answering the records it writes, the settled reason it writes none, or the gap that stops it |
-| [karakuri-layout](../crates/karakuri-layout) | `crates/karakuri-layout` | The console's arrangement as arithmetic: views and splits with a size, a minimum and a maximum each, solved to rectangles. No toolkit, no device, no window (ADR-0156) |
-| [karakuri-pattern](../crates/karakuri-pattern) | `crates/karakuri-pattern` | **What a sequencer pattern is**: one bar, a step mode and a list of lanes, where a lane is what it drives, sixteen slots, two levels and whether it is muted (ADR-0320). A lane is a fifth *route* into the vocabulary rather than a binding (ADR-0222), so a lane hands back an `Operation` and applies nothing — the target is an arm of the vocabulary with its value elided (ADR-0321, `karakuri_operation::LaneTarget`). Depends on `karakuri-operation` and on nothing else, which is what lets the console draw a pattern and the window poll one. **No serialiser and no path**: ADR-0227 settles where a pattern is kept and leaves the file form to the record that has something to serialise, which is the row that saves one; `serde` and a `patterns/` directory arrive with it. **No clock**: the step index is a pure function of `Oscillator::beats`, handed in (P-0092), and where the poll runs is the frame loop's (ADR-0322) |
-| [karakuri-console](../crates/karakuri-console) | `crates/karakuri-console` | The console: its arrangement, the panel model a pointer and a keyboard act on, and the `egui` view. **The destination the CLI is scaffolding for.** `src/` takes no device and now cannot: the eight dev-dependencies that could reach one left with the example (ADR-0214), so ADR-0156's seam is enforced by the manifest holding nothing rather than by a rule |
-| [karakuri](../crates/karakuri) | `crates/karakuri` | **The panel as a program** — the window, the event loop, the engine behind the Program bay and the store behind the Library bay, over `karakuri-console` and `karakuri-environment`. `cargo run -p karakuri`. It is what the panel column of [the operations page](manual/operations.html) is measured against (ADR-0213), and it has no library target on purpose: nothing may depend on a surface |
-| [karakuri-environment](../crates/karakuri-environment) | `crates/karakuri-environment` | **The program: everything this instrument deals with that is not itself.** A module belongs here if what it deals with lives outside this process — a disk, a device, a port, a socket, another program — or is the record of what happened (ADR-0215). It exists because `karakuri-cli` has no library target and the panel could therefore reach none of it, a boundary this repository had already paid for five times (ADR-0214). **Two thin binaries sit over it**, and no module in it may know which surface it is under. Holds **every module that was in scope** — audio input, the `.kir` compile step, the edit history, the metadata card, the mixer's records and wire spellings, the MIDI map's surface, the MCP server, the PNG writer, the scratch store, session recording, the Set file format, the external tempo-source protocol and the hot-reloading watcher — **plus the ones that were not in that scope**: `places`, which owns the presets root and the store root, every refusal about them, and which of the four candidates a search answered with (ADR-0230), and `clock`, the step count a frame advances by, which moved here once two programs made frames (ADR-0297). **The list is not transcribed** — `lib.rs`'s `pub mod` lines are it, with a sentence per module beside them |
-| [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | V1 entry point, and **scaffolding rather than the destination** (`README.md`). Since ADR-0214's move it is **one file** — flag parsing, the `winit` event loop, the key handler, `Live`, and replay. The clock went with the rest: a frame's step count is `karakuri_environment::clock`'s since ADR-0297, because two programs make frames and there is one derivation of it. Everything that deals with a disk, a device, a port or the record went to `karakuri-environment`; what is left is a surface, and splitting `main.rs` is the next thing rather than moving more out of it |
+| Layer | Crate | Path & Documentation | Responsibility |
+|:---:|---|---|---|
+| **1** | [karakuri-ir](../crates/karakuri-ir) | [`crates/karakuri-ir/README.md`](../crates/karakuri-ir/README.md) | DSL (`.kir`) parsing, lexing, type checking, contract verification, and static cost estimation |
+| **1** | [karakuri-layout](../crates/karakuri-layout) | [`crates/karakuri-layout/README.md`](../crates/karakuri-layout/README.md) | Console arrangement as arithmetic: views and splits with size, min, max, solved to screen rectangles. Zero GPU/window dependency (ADR-0156) |
+| **1** | [karakuri-signal](../crates/karakuri-signal) | [`crates/karakuri-signal/README.md`](../crates/karakuri-signal/README.md) | Infallible signal bus (`SignalBus`), signal `confidence` tracking, local monotonic `Oscillator` |
+| **1** | [karakuri-operation](../crates/karakuri-operation) | [`crates/karakuri-operation/README.md`](../crates/karakuri-operation/README.md) | **The unified operation vocabulary**: every named command every control surface routes into (ADR-0180), plus operator permission gating (`gate.rs`, ADR-0235). Zero dependencies beyond `std` |
+| **2** | [karakuri-codegen](../crates/karakuri-codegen) | [`crates/karakuri-codegen/README.md`](../crates/karakuri-codegen/README.md) | WGSL shader code generation from typed AST (`Checked`), pass fusion, uniform struct layout computation |
+| **2** | [karakuri-audio](../crates/karakuri-audio) | [`crates/karakuri-audio/README.md`](../crates/karakuri-audio/README.md) | Real-time audio capture (`cpal`), FFT band analysis, beat tracking, latency offset management |
+| **2** | [karakuri-midi](../crates/karakuri-midi) | [`crates/karakuri-midi/README.md`](../crates/karakuri-midi/README.md) | MIDI input event parsing (`midir`) and operator control map converting hardware messages to `Operation`s (ADR-0196) |
+| **2** | [karakuri-pattern](../crates/karakuri-pattern) | [`crates/karakuri-pattern/README.md`](../crates/karakuri-pattern/README.md) | Sequencer modulation patterns: 16-step lanes emitting parameter `Operation`s synchronized to `Oscillator::beats` (ADR-0320) |
+| **2** | [karakuri-store](../crates/karakuri-store) | [`crates/karakuri-store/README.md`](../crates/karakuri-store/README.md) | Content-addressed artifact storage (keyed by `.kir` SHA-256 hash), `.kbset` pre-resolved Set files (ADR-0231), `.ndjson` session logs |
+| **2** | [karakuri-operation-record](../crates/karakuri-operation-record) | [`crates/karakuri-operation-record/README.md`](../crates/karakuri-operation-record/README.md) | **Operation serialization**: translates `Operation` and runtime readings into immutable session records (ADR-0194) |
+| **3** | [karakuri-engine](../crates/karakuri-engine) | [`crates/karakuri-engine/README.md`](../crates/karakuri-engine/README.md) | `wgpu` pipeline management, `Deck`/`Set` composition, `HotSwap`, `Governor`, OIT, `Present`, and the one frame loop (`compose` over `Sink`s) |
+| **4** | [karakuri-environment](../crates/karakuri-environment) | [`crates/karakuri-environment/README.md`](../crates/karakuri-environment/README.md) | External OS services: modular Setfile packaging (`setfile/`), hot-reloading watcher (`watch/`), directory resolution (`places`), edit history (`history/`), mix transitions, and step clock derivation |
+| **4** | [karakuri-mcp](../crates/karakuri-mcp) | [`crates/karakuri-mcp/README.md`](../crates/karakuri-mcp/README.md) | Model Context Protocol JSON-RPC server exposing 10 AI pair-programming tools under operator permission gates (`gate.rs`, ADR-0235) |
+| **5** | [karakuri-console](../crates/karakuri-console) | [`crates/karakuri-console/README.md`](../crates/karakuri-console/README.md) | VJ console UI (`egui`): modular bays (`mixer/`, `transport/`, `library/`, `inspector/`, `program`, `staging`, `master`, `sequencer`), componentized widgets (`card`, `chip`, `track`, `field`, `fader`, `head`, `pills`, `fold_grip`), and unified 38-probe `ControlDescriptor` registry |
+| **5** | [karakuri-cli](../crates/karakuri-cli) | [`crates/karakuri-cli/README.md`](../crates/karakuri-cli/README.md) | Modular headless runtime: argument parsing (`args.rs`), bit-exact session replay (`replay.rs`), headless snapshot export (`save.rs`), slot aiming (`aiming.rs`), and interactive terminal performance (`live.rs`) |
+| **5** | [karakuri](../crates/karakuri) | [`crates/karakuri/README.md`](../crates/karakuri/README.md) | Desktop GUI application: `winit` event loop (`app.rs`), bridge abstraction (`bridge/`: `sinks`, `engine`, `filesystem`, `handlers`), and decoupled telemetry readout (`readout/`: `costs`, `hud`, `dispatch`) |
 
 ### Repository Layout
 
@@ -106,21 +137,38 @@ Where everything lives, including the parts that are not crates:
 ```
 crates/
   karakuri-ir/        IR parser, type checker, cost estimation
-  karakuri-codegen/   IR → WGSL
-  karakuri-engine/    render graph, Set lifecycle, pipeline management
+  karakuri-codegen/   IR → WGSL, uniform layout, pass fusion
+  karakuri-engine/    render graph, Set lifecycle, pipeline management, Governor
   karakuri-signal/    local oscillator, synthesized signals, signal bus
-  karakuri-audio/     input device, analysis, tempo tracking, the beat lock
-  karakuri-midi/      wire messages, and the operator's map of them
+  karakuri-audio/     input device, FFT analysis, tempo tracking, beat lock
+  karakuri-midi/      wire messages, and operator control map
   karakuri-store/     content-addressed artifact store, ndjson I/O
-  karakuri-operation/ the named operations every surface routes into
+  karakuri-operation/ unified operation vocabulary and operator permission gate
   karakuri-operation-record/
-                      where an operation becomes a record, and the reading it takes
-  karakuri-layout/    the console's arrangement, solved to rectangles
-  karakuri-pattern/   what a sequencer pattern is: one bar, a mode, and lanes
-  karakuri-console/   the console: arrangement, panel model, and the egui view
-  karakuri/           the panel as a program: `cargo run -p karakuri`
-  karakuri-environment/  the program: the disk, the devices, the ports, the record
-  karakuri-cli/       V1 entry point, and scaffolding rather than the destination
+                      operation to record serialization with runtime readings
+  karakuri-layout/    console arrangement arithmetic, solved rectangles
+  karakuri-pattern/   16-step sequencer modulation patterns
+  karakuri-console/   VJ console UI: modular bays, widgets, control registry
+  karakuri-environment/ external OS services: setfile, watcher, places, history
+  karakuri-mcp/       Model Context Protocol server for AI assistant pair programming
+  karakuri-cli/       modular headless runner, replay, batch renderer, live terminal
+  karakuri/           desktop GUI application: app loop, bridge, readout
+docs/
+  adr/                every decision, with the alternatives that lost — append-only
+  architecture.md     central system architecture portal and high-level map
+  architecture/       Tier 2 subsystem deep-dives (console, engine, runtime, operations)
+  contributing.md     engineering principles, build/test commands, and verification rules
+  ir-spec.md          the IR specification. Settled; open questions are empty
+  manual.md           how to play it: flags, keys, and what each does
+  manual/             the console's manual, published — seven rules, bays, operations
+  plugins.md          out-of-process helpers, and why they are out of process
+  principles/         the rules in force, one per file — current only
+  refactoring.md      architectural refactoring and modernization roadmap
+  roadmap.md          the milestones, their status, and the handover
+examples/             app presets: .kir procedures of every kind (L1-L5, Field),
+                      .kset Set files, and control surface maps
+.karakuri/            the store: artifacts, sets, sessions, scratch (gitignored)
+```
 .githooks/            pre-commit: `cargo fmt --check` on what is staged
                       pre-push:   fmt, clippy and every test
                       enable with `git config core.hooksPath .githooks`
@@ -320,93 +368,108 @@ sequenceDiagram
 
 ---
 
-## 4. Crate Deep Dives
+## 4. Crate Deep Dives & Subsystem Architecture Links
+
+For complete subsystem architectural specifications, component breakdowns, and data structures, see the **Tier 2 Subsystem Guides**:
+- [Console & Layout Subsystem (`docs/architecture/console.md`)](architecture/console.md)
+- [Engine, Codegen & IR Subsystem (`docs/architecture/engine.md`)](architecture/engine.md)
+- [Runtime, IO & Environmental Integration (`docs/architecture/runtime.md`)](architecture/runtime.md)
+- [Operations, Control Plane & AI Interface (`docs/architecture/operations.md`)](architecture/operations.md)
 
 ### 4.1 karakuri-ir
-
-- **Purpose**: Parsing and static verification of `.kir` DSL files.
+- **Crate Documentation**: [`crates/karakuri-ir/README.md`](../crates/karakuri-ir/README.md)
+- **Subsystem Guide**: [Engine Subsystem](architecture/engine.md)
+- **Purpose**: Parsing, semantic checking, and static complexity analysis of `.kir` DSL files.
 - **Key Modules**:
-  - `ast.rs` / `typed.rs`: AST node definitions (`Kind::L1` [geometry/elements], `Kind::L2` [deformations/filters], `Kind::L3` [camera], `Kind::L4` [renderers], `Kind::Field` [spatial data fields]) and the `Checked` tree.
+  - `ast.rs` / `typed.rs`: AST node definitions (`Kind::L1` [geometry], `Kind::L2` [motion], `Kind::L3` [camera], `Kind::L4` [renderers], `Kind::L5` [composite], `Kind::Field` [spatial fields]) and the `Checked` typed tree.
   - `check.rs`: Enforces language contracts (e.g., all emitted attributes assigned on every branch).
   - `cost.rs`: Static cost model and field evaluation call counter.
 
 ### 4.2 karakuri-codegen
-
-- **Purpose**: Translating checked IR trees into WGSL shader code and uniform buffer layouts.
+- **Crate Documentation**: [`crates/karakuri-codegen/README.md`](../crates/karakuri-codegen/README.md)
+- **Subsystem Guide**: [Engine Subsystem](architecture/engine.md)
+- **Purpose**: Translating checked IR trees into WGSL shader code and uniform buffer layouts with pass fusion.
 - **Key Modules**:
   - `l1.rs`: Lowers `spawn`/`element` blocks to compute shaders with double-buffered `prev`/`next` state arrays.
   - `l3.rs`: Lowers camera state procedures to single-invocation compute passes.
-  - `l4.rs`: Lowers vertex and fragment procedures. Expands `topology points` to quad primitives for billboard rendering.
-  - `field.rs`: Splices spatial field function bodies into caller modules.
+  - `l4.rs`: Lowers vertex and fragment procedures, expanding point topologies to billboards.
+  - `field.rs`: Inlines spatial field function bodies into caller modules.
   - `layout.rs`: Computes uniform struct member offsets and trailing 16-byte alignment padding.
 
 ### 4.3 karakuri-engine
-
-- **Purpose**: `wgpu` pipeline management, render graph execution, compositing, and the one frame loop every output is driven from.
+- **Crate Documentation**: [`crates/karakuri-engine/README.md`](../crates/karakuri-engine/README.md)
+- **Subsystem Guide**: [Engine Subsystem](architecture/engine.md)
+- **Purpose**: `wgpu` pipeline management, multi-pass render graph execution, compositing, and the real-time frame loop.
 - **Key Modules**:
   - `deck.rs`: Manages up to 4 deck slots and composites them using `add`, `over`, or `max` blend modes.
-  - `frame.rs`: The one frame loop — `compose` asks every `Sink` for a target, commits, renders the deck, and draws into and presents the sinks that answered. `WindowSink` is the default one.
+  - `frame.rs`: The one frame loop — `compose` asks every `Sink` for a target, commits, renders the deck, and presents.
   - `set.rs`: Manages a node graph (`Set`) representing a complete visual scene.
-  - `swap.rs`: `HotSwap` state machine for safe pipeline transitions.
-  - `governor.rs`: Tracks frame execution budget (`budget_ms`) and enforces rollbacks.
+  - `swap.rs`: `HotSwap` state machine for safe asynchronous pipeline transitions on background threads.
+  - `governor.rs`: Tracks frame execution budget (`budget_ms`) and enforces automatic slot parking.
   - `oit.rs`: Weighted Blended Order-Independent Transparency for alpha blending.
-  - `present.rs`: `TonemapOp` — `Clamp`, `Reinhard`, `Aces` and `AgX`, where `Clamp` is the control rather than a tone mapper and is the default — and color space conversions.
+  - `present.rs`: `TonemapOp` (`Clamp`, `Reinhard`, `Aces`, `AgX`) and color space conversions.
 
 ### 4.4 karakuri-signal, karakuri-audio, karakuri-midi
-
-- **Purpose**: Signal propagation, audio capture, and MIDI controller integration.
+- **Crate Documentation**: [`crates/karakuri-signal/README.md`](../crates/karakuri-signal/README.md), [`crates/karakuri-audio/README.md`](../crates/karakuri-audio/README.md), [`crates/karakuri-midi/README.md`](../crates/karakuri-midi/README.md)
+- **Subsystem Guides**: [Engine Subsystem](architecture/engine.md), [Runtime Subsystem](architecture/runtime.md)
+- **Purpose**: Signal propagation, real-time audio capture, and MIDI controller integration.
 - **Key Design Principles**:
-  - **Complete Bus**: The `SignalBus` never fails or returns an `Option`. Querying an unprovided signal name yields a `Sample::synthesized(0.0)` with a low `confidence` score (0.0..1.0).
-  - **Local Oscillator**: Rendering reads from a local `Oscillator` rather than external system clocks. Audio beat tracking supplies a `Correction` delta to adjust oscillator drift.
-  - **Latency Offset**: Audio-visual latency is adjusted via `--latency-offset-ms` (signed), compensating for external PA/projector pipeline delays.
+  - **Complete Bus**: The `SignalBus` never fails or returns an `Option`. Unconnected signals return fallback values with a low `confidence` score (0.0..1.0).
+  - **Local Oscillator**: Rendering reads from a local monotonic `Oscillator` rather than system clocks; audio beat tracking supplies small `Correction` deltas.
+  - **Latency Offset**: Audio-visual latency is adjusted via `--latency-offset-ms` (signed) to compensate for external PA/projector delays.
 
 ### 4.5 karakuri-store
-
-- **Purpose**: Content-addressed artifact storage keyed by SHA-256 of `.kir` source text, `.kbset` Set files, and `.ndjson` session recordings. **A Set has two forms and the store holds one of them**: `.kset` is the authoring form, naming its parts by relative path beside them, and `.kbset` is the resolved form the store holds and the form that travels, so nothing is left to work out at the frame boundary a load lands on (ADR-0229, ADR-0231).
-- **What a Set file cannot carry is named rather than dropped, and printed on load.** A `camera`
-  record carries two of `Orbit`'s six fields, so the other four come back as defaults — a real
-  disagreement between the format and the engine rather than an omission in the loader, reported
-  at the site in `karakuri-environment/src/setfile.rs`. A Set file that half-applied in silence
-  is the failure this repository refuses.
-- **A vector `param` was the other one and is carried now.** A parameter is driven one component
-  at a time (ADR-0268), so `{"t":"param","key":"glow","value":[0.4,0.7,1.0]}` becomes three
-  writes — `glow.x`, `glow.y`, `glow.z` — and the engine holds one `f32` under each. What is
-  reported is the disagreement rather than the width: a single number against a vector
-  declaration, a `vec2` against a `vec3`, or a `bind` on a bare vector key.
+- **Crate Documentation**: [`crates/karakuri-store/README.md`](../crates/karakuri-store/README.md)
+- **Subsystem Guide**: [Runtime Subsystem](architecture/runtime.md)
+- **Purpose**: Content-addressed artifact storage keyed by SHA-256 of `.kir` source text, `.kbset` pre-resolved Set files (ADR-0231), and `.ndjson` session logs.
 
 ### 4.6 karakuri-cli
-
-- **Purpose**: The command-line surface, and **scaffolding rather than the destination**.
-- **Key Modules**: `src/main.rs`, and nothing else. Flag parsing, the `winit` application event
-  loop, the VJ keyboard controls, `Live`, the status line and replay driving. The clock is
-  `karakuri_environment::clock`'s rather than this file's (ADR-0297).
-- **What used to be here**: the watcher, the MCP server, session recording, the offscreen PNG
-  renderer, the Set file format, the metadata card, audio, MIDI and the edit history all moved to
-  `karakuri-environment` (ADR-0214, ADR-0215), so that the panel could reach them too. A comment
-  or a document naming `karakuri-cli/src/<anything>.rs` is pointing at where the code was.
+- **Crate Documentation**: [`crates/karakuri-cli/README.md`](../crates/karakuri-cli/README.md)
+- **Subsystem Guide**: [Runtime Subsystem](architecture/runtime.md)
+- **Purpose**: Modular headless runner, offline batch renderer, and session replayer (decomposed in P22).
+- **Key Modules**:
+  - `args.rs`: CLI command-line arguments, subcommands, and flags.
+  - `replay.rs`: Bit-exact, zero-allocation session replayer executing `.ndjson` journal files against engine state.
+  - `save.rs`: Headless snapshot export and Set saving.
+  - `aiming.rs`: Targeted Set loading, deck slot binding, and procedural parameter initialization.
+  - `live.rs`: Real-time terminal interactive session controller and keymap dispatch.
+  - `app.rs`: Terminal runner initialization and loop coordinator.
 
 ### 4.7 karakuri-environment
+- **Crate Documentation**: [`crates/karakuri-environment/README.md`](../crates/karakuri-environment/README.md)
+- **Subsystem Guide**: [Runtime Subsystem](architecture/runtime.md)
+- **Purpose**: External OS services, file systems, device IO, and shared system coordination (modularized in P23).
+- **Key Modules**:
+  - `setfile/`: Modular Set file system (`bundle.rs`, `codec.rs`, `types.rs`, `summary.rs`, `binding.rs`).
+  - `watch/` / `watch.rs`: Hot-reloading file system watcher for live `.kir` shader editing.
+  - `places.rs`: Preset and storage directory resolution with 4-candidate search heuristics (ADR-0230).
+  - `history.rs` / `history/`: Undo/redo version history for nodes and Sets.
+  - `audio.rs` / `midi.rs` / `tempo_source.rs`: External peripheral and device integrations.
+  - `clock.rs`: Single deterministic integer step count derivation (ADR-0297).
 
-- **Purpose**: Everything this instrument deals with that lives outside this process — a disk, a
-  device, a port, a socket, another program — or is the record of what happened (ADR-0215). Two
-  thin binaries sit over it, and **no module in it may know which surface it is under**.
-- **Key Modules**: `lib.rs`'s `pub mod` lines are the list, and each carries a sentence saying
-  what its module deals with. The ones worth a paragraph here:
-  - `watch.rs`: Hot-reloading file system watcher for live editing.
-  - `mcp.rs`: Model Context Protocol (MCP) server for dynamic LLM agent interaction. Its seven tools name seven `karakuri_operation::Operation`s and perform them on its own threads; the manual's MCP column is checked against what it publishes, both ways round (ADR-0199). What a model may reach is gated per class rather than per tool, and the performance-stopping classes are shut until an operator opens one from the head of the bay it belongs to (ADR-0235).
-  - `session.rs` / `render.rs`: Session recording/replay and offscreen headless PNG rendering.
-  - `setfile.rs` / `meta.rs` / `history.rs`: the Set file format, the metadata card, and the edit history.
-  - `audio.rs` / `midi.rs` / `tempo_source.rs`: the input device, the MIDI port, and the out-of-process tempo source.
-  - `mix.rs`: where a mixer operation becomes the record that moves the deck.
-  - `clock.rs` / `compile.rs` / `scratch.rs`: the step count a frame advances by — one derivation of it now that two programs make frames (ADR-0297) — a `.kir` off a disk through the pipeline with its bytes kept, and the working copies a live run edits so an original is untouched.
-  - `places.rs`: the presets root and the store root — **told rather than baked**. `--presets DIR` and `--store DIR` name them; with neither given, a four-candidate search off `current_exe()` runs and the first candidate that *is* a library wins, where the test is a directory holding at least one `.kset` rather than a directory that exists. Which candidate answered is carried in `Found` so a program can say it rather than describe what it probably did (ADR-0230).
+### 4.8 karakuri (Desktop GUI Application)
+- **Crate Documentation**: [`crates/karakuri/README.md`](../crates/karakuri/README.md)
+- **Subsystem Guide**: [Runtime Subsystem](architecture/runtime.md)
+- **Purpose**: Desktop GUI application coordinating `winit` windowing, `egui` console rendering, and `wgpu` engine presentation (modularized in P24, P33).
+- **Key Modules**:
+  - `readout/`: Decoupled performance monitoring (`costs.rs`, `hud.rs`, `dispatch.rs`, `mod.rs`).
+  - `bridge/`: Hardware and OS abstraction (`sinks.rs`, `engine.rs`, `filesystem.rs`, `handlers.rs`).
+  - `app.rs`: Main window event loop and frame presentation.
 
-### 4.8 karakuri
+### 4.9 karakuri-mcp
+- **Crate Documentation**: [`crates/karakuri-mcp/README.md`](../crates/karakuri-mcp/README.md)
+- **Subsystem Guide**: [Operations Subsystem](architecture/operations.md)
+- **Purpose**: Model Context Protocol (JSON-RPC) server exposing 10 AI pair-programming tools on background worker threads, strictly gated by operator permission classes in `karakuri-operation::gate` (ADR-0235).
 
-- **Purpose**: The panel as a program — `cargo run -p karakuri`. A window, an event loop, the
-  `egui` plumbing between them, and the English. It has no library target on purpose: nothing may
-  depend on a surface. It is what the panel column of
-  [the operations page](manual/operations.html) is measured against (ADR-0213).
+### 4.10 karakuri-console & karakuri-layout
+- **Crate Documentation**: [`crates/karakuri-console/README.md`](../crates/karakuri-console/README.md), [`crates/karakuri-layout/README.md`](../crates/karakuri-layout/README.md)
+- **Subsystem Guide**: [Console Subsystem](architecture/console.md)
+- **Purpose**: The live VJ performance console: pure arithmetic layout solving (`karakuri-layout`), componentized widget library (`view::widgets`), modular bays (`mixer/`, `transport/`, `library/`, `inspector/`, `program`, `staging`, `master`, `sequencer`), and unified 38-probe `ControlDescriptor` registry.
+
+### 4.11 karakuri-operation, karakuri-operation-record & karakuri-pattern
+- **Crate Documentation**: [`crates/karakuri-operation/README.md`](../crates/karakuri-operation/README.md), [`crates/karakuri-operation-record/README.md`](../crates/karakuri-operation-record/README.md), [`crates/karakuri-pattern/README.md`](../crates/karakuri-pattern/README.md)
+- **Subsystem Guide**: [Operations Subsystem](architecture/operations.md)
+- **Purpose**: Control plane foundation: universal `Operation` enum, zero-allocation session recording, operator permission gates (`gate.rs`, `man`/`sug`/`auto`), and 16-step sequencer modulation patterns.
 
 ---
 
@@ -492,8 +555,14 @@ the move to `karakuri-environment`.
 ## 7. Related Documents
 
 - [README.md](../README.md): The front door — what this is, a quickstart, and the document map
+- [architecture/](architecture/README.md): The Tier 2 Subsystem Architecture Documentation index:
+  - [Console & Layout Subsystem](architecture/console.md)
+  - [Engine, Codegen & IR Subsystem](architecture/engine.md)
+  - [Runtime, IO & Environmental Integration](architecture/runtime.md)
+  - [Operations, Control Plane & AI Interface](architecture/operations.md)
 - [principles/](principles/): The rules in force, one per file — current only
 - [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [ir-spec.md](ir-spec.md): `.kir` DSL language specification
+- [refactoring.md](refactoring.md): Architectural refactoring and modernization roadmap (Phases 1–5)
 - [roadmap.md](roadmap.md): The milestones, what each is waiting on, and the handover
 - [manual.md](manual.md): VJ operator manual
