@@ -39,13 +39,13 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 
 ## 2. Planned Phase: Phase 7 — GUI Interaction & Event Dispatch Modernization
 
-Based on architectural analysis of the GUI event handling pipeline (`karakuri-console::input`, `karakuri::readout::dispatch`, `karakuri::app::handler`), Phase 7 modernizes event routing, eliminates hit-testing duplication, unifies modal overlay states, and abstracts text input handling:
+Based on architectural analysis of the GUI event handling pipeline (`karakuri-console::input`, `karakuri::readout::dispatch`, `karakuri::app::handler`), Phase 7 modernizes event routing, eliminates hit-testing duplication, unifies modal overlay states (including new M5.16 Master Chain Add Chooser and Sequencer Lane Chooser cards), and abstracts text input handling:
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
 | **P42** | `karakuri::app` / Text Input | Abstract inline naming modes (`arrangement.naming` & `view.naming_set`) into a unified `TextInputSession` handler | **PENDING** |
-| **P43** | `karakuri-console::view` | Unify popup card open/close states into a type-safe `ModalOverlay` enum to guarantee Rule 2 mutual exclusion | **PENDING** |
-| **P44** | `karakuri-console::hover` | Connect `ModalOverlay` to the hover layer to suppress tooltips on background controls beneath open cards | **PENDING** |
+| **P43** | `karakuri-console::view` | Unify popup card and modal chooser open/close states into a type-safe `ModalOverlay` enum to guarantee Rule 2 mutual exclusion | **PENDING** |
+| **P44** | `karakuri-console::hover` | Connect `ModalOverlay` to the hover layer to suppress tooltips on background controls beneath open cards and choosers | **PENDING** |
 | **P45** | `karakuri::readout::dispatch` | Leverage `ControlId` in `input::claim` to eliminate double hit-testing and decompose 1,200-line pointer dispatch into per-bay handlers | **PENDING** |
 | **P46** | `karakuri::app::handler` | Decouple post-event side-effects (I/O, set saving, projector routing) out of `handler.rs` into `operations.rs` | **PENDING** |
 
@@ -57,19 +57,22 @@ Targets the largest remaining production monoliths across the repository to brin
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
-| **P47** | `karakuri-ir::check` (4,061 lines) | Decompose into `check/` submodules (`context.rs`, `contracts.rs`, `statements.rs`, `expressions.rs`, `mod.rs`) | **PENDING** |
-| **P48** | `karakuri::bridge::handlers` (3,829 lines) | Decompose console-to-engine state updates into per-bay modules (`mixer.rs`, `transport.rs`, `inspector.rs`, `sequencer.rs`, `master.rs`, `mod.rs`) | **PENDING** |
+| **P47** | `karakuri-ir::check` (4,061 lines) | Decomposed into `check/` submodules (`contracts.rs`, `coverage.rs`, `context.rs`, `eval.rs`, `mod.rs`) | **COMPLETED** |
+| **P48** | `karakuri::bridge::handlers` (3,896 lines) | Decompose console-to-engine state updates into per-bay modules (`mixer.rs`, `transport.rs`, `inspector.rs`, `sequencer.rs`, `master.rs`, `mod.rs`) | **PENDING** |
 | **P49** | `karakuri-store::record` (3,222 lines) | Decompose ndjson schema & serialization into `record/` submodules (`types.rs`, `variants.rs`, `serde.rs`, `helpers.rs`, `mod.rs`) | **PENDING** |
-| **P50** | `karakuri-cli::live` (3,052 lines) | Decompose interactive runtime controller into `live/` submodules (`interactive.rs`, `demo.rs`, `audio.rs`, `mod.rs`) | **PENDING** |
+| **P50** | `karakuri-cli::live` (3,056 lines) | Decompose interactive runtime controller into `live/` submodules (`interactive.rs`, `demo.rs`, `audio.rs`, `mod.rs`) | **PENDING** |
+| **P51** | `karakuri-console::focus` (3,664 lines) | Decompose 2D spatial focus navigation and deduplicate card/chooser traversals into `focus/` submodules (`model.rs`, `card.rs`, `chooser.rs`, `ladder.rs`, `mod.rs`) | **PENDING** |
 
 ---
 
 ## 4. Secondary Monolith Candidates (Phase 9 Backlog)
 
 Future candidates for modularization after Phase 8:
-- `karakuri-operation::lib.rs` (2,588 lines) & `karakuri-operation-record::lib.rs` (2,148 lines): Vocabulary and serialized record definitions
-- `karakuri-console::hover` (2,504 lines) & `focus` (2,489 lines): Tooltip manual citation parsing and 2D spatial arrangement focus walking
-- `karakuri::bridge::filesystem` (2,482 lines): Store synchronization, directory watcher event loop, and snapshot pipelines
+- `karakuri-operation::lib.rs` (2,587 lines) & `karakuri-operation-record::lib.rs` (2,148 lines): Vocabulary and serialized record definitions
+- `karakuri::bridge::filesystem` (2,540 lines): Store synchronization, directory watcher event loop, and snapshot pipelines
+- `karakuri::app::handler` (2,533 lines): Console event post-processing and side-effect coordination
+- `karakuri-console::hover` (2,516 lines): Tooltip manual citation parsing and dynamic probe resolution
+- `karakuri::readout::dispatch` (2,319 lines): Pointer translation and bay event dispatch
 - `karakuri-mcp::spelled` (2,141 lines): Schema definitions and MCP protocol stringification
 - `karakuri-midi::map` (2,038 lines): MIDI device map file parser, encoder, and hardware bindings
 
