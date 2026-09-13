@@ -1454,8 +1454,8 @@ pub(crate) fn live(view: &View) -> bool {
 ///   sums under *"the whole frame is a median"*, for the frame just drawn.
 ///   Nothing is timed twice: `Costs::push` kept the last `Cost` and this
 ///   divides nothing.
-/// - The rate. `Costs::rate_now`, which is the reading's own `rate`
-///   asked before its deadline rather than at it.
+/// - The rate. `Costs::rate`, the frames drawn over the last half second
+///   of their own `Cost::period`s, owed frames included.
 /// - How many beats a bar has. `karakuri_signal::oscillator::BEATS_PER_BAR`, which is
 ///   where the deck's own grid gets it, and which says of itself that it is
 ///   provisional until the IR format carries a time signature. Asked rather
@@ -1496,10 +1496,7 @@ pub(crate) fn transport(
         bpm: grid.bpm(),
         beats: grid.beats(),
         beats_per_bar: karakuri_signal::oscillator::BEATS_PER_BAR,
-        fps: live
-            .then(|| costs.rate_now())
-            .flatten()
-            .map(|rate| rate as f32),
+        fps: live.then(|| costs.rate()).flatten().map(|rate| rate as f32),
         frame_ms: ms(last.whole()) as f32,
         budget_ms,
         health,

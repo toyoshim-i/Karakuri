@@ -4193,6 +4193,51 @@ fn a_frame_nobody_asked_for_is_the_one_counted_against_a_still_panel() {
     assert_eq!(costs.still, Still::default());
 }
 
+/// The transport row's rate counts owed frames and is not reset by a touch.
+///
+/// Every frame here is owed, as under a moving pointer, and the rate arrives
+/// once [`Costs::RATE`] of periods has been pushed.
+#[test]
+fn a_moving_pointer_does_not_take_the_rate_off_the_transport_row() {
+    let mut costs = Costs::new();
+
+    // The first frame of a run has no period and is not part of any stretch.
+    costs.push(Cost::default());
+
+    let frame = Cost {
+        period: Some(Duration::from_micros(16_667)),
+        ..Cost::default()
+    };
+    // 29 frames at 60 Hz is 483 ms, short of the stretch.
+    for i in 0..29 {
+        costs.owes();
+        costs.push(frame);
+        assert_eq!(
+            costs.rate(),
+            None,
+            "a rate before a whole stretch, frame {i}"
+        );
+    }
+    assert_eq!(
+        costs.still,
+        Still::default(),
+        "no frame was on a still panel"
+    );
+
+    // The 30th reaches 500 ms.
+    costs.owes();
+    costs.push(frame);
+    let rate = costs
+        .rate()
+        .expect("no rate after a whole stretch of periods");
+    assert!((rate - 60.0).abs() < 0.1, "rate {rate}, not 60");
+
+    // Touching the window does not take it away.
+    costs.touched();
+    costs.owes();
+    assert_eq!(costs.rate(), Some(rate));
+}
+
 /// The defect this instrument was built for, stated as an assertion.
 ///
 /// A frame that spent 200 ms blocked and 3 ms on the CPU is a 203 ms frame.

@@ -659,14 +659,9 @@ pub(crate) fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation)
 /// was derived from is the interval the lag is built from, so the two cannot
 /// disagree about how long this frame was.
 ///
-/// It used to be [`Costs::rate_now`] inverted, on the argument that the row's
-/// `fps` and the lag should be one number. They are not one question.
-/// `rate_now` is *frames drawn on an untouched window over the stretch since
-/// something touched it* — the still-panel reading — so it is `None` on every
-/// frame near a pointer, a key or a resize, and its stretch counts frames that
-/// were asked for as zero while the seconds go on running. The lag wants the
-/// interval between this frame and the last one, on the frames an operator is
-/// working, which is exactly the number the clock takes for the `tick`.
+/// It is not the transport row's rate inverted: [`Costs::rate`] is an average
+/// over half a second, and the lag uses the interval between this frame and the
+/// last one, which is the number the clock takes for the `tick`.
 /// `Audio::frame` still ignores an interval outside `(0, 1)`: the smoothed
 /// value holds, which is the right answer for the first frame of a run and for
 /// one that followed a stall.

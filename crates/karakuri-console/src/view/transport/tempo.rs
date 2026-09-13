@@ -77,10 +77,11 @@ pub struct Transport {
     pub beats_per_bar: u32,
     /// Frames a second, or `None` where nobody can say yet.
     ///
-    /// A rate is measured over a stretch, so a window that has not been left alone
-    /// for one has no rate — and `None` draws no `fps` at all rather than a `0` or
-    /// a stale number. Not derived from [`Transport::frame_ms`]: `1000 / frame_ms`
-    /// is the rate the loop *could* manage, and what it *does* draw is decided by
+    /// A rate is measured over a stretch and is a claim about now, so a window that
+    /// has not drawn a stretch yet, or has nothing live on it, has no rate — and
+    /// `None` draws no `fps` at all rather than a `0` or a stale number. Not
+    /// derived from [`Transport::frame_ms`]: `1000 / frame_ms` is the rate the
+    /// loop *could* manage, and what it *does* draw is decided by
     /// the display and by whether anything asked for a frame. On a `Fifo` surface
     /// those two differ by the whole vsync wait, which is most of the frame.
     pub fps: Option<f32>,
