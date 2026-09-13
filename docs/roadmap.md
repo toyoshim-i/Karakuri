@@ -198,16 +198,15 @@ M5.9 close and the two sections *Rows the manual has not given a home* and *The 
 shape* close with them — named rather than placed, because M5.14 now sits after both and *at the end
 of this list* stopped locating them.
 
-**What is still open, as of 2026-09-13, and no bay is.** M5.1 to M5.9 have all closed — M5.5 —
+**No sub-milestone below is open, as of 2026-09-14.** M5.1 to M5.9 have all closed — M5.5 —
 Inspector was the last of them, on 2026-09-10 — and so have M5.14, M5.15 and *The console's own
-shape*. **What is left of the cross-cutting run is M5.13 — the keyboard**, which is the key column of
+shape*. The cross-cutting run is closed too: **M5.12 — MIDI on 2026-09-10** when its column's grep
+returned nothing, **M5.10 — MCP the same day** when the MCP column's did, **M5.11 — hover tooltips the
+same day** on an exit that is not a grep at all, **M5.16 on 2026-09-13** on M5.8's exit read a second
+time, and **M5.13 — the keyboard on 2026-09-14**, which was the key column of
 [every operation](manual/operations.html) rather than a bay and which the panel column's grep does not
-read: **M5.12 — MIDI closed on 2026-09-10** when its column's grep returned nothing, **M5.10 — MCP the
-same day** when the MCP column's did, and **M5.11 — hover tooltips the same day** on an exit that is
-not a grep at all, and **M5.16 closed on 2026-09-13** on M5.8's exit read a second time. **So M5.13
-is the one sub-milestone below that is open.** Each closed entry above is a stub naming what it
-decided, when its exit was met and where every owed item went; [history/m5.md](history/m5.md) keeps
-them whole.
+read. Each entry above is a stub naming what it decided, when its exit was met and where every owed
+item went; [history/m5.md](history/m5.md) keeps them whole.
 
 **M5.15 was the first sub-milestone whose rows are in two bays, and its exit said so.** It was a
 change to what a library row *is* — a procedure is one, and loading one writes a single layer over
@@ -734,243 +733,50 @@ next start. **A learn over a control with no position is refused and is not owed
 from one and is the number the Inspector draws, the only place a position is visible, so a control off
 the published interface has none and `param N 0` is refused with that sentence (ADR-0336).
 
-#### M5.13 — The keyboard
+#### M5.13 — The keyboard — **closed**
 
-**Rows.** The key column of [every operation](manual/operations.html), which is not this bay's list
-or any bay's — `grep -c 'rt plan">key' docs/manual/operations.html` is the count and it is not
-written down here.
+A key press is addressed to the bay that has focus, the four keys that act inside a bay are the same
+four everywhere because they are rules about kinds of thing, and a global letter survives only where
+the operation it names has no operand
+([ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)).
+The key column is spelled two ways and the page's head says which is which
+([ADR-0331](adr/0331-the-key-column-is-spelled-two-ways-and-a-built-badge-keeps-its-bare-letter.md));
+focus is a pointer the console owns and `Tab` walks it, `esc` going up one level and no longer
+quitting
+([ADR-0332](adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md));
+the console resolves the address and the window loop names the operation
+([ADR-0333](adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md));
+the grammar reaches all nine bays and `space` on a bay is the fold
+([ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)); three
+cards are rungs of the address, and the tempo figure is a track the arrows step by a beat a minute
+([ADR-0350](adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md),
+[ADR-0351](adr/0351-the-lane-chooser-is-a-rung-of-the-address.md)). The last two rows were a decision
+rather than a slice: the panel and the keyboard are real-time routes, a fade from either is the
+opacity fader moved, and no control that asks for a scheduled fade or crossfade is drawn on either,
+so both rows read `gap` in the panel column and in the key column
+([ADR-0353](adr/0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md)).
+The program binds eighteen keys:
+`awk '/^pub\(crate\) const KEYS/,/^\];/' crates/karakuri/src/readout/mod.rs | grep -cE '^    \('`
+returns 18 — `tab`, `esc`, the seven keys of the grammar (a digit, four arrows, `space` and `enter`),
+the rub-out, and eight letters. [history/m5.md](history/m5.md).
 
-**Exit.** No `plan` badge in the key column of [every operation](manual/operations.html). The count
-is the grep rather than a number written here:
-`grep -c 'rt plan">key' docs/manual/operations.html` **returns 2 as of 2026-09-13**, against 7 on
-2026-09-10 and 27 the day before that. **Both are the Mixer's** — *Fade a deck out or in* and
-*Crossfade to the next deck*, each on the transition row and each carrying `enter &middot; in the
-Mixer` with no control behind it.
+**Exit, met on 2026-09-14**: no `plan` badge in the key column of
+[every operation](manual/operations.html). `grep -c 'rt plan">key' docs/manual/operations.html`
+returns 0, against 2 on 2026-09-13, 7 on 2026-09-10 and 27 on 2026-09-09. The column reads 46 `has` /
+0 `plan` / 22 `gap`, each count its own grep over `rt has">key`, `rt plan">key` and `rt gap">key`.
+The two badges that closed it crossed from `plan` to `gap`, so nothing about what is built changed on
+the day of the close.
 
-**Five rows moved from `plan` to `has` on 2026-09-13**, each when the control it was waiting on was
-drawn. *Attach a beat source*, *Save the arrangement* and *Put a saved arrangement back* moved when
-the Transport's two cards — the audio-in pill's inputs and the arrangement pill's menu — became
-rungs of that bay's address, and *Set the free-run tempo* moved with them, the tempo figure stepping
-by one beat a minute under `&uarr;&darr;`
-([ADR-0350](adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)).
-*Point a lane at what it drives* moved when the sequencer's `+ lane` chooser became a rung under the
-head control that opens it
-([ADR-0351](adr/0351-the-lane-chooser-is-a-rung-of-the-address.md)). **The column reads 46 `has` /
-2 `plan` / 20 `gap`**, against 38 / 7 / 23 and 17 / 27 / 24. Five of the eight the `has` side gained
-are those rows; the other three are M5.16's, the chain's three rows reading `has` here where
-*Feedback*, *Bloom* and *RGB shift* read `gap`.
-
-**The maintainer has deferred the letters to this milestone and taken four cells off the page in
-the meantime.** On 2026-09-08 *Scrub a deck a quarter beat* (`u i`), *Fade a deck out or in*
-(`f g`), *Choose the wipe shape, the quantum, the length* (`z n j`) and *Choose which renderer of a
-deck is live* (`r`) were changed to read `&mdash;`. Every letter they named was already bound in
-`crates/karakuri/src/main.rs`'s key match to something else — `u` to `Op::Unsolo`, `f`/`g` to the
-folds, `z` to `Op::UnfoldAll`, `r` to `Op::Reset` — and that match is flat, first arm wins, so the
-`has` side took every collision and the `plan` side could never arrive. **`n` was bound to the
-day/night room toggle with no row on the page claiming it at all.** The cells stayed `plan` rather
-than `gap` because rule 01 still owed a write a keyboard route; what they stopped doing is promise a
-letter that was already spent. **Three of the four read `has` now**, the grammar having reached the
-rows they are on; the fourth is *Fade a deck out or in*, which is one of the two the column has
-left. His instruction: *global shortcuts get thought about together, and
-anything doubtful comes off in the meantime.*
-
-**The letters still promised and still free**, checked against that match on the same day: `y`,
-`x`, `c`, `t`, `-`, `=`, the backtick, and `a`. **The page stopped promising any of them on
-2026-09-09**, when the key column was re-spelled under item 1 below: the five rows that named a free
-letter name a bay and a grammar key instead, and no `plan` badge anywhere in the column reserves a
-letter now. The list stays because it is what is free to bind, which is still the question a global
-key asks.
-
-**What it is.**
-[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md):
-a key press is addressed to the bay that has focus, `Tab` walks the arrangement down a column and
-then across, and the keys that act inside a bay are the same six everywhere because they are rules
-about kinds of thing rather than about bays. A global letter survives only where the operation it
-names has no operand, or where its only operand is the choice the key itself spells — seven keys of
-the thirty-one this file bound when the record was written. **It binds eighteen now**: `tab`, `esc`
-and the four keys of the grammar, the rub-out, and eight letters. Seventeen of the twenty-one the
-record makes focus-relative have gone, each on its own condition — the grammar reaches the same row
-— and what is left is the seven globals the operand rule keeps, plus `g`, which is addressed to the
-focused bay because the grammar reaches no *pane*, and `k`, which the Library draws no control for.
-
-**Blocked on a decision the maintainer owns, and it is the whole of what is left.** What control
-the Mixer draws for a fade and for a crossfade is undrawn. The vocabulary has three operations here
-— the fade, the crossfade and the wipe — and the transition row draws one `go` capsule, which
-performs the wipe alone; neither
-[ADR-0233](adr/0233-the-consoles-mixer-has-no-crossfader.md), which refuses a crossfader, nor
-[ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md), which put
-the transition row on the Mixer's head, says what the other two acts are pressed on. The option
-under recommendation is that `go` stays the wipe's and that the fade and the crossfade each get a
-capsule of their own on that row; the open sub-question is how the fade's direction is spelled, a
-fade being out or in on one deck where the wipe and the crossfade name no direction. The two rows
-stay `plan` rather than `gap` because the key route is designed and the control is missing, which is
-what that badge says.
-
-**Nothing else is blocked.** The one uncertainty the record carried was whether `egui` swallows `Tab`
-before the window loop's `match` sees it, which would have been the failure that looks like nothing
-at all. It does not, and the reason is that `App::to_egui` reads `repaint` and nothing else —
-`egui-winit` reports `consumed` for every `Tab` and this program never asks. That is now an
-invariant a test holds.
-
-**What it owes beyond the badges**, and none of it is drawing:
-
-1. **The manual, and it is done.** ADR-0259 edited none of it on purpose; the three pages were
-   written on 2026-09-08 and 2026-09-09. **`operations.html`'s key column is spelled two ways now,
-   and its head says which is which**: a `has` badge names the letter this instrument binds today,
-   because the keyboard it has is still one letter per operation, and a `plan` badge names a key of
-   the grammar and the bay it is addressed in — `space · in the Mixer` — because a press goes to the
-   bay that has focus and a key named on its own does not say what it lands on. Twenty-nine rows
-   were re-spelled. **Ten were already `plan`** — the five that still promised a free letter (`y`,
-   `x`, `c`, `t`, `- = \``) and the four cells taken off the page on 2026-09-08, plus the star —
-   and **nineteen moved from `gap`**, which is the record's own reading of the page: they were `gap`
-   for want of a route and the grammar is one. *Set a deck's mask position* is the twentieth the
-   record names and it did **not** move, because the record's condition is that a row is `plan`
-   *"only once its bay draws the control the key hangs on"* and that row's panel column reads `gap`.
-   **No badge moved between `has` and `plan` in either direction**, so nothing about what is built
-   changed and `key_column`'s six tests are green untouched — they read a `has` badge as
-   whitespace-separated key names and never look at a `plan` one, which is why a bay could be
-   written into the designed spelling and not into the built one. **That is what item 4 is for**:
-   until both directions of the badge check are replaced, a built badge cannot carry a bay, so
-   *Bring back what is folded* keeps a bare `z` with no focus spelling beside it. **The second of
-   those two rows has since been settled the other way**: *Quit* read a bare `esc` when this was
-   written and reads `&mdash;` since 2026-09-09, because `esc` stopped quitting rather than because
-   a badge was re-spelled (item 2, ADR-0332). **The exit gets larger, on purpose**: nineteen rows that read
-   `gap` now read `plan`, and the count is still the `grep` above rather than a number here.
-   **`console.html` has the mark for a folded bay holding focus** — the head alone with the dashed
-   ring on it, since a folded region has no rectangle — drawn beside its *Two focuses, and they do
-   not look alike* note rather than inside the panel, because the panel draws every bay open and a
-   second dashed ring in it would put focus in two places. That note now reads focus as *the bay a
-   key press is addressed to* and the deck selection as *the Mixer bay's remembered address*, word
-   for word with `concepts.html`, which is item 2 arriving in the prose before the code.
-   **`concepts.html` gained *Focus* in `cdedcad`** and needed no sentence changed by any of this.
-   `index.html`'s seven rules are capped and this fits inside rule 01 rather than adding one; rule
-   03's reword — *when you point at it or land on it* — is still owed.
-   [ADR-0331](adr/0331-the-key-column-is-spelled-two-ways-and-a-built-badge-keeps-its-bare-letter.md).
-2. **The three pointers collapse, and they have.** `View::selection`, `View::cursor_row` and
-   `View::scope` are three readings of one field — a bay's remembered address — which is the
-   record's strongest structural result and the reason the deck selection persisting *"while your
-   hands are in the library"* stops being a special property of the mixer. **The console has a
-   focus pointer and `Tab` walks it**, in `karakuri-console/src/focus.rs`: the ring is derived from
-   the arrangement's own tree rather than read off `view::REGIONS`, a folded bay stays in it so
-   that there is something to press to open it, and the dashed `.wfocus` ring is drawn on the
-   focused bay's head — on the row itself for the two bays that draw no head. **`esc` goes up one
-   level and has stopped quitting**: the window's own close was already handled, so
-   `event_loop.exit()` is reached from one place in `crates/karakuri/src/main.rs` where it was
-   reached from two, and *Quit*'s key badge is `gap` — the one badge in the column that moved, and
-   it moved because the key that reached it stopped reaching it (15 `has` / 29 `plan` / 20 `gap`).
-   [ADR-0332](adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md).
-   **The six keys are built in the Mixer and the Library since 2026-09-10**, which is the rest of
-   this item: a digit names the nth thing one level below the address and `0` the bay's head, the
-   arrows take the neighbour or the next value, `space` is the next state and `enter` the act.
-   **The console resolves the address and the window loop names the operation** — the affordance is
-   the surface's, so the key asks the same three cycles the chips ask, and the deck's value, the
-   size of a step and the store are the host's. **Twelve letters are unbound**, each because the
-   grammar reaches the same row: `0`-`3`, `[ ] \`, `; '`, `m`, `e` and `l`. `f`, `g`, `s` and `u`
-   keep theirs, because they fold and solo *regions* and that is a route through bays this slice
-   does not build; so does `k`, because the Library draws no *keep* control for the act to be
-   addressed to. **`space` on a bay is the fold and is not bound**: it is a rule about all nine, and
-   a badge naming two of them would mislead in the direction this column exists to prevent — so a
-   folded bay is still in the ring with no key that acts on it. The seven bays with no grammar
-   decline the four keys and say where the six are.
-   [ADR-0333](adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md).
-   **Item 2 is complete since 2026-09-10**: the grammar is built in all nine bays, `space` on a bay
-   is bound and is the fold in every one of them, and the panel paints the mark a folded bay owes —
-   the head alone over the edge a fold leaves, with the dashed ring on it. The transition row is the
-   Mixer's **head**, which is where ADR-0333 left it open: the settings carry no slot, so they are
-   about the bay rather than about any one strip, and `go` acts on the addressed strip. A library
-   row's own controls are its star and its `params` chip; its **menu is drawn and is not addressed**,
-   because a card the grammar can open and cannot then walk is a control that traps the address.
-   **Five more letters are unbound**, each because the grammar reaches its rows: `f` and `s` with
-   `Readout::target` — `space` on a bay is the fold and `space` on the Program head's `solo` is the
-   solo — `u` with `s`, and `o` and `p` with the arrows on the Transport's offset. **`g` is what is
-   left of the pointer half and it takes the focus instead**: it folds the split enclosing the
-   focused bay, which is a pane every time, and that is the one row of this page the grammar does
-   not reach.
-   [ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md).
-   **A card the address descends into is a rung of it, since 2026-09-13.** The sentence above — *a
-   card the grammar can open and cannot then walk is a control that traps the address* — was read
-   against the code and two of its three clauses did not survive: `input::claim` routes **pointer**
-   events, so a card that is down takes no key from anything, and a card is drawn, so it is a mode
-   with a readout. What was left was a question, what `Tab` means while a card is down, and the
-   answer is that it takes the card away, because a card the address is inside belongs to the
-   address. Three cards carry the rung now — the sequencer's `+ lane` chooser
-   ([ADR-0351](adr/0351-the-lane-chooser-is-a-rung-of-the-address.md)) and the Transport's audio-in
-   inputs and arrangement menu
-   ([ADR-0350](adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md))
-   — a digit naming the nth row the card drew, `&uarr;&darr;` walking them clamped and never
-   wrapped, `&larr;&rarr;` refused with the pair that works named, `enter` performing the row in the
-   control's own words, and `esc` and `Tab` taking the card away. **`Answers::Card` is gone**, both
-   of its inhabitants having become `Answers::Act(Act::Open)`. **The tempo is a third kind beside a
-   state and a level** — `Answers::Track`, stepped by one beat a minute and declining `space`,
-   because a run starts at whatever the oscillator was built with and the Transport row declares no
-   value to return to. **The Master bay answers all four of the acting keys** from the same day,
-   which makes six of the nine
-   ([ADR-0352](adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
-   The library row's menu and the other cards are still the pointer's, and what keeps each of them
-   there is now its own reason rather than one sentence about all of them.
-3. **`map.rs` moves to `karakuri-map`.** A global key is a complete line exactly as a `cc` is, so it
-   is a third `Key` beside `Cc` and `Note`; the crate holding the layer between a surface and the
-   vocabulary then stops being named for a wire. Keys reached under focus are deliberately not
-   customisable, which is a property rather than a gap.
-4. **`key_column`'s machinery changes shape.** `KEYS`, `ROWS` and `NO_ROW` in
-   `crates/karakuri/src/main.rs` are built around one letter reaching a fixed set of rows; under
-   focus a digit reaches a different row in every bay. The check reads this file's own `match` arms
-   as text, so a keyboard that becomes a per-bay dispatch table is invisible to it — which is the
-   thing to solve rather than to discover. **It is solved.** `ROWS` is keyed by a **(bay, key)**
-   pair with the globals under no bay, `NO_ROW` with it, and both badge checks *parse* the badge —
-   a key, a separator and a bay — where they matched words. `bound` still reads this file's text
-   for every key that is a literal and takes the one it cannot see, the digit, from
-   `karakuri_console::focus::BUILT`; a new check holds the rows written down here against the
-   pairs that table declares, in both directions, so a bay whose grammar is built with no rows
-   written down fails and a pair written down that the console does not declare fails. **A built
-   badge can carry a bay now**, which is what ADR-0331 deferred to *"the code that binds `Tab`"*,
-   and eight rows carry the grammar spelling in the built column. What is still owed is the axis:
-   `&uarr;&darr;` and `&larr;&rarr;` both resolve to *the arrows*, so a badge naming the wrong pair
-   passes.
-   [ADR-0333](adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md).
-   **Item 4 is complete since 2026-09-10.** `ROWS` holds thirty-one routes over the nine bays,
-   `BAYS` still holds the nine, and a tenth spelling — `&middot; in any bay` — resolves to
-   `karakuri_console::focus::ANY`, which is what a press addressed to *whichever* bay has focus
-   needs and what *Fold a bay away* and *Fold a pane away* carry. The reverse badge check reads it
-   as the strong claim it is: a badge saying *any bay* fails unless the dispatch table declares all
-   nine. **The axis is checked**, which is what that record left owed: `karakuri-console`'s
-   `grammar.rs` holds the Sequencer against it in both directions — its lanes are a column and a
-   lane's cells are a row, so `←→` are refused on the lanes and `↑↓` on a cell, and each refusal
-   names the axis that works. What the *page* is still not held to is which pair a badge spells,
-   which is one reading further out and is named here rather than left to look covered.
-   [ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md).
-   **`ROWS` gained three pairs on 2026-09-13** — `(sequencer, enter)` with *Point a lane at what it
-   drives*, `(transport, enter)` with the three card rows, and *Set the free-run tempo* added to
-   `(transport, arrows)` — which is what makes those five badges true in both directions, and
-   `focus::reaches` declares thirty-three routes where it declared thirty-one (ADR-0351, ADR-0350).
-   **The note saying this program deliberately binds no key to the two arrangement rows is gone**:
-   no *letter* names either, which is what ADR-0221 settled, and the route is the pill that lists
-   them. What is still owed is the axis on the page, above.
-5. **The routes closed bays have rescheduled onto it, none of which is a letter.** The Library bay
-   closed owing these: the split `load` button and its pulldown
-   ([ADR-0305](adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)),
-   a row's own menu
-   ([ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)),
-   the landing on a `history` row
-   ([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)),
-   and a key that moves that bay's scroll window
-   ([ADR-0312](adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)) — all of them
-   rescheduled here when that bay closed, and ADR-0305, ADR-0311 and ADR-0312 name this
-   sub-milestone themselves. The sequencer's first slice drew the grid's cells, the lane labels and
-   the mode pill and named a route for none of them
-   ([ADR-0320](adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)
-   to
-   [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md)), so the arrows'
-   walk of a bay's items has to reach a cell of the grid and a lane. All of it is ADR-0259's focus
-   grammar rather than a letter each bay picked, which is why the rows carry no letter to keep.
-   **The sequencer's half is built as of 2026-09-13**: the arrows walk the grid's cells and the
-   lanes, refusing the axis that does not work and naming the one that does (ADR-0343), and `+ lane`
-   is a rung the digits count
-   ([ADR-0351](adr/0351-the-lane-chooser-is-a-rung-of-the-address.md)).
-
-**And it takes `z` with it.** *Bring back what is folded* unfolds everything rather than one region
-because *"a region a pointer cannot reach is a region a key has no way to name either"*, and focus
-can name a folded bay. The key may still earn its place as a bulk act; its recorded reason is gone.
+What M5.13 left owed is rescheduled, and all of it is under *Mx — TODO*: **the eight free letters**
+`y`, `x`, `c`, `t`, `-`, `=`, the backtick and `a`, which is what a global key could still bind and
+which no badge reserves; **`z` as a bulk act**, whose recorded reason — a region a pointer cannot
+reach — is gone now that focus can name a folded bay; **`map.rs` moving to `karakuri-map`**, a global
+key being a complete line exactly as a `cc` is; **the axis on the page**, `SPELLED` resolving both
+arrow pairs to *the arrows* so a badge naming the wrong pair passes; **`focus::Addressed`'s five
+path-shaped variants and the `walk_card` / `walk_chooser` duplication**, recorded as the reviewer's
+on 2026-09-13 and not taken; **the *console's own shape* stub's `esc` still quits**, which stopped
+being true on 2026-09-09; and **the two Mixer rows' MIDI badges**, which stay `gap` until a map line
+names a helper that carries time.
 
 #### Rows the manual has not given a home
 
@@ -1607,6 +1413,46 @@ have.
   `input` answering *is a card down* for the press path and the hover path at once, rather than a
   second condition in the layer. From M5.11.
 
+- **Eight letters are free and nothing binds them.** `y`, `x`, `c`, `t`, `-`, `=`, the backtick and
+  `a` are bound to nothing in `crates/karakuri` and no badge on
+  [every operation](manual/operations.html) reserves one: the five rows that named a free letter were
+  re-spelled into the grammar on 2026-09-09. The list is what a global key could still bind, which is
+  the question a global key asks under ADR-0259's operand rule. From M5.13.
+
+- **`z` is a bulk act whose recorded reason is gone.** *Bring back what is folded* unfolds everything
+  rather than one region because *"a region a pointer cannot reach is a region a key has no way to
+  name either"*, and focus can name a folded bay since ADR-0332. The key may still earn its place as
+  a bulk act, and nothing has said whether it does. From M5.13.
+
+- **`map.rs` has not moved to `karakuri-map`.** A global key is a complete line exactly as a `cc` is,
+  so it is a third `Key` beside `Cc` and `Note`, and the crate holding the layer between a surface
+  and the vocabulary (ADR-0236) then stops being named for a wire. `ls crates/` lists no
+  `karakuri-map` and the file is `crates/karakuri-midi/src/map.rs`. Keys reached under focus are
+  deliberately not customisable, which is a property rather than a gap. From M5.13.
+
+- **The page is not held to which pair of arrows a badge spells.** `SPELLED` in
+  `crates/karakuri/src/keymap.rs` resolves `&uarr;&darr;` and `&larr;&rarr;` both to *the arrows*, so
+  a badge naming the wrong pair passes both badge checks. What the axis is, is
+  `karakuri_console::focus::Built::across`, and `karakuri-console`'s `grammar.rs` holds the console
+  against it where nothing holds the page. From M5.13.
+
+- **`focus::Addressed` carries five variants that differ only in the path they hang from.** `OfHead`,
+  `UnderHead`, `InCard`, `Of` and `Under` each name a control at a different depth, and `walk_card`
+  and `walk_chooser` in `crates/karakuri-console/src/focus.rs` are one walk written twice over two of
+  them. ADR-0350 recorded the fold as the reviewer's on 2026-09-13 and it has not been taken. From
+  M5.13.
+
+- **The *console's own shape* stub says `esc` still quits.** It rescheduled that sentence onto M5.13
+  and said *Quit*'s key badge reads `has`. `esc` stopped quitting under ADR-0332 and that badge reads
+  `&mdash;`, so the stub describes a state that ended on 2026-09-09 and points at a sub-milestone that
+  closed on 2026-09-14. It is a documentation edit and nobody has made it. From M5.13.
+
+- **The two Mixer rows' MIDI badges stay `gap`.** *Fade a deck out or in* and *Crossfade to the next
+  deck* read nothing in the MIDI column: a map line names a slot number, a range, a word from a closed
+  list or a position in a published interface, and a scheduled move names an instant, a length and a
+  curve. The badges move the day a map line names a helper that carries time, which is ADR-0236's
+  third job and does not exist. From M5.13.
+
 ---
 
 ## The handover
@@ -1614,18 +1460,23 @@ have.
 **Read this if you are picking the work up.** It says where to start, what that piece needs, and
 what nobody has decided. Everything else is in the sub-milestone above, in the code, or in a record.
 
-### Where to start: M5.13 — The keyboard
+### Where to start: M5 has no open sub-milestone
 
-**The work starts at M5.13 — the keyboard**, and it is the only sub-milestone above still open.
-**Every bay has closed**, M5.5 — Inspector last on 2026-09-10, with M5.14 and *The console's own
-shape* among them, and M5.12 — MIDI, M5.15 — Procedures in the library, M5.10 — MCP and M5.11 — Hover
-tooltips closed the same day; **M5.16 — L5 closed on 2026-09-13**. **M5.13 is what is left of the
-cross-cutting run** — the key column of [every operation](manual/operations.html) rather than a bay.
-**Two rows of that column are left and both are the Mixer's**, and what they wait on is a decision
-the maintainer owns rather than a slice: what control the Mixer draws for a fade and for a
-crossfade. The entry names its rows, its exit condition and what it is blocked on, and is the one
-place those are written down; what a closed sub-milestone left owed is under *Mx — TODO* and in
-[history/m5.md](history/m5.md).
+**Every sub-milestone of M5 has closed.** M5.5 — Inspector was the last bay, on 2026-09-10, with
+M5.14 and *The console's own shape* among them, and M5.12 — MIDI, M5.15 — Procedures in the library,
+M5.10 — MCP and M5.11 — Hover tooltips closed the same day; **M5.16 — L5 closed on 2026-09-13**, and
+**M5.13 — The keyboard on 2026-09-14**, when the last two `plan` badges in the key column became
+`gap`
+([ADR-0353](adr/0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md)).
+What a closed sub-milestone left owed is under *Mx — TODO* and in
+[history/m5.md](history/m5.md), and each stub above names what it decided, when its exit was met and
+where every owed item went.
+
+**What is left is M5's own exit, and this file does not take it here.** ADR-0226 makes it a grep over
+the panel column of [every operation](manual/operations.html);
+`grep -c 'rt plan">panel' docs/manual/operations.html` returns 0, and the two sections M5 closes with
+— *Rows the manual has not given a home* and *The console's own shape* — are empty and closed. Whether
+M5 closes on that reading is the maintainer's, and the M5 entry above states the condition.
 
 **The panel is a program.** `cargo run -p karakuri` opens the console over a real deck: the
 picture, four deck previews, the transport, the mixer, the Library bay, the Inspector, the
