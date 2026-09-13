@@ -99,6 +99,7 @@ use karakuri_layout::Point;
 use karakuri_operation::gate::Class;
 use karakuri_operation::{Layer, Operation, Output};
 
+use crate::control::{descriptor_for, ControlDescriptor, ControlId};
 use crate::input::{Claim, PROBES};
 use crate::panel::Panel;
 use crate::room::size::HAIRLINE;
@@ -1103,6 +1104,46 @@ pub fn flat() -> impl Iterator<Item = &'static Tipped> {
 /// the caller's: the controls inside a container come before the container.
 pub fn resolve(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option<usize> {
     flat().position(|tip| (tip.at)(panel, ctx, view, p))
+}
+
+/// Returns the [`ControlId`] corresponding to a flat tip index.
+pub fn control_id_at(index: usize) -> Option<ControlId> {
+    let mut count = 0;
+    for (probe_idx, (_, tips)) in TIPS.iter().enumerate() {
+        if index < count + tips.len() {
+            return ControlId::from_probe_index(probe_idx);
+        }
+        count += tips.len();
+    }
+    None
+}
+
+/// Returns the [`ControlDescriptor`] corresponding to a flat tip index.
+pub fn descriptor_at(index: usize) -> Option<&'static ControlDescriptor> {
+    control_id_at(index).map(descriptor_for)
+}
+
+/// Returns the keyboard shortcut assigned to a specific tipped control, if any.
+pub fn hotkey_for_tip(index: usize) -> Option<&'static str> {
+    let id = control_id_at(index)?;
+    let tip = flat().nth(index)?;
+    match id {
+        ControlId::Transition => {
+            if tip.control == "the go capsule" {
+                Some("space")
+            } else {
+                None
+            }
+        }
+        ControlId::Tracker => {
+            if tip.control == "the tap" {
+                Some("b")
+            } else {
+                None
+            }
+        }
+        _ => descriptor_at(index).and_then(|d| d.hotkey),
+    }
 }
 
 // -- the derivations, one per tipped control ------------------------------
@@ -2263,6 +2304,18 @@ impl Hover {
         }
     }
 
+    /// The annotated words on screen (including hotkey badge and live MIDI assignment),
+    /// or `None` if no tip is up.
+    pub fn showing_annotated(&self) -> Option<String> {
+        if !self.up {
+            return None;
+        }
+        let on = self.resting?.on;
+        let words = self.tips.get(on)?;
+        let hotkey = hotkey_for_tip(on);
+        Some(annotate(words, hotkey, self.assigned.as_deref()))
+    }
+
     /// Which control the pointer is resting on, whether or not its dwell has run
     /// out.
     pub fn resting_on(&self) -> Option<&'static Tipped> {
@@ -2274,16 +2327,14 @@ impl Hover {
         &self.tips
     }
 
-    /// Paint the tip, last of everything on the console.
+    /// Paint the tip where one is up, and paint nothing otherwise.
     ///
-    /// It is called from inside the same pass as `View::draw` and after it, so the
+    /// The panel paints it last, after every other bay, which is why the tip's
     /// box goes over every card and every bay — which is the mock's `z-index: 30`
     /// and the order the four cards are already painted in.
     ///
     /// Nothing is allocated after the first frame it is up: the galley is laid out
     /// once for the control the pointer is on and kept until the pointer leaves it.
-    /// What every frame after that costs is a shadow, a fill, a stroke and one
-    /// `galley` call.
     pub fn paint(&mut self, ui: &Ui, panel: &Panel, view: &View, now: Duration) {
         let Some(rest) = self.resting else {
             return;
@@ -2295,7 +2346,8 @@ impl Hover {
             return;
         };
         let pal = view.room.palette();
-        let words = assigned(words, self.assigned.as_deref());
+        let hotkey = hotkey_for_tip(rest.on);
+        let words = annotate(words, hotkey, self.assigned.as_deref());
         let galley = match &self.galley {
             Some((on, was, galley))
                 if *on == rest.on && was.as_deref() == self.assigned.as_deref() =>
@@ -2341,6 +2393,33 @@ impl Hover {
             pal.text,
         );
     }
+}
+
+/// Formats a hotkey as a badge for tooltip display (e.g. `"[Space]"`, `"[K]"`).
+pub fn format_hotkey_badge(hotkey: &str) -> String {
+    let key_name = match hotkey.to_lowercase().as_str() {
+        "space" => "Space".to_string(),
+        "enter" | "return" => "Enter".to_string(),
+        "tab" => "Tab".to_string(),
+        "esc" | "escape" => "Esc".to_string(),
+        "backspace" => "Backspace".to_string(),
+        other => other.to_uppercase(),
+    };
+    format!("[{key_name}]")
+}
+
+/// Prepends a hotkey badge to the tooltip prose if a hotkey is assigned.
+pub fn with_hotkey(words: &str, hotkey: Option<&str>) -> String {
+    match hotkey {
+        Some(key) => format!("{} {words}", format_hotkey_badge(key)),
+        None => words.to_owned(),
+    }
+}
+
+/// Dynamic tooltip annotation combining optional hotkey badge and live MIDI assignment.
+pub fn annotate(words: &str, hotkey: Option<&str>, on: Option<&str>) -> String {
+    let with_key = with_hotkey(words, hotkey);
+    assigned(&with_key, on)
 }
 
 /// The tip, with its MIDI line read off the live map where there is one to
