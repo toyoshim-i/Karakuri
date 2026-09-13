@@ -1398,3 +1398,101 @@ fn a_slot_past_the_deck_is_refused_with_the_range_it_missed() {
 fn a_record_that_is_not_the_mixs_is_left_alone() {
     assert_eq!(change(&Record::Tick { steps: 1 }, 4), Ok(None));
 }
+
+/// The shipped three resolve with no store at all, so a run that has saved
+/// nothing can put a preset in its chain.
+///
+/// Their addresses are the hash of their bytes, so this also says that
+/// `shipped::address` and `karakuri_store::hash::Hash` agree.
+#[test]
+fn a_shipped_procedure_resolves_without_a_store() {
+    for (name, source) in shipped::ALL {
+        let address = shipped::address(source);
+        assert!(
+            address.starts_with("sha256:"),
+            "{name} is addressed as `{address}`"
+        );
+        assert_eq!(
+            resolve_procedure(None, &address).as_deref(),
+            Some(source),
+            "{name} did not resolve to its own source"
+        );
+    }
+}
+
+/// Anything else is the store's to answer, and the same one function answers
+/// it.
+///
+/// A procedure nobody shipped is put in a store exactly as a session's
+/// `procedure` records put one there, and the address the store hands back is
+/// the address a chain slot names.
+#[test]
+fn a_stored_procedure_resolves_through_the_runs_store() {
+    const OWN: &str = "proc dimmer {\n  kind L5\n\n  frame {\n    color = texel(src);\n  }\n}\n";
+    let root = tempfile::tempdir().expect("a temporary store root");
+    let store = karakuri_store::store::Store::open(root.path()).expect("a store opens");
+    let hash = store
+        .put_artifact(OWN.as_bytes())
+        .expect("an artifact is stored");
+    let address = hash.to_string();
+
+    assert_eq!(
+        resolve_procedure(None, &address),
+        None,
+        "an address nobody shipped resolved with no store behind it"
+    );
+    assert_eq!(
+        resolve_procedure(Some(&store), &address).as_deref(),
+        Some(OWN),
+        "the store did not answer for an address it holds"
+    );
+    // And the shipped three still answer through a store.
+    assert_eq!(
+        resolve_procedure(Some(&store), &shipped::address(shipped::BLOOM)).as_deref(),
+        Some(shipped::BLOOM)
+    );
+}
+
+/// One refusal, and it names the address and the slot.
+///
+/// It is decided before anything is compiled, so it is the same sentence on the
+/// frame path and at replay. The chain that resolves whole is the acceptance
+/// beside it.
+#[test]
+fn a_chain_naming_an_address_nothing_holds_is_refused_with_the_address() {
+    let root = tempfile::tempdir().expect("a temporary store root");
+    let store = karakuri_store::store::Store::open(root.path()).expect("a store opens");
+    let resolve = |address: &str| resolve_procedure(Some(&store), address);
+
+    let missing = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    let slots = vec![
+        SlotSpec {
+            procedure: shipped::address(shipped::RGB_SHIFT),
+            cut: None,
+            params: Default::default(),
+        },
+        SlotSpec {
+            procedure: missing.to_string(),
+            cut: None,
+            params: Default::default(),
+        },
+    ];
+
+    let refusal = resolve_chain(&slots, &resolve).expect_err("an address nothing holds is refused");
+    assert!(
+        refusal.contains(missing),
+        "the refusal does not name the address: {refusal}"
+    );
+    assert!(
+        refusal.contains('1'),
+        "the refusal does not name the slot: {refusal}"
+    );
+
+    let held = resolve_chain(&slots[..1], &resolve).expect("a chain of presets resolves whole");
+    assert_eq!(held, vec![shipped::RGB_SHIFT.to_string()]);
+    assert_eq!(
+        resolve_chain(&[], &resolve),
+        Ok(Vec::new()),
+        "an empty chain is not a refusal"
+    );
+}

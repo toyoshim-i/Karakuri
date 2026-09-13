@@ -103,7 +103,8 @@ pub(crate) struct Engine {
     /// end of that chain.
     ///
     /// Held here for `look`'s reason exactly: a press becomes
-    /// `Operation::SetFeedback`, `SetBloom` or `SetRgbShift`, which become one
+    /// `Operation::SetChainParam`, `AddChainEffect` or `RemoveChainEffect`, which
+    /// become one
     /// `Record::MasterChain`, which [`apply`] writes here; the frame loop puts it
     /// on the `Present` and the slots' uniforms are written from it. Nothing calls
     /// that setter behind the record's back, which is P-0090 on this value.
@@ -1499,6 +1500,12 @@ pub(crate) fn transport(
         fps: live.then(|| costs.rate()).flatten().map(|rate| rate as f32),
         frame_ms: ms(last.whole()) as f32,
         budget_ms,
+        // What the chain costs this frame, read off the deck beside the frame
+        // it is about. It is the number `Governor::set_chain_ms` reserves and
+        // `Report::chain_ms` reports, charged against the frame and to no
+        // deck
+        // ([ADR-0349](../../../docs/adr/0349-the-chain-is-the-frames-so-it-reads-the-session-clock-and-is-charged-against-the-frames-budget.md)).
+        chain_ms: Some(deck.chain_ms()).filter(|ms| *ms > 0.0),
         health,
         rec: Some(rec),
     })

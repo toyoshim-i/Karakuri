@@ -96,6 +96,14 @@ pub fn compose(
     let Committed { steps, look } = commit(deck);
 
     present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
+    // The master chain's two frame-level quantities, handed over here and in
+    // no host. The clock a chain slot reads is the session clock this frame
+    // advances to — the same `steps` the deck is about to take — and what the
+    // chain costs is charged against the frame beside the decks (ADR-0340).
+    // The clock is a `queue.write_buffer` per slot, and an empty chain writes
+    // nothing.
+    present.set_chain_clock(&gpu.queue, deck.chain_clock(steps));
+    deck.set_chain_ops_per_fragment(present.chain_ops_per_fragment());
 
     {
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
@@ -447,6 +455,35 @@ mod tests {
         let l4 = compile(&root.join("examples/soft_points.kir"));
         let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 4096, 7).expect("set");
         Deck::new(&gpu.device, vec![HotSwap::fixed(set)], SIZE, SIZE)
+    }
+
+    /// A chain of one L5, built against the `Present` that will run it.
+    ///
+    /// The procedure reads the clock and nothing else. What it draws is not
+    /// read here; `tests/master.rs` holds a chain slot's picture to its
+    /// uniform.
+    fn clock_chain(gpu: &Gpu, present: &Present) -> crate::master::Chain {
+        const CLOCK: &str = r#"
+proc clock_probe {
+  kind L5
+
+  frame {
+    color = vec4(t, beats, dt, 1.0);
+  }
+}
+"#;
+        let proc = karakuri_ir::parse(CLOCK).expect("the probe parses");
+        let checked = karakuri_ir::check::check(&proc).expect("the probe checks");
+        let slot = crate::master::Slot::build(
+            &gpu.device,
+            present.chain_layout(),
+            "test:clock_probe",
+            &checked,
+            None,
+            Default::default(),
+        )
+        .expect("an L5 with no `retains` is a legal chain slot");
+        crate::master::Chain::new(vec![slot])
     }
 
     // All seven drive a real `Present`, so all seven are here.
@@ -1174,6 +1211,96 @@ mod tests {
             assert!(
                 sink.untouched_after_refusing(),
                 "the refusing sink was drawn into anyway"
+            );
+        }
+
+        /// The master chain is handed the clock of the frame it is about to be
+        /// drawn in, and the deck is handed what the chain costs, by `compose`
+        /// and by no host.
+        ///
+        /// The clock is the session clock *after* this frame's `steps`, which
+        /// is the instant every Live slot's own last substep lands on, so two
+        /// consecutive frames advance it and neither reads the clock of the
+        /// frame before it.
+        #[test]
+        fn a_composed_frame_hands_the_chain_its_clock_and_the_deck_its_price() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let mut deck = one_slot_deck(&gpu);
+            let mut present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let chain = clock_chain(&gpu, &present);
+            let ops = chain.ops_per_fragment();
+            assert!(ops > 0, "the probe costs nothing at all");
+            present.set_chain(&gpu.device, &gpu.queue, chain);
+
+            assert_eq!(
+                present.chain_clock(),
+                crate::Clock::default(),
+                "a chain that has never been composed is not at zero"
+            );
+            assert_eq!(
+                deck.chain_ops_per_fragment(),
+                0,
+                "a deck that has never been composed was already charged"
+            );
+
+            const STEPS: u8 = 2;
+            let mut sink = TestSink::new(&gpu, vec![Ok(()), Ok(())]);
+            let compose_one = |deck: &mut Deck, sink: &mut TestSink| {
+                let mut sinks = one(sink);
+                compose(
+                    &gpu,
+                    deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: STEPS,
+                        look: look(),
+                    },
+                    |_| {},
+                )
+                .expect("compose");
+            };
+
+            let first = deck.chain_clock(STEPS);
+            compose_one(&mut deck, &mut sink);
+            assert_eq!(
+                present.chain_clock(),
+                first,
+                "the chain was not handed the clock this frame advanced to"
+            );
+            assert!(first.t > 0.0, "the first frame handed the chain t = 0");
+            assert_eq!(
+                first.dt,
+                crate::set::DT,
+                "`dt` is the fixed simulation step"
+            );
+            assert_eq!(
+                deck.chain_ops_per_fragment(),
+                ops,
+                "the deck was not charged what the running chain costs"
+            );
+            assert!(
+                deck.chain_ms() > 0.0,
+                "a chain that costs ops priced at nothing"
+            );
+            assert!(
+                deck.govern().chain_ms > 0.0,
+                "the governor spent nothing on a running chain"
+            );
+
+            let second = deck.chain_clock(STEPS);
+            assert!(
+                second.t > first.t,
+                "the session clock did not move across a frame: {} then {}",
+                first.t,
+                second.t
+            );
+            compose_one(&mut deck, &mut sink);
+            assert_eq!(
+                present.chain_clock(),
+                second,
+                "the second frame did not move the chain's clock"
             );
         }
     }

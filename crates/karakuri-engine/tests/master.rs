@@ -36,7 +36,8 @@ mod gpu {
     use std::collections::BTreeMap;
 
     use karakuri_engine::{
-        Chain, Cut, Gpu, Points, Present, RenderPassNode, RetentionManager, Slot, VideoSource,
+        Chain, Clock, Cut, Gpu, Points, Present, RenderPassNode, RetentionManager, Slot,
+        VideoSource,
     };
     use karakuri_ir::typed::Checked;
 
@@ -153,6 +154,24 @@ fn fs_rgb_shift(in: VsOut) -> @location(0) vec4<f32> {
     let r = textureSampleLevel(src, samp, in.uv + d, 0.0).r;
     let b = textureSampleLevel(src, samp, in.uv - d, 0.0).b;
     return vec4<f32>(r, centre.g, b, centre.a);
+}
+"#;
+
+    /// A chain slot that is nothing but the clock it was handed. Every texel of
+    /// the frame it writes is `(t, beats, dt)`, so a readback is a direct
+    /// reading of the uniform the pass ran under.
+    ///
+    /// The `amount` parameter is declared and unused: it is what
+    /// `moving_a_parameter_leaves_the_clock_where_it_is` writes.
+    const CLOCK: &str = r#"
+proc clock_probe {
+  kind L5
+
+  param amount : float [0.0, 1.0] = 0.0
+
+  frame {
+    color = vec4(t, beats, dt, 1.0);
+  }
 }
 "#;
 
@@ -981,9 +1000,10 @@ fn fs_rgb_shift(in: VsOut) -> @location(0) vec4<f32> {
     ///
     /// The figures are `karakuri_ir::cost`'s own and are asserted here as a sum
     /// rather than as three numbers, because the three are `cost.rs`'s to hold.
-    /// **What the governor does with it is owed to M5.16's second pass**:
-    /// nothing sets an estimate on this side of the frame today
-    /// (ADR-0325's own note), so the number is read back and spent by nobody.
+    /// What the sum becomes in milliseconds is
+    /// `karakuri_engine::estimate::chain_ms`, and what spends it is
+    /// `Deck::govern` — see `the_three_shipped_procedures_price_the_chains_rate`
+    /// below.
     #[test]
     fn a_chains_price_is_the_sum_of_its_slots() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -1014,6 +1034,144 @@ fn fs_rgb_shift(in: VsOut) -> @location(0) vec4<f32> {
         );
         present.set_chain(&gpu.device, &gpu.queue, three);
         assert_eq!(present.chain_ops_per_fragment(), sum);
+    }
+
+    /// A chain slot's procedure reads the clock the frame hands it, and it
+    /// reads all three of `t`, `beats` and `dt`.
+    ///
+    /// The three shipped procedures read none of them. [`CLOCK`] writes the
+    /// clock into the frame's colour channels, so every texel of the readback
+    /// is a statement about what the shader was handed.
+    ///
+    /// Two clocks are run and not one: the second is the negative control, and
+    /// the picture has to move with it.
+    #[test]
+    fn a_chain_slot_reads_the_clock_the_frame_hands_it() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut present = present(&gpu);
+        let mut points = hot_points(&gpu);
+        present.set_chain(
+            &gpu.device,
+            &gpu.queue,
+            Chain::new(vec![slot(&gpu, &present, CLOCK, None, 0.0)]),
+        );
+
+        let read = |present: &Present, points: &mut Points, clock: Clock| {
+            present.set_chain_clock(&gpu.queue, clock);
+            assert_eq!(
+                present.chain_clock(),
+                clock,
+                "the chain did not keep the clock it was written"
+            );
+            let pixels = frame(&gpu, present, points);
+            let texel = channels(&pixels[..8]);
+            (texel[0], texel[1], texel[2])
+        };
+
+        let first = Clock {
+            t: 2.5,
+            beats: 5.25,
+            dt: 0.25,
+            seed_salt: 0,
+        };
+        let (t, beats, dt) = read(&present, &mut points, first);
+        assert!(
+            (t - first.t).abs() < 1e-3 && (beats - first.beats).abs() < 1e-3,
+            "the slot read t {t} and beats {beats} against {first:?}"
+        );
+        assert!((dt - first.dt).abs() < 1e-4, "the slot read dt {dt}");
+
+        let second = Clock {
+            t: 7.0,
+            beats: 14.0,
+            dt: 0.125,
+            seed_salt: 0,
+        };
+        let (t, beats, dt) = read(&present, &mut points, second);
+        assert!(
+            (t - second.t).abs() < 1e-3 && (beats - second.beats).abs() < 1e-3,
+            "the slot read t {t} and beats {beats} against {second:?}"
+        );
+        assert!((dt - second.dt).abs() < 1e-4, "the slot read dt {dt}");
+    }
+
+    /// A parameter write leaves the running clock where it is.
+    /// `set_chain_params` repacks a whole uniform block, and the clock it
+    /// repacks is the one that is running.
+    #[test]
+    fn moving_a_parameter_leaves_the_clock_where_it_is() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut present = present(&gpu);
+        let mut points = hot_points(&gpu);
+        let built = Chain::new(vec![slot(&gpu, &present, CLOCK, None, 0.0)]);
+        let shape: Vec<(String, Option<Cut>)> = built
+            .slots()
+            .iter()
+            .map(|s| (s.proc().to_string(), s.cut()))
+            .collect();
+        present.set_chain(&gpu.device, &gpu.queue, built);
+
+        let clock = Clock {
+            t: 3.0,
+            beats: 6.0,
+            dt: 0.25,
+            seed_salt: 0,
+        };
+        present.set_chain_clock(&gpu.queue, clock);
+        assert!(
+            present.set_chain_params(&gpu.queue, &shape, &[params(1.0)]),
+            "the shape handed back is the shape that is running"
+        );
+        let pixels = frame(&gpu, &present, &mut points);
+        let texel = channels(&pixels[..8]);
+        assert!(
+            (texel[0] - clock.t).abs() < 1e-3,
+            "a parameter write moved the clock to {}",
+            texel[0]
+        );
+    }
+
+    /// The three shipped procedures are what the chain's rate was calibrated
+    /// on, so the price of that chain at the size the measurement was taken at
+    /// comes back as the measurement.
+    ///
+    /// It is the order of magnitude that is held, not the third decimal.
+    #[test]
+    fn the_three_shipped_procedures_price_the_chains_rate() {
+        use karakuri_engine::estimate::{
+            chain_ms, CHAIN_REFERENCE_MS, CHAIN_REFERENCE_OPS, CHAIN_REFERENCE_SIZE,
+        };
+
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = present(&gpu);
+        let three = Chain::new(vec![
+            slot(&gpu, &present, FEEDBACK, Some(Cut::Mix), 0.5),
+            slot(&gpu, &present, BLOOM, None, 0.5),
+            slot(&gpu, &present, RGB_SHIFT, None, 0.5),
+        ]);
+        assert_eq!(
+            three.ops_per_fragment(),
+            CHAIN_REFERENCE_OPS,
+            "the shipped three no longer cost what the chain's rate was calibrated on"
+        );
+
+        let ms = chain_ms(three.ops_per_fragment(), CHAIN_REFERENCE_SIZE);
+        assert!(
+            (ms - CHAIN_REFERENCE_MS).abs() < 0.01,
+            "the shipped three price at {ms:.3} ms against a measured {CHAIN_REFERENCE_MS:.2}"
+        );
+
+        assert_eq!(
+            chain_ms(0, CHAIN_REFERENCE_SIZE),
+            0.0,
+            "an empty chain is free"
+        );
+        let doubled = chain_ms(three.ops_per_fragment(), (2560, 720));
+        assert!(
+            (doubled - 2.0 * ms).abs() < 1e-3,
+            "twice the area priced at {doubled:.3} ms against {:.3}",
+            2.0 * ms
+        );
     }
 
     /// **What a slot is refused for**, and each refusal is about the chain

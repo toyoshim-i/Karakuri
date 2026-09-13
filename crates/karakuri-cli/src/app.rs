@@ -344,6 +344,9 @@ impl ApplicationHandler for App {
             edges: self.args.edges.clone(),
             aims,
             store_root: self.args.store.clone(),
+            // The store a chain slot's address is resolved against, opened at
+            // the start of the run.
+            store: open_store(&self.args),
             save_tx,
             saves,
             saves_in_flight: 0,

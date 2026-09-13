@@ -301,6 +301,13 @@ pub struct Deck {
     signals: Signals,
     governor: Governor,
     frame_budget_ms: f32,
+    /// The running master chain's summed `ops_per_fragment`, charged against the
+    /// frame beside the slots and against no one of them. Zero while the chain
+    /// is empty. Written once a frame by `crate::frame::compose` from the
+    /// `Present` that holds the chain; the milliseconds are derived at
+    /// [`Deck::chain_ms`] against this deck's current size, so a resize moves
+    /// the charge with no second write.
+    chain_ops_per_fragment: u32,
     transitions: Vec<Transition>,
     selections: Vec<Selection>,
     width: u32,
@@ -364,6 +371,9 @@ impl Deck {
             // The engine's constant until a caller that can ask the platform
             // says otherwise, which is `set_frame_budget_ms` (ADR-0313).
             frame_budget_ms: crate::swap::DEFAULT_BUDGET_MS,
+            // The default chain is empty, so a deck that is never handed one
+            // is charged nothing for it (ADR-0340).
+            chain_ops_per_fragment: 0,
             // At its bound from the start: at most one per `(slot, control)`,
             // so this never grows and `schedule` never allocates. That matters
             // on the replay path, where a scheduled move arrives inside the
@@ -740,6 +750,53 @@ impl Deck {
         self.frame_budget_ms
     }
 
+    /// Records what the running master chain costs per texel — the sum over its
+    /// slots of `ops_per_fragment`, which is `Present::chain_ops_per_fragment`.
+    ///
+    /// Zero for an empty chain. It is a rate and not a duration: what it costs
+    /// in milliseconds is [`Deck::chain_ms`], taken against this deck's current
+    /// size, so a resize needs no second call.
+    pub fn set_chain_ops_per_fragment(&mut self, ops: u32) {
+        self.chain_ops_per_fragment = ops;
+    }
+
+    /// What [`Deck::set_chain_ops_per_fragment`] last recorded.
+    pub fn chain_ops_per_fragment(&self) -> u32 {
+        self.chain_ops_per_fragment
+    }
+
+    /// What the running master chain costs this frame, in milliseconds at the
+    /// size this deck renders at.
+    ///
+    /// Charged against the frame beside the slots and against no one of them
+    /// (ADR-0340), which is what [`Deck::govern`] spends it as.
+    pub fn chain_ms(&self) -> f32 {
+        crate::estimate::chain_ms(self.chain_ops_per_fragment, (self.width, self.height))
+    }
+
+    /// The clock a master chain slot reads on a frame that advances by `steps`.
+    ///
+    /// `t` and `beats` are the session clock at that frame's last substep — the
+    /// instant every Live slot's own last substep lands on — and `dt` is the
+    /// fixed simulation step, the same number every other layer reads. All
+    /// three come from the `tick` this frame was committed with and none from a
+    /// wall clock
+    /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+    ///
+    /// Nothing is advanced here: the value is what [`Frame::render`] will have
+    /// advanced the session to, so it may be written before the frame's encoder
+    /// exists. `seed_salt` is zero — an L5 reads no `seed`.
+    pub fn chain_clock(&self, steps: u8) -> crate::pass::Clock {
+        let mut signals = self.signals;
+        signals.advance(steps.min(MAX_STEPS), DT);
+        crate::pass::Clock {
+            t: signals.oscillator().t() as f32,
+            beats: signals.oscillator().beats() as f32,
+            dt: DT,
+            seed_salt: 0,
+        }
+    }
+
     /// Returns the rolling median frame duration across recent frames, or None if unavailable.
     pub fn frame_period_ms(&self) -> Option<f32> {
         self.slots.first()?.swap.frame_period_ms()
@@ -806,6 +863,13 @@ impl Deck {
                 closed_form: s.swap.set().is_closed_form(),
             })
             .collect();
+        // The chain first: it is not one of the slots. A chain covers the
+        // whole frame once per slot and belongs to no deck, so it is reserved
+        // out of the budget ahead of every slot rather than summed into
+        // `committed_ms` (ADR-0340). It is taken here so that a resize moves it
+        // without a second writer.
+        let chain_ms = self.chain_ms();
+        self.governor.set_chain_ms(chain_ms);
         let mut report = self.governor.decide(&states);
         report.frame_period_ms = self.frame_period_ms();
         report.frame_budget_ms = Some(self.frame_budget_ms);

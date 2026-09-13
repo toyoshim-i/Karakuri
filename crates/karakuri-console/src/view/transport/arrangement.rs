@@ -398,7 +398,11 @@ impl Arrangement {
     /// How many rows the open menu has: *save*, *start a new one*, and one per name
     /// filed. Zero while the menu is shut or asking for a name, which is a menu
     /// with a field in it rather than a list.
-    fn rows(&self) -> usize {
+    ///
+    /// The address descends into this menu and a digit names the nth row of it,
+    /// which is the same number [`ArrangementPill`] lays out
+    /// ([ADR-0350](../../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)).
+    pub fn rows(&self) -> usize {
         match self.menu {
             Menu::Open => VERBS + self.filed.len(),
             _ => 0,

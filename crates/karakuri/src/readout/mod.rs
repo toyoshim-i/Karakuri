@@ -2,7 +2,7 @@
 
 pub(crate) use karakuri_console::input::{claim, wheeled, Claim, Turned, CONTROLS};
 pub(crate) use karakuri_console::panel::{
-    Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released,
+    Dragged, InHand, Knob, Landing, Op, Outcome, Panel, Pressed, Released,
 };
 pub(crate) use karakuri_console::room::Room;
 pub(crate) use karakuri_console::view::{
@@ -195,15 +195,15 @@ impl Readout {
 
     /// The pointer went up, and what the gesture it ended asked for.
     ///
-    /// `onto` is which deck's strip the pointer is over — the caller's answer,
-    /// because a strip's geometry is `karakuri-console`'s view and not its model
+    /// `onto` is where the pointer is — the caller's answer, because a strip's
+    /// geometry is `karakuri-console`'s view and not its model
     /// (`Panel::released`). Two of the three drags do not read it.
     ///
     /// It answers an `Acted` where it used to answer nothing, and the drop is why:
     /// a boundary coming to rest and a fader being let go both ask for nothing —
     /// everything either of them wanted was asked for while it was moving — and a
     /// carry asks for its whole operation here or nowhere.
-    pub(crate) fn released(&mut self, onto: Option<u8>) -> Acted {
+    pub(crate) fn released(&mut self, onto: Option<Landing>) -> Acted {
         match self.panel.released(onto) {
             Some(Released::Rests { split, index, at }) => {
                 println!("release: {} rests at {at:.1}", self.pair(split, index));
@@ -248,8 +248,17 @@ impl Readout {
                 println!(
                     "release: `{set}` was let go over nothing, so nothing was loaded — a drop \
                      names its deck by landing on that deck's strip, or on its preview cell in \
-                     the Program bay"
+                     the Program bay, and it names the master chain by landing on the chain's \
+                     list in the Master bay"
                 );
+                Acted::Nothing
+            }
+            // A row let go over a target that will not take it, which is the
+            // one refusal a release makes: the chain's list is a target for
+            // every carry and what it holds is a `kind L5` procedure. The
+            // reason travels with the release (P-0083).
+            Some(Released::Refused { set, why }) => {
+                println!("release: `{set}` was let go over the master chain — {why}");
                 Acted::Nothing
             }
             None => Acted::Nothing,

@@ -33,15 +33,44 @@ pub fn address(source: &str) -> String {
     karakuri_store::hash::Hash::of(source.as_bytes()).to_string()
 }
 
+/// The content addresses of the three, in the order the Master bay draws them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Shipped {
+    pub feedback: String,
+    pub bloom: String,
+    pub rgb_shift: String,
+}
+
+impl Shipped {
+    /// The three, in [`ALL`]'s order, so a caller can walk them beside the bay's
+    /// rows.
+    pub fn each(&self) -> [&str; 3] {
+        [&self.feedback, &self.bloom, &self.rgb_shift]
+    }
+}
+
 /// The three addresses, computed once. Hashing three files is a few
 /// microseconds and it is still done once, because this is asked per press.
-pub fn addresses() -> &'static karakuri_operation_record::Shipped {
-    static ONCE: OnceLock<karakuri_operation_record::Shipped> = OnceLock::new();
-    ONCE.get_or_init(|| karakuri_operation_record::Shipped {
+pub fn addresses() -> &'static Shipped {
+    static ONCE: OnceLock<Shipped> = OnceLock::new();
+    ONCE.get_or_init(|| Shipped {
         feedback: address(FEEDBACK),
         bloom: address(BLOOM),
         rgb_shift: address(RGB_SHIFT),
     })
+}
+
+/// The word the Master bay draws for one of the three, where the address is one
+/// of them.
+///
+/// The operations page's headings in lower case.
+pub fn name_of(address_of: &str) -> Option<&'static str> {
+    match address_of {
+        _ if address_of == addresses().feedback => Some("feedback"),
+        _ if address_of == addresses().bloom => Some("bloom"),
+        _ if address_of == addresses().rgb_shift => Some("rgb shift"),
+        _ => None,
+    }
 }
 
 /// The source one address names, where it is one of the three.

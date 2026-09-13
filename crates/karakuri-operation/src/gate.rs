@@ -487,13 +487,14 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
 
         // ----- The master effects -------------------------------------------
         //
-        // Every one acts on the composited frame after the mix has run,
-        // unpriced and immediately. The first three carry `Undecided` because
-        // the chain does not exist yet — *"so they are closed before they are
-        // buildable, which is the correct order."*
-        Operation::SetFeedback { .. } => Standing::Closed(Class::MasterEffects),
-        Operation::SetBloom { .. } => Standing::Closed(Class::MasterEffects),
-        Operation::SetRgbShift { .. } => Standing::Closed(Class::MasterEffects),
+        // Every one acts on the composited frame after the mix has run and
+        // immediately. The first three are the chain itself — a slot's values,
+        // a slot added and a slot taken out — and an added slot is the one of
+        // them that changes what a frame costs. All three are shut against a
+        // model until an operator opens them.
+        Operation::SetChainParam { .. } => Standing::Closed(Class::MasterEffects),
+        Operation::AddChainEffect { .. } => Standing::Closed(Class::MasterEffects),
+        Operation::RemoveChainEffect { .. } => Standing::Closed(Class::MasterEffects),
         Operation::SetTonemap { .. } => Standing::Closed(Class::MasterEffects),
         Operation::SetExposure { .. } => Standing::Closed(Class::MasterEffects),
 
@@ -588,8 +589,8 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
 mod tests {
     use super::*;
     use crate::{
-        Authority, BeatSource, BlendMode, Bloom, Control, Curve, Feedback, GridScale, LaneTarget,
-        Layer, NodeAddress, Output, ParamAt, ParamValue, Property, Recording, Residency, RgbShift,
+        Authority, BeatSource, BlendMode, ChainParam, Control, Curve, Cut, GridScale, LaneTarget,
+        Layer, NodeAddress, Output, ParamAt, ParamValue, Property, Recording, Residency,
         SetTransfer, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
     };
 
@@ -683,15 +684,15 @@ mod tests {
                 renderer: 0,
             },
             Operation::SetMasterOut { out: 1.0 },
-            Operation::SetFeedback {
-                params: Feedback::default(),
+            Operation::SetChainParam {
+                at: 0,
+                param: ChainParam::Cut(Cut::Exit),
             },
-            Operation::SetBloom {
-                params: Bloom::default(),
+            Operation::AddChainEffect {
+                procedure: String::new(),
+                cut: None,
             },
-            Operation::SetRgbShift {
-                params: RgbShift::default(),
-            },
+            Operation::RemoveChainEffect { at: 0 },
             Operation::SetTonemap {
                 tonemap: Tonemap::Aces,
             },
@@ -986,14 +987,19 @@ mod tests {
         assert_eq!(Class::MixFaders.bay(), "Mixer");
     }
 
-    /// The master effects are closed until the Master bay opens them, including the
-    /// three whose payload is `Undecided` — closed before they are buildable, which
-    /// is the correct order.
+    /// The master effects are closed until the Master bay opens them — the three
+    /// that are the chain itself, and the two at the far end of it.
     #[test]
     fn the_master_effects_are_closed_until_the_master_bay_opens_them() {
         assert_eq!(
             members(Class::MasterEffects),
-            vec!["Feedback", "Bloom", "RGB shift", "Tone map", "Exposure"]
+            vec![
+                "Set a chain effect's parameter",
+                "Add an effect to the master chain",
+                "Remove an effect from the master chain",
+                "Tone map",
+                "Exposure"
+            ]
         );
         assert_eq!(Class::MasterEffects.bay(), "Master");
     }

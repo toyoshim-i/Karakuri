@@ -30,9 +30,11 @@ use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Knob, Panel, Released, GRAB};
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{master, Chain, Fx, MasterRow, View};
+use karakuri_console::view::{
+    master, AddChoice, AddChoices, Added, Chain, ChainSlot, MasterRow, SlotParam, View,
+};
 use karakuri_layout::{Point, Rect};
-use karakuri_operation::{Cut, Feedback, Operation};
+use karakuri_operation::{ChainParam, Cut, Operation};
 
 /// The mock's own level: `out 1.00`, which is what `docs/manual/console.html`'s
 /// Master bay draws and what `karakuri_engine::deck::Deck` comes up at.
@@ -43,20 +45,75 @@ const MOCK: f32 = 1.0;
 fn view(out: f32) -> View {
     let mut view = View::new(Room::Day);
     view.master_out = Some(out);
-    view.master_chain = Some(MOCK_CHAIN);
+    view.master_chain = Some(mock_chain());
+    view.chain_add = offers();
     view
 }
 
-/// The mock's own chain: `feedback 0.34 · mix`, `bloom 0.60`, `rgb shift 0.00`,
-/// which is what `docs/manual/console.html` draws under the out row. The rgb
-/// shift is the one at zero on purpose — it is the row the page draws dim, and
-/// dim here means *this pass is not recorded at all*.
-const MOCK_CHAIN: Chain = Chain {
-    feedback: 0.34,
-    cut: Cut::Mix,
-    bloom: 0.60,
-    rgb_shift: 0.0,
-};
+/// The mock's own chain: `feedback 0.34 · mix` in slot 0 and `bloom 0.60` in
+/// slot 1, which is what `docs/manual/console.html` draws under the out row.
+///
+/// One of each kind: feedback declares `retains` so its row draws a cut chip,
+/// and bloom does not so its row draws none.
+fn mock_chain() -> Chain {
+    Chain {
+        slots: vec![
+            ChainSlot {
+                name: "feedback".to_owned(),
+                cut: Some(Cut::Mix),
+                params: vec![SlotParam {
+                    key: "amount".to_owned(),
+                    range: [0.0, 0.95],
+                    value: 0.34,
+                    default: 0.0,
+                }],
+            },
+            ChainSlot {
+                name: "bloom".to_owned(),
+                cut: None,
+                params: vec![SlotParam {
+                    key: "amount".to_owned(),
+                    range: [0.0, 1.0],
+                    value: 0.60,
+                    default: 0.0,
+                }],
+            },
+        ],
+    }
+}
+
+/// What the library offers `+ add`: one `kind L5` procedure that declares
+/// `retains` and one that does not. Both of an add's cuts are reachable.
+fn offers() -> Vec<AddChoice> {
+    vec![
+        AddChoice {
+            procedure: "sha256:feed".to_owned(),
+            words: "feedback".to_owned(),
+            retains: true,
+        },
+        AddChoice {
+            procedure: "sha256:b100".to_owned(),
+            words: "bloom".to_owned(),
+            retains: false,
+        },
+    ]
+}
+
+/// The chooser, with the card up — every test that is not about the card.
+fn shut() -> AddChoices {
+    AddChoices {
+        items: offers(),
+        open: false,
+    }
+}
+
+/// The chooser with its card down.
+fn down() -> AddChoices {
+    AddChoices {
+        items: offers(),
+        open: true,
+    }
+}
 
 /// A panel at a viewport, solved, with a context that has drawn once — the pair
 /// every test here starts from, and `look.rs`'s own opening.
@@ -68,7 +125,7 @@ fn console(viewport: Rect) -> (Panel, egui::Context) {
 
 /// The laid-out row at that level, on a solved console.
 fn row(panel: &Panel, ctx: &egui::Context, out: f32) -> MasterRow {
-    master(ctx, panel.layout(), Some(out), Some(MOCK_CHAIN))
+    master(ctx, panel.layout(), Some(out), Some(&mock_chain()), &shut())
         .expect("the Master bay draws its out row")
 }
 
@@ -409,7 +466,7 @@ fn no_level_behind_the_console_is_no_row_at_all() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let it = row(&panel, &ctx, MOCK);
     assert!(
-        master(&ctx, panel.layout(), None, Some(MOCK_CHAIN)).is_none(),
+        master(&ctx, panel.layout(), None, Some(&mock_chain()), &shut()).is_none(),
         "the Master bay drew an out row for a console with no engine behind it"
     );
     assert_eq!(
@@ -439,9 +496,15 @@ fn the_route_a_window_takes_is_claim_then_derivation_then_operation() {
     let press = at(it.fader.knob.center());
 
     assert_eq!(claim(&mut panel, &ctx, &view, press), Claim::Panel);
-    let grab = master(&ctx, panel.layout(), view.master_out, view.master_chain)
-        .and_then(|row| row.grab(press))
-        .expect("the derivation that drew the knob says what a press on it takes hold of");
+    let grab = master(
+        &ctx,
+        panel.layout(),
+        view.master_out,
+        view.master_chain.as_ref(),
+        &shut(),
+    )
+    .and_then(|row| row.grab(press))
+    .expect("the derivation that drew the knob says what a press on it takes hold of");
     panel.grab(press, grab);
     // Rule 1: a drag in hand keeps the claim wherever the pointer wanders to,
     // and the pointer on this control wanders across the bay's whole width.
@@ -458,135 +521,206 @@ fn the_route_a_window_takes_is_claim_then_derivation_then_operation() {
 }
 
 // ---------------------------------------------------------------------------
-// The master chain's three rows
+// The master chain's list
 // ---------------------------------------------------------------------------
 
-/// The three rows are drawn, in the chain's order, and each reads the value the
-/// chain handed in — which is the mock's, row for row.
+/// One well per slot of the chain, in the chain's order, each naming its
+/// procedure and each drawing one parameter row per declared parameter.
 #[test]
-fn the_bay_draws_the_chains_three_passes_in_order() {
+fn the_bay_draws_one_row_per_slot_of_the_chain() {
     let (panel, ctx) = console(PLAUSIBLE);
     let it = row(&panel, &ctx, MOCK);
-    let drawn: Vec<Fx> = it.fx.iter().flatten().map(|row| row.fx).collect();
+    let names: Vec<&str> = it.slots.iter().map(|slot| slot.words.as_str()).collect();
     assert_eq!(
-        drawn,
-        Fx::ALL.to_vec(),
+        names,
+        vec!["feedback", "bloom"],
         "the Master bay drew the chain in an order the engine does not run it in"
     );
-    let amounts: Vec<f32> = it.fx.iter().flatten().map(|row| row.amount).collect();
-    assert_eq!(amounts, vec![0.34, 0.60, 0.0]);
+    let ats: Vec<u32> = it.slots.iter().map(|slot| slot.at).collect();
+    assert_eq!(ats, vec![0, 1], "a slot's row addressed the wrong position");
+    let params: Vec<usize> = it.slots.iter().map(|slot| slot.params.len()).collect();
+    assert_eq!(params, vec![1, 1]);
     // **Under the out row and not over it**, which is the chain's own
-    // direction: the level enters at the top and the passes are downstream of
+    // direction: the level enters at the top and the slots are downstream of
     // it (ADR-0224).
-    let first = it.fx[0].expect("the feedback row").well;
     assert!(
-        first.min.y >= it.fader.track.max.y,
-        "an effect row was drawn over the out fader"
+        it.slots[0].well.min.y >= it.fader.track.max.y,
+        "a chain row was drawn over the out fader"
+    );
+    // And `+ add` under the last of them.
+    let add = it.add.expect("the bay draws + add at the end of the list");
+    assert!(
+        add.min.y >= it.slots[1].well.max.y,
+        "+ add was drawn over the last slot rather than after it"
     );
 }
 
-/// The dot and the dim say whether a pass is recorded at all. An amount of zero
-/// is not a pass multiplying by nothing — no pass is recorded — so the row that
-/// reads 0.00 is the row that is out.
+/// A parameter row's fader is laid out from the range the procedure declares
+/// and not from a fixed one, and the operation a drag asks for carries a value
+/// in that range.
 #[test]
-fn a_pass_at_zero_is_the_row_that_is_out() {
-    let (panel, ctx) = console(PLAUSIBLE);
-    let it = row(&panel, &ctx, MOCK);
-    let runs: Vec<bool> = it.fx.iter().flatten().map(|row| row.runs).collect();
-    assert_eq!(
-        runs,
-        vec![true, true, false],
-        "the rgb shift row reads 0.00 and did not say the pass is not in the frame"
-    );
-}
-
-/// The cut chip is on the feedback row and on neither of the others, which is
-/// the shape that keeps a press on the bloom row from reaching a parameter
-/// bloom has not got.
-#[test]
-fn only_the_feedback_row_carries_a_cut_chip() {
-    let (panel, ctx) = console(PLAUSIBLE);
-    let it = row(&panel, &ctx, MOCK);
-    let chips: Vec<bool> = it
-        .fx
-        .iter()
-        .flatten()
-        .map(|row| row.cut.is_some())
-        .collect();
-    assert_eq!(chips, vec![true, false, false]);
-}
-
-/// Each row's knob asks for its own pass, at the value the track is at, and the
-/// feedback row's carries the cut beside the amount — because the amount alone
-/// is not a picture.
-///
-/// The far end of each track is asked for, because that is the reading a drag
-/// can produce that the row was not already at.
-#[test]
-fn each_row_emits_its_own_operation_with_the_value_in_range() {
+fn a_parameter_rows_fader_rides_the_declared_range() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let view = view(MOCK);
     let it = row(&panel, &ctx, MOCK);
-    let expected: [Operation; 3] = [
-        Operation::SetFeedback {
-            params: Feedback {
-                amount: Feedback::MAX,
-                cut: Cut::Mix,
+    let expected: [Operation; 2] = [
+        Operation::SetChainParam {
+            at: 0,
+            param: ChainParam::Declared {
+                key: "amount".to_owned(),
+                value: 0.95,
             },
         },
-        Operation::SetBloom {
-            params: karakuri_operation::Bloom { amount: 1.0 },
-        },
-        Operation::SetRgbShift {
-            params: karakuri_operation::RgbShift { amount: 1.0 },
+        Operation::SetChainParam {
+            at: 1,
+            param: ChainParam::Declared {
+                key: "amount".to_owned(),
+                value: 1.0,
+            },
         },
     ];
-    for (fx, want) in it.fx.iter().flatten().zip(expected) {
-        let press = at(fx.fader.knob.center());
+    for (slot, want) in it.slots.iter().zip(expected) {
+        let param = &slot.params[0];
+        let press = at(param.fader.knob.center());
         assert_eq!(
             claim(&mut panel, &ctx, &view, press),
             Claim::Panel,
-            "the panel did not claim a press on the {} row's knob",
-            fx.fx.name()
+            "the panel did not claim a press on slot {}'s knob",
+            slot.at
         );
-        let grab = master(&ctx, panel.layout(), view.master_out, view.master_chain)
-            .and_then(|row| row.grab(press))
-            .expect("the derivation that drew the knob says what a press takes hold of");
+        let grab = master(
+            &ctx,
+            panel.layout(),
+            view.master_out,
+            view.master_chain.as_ref(),
+            &shut(),
+        )
+        .and_then(|row| row.grab(press))
+        .expect("the derivation that drew the knob says what a press takes hold of");
         panel.grab(press, grab);
-        let to = Point::new(fx.fader.track.max.x, press.y);
+        let to = Point::new(param.fader.track.max.x, press.y);
         assert_eq!(
             panel.moved(to),
             Some(Dragged::Fader(want)),
-            "the {} row's track dragged to its far end asked for the wrong thing",
-            fx.fx.name()
+            "slot {}'s track dragged to its far end asked for the wrong thing",
+            slot.at
         );
         panel.released(None);
     }
+    // The knob's position is a fraction of the declared range and not of the
+    // value: 0.34 of 0.95 is not 0.34 of 1.00.
+    let feedback = &it.slots[0].params[0];
+    assert!(near(feedback.along(), 0.34 / 0.95));
 }
 
-/// A press on the cut chip asks for the other cut, and for nothing else. The
-/// cycle is this crate's arithmetic over a closed list of two — the blend
-/// chip's arrangement — and what it emits is where the pass is going rather
-/// than a step.
+/// The cut chip is drawn on a slot whose procedure declares `retains` and on no
+/// other.
 #[test]
-fn the_cut_chip_asks_for_the_other_cut_and_keeps_the_amount() {
+fn only_a_slot_that_retains_carries_a_cut_chip() {
     let (panel, ctx) = console(PLAUSIBLE);
     let it = row(&panel, &ctx, MOCK);
-    let feedback = it.fx[0].expect("the feedback row");
-    let chip = feedback.cut.expect("the feedback row draws a cut chip");
+    let chips: Vec<bool> = it.slots.iter().map(|slot| slot.cut.is_some()).collect();
+    assert_eq!(chips, vec![true, false]);
+}
+
+/// A press on the cut chip asks for the other cut on the slot the row
+/// addresses, and for nothing else.
+#[test]
+fn the_cut_chip_asks_for_the_other_cut_on_the_slot_it_names() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let chip = it.slots[0].cut.expect("the feedback slot draws a cut chip");
     assert_eq!(
         it.chip(at(chip.center())),
-        Some(Operation::SetFeedback {
-            params: Feedback {
-                amount: 0.34 * Feedback::MAX,
-                cut: Cut::Exit,
-            },
+        Some(Operation::SetChainParam {
+            at: 0,
+            param: ChainParam::Cut(Cut::Exit),
         }),
-        "the chip on a row reading the mix cut did not ask for the exit cut at the same amount"
+        "the chip on a slot reading the mix cut did not ask for the exit cut on that slot"
     );
-    // And nowhere else on the bay is a chip.
-    assert_eq!(it.chip(at(feedback.fader.knob.center())), None);
     assert_eq!(it.chip(at(it.fader.knob.center())), None);
+}
+
+/// The `−` at the end of a slot's row takes that slot out of the chain, by its
+/// position.
+#[test]
+fn the_minus_takes_the_slot_out_by_its_position() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    for slot in &it.slots {
+        assert_eq!(
+            it.chip(at(slot.remove.center())),
+            Some(Operation::RemoveChainEffect { at: slot.at }),
+            "the − on slot {} asked for the wrong removal",
+            slot.at
+        );
+    }
+}
+
+/// `+ add` puts the chooser down and asks for nothing; picking one of its
+/// entries appends a slot of that procedure, with a cut exactly where the
+/// procedure declares `retains`.
+#[test]
+fn the_chooser_adds_the_procedure_that_was_picked() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let add = it.add.expect("the bay draws + add");
+    assert_eq!(it.chose(at(add.center()), &shut()), Some(Added::Open));
+    assert!(
+        it.card.is_none(),
+        "the card was laid out with the chooser up"
+    );
+
+    let open = master(
+        &ctx,
+        panel.layout(),
+        Some(MOCK),
+        Some(&mock_chain()),
+        &down(),
+    )
+    .expect("the bay draws its body");
+    let card = open
+        .card
+        .expect("the chooser draws its card while it is down");
+    assert_eq!(card.items, 2);
+    assert_eq!(
+        open.chose(at(card.item(0).center()), &down()),
+        Some(Added::Add(Operation::AddChainEffect {
+            procedure: "sha256:feed".to_owned(),
+            cut: Some(Cut::Mix),
+        })),
+        "a procedure that declares retains was added with no cut"
+    );
+    assert_eq!(
+        open.chose(at(card.item(1).center()), &down()),
+        Some(Added::Add(Operation::AddChainEffect {
+            procedure: "sha256:b100".to_owned(),
+            cut: None,
+        })),
+        "a procedure that declares no retains was added with one"
+    );
+    // A press off the card dismisses it and asks for nothing.
+    assert_eq!(
+        open.chose(at(open.fader.knob.center()), &down()),
+        Some(Added::Shut)
+    );
+}
+
+/// The chain's list is the third set of rectangles a release can land on, and
+/// it is one rectangle: an add appends, so every point of the list names the
+/// same landing.
+#[test]
+fn the_chains_list_is_what_a_carried_row_lands_on() {
+    let (panel, ctx) = console(PLAUSIBLE);
+    let it = row(&panel, &ctx, MOCK);
+    let list = it.list.expect("the bay draws a list to land on");
+    for slot in &it.slots {
+        assert_eq!(it.dropped(at(slot.well.center())), Some(list));
+    }
+    let add = it.add.expect("the bay draws + add");
+    assert_eq!(it.dropped(at(add.center())), Some(list));
+    // And the out row is not part of it: a level is not a slot.
+    assert_eq!(it.dropped(at(it.fader.knob.center())), None);
 }
 
 /// A console with a level and no chain draws the out row and nothing under it,
@@ -595,10 +729,14 @@ fn the_cut_chip_asks_for_the_other_cut_and_keeps_the_amount() {
 #[test]
 fn no_chain_behind_the_console_is_the_out_row_alone() {
     let (panel, ctx) = console(PLAUSIBLE);
-    let it = master(&ctx, panel.layout(), Some(MOCK), None)
+    let it = master(&ctx, panel.layout(), Some(MOCK), None, &shut())
         .expect("the out row draws without a chain behind it");
     assert!(
-        it.fx.iter().all(Option::is_none),
-        "the Master bay drew effect rows for a console with no chain behind it"
+        it.slots.is_empty(),
+        "the Master bay drew chain rows for a console with no chain behind it"
+    );
+    assert!(
+        it.add.is_none() && it.list.is_none(),
+        "the Master bay drew + add for a console with no chain behind it"
     );
 }

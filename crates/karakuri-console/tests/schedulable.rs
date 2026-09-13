@@ -149,6 +149,7 @@ fn running() -> Transport {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        chain_ms: None,
         health: Some(karakuri_console::view::Stage::Landed),
         // **A recording running**, because this is the worst case: the `rec`
         // pill is the one thing in this row a console can be told about that

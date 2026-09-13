@@ -964,6 +964,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     // No budget: the `/16.6` goes, and the frame time keeps its unit.
     view.transport = Some(Transport {
         budget_ms: None,
+        chain_ms: None,
         ..mock()
     });
     let no_budget = words(&mut view, &mut panel);
@@ -982,6 +983,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     view.transport = Some(Transport {
         fps: None,
         budget_ms: None,
+        chain_ms: None,
         ..mock()
     });
     assert!(
@@ -1273,6 +1275,7 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
         fps: None,
         frame_ms: 4.0,
         budget_ms: None,
+        chain_ms: None,
         health: None,
         rec: None,
     };

@@ -783,14 +783,28 @@ pub struct View {
     /// ([ADR-0224](../../../../docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md),
     /// [ADR-0317](../../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)).
     pub master_out: Option<f32>,
-    /// What the Master bay's three effect rows read this frame, or `None` for a
-    /// console with no engine behind it — in which case the bay draws the out row
-    /// and nothing under it.
+    /// What the master chain is running this frame, or `None` for a console with
+    /// no engine behind it — in which case the bay draws the out row and nothing
+    /// under it.
     ///
     /// [`View::master_out`]'s seam exactly, one row down:
-    /// `karakuri_engine::present::Present::chain` is what a harness reads it from,
-    /// and [`Chain`] is that value mirrored into a crate with no engine in it.
+    /// `karakuri_engine::present::Present::chain_reading` is what a harness reads
+    /// it from, and [`Chain`] is that value mirrored into a crate with no engine
+    /// in it. A chain with no slot in it is `Some` with an empty list, which is
+    /// the default chain: the bay then draws the out row and `+ add`.
     pub master_chain: Option<Chain>,
+    /// What the Master bay's `+ add` offers this frame: one entry per `kind L5`
+    /// procedure the library holds, in the order the library lists them.
+    ///
+    /// Written by the host per press beside [`View::library`]: an entry carries
+    /// the content address of a procedure's source and this crate reads no store
+    /// (ADR-0156). Empty is a library listing no `kind L5` procedure, and the
+    /// card does not go down on one.
+    ///
+    /// It is also what a carried Library row is resolved through at a release over
+    /// the chain — a row this list does not name is not a `kind L5`, and the drop
+    /// is refused with that reason.
+    pub chain_add: Vec<AddChoice>,
     /// What each mixer strip reads this frame, one per slot the deck has, in slot
     /// order — and empty for a console with no deck behind it, which is every test
     /// in this crate and what the bay draws then is nothing at all.
@@ -1150,6 +1164,10 @@ pub struct View {
     /// reason: `input::claim`'s rule 2 would give an empty card every press on the
     /// console until a second one shut it.
     lane_open: bool,
+    /// Whether the Master bay's `+ add` chooser is down — [`View::lane_open`]'s
+    /// field one bay along. [`View::open_chain_add`] and
+    /// [`View::shut_chain_add`] are the only ways in.
+    chain_add_open: bool,
     /// Which row of the Library bay's list has its menu down, or `None` for none —
     /// the console's own state, exactly as [`target_open`] beside it is, and not a
     /// fourth mark: a menu is a card that is there or is not, and the row under it
@@ -1405,6 +1423,10 @@ impl View {
             // reason: the Master bay draws its head and nothing under it.
             master_out: None,
             master_chain: None,
+            // Nothing to add, which is a console whose library has listed no
+            // `kind L5` procedure — every test in this crate that does not
+            // hand one in.
+            chain_add: Vec::new(),
             // As many strips as a deck can ever have, so the frame path never
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
@@ -1498,6 +1520,7 @@ impl View {
             // **Shut**, for the reason the pulldown's list is: the `+ lane`
             // pill draws the same whether its card is down or not.
             lane_open: false,
+            chain_add_open: false,
             // **No menu**, which is not a mark either, for the reason above
             // it: a card is down on a row or there is no card.
             menu_row: None,
@@ -1626,8 +1649,21 @@ impl View {
     /// back to it — which is the deck selection persisting *"while your hands are
     /// in the library"*, seen as the general rule rather than as a habit of one
     /// bay.
+    ///
+    /// It takes every card the address descends into away, wherever the address
+    /// is: the Transport's two
+    /// ([ADR-0350](../../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)),
+    /// the Sequencer's `+ lane`
+    /// ([ADR-0351](../../../../docs/adr/0351-the-lane-chooser-is-a-rung-of-the-address.md))
+    /// and the Master's `+ add`
+    /// ([ADR-0352](../../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+    /// The cards the address does not walk are left alone.
     pub fn tab(&mut self, panel: &Panel, step: i32) -> bool {
-        self.focus.tab(panel.layout(), step)
+        let moved = self.focus.tab(panel.layout(), step);
+        if moved {
+            focus::shut_cards(self);
+        }
+        moved
     }
 
     /// `esc`: up one level of the focused bay's address, and `false` where there
@@ -1640,10 +1676,24 @@ impl View {
     /// silently is indistinguishable from one that is not bound. It does not quit —
     /// the window's own close is what does
     /// ([ADR-0315](../../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)).
+    ///
+    /// A card on the address's path is a level of the address, so `esc` takes it
+    /// away and the address ends on the control it hangs from — one level up where
+    /// the address had descended into the card, and where it already was
+    /// otherwise. A card that is down anywhere else is left alone and `esc` is the
+    /// ordinary climb. [`focus::card_on_path`] is that reading, and it is one
+    /// reading for all four cards
+    /// ([ADR-0332](../../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
     pub fn focus_up(&mut self, panel: &Panel) -> bool {
+        if let Some((control, inside)) = focus::card_on_path(self, panel) {
+            focus::shut_card(self, control);
+            if inside {
+                self.focus.up(panel.layout());
+            }
+            return true;
+        }
         self.focus.up(panel.layout())
     }
-
     /// Where the dashed focus ring goes, or `None` where the arrangement gives the
     /// focused bay no rectangle to put one on — [`focus::mark`], with the bay this
     /// console has focus on.
@@ -1756,6 +1806,54 @@ impl View {
         let was = self.lane_open;
         self.lane_open = false;
         was
+    }
+
+    /// What the Master bay's `+ add` offers this frame — [`View::lane_choices`]'
+    /// shape one bay along. The item that is drawn and the item a press lands on
+    /// are one derivation.
+    pub fn chain_choices(&self) -> AddChoices {
+        AddChoices {
+            items: self.chain_add.clone(),
+            open: self.chain_add_open,
+        }
+    }
+
+    /// Whether the `+ add` chooser's card is down.
+    pub fn chain_add_open(&self) -> bool {
+        self.chain_add_open
+    }
+
+    /// Put the card down, and answer whether it went down — [`View::open_lane`]'s
+    /// rule: a card with nothing on it offers nothing to pick.
+    pub fn open_chain_add(&mut self) -> bool {
+        if self.chain_add_open || self.chain_add.is_empty() {
+            return false;
+        }
+        self.chain_add_open = true;
+        true
+    }
+
+    /// Take the card away, and answer whether there was one down.
+    pub fn shut_chain_add(&mut self) -> bool {
+        let was = self.chain_add_open;
+        self.chain_add_open = false;
+        was
+    }
+
+    /// What adding the carried Library row to the chain asks for, or the reason
+    /// it asks for nothing.
+    ///
+    /// The chain holds `kind L5` procedures, so a row that is not one is refused
+    /// and the refusal says what the chain holds
+    /// ([P-0083](../../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+    /// [`View::chain_add`] is the list a row is resolved against: it is the
+    /// library's `kind L5` rows, by the name each is listed under.
+    pub fn chain_landing(&self, row: &str) -> Result<Operation, &'static str> {
+        self.chain_add
+            .iter()
+            .find(|choice| choice.words == row)
+            .map(AddChoice::operation)
+            .ok_or("the master chain holds kind L5 procedures, and this row is not one")
     }
 
     /// Every live region that is declaring this frame, each with what one update of

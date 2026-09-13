@@ -100,6 +100,7 @@ fn running() -> Transport {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        chain_ms: None,
         health: Some(karakuri_console::view::Stage::Landed),
         // **Nobody has said whether a recording is running**, so no `rec`
         // pill is drawn — the console's own answer for a program that never

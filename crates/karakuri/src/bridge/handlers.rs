@@ -1329,6 +1329,19 @@ pub(crate) const GAIN_STEP: f32 = 0.1;
 /// page is silent about this one too.
 pub(crate) const OPACITY_STEP: f32 = 0.1;
 
+/// One press of a tempo key: one beat a minute, which is the smallest change the
+/// figure draws as a different whole number.
+///
+/// A difference and not a ratio, so the same press means the same amount
+/// wherever the grid is standing. The figure's own band is
+/// `karakuri_console::view::TEMPO_BAND`, ±15% of the tempo at the press, and one
+/// step is inside it at every tempo this instrument runs at
+/// ([ADR-0350](../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)).
+///
+/// No second keyboard steps a tempo: `karakuri-cli`'s `--bpm N` names one
+/// outright and binds no key for it.
+pub(crate) const TEMPO_STEP_BPM: f32 = 1.0;
+
 /// Which of the grammar's four keys a press is, or `None` for a key that is not
 /// one of them.
 ///
@@ -1563,6 +1576,26 @@ pub(crate) fn exposure_key(step: Step, from: f32) -> f32 {
 ///
 /// The default is zero, which is the value the offset is declared at: a session
 /// nobody has nudged runs at no offset at all.
+/// Where a press takes the free-run tempo — one beat a minute, which is
+/// [`TEMPO_STEP_BPM`].
+///
+/// `from` is the tempo the grid is running, read off the oscillator at the press.
+///
+/// Floored at one beat a minute, which is `karakuri_signal`'s own floor: a grid
+/// at zero has no beat to run, and this decides what the record says.
+///
+/// [`Step::Default`] is the tempo unchanged. The figure has no value it was
+/// declared at, so `space` declines on it in `karakuri_console::focus` and never
+/// reaches this.
+pub(crate) fn tempo_key(step: Step, from: f32) -> f32 {
+    let asked = match step {
+        Step::Down => from - TEMPO_STEP_BPM,
+        Step::Up => from + TEMPO_STEP_BPM,
+        Step::Default => from,
+    };
+    asked.max(1.0)
+}
+
 pub(crate) fn offset_key(step: Step, from: f32) -> f32 {
     match step {
         Step::Down => from - audio::LATENCY_OFFSET_STEP_MS,
@@ -3536,14 +3569,14 @@ pub(crate) fn reading(
     chain: &[karakuri_engine::SlotSpec],
     settings: TransitionSettings,
 ) -> Current {
-    // **The whole chain, for whichever pass was asked for.** The look arm's
-    // argument one bay along: `Record::MasterChain` needs all four numbers and
-    // each row's press carries one pass, so the running chain is handed in and
-    // `written` takes the rows the press did not name.
+    // The whole chain, for whichever slot was asked for: `Record::MasterChain`
+    // carries the whole list and a press names one slot of it, so the chain
+    // that is running is handed in and `written` takes the slots the press did
+    // not name — and answers the position that is not in it.
     let master_chain = match *operation {
-        Operation::SetFeedback { .. }
-        | Operation::SetBloom { .. }
-        | Operation::SetRgbShift { .. } => Some(mix::current_chain(chain)),
+        Operation::SetChainParam { .. }
+        | Operation::AddChainEffect { .. }
+        | Operation::RemoveChainEffect { .. } => Some(mix::current_chain(chain)),
         _ => None,
     };
     let look = match *operation {
@@ -3725,33 +3758,67 @@ pub(crate) fn reading(
 }
 
 /// The master chain, as the console reads it — a level's reading rather than
-/// the level (ADR-0156), and the one place the engine's `Chain` becomes the
+/// the level (ADR-0156), and the one place the engine's chain becomes the
 /// panel's.
 ///
 /// Not `mix::current_chain`, and the two are not the same reading. That one
-/// answers the *conversion* — what `written` completes a record from, in the
-/// engine's own amounts — and this one answers a *fader*, in track positions.
-/// The crossing they share, engine cut to vocabulary cut, is `mix::cut` and is
-/// made once.
+/// answers the *conversion* — the slot list `written` completes a record from —
+/// and this one answers what the bay draws: one row per slot, in the chain's
+/// order, each with the name it is drawn under, the cut it reads where its
+/// procedure declares `retains`, and every declared parameter with the range it
+/// was declared over.
 ///
-/// The feedback amount arrives as a track position, `[0, 1]`, where the engine
-/// holds `[0, 0.95]`: a fader draws where it is along its own travel, and
-/// `Knob::Feedback` multiplies back by `Feedback::MAX` on the way out. The
-/// other two are `[0, 1]` at both ends and pass through.
-pub(crate) fn chain_view(chain: &[karakuri_engine::SlotSpec]) -> view::Chain {
-    // **The three rows read the three shipped slots**, which is
-    // `mix::current_chain`'s own arrangement and is here so the reading is made
-    // once: a row whose procedure is not in the chain reads zero, which is the
-    // honest reading of *this pass is not running*. The rows retire in M5.16's
-    // second pass (ADR-0340 §7) and this function goes with them.
-    let running = mix::current_chain(chain);
+/// It reads the *built* chain and not the description beside it: a declared
+/// range and a declared name are on the compiled procedure and nowhere else, and
+/// `Present::chain_reading` is where they are.
+///
+/// What a row is named: the three procedures this repository ships are named by
+/// the words the bay draws for them; anything else is named by whatever the
+/// library lists that address under, and by the short address where nothing
+/// does.
+pub(crate) fn chain_view(
+    present: &karakuri_engine::Present,
+    offers: &[view::AddChoice],
+) -> view::Chain {
     view::Chain {
-        feedback: running.feedback.amount / karakuri_operation::Feedback::MAX,
-        cut: running.feedback.cut,
-        bloom: running.bloom,
-        rgb_shift: running.rgb_shift,
+        slots: present
+            .chain_reading()
+            .into_iter()
+            .map(|slot| view::ChainSlot {
+                name: chain_slot_name(&slot.procedure, offers),
+                cut: slot.cut.map(mix::cut),
+                params: slot
+                    .params
+                    .into_iter()
+                    .map(|p| view::SlotParam {
+                        key: p.key,
+                        range: [p.min, p.max],
+                        value: p.value,
+                        default: p.default,
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
 }
+
+/// The word a chain row draws for one address — see [`chain_view`].
+fn chain_slot_name(address: &str, offers: &[view::AddChoice]) -> String {
+    if let Some(name) = karakuri_environment::mix::shipped::name_of(address) {
+        return name.to_owned();
+    }
+    if let Some(offer) = offers.iter().find(|offer| offer.procedure == address) {
+        return offer.words.clone();
+    }
+    // The short address, which is what a content-addressed thing is called
+    // when nothing has named it: the `sha256:` prefix and enough of the digest
+    // to tell two apart, as `karakuri_store` prints one.
+    address.chars().take(SHORT_ADDRESS).collect()
+}
+
+/// How much of a content address a chain row draws where nothing names the
+/// procedure: `sha256:` and eight digits.
+const SHORT_ADDRESS: usize = 15;
 
 /// The engine's mask shape, as the vocabulary's — [`blend_mode`]'s function one
 /// control along, and the one place these two lists are made to agree.

@@ -828,14 +828,16 @@ impl Cut {
     }
 }
 
-/// The feedback pass's parameters: how much of the retained frame comes back,
-/// and which frame that is.
+/// What a feedback slot of the master chain is set to: how much of the retained
+/// frame comes back, and which frame that is.
 ///
-/// Two fields and not two operations. The amount without the cut is not a
-/// picture anybody can reconstruct — the same 0.5 is a one-frame echo under
-/// [`Cut::Mix`] and a compounding trail under [`Cut::Exit`] — so a surface that
-/// could move one without saying the other would be asking for a look it had
-/// not named. That is `Record::Look`'s argument at the size of one pass.
+/// A reading and not an ask. No operation carries it — a surface sets one slot
+/// of the chain at a time through [`Operation::SetChainParam`] — and what holds
+/// it is `karakuri_operation_record::Chain`, the reading a conversion completes
+/// a whole-chain record from.
+///
+/// The same amount is a one-frame echo under [`Cut::Mix`] and a compounding
+/// trail under [`Cut::Exit`].
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Feedback {
     /// `[0, 0.95]`, and the ceiling is the engine's: at 1.0 the exit cut is an
@@ -863,32 +865,31 @@ impl Feedback {
     pub const MAX: f32 = 0.95;
 }
 
-/// The bloom pass's parameters: how much of the blurred bright part is added
-/// back.
+/// What [`Operation::SetChainParam`] sets on one slot of the master chain.
 ///
-/// One field, and the two numbers that are not here are stated rather than
-/// forgotten. The *knee* — what counts as bright — is 1.0 and fixed, because in
-/// a linear HDR pipeline 1.0 is the top of the range the sRGB encode is honest
-/// about rather than an arbitrary level, and what decides how much of a frame
-/// is above it is [`Operation::SetMasterOut`] one pass upstream. The *radius*
-/// is fixed because the tap count is what a radius costs and a cost is known
-/// before it is paid
-/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`). Both are named
-/// in `karakuri_engine::master`, with the numbers.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Bloom {
-    /// `[0, 1]`.
-    pub amount: f32,
-}
-
-/// The rgb shift pass's parameters: how far the three channels are pulled
-/// apart.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct RgbShift {
-    /// `[0, 1]`, of the engine's `Chain::SHIFT_MAX` — 2% of the frame's height. In
-    /// fractions of the frame and never in texels, so the same session shifts the
-    /// same distance on a second display (ADR-0247).
-    pub amount: f32,
+/// A slot holds one `kind L5` procedure, the values of the parameters that
+/// procedure declares, and — where it declares `retains` — the cut it reads.
+/// Those are the two kinds of thing a slot is set to: a declared parameter is a
+/// number under a name the procedure chose, and a cut is one word of a closed
+/// list. One is set at a time
+/// (`docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md`).
+///
+/// See
+/// `docs/adr/0348-a-chain-slots-cut-is-set-through-the-parameter-row.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChainParam {
+    /// One parameter the slot's procedure declares, set outright.
+    Declared {
+        /// The declaration's own name — `amount` in `param amount : float`. A key
+        /// the procedure does not declare is refused where the slot is written.
+        key: String,
+        /// What it is set to. The declaration's range is where a value is held,
+        /// and this crate holds it nowhere.
+        value: f32,
+    },
+    /// Which retained frame the slot reads, on a slot whose procedure declares
+    /// `retains`. Refused on a slot whose procedure does not.
+    Cut(Cut),
 }
 
 /// How a signal is shaped on its way to a parameter.
@@ -1520,64 +1521,62 @@ operations! {
     /// would be a second opinion about a range the setter already holds.
     SetMasterOut { out: f32 } => "Master out",
 
-    /// The operator moving the feedback effect's parameters. The chain is fixed and
-    /// that is what decides this row and the two below it: it is presets, all of
-    /// them loaded, in the order the console draws them — feedback, then bloom,
-    /// then rgb shift — between [`Operation::SetMasterOut`] above and
-    /// [`Operation::SetExposure`] below. Nothing here edits the chain, switches one
-    /// effect off or adds an effect somebody wrote; those are controls the panel
-    /// does not draw and decisions nobody has taken.
+    /// One slot of the master chain set outright, addressed by where the slot
+    /// sits in the chain.
     ///
-    /// A state and never a step: [`Feedback`] is where the pass is put, not how far
-    /// it moves, so two surfaces holding this operation cannot disagree about where
-    /// the pass is (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
+    /// The chain is an ordered list of `kind L5` slots between
+    /// [`Operation::SetMasterOut`]'s level at its entry and
+    /// [`Operation::SetExposure`]'s at the tone mapper's input. A position and
+    /// never a procedure: one procedure may hold more than one slot of a chain,
+    /// so the address a surface can say is the position
+    /// (`docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`).
     ///
-    /// The cut was the open question and it is answered. Until 2026-09-09 this
-    /// payload was [`Undecided`] because *which cut of the previous frame it reads*
-    /// had three live answers and a cut that is read has to be held, so naming one
-    /// recomposed the pipeline rather than setting a value on it. The maintainer's
-    /// answer was both, selectable — so the cut is a parameter of this pass, only
-    /// the chosen one is retained, and the pipeline it recomposes is one
-    /// `copy_texture_to_texture` at a different point in the frame. See
-    /// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
+    /// A state and never a step: [`ChainParam`] is where the slot is put, not how
+    /// far it moves, so two surfaces holding this operation cannot disagree about
+    /// where it is (`docs/principles/0090-a-surface-offers-it-never-decides.md`).
     ///
-    /// The amount is bounded and this crate does not bound it. The engine clamps to
-    /// `[0, 0.95]` where the record is applied, so every route in meets the same
-    /// wall — a conversion that clamped here would be a second opinion about a
-    /// range the setter already holds, which is [`Operation::SetMasterOut`]'s rule.
-    SetFeedback { params: Feedback } => "Feedback",
+    /// A slot runs at every value it can hold, so an effect nobody wants is
+    /// [`Operation::RemoveChainEffect`] and not an amount of zero.
+    ///
+    /// A position the chain has not got writes no record;
+    /// `karakuri_operation_record::written` answers that the position is not in
+    /// the chain it read.
+    SetChainParam {
+        /// Where the slot sits, counted from the mix's output: 0 is the slot the
+        /// mix's frame is handed to.
+        at: u32,
+        /// What is set.
+        param: ChainParam,
+    } => "Set a chain effect's parameter",
 
-    /// The frame's bright parts spreading into what is beside them, on
-    /// [`Operation::SetFeedback`]'s terms: a preset, always present, and what this
-    /// names is the operator moving its parameters.
+    /// One `kind L5` procedure appended to the end of the master chain.
     ///
-    /// It runs in linear HDR, before the one tone map, which is why it is on this
-    /// side of [`Operation::SetTonemap`] rather than the other — what it blooms
-    /// from is unbounded light, where the same effect after the transfer would
-    /// bloom from a displayable approximation of it
-    /// (`docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`).
-    /// It reads what it is handed, so the level it blooms from is
-    /// [`Operation::SetMasterOut`]'s and not [`Operation::SetExposure`]'s, which is
-    /// ADR-0224's two multiplications seen from between them.
+    /// Appends: the chain has no operation that inserts and none that reorders,
+    /// so what a surface can say is *this procedure, at the end*.
     ///
-    /// One parameter, and the two that are fixed are named at [`Bloom`] rather than
-    /// left out of the story: the knee is 1.0 because that is the top of the range
-    /// the sRGB encode is honest about, and the radius is fixed because the tap
-    /// count is what a radius costs.
-    SetBloom { params: Bloom } => "Bloom",
+    /// The slot arrives at the values its procedure declares, and it costs what
+    /// its procedure costs from the frame it is added on
+    /// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
+    AddChainEffect {
+        /// The content address of the procedure's source, spelled the way a record
+        /// spells one — `sha256:…`. An address nothing holds is refused where the
+        /// chain is built, with the address in the message.
+        procedure: String,
+        /// Which retained frame the slot reads. `Some` exactly where the procedure
+        /// declares `retains`; the two disagreeing is refused where the slot is
+        /// built, rather than defaulted.
+        cut: Option<Cut>,
+    } => "Add an effect to the master chain",
 
-    /// The three channels sampled apart, so an edge fringes. The last of the three
-    /// and on [`Operation::SetFeedback`]'s terms, so it is the one the other two
-    /// are seen through.
+    /// One slot taken out of the master chain, addressed by its position.
     ///
-    /// The console drew a dash here where the other two carried a number, and it
-    /// draws a figure now. The dash meant *an effect nobody has given a value*,
-    /// which stopped being true the moment the chain existed: every pass has an
-    /// amount, zero is a value, and an amount of zero is the pass not being
-    /// recorded at all. It is still not a per-effect switch — the chain is every
-    /// preset, always — and an empty payload here would still be the reading the
-    /// manual refuses at this row.
-    SetRgbShift { params: RgbShift } => "RGB shift",
+    /// [`Operation::SetChainParam`]'s address and its answer to a position the
+    /// chain has not got. The slots after it move up, so a position names a
+    /// different slot once one before it has gone.
+    RemoveChainEffect {
+        /// Where the slot sits, counted from the mix's output.
+        at: u32,
+    } => "Remove an effect from the master chain",
 
     /// The transfer from unbounded linear HDR to something displayable.
     ///

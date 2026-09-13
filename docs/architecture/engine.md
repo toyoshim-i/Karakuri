@@ -96,7 +96,10 @@ The **Deck** manages up to **4 deck slots** (0..3). A deck slot hosts a Set and 
   - `Add`: Additive light accumulation.
   - `Over`: Standard alpha blending with premultiplied alpha.
   - `Max`: High-contrast peak luminance selection.
-- **Master Chain**: An ordered post-processing sequence applying master transitions, feedback loop buffering, and global tone mapping.
+- **Master Chain**: An ordered list of `kind L5` slots between the mix's write and the one tone map ([ADR-0340](../adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)). There is one chain, at the master; the default chain is empty and takes no intermediate target. Each slot holds one compiled L5 procedure, addressed by the content address of its source, with its parameters and — where the procedure declares `retains` — the cut it reads.
+  - **Clock**: A chain slot reads `t`, `beats` and `dt`: `t` and `beats` are the session clock at the frame's last substep, and `dt` is the fixed simulation step every other layer reads. `frame::compose` writes them once per frame, before the frame's encoder exists, from the `tick` the frame was committed with — never from a wall clock.
+  - **Cost**: Charged against the frame. A chain costs the sum over its slots of `ops_per_fragment` against the frame's area at the size the frame is composited at, and that figure is reserved out of the governor's compute budget ahead of every deck slot rather than summed into any one of them. `Report::chain_ms` is the number and `Report::spendable_ms` is what is left for slots.
+  - **Resolution**: One way for every host. The three shipped under `examples/` answer without a store; any other address is the run's store's to answer, and a slot naming one nothing holds refuses with the address in the message.
 
 ### 3.3 Slot Addressing Disambiguation
 As recorded in [ADR-0049](../adr/0049-slot-means-two-things-and-the-clash-is-recorded.md), the word *slot* carries distinct meanings:

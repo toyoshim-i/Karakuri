@@ -187,6 +187,10 @@ const NOWHERE: &str = "&mdash;";
 /// lives, because this package deliberately holds no dependency on it —
 /// `Cargo.toml` says so at length, and reaching for one to spell a one-line
 /// exemption would undo the closing of ADR-0156 that manifest records.
+///
+/// # It holds nothing
+///
+/// No operation on the page is exempt.
 const UNREACHABLE: [&str; 0] = [];
 
 fn workspace() -> PathBuf {
@@ -259,20 +263,26 @@ fn sample(variant: &str) -> Operation {
         // slot for `Knob::Trim`'s and `Knob::Fader`'s to be filled in from
         // (ADR-0224).
         "SetMasterOut" => Operation::SetMasterOut { out: 1.0 },
-        // The Master bay's other three, and they name no deck for the master
-        // out's reason: the chain reads what the fold produced. Each is one
-        // row of *Mixing and output* and each is emitted by one effect row —
-        // the feedback row twice, from its track and from its cut chip, which
-        // is `dedup_by_key`'s case again (ADR-0317).
-        "SetFeedback" => Operation::SetFeedback {
-            params: karakuri_operation::Feedback::default(),
+        // The Master bay's effect rows, which name no deck for the master
+        // out's reason: the chain reads what the fold produced. One row of
+        // *Mixing and output* for all three of them, emitted from a track and
+        // from a cut chip — one operation is one row however many controls name
+        // it, which is `dedup_by_key`'s case again (ADR-0340). The value is any
+        // slot and any setting: the badge claims that an operator reaches the
+        // row.
+        "SetChainParam" => Operation::SetChainParam {
+            at: 0,
+            param: karakuri_operation::ChainParam::Cut(karakuri_operation::Cut::Mix),
         },
-        "SetBloom" => Operation::SetBloom {
-            params: karakuri_operation::Bloom::default(),
+        // The other two rows of the chain's list: `+ add` and the drop onto
+        // the chain both ask for the add, and the `−` at the end of a slot's
+        // row asks for the removal. One operation is one row however many
+        // controls name it, which is `dedup_by_key`'s case again (ADR-0352).
+        "AddChainEffect" => Operation::AddChainEffect {
+            procedure: String::new(),
+            cut: None,
         },
-        "SetRgbShift" => Operation::SetRgbShift {
-            params: karakuri_operation::RgbShift::default(),
-        },
+        "RemoveChainEffect" => Operation::RemoveChainEffect { at: 0 },
         // The two the Inspector's deck head emits. `SetSync` comes from two
         // controls in that row — the chip that cycles and the anchor that
         // re-asks for the mode the deck is in (ADR-0218) — and one operation

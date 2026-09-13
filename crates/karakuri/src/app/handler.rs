@@ -292,7 +292,10 @@ impl ApplicationHandler for App {
         // And the three rows under it, off the `Present` that holds them — the
         // same seam one row down, and the reading rather than the state
         // (ADR-0156).
-        self.readout.view.master_chain = Some(chain_view(&engine.chain));
+        self.readout.view.master_chain = Some(chain_view(
+            &engine.present,
+            &self.readout.view.chain_add.clone(),
+        ));
         // **And the room, before the legend**, because the legend says which
         // input is open and the answer is the host's rather than a sentence
         // here. The session tempo is the deck's own oscillator: it is what the
@@ -1994,7 +1997,10 @@ impl ApplicationHandler for App {
                 // present pass read it, so the two are read off two different
                 // objects and written here in the same breath (ADR-0224).
                 self.readout.view.master_out = Some(gfx.engine.deck.out());
-                self.readout.view.master_chain = Some(chain_view(&gfx.engine.chain));
+                self.readout.view.master_chain = Some(chain_view(
+                    &gfx.engine.present,
+                    &self.readout.view.chain_add.clone(),
+                ));
                 // **And which classes are open to a model**, read off the
                 // handle rather than remembered from the last press on a pill.
                 // Nothing but a pill writes it today; the handle exists because
@@ -2227,6 +2233,11 @@ impl ApplicationHandler for App {
                 let mut panel_started = None;
                 let mut submitting = None;
                 let engine_started = Instant::now();
+                // The run's one open store, taken out of `self` before the
+                // borrow of `self.gfx` below. It is what a chain slot naming
+                // anything but a shipped procedure resolves against, and it is
+                // the store this run's builds were put in.
+                let held = &*self.held;
                 let composed = {
                     let Gfx {
                         gpu,
@@ -2256,16 +2267,21 @@ impl ApplicationHandler for App {
                     // is what a press on a Master row produces
                     // (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
                     //
-                    // **The shipped three and nothing else**, and a refusal
-                    // names the address: the Library's drop onto the chain is
-                    // M5.16's second pass, and it is what brings a store in.
+                    // The shipped three first, then this run's store, which is
+                    // the order `mix::resolve_procedure` states: a chain of
+                    // presets resolves with no store at all, and any other
+                    // slot's source is one this run's `procedure` records
+                    // already put there. An address nothing holds is refused
+                    // with the address in the message (ADR-0340).
                     if present.chain_spec() != *chain {
                         if let Err(refusal) = karakuri_environment::mix::apply_chain(
                             present,
                             &gpu.device,
                             &gpu.queue,
                             chain,
-                            &|address| karakuri_environment::mix::resolve_procedure(None, address),
+                            &|address| {
+                                karakuri_environment::mix::resolve_procedure(Some(held), address)
+                            },
                         ) {
                             eprintln!("{refusal} — the chain keeps what it had");
                         }

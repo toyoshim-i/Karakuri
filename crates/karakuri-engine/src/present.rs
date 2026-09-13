@@ -282,6 +282,14 @@ impl Present {
         self.chain.spec()
     }
 
+    /// Returns what each slot of the running chain is, for a surface to draw:
+    /// the procedure's address and declared name, the cut it reads where it
+    /// declares `retains`, and every declared parameter with its range and its
+    /// current value.
+    pub fn chain_reading(&self) -> Vec<crate::master::SlotReading> {
+        self.chain.reading()
+    }
+
     /// Returns the cuts currently retained by the running master chain.
     pub fn chain_retained(&self) -> Vec<Cut> {
         self.chain.retained()
@@ -324,9 +332,21 @@ impl Present {
         self.chain.set_params(queue, shape, params)
     }
 
-    /// Updates the host clock uniform passed to master chain frame passes.
-    pub fn set_chain_clock(&mut self, queue: &wgpu::Queue, clock: Clock) {
+    /// Updates the clock uniform every master chain slot reads — `t`, `beats`
+    /// and `dt`.
+    ///
+    /// Written once per frame, before the frame's encoder exists, from the
+    /// session clock the frame is about to advance to — see
+    /// `crate::frame::compose` and [`crate::deck::Deck::chain_clock`]. An empty
+    /// chain writes nothing. Takes `&self` for [`Present::set_tonemap`]'s
+    /// reason: this is a `queue.write_buffer` into buffers sized at build.
+    pub fn set_chain_clock(&self, queue: &wgpu::Queue, clock: Clock) {
         self.chain.set_clock(queue, clock);
+    }
+
+    /// The clock last written to the running chain's slots.
+    pub fn chain_clock(&self) -> Clock {
+        self.chain.clock()
     }
 
     /// Records master chain render passes into `encoder`.

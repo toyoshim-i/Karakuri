@@ -68,6 +68,40 @@ impl fmt::Display for SlotError {
     }
 }
 
+/// One declared parameter of a chain slot, as a surface reads it: the key the
+/// procedure declares, the range it declares it over, and what the slot holds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotParam {
+    pub key: String,
+    pub min: f32,
+    pub max: f32,
+    /// The value the slot is running at, clamped into the declared range.
+    pub value: f32,
+    /// What the procedure declares it at.
+    pub default: f32,
+}
+
+/// One slot of the running chain, as a surface reads it.
+///
+/// [`SlotSpec`] says what to build and this says what is built: a spec carries
+/// no declared range, no declared name and no `retains`, and a surface that
+/// draws a slot needs all three.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotReading {
+    /// The content address of the procedure's source.
+    pub procedure: String,
+    /// The name the procedure declares.
+    pub name: String,
+    /// Which cut this slot reads, and `None` where its procedure declares no
+    /// `retains`.
+    pub cut: Option<Cut>,
+    /// Whether the procedure declares `retains`, which is whether the slot has a
+    /// cut to be set at all.
+    pub retains: bool,
+    /// The declared parameters, in declaration order.
+    pub params: Vec<SlotParam>,
+}
+
 /// Compiled pipeline and parameter state for one slot in the master chain.
 pub struct Slot {
     /// Content address of the procedure source code.
@@ -328,7 +362,11 @@ pub(crate) struct MasterChain {
     entry: Option<wgpu::TextureView>,
     /// Intermediate ping-pong texture views between slots.
     ping: Vec<wgpu::TextureView>,
-    clock: Clock,
+    /// The clock last written to every slot's uniform, repacked whenever a slot's
+    /// whole uniform block is rewritten. A frame writes it through
+    /// [`MasterChain::set_clock`], which takes `&self` because writing it is a
+    /// `queue.write_buffer` into a buffer sized at build and nothing else.
+    clock: std::cell::Cell<Clock>,
     width: u32,
     height: u32,
 }
@@ -346,7 +384,7 @@ impl MasterChain {
             binds: Vec::new(),
             entry: None,
             ping: Vec::new(),
-            clock: Clock::default(),
+            clock: std::cell::Cell::new(Clock::default()),
             width,
             height,
         }
@@ -401,7 +439,7 @@ impl MasterChain {
             return false;
         }
         let viewport = [self.width.max(1) as f32, self.height.max(1) as f32];
-        let clock = self.clock;
+        let clock = self.clock.get();
         for (slot, want) in self.slots.iter_mut().zip(params) {
             slot.set_params(want.clone());
             slot.write_uniform(queue, clock, viewport);
@@ -410,11 +448,20 @@ impl MasterChain {
     }
 
     /// Updates the clock uniform across all active chain slots.
-    pub(crate) fn set_clock(&mut self, queue: &wgpu::Queue, clock: Clock) {
-        self.clock = clock;
+    ///
+    /// A `queue.write_buffer` of the uniform block's head per slot, and nothing
+    /// else: an empty chain writes nothing. The value is kept so that a later
+    /// repack of a whole uniform block carries the clock that is running.
+    pub(crate) fn set_clock(&self, queue: &wgpu::Queue, clock: Clock) {
+        self.clock.set(clock);
         for slot in &self.slots {
             slot.write_clock(queue, clock);
         }
+    }
+
+    /// The clock last written to this chain's slots.
+    pub(crate) fn clock(&self) -> Clock {
+        self.clock.get()
     }
 
     pub(crate) fn chain_len(&self) -> usize {
@@ -423,6 +470,33 @@ impl MasterChain {
 
     pub(crate) fn shape(&self) -> Vec<(String, Option<Cut>)> {
         self.slots.iter().map(|s| (s.proc.clone(), s.cut)).collect()
+    }
+
+    /// Returns what each slot of the running chain is, for a surface to draw.
+    pub(crate) fn reading(&self) -> Vec<SlotReading> {
+        self.slots
+            .iter()
+            .map(|s| {
+                let resolved = s.resolved();
+                SlotReading {
+                    procedure: s.proc.clone(),
+                    name: s.name().to_string(),
+                    cut: s.cut,
+                    retains: s.retains,
+                    params: s
+                        .declared
+                        .iter()
+                        .map(|d| SlotParam {
+                            key: d.name.clone(),
+                            min: d.min,
+                            max: d.max,
+                            value: resolved.get(&d.name).copied().unwrap_or(d.default),
+                            default: d.default,
+                        })
+                        .collect(),
+                }
+            })
+            .collect()
     }
 
     /// Returns current slot specifications with resolved parameter values.
@@ -537,7 +611,7 @@ impl MasterChain {
             .collect();
 
         let viewport = [self.width.max(1) as f32, self.height.max(1) as f32];
-        let clock = self.clock;
+        let clock = self.clock.get();
         for slot in &mut self.slots {
             slot.write_uniform(queue, clock, viewport);
         }

@@ -1089,11 +1089,13 @@ impl Readout {
                 // bay has a knob question and a chip question now, and two
                 // derivations of it would be a chip painted where a hand
                 // cannot press it.
+                let adding = self.view.chain_choices();
                 let master = master_row(
                     ctx,
                     self.panel.layout(),
                     self.view.master_out,
-                    self.view.master_chain,
+                    self.view.master_chain.as_ref(),
+                    &adding,
                 );
                 let knob = bay
                     .as_ref()
@@ -1128,6 +1130,14 @@ impl Readout {
                     .or_else(|| master.as_ref().and_then(|row| row.chip(at)));
                 let tally = bay.as_ref().and_then(|bay| bay.tally(at));
                 let mask = bay.as_ref().and_then(|bay| bay.mask(at));
+                // `+ add` and its card are asked before anything else, which
+                // is `input::claim`'s rule 2 read from this side: while a card
+                // is down every press on the console belongs to it, and a
+                // press outside it dismisses it.
+                let chose = master.as_ref().and_then(|row| row.chose(at, &adding));
+                if let Some(chose) = chose {
+                    return (claim, self.chain_chose(chose));
+                }
                 match (sink, knob, chip, tally, mask) {
                     // **One press, two performers, and which is which is
                     // the output.** The picture's on and off is a layout node,
@@ -1234,6 +1244,28 @@ impl Readout {
                             program_bay(self.panel.layout(), self.view.canvas)
                                 .as_ref()
                                 .and_then(|cells| cells.dropped(at, self.view.mixer.len()))
+                        })
+                        .map(Landing::Deck)
+                        // And the third set of rectangles: the chain's own
+                        // list, which takes a `kind L5` row and refuses any
+                        // other with the reason
+                        // ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
+                        // What the carried row is, is the view's reading —
+                        // `View::chain_landing` resolves the name against the
+                        // library's `kind L5` rows.
+                        .or_else(|| {
+                            let adding = self.view.chain_choices();
+                            master_row(
+                                ctx,
+                                self.panel.layout(),
+                                self.view.master_out,
+                                self.view.master_chain.as_ref(),
+                                &adding,
+                            )
+                            .as_ref()
+                            .and_then(|row| row.dropped(at))?;
+                            let carried = self.panel.carried()?;
+                            Some(Landing::Chain(self.view.chain_landing(carried)))
                         }),
                     _ => None,
                 };
@@ -1568,6 +1600,41 @@ impl Readout {
             Aim::NoSet => {
                 println!("load: nothing under the cursor — this library is listing no Sets");
                 Acted::Nothing
+            }
+        }
+    }
+
+    /// A press on the Master bay's `+ add` or on its card, and what this program
+    /// does about it.
+    ///
+    /// [`Readout::chosen`]'s shape one bay along, and the same division: the two
+    /// answers that are the *console's* own state are performed here, and the one
+    /// that is an operation leaves as one.
+    ///
+    /// The card is put away before the operation is emitted, which is
+    /// [`Readout::chosen`]'s rule.
+    pub(crate) fn chain_chose(&mut self, ask: view::Added) -> Acted {
+        match ask {
+            view::Added::Open => {
+                let offers = self.view.chain_add.len();
+                println!(
+                    "chain: {offers} kind L5 procedure{} in this library — pick one to add it to \
+                     the end of the master chain",
+                    match offers {
+                        1 => "",
+                        _ => "s",
+                    }
+                );
+                self.view.open_chain_add();
+                Acted::Nothing
+            }
+            view::Added::Shut => {
+                self.view.shut_chain_add();
+                Acted::Nothing
+            }
+            view::Added::Add(operation) => {
+                self.view.shut_chain_add();
+                Acted::Emitted(Some(operation))
             }
         }
     }

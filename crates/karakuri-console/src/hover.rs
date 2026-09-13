@@ -1316,13 +1316,25 @@ fn on_go(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 }
 
 fn on_master_out(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(ctx, panel.layout(), view.master_out, view.master_chain)
-        .is_some_and(|row| row.grab(p).is_some())
+    master(
+        ctx,
+        panel.layout(),
+        view.master_out,
+        view.master_chain.as_ref(),
+        &view.chain_choices(),
+    )
+    .is_some_and(|row| row.grab(p).is_some())
 }
 
 fn on_master_chip(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(ctx, panel.layout(), view.master_out, view.master_chain)
-        .is_some_and(|row| row.chip(p).is_some())
+    master(
+        ctx,
+        panel.layout(),
+        view.master_out,
+        view.master_chain.as_ref(),
+        &view.chain_choices(),
+    )
+    .is_some_and(|row| row.chip(p).is_some() || row.chose(p, &view.chain_choices()).is_some())
 }
 
 fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {

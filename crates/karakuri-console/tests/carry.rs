@@ -31,7 +31,7 @@ mod common;
 
 use common::{drawn_once, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
-use karakuri_console::panel::{Panel, Released};
+use karakuri_console::panel::{Landing, Panel, Released};
 use karakuri_console::room::size;
 use karakuri_console::view::{
     library, mixer, program_bay, rearrange, LibraryBay, Mixer, ProgramBay, Rows, Scope, Strip,
@@ -400,7 +400,7 @@ fn a_drop_on_a_strip_asks_to_load_that_strips_deck() {
             let onto = strip_at(&strips, deck);
             assert_eq!(panel.moved(onto), None);
             assert_eq!(
-                panel.released(strips.dropped(onto)),
+                panel.released(strips.dropped(onto).map(Landing::Deck)),
                 Some(Released::Dropped(Operation::LoadSet {
                     deck,
                     set: view.library[index].clone(),
@@ -437,7 +437,7 @@ fn a_drop_on_nothing_asks_for_nothing() {
         panel.carry(at, taken.set, taken.procedure);
         assert_eq!(panel.moved(over), None);
         assert_eq!(
-            panel.released(strips.dropped(over)),
+            panel.released(strips.dropped(over).map(Landing::Deck)),
             Some(Released::Nowhere {
                 set: view.library[0].clone(),
             }),
@@ -478,7 +478,7 @@ fn a_drop_on_a_live_deck_still_asks_for_the_load() {
     panel.carry(at, taken.set, taken.procedure);
     let onto = strip_at(&strips, 0);
     assert_eq!(
-        panel.released(strips.dropped(onto)),
+        panel.released(strips.dropped(onto).map(Landing::Deck)),
         Some(Released::Dropped(Operation::LoadSet {
             deck: 0,
             set: view.library[0].clone(),
@@ -553,7 +553,7 @@ fn a_carry_keeps_its_claim_while_the_pointer_leaves_the_bay() {
     assert_eq!(asked, 3, "not every point was asked");
 
     let away = Point::new(-40.0, -40.0);
-    panel.released(strips.dropped(away));
+    panel.released(strips.dropped(away).map(Landing::Deck));
     assert_eq!(
         claim(&mut panel, &ctx, &view, away),
         Claim::Egui,
@@ -670,7 +670,7 @@ fn a_drop_on_a_preview_cell_asks_to_load_that_cells_deck() {
             panel.carry(at, taken.set, taken.procedure);
             assert_eq!(panel.moved(onto), None);
             assert_eq!(
-                panel.released(cells.dropped(onto, view.mixer.len())),
+                panel.released(cells.dropped(onto, view.mixer.len()).map(Landing::Deck)),
                 Some(Released::Dropped(Operation::LoadSet {
                     deck,
                     set: view.library[index].clone(),
@@ -724,7 +724,7 @@ fn a_cell_whose_letter_names_no_slot_takes_no_drop() {
     let taken = bay.take(listed(&view.library), at).expect("row 0 is drawn");
     panel.carry(at, taken.set, taken.procedure);
     assert_eq!(
-        panel.released(cells.dropped(onto, view.mixer.len())),
+        panel.released(cells.dropped(onto, view.mixer.len()).map(Landing::Deck)),
         Some(Released::Nowhere {
             set: view.library[0].clone(),
         }),

@@ -644,10 +644,19 @@ pub(crate) struct Live {
     /// `HotSwap::fixed`. See [`Aiming`]: this is how an edge written over MCP
     /// reaches the thing that rebuilds with it.
     pub(crate) aims: Vec<Option<Aiming>>,
-    /// The store root a live save writes into. The *root* and not an open store:
-    /// every part of a save that touches a disk happens on the thread that does it
-    /// — see [`Save::run`].
+    /// The store root a live save writes into. The *root* and not the open store
+    /// below: every part of a save that touches a disk happens on the thread that
+    /// does it — see [`Save::run`].
     pub(crate) store_root: PathBuf,
+    /// The store this run resolves a chain slot's address against.
+    ///
+    /// Opened when the run starts. The shipped three resolve without a store at
+    /// all; every other address resolves out of this one
+    /// (`karakuri_environment::mix::resolve_procedure`).
+    ///
+    /// `Store::open` creates the directories under the root, so a run creates the
+    /// store whether or not it ever writes to it.
+    pub(crate) store: karakuri_store::store::Store,
     /// Where a save reports back. One thread per save writes into the sender's
     /// clone; the frame loop drains the receiver, which is the shape `rebuilds`
     /// already has and for the same reason: an outcome arrives when it arrives, and
@@ -2554,15 +2563,10 @@ impl Live {
                     &self.gpu.device,
                     &self.gpu.queue,
                     &slots,
-                    // **The shipped three and nothing else, and the refusal
-                    // says which address it could not find.** This surface has
-                    // no key that names a slot of the chain — `written` is
-                    // handed the reading all the same, for its own reason — so
-                    // the only lists it can be handed are ones made of the
-                    // presets. An address out of a store is what M5.16's second
-                    // pass owes, with the Library's drop; opening one here
-                    // would create a store a plain run never asked for.
-                    &|address| mix::resolve_procedure(None, address),
+                    // The shipped three first and then this run's store, which
+                    // is the order `mix::resolve_procedure` states. The refusal
+                    // names the address it could not find.
+                    &|address| mix::resolve_procedure(Some(&self.store), address),
                 ) {
                     eprintln!("  {refusal} — the chain keeps what it had");
                 }

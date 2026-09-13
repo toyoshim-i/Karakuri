@@ -79,7 +79,10 @@ impl View {
         let armed = self.learn;
         let look_at = self.look;
         let out = self.master_out;
-        let chain = self.master_chain;
+        let chain = self.master_chain.as_ref();
+        // What `+ add` offers, read once for the frame: the card that is
+        // painted and the card a press lands on are one derivation.
+        let adding = self.chain_choices();
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
         // **And what each of those rows is**, read beside the names for their
@@ -334,8 +337,15 @@ impl View {
                     Kind::Master => {
                         bay_card(ui, &pal, rect);
                         head_into(ui, &pal, rect, placed.region, opening);
-                        if let Some(row) = master(ui.ctx(), panel.layout(), out, chain) {
+                        if let Some(row) = master(ui.ctx(), panel.layout(), out, chain, &adding) {
                             master::master_into(ui, &pal, &row);
+                            // The third set of rectangles a release can land
+                            // on (ADR-0273). One ring round the whole list: an
+                            // add appends, so every point of it names the same
+                            // landing.
+                            if let Some(list) = carried.and_then(|at| row.dropped(at)) {
+                                drop_ring(ui, &pal, list, f32::from(size::FX_RADIUS));
+                            }
                         }
                     }
                     // The other bay with something in its body, and it is a

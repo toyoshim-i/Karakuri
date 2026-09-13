@@ -15,7 +15,8 @@ Real-time GPU execution runtime (`wgpu 30`): Decks, Sets, HotSwap, Governor, and
   - [`Deck`](src/deck.rs): Manages up to four simultaneous performance slots with residency, blend modes, transitions, and audio sync.
   - [`Set`](src/set.rs): An instantiated visual preset containing active GPU buffers and shader pipelines for `L1`–`L5` stages.
   - [`HotSwap`](src/swap.rs): Non-blocking shader and procedure swaps executed strictly on frame boundaries.
-  - [`Governor`](src/governor.rs): Dynamic frame budget enforcement preventing GPU hangs and frame drops.
+  - [`Governor`](src/governor.rs): Dynamic frame budget enforcement preventing GPU hangs and frame drops. The master chain's cost is reserved out of the budget ahead of every deck slot (`Governor::set_chain_ms`, `Report::chain_ms`).
+  - [`Chain`](src/master.rs): The master chain, an ordered list of `kind L5` slots between the mix's write and the tone map. Installed on a [`Present`](src/present.rs); its clock and its price are handed over by [`compose`](src/frame.rs) once a frame.
   - [`Frame`](src/frame.rs): Frame progression coordinator dispatching output to multiple [`Sink`](src/frame.rs) presentation targets.
 
 ---
@@ -29,6 +30,10 @@ Real-time GPU execution runtime (`wgpu 30`): Decks, Sets, HotSwap, Governor, and
    - Procedure changes and Set re-aiming take effect exclusively at the start of a frame, ensuring glitch-free visual transitions.
 3. **Multi-Sink Independence**:
    - Presentation targets (GUI texture, offscreen buffer, physical displays) operate independently. A slow or failing sink does not block simulation progression on the deck.
+4. **One Frame, One Clock and One Price for the Master Chain**:
+   - `compose` writes the chain's clock (`Present::set_chain_clock`) and charges the deck what the chain costs (`Deck::set_chain_ops_per_fragment`) on every frame. No host does either.
+   - The clock is `Deck::chain_clock(steps)`: the session clock after this frame's `steps`, with `dt` the fixed simulation step. It comes from the frame's `tick` and never from a wall clock.
+   - The price is `Deck::chain_ms()`: `estimate::chain_ms` over the chain's summed `ops_per_fragment` against the deck's current size, so a resize moves it with no second write.
 
 ---
 

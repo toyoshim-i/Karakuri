@@ -592,9 +592,9 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
         | Operation::SetMaskShape { .. }
         | Operation::SelectRenderer { .. }
         | Operation::SetMasterOut { .. }
-        | Operation::SetFeedback { .. }
-        | Operation::SetBloom { .. }
-        | Operation::SetRgbShift { .. }
+        | Operation::SetChainParam { .. }
+        | Operation::AddChainEffect { .. }
+        | Operation::RemoveChainEffect { .. }
         | Operation::SetTonemap { .. }
         | Operation::SetExposure { .. }
         | Operation::WriteParam { .. }

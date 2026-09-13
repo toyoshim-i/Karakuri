@@ -67,7 +67,7 @@ Following [ADR-0180](../adr/0180-the-operation-vocabulary-is-a-crate-with-no-dep
 - **Procedural Uniforms**: `SetParamScalar`, `SetParamVector`, `BindInput`, `ResetParam`.
 - **Transport & Rhythm**: `SetTempoBpm`, `NudgeTempo`, `TapTempo`, `SetLook`.
 - **Library & Preset Management**: `LoadSet`, `SaveSet`, `StarItem`, `FilterLibrary`.
-- **System & Master**: `MasterBlackout`, `SetFeedback`, `Quit`.
+- **System & Master**: `MasterBlackout`, `SetChainParam`, `AddChainEffect`, `RemoveChainEffect`, `Quit`.
 
 ---
 

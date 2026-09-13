@@ -80,7 +80,7 @@
 //! flag test, and every operation leaves the layout clean behind it.
 
 use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
-use karakuri_operation::{Bloom, Cut, Feedback, Operation, ParamAt, ParamValue, RgbShift};
+use karakuri_operation::{ChainParam, Operation, ParamAt, ParamValue};
 
 /// How far either side of a boundary still grabs it. Wider than any divider the
 /// console draws, which is [`Layout::hit`]'s whole argument for taking a grab
@@ -293,22 +293,20 @@ pub enum Knob {
     /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`
     /// for why it is not the tone mapper's exposure).
     Out,
-    /// The feedback pass's amount — the first of the master chain's three rows, and
-    /// the one that carries a second value.
-    ///
-    /// `cut` is not what this knob moves: it is what the row is *at*, carried so
-    /// that the operation a drag asks for is the whole of what the pass is set to.
-    /// [`Knob::Param`] carries its range for the same reason — a track position is
-    /// not an operation until something beside it says what it means.
-    Feedback {
-        /// Which cut of the previous frame the pass is reading, from the row this knob
-        /// was laid out from.
-        cut: Cut,
+    /// One declared parameter of one slot of the master chain, on the parameter
+    /// row the Master bay draws for it.
+    Chain {
+        /// Which slot of the master chain, by its position — the address a chain
+        /// operation takes.
+        at: u32,
+        /// The parameter this track moves, by the name the slot's procedure declares
+        /// for it.
+        key: String,
+        /// The range the procedure declares the parameter over, low then high. A
+        /// track position is `[0, 1]`, and the operation carries the value at that
+        /// fraction of this range.
+        range: [f32; 2],
     },
-    /// The bloom pass's amount — the chain's second row.
-    Bloom,
-    /// The rgb shift pass's amount — the chain's third row.
-    RgbShift,
     /// A published parameter's fader, in an Inspector pane —
     /// [`Operation::WriteParam`]. It is the one knob that names something inside a
     /// Set rather than a level on it, which is why it carries a name and this enum
@@ -341,21 +339,19 @@ impl Knob {
                 opacity: value,
             },
             Knob::Out => Operation::SetMasterOut { out: value },
-            // **The whole of what the pass is set to, and never a step.** The
-            // cut rides along because the amount alone is not a picture: the
-            // same 0.5 is a one-frame echo under `mix` and a compounding trail
-            // under `exit`.
-            Knob::Feedback { cut } => Operation::SetFeedback {
-                params: Feedback {
-                    amount: value * Feedback::MAX,
-                    cut: *cut,
+            // The operation names the slot by its position and carries what
+            // that one parameter is set to, never a step. The cut a slot reads
+            // is set by a press on the chip and not by a drag on the track.
+            Knob::Chain {
+                at,
+                key,
+                range: [low, high],
+            } => Operation::SetChainParam {
+                at: *at,
+                param: ChainParam::Declared {
+                    key: key.clone(),
+                    value: low + (high - low) * value.clamp(0.0, 1.0),
                 },
-            },
-            Knob::Bloom => Operation::SetBloom {
-                params: Bloom { amount: value },
-            },
-            Knob::RgbShift => Operation::SetRgbShift {
-                params: RgbShift { amount: value },
             },
             // `crate::view::Param::at` inverted, which is the relation
             // `Grab::value` has to `crate::view::filled` one field along.
@@ -379,7 +375,7 @@ impl Knob {
     pub fn deck(&self) -> Option<u8> {
         match self {
             Knob::Trim { deck } | Knob::Fader { deck } | Knob::Param { deck, .. } => Some(*deck),
-            Knob::Out | Knob::Feedback { .. } | Knob::Bloom | Knob::RgbShift => None,
+            Knob::Out | Knob::Chain { .. } => None,
         }
     }
 }
@@ -819,6 +815,35 @@ pub enum Released {
     /// up, carried and then silently forgotten reads as a panel that missed the
     /// press.
     Nowhere { set: String },
+    /// A carried row was let go over a rectangle that is a target, and the target
+    /// will not take it.
+    ///
+    /// The one refusal a release on this panel makes, and it is about the
+    /// *payload* rather than the destination: the master chain's list is a target
+    /// for every carry and holds `kind L5` procedures, so a row that is not one is
+    /// refused (ADR-0340). The mark says *where* and never *whether* (ADR-0273),
+    /// so the ring is drawn and the refusal comes at the release.
+    ///
+    /// The reason travels with it
+    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+    /// What kinds a library row has is the view's reading, so the caller supplies
+    /// it.
+    Refused { set: String, why: &'static str },
+}
+
+/// Where a carried row was let go. The caller answers it: which rectangle a point
+/// is in is the view's derivation and not this module's.
+///
+/// Three sets of rectangles name a landing: a mixer strip and a deck preview cell
+/// each name a deck, and the Master bay's chain list names the chain
+/// ([ADR-0273](../../../docs/adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Landing {
+    /// The deck a strip or a preview cell names.
+    Deck(u8),
+    /// The master chain's list, with what adding the carried row asks for — or the
+    /// reason it asks for nothing, which is a row that is not a `kind L5`.
+    Chain(Result<Operation, &'static str>),
 }
 
 /// Whether a node is drawing, and if not, why not.
@@ -1153,6 +1178,18 @@ impl Panel {
         self.drag = Some(Drag::Carry(Carrying { set, procedure }));
     }
 
+    /// What is in hand, by the name the Library row was listed under, or `None`
+    /// where the gesture in progress is not a carry.
+    ///
+    /// For a caller building the [`Landing`] a release takes, which needs the
+    /// payload.
+    pub fn carried(&self) -> Option<&str> {
+        match self.drag.as_ref()? {
+            Drag::Carry(carrying) => Some(&carrying.set),
+            _ => None,
+        }
+    }
+
     /// A move with something in hand, and what it did — see [`Dragged`]. `None`
     /// where nothing is in hand, and `None` where this move changed nothing.
     ///
@@ -1358,10 +1395,11 @@ impl Panel {
     ///
     /// # `onto` is the destination, resolved by whoever can resolve it
     ///
-    /// Which deck the rectangle under the pointer names — a mixer strip or one of
-    /// the four deck preview cells — or `None` for neither, and `None` for every
-    /// release that is not a carry, because the other two drags have no destination
-    /// to name. A boundary comes to rest where the layout put it and the layout is
+    /// What the rectangle under the pointer is — a deck, by a mixer strip or one of
+    /// the four deck preview cells, or the master chain's list — or `None` for
+    /// none of them, and `None` for every release that is not a carry, because the
+    /// other two drags have no destination to name. See [`Landing`]. A boundary
+    /// comes to rest where the layout put it and the layout is
     /// asked; a fader's rest is the deck's and nobody is asked at all
     /// ([`Released::Let`]).
     ///
@@ -1378,7 +1416,7 @@ impl Panel {
     /// reached for the wrong one would cancel every drop in silence. Here a caller
     /// that cannot answer passes `None`, which is the honest outcome for a release
     /// that landed on nothing anyway.
-    pub fn released(&mut self, onto: Option<u8>) -> Option<Released> {
+    pub fn released(&mut self, onto: Option<Landing>) -> Option<Released> {
         match self.drag.take()? {
             Drag::Boundary(drag) => {
                 self.solve();
@@ -1409,7 +1447,7 @@ impl Panel {
                 // `Knob::operation`'s reason: the translation from what a hand
                 // did into one operation of the vocabulary is the model's, and
                 // the two operands are the payload and the destination.
-                Some(deck) => Released::Dropped(match carrying.procedure {
+                Some(Landing::Deck(deck)) => Released::Dropped(match carrying.procedure {
                     true => Operation::LoadProcedure {
                         deck,
                         procedure: carrying.set,
@@ -1419,6 +1457,14 @@ impl Panel {
                         set: carrying.set,
                     },
                 }),
+                // The chain takes a procedure and appends it. The destination
+                // carries no position: a release over a slot appends exactly as
+                // a release over `+ add` does.
+                Some(Landing::Chain(Ok(operation))) => Released::Dropped(operation),
+                Some(Landing::Chain(Err(why))) => Released::Refused {
+                    set: carrying.set,
+                    why,
+                },
                 None => Released::Nowhere { set: carrying.set },
             }),
         }
