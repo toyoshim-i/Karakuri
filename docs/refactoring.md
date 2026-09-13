@@ -111,12 +111,12 @@ Established `karakuri-console::control` single source of truth:
 2. `descriptor.rs` & `registry.rs`: `ControlDescriptor` and static `DESCRIPTORS` array linking probe names, human labels, hotkeys, and operation titles.
 3. Aligned with `PROBES`, `TIPS`, and `keymap::KEY_BINDINGS` with automated verification tests.
 
-#### P33. Decouple `Readout` and Event Dispatch in `karakuri`
-Dismantle `karakuri/src/readout.rs` (4,754 lines) into `karakuri/src/readout/`:
-1. `mod.rs`: `Readout` struct and state container
-2. `costs.rs`: Metric / frame timing / memory allocation measurement (`Costs`, `STILL`, `SAMPLE_CAP`)
-3. `hud.rs`: Legend formatting and status string generation
-4. `dispatch.rs`: Delegate pointer event handling to modular bay dispatchers, replacing the monolithic 1,300-line match block in `Readout::pointer`.
+#### P33. Decouple `Readout` and Event Dispatch in `karakuri` — **COMPLETED**
+Dismantled `karakuri/src/readout.rs` into modular submodules under `readout/`:
+1. `costs.rs`: Metric / frame timing / memory allocation measurement (`Costs`, `STILL`, `SAMPLE`, `Counting`).
+2. `hud.rs`: Legend formatting, logging, and status string generation (`print_legend`, `say_drag`, `say_op`).
+3. `dispatch.rs`: Pointer event translation (`Readout::pointer`) and bay event dispatch methods (`Pointer`, `Acted`).
+4. `mod.rs`: `Readout` state struct and foundational panel operations.
 
 ---
 
@@ -127,4 +127,4 @@ Dismantle `karakuri/src/readout.rs` (4,754 lines) into `karakuri/src/readout/`:
 | **P30** | `karakuri-console` | Extract reusable widgets: `chip.rs`, `card.rs`, `track.rs`, `field.rs` | **COMPLETED** |
 | **P31** | `karakuri-console` | Decompose bay monoliths (`inspector/`, `library/`, `transport/`, `mixer/`) | **COMPLETED** |
 | **P32** | `karakuri-console` / `karakuri` | Implement `ControlDescriptor` registry linking UI, keys, tooltips, and MCP | **COMPLETED** |
-| **P33** | `karakuri` (GUI) | Decompose `readout.rs` into `costs`, `hud`, and modular pointer `dispatch` | **Ready to Execute** |
+| **P33** | `karakuri` (GUI) | Decompose `readout.rs` into `costs`, `hud`, and modular pointer `dispatch` | **COMPLETED** |
