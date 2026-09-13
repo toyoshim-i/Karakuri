@@ -887,8 +887,10 @@ pub(crate) mod key_column {
         // addressed strip**, which is the deck selection: this deck is covered
         // and the next one round arrives over it. **Only the wipe**, because
         // the row draws one capsule and `Operation::Wipe` is what it asks for
-        // — the fade and the crossfade have no control on this row and their
-        // panel badges say so.
+        // — the fade and the crossfade are drawn nowhere on this bay and are
+        // reached by no key: a scheduled move is not authored on a real-time
+        // surface, so both rows read `gap` in the panel column and in the key
+        // column (ADR-0353).
         (Some("mixer"), "enter", &["Wipe the next deck in"]),
         // ------------------------------------------------------------------
         // The Master chain's grammar
