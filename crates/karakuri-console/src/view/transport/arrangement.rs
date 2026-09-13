@@ -960,22 +960,6 @@ pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
     };
     popup_card(painter, pal, card);
 
-    let row_text = |painter: &egui::Painter, rect: Rect, text: String, colour: Color32| {
-        let galley = painter.layout_no_wrap(
-            text,
-            FontId::new(size::BASE, FontFamily::Proportional),
-            colour,
-        );
-        painter.galley(
-            Pos2::new(
-                rect.min.x + size::LIB_ROW_PAD_X,
-                rect.center().y - galley.size().y * 0.5,
-            ),
-            galley,
-            colour,
-        );
-    };
-
     // **The field, where a name is being asked for.** The card has one row in
     // it and `pill.rows` is zero, which is what stops `row` handing out a
     // rectangle for something that is not a list.
@@ -987,18 +971,18 @@ pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
             ),
             egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
         );
-        row_text(painter, field, naming_text(typed), pal.text);
+        card_row_text(painter, field, &naming_text(typed), pal.text);
         return;
     }
 
     for index in 0..pill.rows {
-        let rect = pill.row(index);
-        let (text, colour) = match index {
-            0 => (save_word(arr).to_owned(), pal.text),
-            1 => (NEW_ITEM.to_owned(), pal.text),
-            other => (arr.filed[other - VERBS].clone(), pal.dim),
+        let row = pill.row(index);
+        let (name, colour) = match index {
+            0 => (save_word(arr), pal.text),
+            1 => (NEW_ITEM, pal.text),
+            other => (arr.filed[other - VERBS].as_str(), pal.dim),
         };
-        row_text(painter, rect, text, colour);
+        card_row_text(painter, row, name, colour);
     }
     // The rule under the two verbs, which is what makes the names below it a
     // list rather than two more items.
