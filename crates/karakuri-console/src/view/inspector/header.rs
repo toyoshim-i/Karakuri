@@ -1416,47 +1416,6 @@ pub(crate) fn deck_head_into(ui: &Ui, pal: &Palette, at: &DeckHead, pane: &Pane)
     word(at.composite, COMPOSITE_LABEL, pane.composite);
 }
 
-/// An arrow's mark, drawn rather than typed — a triangle with its point to the
-/// left when `back`, to the right when not.
-///
-/// `across` wide and the same tall, which is [`Mask`]'s rule for a mark that
-/// stands in for a glyph: the box is the size the glyph would have been. It is
-/// not [`CHEVRON_W`]'s 2:1, because the ink of a left-pointing small triangle
-/// is about as wide as it is tall where a down-pointing one is wider than it is
-/// deep.
-///
-/// The size is an argument and not [`size::SCRUB_SIZE`], because the same mark
-/// is drawn at two sizes now: the Inspector's two scrub arrows, at the size of
-/// the chip they sit in, and the Library foot's `→`, at [`library::LOAD_ARROW`]
-/// beside the type it stands between. One triangle, so an arrow this console
-/// draws is the same arrow wherever it is drawn.
-pub(crate) fn arrow_mark(
-    painter: &egui::Painter,
-    centre: Pos2,
-    across: f32,
-    colour: Color32,
-    back: bool,
-) {
-    let r = across * 0.5;
-    let point = match back {
-        true => centre.x - r,
-        false => centre.x + r,
-    };
-    let base = match back {
-        true => centre.x + r,
-        false => centre.x - r,
-    };
-    painter.add(egui::Shape::convex_polygon(
-        vec![
-            Pos2::new(point, centre.y),
-            Pos2::new(base, centre.y - r),
-            Pos2::new(base, centre.y + r),
-        ],
-        colour,
-        Stroke::NONE,
-    ));
-}
-
 /// A pane head's deck list, painted — [`deck_list_into`]'s card one bay along,
 /// with the deck the pane is *showing* in the panel's own text colour and the
 /// rest dim.

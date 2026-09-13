@@ -953,15 +953,7 @@ pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, a
     );
     // The `▾`: a triangle with its point down, in the box `arrangement`
     // measured for it.
-    painter.add(egui::Shape::convex_polygon(
-        vec![
-            pill.chevron.left_top(),
-            pill.chevron.right_top(),
-            Pos2::new(pill.chevron.center().x, pill.chevron.max.y),
-        ],
-        pal.dim,
-        Stroke::NONE,
-    ));
+    chevron_down(painter, pill.chevron, pal.dim);
 
     let Some(card) = pill.menu else {
         return;

@@ -32,6 +32,19 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 
 ---
 
-## 2. Future Initiatives
+## 2. Active Phase: Phase 6 — GUI Refinement & Consolidation (Pre-M5 Verification)
+
+In preparation for concluding the GUI milestone (M5) in `docs/roadmap.md`, Phase 6 enforces proper GUI modularization, deduplication of rendering primitives, and standardized module reuse across `karakuri-console`.
+
+| Initiative | Target Subsystem | Actionable Deliverable | Status |
+|---|---|---|:---:|
+| **P38** | `karakuri-console::view::widgets::glyph` | Componentize `chevron_down`, `arrow_mark`, `CHEVRON_W`, `CHEVRON_H`; deduplicate convex polygon glyphs across 6 bay files | **COMPLETED** |
+| **P39** | `karakuri-console::view::widgets::card` | Standardize popup card row text layout using `card_row_text` across `audio_in`, `arrangement`, and `wiring` | **PENDING** |
+| **P40** | `karakuri-console::view` | Decompose `view/mod.rs` (3,001 lines) by extracting `draw.rs` (`draw`, `cursor`) and `regions.rs` (`Region`, `REGIONS`, `Kind`) | **PENDING** |
+| **P41** | `docs/roadmap.md` & Console Verification | Verify M5 exit conditions (`grep -c 'rt plan">panel' docs/manual/operations.html` == 0) and full workspace test suite | **PENDING** |
+
+---
+
+## 3. Future Initiatives
 
 Future refactoring and architectural enhancements will be recorded here as new requirements emerge.

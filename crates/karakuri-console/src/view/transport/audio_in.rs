@@ -487,15 +487,7 @@ pub(crate) fn audio_in_into(ui: &Ui, pal: &Palette, pill: &AudioInPill, audio: &
         galley,
         ink,
     );
-    painter.add(egui::Shape::convex_polygon(
-        vec![
-            pill.chevron.left_top(),
-            pill.chevron.right_top(),
-            Pos2::new(pill.chevron.center().x, pill.chevron.max.y),
-        ],
-        ink,
-        Stroke::NONE,
-    ));
+    chevron_down(painter, pill.chevron, ink);
 
     let Some(card) = pill.menu else {
         return;

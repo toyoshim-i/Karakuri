@@ -2002,15 +2002,7 @@ pub(crate) fn load_into(ui: &Ui, pal: &Palette, load: &Load, at: Target) {
     // [`pill_at`]'s hairline round `--c-dim` with the chevron the two menu
     // pills in the transport row already carry.
     pill_at(ui, pal, load.deck, at.letter());
-    painter.add(egui::Shape::convex_polygon(
-        vec![
-            load.chevron.left_top(),
-            load.chevron.right_top(),
-            Pos2::new(load.chevron.center().x, load.chevron.max.y),
-        ],
-        pal.dim,
-        Stroke::NONE,
-    ));
+    chevron_down(&painter, load.chevron, pal.dim);
 }
 
 /// The foot of the Library bay, painted: the count, the params chip, and the load controls.
