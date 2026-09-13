@@ -5,6 +5,7 @@ pub mod chip;
 pub mod fader;
 pub mod field;
 pub mod fold_grip;
+pub mod glyph;
 pub mod head;
 pub mod pills;
 pub mod track;
@@ -19,6 +20,8 @@ pub use fader::*;
 pub use field::*;
 #[allow(unused_imports)]
 pub use fold_grip::*;
+#[allow(unused_imports)]
+pub use glyph::*;
 #[allow(unused_imports)]
 pub use head::*;
 #[allow(unused_imports)]
@@ -36,6 +39,8 @@ pub(crate) use fader::*;
 pub(crate) use field::*;
 #[allow(unused_imports)]
 pub(crate) use fold_grip::{grip_dots, pane_dividers};
+#[allow(unused_imports)]
+pub(crate) use glyph::*;
 #[allow(unused_imports)]
 pub(crate) use head::*;
 #[allow(unused_imports)]

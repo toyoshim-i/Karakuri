@@ -833,15 +833,7 @@ fn uses_into(painter: &egui::Painter, pal: &Palette, row: Rect, uses: &Uses) {
         ),
         egui::vec2(CHEVRON_W, CHEVRON_H),
     );
-    painter.add(egui::Shape::convex_polygon(
-        vec![
-            chevron.left_top(),
-            chevron.right_top(),
-            Pos2::new(chevron.center().x, chevron.max.y),
-        ],
-        pal.dim,
-        Stroke::NONE,
-    ));
+    chevron_down(&painter, chevron, pal.dim);
 }
 
 /// A `uses` line's card, painted — one row per node the input may be wired to,

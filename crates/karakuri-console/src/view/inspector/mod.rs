@@ -8,7 +8,7 @@ pub use header::*;
 pub use params::*;
 pub use wiring::*;
 
-pub(crate) use header::{arrow_mark, next_sync};
+pub(crate) use header::next_sync;
 
 // ---------------------------------------------------------------------------
 // The Inspector
@@ -1127,15 +1127,7 @@ pub(super) fn inspector_into(
     // and the console draws every `▾` it has in `--c-faint`.
     if let Some(target) = target {
         let mark = target.chevron;
-        painter.add(egui::Shape::convex_polygon(
-            vec![
-                mark.left_top(),
-                mark.right_top(),
-                Pos2::new(mark.center().x, mark.max.y),
-            ],
-            pal.faint,
-            Stroke::NONE,
-        ));
+        chevron_down(&painter, mark, pal.faint);
     }
     // **The mock draws the first pane's `keep` as `.pill.on` and the second
     // pane's as a plain `.pill`**, and what the lit one reads is now on the

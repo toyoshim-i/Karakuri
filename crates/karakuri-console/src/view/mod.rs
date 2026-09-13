@@ -357,11 +357,10 @@ pub use inspector::{
     Source, Uses, UsesLine, AUTHORITIES, PANES, PANE_DECKS, PANE_NAMES, RE_SALT_LABEL, SCRUB_BEATS,
     SENS_LABEL, SYNCS, TAKE_BACK,
 };
-// **Two symbols Inspector keeps crate-internal rather than exporting**:
-// `arrow_mark` backs the Library bay's own `load → A` arrow between its two
-// capsules, and `next_sync` backs [`crate::focus`]'s own cycling of the deck
-// head's sync chip — both need the derivation and not a second copy of it.
-pub(crate) use inspector::{arrow_mark, next_sync};
+// **The symbol Inspector keeps crate-internal rather than exporting**:
+// `next_sync` backs [`crate::focus`]'s own cycling of the deck head's sync
+// chip, which needs the derivation and not a second copy of it.
+pub(crate) use inspector::next_sync;
 
 mod program;
 
@@ -444,6 +443,7 @@ pub mod widgets;
 pub use widgets::card::{bay_card, popup_card};
 pub use widgets::chip::Tally;
 pub use widgets::field::CARET;
+pub use widgets::glyph::{arrow_mark, chevron_down, CHEVRON_H, CHEVRON_W};
 pub use widgets::*;
 #[allow(unused_imports)]
 pub(crate) use widgets::*;
@@ -841,16 +841,6 @@ const MOCK_BPM_MILLI: u64 = 128_000;
 
 /// One beat at that tempo, in microseconds: 468 750, which is 468.75 ms.
 const BEAT_MICROS: u64 = 60 * 1_000_000 * 1_000 / MOCK_BPM_MILLI;
-
-/// The `▾` at the end of the pill, drawn rather than typed — [`grip_dots`]'
-/// reason one control along. Whether a black down-pointing small triangle is in
-/// `egui`'s default face is a question with no good answer, and a triangle is
-/// the same mark either way.
-///
-/// Half the type it sits beside wide and half of that tall, which is about what
-/// the glyph's ink measures at [`size::BASE`].
-const CHEVRON_W: f32 = size::BASE * 0.5;
-const CHEVRON_H: f32 = CHEVRON_W * 0.5;
 
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
