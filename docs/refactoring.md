@@ -51,6 +51,30 @@ Based on architectural analysis of the GUI event handling pipeline (`karakuri-co
 
 ---
 
-## 3. Future Initiatives
+## 3. Planned Phase: Phase 8 — Core Subsystem Monolith Decomposition
+
+Targets the largest remaining production monoliths across the repository to bring all files comfortably below 2,000 lines without breaking cross-crate invariants:
+
+| Initiative | Target Subsystem | Actionable Deliverable | Status |
+|---|---|---|:---:|
+| **P47** | `karakuri-ir::check` (4,061 lines) | Decompose into `check/` submodules (`context.rs`, `contracts.rs`, `statements.rs`, `expressions.rs`, `mod.rs`) | **PENDING** |
+| **P48** | `karakuri::bridge::handlers` (3,829 lines) | Decompose console-to-engine state updates into per-bay modules (`mixer.rs`, `transport.rs`, `inspector.rs`, `sequencer.rs`, `master.rs`, `mod.rs`) | **PENDING** |
+| **P49** | `karakuri-store::record` (3,222 lines) | Decompose ndjson schema & serialization into `record/` submodules (`types.rs`, `variants.rs`, `serde.rs`, `helpers.rs`, `mod.rs`) | **PENDING** |
+| **P50** | `karakuri-cli::live` (3,052 lines) | Decompose interactive runtime controller into `live/` submodules (`interactive.rs`, `demo.rs`, `audio.rs`, `mod.rs`) | **PENDING** |
+
+---
+
+## 4. Secondary Monolith Candidates (Phase 9 Backlog)
+
+Future candidates for modularization after Phase 8:
+- `karakuri-operation::lib.rs` (2,588 lines) & `karakuri-operation-record::lib.rs` (2,148 lines): Vocabulary and serialized record definitions
+- `karakuri-console::hover` (2,504 lines) & `focus` (2,489 lines): Tooltip manual citation parsing and 2D spatial arrangement focus walking
+- `karakuri::bridge::filesystem` (2,482 lines): Store synchronization, directory watcher event loop, and snapshot pipelines
+- `karakuri-mcp::spelled` (2,141 lines): Schema definitions and MCP protocol stringification
+- `karakuri-midi::map` (2,038 lines): MIDI device map file parser, encoder, and hardware bindings
+
+---
+
+## 5. Future Initiatives
 
 Future refactoring and architectural enhancements will be recorded here as new requirements emerge.
