@@ -1,6 +1,6 @@
 # Karakuri Contributing & Development Guide
 
-This document outlines the engineering principles, workflow guidelines, build/test commands, and verification practices for **Karakuri**. Both human contributors and AI coding agents MUST adhere to these rules when submitting changes.
+This document outlines the engineering principles, workflow guidelines, build and test commands, and verification practices for **Karakuri**. Both human contributors and AI coding agents MUST adhere to these rules when submitting changes.
 
 ---
 
@@ -12,11 +12,17 @@ Code must never be contorted to accommodate hasty hacks or accumulate technical 
 Every change should aim to leave the codebase cleaner, more cohesive, and easier to reason about than before.
 When a choice arises between preserving an awkward historical convention and adopting a demonstrably cleaner design, **design correctness wins**.
 
+### Separate Specifications from Arguments (No Arguments in Code or Manuals)
+To maintain clarity across documentation and prevent conversational monologue from leaking into production artifacts:
+- **ADRs are Arguments (Rationale)**: An Architectural Decision Record ([`docs/adr/`](adr/)) records *why* a decision was made, historical context, rejected alternatives, and design trade-offs.
+- **Manuals and Code Comments are Specifications**: Manuals ([`docs/manual.md`](manual.md), [`docs/manual/`](manual/)), UI tooltips, and source comments (`//!`, `///`) record *what* the system does, observable behavior, invariants, and how to use the interface.
+- **Never write arguments, historical narratives, or philosophical justifications in manuals, tooltips, or code comments.** Keep manuals focused strictly on user-facing behavior, and code comments on technical contracts, pre/post-conditions, and invariants. If you need to explain why an alternative was rejected, write an ADR.
+
 ### Rapidly Understanding the Codebase Architecture (3-Tier Hierarchy)
 Before writing code or proposing changes, contributors and AI agents MUST understand the system topology and component boundaries. The codebase is documented in a three-tier hierarchy designed for quick onboarding:
 
 1. **System-wide Architecture ([`docs/architecture.md`](architecture.md))**:
-   The top-level map covering repository-wide topologies, the multi-crate division of labor, the frame pipeline, and the render thread model. Start here to understand how the whole instrument fits together.
+   The top-level map covering repository-wide topologies, the 16-crate division of labor, the frame pipeline, and the render thread model. Start here to understand how the entire instrument fits together.
 2. **Subsystem Architecture ([`docs/architecture/`](architecture/))**:
    Domain-specific deep dives into individual subsystems:
    - [`console.md`](architecture/console.md): Egui UI layout, componentized widgets, modular bays, and Control descriptor registry
@@ -28,165 +34,40 @@ Before writing code or proposing changes, contributors and AI agents MUST unders
    Every single one of the 16 crates maintains its own `README.md` documenting its public types, internal module hierarchy, dependencies, and testing rules. Consult the crate `README.md` before editing files in that crate.
 
 ### ADRs are Historical Records, Not Inviolable Laws
-**Why** past decisions were made is in [docs/adr/](adr/). However, **do not treat ADRs as immutable dogma or religious law**:
+Past decisions are recorded in [docs/adr/](adr/). However, **do not treat ADRs as immutable dogma or religious law**:
 - An ADR is a *description of history* ([ADR-0151](adr/0151-an-adr-is-a-description-of-history.md)) capturing why a particular alternative was chosen under the constraints, knowledge, and state of the repository *at that specific moment in time*.
 - As the system evolves, past decisions may become suboptimal, restrictive, or obsolete.
-- **Always critically assess the validity of existing ADRs against current design ideals.** If an old ADR forces unnatural contortions, preserves technical debt, or contradicts clean architecture, challenge it!
-- When a past decision is superseded by a cleaner design, do not hesitate to record a superseding ADR (e.g. `ADR-0344` superseding `ADR-0049`) and modernize the code. **Design correctness trumps historical inertia.**
+- **Always critically assess the validity of existing ADRs against current design ideals.** If an old ADR forces unnatural contortions, preserves technical debt, or contradicts clean architecture, challenge it.
+- When a past decision is superseded by a cleaner design, record a superseding ADR (e.g. `ADR-0344` superseding `ADR-0049`) and modernize the code. **Design correctness trumps historical inertia.**
 
 ### Project Principles
-Every change MUST respect the standing rules in [docs/principles/](principles/) — **one file each**,
-so a rule is stated once and cannot drift between documents. `ls docs/principles/` is the index,
-because each filename is the rule it states.
+Standing invariants are maintained in [docs/principles/](principles/) — **one file per rule**:
+- Each rule is stated once and cannot drift across multiple documents.
+- The filenames in `docs/principles/` form the index of active rules.
+- Key principles to review before modifying the engine:
+  - [Cost is known before it is paid](principles/0091-cost-is-known-before-it-is-paid.md)
+  - [The same inputs produce the same frame](principles/0092-the-same-inputs-produce-the-same-frame.md)
+  - [Pipeline is linear HDR with sRGB encoded once](principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)
+- When a principle becomes obsolete, retire its file and record the retirement in [docs/adr/INDEX.md](adr/INDEX.md) rather than silently editing it into a different rule ([ADR-0059](adr/0059-a-records-pointer-into-the-principles-registry-is-metadata.md)).
 
-They were previously copied here and into [architecture.md](architecture.md), and the two copies had
-already stopped agreeing on which four were foundational, which is what moved them.
+### Engineering Style & Constraints
+- **Vertical slices over horizontal speculation**: Deliver working, end-to-end functionality (e.g., getting a primitive on screen reliably) rather than building ungrounded abstraction layers.
+- **Keep code continuously buildable**: Never commit changes that break the build or fail automated checks.
+- **Validate abstractions**: Do not introduce a shared abstraction without at least two distinct concrete call sites.
+- **1,000-line file limit**: When a Rust source file exceeds 1,000 lines, git hooks issue a reminder ([ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md)). Modularize large files into focused submodules (see [docs/refactoring.md](refactoring.md)).
+- **Performance Benchmarking Standards**:
+  - GPU timestamp queries can be unreliable or unsupported depending on OS and driver backends ([ADR-0169](adr/0169-the-timestamp-verdict-is-the-backends-not-the-machines.md)). Probes calibrate against known workloads and fall back to host-side timers where needed.
+  - Performance comparisons must use the standardized reference workload: [`examples/drift_cloud.kset`](../examples/drift_cloud.kset) (262,144 elements, rendered at 1280x720; [ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md)).
+  - Explicitly document measurement conditions (canvas size, element count, host vs. GPU timing) alongside any reported figures.
 
-Start with these, and read the rest before changing anything they touch:
-
-- [Cost is known before it is paid](principles/0091-cost-is-known-before-it-is-paid.md)
-- [The same inputs produce the same frame](principles/0092-the-same-inputs-produce-the-same-frame.md)
-
-**Why** each is the way it is, and what was rejected on the way, is in [docs/adr/](adr/). A rule that
-stops being true is deleted and re-recorded under a new number rather than edited — see
-[ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
-
-**Deciding something that is not already decided:**
-
-1. Check `docs/principles/` first, before settling on an answer.
-2. Search by the question, not by the topic. A principle decides questions it does not itself
-   mention ([ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)), so
-   the one that applies is usually filed under something else.
-3. If a principle settles it, cite it — in the ADR, the commit message, or the code comment.
-4. If none does, say so in the same place. A missing rule is visible only there.
-
-The engine-level rules — the render thread, state mutation, signals, determinism, the IR and
-colour — are principles like any other, and there is deliberately **no second document
-restating them**. `invariants.md` was exactly that document, and a sixth copy of a rule stated
-in five places is the drift [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md)
-was written to end rather than to preserve. Read the ones your change touches before changing
-anything on the frame path; the colour rule in particular is
-[P-0064](principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md).
-
-### Working style
-
-- **Vertical slices, not layers.** Not "build the whole signal bus" but "get a triangle on
-  screen, then never break it"
-- Keep it running. Do not commit a state that does not build
-- Before adding an abstraction, confirm it has at least two call sites
-- **A `.rs` file that crosses 1000 lines gets a pre-commit printout the day it happens, and never
-  again after** — [ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md).
-  It is a nudge, not a gate: the commit still lands either way. Read the printout before the file
-  grows further, not instead of committing
-- Any change touching performance comes with a GPU-timestamp measurement — **which does not work
-  on the two backends this project is developed and run on.** `wgpu` advertises and enables
-  `TIMESTAMP_QUERY`, and a deliberately enormous workload still resolves to zero or to a negative
-  delta. Flaky is worse than broken: a probe returning 0.0 ms reads as a very fast shader. `Probe`
-  therefore calibrates against a known-heavy workload rather than trusting the feature flag, and
-  falls back to a host measurement that says so in the result. **Treat every performance number
-  produced here as host-side and biased high.**
-
-  **It is the backend rather than the hardware, which took three machines to find out** and is
-  [ADR-0169](adr/0169-the-timestamp-verdict-is-the-backends-not-the-machines.md). One machine, one
-  driver, one binary: calibration clears **23 of 25 on DX12 and 0 of 25 on Vulkan**, and Metal
-  falls back 20 times out of 20. The two faults are not even the same — on Vulkan the gate fails
-  while the numbers are good, and on Metal the values themselves come back as zero. **We do not
-  switch backends to get a clock**: DX12 costs 3.5× the frame on the same hardware, so it would buy
-  the measurement by changing what is measured
-- **One reference workload, and it is a named Set rather than whatever the default is:
-  [`examples/drift_cloud.kset`](../examples/drift_cloud.kset) — `drift_shell.kir` at the 262144
-  elements it declares, with `soft_points.kir` — rendered at 1280x720.** Every host-clock figure
-  quoted in this repository is taken there, which is the only reason two of them written a month
-  apart can be put beside each other. It is neither a target nor a limit, and it earns its place
-  by being what everything else was measured at and by nothing else. **It was defined as the
-  default until 2026-09-07** — the `.kir` default capacity and the default canvas — and a
-  convention that moves whenever the demo moves is not a convention: the pair a bare `cargo run
-  -p karakuri` opens on is free to change, and no longer takes the workload with it when it does
-  ([ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md)).
-  **Nothing already written is invalidated by that.** What was measured has not moved; only its
-  definition has, from *the default* to *this Set at this canvas*, so no figure needs re-taking.
-  A number taken anywhere else says so beside itself, because the failure this prevents is
-  silent: a reader subtracts two figures that were never about the same thing and gets a result
-  that looks like a finding. **A panel figure and a headless figure are two of those**, at the
-  same nominal workload: the panel is a deck of four slots, every one of them stepped and drawn
-  on every frame ([ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)),
-  with a present pass per cell and an `egui` pass over the lot, where a headless figure has no panel
-  over it at all — and **headless is not one thing either**: `karakuri-engine`'s benchmarks include
-  a deck of four, so a figure says what it was taken on rather than which side of that line it fell.
-  So each of them says which it is. It is also why
-  [`swap.rs`](../crates/karakuri-engine/src/swap.rs)'s `PROBE_RESOLUTION` is fixed rather than
-  the deck's — a governor adds per-Set measurements together, so **comparable matters more than
-  absolute**. What a number carries about *how* it was taken is the instrument's own rule and is
-  [P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
-- **Check a number against a second measurement whose bias direction you know, never against a
-  constant.** The host clock includes submit and synchronisation, so it is an upper bound on GPU
-  time, and that is why `Probe::plausible` reads
-  `host_ns < PLAUSIBILITY_FLOOR_NS || gpu_ns * PLAUSIBILITY_RATIO >= host_ns` rather than comparing
-  against a fixed number. **A threshold on its own has no good value**: low lets garbage through,
-  high rejects a genuinely fast machine, and the lying measurement this replaced reported 0.095 ms
-  for work taking tens of milliseconds — two million points at size 40 measuring lighter than
-  sixty-four points — missing a constant floor of 0.1 ms by **five microseconds**, on a floor
-  already raised once from `> 0` for the same reason. `gpu_ns >= host_ns / 4` is the same test on a
-  fast machine and a slow one. **Never relax a threshold until the reports stop**, which is the
-  instinct that would have kept this one hidden
-  ([ADR-0068](adr/0068-a-timestamp-is-checked-against-a-second-measurement-not-a-constant.md))
-- **This machine is evidence about this machine.** It has been read for more than that twice: once
-  concluding that GPU timestamps work, and once concluding that a wasteful element layout could wait
-  because four resident slots fit here — where under `std430` only scalars are recoverable, 80 B to
-  64 B for `drift_shell`, a fifth and not a half, and one `amplify 64` stage adds 1.25 GiB by
-  multiplying exactly the stride the layout shrinks. The backend bullet above is the same lesson a
-  third time, one level down
-  ([ADR-0110](adr/0110-this-machine-is-not-the-reference.md))
-
-### Working with git
-
-**Act on what you have looked at, and never on everything.** That is the whole of it: a
-command whose scope is "the tree" acts on whatever happens to be in the tree, which is not
-the same as what you meant. Working alone, that is a build artifact or a half-finished edit of
-your own landing in a commit about something else — untidy, and recoverable. But **a checkout
-may be shared**: nothing stops two sessions or a handful of agents working against one
-working copy, and it is a normal way to use this project. Then the same command takes
-somebody else's work instead, and untidy becomes destructive.
-
-That possibility is enough. None of the rules below asks you to know which situation you are
-in, because the practice that is safe when a checkout is shared costs nothing when it is
-not.
-
-- **Set the hooks up once per clone**: `git config core.hooksPath .githooks`. The gates are
-  in the repository rather than in anyone's habits — a commit is refused if its Rust is not
-  what `cargo fmt` writes, and a **tag** push is refused unless the whole workspace formats,
-  lints under `-D warnings`, and passes every test. Formatting is on the commit because it
-  costs a second; the suite is on the tag and on nothing else, because a gate that costs
-  minutes gets skipped until it is not a gate, and a branch push is part of working rather
-  than a moment anybody claimed the work was good. §2 states the same condition; this bullet
-  said *a push* until 2026-09-03 and the two had been disagreeing since ADR-0114
-- **Stage by explicit path. Never `git add -A`, never `git commit -a`.** A wildcard stage
-  commits what you did not read, and on a shared checkout what you did not write — which is
-  not hypothetical; it has happened in this repository. Read `git status --short` before
-  staging and
-  `git log --oneline -1` before committing. `HEAD` and the remote can both move while you
-  work, so a count of unpushed commits you have been carrying in your head is a guess —
-  `git rev-list --count origin/main..HEAD` is the answer
-- **Nothing that discards, unless you can name what it discards.** `git checkout -- <path>`,
-  `restore`, `reset`, `stash` and `clean` destroy rather than confuse, and what they take is
-  uncommitted, which means it is the only copy. `git show HEAD:<path>` gets a file's committed
-  state back without touching the working one, and answers the question most of the time
-- **If the tree holds changes you did not make, they stay.** Leave them, stage around them,
-  and say what you saw. Do not tidy them, and do not sweep them in to make the tree clean —
-  on a shared checkout they are someone's work in progress, and even alone they are a
-  question worth answering before a commit rather than after one
-- **One commit per concern, with its documentation in the same commit.** The record, the
-  manual page and the roadmap line a change makes true land with the change, because a
-  follow-up commit to fix the prose is one nobody writes. It is what makes §4's *hook it from
-  where the work is* possible at all
-- **Commit a concern when it is finished, not at the end of the day.** Work left uncommitted
-  while other commits land on top of it gets harder to describe by the hour, and the message
-  it deserved is the first thing lost
-- **The commit message carries the argument, not the diff.** What was wrong, what was chosen,
-  and what the alternative was — `git log` is the only place some of that is ever written
-  down. End a message written with an AI agent with a `Co-Authored-By:` trailer naming it
-- **Commit; do not push.** Publishing is the maintainer's, and an agent working here has no
-  credentials for it by design. Say how many commits are waiting rather than pushing them
+### Git Hygiene & Workflow
+- **Stage files explicitly**: Always specify paths explicitly with `git add <file>`. **Never use wildcard `git add -A`, `git add .`, or `git commit -a`**, which can inadvertently stage temporary artifacts or unreviewed edits.
+- **Verify status before staging**: Run `git status` and `git diff` to inspect changes thoroughly before staging and committing.
+- **Preserve unrelated working changes**: If the working tree contains uncommitted files from another session or task, do not clean, revert, or commit them. Stage only the files relevant to your task.
+- **Atomic, focused commits**: Group related changes into single, coherent commits where documentation and implementation updates land together.
+- **Clear, descriptive commit messages**: Explain what changed and why in the commit message. For work co-authored with AI assistants, append the standard trailer:
+  `Co-Authored-By: <Agent Name> <<agent-email>>`
+- **Do not push without review**: Commits should be staged and committed locally; pushing to remote repositories is handled by the maintainer.
 
 ---
 
@@ -194,295 +75,62 @@ not.
 
 ### Required Prerequisites
 - **Rust**: Stable Rust (`1.84` or higher) with `cargo`.
-- **GPU Driver & WebGPU Environment**: `wgpu` compatible Vulkan, Metal, or DX12 backend.
+- **GPU Driver**: Vulkan, Metal, or DirectX 12 compatible driver with WebGPU support.
 
 ### Git Hooks
-Karakuri provides pre-commit and pre-push hooks under `.githooks/`. Enable them in your local repository:
+Enable repository hooks located in `.githooks/`:
 
 ```sh
 git config core.hooksPath .githooks
 ```
 
-- **`pre-commit`**: Runs `cargo fmt --check` on the **staged content**; this is the only thing
-  that can fail the commit. It reads what is being committed rather than the working tree, so
-  a half-finished edit on disk neither blocks a good commit nor hides a bad one. It also prints
-  — without failing anything — when a staged `.rs` file's line count crosses 1000 for the first
-  time (compared against its `HEAD` version), and stays quiet on every later commit to a file
-  already past that line. See [ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md)
-  for why this is one printout at the crossing rather than a standing warning or a gate.
-- **`pre-push`**: Runs `cargo fmt --check`, `cargo clippy` and the whole suite **on a tag
-  push, and on nothing else**. A tag is the deploy; a branch push is part of working —
-  backing up, moving between machines, opening something for review — and a gate there asks
-  whether the work is good at a moment nobody was claiming it was.
-
-Neither hook runs tests on an ordinary commit or branch push, and that is a decision rather
-than an omission: this workspace has nearly a thousand tests, and while only about three
-hundred of them want a GPU those three hundred are ~99% of the five minutes the suite costs,
-so any fixed subset spends minutes answering a question nobody asked. What replaces it is
-deliberate: whoever makes a change names the smallest suite that answers it and runs that
-(§3 lists them per crate), and the whole workspace runs at a boundary — before a tag, after
-a refactor, and before a change is called done (§5). The reasoning is written into the hooks
-themselves.
+- **`pre-commit`**: Runs `cargo fmt --check` against staged Rust files to enforce workspace formatting standards. Warns if a modified file exceeds 1,000 lines for the first time.
+- **`pre-push`**: Runs full workspace formatting, lints (`cargo clippy --workspace --all-targets -- -D warnings`), and test suites on tag pushes.
 
 ---
 
 ## 3. Build, Lint, and Test Commands
 
-**Run the whole workspace. It is cheap now.** `cargo test --workspace` takes about a minute
-as of 2026-08-23, against roughly thirty before — the difference is a macOS pathology found
-and measured on 2026-08-23, where creating a Metal device stats every entry of the
-directory the binary sits in, so a `target/deps` full of old test binaries cost more than
-the tests did ([ADR-0144](adr/0144-the-test-suites-largest-cost-was-a-directory-listing.md)).
-Everything below is still true and worth knowing; almost none of it is worth *rationing* at
-this price.
+### Running Workspace Tests
+The full test suite can be run across the workspace:
 
-**What that changes, and what it does not.** The rules here divide into ones that existed
-because running tests was expensive and ones that exist because of what a result *tells*
-you. The first kind is now a convenience: reach for `--skip gpu::` mid-edit if you like, and
-let the directing side carry the suite when several agents are working, but neither is owed.
-The second kind holds at any price — **after a fix, run the failed test first and alone**,
-because a green suite is a slower way to learn the same fact and a red one tells you less;
-and **run a test against its injected defect on its own**, because that is one test's
-evidence and the suite around it is not. That is about
-answering the question in front of you rather than about saving seconds, and it is stated in §3
-above rather than in `docs/principles/`: it governs how a contributor works, not how the instrument
-behaves. Decided in
-[ADR-0114](adr/0114-tests-run-when-somebody-asks-not-when-git-does.md).
-
-**Revisit this if the suite becomes a bottleneck again.** The strict operation it replaces —
-name the smallest suite, keep the workspace for boundaries, put the cost on whoever is
-directing — is recoverable from this paragraph and from §2, and the number above is dated so
-it can be checked rather than assumed.
-
-### A test is watched to fail before it is kept
-
-**Run the test against the broken implementation and observe it fail before you keep it**, and read
-a green result by asking what it was green against. A check nobody has watched fail is a guess about
-what it checks.
-
-- **Assert the property, not a consequence of it.** Changing `Poll` to `Wait` — a full render-thread
-  stall, the exact thing the module documentation calls a bug — left all seven meter tests passing,
-  because a `Wait` paces the loop and a paced reading is exactly one frame old, so
-  `frames_behind >= 1` and `mean > 0.0` are satisfied by a stalled loop.
-  `karakuri-engine/tests/meter.rs` states the property instead: over 240 unpaced frames either a
-  reading is more than one frame behind or a measurement was skipped, and a `Wait` anywhere in the
-  frame path makes both impossible.
-- **A rejection test carries a negative control.** A checker that refused everything would pass a
-  suite made only of refusals. `karakuri-ir/tests/check.rs` pairs each refusal with the case that
-  must be accepted — a `spawn` block *with* a rate, a range whose minimum is exactly 1.
-- **A `compile_fail` test has a compiling twin** differing by exactly the thing under test, and the
-  expected error is verified to be the *only* error. `Deck::begin_frame` carries the pair — a
-  `compile_fail` doctest and a `no_run` twin differing by the second borrow — with the reason written
-  between them.
-- **Ask what a green result was green against.** A verification reported *140 tests pass* while
-  measuring `HEAD`, and the tell was the number: the suite has 147. Fifteen commits in a row lost a
-  `Co-Authored-By` trailer, each verified with `git log --oneline -1` — a view in which a trailer is
-  structurally invisible.
-- **Do not assume a validation stage does what its name says.** Five defects checked clean and came
-  up short at runtime, and **not one was found by an existing test**: among them `spawn` with no
-  `spawn_rate`, where `Proc::spawn_rate()` existed with no caller anywhere and the engine defaulted
-  the missing value to `0.0`, so a procedure parsed, type-checked, cost-checked, built a Set, and
-  created zero elements every step forever — a black frame, no diagnostic.
-- **A fixture the product can rewrite is not a fixture.** The criterion is not *it probably will not
-  change* but **it can change**. Tests derived a second procedure by substituting a sentence in
-  `examples/soft_points.kir`, one of the files the MCP surface exists to rewrite, and a live session
-  rewrote it until the two procedures were identical. Prepend a line rather than substituting one —
-  that changes the content whatever the content is — and prefer a fixture the product cannot reach,
-  as `karakuri-cli/tests/fixtures/flat.kir` is.
-- **Name a fixture after what the code generates, not around it.** A hand-built fixture dodges by
-  accident: the codegen's naga tests passed while the generator was broken because the fixtures named
-  their locals `uu` and `vv` rather than the `u` the specification's own example uses — and `u` was
-  the uniform block, so a `param` named `array` passed all four validation stages and produced WGSL
-  that would not compile. State why a class is **closed**, never why a collision is unlikely: the
-  blocklist that lost there stated the second, and `lower.rs`'s `mangle_local` is `usr_{name}`
-  unconditionally, which states the first.
-- **A gate is judged by its output, not by its exit code, and a gate's test is something that must
-  not pass.** [`.githooks/pre-commit`](../.githooks/pre-commit) first failed by passing:
-  `rustfmt --check` reading stdin prints its diff and exits 0. A green suite is not evidence that a
-  gate works. What each hook runs, and why a gate costing minutes on every commit gets `--no-verify`d
-  and is then not a gate, is §2.
-
-Decided in
-[ADR-0014](adr/0014-generated-code-cannot-be-captured-by-a-name-a-procedure-can-spell.md),
-[ADR-0030](adr/0030-simulation-time-comes-from-an-integer-step-count.md),
-[ADR-0032](adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md),
-[ADR-0044](adr/0044-a-test-that-survives-mutation-is-not-a-test.md),
-[ADR-0087](adr/0087-a-fixture-the-product-can-rewrite-is-not-a-fixture.md),
-[ADR-0093](adr/0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md),
-[ADR-0102](adr/0102-a-renderers-address-is-layer-and-index.md),
-[ADR-0103](adr/0103-a-trailer-missed-fifteen-times.md),
-[ADR-0109](adr/0109-format-the-workspace-and-split-the-gate.md) and
-[ADR-0114](adr/0114-tests-run-when-somebody-asks-not-when-git-does.md).
-
-### Testing one crate
-```sh
-cargo test -p karakuri-ir          # IR: lexer, parser, checker, cost
-cargo test -p karakuri-codegen     # WGSL generation and naga validation
-cargo test -p karakuri-engine      # render graph, Set lifecycle, deck (needs a GPU)
-cargo test -p karakuri-audio       # analysis, tempo tracking, beat lock
-cargo test -p karakuri-signal      # oscillator, synthesized bus, noise
-cargo test -p karakuri-store       # records, ndjson, content addressing
-cargo test -p karakuri-midi        # wire parsing and the map
-cargo test -p karakuri-operation   # the operation vocabulary, against the manual
-cargo test -p karakuri-operation-record  # an operation as the records it writes
-cargo test -p karakuri-layout      # the arrangement, solved to rectangles
-cargo test -p karakuri-environment # the program: the disk, the devices, the ports, the record
-cargo test -p karakuri-console     # the console: arrangement, panel model, view (no device at all)
-cargo test -p karakuri            # the panel as a program: that it starts at all, the window, the engine behind it (needs a GPU)
-cargo test -p karakuri-cli         # flags, the key handler, replay, live save (needs a GPU)
-```
-
-**Three crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
-and so does part of `karakuri-cli`: eight tests in the binary build a Set, and the five in
-`tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
-third is **`karakuri`**, the panel as a program — its `src/main.rs` opens a window and builds
-a deck, and its device tests are the ones under `mod gpu` in `crates/karakuri/src/tests/gpu.rs` — and `tests/starts.rs`, which spawns the panel binary and waits for its legend, so a startup panic goes red somewhere. **No count is written
-down**: `grep -c '#\[test\]' crates/karakuri/src/tests/gpu.rs` is the number, and
-a transcribed one has already gone stale here twice.
-
-**`karakuri-console` is not on that list any more, and the change is worth reading the right
-way round.** It used to be third, and only through `examples/panel.rs`. That example became
-`crates/karakuri` (ADR-0214), and with it went every dev-dependency the console kept for it —
-`wgpu`, `winit`, `pollster`, `karakuri-engine`, `karakuri-ir`, `karakuri-signal`,
-`karakuri-store` and `karakuri-operation-record`, eight of nine. So
-[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)'s seam is
-**completed rather than weakened**: the rule was that a device stays a dev-dependency so `src/`
-cannot reach for one, and there is now no entry in that manifest to reach for at all.
-`cargo test -p karakuri-console` takes no device by any path.
-
-Every other crate in the list above is pure CPU.
-
-### Running only the part that needs no GPU
-
-**Every test that reaches a device lives under a module called `gpu`**, so the whole CPU-only
-set is one filter away:
-
-```sh
-cargo test --workspace -- --skip gpu::          # everything that needs no device
-cargo test -p karakuri-engine -- --skip gpu::   # the render graph's own arithmetic
-cargo test -p karakuri-engine --lib -- --skip gpu::
-cargo test -p karakuri-cli --bins -- --skip gpu::   # `karakuri-cli` has no library target, and is one file
-```
-
-The GPU tests are most of the time the whole workspace costs and a minority of its tests —
-288 of 1050 as of 2026-08-23, about 4 s against 61 s. So this is nearly all of the suite for
-a fraction of the wall clock. (The first run after a clean rebuild is slower while the freshly
-written binaries page in; it settles after that.) `--skip` is a substring match on the full
-test path, which is why the module is named `gpu` and nothing else is.
-
-**Counts and timings here carry the date they were true**, and are meant to be read as an
-order of magnitude rather than as a current figure — the suite only grows. A number with no
-date reads as current forever, which is how this section came to say 997 in one paragraph and
-301 in another after a few days of ordinary work.
-
-**Do not turn incremental compilation back on** without reading
-[ADR-0144](adr/0144-the-test-suites-largest-cost-was-a-directory-listing.md). It leaves
-~865 object files per rebuild in `target/debug/deps/`, and macOS makes every test binary
-run from that directory pay a full listing of it before it can reach a GPU. That one fact
-was worth more than every other change to this suite put together: the whole workspace went
-from over 370 s to about 60 s (2026-08-23). If the suite ever starts creeping up again, count
-the files there
-first — `ls target/debug/deps | wc -l` — before looking at any test.
-
-The convention and its enforcement are argued in
-[ADR-0140](adr/0140-a-gpu-test-lives-under-mod-gpu-and-the-rule-is-enforced-both-ways.md),
-and the no-skip rule below in
-[ADR-0141](adr/0141-a-gpu-test-with-no-adapter-fails-rather-than-skipping.md), which also
-records what would reverse it.
-
-`cargo test -p <crate>` keeps its exact meaning — everything runs, and the pre-push hook is
-untouched. The filter only ever subtracts. `#[ignore]` would have inverted that default, so
-`cargo test` would have quietly stopped meaning "everything"; that is why this is a module
-path and not an attribute.
-
-The convention is enforced by
-[`crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`](../crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs),
-which reads the workspace's own source and fails both ways round: a GPU test outside `mod
-gpu` would be run by the filtered command, and a CPU test inside one would silently stop
-running whenever anyone filtered. It counts spawning a binary that reaches `Gpu::headless`
-as reaching one, which is the only way `tests/replay.rs` can be seen at all.
-
-A test that needs a device is only *untestable* to the extent that the line needing it is —
-where one line needs the device and the rest is a decision, the decision comes out
-([ADR-0130](adr/0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md)).
-
-**There is no in-test skip, in either direction.** A test that needs a device and cannot get
-one panics; every one of them does. Eight used to print a message and return instead, and one
-of those returned in silence; they were changed when this filter landed, because on a machine
-with no adapter `--skip gpu::` is a better answer than a green run that measured nothing. If
-you are on such a machine, the filtered command is the suite you have, and it says as much.
-
-### Known failures off macOS
-
-Two things fail on Windows and neither is new. **Do not report them as new**, and do not serialise
-or delete them to make a run green — both are worth more failing than passed over.
-
-- **Ten tests in `karakuri-cli`, because there is no `sh` on `PATH`.** `try_fake` writes a script to
-  a temp directory and spawns `sh <script>`; `Source::open` itself takes any program name and
-  assumes nothing about it, so this is a fixture rather than the product. Git for Windows ships an
-  `sh` and it is not on `PATH`, on two machines set up independently. Every way out is a decision
-  somebody should take on purpose — a `.cmd` beside the `.sh` is a platform branch in a fixture, a
-  helper binary is a second target in the package, and re-entering the test executable as its own
-  fake source is a mode a test binary does not otherwise have.
-- **`karakuri-cli --test replay`, intermittently, and this one is not a fixture.** Zero to three of
-  the five fail per run on a Radeon 780M, a different set each time, and all five pass with
-  `--test-threads=1`. Each test spawns `karakuri-cli` as a subprocess and each subprocess takes a
-  device of its own. Reproduced outside the harness: six concurrent `--store … --replay … --render`
-  runs, and one round in two has one or two exit `0xC0000409` — `STATUS_STACK_BUFFER_OVERRUN` —
-  **with no Rust panic message at all**, which a Rust `abort` would have printed, so it looks like a
-  fault in native code rather than a panic. Six concurrent `--render` runs without the store and
-  replay path did not reproduce it. **Not diagnosed.** A wrong answer here is *the test suite is
-  flaky*; the right one may be *concurrent device use is not safe on this driver*. An RTX 2070 SUPER
-  passed 5 of 5 in one run, which against a zero-to-three-per-run failure is not evidence — closing
-  that costs about a minute of running `cargo test -p karakuri-cli --test replay` twenty times and
-  writing down the fraction.
-
-### At a boundary — before a tag, after a refactor, before calling a change done
 ```sh
 cargo test --workspace
 ```
 
-### When the work is split across several hands
+### Testing Specific Crates
+To run tests for individual crates during targeted development:
 
-Several agents or sessions working at once multiply whatever each of them runs: a suite that
-costs a minute costs it *per worker*, mostly to re-answer a question somebody else already
-answered. The rule in §2 does not change, but who applies it does.
+```sh
+cargo test -p karakuri-ir          # IR parser, type-checker, and cost estimator
+cargo test -p karakuri-codegen     # WGSL shader generation and naga validation
+cargo test -p karakuri-engine      # Render graph and Set execution (requires GPU)
+cargo test -p karakuri-audio       # Audio FFT analysis and beat tracking
+cargo test -p karakuri-signal      # Signal bus, oscillators, and noise
+cargo test -p karakuri-store       # Content-addressed store and ndjson journals
+cargo test -p karakuri-midi        # MIDI message parsing and control mapping
+cargo test -p karakuri-operation   # Operation vocabulary verification
+cargo test -p karakuri-operation-record # Operation journal serialization
+cargo test -p karakuri-layout      # Layout arithmetic and panel geometries
+cargo test -p karakuri-environment # Setfiles, file watching, and presets
+cargo test -p karakuri-console     # VJ console UI model and widgets (pure CPU)
+cargo test -p karakuri            # Desktop GUI application integration (requires GPU)
+cargo test -p karakuri-cli         # Headless CLI runner and replay tests (requires GPU)
+```
 
-- **The side directing the work runs the tests.** A worker says what it changed and which test
-  would catch a regression in it; proving that by running the workspace suite is the expensive
-  way to say the same thing.
-- **After a fix, run the test that failed — first, and on its own.** `cargo test -p <crate>
-  <name>` runs one. Broaden only once it passes; a green suite is a slower way to learn the
-  same fact, and a red one tells you less.
-- **Running a test against its injected defect is one test's evidence.** Run that test with the
-  defect in place, not the suite around it — *A test is watched to fail before it is kept* above.
-- **`cargo check -p <crate>` answers "does this compile"** without building or running a test,
-  which is often the whole question.
-- **Cut the seam serially before anything fans out.** The shared types several passes must agree
-  on — the binding layout above all — are settled first and published as a contract rather than as
-  a text to be grepped. Fanning out by crate before the seam exists earns parallelism and loses more
-  to the merge, because agents invent incompatible types
-  ([ADR-0016](adr/0016-agents-leave-work-in-the-tree-and-the-reviewer-commits.md)).
-- **Nothing reaches `origin` unreviewed, and the review is the directing side's.** A worker reports
-  what it changed and what it doubted; whoever is directing reads the diff, runs what the question
-  needs, and pushes back what is wrong. ADR-0016 met this by having agents leave work in the tree
-  for the reviewer to commit; the practice since is that a worker commits and the review happens
-  before the push, which the *Commit; do not push* rule above is what makes safe. **What must not
-  change is that a defect is caught by a reader and not by `origin`** — and that the worker
-  *reports* rather than papers over, which is the behaviour this selects for: on one day it caught a
-  valid procedure rejected by a rule the brief itself got wrong, a seam that made two unaddable
-  costs addable, and a requirement that had to be walked back, each reported by the agent that was
-  told to do it.
-- **A worker's finding is not a decision input until you can say what happens, when, and why.**
-  Relaying a summary costs whoever is deciding a round trip and usually hides the mechanism, which
-  is where the answer is: *a vector param reaches the shader as zero* was true and useless, and half
-  an hour of reading turned it into *the packer refuses to emit an unwritten field, the value
-  channel is an `Option<f32>` that cannot carry three floats, and the assertion built to stop a
-  silently-zero parameter is satisfied by writing one*. Ask the obvious next question yourself
-  before passing the answer on.
-- **Divide the work by file, not by phase.** Three commits that all touch one crate can only be
-  done in order; the same work split by file runs in parallel and lands as it finishes. Decided in
-  [ADR-0115](adr/0115-split-work-by-file-not-by-phase.md).
+### Running CPU-Only Tests (Skipping GPU)
+Tests requiring physical GPU access are organized under modules named `gpu`. To execute all unit tests quickly without requiring GPU initialization:
+
+```sh
+cargo test --workspace -- --skip gpu::
+cargo test -p karakuri-engine -- --skip gpu::
+```
+
+### Test Quality & Verification Practices
+- **Observe failure first (TDD)**: Verify that a new test actually fails against broken or missing code before confirming it passes against the solution.
+- **Negative controls**: Checker and validator tests must pair rejection assertions with corresponding acceptance cases to ensure the validator is not simply rejecting everything.
+- **Compile-fail doctests**: Pair `compile_fail` doctests with compiling equivalents differing strictly by the invariant under test.
+- **Independent fixtures**: Never use live, editable application presets as static test fixtures. Store static test fixtures under dedicated `fixtures/` directories where product mutations cannot alter them.
 
 ### Running Workspace Linter (Clippy)
 ```sh
@@ -491,265 +139,75 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ### Checking Code Formatting
 ```sh
-cargo fmt --check
+cargo fmt --all -- --check
 ```
 
 ---
 
-## 4. Recording a Decision
+## 4. Recording Decisions & Preventing Drift
 
-**When a decision is made, write it down then — not later.** These records exist because they were
-once reconstructed from four weeks of session transcripts, and reconstruction only works while the
-transcripts still exist and someone remembers to look.
+### When to Write an ADR
+- Write an Architectural Decision Record ([`docs/adr/`](adr/)) whenever a design choice rejects a viable, non-trivial alternative that someone might reasonably reconsider in the future.
+- Focus the ADR on the **context, problem statement, rejected alternatives, and trade-offs**.
+- Number ADRs sequentially after the highest existing number, register the entry in [`docs/adr/INDEX.md`](adr/INDEX.md), and follow the format established in [`ADR-0000`](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
-**Write an ADR when a plausible alternative lost.** Not for every change — for a choice someone could
-reasonably re-propose in three months. The record's job is the *rejected* alternative and why it lost;
-the conclusion alone does not stop anyone re-proposing it. Number it after the highest existing one,
-add a row to [docs/adr/INDEX.md](adr/INDEX.md), and follow the shape in
-[ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
+### When to Add a Principle
+- Add a file to [`docs/principles/`](principles/) only when an invariant applies broadly across multiple subsystems and resolves questions without needing to mention specific components directly ([ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md)).
+- If a rule addresses only a localized decision, record it as an ADR rather than a principle.
 
-**Add a principle only if it decides a question it does not itself mention** — and demonstrate that
-rather than asserting it: name a concrete undecided question, from a domain the file does not discuss,
-that reading the file answers. If you cannot name one, what you have is a decision and it belongs in
-an ADR, however true or load-bearing it is. Every principle has an ADR; not every ADR yields a
-principle. **Judge the body, not the filename**: a narrow title over a general argument is a principle,
-and widening the title is a delete-and-re-record rather than an edit. This replaces *could a future
-proposal violate it*, which admitted every specific prohibition —
-[ADR-0249](adr/0249-a-principle-is-what-decides-a-question-it-does-not-mention.md).
-
-**When a rule stops being true, delete its file and re-record it under a new number** — never edit it
-into something else, and never reuse the retired number. Record the retirement in `INDEX.md` and
-re-point the ADRs that cited it
-([ADR-0059](adr/0059-a-records-pointer-into-the-principles-registry-is-metadata.md)).
-
-**An ADR is a description of history**, and that decides what may be edited: the past is not revised,
-a description that was wrong is corrected, and annotating a record with what it later became is
-welcome. An argument that would have to change is a new record, which is what buys the permission to
-stop maintaining a catalogue this size — `ls docs/adr/0*.md | wc -l`, and it only grows. See *Where this
-does not reach* below, and
-[ADR-0151](adr/0151-an-adr-is-a-description-of-history.md), which carries the test for the cases
-that are not obvious.
-
-**ADRs are not immutable law.** An ADR records why an alternative lost *then*, not an eternal prohibition. As code evolves, requirements shift, and better abstractions become clear, holding onto a flawed historical decision is harmful dogma. The code's design correctness and architectural elegance are the highest priority. When an existing ADR stands in the way of a cleaner, more modular, and correct design, re-evaluate it with an open mind and supersede it with a new record.
-
-The present tense lives in the other documents; `docs/principles/` is where a rule that still stands
-is kept current, by deletion and renumbering rather than by editing.
-
-**A source comment cites what is in force — a principle, an ADR, or a present-tense document. It never
-cites a plan**, and **a milestone named without a filename is the same citation** — *"M2's budget
-governor"* carries a schedule into the code exactly as a path would, and is harder to find because
-searching for the document does not catch it. `docs/roadmap.md` and anything under `docs/history/` are
-schedules: a reader who
-follows the pointer arrives at work that was *intended*, not at why the code is the way it is, and
-when the milestone closes the comment still reads plausibly while pointing at nothing. Where the
-comment already states its claim, write no pointer. Where the reason is genuinely elsewhere, an ADR is
-the durable ticket to point at — addressable for as long as the code exists.
-
-**That ratio has turned over, and neither side of it is written down here.** Counted on
-2026-08-23 it was seventy-one references to the roadmap across twenty-six source files against a
-single reference to an ADR or a principle in the whole of `crates/` — which is what made it *the
-number worth watching*, and it was never really about comment style: it said the catalogue was not
-yet where anybody reached while writing code. It is now. Two commands are the whole of the
-instrumentation, so nothing here can go stale in silence:
-
-```sh
-grep -rn 'roadmap' --include='*.rs' crates/ | wc -l                     # the schedule, still cited
-grep -rEo 'ADR-[0-9]{4}|P-[0-9]{4}' --include='*.rs' crates/ | wc -l    # what is in force
-```
-
-**Watch the first and expect it near zero**; each hit it returns is a comment to read, because a
-schedule cited from code is what *A statement is held true by the thing it describes* below
-forbids. See [ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md).
-
-**Hook it from where the work is, or nobody will find it.** `INDEX.md` makes a record
-*findable*; it does not make anyone *look*. A record that changes what is planned or what is
-still owed gets a pointer from [roadmap.md](roadmap.md), beside the item it changes — including
-the sentence naming what the decision leaves undone, because a consequence recorded only in
-the ADR is a consequence the next person meets rather than reads. A record that changes how
-the thing is used gets one from [manual.md](manual.md) or [ir-spec.md](ir-spec.md); a record
-that settles a standing rule gets a principle, which is the working set people actually read.
-
-This is not decoration. Nineteen records were written on 2026-08-22 and 2026-08-23 and
-fourteen of them were reachable from nothing outside `docs/adr/` — the reasoning was all
-there, and the plan did not know any of it had happened.
-
-### A statement is held true by the thing it describes, or it is deleted
-
-**Where one fact is stated twice and the two can disagree, make them one thing or delete one.** It
-applies to a comment, a document, a name in the program and a number written in prose alike. There
-are three ways to make a statement hold, and this is the order to reach for them in.
-
-1. **Generated.** Where the fact exists as data in the program, publish the generated form. The
-   builtins and signatures handed to a model come from `Builtin::ALL` and `signature()` in
-   [`karakuri-ir`](../crates/karakuri-ir/src/builtin.rs) — the checker's own table — so the moment
-   they went stale compilation would fail, and
-   [`mcp.rs`](../crates/karakuri-environment/src/mcp.rs) serves them out of that rather than out of
-   a second copy. **A vocabulary list maintained by hand** is what this replaces.
-2. **Tested.** Where an invariant can be checked mechanically, a test checks it.
-   [`no_clock_access.rs`](../crates/karakuri-signal/tests/no_clock_access.rs) scans
-   `karakuri-signal`'s own source for `Instant::now` and its kin, which makes *rendering reads only
-   the local oscillator* a property of the crate rather than a claim about it, and
-   `karakuri-codegen/tests/naga_test.rs` puts generated WGSL through a compiler. **An invariant
-   asserted in a README and enforced by review** is what this replaces: everything it was meant to
-   catch was found by a test a reviewer had already read past.
-3. **Structural.** [`deck.rs`](../crates/karakuri-engine/src/deck.rs)'s frame guard owns the
-   encoder, so a second `begin_frame` is an `E0499` and a frame cannot be built from two generations
-   of Sets. **Never claim the compiler enforces something it does not:** a brief asserted the borrow
-   checker made a mid-frame swap impossible, and it did not, because the command encoder belongs to
-   the caller and borrows nothing — a review demonstrated it by recording two Sets of different
-   capacity into a single submit, and the guard that closed it is what makes the `E0499` true.
-
-**A guarantee is structural, or it says which convention holds it** and points at what enforces it.
-`karakuri-store`'s `ndjson.rs` keeps an unknown record verbatim rather than re-serialising it, and
-says that this is a convention and where it is held.
-
-**Where none of the three is possible, the statement dates itself.** A claim that is not yet true
-says which parts hold today, which costs a clause and buys the reader the ability to trust the rest,
-and it is a marker rather than a resting place. A settled section marks which of its parts are
-**forced** and which are **chosen**, so a wrong one is a one-clause revision instead of a reopened
-decision — [ir-spec.md](ir-spec.md)'s *Multiple L1 sources, and `source`* marks two clauses
-*preference rather than force*, which is exactly what made one of them a one-clause revision when it
-turned out to be wrong.
-
-**Write against these, each of which has happened here:**
-
-- **A comment describing replaced behaviour.** The sharpest sat *inside the function implementing
-  the change* — *t is constant across a frame's substeps*, in `VideoSource::render`. Two more were
-  wrong rather than stale, both saying the tail of the draw range holds the dead elements when it
-  holds the newest live ones, so anyone who believes them optimises by truncating the range and
-  drops living elements.
-- **A workaround written in prose**, which is a missing feature with a distribution channel. *Set
-  exposure to 0.05* is a tone mapper written in English, and since the right value follows the
-  element count it ends as a table — 0.05 at 262144 and 0.5 at 16384 — while one Set authored at
-  0.05 and another at 1.6 do not mix.
-- **A name meaning two things.** `{"t":"param"}` was used for two differently shaped records; and a
-  `noise` signed at confidence 0.1 on the bus stood against a declared generator mapped to `[0,1]`
-  at confidence 1.0. **It is not enough to be disjoint in practice; they have to be disjoint by
-  name.** The bus entry was deleted rather than reconciled, because completeness already came from
-  the unknown-name arm.
-- **A goal stated in the present tense.** *The record stream is the only path that mutates engine
-  state*, written unconditionally while `Record::Tick` was never constructed anywhere.
-- **A source comment citing a plan**, which is the rule above and the two `grep` commands that keep
-  its ratio from going stale in silence.
-
-**Where this does not reach.** This guide is the entry document — the ADR and principle rules are
-first revealed here — so it **quotes in full on purpose**, and a passage here that restates a rule
-stated elsewhere is not a second copy to be reported as drift. `docs/adr/` is history: a record is
-corrected where it was wrong and annotated with what it became, and it is never brought into step
-with the present. **What this rule forbids is an independent copy that drifts unnoticed**; a
-quotation that names what it quotes is checkable and is allowed.
-
-Decided in [ADR-0010](adr/0010-one-t-value-is-one-record-shape.md),
-[ADR-0017](adr/0017-an-invariant-that-can-be-tested-is-a-test.md),
-[ADR-0019](adr/0019-exposure-is-three-things-and-none-stands-in-for-another.md),
-[ADR-0020](adr/0020-a-corpus-expresses-taste-and-never-a-missing-feature.md),
-[ADR-0031](adr/0031-a-document-describing-replaced-behaviour-is-worse-than-none.md),
-[ADR-0034](adr/0034-the-frame-guard-owns-the-encoder.md),
-[ADR-0051](adr/0051-a-name-means-one-thing-so-the-buss-noise-entry-is-deleted.md),
-[ADR-0063](adr/0063-an-invariant-that-is-not-yet-true-says-so.md),
-[ADR-0064](adr/0064-a-replaced-passage-is-read-to-its-end.md),
-[ADR-0083](adr/0083-mcp-is-the-only-prompt-surface.md),
-[ADR-0111](adr/0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md),
-[ADR-0121](adr/0121-moving-code-leaves-its-reasoning-behind.md),
-[ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md) and
-[ADR-0151](adr/0151-an-adr-is-a-description-of-history.md).
+### Preventing Documentation Drift
+To prevent discrepancies between code and documentation:
+1. **Generated Sources**: Wherever possible, generate documentation and schemas directly from code constants (e.g. `Builtin::ALL` in `karakuri-ir`).
+2. **Automated Invariant Tests**: Verify architectural rules through automated tests (e.g. `no_clock_access.rs` ensuring the signal bus does not read host clocks).
+3. **Type-Enforced Invariants**: Use Rust's type system, affine ownership, and RAII guards to make illegal states unrepresentable (e.g. `FrameGuard` preventing mid-frame encoder re-acquisition).
+4. **Cite Active State, Never Schedules**: Source code comments must cite active principles or ADRs, never milestones, plans, or roadmap schedules ([ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md)).
 
 ---
 
-## 5. Changing What an Operation Is, During M5
+## 5. Adding or Updating an Operation
 
-§4 says how to record a decision. This says how to land one, for the kind of decision M5 is made
-of: an operation is added, retired, or its route to a surface changes.
+In Karakuri, every user or automated action is modeled as an `Operation` ([`karakuri-operation`](crates/karakuri-operation)). When adding, modifying, or retiring an operation, update all associated locations in the following sequence:
 
-An operation exists in nine places. Change one and the suite goes red with a message naming the
-gap; change none of them and the record is a claim about a tree that does not match it. **Find all
-nine before editing any**, and work them in this order.
-
-**1. Find every site.** For an operation titled *T* with variant `V`:
-
-```sh
-grep -rn 'Operation::V' --include='*.rs' crates/     # every construction and match arm
-grep -n 'T' docs/manual/operations.html              # the row
-grep -rn 'T' docs/manual/console.html                # the control's tooltip and notes
-```
-
-**2. `docs/manual/operations.html` — the row.** Add it, delete it, or move its badges. The page is
-the specification, so it moves first. A badge is `has` only where a program a player runs reaches
-it today.
-
-**3. `docs/manual/console.html` — the control.** Its `data-tip`, and any note that names it. A
-control drawn in the mock with no operation behind it is a specification; a control the panel
-draws that the mock does not is a defect.
-
-**4. `crates/karakuri-operation/src/lib.rs` — the variant.** Its title string must equal the row's
-heading exactly. `the_manual_and_the_vocabulary_agree` compares them.
-
-**5. `crates/karakuri-operation/src/gate.rs` — the class.** The match is exhaustive with no
-wildcard arm, so a new variant does not compile until somebody says which class it is in.
-
-**6. `crates/karakuri-operation-record/src/lib.rs` — what it writes.** `Records`, `Silent` or
-`Owed`, each with its reason at the arm.
-
-**7. `crates/karakuri-store/src/record.rs` — the record**, if it writes one. A record is separate
-from an operation: a bay-internal act writes none, and one that a replay must reproduce does.
-
-**8. The surfaces that construct it.** `karakuri-console/src` for a press, `karakuri/src/main.rs`
-for a key and its `apply` arm, `karakuri-cli/src/main.rs` for a flag or key, `karakuri-midi/src/map.rs`
-for a target.
-
-**9. The tests that name it**, including the fixtures. A test whose only subject was the retired
-operation goes with it. A test weakened to pass is worse than a red one.
-
-**Then run the suite. Do not mark it done on red.** Four tests hold the two halves together and
-each reads in a different direction:
-
-- `karakuri-console/tests/panel_column.rs` — a control emits an operation with no row.
-- `karakuri-operation/tests/the_manual_and_the_vocabulary_agree.rs` — a row with no variant, or a
-  title that does not match.
-- `karakuri-console/tests/vocabulary.rs` — the console's own shape against its rows.
-- the `key_column` module in `karakuri/src/main.rs` — a key bound to a route the page calls unbuilt.
-
-**Then write the record's Consequences, and only then.** That section is read as a description of
-the tree. Check each clause against the file it names.
+1. **`docs/manual/operations.html`**: Add, update, or remove the operation row, description, and status badges.
+2. **`docs/manual/console.html`**: Update corresponding control tooltips (`data-tip`) and UI documentation.
+3. **`crates/karakuri-operation/src/lib.rs`**: Update the `Operation` enum variant and ensure its title string matches the manual heading exactly.
+4. **`crates/karakuri-operation/src/gate.rs`**: Assign the operation to its appropriate safety permission class.
+5. **`crates/karakuri-operation-record/src/lib.rs`**: Define how the operation serializes into session journals (`Records`, `Silent`, or `Owed`).
+6. **`crates/karakuri-store/src/record.rs`**: Update persistent journal record formats if new disk serialization is introduced.
+7. **Input Surface Bindings**: Connect the operation to UI handlers in `karakuri-console`, keyboard bindings in `karakuri`, CLI flags in `karakuri-cli`, or MIDI maps in `karakuri-midi`.
+8. **Automated Verification**: Run integration tests verifying operation consistency:
+   ```sh
+   cargo test -p karakuri-operation --test the_manual_and_the_vocabulary_agree
+   cargo test -p karakuri-console --test panel_column
+   ```
+9. **Record ADR Consequences**: Record any operational changes and rejected routing alternatives in a dedicated ADR.
 
 ---
 
-## 6. Carrying Out a Decision That Is Not an Operation
+## 6. Carrying Out Non-Operation Architectural Decisions
 
-§5 is the common case. This is the rule behind it, for a decision that changes something else —
-a file format, a layout constant, where a thing is kept, what a refusal says.
-
-**Take stock before you change anything.** A decision that removes something is a sweep rather
-than an edit. Find every place the thing exists first and write the list down. Deleting the most
-obvious site and discovering the rest one test failure at a time is how a half-done change gets
-committed.
-
-**Whatever states the rule moves first.** For an operation that is the manual. For a file format
-it is `docs/ir-spec.md`; for a layout constant it is the mock; for a rule in force it is
-`docs/principles/`. The code follows the thing that specifies it, and the tests are what check
-the two agree.
-
-**Do not mark it done on a red suite.** The failing test names what is missing. If the message is
-not the one you expected, the decision has a consequence you have not found yet.
-
-**Say only what happened.** An ADR's Consequences are read as a description of the tree. Write
-that section after the work and check each clause against the file it names.
+For architectural modifications that do not involve operations (e.g., DSL syntax changes, storage refactoring, widget componentization):
+1. **Audit Dependencies**: Survey all affected files across workspace crates before modifying code.
+2. **Specification First**: Update the formal specification first ([`docs/ir-spec.md`](ir-spec.md), [`docs/architecture/`](architecture/), or relevant crate `README.md`).
+3. **Implement Changes Incrementally**: Break work into cohesive, single-file or single-crate steps.
+4. **Run Verification**: Ensure all workspace unit, integration, and formatting checks pass.
+5. **Document Outcomes**: Summarize changes factually in commit messages and relevant architectural documents.
 
 ---
 
 ## 7. Verification Checklist for Code Changes
 
-Before marking a task or pull request as complete, ensure the following checklist is satisfied:
+Before marking a task or pull request as complete, verify that:
 
-- [ ] **A decision with a losing alternative has a record**: see §4. If nothing was decided, nothing is owed.
-- [ ] **An operation that changed landed in all nine places**: see §5, which lists them and the
-      order; §6 for a decision that is not an operation. A record claiming a deletion that did not happen is worse than no record.
-- [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 — it costs about a minute, see §3.
-- [ ] **Formatting and lints pass**: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`. The push hook enforces both, so a checklist without them is one you can satisfy and still be refused.
-- [ ] **Naga validation passes**: Any modifications to `karakuri-codegen` MUST be verified against `naga_test.rs` to guarantee generated WGSL text parses and validates cleanly.
-- [ ] **Documentation integrity**: Existing comments, docstrings (`//!` and `///`), and Markdown documentation are updated accordingly.
-- [ ] **No unhandled errors or silent fallbacks**: Core logic should produce explicit error types (`IrError`, `SetError`, `GpuError`, etc.) rather than swallowing exceptions.
-- [ ] **Relative links in documentation**: Markdown links to repository files MUST use relative paths (e.g. `../crates/karakuri-ir` or `architecture.md`).
+- [ ] **Distinguish specification from argument in all added text**: Every added documentation block (whether in `.rs` docstrings/comments, HTML manuals, or UI tooltips) MUST be a specification (what it does / how to use it). Any design arguments, historical context, or rejected alternatives belong strictly in an ADR, not in code or manuals.
+- [ ] **A decision with a losing alternative has an ADR**: Recorded in `docs/adr/` and registered in `docs/adr/INDEX.md`.
+- [ ] **Operation changes updated across all surfaces**: Checked against Section 5 steps and validated with vocabulary tests.
+- [ ] **All workspace tests pass**: `cargo test --workspace` completes successfully with zero failures.
+- [ ] **Formatting and linter clean**: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` pass without warnings.
+- [ ] **Naga shader validation passes**: Modifications to `karakuri-codegen` verified against `naga_test.rs`.
+- [ ] **Documentation and comments updated**: Docstrings, crate READMEs, and architecture docs reflect current reality without obsolete historical claims.
+- [ ] **Explicit error handling**: Functions return structured domain errors (`IrError`, `SetError`, `StoreError`) rather than unhandled panics or silent fallbacks.
+- [ ] **Relative links in documentation**: Markdown references use relative links (e.g. `architecture.md`, `../crates/karakuri-ir`).
 
 ---
 
@@ -773,14 +231,7 @@ Before marking a task or pull request as complete, ensure the following checklis
 
 ### User Guides & Project Milestones
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
-- [manual/](manual/): **The console's manual, published** at
-  <https://toyoshim-i.github.io/Karakuri/manual/> — the seven rules its surface obeys, what
-  the words mean, the console region by region, and every operation with each way in. Written
-  ahead of the interface on purpose, and the reference that implementation is checked against.
-  HTML rather than Markdown, which is the same distinction said in the file extension: a
-  designed document with readers who never open this repository
+- [manual/](manual/): The console's manual, published at <https://toyoshim-i.github.io/Karakuri/manual/>
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
-- [roadmap.md](roadmap.md): What exists today, and where the project is going, milestone by milestone. **Its *Where this goes next* section is the handover** — the order the remaining work is cheapest in, and the decisions each piece is waiting on
-- [history/](history/): Milestones that closed, kept whole — history, never the present tense
-
-
+- [roadmap.md](roadmap.md): Milestone progress, delivery status, and technical backlog
+- [history/](history/): Closed milestones archive
