@@ -864,18 +864,6 @@ pub fn uses_card_into(
         let Some(row) = line.row_at(room, index) else {
             continue;
         };
-        let galley = painter.layout_no_wrap(
-            name.clone(),
-            FontId::new(size::BASE, FontFamily::Proportional),
-            pal.dim,
-        );
-        painter.galley(
-            Pos2::new(
-                row.min.x + size::LIB_ROW_PAD_X,
-                row.center().y - galley.size().y * 0.5,
-            ),
-            galley,
-            pal.dim,
-        );
+        card_row_text(&painter, row, name, pal.dim);
     }
 }

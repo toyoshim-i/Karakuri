@@ -494,46 +494,31 @@ pub(crate) fn audio_in_into(ui: &Ui, pal: &Palette, pill: &AudioInPill, audio: &
     };
     popup_card(painter, pal, card);
 
-    let line = |rect: Rect, text: String, colour: Color32| {
-        let galley = painter.layout_no_wrap(
-            text,
-            FontId::new(size::BASE, FontFamily::Proportional),
-            colour,
-        );
-        painter.galley(
-            Pos2::new(
-                rect.min.x + size::LIB_ROW_PAD_X,
-                rect.center().y - galley.size().y * 0.5,
-            ),
-            galley,
-            colour,
-        );
-    };
-
     // **A machine with no inputs**, which is a sentence and not a list —
     // `pill.rows` is zero, so `row` hands out nothing.
     if audio.inputs.is_empty() {
-        let only = Rect::from_min_size(
+        let foot = Rect::from_min_size(
             Pos2::new(
                 card.min.x + size::LIB_LIST_PAD,
                 card.min.y + size::LIB_LIST_PAD,
             ),
             egui::vec2(card.width() - size::LIB_LIST_PAD * 2.0, size::LIB_ROW_H),
         );
-        line(only, NO_INPUTS.to_owned(), pal.faint);
+        card_row_text(painter, foot, NO_INPUTS, pal.faint);
         return;
     }
 
     for index in 0..pill.rows {
-        let name = &audio.inputs[index];
+        let row = pill.row(index);
+        let input = &audio.inputs[index];
         // **The one that is open is the one colour the list has**, for the
         // reason the pill has one: a card of names with nothing marked leaves
         // an operator to remember which they picked.
-        let colour = match audio.device.as_deref() == Some(name.as_str()) {
+        let colour = match audio.device.as_deref() == Some(input.as_str()) {
             true => pal.mint,
             false => pal.text,
         };
-        line(pill.row(index), name.clone(), colour);
+        card_row_text(painter, row, input, colour);
     }
     // **`n of m`, in the Library bay's own words**, and only where the list
     // could not be shown whole.
