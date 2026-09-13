@@ -19,8 +19,8 @@ Immediate-mode graphical performance console (egui) for real-time visual operato
 1. **Program & Staging Bays (`view/program.rs`, `view/staging.rs`)**:
    - Displays live program output previews and staging preview cells.
    - Houses shader compilation diagnostics, compilation cards, and hot-swap controls.
-2. **Mixer & Master Bays (`view/mixer.rs`, `view/master.rs`)**:
-   - Interactive crossfaders, parameter strips, and deck gain/opacity controls.
+2. **Mixer & Master Bays (`view/mixer/`, `view/master.rs`)**:
+   - Deck strips carrying a trim, an opacity fader, a blend button and a mask mini, and the transition row under them. The mixer has no crossfader.
    - Tonemapping operators and compositing blend mode selectors.
 3. **Sequencer & Transport (`view/sequencer.rs`, `view/transport.rs`)**:
    - Beat grid visualizer, tempo readout, and quantization step triggers.

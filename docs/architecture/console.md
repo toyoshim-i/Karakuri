@@ -109,10 +109,10 @@ All widgets follow standardized padding, typography, contrast tokens, and probe 
 The console layout divides operator functionality into modular **bays**. In Phase 4 (P31), large monolithic bay files were decomposed into cohesive directory structures:
 
 ### 4.1 Mixer Bay (`view/mixer/`)
-Manages real-time compositing, transition curves, and deck balancing.
-- **[`strip.rs`](../../crates/karakuri-console/src/view/mixer/strip.rs)**: Individual deck channel strips containing gain faders, peak meters, mute/solo buttons, and cue monitors.
-- **[`transition.rs`](../../crates/karakuri-console/src/view/mixer/transition.rs)**: Crossfader controls, transition curves (linear, smoothstep, exponential), wipe front shapes, and soft edge parameters.
-- **[`mod.rs`](../../crates/karakuri-console/src/view/mixer/mod.rs)**: Main mixer bay coordinator assembling strips, crossfader, and master bus controls.
+Draws one strip per slot the deck has, with the transition row under them. There is no crossfader ([ADR-0233](../adr/0233-the-consoles-mixer-has-no-crossfader.md)).
+- **[`strip.rs`](../../crates/karakuri-console/src/view/mixer/strip.rs)**: One deck's strip: the residency tally, the trim, the opacity fader, the blend button, the mask mini, and the level meter.
+- **[`transition.rs`](../../crates/karakuri-console/src/view/mixer/transition.rs)**: The transition row: the wipe shape, the quantum and the length, and the `go` capsule, which runs a wipe on the addressed strip.
+- **[`mod.rs`](../../crates/karakuri-console/src/view/mixer/mod.rs)**: The Mixer bay coordinator, laying the strips out across the bay's track.
 
 ### 4.2 Transport Bay (`view/transport/`)
 Controls rhythm, clock synchronization, and global visual aesthetics.
