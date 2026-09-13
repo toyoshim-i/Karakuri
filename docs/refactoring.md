@@ -87,6 +87,6 @@ Decompose `crates/karakuri-engine/src/set.rs` (3,705 lines) into `crates/karakur
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
 | **P34** | `docs/architecture/` | Establish hierarchical architecture documentation (`console`, `engine`, `runtime`, `operations`) | **COMPLETED** |
-| **P35** | `karakuri::app` | Decompose `app.rs` into `handler.rs`, `operations.rs`, `audio_midi.rs`, `mod.rs` | **Ready to Execute** |
+| **P35** | `karakuri::app` | Decompose `app.rs` into `handler.rs`, `operations.rs`, `audio_midi.rs`, `mod.rs` | **COMPLETED** |
 | **P36** | `karakuri-console::hover` | Integrate `ControlDescriptor` hotkey badges into tooltips | **Ready to Execute** |
 | **P37** | `karakuri-engine::set` | Modularize `set.rs` into `schedule.rs`, `layers.rs`, `types.rs`, `mod.rs` | **Ready to Execute** |
