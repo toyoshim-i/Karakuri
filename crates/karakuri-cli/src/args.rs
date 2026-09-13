@@ -1639,7 +1639,9 @@ pub(crate) fn taken_in_file(
         karakuri_store::ndjson::read(file)
             .map_err(|e| format!("reading `{}`: {e}", file.display()))?
     };
-    setfile::unbundle(&store, &lines)
+    // `Somebody`: this binary has no `--presets`, so it cannot tell a shipped
+    // file from any other typed path. ADR-0347.
+    setfile::unbundle(&store, setfile::CameFrom::Somebody, &lines)
 }
 
 /// What a Set holds, by layer and in the order the layers compose: `2 L1, 1 L2,

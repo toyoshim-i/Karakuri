@@ -417,6 +417,26 @@ impl Slot {
     }
 }
 
+/// Where the file being taken in came from. Decides whether an id this store
+/// already holds is refused or replaced — ADR-0347.
+///
+/// No `Default`: like [`crate::Asked`], every call site says which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CameFrom {
+    /// A `.kbset` that arrived, a row of a dropped folder, a path typed at
+    /// `--take-in`. A taken id is refused.
+    Somebody,
+    /// The preset library this run resolved (ADR-0230). A taken id is replaced,
+    /// and what was there is kept under [`retired_as`] first.
+    TheShippedLibrary,
+}
+
+/// What the Set filed under `id` is filed again as before it is replaced:
+/// `<id>-<stamp>`, in [`crate::history::stamped_id`]'s spelling.
+pub fn retired_as(id: &str) -> String {
+    format!("{id}-{}", crate::history::stamped_id())
+}
+
 /// Take a Set somebody sent you into this store: its inlined sources as
 /// artifacts, a metadata card per artifact that compiles, and its Set file
 /// under the id the file itself carries. `--take-in`'s half of this; the lines
@@ -439,12 +459,17 @@ impl Slot {
 /// picked the same word. Being annoying about it costs one rename; the other
 /// failure costs work that is gone.
 ///
+/// **That argument is about a stranger, and the preset library is not one.** So
+/// [`CameFrom::TheShippedLibrary`] replaces instead: what is there is kept under
+/// [`retired_as`] first, and a take-in whose records match the ones already
+/// filed writes nothing and says so. ADR-0347.
+///
 /// The report says what happened, including the sources this build's checker
 /// will not compile: those are stored and filed all the same, because the Set
 /// will then fail on load with the checker's own diagnostics against the source
 /// — which tells an operator which line is wrong, where refusing the whole file
 /// would tell them only that it was.
-pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
+pub fn unbundle(store: &Store, came: CameFrom, lines: &[Line]) -> Result<String, String> {
     let mut file_id = None;
     let mut slots: Vec<Slot> = Vec::new();
     // Keyed and folded exactly as [`from_lines`](crate::setfile::from_lines) does it, so what is hashed
@@ -483,7 +508,10 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
     let held = store
         .list_sets()
         .map_err(|e| format!("reading what this store already holds: {e}"))?;
-    if held.iter().any(|entry| entry.id == file_id) {
+    // Decided here, performed at the write, so `Somebody` still returns before
+    // an artifact is stored.
+    let replacing = held.iter().any(|entry| entry.id == file_id);
+    if replacing && came == CameFrom::Somebody {
         return Err(format!(
             "set `{file_id}` is already in this store, and taking a Set in does not \
              overwrite one: the id came from the file rather than from you. Nothing was \
@@ -577,18 +605,74 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         .filter(|line| !matches!(line.record(), Record::Src { .. }))
         .cloned()
         .collect();
+    // Only reachable as the shipped library: `Somebody` returned above.
+    let retired = match replacing {
+        false => None,
+        true => {
+            let there = store
+                .read_set(&file_id)
+                .map_err(|e| format!("reading the `{file_id}` this store holds: {e}"))?;
+            // The records and not the lines: `Line` carries its original text
+            // too, so a different key order would read as a change.
+            if there
+                .iter()
+                .map(Line::record)
+                .eq(kept.iter().map(Line::record))
+            {
+                return Ok(format!(
+                    "`{file_id}` is already what the preset library ships — nothing was \
+                     written, and the Set this store holds is the one you pressed\n"
+                ));
+            }
+            let retired = retired_as(&file_id);
+            // `stamped_id` hands out each spelling once, so this cannot
+            // happen in one run. Asked anyway: a collision would overwrite the
+            // copy this branch exists to keep.
+            if held.iter().any(|entry| entry.id == retired) {
+                return Err(format!(
+                    "keeping the `{file_id}` this store holds would be filed as `{retired}`, \
+                     which this store also holds. Nothing was written"
+                ));
+            }
+            // The `set` record is rewritten to the id it is filed under, so
+            // the file does not carry two answers to what it is called.
+            let renamed: Vec<Line> = there
+                .iter()
+                .map(|line| match line.record() {
+                    Record::Set { v, .. } => Line::new(Record::Set {
+                        id: retired.clone(),
+                        v: *v,
+                    }),
+                    _ => line.clone(),
+                })
+                .collect();
+            store
+                .write_set(&retired, &renamed)
+                .map_err(|e| format!("keeping the `{file_id}` this store holds: {e}"))?;
+            Some(retired)
+        }
+    };
     store
         .write_set(&file_id, &kept)
         .map_err(|e| format!("writing set `{file_id}`: {e}"))?;
 
     let mut said = format!(
-        "took `{file_id}` in: {} node{}, {} source{} stored, {cards} metadata card{} written\n",
+        "{} `{file_id}` in: {} node{}, {} source{} stored, {cards} metadata card{} written\n",
+        match retired.is_some() {
+            true => "replaced",
+            false => "took",
+        },
         slots.len(),
         plural(slots.len()),
         sources.len(),
         plural(sources.len()),
         plural(cards),
     );
+    if let Some(retired) = &retired {
+        said.push_str(&format!(
+            "  the `{file_id}` that was here is kept as `{retired}`\n"
+        ));
+    }
     for note in &notes {
         said.push_str(&format!("  {note}\n"));
     }

@@ -2070,7 +2070,7 @@ fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
 
     let elsewhere = tempfile::tempdir().expect("tempdir");
     let bare = Store::open(elsewhere.path()).expect("store");
-    let said = unbundle(&bare, &sent).expect("the file carries its own source");
+    let said = unbundle(&bare, CameFrom::Somebody, &sent).expect("the file carries its own source");
     assert!(said.contains("`s1`"), "{said}");
 
     let loaded = load(&bare, "s1").expect("the set is filed and its artifacts are here");
@@ -2185,7 +2185,7 @@ fn an_unbundle_refuses_a_source_that_does_not_hash_to_its_address() {
 
     let elsewhere = tempfile::tempdir().expect("tempdir");
     let bare = Store::open(elsewhere.path()).expect("store");
-    let e = unbundle(&bare, &as_a_file(&tampered))
+    let e = unbundle(&bare, CameFrom::Somebody, &as_a_file(&tampered))
         .expect_err("text that is not the bytes its address names");
     // The node, by the address the file gives it and by what it is called
     // — which in a store with no card for it is its short hash.
@@ -2248,9 +2248,122 @@ fn an_unbundle_refuses_an_id_already_taken_and_leaves_the_set_alone() {
     save(&theirs, Asked::Operator, "s1", plain(&mine, &[])).expect("save");
     let before = written(&theirs, "s1");
 
-    let e = unbundle(&theirs, &sent).expect_err("an id that arrived in a file is not typed");
+    let e = unbundle(&theirs, CameFrom::Somebody, &sent)
+        .expect_err("an id that arrived in a file is not typed");
     assert!(e.contains("`s1`"), "the id is not named: {e}");
     assert_eq!(before, written(&theirs, "s1"), "the preset was overwritten");
+}
+
+/// The shipped library replaces its own row, and the Set that was there is kept
+/// under a stamped id (ADR-0347).
+///
+/// The pair of the test above: same taken id, same store, one argument
+/// different. "It wrote" would pass on a plain overwrite, so what is asserted
+/// is that both Sets are there afterwards, that the plain id holds the new
+/// material, and that the retired copy names itself by the id it is filed
+/// under.
+#[test]
+fn a_shipped_row_replaces_a_taken_id_and_what_was_there_is_kept() {
+    let (dir, store, l1, l4) = fixture();
+    save(
+        &store,
+        Asked::Operator,
+        "s1",
+        plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
+    )
+    .expect("save");
+    let sent = as_a_file(&bundle(&store, "s1").expect("bundle"));
+
+    // An `s1` of its own: the same geometry under a second renderer, so the id
+    // is taken and the material differs.
+    let elsewhere = tempfile::tempdir().expect("tempdir");
+    let theirs = Store::open(elsewhere.path()).expect("store");
+    let other = beside(&dir, "other.kir", L4);
+    save(
+        &theirs,
+        Asked::Operator,
+        "s1",
+        plain(&ordinary(&theirs, &l1, &[l4.clone(), other]), &[]),
+    )
+    .expect("save");
+    let before = written(&theirs, "s1");
+
+    let said = unbundle(&theirs, CameFrom::TheShippedLibrary, &sent)
+        .expect("the shipped library may replace its own row");
+
+    let held: Vec<String> = theirs
+        .list_sets()
+        .expect("list")
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect();
+    let retired: Vec<&String> = held.iter().filter(|id| *id != "s1").collect();
+    assert_eq!(
+        retired.len(),
+        1,
+        "the copy that was replaced was not kept: {held:?}"
+    );
+    let retired = retired[0];
+    assert!(
+        retired.starts_with("s1-"),
+        "the retired copy is filed as `{retired}`"
+    );
+    assert!(
+        said.contains(retired) && said.contains("kept as"),
+        "the operator is not told where it went: `{said}`"
+    );
+
+    assert_eq!(
+        written(&theirs, retired),
+        before.replace("\"id\":\"s1\"", &format!("\"id\":\"{retired}\"")),
+        "the retired copy is not the Set that was there, under its new id"
+    );
+    assert_eq!(
+        written(&theirs, "s1"),
+        written(&store, "s1"),
+        "the plain id does not hold what the library ships"
+    );
+}
+
+/// A shipped row this store already holds unchanged writes nothing, says so,
+/// and is not an error.
+///
+/// Two claims. Not an error, because a press is a take-in and then a load, and
+/// the refusal this replaced meant nothing loaded. Nothing written, because the
+/// alternative files a dated copy of an unchanged Set on every press.
+#[test]
+fn a_shipped_row_this_store_already_holds_writes_nothing_and_says_so() {
+    let (_dir, store, l1, l4) = fixture();
+    save(
+        &store,
+        Asked::Operator,
+        "s1",
+        plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
+    )
+    .expect("save");
+    let sent = as_a_file(&bundle(&store, "s1").expect("bundle"));
+
+    let elsewhere = tempfile::tempdir().expect("tempdir");
+    let theirs = Store::open(elsewhere.path()).expect("store");
+    unbundle(&theirs, CameFrom::TheShippedLibrary, &sent).expect("the first take-in");
+    let before = written(&theirs, "s1");
+
+    let said = unbundle(&theirs, CameFrom::TheShippedLibrary, &sent)
+        .expect("a preset already current is not a refusal");
+    assert!(
+        said.contains("already what the preset library ships"),
+        "what the operator reads is `{said}`"
+    );
+    assert_eq!(
+        before,
+        written(&theirs, "s1"),
+        "an unchanged preset rewrote the Set file"
+    );
+    assert_eq!(
+        theirs.list_sets().expect("list").len(),
+        1,
+        "an unchanged preset filed a retired copy of itself"
+    );
 }
 
 /// A source this build cannot compile is stored, keeps its slot, and is
@@ -2300,7 +2413,8 @@ fn an_unbundle_stores_a_source_that_does_not_compile_and_says_so() {
 
     let elsewhere = tempfile::tempdir().expect("tempdir");
     let bare = Store::open(elsewhere.path()).expect("store");
-    let said = unbundle(&bare, &as_a_file(&lines)).expect("one bad source is not a refusal");
+    let said = unbundle(&bare, CameFrom::Somebody, &as_a_file(&lines))
+        .expect("one bad source is not a refusal");
 
     let report = crate::compile::check(broken).expect_err("the fixture must not compile");
     let first = report.lines().next().expect("a diagnostic").trim();
@@ -2447,7 +2561,7 @@ fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
 
     let elsewhere = tempfile::tempdir().expect("tempdir");
     let bare = Store::open(elsewhere.path()).expect("store");
-    unbundle(&bare, &sent).expect("the bundle carries its own sources");
+    unbundle(&bare, CameFrom::Somebody, &sent).expect("the bundle carries its own sources");
     let loaded = load(&bare, "night").expect("the set is filed and its artifacts are here");
     assert_eq!(loaded.l1s[0].name, "ring");
     assert_eq!(loaded.l4s[0].name, "points");

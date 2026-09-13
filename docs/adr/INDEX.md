@@ -372,6 +372,7 @@ number; new records continue from the end.
 | [ADR-0344](0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md) | `slot` is disambiguated into three types, and ADR-0049's wait is over | 2026-09-11 | accepted |
 | [ADR-0345](0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md) | A file that crosses 1000 lines gets a nudge, not a gate | 2026-09-11 | accepted |
 | [ADR-0346](0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md) | The GUI and CLI keymaps diverged in scaffolding and converge on the operations page | 2026-09-11 | accepted |
+| [ADR-0347](0347-the-shipped-library-replaces-its-own-row-and-the-copy-it-replaces-is-kept.md) | The shipped library replaces its own row, and the copy it replaces is kept | 2026-09-13 | accepted |
 
 ## Retired numbers
 

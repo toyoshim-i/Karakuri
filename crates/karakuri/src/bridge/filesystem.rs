@@ -1605,6 +1605,19 @@ impl Taking<'_> {
         }
     }
 
+    /// Whose file a row of this listing is, which decides whether an id the
+    /// store already holds is refused or replaced (ADR-0347).
+    ///
+    /// The first thing that reads these two variants apart for anything but a
+    /// noun in a sentence: `unbundle` used to be handed the file with the
+    /// difference dropped.
+    pub(crate) fn came_from(&self) -> karakuri_environment::setfile::CameFrom {
+        match self {
+            Taking::Presets(_) => karakuri_environment::setfile::CameFrom::TheShippedLibrary,
+            Taking::Folder(_) => karakuri_environment::setfile::CameFrom::Somebody,
+        }
+    }
+
     /// The file behind the word that was pressed, or a sentence saying why there is
     /// not one.
     ///
@@ -1692,16 +1705,20 @@ impl Taking<'_> {
 /// you is not a way of asking this machine for its files"* (ADR-0229). Nothing
 /// here loosens it and nothing here repeats it.
 ///
-/// # An id this store already holds is refused, and the refusal is not written
-/// # here
+/// # An id this store already holds is settled there, and not written here
 ///
-/// `setfile::unbundle` asks what the store holds before it writes a byte and
-/// refuses an id that is taken — *"the id came from the file rather than from
-/// you"* — and that sentence is the one the operator gets. A second check here
-/// would be a second answer to *may this be overwritten*, and the two would
-/// disagree the day one of them moved. What this adds is which of the two acts
-/// failed: nothing was taken in, so nothing was loaded, and the deck is exactly
-/// as it was.
+/// `setfile::unbundle` asks what the store holds before it writes a byte, and
+/// what it does about a taken id depends on [`Taking::came_from`]: a folder row
+/// is refused, a preset row replaces and keeps what was there under a stamped
+/// id (ADR-0347). Both sentences are that function's. A second check here would
+/// be a second answer to *may this be overwritten*, and the two would disagree
+/// the day one of them moved. What this side adds is which of the two acts
+/// failed where one does: nothing was taken in, so nothing was loaded, and the
+/// deck is exactly as it was.
+///
+/// So a preset row now always ends with the preset loaded. Before ADR-0347 a
+/// store holding a copy from before the shipped parts moved met a refusal and
+/// no load, on every press.
 ///
 /// # The id is the file's own
 ///
@@ -1720,6 +1737,8 @@ pub(crate) fn taking_in(
     // by asking the library again on the press. A second copy of the listing
     // held on this side is a copy that goes on naming a file that has moved.
     let file = from.file(row)?;
+    // A property of the listing the row came off, not of the file.
+    let came = from.came_from();
     let store = Store::open(root).map_err(|e| format!("store `{}`: {e}", root.display()))?;
     // **The form is the file's own and the branch is `karakuri-cli`'s** — see
     // this function's head. A name is what says which, and nothing is opened
@@ -1745,7 +1764,7 @@ pub(crate) fn taking_in(
                 file.display()
             )
         })?;
-    let said = karakuri_environment::setfile::unbundle(&store, &lines)?;
+    let said = karakuri_environment::setfile::unbundle(&store, came, &lines)?;
     Ok(TakenIn { file, id, said })
 }
 
