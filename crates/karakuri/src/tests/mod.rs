@@ -1884,6 +1884,23 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
         vec!["beat_cloud".to_owned()],
         "the folder row was taken in and `all` does not list it"
     );
+    // And a second press on it is refused: the half of ADR-0347 that did not
+    // change, asserted at the press because that is where the two scopes were
+    // confused.
+    let refused = taking_in(&root, Taking::Folder(Some(&examples)), "beat_cloud")
+        .expect_err("a folder row overwrote a Set this store holds");
+    assert!(
+        refused.contains("already in this store") && refused.contains("beat_cloud"),
+        "the refusal an operator reads is `{refused}`"
+    );
+    assert_eq!(
+        library(&root)
+            .into_iter()
+            .map(|set| set.id)
+            .collect::<Vec<_>>(),
+        vec!["beat_cloud".to_owned()],
+        "a refused folder row left something behind"
+    );
     // **And the two operations one press performs**, in the order they
     // happen: the transfer names the *file* and the load names the id the
     // file filed itself under.
@@ -2166,35 +2183,37 @@ fn the_take_in_the_press_names_writes_no_record_and_that_is_settled() {
     );
 }
 
-/// An id this store already holds is refused rather than overwritten, and the
-/// operator is told which of the two acts failed.
+/// A preset this store already holds unchanged is loaded rather than refused,
+/// and a row the library does not hold is still refused by name.
 ///
-/// The refusal is `setfile::unbundle`'s and is not written twice — *"an id
-/// already taken is refused rather than overwritten"* — so what is asserted
-/// here is that the press goes through it: a second press on the same preset
-/// row leaves the store exactly as the first one left it, and the sentence
-/// names the id rather than the file.
+/// Before ADR-0347 a second press was a refusal, so nothing was taken in and
+/// nothing loaded. Asserted here: the press succeeds *and* wrote nothing —
+/// "it loaded" alone would pass on a press that filed a dated copy each time.
+/// The sentence is `setfile::unbundle`'s; what is checked is that the press
+/// goes through it.
 ///
 /// A CPU test, for the test above's reason.
 #[test]
-fn a_preset_whose_id_this_store_holds_is_refused_rather_than_overwritten() {
-    let root = scratch_dir("preset-refused");
+fn a_preset_this_store_already_holds_is_loaded_rather_than_refused() {
+    let root = scratch_dir("preset-current");
     let presets = shipped_presets();
     Store::open(&root).expect("a store to take a preset into");
 
     taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud").expect("the first take-in");
     let held = library(&root);
 
-    let refused = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
-        .expect_err("the same preset was taken in twice");
+    let again = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
+        .expect("a preset already current is not a refusal");
     assert!(
-        refused.contains("already in this store") && refused.contains("beat_cloud"),
-        "the refusal an operator reads is `{refused}`"
+        again.said.contains("already what the preset library ships"),
+        "what the operator reads is `{}`",
+        again.said
     );
+    assert_eq!(again.id, "beat_cloud", "the load would name `{}`", again.id);
     assert_eq!(
         library(&root),
         held,
-        "a refused take-in changed what the store holds"
+        "an unchanged preset changed what the store holds"
     );
 
     // And a row that is not in the preset library at all is refused
@@ -2211,7 +2230,77 @@ fn a_preset_whose_id_this_store_holds_is_refused_rather_than_overwritten() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
+/// A preset library that has moved on since the press that took it in replaces
+/// its own row, and the copy that was there is kept.
+///
+/// The library is a copy of `examples/` this test edits, rather than a Set
+/// hand-built to differ: a `.kset` names its parts by relative path and the
+/// stored file names them by content, so editing a `.kir` beside the `.kset` is
+/// how the two come apart in practice.
+///
+/// A CPU test, for the test above's reason.
+#[test]
+fn a_preset_the_library_has_moved_on_from_is_replaced_and_the_old_one_kept() {
+    let root = scratch_dir("preset-moved-on");
+    let library_dir = root.join("examples");
+    std::fs::create_dir_all(&library_dir).expect("a library of this test's own");
+    for entry in std::fs::read_dir(shipped_presets().dir).expect("read examples") {
+        let entry = entry.expect("entry");
+        if entry.file_type().expect("file type").is_file() {
+            std::fs::copy(entry.path(), library_dir.join(entry.file_name())).expect("copy");
+        }
+    }
+    let presets = karakuri_environment::places::Presets {
+        dir: library_dir.clone(),
+        found: karakuri_environment::places::Found::Given,
+    };
+    Store::open(&root).expect("a store to take a preset into");
+
+    taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud").expect("the first take-in");
+    let before = std::fs::read_to_string(root.join("sets/beat_cloud.kbset")).expect("the Set file");
+
+    // The library moves on: a part the `.kset` names is edited where it lies.
+    // A comment, because the assertion is about the address changing.
+    let part = library_dir.join("beat_shell.kir");
+    let source = std::fs::read_to_string(&part).expect("the part");
+    std::fs::write(&part, format!("// the library moved on\n{source}")).expect("edit the part");
+
+    let said = taking_in(&root, Taking::Presets(Some(&presets)), "beat_cloud")
+        .expect("the shipped library may replace its own row")
+        .said;
+
+    let held: Vec<String> = library(&root).into_iter().map(|set| set.id).collect();
+    let retired: Vec<&String> = held.iter().filter(|id| *id != "beat_cloud").collect();
+    assert_eq!(
+        retired.len(),
+        1,
+        "the copy that was replaced was not kept: {held:?}"
+    );
+    let retired = retired[0];
+    assert!(
+        retired.starts_with("beat_cloud-"),
+        "the retired copy is filed as `{retired}`"
+    );
+    assert!(
+        said.contains(retired) && said.contains("kept as"),
+        "the operator is not told where it went: `{said}`"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join(format!("sets/{retired}.kbset"))).expect("the kept Set"),
+        before.replace("\"id\":\"beat_cloud\"", &format!("\"id\":\"{retired}\"")),
+        "the kept copy is not the Set that was there, under its new id"
+    );
+    assert_ne!(
+        std::fs::read_to_string(root.join("sets/beat_cloud.kbset")).expect("the Set file"),
+        before,
+        "`beat_cloud` still names the material it named before the library moved on"
+    );
+
+    std::fs::remove_dir_all(&root).expect("clean up");
+}
+
 /// A scope is a listing on this side, and stepping to one answers it — two of
+/// the four with rows here,ng to one answers it — two of
 /// the four with rows here, and two with nothing and a sentence saying which
 /// kind of nothing it is.
 ///
