@@ -37,6 +37,20 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 
 ---
 
-## 2. Future Initiatives
+## 2. Planned Phase: Phase 7 — GUI Interaction & Event Dispatch Modernization
+
+Based on architectural analysis of the GUI event handling pipeline (`karakuri-console::input`, `karakuri::readout::dispatch`, `karakuri::app::handler`), Phase 7 modernizes event routing, eliminates hit-testing duplication, unifies modal overlay states, and abstracts text input handling:
+
+| Initiative | Target Subsystem | Actionable Deliverable | Status |
+|---|---|---|:---:|
+| **P42** | `karakuri::app` / Text Input | Abstract inline naming modes (`arrangement.naming` & `view.naming_set`) into a unified `TextInputSession` handler | **PENDING** |
+| **P43** | `karakuri-console::view` | Unify popup card open/close states into a type-safe `ModalOverlay` enum to guarantee Rule 2 mutual exclusion | **PENDING** |
+| **P44** | `karakuri-console::hover` | Connect `ModalOverlay` to the hover layer to suppress tooltips on background controls beneath open cards | **PENDING** |
+| **P45** | `karakuri::readout::dispatch` | Leverage `ControlId` in `input::claim` to eliminate double hit-testing and decompose 1,200-line pointer dispatch into per-bay handlers | **PENDING** |
+| **P46** | `karakuri::app::handler` | Decouple post-event side-effects (I/O, set saving, projector routing) out of `handler.rs` into `operations.rs` | **PENDING** |
+
+---
+
+## 3. Future Initiatives
 
 Future refactoring and architectural enhancements will be recorded here as new requirements emerge.
