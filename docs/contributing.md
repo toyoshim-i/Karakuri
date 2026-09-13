@@ -6,6 +6,35 @@ This document outlines the engineering principles, workflow guidelines, build/te
 
 ## 1. Project Invariants & Core Rules
 
+### Design Correctness is the Foremost Priority
+In Karakuri, **architectural and design elegance, modularity, and correctness take precedence above all else**.
+Code must never be contorted to accommodate hasty hacks or accumulate technical debt just to "make something work."
+Every change should aim to leave the codebase cleaner, more cohesive, and easier to reason about than before.
+When a choice arises between preserving an awkward historical convention and adopting a demonstrably cleaner design, **design correctness wins**.
+
+### Rapidly Understanding the Codebase Architecture (3-Tier Hierarchy)
+Before writing code or proposing changes, contributors and AI agents MUST understand the system topology and component boundaries. The codebase is documented in a three-tier hierarchy designed for quick onboarding:
+
+1. **System-wide Architecture ([`docs/architecture.md`](architecture.md))**:
+   The top-level map covering repository-wide topologies, the multi-crate division of labor, the frame pipeline, and the render thread model. Start here to understand how the whole instrument fits together.
+2. **Subsystem Architecture ([`docs/architecture/`](architecture/))**:
+   Domain-specific deep dives into individual subsystems:
+   - [`console.md`](architecture/console.md): Egui UI layout, componentized widgets, modular bays, and Control descriptor registry
+   - [`engine.md`](architecture/engine.md): 8-stage `.kir` compilation pipeline, Deck/Set execution graphs, residency lifecycle, and 3-clock model
+   - [`runtime.md`](architecture/runtime.md): Desktop GUI coordinator (`karakuri`), headless runner (`karakuri-cli`), environmental services, and artifact store
+   - [`operations.md`](architecture/operations.md): Single operation vocabulary (`karakuri-operation`), immutable session journals, sequencer, and MCP server
+   Read the subsystem document that corresponds to the area you are modifying.
+3. **Crate-Level API & Invariants (`crates/<crate>/README.md`)**:
+   Every single one of the 16 crates maintains its own `README.md` documenting its public types, internal module hierarchy, dependencies, and testing rules. Consult the crate `README.md` before editing files in that crate.
+
+### ADRs are Historical Records, Not Inviolable Laws
+**Why** past decisions were made is in [docs/adr/](adr/). However, **do not treat ADRs as immutable dogma or religious law**:
+- An ADR is a *description of history* ([ADR-0151](adr/0151-an-adr-is-a-description-of-history.md)) capturing why a particular alternative was chosen under the constraints, knowledge, and state of the repository *at that specific moment in time*.
+- As the system evolves, past decisions may become suboptimal, restrictive, or obsolete.
+- **Always critically assess the validity of existing ADRs against current design ideals.** If an old ADR forces unnatural contortions, preserves technical debt, or contradicts clean architecture, challenge it!
+- When a past decision is superseded by a cleaner design, do not hesitate to record a superseding ADR (e.g. `ADR-0344` superseding `ADR-0049`) and modernize the code. **Design correctness trumps historical inertia.**
+
+### Project Principles
 Every change MUST respect the standing rules in [docs/principles/](principles/) — **one file each**,
 so a rule is stated once and cannot drift between documents. `ls docs/principles/` is the index,
 because each filename is the rule it states.
@@ -501,6 +530,8 @@ does not reach* below, and
 [ADR-0151](adr/0151-an-adr-is-a-description-of-history.md), which carries the test for the cases
 that are not obvious.
 
+**ADRs are not immutable law.** An ADR records why an alternative lost *then*, not an eternal prohibition. As code evolves, requirements shift, and better abstractions become clear, holding onto a flawed historical decision is harmful dogma. The code's design correctness and architectural elegance are the highest priority. When an existing ADR stands in the way of a cleaner, more modular, and correct design, re-evaluate it with an open mind and supersede it with a new record.
+
 The present tense lives in the other documents; `docs/principles/` is where a rule that still stands
 is kept current, by deletion and renumbering rather than by editing.
 
@@ -724,10 +755,25 @@ Before marking a task or pull request as complete, ensure the following checklis
 
 ## 8. Related Architecture & Specification Reference
 
-- [architecture.md](architecture.md): Source code structure, multi-crate map, pipeline, and threading model
-- [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
+### Tier 1: System Architecture
+- [architecture.md](architecture.md): Source code structure, 16-crate dependency map, frame pipeline, and threading model
+- [architecture/README.md](architecture/README.md): Architecture guide hub, 3-tier model overview, and crate topology diagrams
+
+### Tier 2: Subsystem Architecture
+- [architecture/console.md](architecture/console.md): Console UI layout, componentized widgets, modular bays, and Control descriptor registry
+- [architecture/engine.md](architecture/engine.md): 8-stage `.kir` compilation pipeline, Deck/Set execution graphs, residency lifecycle, and 3-clock model
+- [architecture/runtime.md](architecture/runtime.md): Desktop GUI coordinator (`karakuri`), headless runner (`karakuri-cli`), environmental services, and artifact store
+- [architecture/operations.md](architecture/operations.md): Single operation vocabulary (`karakuri-operation`), immutable session journals, sequencer, and MCP server
+
+### Tier 3: Invariants, Specifications & Crate Guides
+- [crates/*/README.md](../crates/): Per-crate component guides, module boundaries, public APIs, and testing constraints for all 16 workspace crates
+- [ir-spec.md](ir-spec.md): `.kir` DSL specification, type system, and language invariants
+- [principles/](principles/): The rules in force, one per file — current non-negotiable invariants
+- [adr/](adr/): Architectural decision records — historical context of past choices (descriptions of history, not immutable dogma)
+
+### User Guides & Project Milestones
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
-- [manual/](manual/): **the console's manual, published** at
+- [manual/](manual/): **The console's manual, published** at
   <https://toyoshim-i.github.io/Karakuri/manual/> — the seven rules its surface obeys, what
   the words mean, the console region by region, and every operation with each way in. Written
   ahead of the interface on purpose, and the reference that implementation is checked against.
@@ -736,6 +782,5 @@ Before marking a task or pull request as complete, ensure the following checklis
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): What exists today, and where the project is going, milestone by milestone. **Its *Where this goes next* section is the handover** — the order the remaining work is cheapest in, and the decisions each piece is waiting on
 - [history/](history/): Milestones that closed, kept whole — history, never the present tense
-- [adr/](adr/): Every decision, with the alternatives that lost — append-only
-- [principles/](principles/): The rules in force, one per file — current only
+
 
