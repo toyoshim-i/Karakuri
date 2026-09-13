@@ -502,6 +502,16 @@ pub(crate) struct Costs {
     /// this a host clock* has an answer taken against a load rather than read off a
     /// flag — and prints `None` as *nothing asked* rather than as a verdict.
     pub(crate) clock: Option<MeasurementMethod>,
+    /// The periods of the frames drawn since the last rate was taken — see
+    /// [`Costs::RATE`].
+    ///
+    /// Every drawn frame's, owed or not; [`Costs::touched`] does not clear it.
+    pub(crate) paced: Duration,
+    /// How many frames `paced` is the periods of.
+    pub(crate) paced_frames: usize,
+    /// Frames a second over the last completed [`Costs::RATE`], and `None` until
+    /// one has completed.
+    pub(crate) last_rate: Option<f64>,
 }
 
 impl Costs {
@@ -525,6 +535,9 @@ impl Costs {
             // about.
             since_audit: Instant::now(),
             clock: None,
+            paced: Duration::ZERO,
+            paced_frames: 0,
+            last_rate: None,
         }
     }
 
@@ -550,6 +563,12 @@ impl Costs {
     /// not cheap says so on that machine instead of being reassured by a sentence
     /// written on another one.
     pub(crate) const AUDIT: Duration = Duration::from_millis(500);
+
+    /// How much drawn time the transport row's rate is taken over — see
+    /// [`Costs::rate`].
+    ///
+    /// Summed from [`Cost::period`], so the stretch covers drawn frames only.
+    pub(crate) const RATE: Duration = Duration::from_millis(500);
 
     /// The top of a frame: store the anchor and hand back the interval since the
     /// previous one, which is [`Cost::period`].
@@ -628,6 +647,15 @@ impl Costs {
             self.still.bytes += cost.bytes;
         }
         self.owed = false;
+        if let Some(period) = cost.period {
+            self.paced += period;
+            self.paced_frames += 1;
+            if self.paced >= Costs::RATE {
+                self.last_rate = Some(self.paced_frames as f64 / self.paced.as_secs_f64());
+                self.paced = Duration::ZERO;
+                self.paced_frames = 0;
+            }
+        }
         if self.frames.len() < SAMPLE {
             self.frames.push(cost);
         }
@@ -636,28 +664,28 @@ impl Costs {
     /// Frames a second: what was drawn on the untouched window, over the stretch it
     /// was drawn in.
     ///
-    /// The stretch is the caller's because the two callers are at different points
-    /// in it and neither may guess the other's. [`Costs::say`] is taken exactly
-    /// [`STILL`] after `quiet_since` and says so in the sentence above the number;
-    /// the transport row is asked on every frame and its stretch is however much of
-    /// one has elapsed. One quotient, two stretches — and a second expression of
-    /// *frames over seconds* would be the readout and the reading disagreeing about
-    /// the rate of the same window.
+    /// The stretch is the caller's: [`Costs::say`] is taken exactly [`STILL`] after
+    /// `quiet_since` and says so in the sentence above the number.
+    ///
+    /// Only frames drawn on a window nobody touched are counted, so this is zero
+    /// while a pointer moves over the window. The transport row reads
+    /// [`Costs::rate`] instead.
     pub(crate) fn rate_over(&self, stretch: f64) -> f64 {
         self.still.frames as f64 / stretch
     }
 
-    /// The rate as it stands, for the transport row — or `None` where there is not
-    /// yet a stretch with a frame in it to divide.
+    /// Frames a second for the transport row: the frames drawn over the last
+    /// [`Costs::RATE`] of their own periods, or `None` before the first such
+    /// stretch has been drawn.
     ///
-    /// `None` is the honest answer twice over. Just after something touched the
-    /// window there is no stretch, and a rate over no time is an infinity. And a
-    /// window with nothing live on it stops asking for frames entirely, so the
-    /// stretch goes on growing while the frames do not — which is a rate falling
-    /// towards zero and is exactly what the window is doing.
-    pub(crate) fn rate_now(&self) -> Option<f64> {
-        let stretch = self.quiet_since.elapsed().as_secs_f64();
-        (self.still.frames > 0 && stretch > 0.0).then(|| self.rate_over(stretch))
+    /// Every drawn frame counts, owed or not, and touching the window does not
+    /// reset it, so the figure holds while the pointer moves. Nothing new is
+    /// timed: the periods are the ones [`Costs::tick`] already hands each frame.
+    ///
+    /// It holds its last value while no frame is pushed, so the transport row
+    /// asks it only while something is live (ADR-0177).
+    pub(crate) fn rate(&self) -> Option<f64> {
+        self.last_rate
     }
 
     /// When the reading is due, and `None` once it has been taken. It is also what
