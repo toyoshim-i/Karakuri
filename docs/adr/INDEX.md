@@ -373,6 +373,11 @@ number; new records continue from the end.
 | [ADR-0345](0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md) | A file that crosses 1000 lines gets a nudge, not a gate | 2026-09-11 | accepted |
 | [ADR-0346](0346-the-gui-and-cli-keymaps-diverged-in-scaffolding-and-converge-on-the-operations-page.md) | The GUI and CLI keymaps diverged in scaffolding and converge on the operations page | 2026-09-11 | accepted |
 | [ADR-0347](0347-the-shipped-library-replaces-its-own-row-and-the-copy-it-replaces-is-kept.md) | The shipped library replaces its own row, and the copy it replaces is kept | 2026-09-13 | accepted |
+| [ADR-0348](0348-a-chain-slots-cut-is-set-through-the-parameter-row.md) | A chain slot's cut is set through the parameter row, and a position the chain has not got writes nothing | 2026-09-13 | accepted |
+| [ADR-0349](0349-the-chain-is-the-frames-so-it-reads-the-session-clock-and-is-charged-against-the-frames-budget.md) | The chain is the frame's, so it reads the session clock and is charged against the frame's budget | 2026-09-13 | accepted |
+| [ADR-0350](0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md) | The Transport's two cards are walked, and the tempo figure steps by a beat a minute | 2026-09-13 | accepted |
+| [ADR-0351](0351-the-lane-chooser-is-a-rung-of-the-address.md) | The lane chooser is a rung of the address | 2026-09-13 | accepted |
+| [ADR-0352](0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md) | The chain's list is the Master bay's items, and a slot is taken out by a glyph on its row | 2026-09-13 | accepted |
 
 ## Retired numbers
 

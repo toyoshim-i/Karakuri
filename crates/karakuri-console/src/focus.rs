@@ -76,12 +76,15 @@
 
 use std::collections::BTreeMap;
 
-use karakuri_operation::{Authority, BlendMode, Operation, Output, ParamValue, Revision, StepMode};
+use karakuri_operation::{
+    Authority, BeatSource, BlendMode, ChainParam as ParamOfChain, Operation, Output, ParamValue,
+    Revision, StepMode,
+};
 
 use karakuri_layout::{Layout, NodeId};
 
 use crate::panel::{Op, Panel};
-use crate::view::{region, Kind, Mask, Region, Tally, View};
+use crate::view::{region, Ask, AudioAsk, Kind, Mask, Region, Tally, View};
 
 /// The digit that names a bay's head, which is the one digit that is not an
 /// item.
@@ -357,6 +360,19 @@ impl Address {
     pub fn to_item(&mut self, nth: usize) {
         self.at.clear();
         self.down(nth);
+    }
+
+    /// Put the address on the `nth` thing at the level it has already reached,
+    /// remembering it — [`Address::to_item`] at any depth, which is what an arrow
+    /// does inside a card.
+    ///
+    /// `false` at the bay, where there is no level to walk along.
+    pub fn to_row(&mut self, nth: usize) -> bool {
+        if self.at.pop().is_none() {
+            return false;
+        }
+        self.down(nth);
+        true
     }
 }
 
@@ -649,6 +665,18 @@ pub enum Control {
     /// The exposure track, which is a level.
     Exposure,
 
+    // -- the two cards the Transport's address walks -----------------------
+    /// One input of the audio-in pill's card, by the name the machine answered
+    /// with — `enter` attaches it as the beat source.
+    Input,
+    /// The arrangement menu's *save*. `enter` files the arrangement under the name
+    /// in use, and asks for one where there is none.
+    Save,
+    /// The arrangement menu's *start a new one*.
+    New,
+    /// One name the arrangement menu lists — `enter` puts that arrangement back.
+    Filed,
+
     // -- the Program bay ---------------------------------------------------
     /// The Program head's `solo` — `space` is *soloed* and *not*.
     Solo,
@@ -682,17 +710,37 @@ pub enum Control {
     // -- the Master chain --------------------------------------------------
     /// The master out, which is a level.
     Out,
-    /// One of the three effects, whose parameters have no spelling in the
-    /// vocabulary — so a digit reaches the effect and stops.
-    Fx,
+    /// One slot of the master chain, which holds controls of its own.
+    Slot,
+    /// One parameter row of a slot, which is a level: the arrows step it a tenth of
+    /// the range its procedure declares and `space` returns it to the value that
+    /// procedure declared it at.
+    ChainParam,
+    /// A slot's cut chip — `space` cycles `mix` and `exit`. It is addressed on
+    /// every slot and draws on a slot whose procedure declares `retains`; on one
+    /// that does not it declines and says so.
+    ChainCut,
+    /// The `−` at the end of a slot's row — `enter` takes that slot out of the
+    /// chain.
+    ChainRemove,
+    /// The Master bay's `+ add` — `enter` puts the chooser down, and the chooser's
+    /// entries are the rung under it.
+    AddEffect,
+    /// One entry of the `+ add` chooser: a `kind L5` procedure the library holds.
+    /// `enter` appends a slot of it and takes the card away.
+    ChainProcedure,
 
     // -- the Sequencer -----------------------------------------------------
     /// The head's grid mode pill — `space` names the other of the two.
     Mode,
     /// One of the head's four bank pills — `space` arms that pattern.
     Bank,
-    /// The foot's `+ lane`, whose press puts the chooser down.
+    /// The foot's `+ lane` — `enter` puts the chooser down, and the chooser's
+    /// entries are the rung under it.
     AddLane,
+    /// One entry of the `+ lane` chooser: a target a lane can drive. `enter` points
+    /// a lane at it and takes the card away.
+    LaneTarget,
     /// A lane's label, whose mute is a state.
     Label,
     /// One step of a lane — a row of alike cells the arrows walk across while the
@@ -717,8 +765,9 @@ pub enum Control {
 /// ADR-0259's kinds, as the grammar reads them: a state is a closed list
 /// `space` cycles, a level is a continuum the arrows step and `space` returns
 /// to its default, an act is a control that performs rather than sets, and the
-/// last two are what the walk found that the record's seven do not have a word
-/// for — a row of alike cells, and a control that is drawn and answers nothing.
+/// last three are what the walk found that the record's seven do not have a
+/// word for — a row of alike cells, a continuum with no value it was declared
+/// at, and a control that is drawn and answers nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Answers {
     /// A closed list: `space` cycles it and the arrows decline, because the values
@@ -734,10 +783,9 @@ pub enum Answers {
     /// sets — the Sequencer's steps, and the one place a bay walks two axes:
     /// `across` is this control's and [`Built::across`] is its items'.
     Cells { across: bool },
-    /// A control whose press puts a card down. The card's own rows are a second
-    /// listing and the address does not descend into one, so the four keys decline
-    /// here and say so rather than opening something they cannot then walk.
-    Card(&'static str),
+    /// A continuum the arrows step, with no value it was declared at — so `space`
+    /// declines with this sentence where a level returns to its default.
+    Track(&'static str),
     /// Drawn, addressed, and answering nothing, with the sentence that says why — a
     /// digit lands on it and the ring is drawn, which is ADR-0259's own finding
     /// about the four preview cells.
@@ -758,12 +806,15 @@ impl Control {
             Control::Star => Answers::State,
             Control::Params => Answers::Act(Act::Read),
             // **The figure is a track and not a level**: a press positions it
-            // inside a band that is a guard on a hand (ADR-0291), and nothing
-            // in this workspace names a step for a tempo — so there is nothing
-            // for an arrow to move it by.
-            Control::Tempo => Answers::Nothing(
-                "the tempo figure is a track a press positions rather than a level with a step \
-                 — press it, or tap the beat with b",
+            // inside a band that is a guard on a hand (ADR-0291) and the arrows
+            // step it by one beat a minute, which is
+            // [ADR-0350](../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md).
+            // What the grid runs at is not a value this row declares, so there
+            // is no state for `space` to return it to.
+            Control::Tempo => Answers::Track(
+                "the tempo figure has no value it was declared at, so there is nothing for \
+                 space to return it to — the arrows step it a beat a minute, a press names one \
+                 outright, and b taps the beat",
             ),
             // The operand is the direction the key spells, which is the
             // operand rule's own second clause: `,` and `.` stay global.
@@ -775,14 +826,16 @@ impl Control {
             Control::Beat => Answers::Nothing("the beat grid is a readout — b taps the beat"),
             Control::Bar => Answers::Nothing("the bar counter is a readout"),
             Control::Cost => Answers::Nothing("the frame cost is a readout"),
-            Control::Audio => Answers::Card(
-                "the audio-in pill puts a card of inputs down, and the address does not descend \
-                 into a card — press the input you want",
+            Control::Audio | Control::Arrangement => Answers::Act(Act::Open),
+            Control::Input => Answers::Act(Act::Attach),
+            Control::Save => Answers::Act(Act::Save),
+            // **The reset is one row of the page and `r` is the key that
+            // reaches it**, so this row of the menu is drawn and is not
+            // performed here.
+            Control::New => Answers::Nothing(
+                "start a new one is the reset, and r starts one from anywhere on this panel",
             ),
-            Control::Arrangement => Answers::Card(
-                "the arrangement pill puts its menu down, and the address does not descend into \
-                 a card — press save, or the arrangement you want back",
-            ),
+            Control::Filed => Answers::Act(Act::Restore),
             Control::Tonemap => Answers::State,
             Control::Exposure => Answers::Level,
             Control::Solo | Control::Class => Answers::State,
@@ -808,17 +861,19 @@ impl Control {
             }
             Control::Anchor | Control::Param => Answers::Level,
             Control::Out => Answers::Level,
-            // ADR-0259's one place where a bay is drawn and its operations are
-            // not sayable.
-            Control::Fx => Answers::Nothing(
-                "this effect's parameters have no spelling in the vocabulary, so a digit \
-                 reaches the effect and stops — the track under the pointer is the way in",
+            // A rung and not a control, on the Inspector's two rungs' terms.
+            Control::Slot => Answers::Nothing(
+                "a chain slot is a rung and not a control — press a digit to name one of the \
+                 controls in it",
             ),
+            Control::ChainParam => Answers::Level,
+            Control::ChainCut => Answers::State,
+            Control::ChainRemove => Answers::Act(Act::Remove),
+            Control::AddEffect => Answers::Act(Act::Open),
+            Control::ChainProcedure => Answers::Act(Act::Add),
             Control::Mode | Control::Bank => Answers::State,
-            Control::AddLane => Answers::Card(
-                "+ lane puts the chooser down, and the address does not descend into a card — \
-                 press what the lane should drive",
-            ),
+            Control::AddLane => Answers::Act(Act::Open),
+            Control::LaneTarget => Answers::Act(Act::Point),
             Control::Label => Answers::State,
             Control::Step => Answers::Cells { across: true },
             Control::Sink => Answers::State,
@@ -859,16 +914,50 @@ impl Control {
             Grammar::Enter => self.acts().is_some(),
             // **Two rungs are not controls**, and a digit descends through
             // them — which is the only way the Inspector's third rung is
-            // reached at all.
-            Grammar::Digit => matches!(self, Control::DeckHead | Control::Node),
+            // reached at all. **`+ lane` is a control and a rung both**: it
+            // performs — `enter` puts the chooser down — and a digit then
+            // names the nth entry of the card it put there.
+            Grammar::Digit => matches!(
+                self,
+                Control::DeckHead
+                    | Control::Node
+                    | Control::AddLane
+                    | Control::Audio
+                    | Control::Arrangement
+                    | Control::Slot
+                    | Control::AddEffect
+            ),
+            // **A card's rows are walked**, so the arrows reach the control
+            // that opens the card and the rows under it, where they reach
+            // neither of the other two acts.
+            Grammar::Arrows
+                if matches!(
+                    self,
+                    Control::AddLane
+                        | Control::LaneTarget
+                        | Control::Audio
+                        | Control::Arrangement
+                        | Control::Input
+                        | Control::Save
+                        | Control::New
+                        | Control::Filed
+                        | Control::AddEffect
+                        | Control::ChainProcedure
+                ) =>
+            {
+                true
+            }
             _ => match (self.answers(), key) {
                 // A state has a next value and a level has a default, so
                 // `space` acts on both — which is what makes it the key of the
                 // grammar an operator reaches for. A cell is set by it too.
                 (Answers::State | Answers::Level | Answers::Cells { .. }, Grammar::Space) => true,
                 // A level's neighbour is its next value and a cell's is the
-                // cell beside it. A state has neither.
-                (Answers::Level | Answers::Cells { .. }, Grammar::Arrows) => true,
+                // cell beside it. A track's is its next value too. A state has
+                // neither.
+                (Answers::Level | Answers::Track(_) | Answers::Cells { .. }, Grammar::Arrows) => {
+                    true
+                }
                 _ => false,
             },
         }
@@ -898,6 +987,26 @@ pub enum Act {
     /// The attachment on a parameter row, taken back — after it the row is a handle
     /// again.
     TakeBack,
+    /// The chooser under the addressed control, put down. After it the card's
+    /// entries are the rung below the control and the address descends into them by
+    /// digit or by arrow.
+    Open,
+    /// A lane, pointed at the target on the addressed entry. After it the card is
+    /// gone and the address is back on the control that opened it.
+    Point,
+    /// The input on the addressed row of the audio-in card, attached as the beat
+    /// source.
+    Attach,
+    /// The arrangement, filed under the name in use — or a name asked for, where
+    /// there is none in use.
+    Save,
+    /// The arrangement named on the addressed row, put back.
+    Restore,
+    /// The addressed slot, taken out of the master chain.
+    Remove,
+    /// A slot of the addressed procedure, appended to the master chain. After it
+    /// the card is gone and the address is back on `+ add`.
+    Add,
 }
 
 /// What the things at one rung are made of: the controls drawn first, and the
@@ -915,6 +1024,15 @@ pub struct Of {
     /// The control every thing after them is, or `None` where a thing draws only
     /// the controls above.
     pub then: Option<Control>,
+    /// The controls drawn *after* the counted ones, in draw order.
+    ///
+    /// The Master bay is what asks for it: its items are the out fader, then one
+    /// per slot of the chain, then `+ add`, and a rung that is a prefix and a
+    /// repeat cannot say that. Every entry here is drawn whenever the rung is, so
+    /// the count a bay reports includes all of them — which is what lets the nth
+    /// be resolved from the end
+    /// ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+    pub last: &'static [Control],
 }
 
 impl Of {
@@ -922,11 +1040,16 @@ impl Of {
     pub const NONE: Of = Of {
         first: &[],
         then: None,
+        last: &[],
     };
 
     /// A rung that is a fixed list and nothing after it.
     pub const fn just(first: &'static [Control]) -> Of {
-        Of { first, then: None }
+        Of {
+            first,
+            then: None,
+            last: &[],
+        }
     }
 
     /// The `nth` control of this rung, counting from one, against a rung drawing
@@ -939,10 +1062,18 @@ impl Of {
         if nth == HEAD || nth > drawn {
             return None;
         }
-        match self.first.get(nth - 1) {
-            Some(control) => Some(*control),
-            None => self.then,
+        if let Some(control) = self.first.get(nth - 1) {
+            return Some(*control);
         }
+        // **The suffix is counted from the end**, which is what makes a rung
+        // whose middle repeats resolvable at all: how many of the repeat there
+        // are is the bay's reading, and the controls after them are however
+        // many this table names.
+        let after = drawn - nth;
+        if let Some(control) = self.last.len().checked_sub(after + 1) {
+            return Some(self.last[control]);
+        }
+        self.then
     }
 
     /// How many things this rung draws where the repeat runs `repeats` times.
@@ -952,12 +1083,15 @@ impl Of {
                 Some(_) => repeats,
                 None => 0,
             }
+            + self.last.len()
     }
 
     /// Whether any control of this rung is reached by `key`, against a rung drawing
     /// everything it can.
     fn reaches(&self, key: Grammar) -> bool {
-        self.first.iter().any(|c| c.reached_by(key)) || self.then.is_some_and(|c| c.reached_by(key))
+        self.first.iter().any(|c| c.reached_by(key))
+            || self.then.is_some_and(|c| c.reached_by(key))
+            || self.last.iter().any(|c| c.reached_by(key))
     }
 }
 
@@ -971,7 +1105,10 @@ pub enum Items {
     /// The bay's items are its controls, so a digit at bay level names one outright
     /// and there is no item rung at all — the Transport, the Outputs row, the
     /// Master chain and the Program bay.
-    Controls(&'static [Control]),
+    ///
+    /// An [`Of`] and not a plain list, because the Master's items are the out
+    /// fader, one per slot of the chain, and `+ add`.
+    Controls(Of),
     /// The bay lists alike things and a digit names the nth of them; these are the
     /// controls one of them draws.
     Alike(Of),
@@ -995,10 +1132,16 @@ pub struct Built {
     pub head: &'static [Control],
     /// What the bay's items are.
     pub items: Items,
-    /// The third rung, which only the Inspector has: the control the address
-    /// descends *through*, and what is under it. ADR-0259 calls that bay three deep
-    /// and says it is *"what proves the address has to be a path rather than two
-    /// levels"*.
+    /// The third rung: the control the address descends *through*, and what is
+    /// under it. ADR-0259 calls the Inspector three deep and says it is *"what
+    /// proves the address has to be a path rather than two levels"*.
+    ///
+    /// Four bays have one, and which rung it hangs off is what differs. The
+    /// Inspector's is under an *item* — a pane's deck head and its node groups.
+    /// The Sequencer's is under a *head* control, `+ lane`. The Transport's two
+    /// and the Master's `+ add` are under a headless row's own controls, and the
+    /// Master's slots are there too. Every one of those but the slots is a card
+    /// the address descends into and `esc` takes away.
     pub under: &'static [(Control, Of)],
     /// What `enter` on an item performs, or `None` where an item is not an act.
     pub act: Option<Act>,
@@ -1017,7 +1160,7 @@ impl Built {
     /// items are its controls.
     pub fn item(&self) -> Of {
         match self.items {
-            Items::Controls(controls) => Of::just(controls),
+            Items::Controls(of) => of,
             Items::Alike(of) => of,
         }
     }
@@ -1083,7 +1226,7 @@ pub const BUILT: &[Built] = &[
     Built {
         bay: TRANSPORT,
         head: &[],
-        items: Items::Controls(&[
+        items: Items::Controls(Of::just(&[
             Control::Tempo,
             Control::Grid,
             Control::Offset,
@@ -1094,8 +1237,32 @@ pub const BUILT: &[Built] = &[
             Control::Arrangement,
             Control::Tonemap,
             Control::Exposure,
-        ]),
-        under: &[],
+        ])),
+        // **Two of those controls are rungs as well**, and they are the only
+        // ones under a bay whose items are its controls: the audio-in pill's
+        // card lists the machine's inputs, and the arrangement pill's menu
+        // lists *save*, *start a new one* and every name filed. `enter` puts
+        // each card down, a digit names the nth row of it, `↑↓` walk the rows
+        // and `esc` takes the card away
+        // ([ADR-0350](../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)).
+        under: &[
+            (
+                Control::Audio,
+                Of {
+                    last: &[],
+                    first: &[],
+                    then: Some(Control::Input),
+                },
+            ),
+            (
+                Control::Arrangement,
+                Of {
+                    last: &[],
+                    first: &[Control::Save, Control::New],
+                    then: Some(Control::Filed),
+                },
+            ),
+        ],
         act: None,
         selects: false,
         across: true,
@@ -1151,13 +1318,13 @@ pub const BUILT: &[Built] = &[
     Built {
         bay: PROGRAM,
         head: &[Control::Solo, Control::Class],
-        items: Items::Controls(&[
+        items: Items::Controls(Of::just(&[
             Control::Picture,
             Control::Cell,
             Control::Cell,
             Control::Cell,
             Control::Cell,
-        ]),
+        ])),
         under: &[],
         act: None,
         selects: false,
@@ -1178,6 +1345,7 @@ pub const BUILT: &[Built] = &[
         bay: INSPECTOR,
         head: &[],
         items: Items::Alike(Of {
+            last: &[],
             first: &[Control::DeckHead],
             then: Some(Control::Node),
         }),
@@ -1189,6 +1357,7 @@ pub const BUILT: &[Built] = &[
             (
                 Control::Node,
                 Of {
+                    last: &[],
                     first: &[Control::Authority, Control::Renderer],
                     then: Some(Control::Param),
                 },
@@ -1234,16 +1403,50 @@ pub const BUILT: &[Built] = &[
     },
     // -- Master ------------------------------------------------------------
     //
-    // **Items are the out fader and the three effects**, which are controls
-    // rather than things with controls under them. `↑↓` step `out` and `space`
-    // returns it to its default; **the three effects have no addressable
-    // controls**, because `Operation::SetFeedback { params: Undecided }` and
-    // its two neighbours carry no spelling for a parameter.
+    // **Items are the out fader, the chain's slots and `+ add`**, in the order
+    // the bay draws them. `↑↓` step `out` and `space` returns it to its
+    // default.
+    //
+    // **A slot is a rung as well as an item**: its controls are its parameter
+    // rows, its cut chip and its `−`. `↑↓` on a parameter row step it a tenth
+    // of the range its procedure declares and `space` returns it to what that
+    // procedure declared it at; `space` on the cut chip cycles `mix` and
+    // `exit`; `enter` on the `−` takes the slot out of the chain.
+    //
+    // **The cut chip keeps its number on a slot that draws none**, so that a
+    // digit means the same control on every slot of the chain; the chip then
+    // declines and says that the slot's procedure declares no `retains`
+    // ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+    //
+    // **`+ add` is a rung too**, and the second on this panel after `+ lane`:
+    // `enter` puts its chooser down and the card's entries — the `kind L5`
+    // procedures the library holds — are what is under it (ADR-0351).
     Built {
         bay: MASTER,
         head: &[],
-        items: Items::Controls(&[Control::Out, Control::Fx, Control::Fx, Control::Fx]),
-        under: &[],
+        items: Items::Controls(Of {
+            first: &[Control::Out],
+            then: Some(Control::Slot),
+            last: &[Control::AddEffect],
+        }),
+        under: &[
+            (
+                Control::Slot,
+                Of {
+                    first: &[],
+                    then: Some(Control::ChainParam),
+                    last: &[Control::ChainCut, Control::ChainRemove],
+                },
+            ),
+            (
+                Control::AddEffect,
+                Of {
+                    first: &[],
+                    then: Some(Control::ChainProcedure),
+                    last: &[],
+                },
+            ),
+        ],
         act: None,
         selects: false,
         across: false,
@@ -1258,6 +1461,12 @@ pub const BUILT: &[Built] = &[
     // reach the label and the first eight steps, and the rest are walked. **It
     // is also the one bay that uses both axes** — the lanes are a column and a
     // lane's cells are a row — which is `Answers::Cells`.
+    //
+    // **`+ lane` is a rung as well as a control**, and the only one under a
+    // head: `enter` on it puts the chooser down and the card's entries are
+    // what is under it, one per target a lane can drive, in the order the card
+    // lists them. They are a column, so `↑↓` walk them
+    // ([ADR-0351](../../../docs/adr/0351-the-lane-chooser-is-a-rung-of-the-address.md)).
     Built {
         bay: SEQUENCER,
         head: &[
@@ -1269,10 +1478,18 @@ pub const BUILT: &[Built] = &[
             Control::AddLane,
         ],
         items: Items::Alike(Of {
+            last: &[],
             first: &[Control::Label],
             then: Some(Control::Step),
         }),
-        under: &[],
+        under: &[(
+            Control::AddLane,
+            Of {
+                last: &[],
+                first: &[],
+                then: Some(Control::LaneTarget),
+            },
+        )],
         act: None,
         selects: false,
         across: false,
@@ -1286,7 +1503,7 @@ pub const BUILT: &[Built] = &[
     Built {
         bay: OUTPUTS,
         head: &[],
-        items: Items::Controls(&[Control::Sink]),
+        items: Items::Controls(Of::just(&[Control::Sink])),
         under: &[],
         act: None,
         selects: false,
@@ -1359,6 +1576,23 @@ pub enum Addressed {
     Head,
     /// The nth control of the head.
     OfHead(usize, Control),
+    /// A rung under one of the head's controls: the number of the head control the
+    /// address descended through, then the number of the thing under it and which
+    /// it is. The Sequencer's `+ lane` chooser is the one of these.
+    UnderHead {
+        through: usize,
+        nth: usize,
+        control: Control,
+    },
+    /// A rung under one of the bay's own controls, in a bay whose items are its
+    /// controls: the number of the control the address descended through, then the
+    /// number of the row under it and which row it is. The Transport's two cards
+    /// are the ones of these.
+    InCard {
+        through: usize,
+        nth: usize,
+        control: Control,
+    },
     /// The nth item — only in a bay that lists items.
     Item(usize),
     /// A control: the item it is under, `None` in a bay whose items are its
@@ -1399,6 +1633,36 @@ pub fn addressed(
             .get(nth.checked_sub(1)?)
             .copied()
             .map(|control| Addressed::OfHead(nth, control)),
+        // **The rung under a head control**, which the Sequencer's chooser is
+        // the one of: it is matched before the item arms below because `HEAD`
+        // is zero and a path of three digits starting with one would otherwise
+        // read as an item, a control and a thing under it.
+        [HEAD, through, nth] => {
+            let above = built.head.get(through.checked_sub(1)?).copied()?;
+            built
+                .beneath(above)
+                .nth(nth, drawn(&[HEAD, through]))
+                .map(|control| Addressed::UnderHead {
+                    through,
+                    nth,
+                    control,
+                })
+        }
+        // **The rung under one of a headless row's own controls**, which the
+        // Transport's two cards are: the control rung is the first, so a card
+        // it puts down is the second. A card that is not down draws no rows,
+        // so `drawn` answers zero and this resolves to nothing.
+        [through, nth] if matches!(built.items, Items::Controls(_)) => {
+            let above = built.item().nth(through, items)?;
+            built
+                .beneath(above)
+                .nth(nth, drawn(&[through]))
+                .map(|control| Addressed::InCard {
+                    through,
+                    nth,
+                    control,
+                })
+        }
         // A headless row's items are its controls, so the first rung *is* the
         // control rung and there is nothing below it.
         [nth] if matches!(built.items, Items::Controls(_)) => {
@@ -1478,6 +1742,8 @@ pub enum Level {
     Fader(u8),
     /// The Master bay's out.
     Out,
+    /// The Transport's free-run tempo, stepped a beat a minute (ADR-0350).
+    Tempo,
     /// The Transport's exposure.
     Exposure,
     /// The Transport's latency offset.
@@ -1518,6 +1784,15 @@ pub enum Asked {
     /// host's for the scope's reason, and because a preset row is taken into the
     /// store on the way.
     Load,
+    /// A press on the audio-in pill or on one of its rows, in that control's own
+    /// words. The host performs it through the method a pointer press already
+    /// reaches, because opening the card enumerates the machine's inputs and this
+    /// crate takes no device (ADR-0156).
+    Listened(AudioAsk),
+    /// A press on the arrangement pill or on one of its menu rows, in that
+    /// control's own words. The host performs it through the method a pointer press
+    /// already reaches: the names filed are a directory and the save writes a file.
+    Arranged(Ask),
 }
 
 /// The sentence for a key pressed in a bay whose grammar is not built. No bay
@@ -1668,13 +1943,49 @@ pub fn press(
                 ),
             }
         }
+        // **A digit below one of the Master's chain slots**, which is a rung
+        // and not a card: a slot's controls are its parameter rows, its cut
+        // chip and its `−`, and every one of them is counted whenever the slot
+        // is drawn.
         (
-            Addressed::Of { .. } | Addressed::OfHead(..) | Addressed::Under { .. },
+            Addressed::Of {
+                item: None,
+                nth: through,
+                control: Control::Slot,
+            },
+            Press::Digit(nth),
+        ) => match built
+            .beneath(Control::Slot)
+            .nth(nth, drawn(view, built, &[through]))
+        {
+            Some(_) => {
+                address_into(view, bay.name, nth);
+                Asked::Moved
+            }
+            None => Asked::Nothing(SLOT_SHORT),
+        },
+        // **A digit below the control a card hangs from**: the Sequencer's
+        // `+ lane` on the head, and the Transport's two pills and the Master's
+        // `+ add` on a headless row. A digit names the nth row of the card
+        // exactly as it names the nth of anything else drawn.
+        (Addressed::OfHead(through, control), Press::Digit(nth)) => {
+            name_row(view, bay.name, built, control, &[HEAD, through], nth)
+        }
+        (
+            Addressed::Of {
+                item: None,
+                nth: through,
+                control,
+            },
+            Press::Digit(nth),
+        ) => name_row(view, bay.name, built, control, &[through], nth),
+        (
+            Addressed::Of { .. }
+            | Addressed::Under { .. }
+            | Addressed::UnderHead { .. }
+            | Addressed::InCard { .. },
             Press::Digit(_),
-        ) => Asked::Nothing(
-            "nothing below this control is drawn, so a digit here reaches nothing — esc \
-                 goes back up",
-        ),
+        ) => Asked::Nothing(NOTHING_BELOW),
 
         // ------------------------------------------------------------------
         // The arrows — the neighbour, or the next value
@@ -1686,6 +1997,81 @@ pub fn press(
                     true => "this bay's items are a row, so left and right walk them",
                     false => "this bay's items are a column, so up and down walk them",
                 }),
+            }
+        }
+        // **A chain parameter row is a level**, stepped a tenth of the range
+        // its procedure declares.
+        (
+            Addressed::InCard {
+                through,
+                nth,
+                control: Control::ChainParam,
+            },
+            Press::Arrow(arrow),
+        ) => match arrow {
+            Arrow::Up => chain_param(view, through, nth, Step::Up),
+            Arrow::Down => chain_param(view, through, nth, Step::Down),
+            _ => Asked::Nothing("a level is stepped up and down, not across"),
+        },
+        (
+            Addressed::InCard {
+                control: Control::ChainCut | Control::ChainRemove,
+                ..
+            },
+            Press::Arrow(_),
+        ) => Asked::Nothing(
+            "this control's values are a closed list and a list has no axis — space cycles it",
+        ),
+        // **A card's rows are walked from the row it remembers**, which is the
+        // bay-level rule one rung down: the arrows work with no digit pressed
+        // first, and the address follows them into the card. Which card it is,
+        // is the control the address descended through.
+        (Addressed::OfHead(through, control), Press::Arrow(arrow))
+            if card_of(control).is_some() =>
+        {
+            walk_card(
+                view,
+                bay.name,
+                built,
+                control,
+                &[HEAD, through],
+                None,
+                arrow,
+            )
+        }
+        (Addressed::UnderHead { through, nth, .. }, Press::Arrow(arrow)) => {
+            match built.head.get(through.wrapping_sub(1)).copied() {
+                Some(above) if card_of(above).is_some() => walk_card(
+                    view,
+                    bay.name,
+                    built,
+                    above,
+                    &[HEAD, through],
+                    Some(nth),
+                    arrow,
+                ),
+                _ => Asked::Nothing(
+                    "this control's values are a closed list and a list has no axis — space \
+                     cycles it",
+                ),
+            }
+        }
+        (
+            Addressed::Of {
+                item: None,
+                nth: through,
+                control,
+            },
+            Press::Arrow(arrow),
+        ) if card_of(control).is_some() => {
+            walk_card(view, bay.name, built, control, &[through], None, arrow)
+        }
+        (Addressed::InCard { through, nth, .. }, Press::Arrow(arrow)) => {
+            match built.item().nth(through, items) {
+                Some(above) => {
+                    walk_card(view, bay.name, built, above, &[through], Some(nth), arrow)
+                }
+                None => Asked::Nothing("this control is not drawn"),
             }
         }
         (Addressed::OfHead(_, control), Press::Arrow(arrow)) => stepped(view, None, control, arrow),
@@ -1731,6 +2117,32 @@ pub fn press(
         (Addressed::Of { item, nth, control }, Press::Space) => {
             cycled(view, panel, item, nth, control, held)
         }
+        // **A chain slot's two settings**: the cut chip cycles, and a
+        // parameter row goes back to what its procedure declared it at.
+        (
+            Addressed::InCard {
+                through,
+                control: Control::ChainCut,
+                ..
+            },
+            Press::Space,
+        ) => chain_cut(view, through),
+        (
+            Addressed::InCard {
+                through,
+                nth,
+                control: Control::ChainParam,
+            },
+            Press::Space,
+        ) => chain_param(view, through, nth, Step::Default),
+        // **A card's rows perform rather than set**, so `space` names the
+        // sentence the row carries rather than a next state.
+        (Addressed::InCard { control, .. }, Press::Space) => match control.answers() {
+            Answers::Nothing(why) => Asked::Nothing(why),
+            _ => Asked::Nothing(
+                "this row performs rather than sets, so it has no next state — enter runs it",
+            ),
+        },
         (
             Addressed::Under {
                 item,
@@ -1740,6 +2152,11 @@ pub fn press(
             },
             Press::Space,
         ) => under_space(view, item, through, nth, control),
+        // **An entry of the chooser performs rather than sets**, so there is
+        // no next state for `space` to name.
+        (Addressed::UnderHead { .. }, Press::Space) => Asked::Nothing(
+            "this control performs rather than sets, so it has no next state — enter runs it",
+        ),
         (Addressed::Bay, Press::Space) => fold(panel, bay),
 
         // ------------------------------------------------------------------
@@ -1752,8 +2169,62 @@ pub fn press(
                  items are things you set rather than things you run",
             ),
         },
+        // **`enter` on the control a card hangs from puts the card down**,
+        // which is what makes the card's rows a rung the address descends
+        // into.
+        (Addressed::OfHead(_, control), Press::Enter) if card_of(control).is_some() => {
+            open_card(view, control)
+        }
+        // **And `enter` on one of the rows performs that row and takes the
+        // card away**, which is the pointer's own pair of moves in the
+        // pointer's own order.
+        (
+            Addressed::UnderHead {
+                through,
+                nth,
+                control,
+            },
+            Press::Enter,
+        ) => match built.head.get(through.wrapping_sub(1)).copied() {
+            Some(above) if card_of(above).is_some() => {
+                card_enter(view, bay.name, built, above, control, nth)
+            }
+            _ => Asked::Nothing(
+                "nothing here performs — enter is the act the addressed control is for, \
+                     and this one sets rather than performs",
+            ),
+        },
         (Addressed::OfHead(_, control), Press::Enter) => act_of(view, None, control),
+        // **`enter` on a slot's `−` takes that slot out of the chain**, which
+        // is the one act on a rung that is not a card.
+        (
+            Addressed::InCard {
+                through,
+                control: Control::ChainRemove,
+                ..
+            },
+            Press::Enter,
+        ) => chain_remove(view, through),
+        (
+            Addressed::Of {
+                item: None,
+                control,
+                ..
+            },
+            Press::Enter,
+        ) if card_of(control).is_some() => open_card(view, control),
         (Addressed::Of { item, control, .. }, Press::Enter) => act_of(view, item, control),
+        (
+            Addressed::InCard {
+                through,
+                nth,
+                control,
+            },
+            Press::Enter,
+        ) => match built.item().nth(through, items) {
+            Some(above) => card_enter(view, bay.name, built, above, control, nth),
+            None => Asked::Nothing("this control is not drawn"),
+        },
         (
             Addressed::Under {
                 item,
@@ -1769,6 +2240,555 @@ pub fn press(
         ),
     }
 }
+
+/// One of the four cards the address descends into, and the whole of what one
+/// card does not share with the next.
+///
+/// A card is a rung hanging off a control: `enter` on the control puts the card
+/// down, a digit names the nth row of it, `↑↓` walk the rows from the one the
+/// card remembers — clamped, never wrapped — `←→` are refused, `enter` on a row
+/// performs that row, and `esc` or `Tab` takes the card away and leaves the
+/// address on the control it hangs from. That is written once, in
+/// [`open_card`], [`name_row`], [`walk_card`] and [`card_enter`]; a row of
+/// [`CARDS`] is what those four read.
+///
+/// The four are the audio-in pill's inputs and the arrangement pill's menu
+/// ([ADR-0350](../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)),
+/// the Sequencer's `+ lane` chooser
+/// ([ADR-0351](../../../docs/adr/0351-the-lane-chooser-is-a-rung-of-the-address.md))
+/// and the Master's `+ add` chooser
+/// ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+struct Card {
+    /// The control the card hangs from, and what [`card_of`] finds it by.
+    control: Control,
+    /// Whether the card is down.
+    down: fn(&View) -> bool,
+    /// How many rows it is drawing, which is zero while it is up.
+    rows: fn(&View) -> usize,
+    /// How `enter` on the control puts it down, and what takes it away.
+    puts: Puts,
+    /// What a press addressed below the control says while the card is up: the
+    /// rung is not drawn, and the sentence names the press that draws it.
+    shut: &'static str,
+    /// What `enter` on the control says with the card already down. It names the
+    /// keys that reach the rows.
+    standing: &'static str,
+    /// What a digit that named a row the card is not drawing says.
+    short: &'static str,
+    /// What an arrow says on a card that is down with nothing on it to walk.
+    empty: &'static str,
+    /// What `←→` say, naming the pair that walks the rows.
+    column: &'static str,
+    /// What an arrow says where the address is already at the end.
+    end: &'static str,
+    /// A sentence this card's own state carries in place of [`Card::short`] and
+    /// [`Card::empty`], or `None` for a card with no such state. The arrangement
+    /// menu's is the one: while it is asking for a name it is a field rather than
+    /// a list, and it draws no rows.
+    busy: Option<fn(&View) -> Option<&'static str>>,
+}
+
+/// How a card is put down and taken away.
+#[derive(Clone, Copy)]
+enum Puts {
+    /// This console's own state: the method that puts the card down, the method
+    /// that takes it away, and the sentence for a card with nothing to offer,
+    /// which is what refuses to put it down.
+    Console {
+        put: fn(&mut View) -> bool,
+        shut: fn(&mut View) -> bool,
+        nothing: &'static str,
+    },
+    /// The host's: `enter` leaves in the control's own word for it and the host
+    /// puts the card down, through the method a pointer press already reaches
+    /// (ADR-0156). `shut` is still this console's, because `esc` and `Tab` take
+    /// the card away without asking the host for anything.
+    Host {
+        asked: fn() -> Asked,
+        shut: fn(&mut View),
+    },
+}
+
+impl Card {
+    /// What a digit that named a row this card is not drawing says: the card is
+    /// up, its own state is in the way, or it draws fewer rows than that.
+    fn named(&self, view: &View) -> &'static str {
+        match (self.down)(view) {
+            false => self.shut,
+            true => self.asking(view).unwrap_or(self.short),
+        }
+    }
+
+    /// What an arrow says on a card that is down and drawing nothing.
+    fn bare(&self, view: &View) -> &'static str {
+        self.asking(view).unwrap_or(self.empty)
+    }
+
+    /// The sentence this card's own state carries in place of a count's, or
+    /// `None` where nothing is in the way.
+    fn asking(&self, view: &View) -> Option<&'static str> {
+        self.busy.and_then(|state| state(view))
+    }
+
+    /// Take this card away. A card that is already up is left as it is.
+    fn shut(&self, view: &mut View) {
+        match self.puts {
+            Puts::Console { shut, .. } => {
+                shut(view);
+            }
+            Puts::Host { shut, .. } => shut(view),
+        }
+    }
+}
+
+/// The sentence a press addressed to a Transport card's rung carries while the
+/// card is up: the rung is not drawn, and `enter` on the pill is the press that
+/// draws it.
+const CARD_SHUT: &str = "this card is not down, so there is nothing here to name — press enter on \
+                         this control to put it down";
+
+/// The sentence a digit carries when a Transport card is drawing fewer rows than
+/// that.
+const CARD_SHORT: &str =
+    "this card is not drawing a row with that number — the digits count what is on it, from one";
+
+/// The sentence `enter` on a Transport pill carries with its card already down.
+const CARD_STANDING: &str = "this card is already down — press a digit to name a row, or walk it \
+                             with up and down, and enter runs the row the address is on";
+
+/// The sentence the arrangement menu carries while it is a field rather than a
+/// list. The keyboard is the name's while it is asking for one, which is the one
+/// flow on this panel that takes letters (ADR-0259).
+const NAMING: &str = "this menu is asking for a name — type it and press return, or press esc to \
+                      leave the arrangement unsaved";
+
+/// The sentence a digit carries when the `+ add` chooser is not offering that
+/// many.
+const CHAIN_CARD_SHORT: &str = "the chooser is not offering a procedure with that number — the \
+                                digits count what is on the card, from one";
+
+/// The sentence an arrow carries on a chooser that is down with nothing on it.
+const NOTHING_TO_WALK: &str = "the chooser is offering nothing to walk";
+
+/// The four cards, one row each.
+const CARDS: &[Card] = &[
+    Card {
+        control: Control::Audio,
+        down: inputs_down,
+        rows: inputs_rows,
+        puts: Puts::Host {
+            asked: open_inputs,
+            shut: shut_inputs,
+        },
+        shut: CARD_SHUT,
+        standing: CARD_STANDING,
+        short: CARD_SHORT,
+        empty: CARD_SHORT,
+        column: "a card's rows are a column, so up and down walk them",
+        end: "the address is already at the end of this card",
+        busy: None,
+    },
+    Card {
+        control: Control::Arrangement,
+        down: menu_down,
+        rows: menu_rows,
+        puts: Puts::Host {
+            asked: open_menu,
+            shut: shut_menu,
+        },
+        shut: CARD_SHUT,
+        standing: CARD_STANDING,
+        short: CARD_SHORT,
+        empty: CARD_SHORT,
+        column: "a card's rows are a column, so up and down walk them",
+        end: "the address is already at the end of this card",
+        busy: Some(menu_asking),
+    },
+    Card {
+        control: Control::AddLane,
+        down: View::lane_open,
+        rows: lane_rows,
+        puts: Puts::Console {
+            put: View::open_lane,
+            shut: View::shut_lane,
+            nothing: "there is nothing for a lane to drive — this console draws no mixer strip \
+                      and the inspector is showing no published control",
+        },
+        shut: "the chooser is not down, so there is nothing here to name — press enter on + lane \
+               to put it down",
+        standing: "the chooser is already down — press a digit to name a target, or walk it with \
+                   up and down, and enter points the lane at the one the address is on",
+        short: "the chooser is not offering that many targets — the digits count what is on the \
+                card, from one",
+        empty: NOTHING_TO_WALK,
+        column: "the chooser's targets are a column, so up and down walk them",
+        end: "the address is already at the end of the chooser",
+        busy: None,
+    },
+    Card {
+        control: Control::AddEffect,
+        down: View::chain_add_open,
+        rows: chain_rows,
+        puts: Puts::Console {
+            put: View::open_chain_add,
+            shut: View::shut_chain_add,
+            nothing: "this library is listing no kind L5 procedure, so there is nothing to add \
+                      — the master chain holds kind L5 procedures",
+        },
+        shut: "the chooser is not down, so there is nothing here to name — press enter on + add \
+               to put it down",
+        standing: "this chooser is already down — press a digit to name a procedure, or walk it \
+                   with up and down, and enter adds the one the address is on",
+        short: CHAIN_CARD_SHORT,
+        empty: NOTHING_TO_WALK,
+        column: "the chooser's procedures are a column, so up and down walk them",
+        end: "the address is already at the end of the chooser",
+        busy: None,
+    },
+];
+
+/// Whether the audio-in pill's card is down.
+fn inputs_down(view: &View) -> bool {
+    view.audio.as_ref().is_some_and(crate::view::AudioIn::open)
+}
+
+/// How many inputs that card is listing.
+fn inputs_rows(view: &View) -> usize {
+    view.audio.as_ref().map_or(0, crate::view::AudioIn::rows)
+}
+
+/// The audio-in card, in the pill's own word for putting it down.
+fn open_inputs() -> Asked {
+    Asked::Listened(AudioAsk::Open)
+}
+
+/// Take the audio-in card away.
+fn shut_inputs(view: &mut View) {
+    if let Some(audio) = view.audio.as_mut() {
+        audio.shut();
+    }
+}
+
+/// Whether the arrangement pill's menu is down, a name being asked for included.
+fn menu_down(view: &View) -> bool {
+    view.arrangement.open()
+}
+
+/// How many rows that menu is drawing.
+fn menu_rows(view: &View) -> usize {
+    view.arrangement.rows()
+}
+
+/// The menu asking for a name, which is the state that draws no rows.
+fn menu_asking(view: &View) -> Option<&'static str> {
+    view.arrangement.naming().map(|_| NAMING)
+}
+
+/// The arrangement menu, in the pill's own word for putting it down.
+fn open_menu() -> Asked {
+    Asked::Arranged(Ask::Open)
+}
+
+/// Take the arrangement menu away, typed name and all.
+fn shut_menu(view: &mut View) {
+    view.arrangement.shut();
+}
+
+/// How many targets the `+ lane` chooser is offering, and none while it is up.
+fn lane_rows(view: &View) -> usize {
+    match view.lane_open() {
+        true => view.lane_choices().items.len(),
+        false => 0,
+    }
+}
+
+/// How many procedures the `+ add` chooser is offering, and none while it is up.
+fn chain_rows(view: &View) -> usize {
+    match view.chain_add_open() {
+        true => view.chain_choices().items.len(),
+        false => 0,
+    }
+}
+
+/// The card `control` hangs, or `None` for a control that hangs none — the one
+/// reading the digit, the arrows and `enter` all ask.
+fn card_of(control: Control) -> Option<&'static Card> {
+    CARDS.iter().find(|card| card.control == control)
+}
+
+/// How many rows the card `control` hangs is drawing, and zero for a control that
+/// hangs none — the reading [`drawn`] takes at a card's rung.
+fn card_rows(view: &View, control: Control) -> usize {
+    card_of(control).map_or(0, |card| (card.rows)(view))
+}
+
+/// The card on the focused bay's address, and whether the address has descended
+/// into its rows — or `None` where the address is on no control that hangs a
+/// card, or where the card that control hangs is up.
+///
+/// The reading `esc` takes. A card on the address's path is a level of the
+/// address; a card that is down anywhere else is not, and `esc` leaves it alone
+/// ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)).
+///
+/// `panel` must be solved: the focused bay is read off the arrangement.
+pub fn card_on_path(view: &View, panel: &Panel) -> Option<(Control, bool)> {
+    let bay = view.focused(panel)?;
+    let built = built(bay.name)?;
+    let at = view.focus().address(bay.name).map(Address::at)?;
+    // A card hangs off a head control or off a headless row's own control, so
+    // the control is the second step of the path or the first, and the address
+    // is inside the card where there is one step after it.
+    let (control, inside) = match *at {
+        [HEAD, through] => (head_control(built, through)?, false),
+        [HEAD, through, _] => (head_control(built, through)?, true),
+        [through] if matches!(built.items, Items::Controls(_)) => {
+            (row_control(view, built, through)?, false)
+        }
+        [through, _] if matches!(built.items, Items::Controls(_)) => {
+            (row_control(view, built, through)?, true)
+        }
+        _ => return None,
+    };
+    let card = card_of(control)?;
+    (card.down)(view).then_some((control, inside))
+}
+
+/// The `through`th control of `built`'s head, counting from one.
+fn head_control(built: &Built, through: usize) -> Option<Control> {
+    built.head.get(through.checked_sub(1)?).copied()
+}
+
+/// The `through`th control of a headless row, counting from one.
+fn row_control(view: &View, built: &Built, through: usize) -> Option<Control> {
+    built.item().nth(through, drawn(view, built, &[]))
+}
+
+/// Take the card `control` hangs away, and do nothing for a control that hangs
+/// none. A card that is already up is left as it is.
+pub fn shut_card(view: &mut View, control: Control) {
+    if let Some(card) = card_of(control) {
+        card.shut(view);
+    }
+}
+
+/// Take every card away, wherever the address is — the reading `Tab` takes,
+/// because a move of focus is the address leaving every card it could be in.
+pub fn shut_cards(view: &mut View) {
+    for card in CARDS {
+        card.shut(view);
+    }
+}
+
+/// `enter` on the control a card hangs from: the card, put down.
+///
+/// Declines where the card is already down, and where it has nothing to offer —
+/// a card with no rows offers nothing to pick and nothing to leave by, which is
+/// [`crate::view::View::open_lane`]'s own rule. The address stays on the control;
+/// a digit or an arrow is what descends into the rows.
+fn open_card(view: &mut View, control: Control) -> Asked {
+    let Some(card) = card_of(control) else {
+        return Asked::Nothing("this control puts no card down");
+    };
+    if (card.down)(view) {
+        return Asked::Nothing(card.standing);
+    }
+    match card.puts {
+        Puts::Console { put, nothing, .. } => match put(view) {
+            true => Asked::Moved,
+            false => Asked::Nothing(nothing),
+        },
+        Puts::Host { asked, .. } => asked(),
+    }
+}
+
+/// A digit below the control a card hangs from: the nth row of the card, with the
+/// address descended onto it.
+///
+/// `under` is the path the card's rung is at — `[HEAD, through]` for a card on a
+/// head control and `[through]` for one on a headless row's own control. The
+/// digits count what the card drew, from one, and a digit past that declines with
+/// the card's own sentence.
+fn name_row(
+    view: &mut View,
+    bay: &'static str,
+    built: &Built,
+    control: Control,
+    under: &[usize],
+    nth: usize,
+) -> Asked {
+    let Some(card) = card_of(control) else {
+        return Asked::Nothing(NOTHING_BELOW);
+    };
+    let rows = drawn(view, built, under);
+    match built.beneath(control).nth(nth, rows) {
+        Some(_) => {
+            address_into(view, bay, nth);
+            Asked::Moved
+        }
+        None => Asked::Nothing(card.named(view)),
+    }
+}
+
+/// An arrow on the control a card hangs from, or on one of the card's rows: the
+/// neighbouring row.
+///
+/// `from` is the row the address is on, or `None` where it is still on the
+/// control — and then the walk starts from the row the card remembers, which is
+/// [`walk`]'s rule at bay level one rung down: the arrows work with no digit
+/// pressed first. `under` is the path the card's rung is at, as [`name_row`]
+/// takes it.
+///
+/// A card is a column of rows, so `←→` are refused and the refusal names the pair
+/// that works. The walk is clamped at both ends and never wraps.
+fn walk_card(
+    view: &mut View,
+    bay: &'static str,
+    built: &Built,
+    control: Control,
+    under: &[usize],
+    from: Option<usize>,
+    arrow: Arrow,
+) -> Asked {
+    let Some(card) = card_of(control) else {
+        return Asked::Nothing("this control puts no card down");
+    };
+    if !(card.down)(view) {
+        return Asked::Nothing(card.shut);
+    }
+    if arrow.across() {
+        return Asked::Nothing(card.column);
+    }
+    let rows = drawn(view, built, under);
+    if rows == 0 {
+        return Asked::Nothing(card.bare(view));
+    }
+    let at = from.unwrap_or_else(|| {
+        view.focus()
+            .address(bay)
+            .and_then(|address| address.remembered(under))
+            .unwrap_or(1)
+            .clamp(1, rows)
+    });
+    let to = (at as i64 + i64::from(arrow.step())).clamp(1, rows as i64) as usize;
+    let address = view.focus_mut().address_mut(bay);
+    // A walk moves along a level and never into one, so an address that had
+    // already descended has its last step replaced rather than pushed.
+    match from.is_some() {
+        true => {
+            address.to_row(to);
+        }
+        false => address.down(to),
+    }
+    match from.is_none() || to != at {
+        true => Asked::Moved,
+        false => Asked::Nothing(card.end),
+    }
+}
+
+/// `enter` on one of a card's rows: what that row performs, with the card taken
+/// away and the address back on the control it hangs from.
+///
+/// `above` is that control and `row` is the control the addressed row is. A row
+/// that declines performs nothing, so the card stays down and the address stays
+/// on the row.
+///
+/// A card this console owns is taken away here, before the answer leaves; a card
+/// the host owns leaves in the answer, and the host takes it away through the
+/// method a pointer press on that row already reaches (ADR-0333). `above` is
+/// allowed to hang no card — a slot of the master chain is a rung and not one —
+/// and then the row answers for itself and nothing is taken away.
+fn card_enter(
+    view: &mut View,
+    bay: &'static str,
+    built: &Built,
+    above: Control,
+    row: Control,
+    nth: usize,
+) -> Asked {
+    // The rows a card draws before the counted ones are its own verbs, so the
+    // nth thing it lists is that many further down the rung.
+    let verbs = built.beneath(above).first.len();
+    let asked = row_act(view, row, nth, verbs);
+    if matches!(asked, Asked::Nothing(_)) {
+        return asked;
+    }
+    if let Some(Puts::Console { shut, .. }) = card_of(above).map(|card| card.puts) {
+        shut(view);
+    }
+    view.focus_mut().address_mut(bay).up();
+    asked
+}
+
+/// What `enter` on one row of a card asks for — the one thing the four cards do
+/// not share.
+///
+/// `nth` counts the rung from one and `verbs` is how many rows the card draws
+/// before the ones it lists, so the nth listed thing is at `nth - verbs - 1`. A
+/// control that is not a card's row answers with its own sentence.
+fn row_act(view: &View, row: Control, nth: usize, verbs: usize) -> Asked {
+    match row {
+        Control::Input => match view
+            .audio
+            .as_ref()
+            .and_then(|audio| audio.inputs.get(nth.wrapping_sub(verbs + 1)))
+        {
+            Some(name) => Asked::Listened(AudioAsk::Operation(Operation::AttachBeatSource {
+                source: BeatSource::AudioInput(name.clone()),
+            })),
+            None => Asked::Nothing("this card is not drawing an input with that number"),
+        },
+        // **Saving again means the name in use**, and with none in use the
+        // menu asks for one: the field takes the keyboard whole while it is
+        // asking, which is where the name is typed and where `return` files it
+        // (ADR-0259).
+        Control::Save => Asked::Arranged(match view.arrangement.name.clone() {
+            Some(name) => Ask::Operation(Operation::SaveArrangement { name }),
+            None => Ask::Name,
+        }),
+        Control::Filed => match view.arrangement.filed.get(nth.wrapping_sub(verbs + 1)) {
+            Some(name) => Asked::Arranged(Ask::Operation(Operation::RestoreArrangement {
+                name: name.clone(),
+            })),
+            None => Asked::Nothing("this menu is not drawing a name with that number"),
+        },
+        // **The bank is this bay's own reading** rather than whichever pattern
+        // is armed by the time the operation is performed, which is every other
+        // arm of this bay's.
+        Control::LaneTarget => {
+            let Some(bank) = view.sequencer.as_ref().map(|seq| seq.bank as u8) else {
+                return Asked::Nothing("this console has no pattern behind it");
+            };
+            let choices = view.lane_choices();
+            match choices.items.get(nth.wrapping_sub(verbs + 1)) {
+                Some(choice) => Asked::Emitted(Operation::PointLane {
+                    pattern: bank,
+                    target: choice.target.clone(),
+                }),
+                None => Asked::Nothing(
+                    "the chooser is not offering a target with that number — the digits count \
+                     what is on the card, from one",
+                ),
+            }
+        }
+        Control::ChainProcedure => {
+            let choices = view.chain_choices();
+            match choices.items.get(nth.wrapping_sub(verbs + 1)) {
+                Some(choice) => Asked::Emitted(choice.operation()),
+                None => Asked::Nothing(CHAIN_CARD_SHORT),
+            }
+        }
+        other => match other.answers() {
+            Answers::Nothing(why) => Asked::Nothing(why),
+            _ => {
+                Asked::Nothing("nothing here performs — enter is the act the addressed row is for")
+            }
+        },
+    }
+}
+
+/// The sentence a digit carries below a control nothing is drawn under.
+const NOTHING_BELOW: &str = "nothing below this control is drawn, so a digit here reaches \
+                             nothing — esc goes back up";
 
 /// `space` on a bay: the fold.
 ///
@@ -1800,13 +2820,22 @@ fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
         (_, []) => match built.items {
             // A headless row's items are its controls, and how many of them
             // are drawn is the bay's own count.
-            Items::Controls(controls) => match built.bay {
+            Items::Controls(of) => match built.bay {
+                // **The out fader, one per slot of the chain, and `+ add`** —
+                // the bay's own reading, because how many slots there are is
+                // what an operator put in the chain. A console with no chain
+                // behind it draws the out row and nothing under it.
                 MASTER => match view.master_out.is_some() {
-                    true => 1 + view.master_chain.map_or(0, |_| crate::view::Fx::ALL.len()),
+                    true => {
+                        1 + view
+                            .master_chain
+                            .as_ref()
+                            .map_or(0, |chain| chain.slots.len() + 1)
+                    }
                     false => 0,
                 },
                 OUTPUTS => 1,
-                _ => controls.len(),
+                _ => of.len(0),
             },
             Items::Alike(_) => match built.bay {
                 MIXER => view.mixer.len(),
@@ -1836,9 +2865,118 @@ fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
         },
         // A lane draws its label and a cell per step of the mode.
         (SEQUENCER, [lane]) if *lane <= lanes(view) => 1 + steps(view),
+        // **A card hanging off a head control**, which the Sequencer's
+        // `+ lane` chooser is the one of: the card draws one row per thing it
+        // offers, and none at all while it is up. A rung that is not on the
+        // panel draws nothing, and the press then declines with the sentence
+        // that says how to put it down.
+        (_, [HEAD, through]) => match built.head.get(through.wrapping_sub(1)).copied() {
+            Some(control) => card_rows(view, control),
+            None => 0,
+        },
+        // **The Master's two rungs**: a slot draws its parameter rows, its cut
+        // chip and its `−`, and `+ add` draws one row per `kind L5` procedure
+        // the library holds.
+        //
+        // **The cut chip is counted on every slot**, drawn or not, so that a
+        // digit names the same control on every slot of the chain; a slot
+        // whose procedure declares no `retains` draws none and the chip
+        // declines (ADR-0352).
+        (MASTER, [through]) => match built.item().nth(*through, drawn(view, built, &[])) {
+            Some(Control::Slot) => match chain_slot(view, *through) {
+                Some(slot) => slot.params.len() + 2,
+                None => 0,
+            },
+            Some(control) => card_rows(view, control),
+            None => 0,
+        },
+        // **The Transport's two cards**: the audio-in card draws one row per
+        // input the machine answered with, and the arrangement menu draws
+        // *save*, *start a new one* and one row per name filed.
+        (TRANSPORT, [through]) => match built.item().nth(*through, built.item().first.len()) {
+            Some(control) => card_rows(view, control),
+            None => 0,
+        },
         (_, [_]) => built.item().first.len(),
         _ => 0,
     }
+}
+
+/// The slot of the running chain the Master bay's `through`th item is, or `None`
+/// where that item is not a slot or the chain has not got one there.
+///
+/// The bay's items are the out fader, then one per slot, then `+ add`, so the
+/// slot's position in the chain — which is the address every chain operation
+/// takes — is two less than the item's number.
+fn chain_slot(view: &View, through: usize) -> Option<&crate::view::ChainSlot> {
+    view.master_chain
+        .as_ref()?
+        .slots
+        .get(through.checked_sub(2)?)
+}
+
+/// The position in the chain the Master bay's `through`th item names.
+fn chain_at(through: usize) -> Option<u32> {
+    u32::try_from(through.checked_sub(2)?).ok()
+}
+
+/// The sentence a digit carries when a slot does not draw that many controls.
+const SLOT_SHORT: &str = "this slot does not draw that many controls — the digits count what is \
+                          drawn, from one";
+
+/// One press of an arrow on a chain parameter row, or `space` on one: a tenth of
+/// the range the slot's procedure declares, or the value it declared.
+///
+/// [`param`]'s rule one bay along — *"a tenth of the published range"* — read on
+/// a range that is declared in a `.kir` rather than published by a Set
+/// ([ADR-0343](../../../docs/adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)).
+fn chain_param(view: &View, through: usize, nth: usize, step: Step) -> Asked {
+    let (Some(at), Some(slot)) = (chain_at(through), chain_slot(view, through)) else {
+        return Asked::Nothing("this slot is not drawn");
+    };
+    let Some(param) = slot.params.get(nth.wrapping_sub(1)) else {
+        return Asked::Nothing("this parameter row is not drawn");
+    };
+    let [low, high] = param.range;
+    let value = match step {
+        Step::Default => param.default,
+        Step::Up => param.value + (high - low) * PARAM_STEP,
+        Step::Down => param.value - (high - low) * PARAM_STEP,
+    };
+    Asked::Emitted(Operation::SetChainParam {
+        at,
+        param: ParamOfChain::Declared {
+            key: param.key.clone(),
+            value: value.clamp(low, high),
+        },
+    })
+}
+
+/// `space` on a slot's cut chip: the other of the two cuts.
+fn chain_cut(view: &View, through: usize) -> Asked {
+    let (Some(at), Some(slot)) = (chain_at(through), chain_slot(view, through)) else {
+        return Asked::Nothing("this slot is not drawn");
+    };
+    let Some(cut) = slot.cut else {
+        return Asked::Nothing(
+            "this slot's procedure declares no retains, so it reads no retained frame and has \
+             no cut to set",
+        );
+    };
+    let all = karakuri_operation::Cut::ALL;
+    let showing = all.iter().position(|c| *c == cut).unwrap_or(0);
+    Asked::Emitted(Operation::SetChainParam {
+        at,
+        param: ParamOfChain::Cut(all[(showing + 1) % all.len()]),
+    })
+}
+
+/// `enter` on a slot's `−`: the slot, taken out of the chain.
+fn chain_remove(view: &View, through: usize) -> Asked {
+    let (Some(at), Some(_)) = (chain_at(through), chain_slot(view, through)) else {
+        return Asked::Nothing("this slot is not drawn");
+    };
+    Asked::Emitted(Operation::RemoveChainEffect { at })
 }
 
 /// How many lanes the Sequencer is drawing.
@@ -1990,7 +3128,9 @@ fn remembered(view: &View, bay: &str, items: usize) -> usize {
 #[allow(clippy::too_many_arguments)]
 fn stepped(view: &View, item: Option<usize>, control: Control, arrow: Arrow) -> Asked {
     match control.answers() {
-        Answers::Level => match arrow {
+        // A track is stepped exactly as a level is; what it has not got is a
+        // value `space` returns it to.
+        Answers::Level | Answers::Track(_) => match arrow {
             Arrow::Up | Arrow::Down => {
                 let step = match arrow {
                     Arrow::Up => Step::Up,
@@ -2098,6 +3238,19 @@ fn level(view: &View, item: Option<usize>, control: Control, step: Step) -> Aske
             },
             false => Asked::Nothing("this console has no master out behind it to step"),
         },
+        // **The tempo the host steps is the one the grid is running**, read
+        // off the oscillator at the press rather than off the figure a frame
+        // drew — which is the three mix keys' own rule (ADR-0333). What the
+        // step is, is `karakuri/src/bridge/handlers.rs`'s `tempo_key`.
+        Control::Tempo => match view.transport.is_some() {
+            true => Asked::Stepped {
+                level: Level::Tempo,
+                step,
+            },
+            false => {
+                Asked::Nothing("this console has no engine behind it, so there is no grid to step")
+            }
+        },
         Control::Exposure => match view.look.is_some() {
             true => Asked::Stepped {
                 level: Level::Exposure,
@@ -2133,7 +3286,7 @@ fn cycled(
 ) -> Asked {
     match control.answers() {
         Answers::Level => level(view, item, control, Step::Default),
-        Answers::Nothing(why) | Answers::Card(why) => Asked::Nothing(why),
+        Answers::Nothing(why) | Answers::Track(why) => Asked::Nothing(why),
         Answers::Act(_) => Asked::Nothing(
             "this control performs rather than sets, so it has no next state — enter runs it",
         ),
@@ -2377,7 +3530,6 @@ fn next_authority(level: Authority) -> Authority {
 fn act_of(view: &View, item: Option<usize>, control: Control) -> Asked {
     match control.answers() {
         Answers::Act(act) => performed(view, item, act),
-        Answers::Card(why) => Asked::Nothing(why),
         Answers::Nothing(why) => Asked::Nothing(why),
         _ => Asked::Nothing(
             "nothing here performs — enter is the act the addressed control is for, and this one \
@@ -2390,6 +3542,13 @@ fn act_of(view: &View, item: Option<usize>, control: Control) -> Asked {
 fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
     match act {
         Act::Load => Asked::Load,
+        // **The two chain acts arrive on the rung under a control**, where
+        // this function is reached from an *item*, so neither is asked here.
+        // The arms are `Addressed::Of`'s and `Addressed::InCard`'s in
+        // [`press`], which have the slot's position and the card's entry.
+        Act::Remove | Act::Add => Asked::Nothing(
+            "this is not the rung this act is on — press a digit to name a slot of the chain",
+        ),
         Act::Read => match view.rows().set(item.unwrap_or(1) - 1) {
             Some(id) => Asked::Emitted(Operation::ReadSet { id: id.to_owned() }),
             None => Asked::Nothing(
@@ -2431,6 +3590,22 @@ fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
         Act::TakeBack => Asked::Nothing(
             "a parameter is taken back on the row that draws it — press a digit to name the \
              pane, the node and the row",
+        ),
+        // **A card and its rows are reached on the control the card hangs
+        // from**, because both have the address to move and the card to put
+        // down or take away — see [`open_card`] and [`card_enter`], which
+        // [`press`] reaches before this function.
+        Act::Open | Act::Point => Asked::Nothing(
+            "the chooser is reached in the Sequencer's head — press 0 and then the digit that \
+             names + lane",
+        ),
+        // **The Transport's two cards are reached on the row that draws
+        // them**, because each needs the pill the address descended through
+        // and the card to take away — see [`card_enter`], which [`press`]
+        // reaches before this function.
+        Act::Attach | Act::Save | Act::Restore => Asked::Nothing(
+            "this is a row of a card in the Transport — press enter on the pill that puts the \
+             card down, then a digit to name the row",
         ),
         // **The addressed strip is covered and the next one round arrives over
         // it**, which is `karakuri-cli`'s `c` and the `go` capsule's own

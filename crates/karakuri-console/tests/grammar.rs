@@ -42,13 +42,15 @@ use karakuri_console::focus::{self, Arrow, Asked, Control, Grammar, Level, Press
 use karakuri_console::panel::{Op, Panel};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    Candidate, Chain, Look, Mask, Node, NodeAuthority, Pane, Param, Renderer, Scope, Sequenced,
-    Stage, Strip, Tally, Tracker, View, AUTHORITIES, SCRUB_BEATS, SYNCS,
+    AddChoice, Ask, AudioAsk, AudioIn, Candidate, Chain, ChainSlot, Look, Mask, Node,
+    NodeAuthority, Pane, Param, Renderer, Scope, Sequenced, SlotParam, Stage, Strip, Tally,
+    Tracker, View, AUTHORITIES, SCRUB_BEATS, SYNCS,
 };
 use karakuri_operation::LaneTarget;
 use karakuri_operation::{
-    Authority, BlendMode, Curve, Layer, NodeAddress, Operation, ParamAt, ParamValue, Residency,
-    Revision, StepMode, Sync, Tonemap, TransitionSetting, Undecided, WipeKind,
+    Authority, BeatSource, BlendMode, ChainParam, Curve, Cut, Layer, NodeAddress, Operation,
+    ParamAt, ParamValue, Residency, Revision, StepMode, Sync, Tonemap, TransitionSetting,
+    Undecided, WipeKind,
 };
 use karakuri_pattern::{Lane, Pattern};
 
@@ -204,12 +206,47 @@ fn console() -> (Panel, View) {
     ];
     view.inspector = vec![pane(0), pane(1)];
     view.master_out = Some(0.8);
+    // Two slots of the chain, one of which declares `retains` and so reads a
+    // cut, and one of which does not. Both of the cut chip's answers are
+    // reachable.
     view.master_chain = Some(Chain {
-        feedback: 0.2,
-        cut: karakuri_operation::Cut::Mix,
-        bloom: 0.1,
-        rgb_shift: 0.0,
+        slots: vec![
+            ChainSlot {
+                name: "feedback".to_owned(),
+                cut: Some(karakuri_operation::Cut::Mix),
+                params: vec![SlotParam {
+                    key: "amount".to_owned(),
+                    range: [0.0, 0.95],
+                    value: 0.2,
+                    default: 0.0,
+                }],
+            },
+            ChainSlot {
+                name: "bloom".to_owned(),
+                cut: None,
+                params: vec![SlotParam {
+                    key: "amount".to_owned(),
+                    range: [0.0, 1.0],
+                    value: 0.1,
+                    default: 0.0,
+                }],
+            },
+        ],
     });
+    // The `+ add` chooser's offer: one procedure that declares `retains` and
+    // one that does not, so the cut a slot arrives at is both answers.
+    view.chain_add = vec![
+        AddChoice {
+            procedure: "sha256:feed".to_owned(),
+            words: "feedback".to_owned(),
+            retains: true,
+        },
+        AddChoice {
+            procedure: "sha256:b100".to_owned(),
+            words: "bloom".to_owned(),
+            retains: false,
+        },
+    ];
     view.look = Some(Look {
         tonemap: Tonemap::Aces,
         exposure: 1.0,
@@ -301,6 +338,7 @@ fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
             ("transport", Grammar::Digit),
             ("transport", Grammar::Arrows),
             ("transport", Grammar::Space),
+            ("transport", Grammar::Enter),
             ("library", Grammar::Digit),
             ("library", Grammar::Arrows),
             ("library", Grammar::Space),
@@ -322,15 +360,17 @@ fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
             ("master", Grammar::Digit),
             ("master", Grammar::Arrows),
             ("master", Grammar::Space),
+            ("master", Grammar::Enter),
             ("sequencer", Grammar::Digit),
             ("sequencer", Grammar::Arrows),
             ("sequencer", Grammar::Space),
+            ("sequencer", Grammar::Enter),
             ("outputs", Grammar::Digit),
             ("outputs", Grammar::Arrows),
             ("outputs", Grammar::Space),
         ],
         "the grammar the console declares is not the one the records walk. `enter` reaches \
-         nothing in five of the nine — no item there performs — and `space` reaches nothing in \
+         nothing in three of the nine — no item there performs — and `space` reaches nothing in \
          Staging below the fold, which is ADR-0259's own finding about a lane of things that \
          happened"
     );
@@ -355,12 +395,20 @@ fn the_dispatch_table_is_the_nine_bays_the_record_walks() {
 ///   star is a state — so `space` reaches a row after all.
 /// - The Mixer's `go` capsule is its head's, which is where ADR-0343 puts
 ///   the transition row — so `enter` reaches a row of that bay.
+/// - The Sequencer's `+ lane` chooser is a rung of the address, which is where
+///   ADR-0351 puts it — so `enter` reaches a row of that bay too.
+/// - The Transport's audio-in pill and arrangement pill are two more of those,
+///   which is where ADR-0350 puts them — so `enter` reaches three rows of that
+///   bay.
+/// - The Master bay draws the chain as a list, whose slots carry a `−` and
+///   whose `+ add` opens a chooser, which is where ADR-0352 puts them — so
+///   `enter` reaches two rows of that bay.
 ///
-/// So two bays use all four of the keys that act, and seven still do not.
-/// The list is asserted rather than the claim, so a third bay joining them is
+/// So six bays use all four of the keys that act, and three still do not.
+/// The list is asserted rather than the claim, so a sixth bay joining them is
 /// a failure that says which rather than a sentence quietly going false.
 #[test]
-fn two_bays_use_all_four_of_the_keys_that_act_and_seven_do_not() {
+fn six_bays_use_all_four_of_the_keys_that_act_and_three_do_not() {
     let all: Vec<&str> = focus::BUILT
         .iter()
         .filter(|bay| Grammar::ALL.iter().all(|key| bay.reaches(*key)))
@@ -368,10 +416,18 @@ fn two_bays_use_all_four_of_the_keys_that_act_and_seven_do_not() {
         .collect();
     assert_eq!(
         all,
-        vec!["library", "inspector", "mixer"],
+        vec![
+            "transport",
+            "library",
+            "inspector",
+            "mixer",
+            "master",
+            "sequencer"
+        ],
         "which bays answer all four of the acting keys has changed. ADR-0259 found that none \
-         did; the Library's star and the Mixer's `go` are what made two of them, and the \
-         Inspector's parameter rows are a level that also performs. A fourth is a finding to \
+         did; the Library's star, the Mixer's `go`, the Sequencer's lane chooser, the \
+         Transport's two cards and the Master chain's list are what made five of them, and the \
+         Inspector's parameter rows are a level that also performs. A seventh is a finding to \
          write down rather than one to pass quietly"
     );
 }
@@ -1246,39 +1302,964 @@ fn every_refusal_says_why() {
             ),
         }
     }
-    // And the three effects of the master chain, which ADR-0259 calls the one
-    // place a bay is drawn and its operations are not sayable.
+    // And a slot of the master chain, which is a rung rather than a control:
+    // its parameter rows, its cut chip and its `−` are what answer a key.
     let (panel, mut view) = console();
     walk_to(&mut view, &panel, "master", &[2]);
     match press(&mut view, &panel, Press::Space) {
         Asked::Nothing(why) => assert!(
-            why.contains("spelling"),
-            "an effect declined without saying its parameters have no spelling: {why}"
+            why.contains("rung"),
+            "a chain slot declined without saying it is a rung: {why}"
         ),
-        other => panic!("an effect answered space: {other:?}"),
+        other => panic!("a chain slot answered space: {other:?}"),
     }
 }
 
-/// A control whose press puts a card down declines and says so, rather than
-/// opening something the address cannot then walk.
+/// The Sequencer's `+ lane` is `0 6`, and the number is the head's own count —
+/// the mode pill, the four bank pills, then the chooser.
+const ADD_LANE: &[usize] = &[HEAD, 6];
+
+/// `enter` on `+ lane` puts the chooser down, and its entries are the rung
+/// under it: a digit names the nth of them and the address descends
+/// (ADR-0351).
 #[test]
-fn a_control_that_opens_a_card_declines_and_names_what_is_in_it() {
-    let cases: [(&str, &[usize], &str); 3] = [
-        ("transport", &[7], "input"),
-        ("transport", &[8], "save"),
-        ("sequencer", &[HEAD, 6], "drive"),
-    ];
-    for (bay, path, word) in cases {
-        let (panel, mut view) = console();
-        walk_to(&mut view, &panel, bay, path);
-        match press(&mut view, &panel, Press::Enter) {
-            Asked::Nothing(why) => assert!(
-                why.contains("card") && why.contains(word),
-                "`{path:?} enter` in `{bay}` declined without saying what the card holds: {why}"
-            ),
-            other => panic!("`{path:?} enter` in `{bay}` opened a card: {other:?}"),
-        }
+fn enter_on_add_lane_puts_the_chooser_down_and_the_address_descends_into_it() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "sequencer", ADD_LANE);
+    assert!(
+        !view.lane_open(),
+        "the chooser was already down before anything was pressed"
+    );
+
+    // While the card is up there is no rung under `+ lane`, and the refusal
+    // says which press draws it.
+    match press(&mut view, &panel, Press::Digit(1)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("enter") && why.contains("+ lane"),
+            "a digit on `+ lane` with the card up declined without naming the press that puts \
+             it down: {why}"
+        ),
+        other => panic!("a digit named an entry of a chooser that is not down: {other:?}"),
     }
+    assert_eq!(at(&view, "sequencer"), vec![HEAD, 6]);
+
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Moved,
+        "`enter` on `+ lane` did not put the chooser down"
+    );
+    assert!(view.lane_open(), "the card is not down");
+
+    // And now the digits count what is on it, from one.
+    let offered = view.lane_choices().items.len();
+    assert!(offered >= 2, "this console offers too few targets to walk");
+    match press(&mut view, &panel, Press::Digit(offered + 1)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("from one"),
+            "a digit past the end of the chooser declined without saying what the digits \
+             count: {why}"
+        ),
+        other => panic!("a digit named a target the chooser is not offering: {other:?}"),
+    }
+    assert_eq!(
+        at(&view, "sequencer"),
+        vec![HEAD, 6],
+        "a refused digit descended anyway"
+    );
+    assert_eq!(press(&mut view, &panel, Press::Digit(2)), Asked::Moved);
+    assert_eq!(
+        at(&view, "sequencer"),
+        vec![HEAD, 6, 2],
+        "the address did not descend into the chooser"
+    );
+}
+
+/// The chooser's entries are a column, so `↑↓` walk them and `←→` are refused
+/// with the pair that works — the axis check one rung under the head.
+#[test]
+fn the_choosers_entries_are_a_column_the_arrows_walk() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "sequencer", ADD_LANE);
+    press(&mut view, &panel, Press::Enter);
+    let offered = view.lane_choices().items.len();
+
+    match press(&mut view, &panel, Press::Arrow(Arrow::Right)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("column") && why.contains("up and down"),
+            "`→` in the chooser declined without naming the axis that works: {why}"
+        ),
+        other => panic!("`→` walked a column of targets: {other:?}"),
+    }
+
+    // The walk starts from the entry the chooser remembers, with no digit
+    // pressed first, and the address follows it into the card.
+    assert_eq!(
+        press(&mut view, &panel, Press::Arrow(Arrow::Down)),
+        Asked::Moved
+    );
+    assert_eq!(at(&view, "sequencer"), vec![HEAD, 6, 2]);
+
+    // And it is walked and clamped rather than wrapped.
+    for _ in 0..offered + 2 {
+        press(&mut view, &panel, Press::Arrow(Arrow::Down));
+    }
+    assert_eq!(
+        at(&view, "sequencer"),
+        vec![HEAD, 6, offered],
+        "the walk wrapped past the end of the chooser instead of stopping at it"
+    );
+    match press(&mut view, &panel, Press::Arrow(Arrow::Down)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("end"),
+            "a walk off the end of the chooser declined without saying so: {why}"
+        ),
+        other => panic!("the walk ran off the end of the chooser: {other:?}"),
+    }
+}
+
+/// `enter` on an entry points the lane at that target and takes the card away —
+/// the same operation the pointer's pick emits, with the bank this bay drew.
+#[test]
+fn enter_on_a_chooser_entry_points_the_lane_and_takes_the_card_away() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "sequencer", ADD_LANE);
+    press(&mut view, &panel, Press::Enter);
+    let want = view.lane_choices().items[1].target.clone();
+    press(&mut view, &panel, Press::Digit(2));
+
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Emitted(Operation::PointLane {
+            // The bank this bay is reading, which is `console`'s own — never
+            // whichever is armed by the time the operation is performed.
+            pattern: 2,
+            target: want
+        }),
+        "`enter` on an entry of the chooser did not point the lane at what it names"
+    );
+    assert!(
+        !view.lane_open(),
+        "the card was left standing over a lane that has already been asked for"
+    );
+    assert_eq!(
+        at(&view, "sequencer"),
+        vec![HEAD, 6],
+        "the address did not go back to `+ lane`"
+    );
+}
+
+/// `esc` takes the card away and leaves the address on `+ lane`, from inside the
+/// chooser and from the control that opened it.
+#[test]
+fn esc_takes_the_chooser_away_and_leaves_the_address_on_add_lane() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "sequencer", ADD_LANE);
+    press(&mut view, &panel, Press::Enter);
+    press(&mut view, &panel, Press::Digit(1));
+    assert_eq!(at(&view, "sequencer"), vec![HEAD, 6, 1]);
+
+    assert!(
+        view.focus_up(&panel),
+        "`esc` inside the chooser acted on nothing"
+    );
+    assert!(!view.lane_open(), "`esc` left the card down");
+    assert_eq!(
+        at(&view, "sequencer"),
+        vec![HEAD, 6],
+        "`esc` did not leave the address on `+ lane`"
+    );
+
+    // And from `+ lane` itself, where the card is down and the address never
+    // descended: the card goes and the address stays.
+    press(&mut view, &panel, Press::Enter);
+    assert!(view.lane_open());
+    assert!(view.focus_up(&panel));
+    assert!(!view.lane_open(), "`esc` on `+ lane` left the card down");
+    assert_eq!(at(&view, "sequencer"), vec![HEAD, 6]);
+
+    // With no card down it is the ordinary climb again.
+    assert!(view.focus_up(&panel));
+    assert_eq!(at(&view, "sequencer"), vec![HEAD]);
+}
+
+/// `space` sets and `enter` performs, so neither `+ lane` nor one of its entries
+/// has a next state — and each refusal names the key that does run it.
+#[test]
+fn space_declines_on_the_chooser_and_names_enter() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "sequencer", ADD_LANE);
+    for _ in 0..2 {
+        match press(&mut view, &panel, Press::Space) {
+            Asked::Nothing(why) => assert!(
+                why.contains("enter"),
+                "`space` on the chooser declined without naming the key that runs it: {why}"
+            ),
+            other => panic!("`space` on the chooser set something: {other:?}"),
+        }
+        press(&mut view, &panel, Press::Enter);
+        press(&mut view, &panel, Press::Digit(1));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The Transport's two cards, and its tempo figure
+// ---------------------------------------------------------------------------
+
+/// The tempo figure, the audio-in pill and the arrangement pill, by the number a
+/// digit names each of them with: the row's own order, left to right, which is
+/// what the digits count.
+const TEMPO: &[usize] = &[1];
+const AUDIO_IN: &[usize] = &[7];
+const ARRANGEMENT: &[usize] = &[8];
+
+/// A console with a grid running and both of the Transport's cards' contents
+/// behind it — two inputs on the machine and two arrangements filed.
+fn transport() -> (Panel, View) {
+    let (panel, mut view) = console();
+    view.transport = Some(common::mock_transport());
+    let mut audio = AudioIn::NONE;
+    audio.inputs = vec![
+        "Scarlett 2i2".to_owned(),
+        "MacBook Pro Microphone".to_owned(),
+    ];
+    view.audio = Some(audio);
+    view.arrangement.filed = vec!["night".to_owned(), "wide".to_owned()];
+    (panel, view)
+}
+
+/// The host's half of a press that runs one of a card's rows: the card goes as
+/// the operation is named, which is what `Readout::listened` and
+/// `Readout::arranged` do at the pointer.
+fn take_the_card_away(view: &mut View, asked: &Asked) {
+    match asked {
+        Asked::Listened(AudioAsk::Operation(_)) => {
+            view.audio.as_mut().expect("an audio pill").shut();
+        }
+        Asked::Arranged(Ask::Operation(_)) => view.arrangement.shut(),
+        Asked::Arranged(Ask::Name) => view.arrangement.asks_a_name(),
+        other => panic!("this press did not run a row of a card: {other:?}"),
+    }
+}
+
+/// The host's half of the press that puts a card down: the console says which
+/// card and the program puts it there. Opening the audio-in card enumerates the
+/// machine's inputs, and this crate takes no device (ADR-0156).
+fn put_the_card_down(view: &mut View, asked: &Asked) {
+    match asked {
+        Asked::Listened(AudioAsk::Open) => view.audio.as_mut().expect("an audio pill").opened(),
+        Asked::Arranged(Ask::Open) => view.arrangement.opened(),
+        other => panic!("this press did not ask for a card: {other:?}"),
+    }
+}
+
+/// The tempo figure is a track the arrows step — one press, one beat a minute,
+/// named here and stepped by the host — and it has no value `space` returns it
+/// to (ADR-0350).
+#[test]
+fn the_arrows_step_the_tempo_figure_and_space_declines_on_it() {
+    let (panel, mut view) = transport();
+    walk_to(&mut view, &panel, "transport", TEMPO);
+    assert_eq!(
+        press(&mut view, &panel, Press::Arrow(Arrow::Up)),
+        Asked::Stepped {
+            level: Level::Tempo,
+            step: Step::Up
+        },
+        "`1 ↑` in the Transport did not ask the host to step the grid"
+    );
+    assert_eq!(
+        press(&mut view, &panel, Press::Arrow(Arrow::Down)),
+        Asked::Stepped {
+            level: Level::Tempo,
+            step: Step::Down
+        }
+    );
+    match press(&mut view, &panel, Press::Space) {
+        Asked::Nothing(why) => assert!(
+            why.contains("declared"),
+            "`space` on the tempo declined without saying it has no value to return to: {why}"
+        ),
+        other => panic!("`space` on the tempo figure set something: {other:?}"),
+    }
+    match press(&mut view, &panel, Press::Arrow(Arrow::Right)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("up and down"),
+            "`→` on the tempo declined without naming the pair that works: {why}"
+        ),
+        other => panic!("`→` stepped the tempo across: {other:?}"),
+    }
+    // And with no engine behind the console there is no grid to step.
+    let (panel, mut view) = transport();
+    view.transport = None;
+    walk_to(&mut view, &panel, "transport", TEMPO);
+    match press(&mut view, &panel, Press::Arrow(Arrow::Up)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("grid"),
+            "a tempo with no engine behind it declined without saying so: {why}"
+        ),
+        other => panic!("a console with no engine stepped a grid: {other:?}"),
+    }
+}
+
+/// `enter` on the audio-in pill puts its card down, the inputs are the rung under
+/// it, and `enter` on one attaches that input — the card walked rather than
+/// declined (ADR-0350).
+#[test]
+fn the_audio_in_card_is_walked_and_enter_attaches_the_input_it_is_on() {
+    let (panel, mut view) = transport();
+    walk_to(&mut view, &panel, "transport", AUDIO_IN);
+
+    // While the card is up there is no rung under the pill, and the refusal
+    // says which press draws it.
+    match press(&mut view, &panel, Press::Digit(1)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("enter"),
+            "a digit under a card that is up declined without naming the press that puts it \
+             down: {why}"
+        ),
+        other => panic!("a digit named a row of a card that is not down: {other:?}"),
+    }
+    assert_eq!(at(&view, "transport"), vec![7]);
+
+    let asked = press(&mut view, &panel, Press::Enter);
+    assert_eq!(
+        asked,
+        Asked::Listened(AudioAsk::Open),
+        "`enter` on the audio-in pill did not ask for its card"
+    );
+    put_the_card_down(&mut view, &asked);
+
+    // The digits count what is on the card, from one.
+    match press(&mut view, &panel, Press::Digit(3)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("from one"),
+            "a digit past the end of the card declined without saying what the digits count: \
+             {why}"
+        ),
+        other => panic!("a digit named an input the card is not drawing: {other:?}"),
+    }
+    assert_eq!(press(&mut view, &panel, Press::Digit(2)), Asked::Moved);
+    assert_eq!(
+        at(&view, "transport"),
+        vec![7, 2],
+        "the address did not descend into the card"
+    );
+
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Listened(AudioAsk::Operation(Operation::AttachBeatSource {
+            source: BeatSource::AudioInput("MacBook Pro Microphone".to_owned()),
+        })),
+        "`enter` on a row of the card did not attach the input it names"
+    );
+    assert_eq!(
+        at(&view, "transport"),
+        vec![7],
+        "the address was left inside a card the press takes away"
+    );
+}
+
+/// The arrangement menu is *save*, *start a new one* and the names filed, in that
+/// order — `enter` on the first saves under the name in use and asks for one where
+/// there is none, `enter` on one of the names puts that arrangement back, and the
+/// reset declines and names the key that reaches it (ADR-0350).
+#[test]
+fn the_arrangement_menu_is_walked_and_enter_saves_or_puts_one_back() {
+    let (panel, mut view) = transport();
+    view.arrangement.name = Some("night".to_owned());
+    walk_to(&mut view, &panel, "transport", ARRANGEMENT);
+    let asked = press(&mut view, &panel, Press::Enter);
+    assert_eq!(asked, Asked::Arranged(Ask::Open));
+    put_the_card_down(&mut view, &asked);
+
+    // `1` is *save*, and with a name in use saving again means that name.
+    assert_eq!(press(&mut view, &panel, Press::Digit(1)), Asked::Moved);
+    let asked = press(&mut view, &panel, Press::Enter);
+    assert_eq!(
+        asked,
+        Asked::Arranged(Ask::Operation(Operation::SaveArrangement {
+            name: "night".to_owned(),
+        })),
+    );
+    assert_eq!(
+        at(&view, "transport"),
+        vec![8],
+        "the address was left inside a menu the press takes away"
+    );
+    take_the_card_away(&mut view, &asked);
+
+    // `2` is *start a new one*, which is the reset: `r` reaches that row and
+    // the grammar declines rather than reaching it a second way.
+    let asked = press(&mut view, &panel, Press::Enter);
+    put_the_card_down(&mut view, &asked);
+    press(&mut view, &panel, Press::Digit(2));
+    match press(&mut view, &panel, Press::Enter) {
+        Asked::Nothing(why) => assert!(
+            why.contains('r'),
+            "the reset row declined without naming the key that reaches it: {why}"
+        ),
+        other => panic!("the menu's reset was performed from the grammar: {other:?}"),
+    }
+
+    // `3` and `4` are the names filed, in the order the store listed them, and
+    // the arrows are how the address moves between rows of a card it has
+    // already descended into — a digit reaches nothing under a row.
+    press(&mut view, &panel, Press::Arrow(Arrow::Down));
+    press(&mut view, &panel, Press::Arrow(Arrow::Down));
+    assert_eq!(at(&view, "transport"), vec![8, 4]);
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Arranged(Ask::Operation(Operation::RestoreArrangement {
+            name: "wide".to_owned(),
+        })),
+        "`enter` on a filed name did not put that arrangement back"
+    );
+}
+
+/// With no arrangement in use, *save* asks for a name — the one flow on this
+/// panel that takes letters, which the field then has the keyboard for.
+#[test]
+fn save_with_no_name_in_use_asks_for_one() {
+    let (panel, mut view) = transport();
+    assert!(view.arrangement.name.is_none());
+    walk_to(&mut view, &panel, "transport", ARRANGEMENT);
+    let asked = press(&mut view, &panel, Press::Enter);
+    put_the_card_down(&mut view, &asked);
+    press(&mut view, &panel, Press::Digit(1));
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Arranged(Ask::Name),
+        "*save* with no name in use did not ask for one"
+    );
+}
+
+/// A card's rows are a column, so `↑↓` walk them and `←→` are refused with the
+/// pair that works — and the walk starts from the pill with no digit pressed
+/// first, which is the bay-level rule one rung down.
+#[test]
+fn a_cards_rows_are_a_column_the_arrows_walk() {
+    let (panel, mut view) = transport();
+    walk_to(&mut view, &panel, "transport", AUDIO_IN);
+    let asked = press(&mut view, &panel, Press::Enter);
+    put_the_card_down(&mut view, &asked);
+
+    match press(&mut view, &panel, Press::Arrow(Arrow::Right)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("column") && why.contains("up and down"),
+            "`→` in a card declined without naming the axis that works: {why}"
+        ),
+        other => panic!("`→` walked a column of rows: {other:?}"),
+    }
+    assert_eq!(
+        press(&mut view, &panel, Press::Arrow(Arrow::Down)),
+        Asked::Moved
+    );
+    assert_eq!(at(&view, "transport"), vec![7, 2]);
+    // Walked and clamped rather than wrapped, which is `View::walk`'s rule one
+    // bay over.
+    match press(&mut view, &panel, Press::Arrow(Arrow::Down)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("end"),
+            "a walk off the end of a card declined without saying so: {why}"
+        ),
+        other => panic!("the walk ran off the end of the card: {other:?}"),
+    }
+    assert_eq!(at(&view, "transport"), vec![7, 2]);
+}
+
+/// `Tab` takes the card away too: a card the address descends into goes when
+/// focus moves.
+#[test]
+fn tab_takes_a_transport_card_away() {
+    let (panel, mut view) = transport();
+    walk_to(&mut view, &panel, "transport", AUDIO_IN);
+    let asked = press(&mut view, &panel, Press::Enter);
+    put_the_card_down(&mut view, &asked);
+    assert!(view.audio.as_ref().expect("an audio pill").open());
+
+    assert!(view.tab(&panel, 1), "`tab` did not move focus");
+    assert!(
+        !view.audio.as_ref().expect("an audio pill").open(),
+        "`tab` left a card standing over a bay the keys have left"
+    );
+    // The bay keeps where it was, which is every other thing `Tab` leaves
+    // alone.
+    assert_eq!(at(&view, "transport"), vec![7]);
+}
+
+/// `esc` takes the card away and leaves the address on the pill it hangs from,
+/// from inside the card and from the pill itself.
+#[test]
+fn esc_takes_a_transport_card_away_and_leaves_the_address_on_its_pill() {
+    let (panel, mut view) = transport();
+    walk_to(&mut view, &panel, "transport", ARRANGEMENT);
+    let asked = press(&mut view, &panel, Press::Enter);
+    put_the_card_down(&mut view, &asked);
+    press(&mut view, &panel, Press::Digit(3));
+    assert_eq!(at(&view, "transport"), vec![8, 3]);
+
+    assert!(
+        view.focus_up(&panel),
+        "`esc` inside a card acted on nothing"
+    );
+    assert!(!view.arrangement.open(), "`esc` left the menu down");
+    assert_eq!(
+        at(&view, "transport"),
+        vec![8],
+        "`esc` did not leave the address on the pill"
+    );
+
+    // And from the pill itself, where the card is down and the address never
+    // descended: the card goes and the address stays.
+    let asked = press(&mut view, &panel, Press::Enter);
+    put_the_card_down(&mut view, &asked);
+    assert!(view.focus_up(&panel));
+    assert!(
+        !view.arrangement.open(),
+        "`esc` on the pill left the menu down"
+    );
+    assert_eq!(at(&view, "transport"), vec![8]);
+
+    // With no card down it is the ordinary climb again.
+    assert!(view.focus_up(&panel));
+    assert_eq!(at(&view, "transport"), Vec::<usize>::new());
+}
+
+// ---------------------------------------------------------------------------
+// The Master chain's list
+// ---------------------------------------------------------------------------
+
+/// The Master bay's items are the out fader, one per slot of the chain and
+/// `+ add`, so `console`'s two-slot chain numbers them 1 to 4 — and a slot's
+/// controls are its parameter rows, its cut chip and its `−` (ADR-0352).
+const OUT: &[usize] = &[1];
+const RETAINING_SLOT: &[usize] = &[2];
+const PLAIN_SLOT: &[usize] = &[3];
+const ADD_EFFECT: &[usize] = &[4];
+
+/// `enter` on `+ add` puts the chooser down, and the `kind L5` procedures it
+/// lists are the rung under it: a digit names the nth and the address descends
+/// (ADR-0352).
+#[test]
+fn enter_on_add_effect_puts_the_chooser_down_and_the_address_descends_into_it() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", ADD_EFFECT);
+    assert!(
+        !view.chain_add_open(),
+        "the chooser was already down before anything was pressed"
+    );
+
+    // While the card is up there is no rung under `+ add`, and the refusal
+    // says which press draws it.
+    match press(&mut view, &panel, Press::Digit(1)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("enter") && why.contains("+ add"),
+            "a digit on `+ add` with the card up declined without naming the press that puts it \
+             down: {why}"
+        ),
+        other => panic!("a digit named a row of a chooser that is not down: {other:?}"),
+    }
+    assert_eq!(at(&view, "master"), vec![4]);
+
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Moved,
+        "`enter` on `+ add` did not put the chooser down"
+    );
+    assert!(view.chain_add_open(), "the card is not down");
+
+    // A second `enter` declines and names the keys that reach what is on it.
+    match press(&mut view, &panel, Press::Enter) {
+        Asked::Nothing(why) => assert!(
+            why.contains("already down"),
+            "`enter` on a chooser that is down declined without saying so: {why}"
+        ),
+        other => panic!("`enter` put a card down twice: {other:?}"),
+    }
+
+    // And now the digits count what is on it, from one.
+    let offered = view.chain_choices().items.len();
+    assert_eq!(
+        offered, 2,
+        "this console offers the wrong number of procedures"
+    );
+    match press(&mut view, &panel, Press::Digit(offered + 1)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("from one"),
+            "a digit past the end of the chooser declined without saying what the digits count: \
+             {why}"
+        ),
+        other => panic!("a digit named a procedure the chooser is not offering: {other:?}"),
+    }
+    assert_eq!(
+        at(&view, "master"),
+        vec![4],
+        "a refused digit descended anyway"
+    );
+    assert_eq!(press(&mut view, &panel, Press::Digit(2)), Asked::Moved);
+    assert_eq!(
+        at(&view, "master"),
+        vec![4, 2],
+        "the address did not descend into the chooser"
+    );
+}
+
+/// The `+ add` chooser's rows are a column, so `↑↓` walk them and `←→` are
+/// refused with the pair that works — walked and clamped, never wrapped.
+#[test]
+fn the_add_choosers_rows_are_a_column_the_arrows_walk() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", ADD_EFFECT);
+    press(&mut view, &panel, Press::Enter);
+    let offered = view.chain_choices().items.len();
+
+    match press(&mut view, &panel, Press::Arrow(Arrow::Right)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("column") && why.contains("up and down"),
+            "`→` in the chooser declined without naming the axis that works: {why}"
+        ),
+        other => panic!("`→` walked a column of procedures: {other:?}"),
+    }
+
+    // The walk starts from the row the chooser remembers, with no digit
+    // pressed first, and the address follows it into the card.
+    assert_eq!(
+        press(&mut view, &panel, Press::Arrow(Arrow::Down)),
+        Asked::Moved
+    );
+    assert_eq!(at(&view, "master"), vec![4, 2]);
+
+    for _ in 0..offered + 2 {
+        press(&mut view, &panel, Press::Arrow(Arrow::Down));
+    }
+    assert_eq!(
+        at(&view, "master"),
+        vec![4, offered],
+        "the walk wrapped past the end of the chooser instead of stopping at it"
+    );
+    match press(&mut view, &panel, Press::Arrow(Arrow::Down)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("end"),
+            "a walk off the end of the chooser declined without saying so: {why}"
+        ),
+        other => panic!("the walk ran off the end of the chooser: {other:?}"),
+    }
+}
+
+/// `enter` on one of the chooser's rows appends a slot of that procedure, takes
+/// the card away and puts the address back on `+ add` — the cut is `Some`
+/// exactly where the procedure declares `retains`.
+#[test]
+fn enter_on_an_add_chooser_row_appends_the_slot_and_takes_the_card_away() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", ADD_EFFECT);
+    press(&mut view, &panel, Press::Enter);
+    press(&mut view, &panel, Press::Digit(1));
+
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Emitted(Operation::AddChainEffect {
+            procedure: "sha256:feed".to_owned(),
+            cut: Some(Cut::Mix),
+        }),
+        "`enter` on a row of the chooser did not append the procedure it names"
+    );
+    assert!(
+        !view.chain_add_open(),
+        "the card was left standing over a slot that has already been asked for"
+    );
+    assert_eq!(
+        at(&view, "master"),
+        vec![4],
+        "the address did not go back to `+ add`"
+    );
+
+    // And the second row, whose procedure declares no `retains`, arrives with
+    // no cut at all.
+    press(&mut view, &panel, Press::Enter);
+    press(&mut view, &panel, Press::Digit(2));
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Emitted(Operation::AddChainEffect {
+            procedure: "sha256:b100".to_owned(),
+            cut: None,
+        })
+    );
+}
+
+/// A slot's parameter row is a level: `↑↓` step it a tenth of the range its
+/// procedure declares and `space` returns it to the value that procedure
+/// declared it at (ADR-0352).
+#[test]
+fn the_arrows_step_a_chain_parameter_by_a_tenth_of_its_declared_range() {
+    let (panel, mut view) = console();
+    // The first slot's first parameter row — `amount`, declared over
+    // `0.0 .. 0.95` and holding `0.2`.
+    walk_to(&mut view, &panel, "master", &[RETAINING_SLOT[0], 1]);
+
+    match press(&mut view, &panel, Press::Arrow(Arrow::Up)) {
+        Asked::Emitted(Operation::SetChainParam {
+            at,
+            param: ChainParam::Declared { key, value },
+        }) => {
+            assert_eq!(at, 0, "the step named the wrong slot of the chain");
+            assert_eq!(key, "amount");
+            assert!(
+                (value - (0.2 + 0.095)).abs() < 1e-6,
+                "`↑` did not step a tenth of the declared range: {value}"
+            );
+        }
+        other => panic!("`↑` on a chain parameter row did not set it: {other:?}"),
+    }
+    match press(&mut view, &panel, Press::Arrow(Arrow::Down)) {
+        Asked::Emitted(Operation::SetChainParam {
+            param: ChainParam::Declared { value, .. },
+            ..
+        }) => assert!(
+            (value - (0.2 - 0.095)).abs() < 1e-6,
+            "`↓` did not step a tenth of the declared range: {value}"
+        ),
+        other => panic!("`↓` on a chain parameter row did not set it: {other:?}"),
+    }
+    // `space` is the value the procedure declared it at, which the reading
+    // carries because the compiled slot has it.
+    match press(&mut view, &panel, Press::Space) {
+        Asked::Emitted(Operation::SetChainParam {
+            param: ChainParam::Declared { value, .. },
+            ..
+        }) => assert!(
+            value.abs() < 1e-6,
+            "`space` did not return the row to what the procedure declared: {value}"
+        ),
+        other => panic!("`space` on a chain parameter row did not set it: {other:?}"),
+    }
+    // It performs nothing, so `enter` declines.
+    match press(&mut view, &panel, Press::Enter) {
+        Asked::Nothing(why) => assert!(
+            why.contains("enter"),
+            "a chain parameter row declined `enter` without saying why: {why}"
+        ),
+        other => panic!("a chain parameter row performed something: {other:?}"),
+    }
+}
+
+/// A slot's cut chip is a state `space` cycles, and it is addressed on every
+/// slot: one whose procedure declares no `retains` draws none and declines with
+/// that sentence, so a digit means the same control down the whole chain
+/// (ADR-0352).
+#[test]
+fn space_on_a_slots_cut_chip_cycles_it_and_declines_where_the_slot_retains_nothing() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", &[RETAINING_SLOT[0], 2]);
+    assert_eq!(
+        press(&mut view, &panel, Press::Space),
+        Asked::Emitted(Operation::SetChainParam {
+            at: 0,
+            param: ChainParam::Cut(Cut::Exit),
+        }),
+        "`space` on a cut chip did not name the other of the two cuts"
+    );
+    // A closed list has no axis, so the arrows decline and name `space`.
+    match press(&mut view, &panel, Press::Arrow(Arrow::Down)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("space"),
+            "an arrow on the cut chip declined without naming the key that cycles it: {why}"
+        ),
+        other => panic!("an arrow walked a closed list: {other:?}"),
+    }
+
+    // The second slot declares no `retains`, and its chip keeps the number.
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", &[PLAIN_SLOT[0], 2]);
+    match press(&mut view, &panel, Press::Space) {
+        Asked::Nothing(why) => assert!(
+            why.contains("retains"),
+            "a slot with no cut declined without saying why it has none: {why}"
+        ),
+        other => panic!("a slot with no retained frame answered with a cut: {other:?}"),
+    }
+}
+
+/// `enter` on the `−` at the end of a slot's row takes that slot out of the
+/// chain, by the position the bay drew it at.
+#[test]
+fn enter_on_a_slots_minus_takes_it_out_of_the_chain() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", &[RETAINING_SLOT[0], 3]);
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Emitted(Operation::RemoveChainEffect { at: 0 })
+    );
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", &[PLAIN_SLOT[0], 3]);
+    assert_eq!(
+        press(&mut view, &panel, Press::Enter),
+        Asked::Emitted(Operation::RemoveChainEffect { at: 1 }),
+        "the `−` on the second slot named the wrong position in the chain"
+    );
+
+    // A digit past what a slot draws says what the digits count.
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", PLAIN_SLOT);
+    match press(&mut view, &panel, Press::Digit(4)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("this slot") && why.contains("from one"),
+            "a digit past a slot's controls declined without saying what the digits count: {why}"
+        ),
+        other => panic!("a digit named a control a slot does not draw: {other:?}"),
+    }
+
+    // And the out fader is a level with nothing under it.
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", OUT);
+    match press(&mut view, &panel, Press::Digit(1)) {
+        Asked::Nothing(why) => assert!(
+            why.contains("esc"),
+            "a digit below the out fader declined without saying how to go back: {why}"
+        ),
+        other => panic!("the out fader drew a rung: {other:?}"),
+    }
+}
+
+/// `esc` takes the `+ add` chooser away and leaves the address on `+ add`, from
+/// inside the card and from the control that opened it.
+#[test]
+fn esc_takes_the_add_chooser_away_and_leaves_the_address_on_add_effect() {
+    let (panel, mut view) = console();
+    walk_to(&mut view, &panel, "master", ADD_EFFECT);
+    press(&mut view, &panel, Press::Enter);
+    press(&mut view, &panel, Press::Digit(1));
+    assert_eq!(at(&view, "master"), vec![4, 1]);
+
+    assert!(
+        view.focus_up(&panel),
+        "`esc` inside the chooser acted on nothing"
+    );
+    assert!(!view.chain_add_open(), "`esc` left the card down");
+    assert_eq!(
+        at(&view, "master"),
+        vec![4],
+        "`esc` did not leave the address on `+ add`"
+    );
+
+    // And from `+ add` itself, where the card is down and the address never
+    // descended: the card goes and the address stays.
+    press(&mut view, &panel, Press::Enter);
+    assert!(view.chain_add_open());
+    assert!(view.focus_up(&panel));
+    assert!(
+        !view.chain_add_open(),
+        "`esc` on `+ add` left the card down"
+    );
+    assert_eq!(at(&view, "master"), vec![4]);
+
+    // With no card down it is the ordinary climb again.
+    assert!(view.focus_up(&panel));
+    assert_eq!(at(&view, "master"), Vec::<usize>::new());
+}
+
+// ---------------------------------------------------------------------------
+// A card that is not on the address's path
+// ---------------------------------------------------------------------------
+
+/// `esc` goes up one level of the focused bay's address
+/// ([ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)),
+/// so a card that is down but is not on that path is not the key's: the pointer
+/// put it there and the pointer takes it away. One test per card, because each
+/// is a different control on a different rung.
+///
+/// `Tab` is the key that takes a card away wherever it is, so each of these puts
+/// the card down after focus has moved — which is the pointer's own order.
+#[test]
+fn esc_in_another_bay_leaves_the_lane_chooser_alone() {
+    let (panel, mut view) = console();
+    focus_on(&mut view, &panel, "mixer");
+    press(&mut view, &panel, Press::Digit(2));
+    assert!(view.open_lane(), "the chooser did not go down");
+
+    assert!(view.focus_up(&panel), "`esc` acted on nothing");
+    assert!(
+        view.lane_open(),
+        "`esc` took a card that is not on the address's path"
+    );
+    assert_eq!(
+        at(&view, "mixer"),
+        Vec::<usize>::new(),
+        "`esc` did not go up one level of the focused bay's address"
+    );
+}
+
+/// [`esc_in_another_bay_leaves_the_lane_chooser_alone`]'s rule, one bay along.
+#[test]
+fn esc_in_another_bay_leaves_the_add_chooser_alone() {
+    let (panel, mut view) = console();
+    focus_on(&mut view, &panel, "mixer");
+    press(&mut view, &panel, Press::Digit(2));
+    assert!(view.open_chain_add(), "the chooser did not go down");
+
+    assert!(view.focus_up(&panel), "`esc` acted on nothing");
+    assert!(
+        view.chain_add_open(),
+        "`esc` took a card that is not on the address's path"
+    );
+    assert_eq!(at(&view, "mixer"), Vec::<usize>::new());
+}
+
+/// [`esc_in_another_bay_leaves_the_lane_chooser_alone`]'s rule, on the audio-in
+/// pill's card.
+#[test]
+fn esc_in_another_bay_leaves_the_audio_in_card_alone() {
+    let (panel, mut view) = transport();
+    focus_on(&mut view, &panel, "mixer");
+    press(&mut view, &panel, Press::Digit(2));
+    view.audio.as_mut().expect("an audio pill").opened();
+
+    assert!(view.focus_up(&panel), "`esc` acted on nothing");
+    assert!(
+        view.audio.as_ref().expect("an audio pill").open(),
+        "`esc` took a card that is not on the address's path"
+    );
+    assert_eq!(at(&view, "mixer"), Vec::<usize>::new());
+}
+
+/// [`esc_in_another_bay_leaves_the_lane_chooser_alone`]'s rule, on the
+/// arrangement pill's menu.
+#[test]
+fn esc_in_another_bay_leaves_the_arrangement_menu_alone() {
+    let (panel, mut view) = transport();
+    focus_on(&mut view, &panel, "mixer");
+    press(&mut view, &panel, Press::Digit(2));
+    view.arrangement.opened();
+
+    assert!(view.focus_up(&panel), "`esc` acted on nothing");
+    assert!(
+        view.arrangement.open(),
+        "`esc` took a card that is not on the address's path"
+    );
+    assert_eq!(at(&view, "mixer"), Vec::<usize>::new());
+}
+
+/// A card down in the bay that has focus is still not `esc`'s unless the address
+/// is on the control it hangs from: the key goes up one level of the address it
+/// is given, and a card the address is not on is not one of those levels.
+#[test]
+fn esc_on_another_control_of_the_same_bay_leaves_the_card_alone() {
+    let (panel, mut view) = console();
+    // `0 1` is the grid mode pill, which hangs no card, and the pointer put
+    // the chooser down while the address was on it.
+    walk_to(&mut view, &panel, "sequencer", &[HEAD, 1]);
+    assert!(view.open_lane(), "the chooser did not go down");
+
+    assert!(view.focus_up(&panel), "`esc` acted on nothing");
+    assert!(
+        view.lane_open(),
+        "`esc` on a control that hangs no card took the card away"
+    );
+    assert_eq!(
+        at(&view, "sequencer"),
+        vec![HEAD],
+        "`esc` did not go up one level"
+    );
 }
 
 /// An address on something the bay has stopped drawing goes back to the bay,

@@ -506,31 +506,19 @@ pub(crate) mod key_column {
     //!   both assertions below read the same list, so an entry naming a row
     //!   that is not marked built fails one and a badge naming a key no entry
     //!   claims fails the other.
-    //! # Two rows this program deliberately binds no key to
+    //! # The two arrangement rows are reached through the control that lists
+    //! them
     //!
     //! *Save the arrangement* and *Put a saved arrangement back* each carry a
-    //! name the operator picked, and a bare key press cannot type one.
-    //! ADR-0221 §1 provides a fallback — a surface that cannot type a name
-    //! passes a `history::stamped_id` stamp, as `accepted_save` does for a Set
-    //! — and it is declined here for two reasons, both of which would show up
-    //! as a badge that lies:
-    //!
-    //! - Putting one back cannot be bound at all. Nothing at a key press
-    //!   says *which* arrangement, and *the most recent* is a handle derived
-    //!   from where a file sits, which is the failure
-    //!   [P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)
-    //!   is about and the one ADR-0221 rejected a slot number over.
-    //! - So a save key alone would keep arrangements nothing can put back.
-    //!   This program has no control that lists them and no way to show an
-    //!   operator the stamp it picked for them, and `ArrangementEntry`'s own
-    //!   documentation says an arrangement is *"saved by an operator who is
-    //!   telling the console what to call this shape"*. A `has` badge would be
-    //!   true of the press and false of everything the press was for.
-    //!
-    //! Both rows therefore carry four empty badges on [`PAGE`], and the page
-    //! says the same thing in its own words. Binding either one is a change to
-    //! that specification first, and it wants the control this page's *panel*
-    //! badges now name — the transport row — rather than a letter.
+    //! name the operator picked, and no bare letter is bound to either: a key
+    //! press cannot type a name, and nothing at one says *which* arrangement.
+    //! What reaches them is the arrangement pill's menu, addressed — `enter`
+    //! puts the menu down, a digit names a row of it, and `enter` on that row
+    //! saves under the name in use or puts a filed arrangement back. Saving
+    //! with no name in use opens the field, which takes the keyboard whole
+    //! while it is asking (ADR-0259, ADR-0350). So both rows carry
+    //! `enter &middot; in the Transport` in the key column of [`PAGE`], and
+    //! [`NAME_ENTRY_KEY`] is the rub-out that flow binds.
     //!
     //! - Only the key column. The panel column is
     //!   `karakuri-console`'s two files, the MCP column is
@@ -700,10 +688,10 @@ pub(crate) mod key_column {
         // `enter` and `space` are grammar keys the rest of the time and appear
         // under their bays below; this is the rub-out, which is nothing else.
         //
-        // ADR-0221 records that **no key is bound to saving or restoring an
-        // arrangement**, and that is still true: it does not *name* the
-        // operation and cannot be pressed to reach it. A save is reached by
-        // opening the pill's menu and picking *save*, which is a pointer.
+        // No *letter* names a save or a restore, and this key names neither:
+        // it is the rub-out inside a name being typed. The two rows are
+        // reached by addressing the pill that lists them, which is the
+        // Transport's `enter` below (ADR-0221, ADR-0350).
         (None, "backspace", &[]),
         // ------------------------------------------------------------------
         // Addressed to the focused bay, wherever it is
@@ -723,19 +711,44 @@ pub(crate) mod key_column {
         // The Transport's grammar
         // ------------------------------------------------------------------
         // A headless row, so `0` names the row itself and a digit names one of
-        // the controls left to right. Naming one asks for nothing.
+        // the controls left to right. Naming one asks for nothing — and a
+        // digit under one of the two pills names a row of the card it put
+        // down, which asks for nothing either.
         (Some("transport"), DIGIT, &[]),
-        // **`↑↓` on the exposure and on the offset**, which are this row's two
-        // levels. The tempo figure is a track a press positions and not a
-        // level with a step, so the arrows decline on it and say so.
+        // `↑↓` on the tempo figure, on the exposure and on the offset, which
+        // are this row's three continua. The tempo steps by one beat a minute
+        // and the arrows walk the rows of a card that is down (ADR-0350).
         (
             Some("transport"),
             "arrows",
-            &["Exposure", "Nudge the latency offset"],
+            &[
+                "Set the free-run tempo",
+                "Exposure",
+                "Nudge the latency offset",
+            ],
         ),
         // **`space` on the tone map cycles the four operators**, and on the
-        // exposure it is the value the control was declared at.
+        // exposure it is the value the control was declared at. The tempo
+        // figure is not here: it is a track with no value it was declared at,
+        // so there is nothing for `space` to return it to.
         (Some("transport"), "space", &["Tone map", "Exposure"]),
+        // `enter` puts one of the two cards down and runs a row of it. The
+        // audio-in pill's card is the machine's inputs and a row of it
+        // attaches one; the arrangement pill's menu is *save*, *start a new
+        // one* and the names filed, and a row of it saves under the name in
+        // use — asking for one where there is none — or puts a filed
+        // arrangement back. The reset is not here: `r` reaches that row from
+        // anywhere, so the menu draws *start a new one* and the grammar
+        // declines on it (ADR-0350).
+        (
+            Some("transport"),
+            "enter",
+            &[
+                "Attach a beat source",
+                "Save the arrangement",
+                "Put a saved arrangement back",
+            ],
+        ),
         // ------------------------------------------------------------------
         // The Library's grammar
         // ------------------------------------------------------------------
@@ -880,14 +893,39 @@ pub(crate) mod key_column {
         // ------------------------------------------------------------------
         // The Master chain's grammar
         // ------------------------------------------------------------------
-        // **The three effects have no addressable controls**, because
-        // `Operation::SetFeedback { params: Undecided }` and its two
-        // neighbours carry no spelling for a parameter — so a digit reaches
-        // the effect and stops, which is ADR-0259's one place where a bay is
-        // drawn and its operations are not sayable.
+        // The bay's items are the out fader, the chain's slots and `+ add`,
+        // and a slot is a rung: a digit names one of its parameter rows, its
+        // cut chip or its `−`. Naming is not an operation, so the digit
+        // reaches no row.
         (Some("master"), DIGIT, &[]),
-        (Some("master"), "arrows", &["Master out"]),
-        (Some("master"), "space", &["Master out"]),
+        // The arrows step the two levels: the out fader, and a parameter row
+        // of a slot by a tenth of the range its procedure declares. They also
+        // walk the `+ add` chooser's entries, which is a move rather than an
+        // operation.
+        (
+            Some("master"),
+            "arrows",
+            &["Master out", "Set a chain effect's parameter"],
+        ),
+        // `space` returns each of those levels to its default and cycles a
+        // slot's cut chip, which is the one row that is both: a parameter and
+        // a cut are the two things `Operation::SetChainParam` sets (ADR-0348).
+        (
+            Some("master"),
+            "space",
+            &["Master out", "Set a chain effect's parameter"],
+        ),
+        // `enter` on `+ add` puts the chooser down and `enter` on one of its
+        // entries appends a slot of that procedure; `enter` on a slot's `−`
+        // takes that slot out (ADR-0352).
+        (
+            Some("master"),
+            "enter",
+            &[
+                "Add an effect to the master chain",
+                "Remove an effect from the master chain",
+            ],
+        ),
         // ------------------------------------------------------------------
         // The Sequencer's grammar
         // ------------------------------------------------------------------
@@ -897,11 +935,10 @@ pub(crate) mod key_column {
         // not an operation, so neither key names a row.
         (Some("sequencer"), DIGIT, &[]),
         (Some("sequencer"), "arrows", &[]),
-        // **`space` is the whole of this bay**: the head's mode and bank
-        // pills, a lane's label and a lane's cells, each named as the state it
-        // arrives at. **`+ lane` is not here** — its press puts the chooser
-        // down and what a lane is pointed at is picked in that card, which the
-        // address does not descend into.
+        // `space` is four of this bay's five controls: the head's mode and
+        // bank pills, a lane's label and a lane's cells, each named as the
+        // state it arrives at. `+ lane` is not here — it performs rather than
+        // sets, so it is `enter`'s.
         (
             Some("sequencer"),
             "space",
@@ -911,6 +948,15 @@ pub(crate) mod key_column {
                 "Mute a lane",
                 "Toggle a step",
             ],
+        ),
+        // `enter` on `+ lane` puts the chooser down and `enter` on one of its
+        // entries points the lane at that target, which is the one row this
+        // bay's head reaches: the digits and `↑↓` name what is on the card and
+        // `esc` takes it away (ADR-0351).
+        (
+            Some("sequencer"),
+            "enter",
+            &["Point a lane at what it drives"],
         ),
         // ------------------------------------------------------------------
         // The Outputs row's grammar

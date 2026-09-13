@@ -139,6 +139,13 @@ pub struct Report {
     pub budget_ms: f32,
     /// Summed budgeted compute time of active Live slots in milliseconds.
     pub committed_ms: f32,
+    /// What the running master chain costs this frame, in milliseconds at the
+    /// size the frame is composited at.
+    ///
+    /// Charged against the frame beside the slots and against no one of them,
+    /// so it is reserved out of `budget_ms` before any slot is considered and
+    /// is never part of `committed_ms` (ADR-0340). Zero for an empty chain.
+    pub chain_ms: f32,
     /// Summed budgeted compute time of admitted Priming slots in milliseconds.
     pub priming_ms: f32,
     /// Count of Live slots lacking both a measurement and an estimate.
@@ -154,10 +161,16 @@ pub struct Report {
 }
 
 impl Report {
+    /// The budget left for slots once the frame's own work is reserved out of
+    /// it — `budget_ms` less `chain_ms`, never below zero.
+    pub fn spendable_ms(&self) -> f32 {
+        (self.budget_ms - self.chain_ms).max(0.0)
+    }
+
     /// Returns remaining compute budget headroom in milliseconds, or `None` if unmeasured Live slots exist.
     pub fn headroom_ms(&self) -> Option<f32> {
         self.committed_known()
-            .then_some(self.budget_ms - self.committed_ms)
+            .then_some(self.spendable_ms() - self.committed_ms)
     }
 
     /// Returns true if all Live slots have known measurements or estimates.
@@ -224,6 +237,9 @@ impl std::fmt::Display for Report {
             "governor: {:.2} / {:.2} ms live",
             self.committed_ms, self.budget_ms
         )?;
+        if self.chain_ms > 0.0 {
+            write!(f, " + {:.2} chain", self.chain_ms)?;
+        }
         if self.priming_ms > 0.0 {
             write!(f, " + {:.2} priming", self.priming_ms)?;
         }
@@ -321,6 +337,7 @@ pub fn budgeted(cost: Option<Measurement>, estimate: Option<Estimated>) -> (Basi
 #[derive(Clone, Copy, Debug)]
 pub struct Governor {
     budget_ms: f32,
+    chain_ms: f32,
 }
 
 impl Default for Governor {
@@ -331,7 +348,10 @@ impl Default for Governor {
 
 impl Governor {
     pub fn new(budget_ms: f32) -> Governor {
-        Governor { budget_ms }
+        Governor {
+            budget_ms,
+            chain_ms: 0.0,
+        }
     }
 
     pub fn budget_ms(&self) -> f32 {
@@ -340,6 +360,29 @@ impl Governor {
 
     pub fn set_budget_ms(&mut self, budget_ms: f32) {
         self.budget_ms = budget_ms;
+    }
+
+    /// What the running master chain costs this frame, in milliseconds.
+    pub fn chain_ms(&self) -> f32 {
+        self.chain_ms
+    }
+
+    /// Reserves `ms` for the master chain out of the compute budget, ahead of
+    /// every slot.
+    ///
+    /// The chain is one pass per slot over the whole frame and belongs to no
+    /// deck, so it is charged against the frame beside them and never against
+    /// one of them (ADR-0340). A non-finite or negative `ms` is ignored, and
+    /// zero is what an empty chain costs.
+    pub fn set_chain_ms(&mut self, ms: f32) {
+        if ms.is_finite() && ms >= 0.0 {
+            self.chain_ms = ms;
+        }
+    }
+
+    /// The budget left for slots once the chain is reserved out of it.
+    pub fn spendable_ms(&self) -> f32 {
+        (self.budget_ms - self.chain_ms).max(0.0)
     }
 
     /// Evaluates slot residency requests against the compute budget and produces a Report.
@@ -367,9 +410,10 @@ impl Governor {
             }
         }
 
-        let over_budget = committed_ms > self.budget_ms;
+        let spendable = self.spendable_ms();
+        let over_budget = committed_ms > spendable;
         let committed_known = unmeasured_live == 0;
-        let mut headroom = (self.budget_ms - committed_ms).max(0.0);
+        let mut headroom = (spendable - committed_ms).max(0.0);
         let mut priming_ms = 0.0f32;
 
         let decisions = slots
@@ -405,6 +449,7 @@ impl Governor {
         Report {
             decisions,
             budget_ms: self.budget_ms,
+            chain_ms: self.chain_ms,
             committed_ms,
             priming_ms,
             unmeasured_live,

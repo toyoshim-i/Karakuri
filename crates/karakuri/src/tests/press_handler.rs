@@ -666,6 +666,7 @@ fn the_press_handler_dispatches_transport_and_transition_controls() {
         fps: Some(60.0),
         frame_ms: 16.6,
         budget_ms: Some(16.6),
+        chain_ms: None,
         health: Some(view::Stage::Landed),
         rec: Some(view::Rec::Idle),
     });
@@ -819,6 +820,7 @@ fn the_press_handler_dispatches_look_and_learn_controls() {
         fps: Some(60.0),
         frame_ms: 16.6,
         budget_ms: Some(16.6),
+        chain_ms: None,
         health: Some(view::Stage::Landed),
         rec: Some(view::Rec::Idle),
     });

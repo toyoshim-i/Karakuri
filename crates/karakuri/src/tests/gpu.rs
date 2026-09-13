@@ -3406,6 +3406,7 @@ fn a_press_on_the_look_controls_moves_the_look_every_sink_is_drawn_under() {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        chain_ms: None,
         health: Some(view::Stage::Landed),
         rec: Some(view::Rec::Idle),
     });

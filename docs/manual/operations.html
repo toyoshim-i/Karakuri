@@ -102,11 +102,17 @@
       <em>designed</em> one is a press that is decided and does not work yet.
       <strong>The grammar is built in all nine bays</strong> since
       2026&#8209;09&#8209;10, so a row that still reads <em>designed</em> is
-      waiting on a control rather than on a bay: a card the address does not
-      descend into &mdash; the audio&#8209;in pill's inputs, the arrangement
-      pill's menu, the sequencer's <code>+ lane</code> &mdash; or a control
-      that is drawn and is not a level, which is the tempo figure, or a
-      transition this bay draws no capsule for.
+      waiting on a control rather than on a bay &mdash; a transition its bay
+      draws no capsule for, or a parameter the vocabulary has no spelling
+      for. <strong>Three cards are walked by the address</strong> &mdash;
+      the audio&#8209;in pill's inputs, the arrangement pill's menu and the
+      sequencer's <code>+ lane</code>: <code>enter</code> puts the card down,
+      the digits and <code>&uarr;&darr;</code> name what is on it,
+      <code>enter</code> on a row runs that row, and <code>esc</code> takes the
+      card away. <strong>The tempo figure is a track and the arrows step
+      it</strong>, one beat a minute; a press on the figure still names a tempo
+      outright, and <code>space</code> reaches nothing on it: that row
+      declares no value to return to.
     </p>
     <p>
       <strong>A letter stays bare only where the operation it names has no
@@ -178,7 +184,7 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="Five milliseconds a press, for the delay between what a room hears and what it sees; o steps it down and p steps it up, held inside 200 ms either way. It means nothing without an input attached &mdash; the offset is a term in the lead a beat correction is applied with, and the audio-in pill beside it says whether there is one. The panel draws it as a track rather than as a capsule, because a press has to be able to name a value and a capsule cannot: the track is 80 pixels for the 80 five-millisecond steps between the two ends, so one pixel is one press of o or p and pointing at it reaches exactly what stepping it reaches. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused with the clock, which no bay opens.">
+        <div class="op-name" tabindex="0" data-tip="Five milliseconds a press, for the delay between what a room hears and what it sees; &uarr;&darr; with the keys addressed to it in the Transport step it, held inside 200 ms either way. It means nothing without an input attached &mdash; the offset is a term in the lead a beat correction is applied with, and the audio-in pill beside it says whether there is one. The panel draws it as a track rather than as a capsule, because a press has to be able to name a value and a capsule cannot: the track is 80 pixels for the 80 five-millisecond steps between the two ends, so one pixel is one press of &uarr; or &darr; and pointing at it reaches exactly what stepping it reaches. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused with the clock, which no bay opens.">
           <div class="op-head"><h3>Nudge the latency offset</h3></div>
         </div>
         <span class="op-when">immediate</span>
@@ -217,26 +223,26 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="What the grid runs at with nothing driving it. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused with the clock, which no bay opens.">
+        <div class="op-name" tabindex="0" data-tip="What the grid runs at with nothing driving it. A press on the transport row's figure names a tempo outright; &uarr;&darr; with the keys addressed to that figure step it one beat a minute, and there is no value for space to return it to. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused with the clock, which no bay opens.">
           <div class="op-head"><h3>Set the free-run tempo</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
-          <span class="rt plan">key <b>&uarr;&darr; &middot; in the Transport</b></span>
+          <span class="rt has">key <b>&uarr;&darr; &middot; in the Transport</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt has">CLI <b>--bpm N</b></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="An audio input to track, or an external process to follow. Four keys are refused without one. The transport row's audio-in pill lists the inputs the machine has and opens the one you pick, read at the press rather than at startup, so an interface plugged in during a set is attached during that set. A process is still a flag before the run: nothing on the panel starts one. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens inputs and outputs, routed, enabled and disabled at the Outputs row, which has no head.">
+        <div class="op-name" tabindex="0" data-tip="An audio input to track, or an external process to follow. Four keys are refused without one. The transport row's audio-in pill lists the inputs the machine has and opens the one you pick, read at the press rather than at startup, so an interface plugged in during a set is attached during that set. From the keyboard it is the same card: enter on the pill puts it down, a digit names an input and &uarr;&darr; walk them, enter attaches the one the address is on, and esc takes the card away. A process is still a flag before the run: nothing on the panel starts one. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens inputs and outputs, routed, enabled and disabled at the Outputs row, which has no head.">
           <div class="op-head"><h3>Attach a beat source</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
-          <span class="rt plan">key <b>enter &middot; in the Transport</b></span>
+          <span class="rt has">key <b>enter &middot; in the Transport</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt has">CLI <b>--audio-in, --tempo-source</b></span>
@@ -450,39 +456,39 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The chain is fixed: three built&#8209;in passes, all of them loaded, in the order feedback, bloom, rgb shift, and what this row names is the operator moving that pass&#39;s parameters &mdash; never the chain. Two parameters: how much of the retained frame comes back, 0.00 to 0.95, and <b>which cut of the previous frame is read</b> &mdash; the frame as the mixer wrote it, which is one echo, or this chain&#39;s own exit, which is a trail. The cut was this row&#39;s open question and the answer was both, selectable: a cut that is read has to be held, so only the one being read is kept. The record carries all four of the chain&#39;s numbers, because a stream that moved one pass without saying where the others were would describe a chain a replay could not put back. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens the master effects at the head of the Master bay.">
-          <div class="op-head"><h3>Feedback</h3></div>
+        <div class="op-name" tabindex="0" data-tip="One slot of the master chain, set outright. The slot is its position in the chain, counted from the mix&#39;s output, and what is set is either a parameter of the slot&#39;s procedure by the name that procedure declares for it, or &mdash; on a slot whose procedure declares <b>retains</b> &mdash; which retained frame it reads: <em>mix</em>, the frame as the mixer wrote it, which is one echo, or <em>exit</em>, this chain&#39;s own output, which is a trail. A slot runs at every value it can hold, so zero is an amount and not a pass left out; a pass nobody wants is removed. A position the chain has not got writes nothing. The record carries the whole chain. The Master bay draws one row per slot of the running chain, and under it one parameter row per parameter the slot&#39;s procedure declares, laid out over the range that procedure declares; a slot whose procedure declares <b>retains</b> also draws the chip that picks the cut. From the keyboard the arrows step a parameter row by a tenth of its declared range, space returns it to the value the procedure declared it at, and space on the cut chip cycles the two cuts. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens the master effects at the head of the Master bay.">
+          <div class="op-head"><h3>Set a chain effect's parameter</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt has">panel <b>feedback</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">panel <b>parameter row</b></span>
+          <span class="rt has">key <b>&uarr;&darr; space &middot; in the Master</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The frame&#39;s bright parts spreading into what is beside them, on the Feedback row&#39;s terms: a fixed pass, always loaded, and what this row names is the operator moving its amount, 0.00 to 1.00. It runs in linear HDR, before the one tone map, so what it blooms from is unbounded light &mdash; and the level it blooms from is the master out&#39;s, not the exposure&#39;s. What counts as bright is not a parameter: the knee is 1.00, which is the top of the range the sRGB encode is honest about, and the master out one pass above is what moves material across it. Nor is the radius, because the number of samples is what a radius costs. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens the master effects at the head of the Master bay.">
-          <div class="op-head"><h3>Bloom</h3></div>
+        <div class="op-name" tabindex="0" data-tip="One <b>kind L5</b> procedure appended to the end of the master chain, named by the content address of its source. A procedure that declares <b>retains</b> is added with the cut it reads &mdash; <em>mix</em> or <em>exit</em> &mdash; and one that does not is added with none; the other way round is refused. The slot arrives at the values its procedure declares, and it runs from the frame it is added on. Every slot in the chain costs what its procedure costs whatever its parameters are set to. The record carries the whole chain. Two controls ask for it. <b>+ add</b> at the end of the Master bay&#39;s list puts down a card of the <b>kind L5</b> procedures the library holds, and picking one appends a slot of it; from the keyboard enter on <b>+ add</b> puts the card down, a digit names the nth procedure on it, up and down walk them, enter adds the one the address is on, and esc takes the card away. A <b>kind L5</b> row dragged out of the Library and let go over the chain&#39;s list appends one as well, wherever on the list it is released; a row of any other kind is refused there and the refusal says the chain holds <b>kind L5</b> procedures. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens the master effects at the head of the Master bay.">
+          <div class="op-head"><h3>Add an effect to the master chain</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt has">panel <b>bloom</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">panel <b>+ add</b></span>
+          <span class="rt has">key <b>enter &middot; in the Master</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The three channels sampled apart, so an edge fringes. On the Feedback row&#39;s terms again, and the last of the three, so it is the one the other two are seen through. One parameter: how far the channels are pulled apart, 0.00 to 1.00 of 2% of the frame&#39;s height &mdash; a fraction of the frame and not a count of pixels, so a session shifts the same distance at another resolution. The console drew its figure as a dash and draws a number now: every pass has an amount, zero is a value, and an amount of zero is the pass not being recorded at all. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens the master effects at the head of the Master bay.">
-          <div class="op-head"><h3>RGB shift</h3></div>
+        <div class="op-name" tabindex="0" data-tip="One slot taken out of the master chain, addressed by its position, counted from the mix&#39;s output. The slots after it move up, so a position names a different slot once one before it has gone. A frame is held only where a slot reads one, so removing the last slot that reads a cut stops that frame being kept. A position the chain has not got writes nothing. The record carries the whole chain. The control is the &minus; at the end of that slot&#39;s row in the Master bay; from the keyboard it is enter on the &minus;, which is the last control of the slot. &#8853; The MCP badge reads `operate`: a model names this row in the vocabulary&#39;s own words and the audit answers. It is refused until an operator opens the master effects at the head of the Master bay.">
+          <div class="op-head"><h3>Remove an effect from the master chain</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
-          <span class="rt has">panel <b>rgb shift</b></span>
-          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt has">panel <b>&minus;</b></span>
+          <span class="rt has">key <b>enter &middot; in the Master</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt-none"></span>
@@ -553,7 +559,7 @@
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>+ lane</b></span>
-          <span class="rt plan">key <b>enter &middot; in the Sequencer</b></span>
+          <span class="rt has">key <b>enter &middot; in the Sequencer</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
@@ -1000,26 +1006,26 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. The name is the whole of the handle, which is why you type one: a slot moves when you delete the slot above it, and a name does not. A key press cannot type a name and a map line carries none. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
+        <div class="op-name" tabindex="0" data-tip="The console as it stands &mdash; every fold, every boundary you have dragged, the solo and both sets of remembered sizes &mdash; filed under a name you pick, and saving over that name again is what you mean by saving it again. The name is the whole of the handle, which is why you type one: a slot moves when you delete the slot above it, and a name does not. No letter is bound to it, because a key press cannot type a name; the way in from the keyboard is the pill's own menu, addressed &mdash; enter puts it down, a digit names save, and the field then takes the keyboard until return files it or esc leaves it unsaved. A map line carries no name. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Save the arrangement</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
-          <span class="rt plan">key <b>enter &middot; in the Transport</b></span>
+          <span class="rt has">key <b>enter &middot; in the Transport</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
         </div>
       </div>
       <div class="op">
-        <div class="op-name" tabindex="0" data-tip="The arrangement you kept under that name, in the window you already have. The window is not restored: an arrangement carries the viewport it was saved at and comes back at the one you are looking at now. Two things are refused rather than guessed: a name nothing is filed under, and an arrangement that disagrees with itself, which is refused whole rather than repaired. Nothing at a key press says which one, and a map line carries no name. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
+        <div class="op-name" tabindex="0" data-tip="The arrangement you kept under that name, in the window you already have. The window is not restored: an arrangement carries the viewport it was saved at and comes back at the one you are looking at now. Two things are refused rather than guessed: a name nothing is filed under, and an arrangement that disagrees with itself, which is refused whole rather than repaired. No letter is bound to it, because nothing at a key press says which one; the way in from the keyboard is the pill's own menu, addressed &mdash; enter puts it down, a digit names one of the arrangements filed and &uarr;&darr; walk them, and enter puts that one back. A map line carries no name. The MCP badge is empty because a model has no window: this is a surface&#39;s own state, and a route into a surface&#39;s own state is a route into a window the model is not looking at.">
           <div class="op-head"><h3>Put a saved arrangement back</h3></div>
         </div>
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
-          <span class="rt plan">key <b>enter &middot; in the Transport</b></span>
+          <span class="rt has">key <b>enter &middot; in the Transport</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>

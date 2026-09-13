@@ -362,6 +362,7 @@ fn the_bay_declares_a_step_and_the_deadline_never_beats_the_rate() {
         fps: None,
         frame_ms: 12.4,
         budget_ms: None,
+        chain_ms: None,
         health: None,
         rec: None,
     });
@@ -407,6 +408,7 @@ fn a_pattern_with_no_lanes_declares_nothing() {
         fps: None,
         frame_ms: 12.4,
         budget_ms: None,
+        chain_ms: None,
         health: None,
         rec: None,
     });

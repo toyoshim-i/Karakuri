@@ -413,6 +413,9 @@ pub fn mock_transport() -> karakuri_console::view::Transport {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        // The chain's term, which the mock's transport row does not draw: the
+        // mock's chain is empty and a chain that costs nothing draws nothing.
+        chain_ms: None,
         // **The `landed` capsule at the end of the row**, which the mock
         // draws `armed`: the last procedure written is on screen.
         health: Some(karakuri_console::view::Stage::Landed),

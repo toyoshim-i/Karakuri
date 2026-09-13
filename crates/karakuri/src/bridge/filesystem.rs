@@ -99,6 +99,59 @@ pub(crate) fn procedures(root: &std::path::Path) -> Vec<ListedProcedure> {
     out
 }
 
+/// The `kind L5` procedures of the library, as the Master bay's `+ add` offers
+/// them: the address a slot of each is named by, the name the library lists it
+/// under, and whether the procedure declares `retains`.
+///
+/// Both tiers, in the order the bay would list them — what the operator has kept
+/// first and then what ships, which is `library`'s own order over the two.
+///
+/// One read and one check per `kind L5` row, and none for any other: the `kind`
+/// badge is already on the row, so this pays only for the files it is going to
+/// offer (P-0091). A file that will not read or will not check is dropped
+/// rather than offered.
+fn chain_offers(
+    store: &std::path::Path,
+    kept: &[ListedProcedure],
+    shipped: &[karakuri_environment::places::PresetProcedure],
+) -> Vec<view::AddChoice> {
+    let l5 = |kind: Option<karakuri_operation::Layer>| kind == Some(karakuri_operation::Layer::L5);
+    let opened = Store::open(store).ok();
+    let mut out: Vec<view::AddChoice> = Vec::new();
+    for entry in kept.iter().filter(|entry| l5(entry.kind)) {
+        let Some(source) = opened
+            .as_ref()
+            .and_then(|store| store.read_procedure(&entry.name).ok())
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+        else {
+            continue;
+        };
+        if let Some((procedure, retains)) = karakuri_environment::mix::l5_offer(&source) {
+            out.push(view::AddChoice {
+                procedure,
+                words: entry.name.clone(),
+                retains,
+            });
+        }
+    }
+    for entry in shipped
+        .iter()
+        .filter(|entry| l5(entry.kind.and_then(kind_of)))
+    {
+        let Ok(source) = std::fs::read_to_string(&entry.file) else {
+            continue;
+        };
+        if let Some((procedure, retains)) = karakuri_environment::mix::l5_offer(&source) {
+            out.push(view::AddChoice {
+                procedure,
+                words: entry.name.clone(),
+                retains,
+            });
+        }
+    }
+    out
+}
+
 /// What a Set's row is: the layers its own `slot` records fill, once each and
 /// in the file's own order.
 ///
@@ -1358,6 +1411,16 @@ pub(crate) fn listing(
     };
     view.library = rows.iter().map(|(name, _)| name.clone()).collect();
     view.kinds = rows.into_iter().map(|(_, kind)| kind).collect();
+    // And what the Master bay's `+ add` offers, read on the same press and off
+    // the same two tiers: the master chain holds `kind L5` procedures, so what
+    // it can be handed is the `kind L5` rows of the library
+    // ([ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)).
+    //
+    // An entry carries a content address and a row carries a name, so this is
+    // not read off `view.library`: an add names the procedure's source by its
+    // address, and the address is the hash of bytes this side has and the
+    // console has not (ADR-0156).
+    view.chain_add = chain_offers(store, &kept, &shipped);
     // **Only where the filter was applied.** `layer` survives a scope change —
     // it is the console's own value and not a position in a listing — so a bay
     // reading `presets` under a set `layer` field would otherwise report a

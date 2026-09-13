@@ -153,6 +153,56 @@ pub(crate) fn named_of(with: &Value, key: &str, what: &str) -> Result<String, St
     Ok(said.to_string())
 }
 
+/// What one slot of the master chain is set to: a parameter its procedure
+/// declares, at a value, or the cut it reads.
+///
+/// One of the two and never both
+/// (`docs/adr/0348-a-chain-slots-cut-is-set-through-the-parameter-row.md`). A
+/// call saying both is refused, and so is one saying neither.
+/// [`revision_of`]'s arrangement for a two-armed operand.
+pub(crate) fn chain_param_of(with: &Value) -> Result<karakuri_operation::ChainParam, String> {
+    match (with.get("key"), with.get("cut")) {
+        (Some(Value::Null) | None, Some(Value::Null) | None) => Err(String::from(
+            "`with` says neither `key` nor `cut`, and a slot is set to a parameter its \
+             procedure declares, at a value, or to the cut it reads",
+        )),
+        (Some(_), Some(_)) => Err(String::from(
+            "`with` says both `key` and `cut`, which are two things to set — say one",
+        )),
+        (Some(_), _) => Ok(karakuri_operation::ChainParam::Declared {
+            key: named_of(with, "key", "a parameter")?,
+            value: f32_of(with, "value")?,
+        }),
+        (_, Some(_)) => Ok(karakuri_operation::ChainParam::Cut(word_of(
+            with,
+            "cut",
+            &karakuri_operation::Cut::ALL,
+            karakuri_operation::Cut::name,
+            "a cut of the previous frame",
+        )?)),
+    }
+}
+
+/// A procedure's content address, as a record spells one: `sha256:` and
+/// sixty-four hex digits.
+///
+/// The shape is checked here and never resolved: whether anything holds the
+/// address is answered where the chain is built, with the address in the
+/// message. A caller that spelled a Set id or a file name is told what an
+/// address looks like instead
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+pub(crate) fn address_of(with: &Value, key: &str) -> Result<String, String> {
+    let said = text_of(with, key)?;
+    let digits = said.strip_prefix("sha256:").unwrap_or("");
+    if digits.len() == 64 && digits.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Ok(said.to_string());
+    }
+    Err(format!(
+        "`with.{key}` is `{said}`, and a procedure is named by the content address of its \
+         source — `sha256:` and sixty-four hex digits"
+    ))
+}
+
 /// One value of a closed list, by the word the vocabulary spells it with, and
 /// the refusal lists every word there is.
 pub(crate) fn word_of<T: Copy>(
@@ -917,85 +967,99 @@ pub(crate) const SPELLED: &[Spelled] = &[
     Spelled {
         sample: || {
             (
-                Operation::SetFeedback {
-                    params: karakuri_operation::Feedback {
-                        amount: 0.5,
-                        cut: karakuri_operation::Cut::Mix,
+                Operation::SetChainParam {
+                    at: 0,
+                    param: karakuri_operation::ChainParam::Declared {
+                        key: "amount".to_owned(),
+                        value: 0.5,
                     },
                 },
-                json!({ "amount": 0.5, "cut": "mix" }),
+                json!({ "at": 0, "key": "amount", "value": 0.5 }),
             )
         },
+        // A key and a value, or a cut, and never both: a slot holds the values
+        // its procedure declares and — where that procedure declares `retains`
+        // — the cut it reads. A call saying both is refused with the two
+        // spellings named.
         make: Some(|with, _| {
-            Ok(Operation::SetFeedback {
-                params: karakuri_operation::Feedback {
-                    amount: f32_of(with, "amount")?,
-                    cut: word_of(
+            Ok(Operation::SetChainParam {
+                at: u32_of(with, "at")?,
+                param: chain_param_of(with)?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "at": p_int("which slot of the master chain, by its position — 0 is the slot the mix's frame is handed to"),
+                    "key": p_string("a parameter the slot's procedure declares, by the name it declares — with `value`, and never with `cut`"),
+                    "value": p_number("what that parameter is set to, inside the range the procedure declares for it"),
+                    "cut": p_word(
+                        words(&karakuri_operation::Cut::ALL, karakuri_operation::Cut::name),
+                        "which retained frame the slot reads, on a slot whose procedure declares `retains` — `mix` is one echo and `exit` is a trail",
+                    ),
+                }),
+                &["at"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::AddChainEffect {
+                    procedure:
+                        "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                            .to_owned(),
+                    cut: None,
+                },
+                json!({ "procedure": "sha256:0000000000000000000000000000000000000000000000000000000000000000" }),
+            )
+        },
+        // A slot costs what its procedure costs from the frame it is added on,
+        // however its parameters are set: a chain's price is the sum over its
+        // slots and not a function of the values in them (`docs/adr/0340-…`,
+        // §5). This is the one chain call that changes what a frame costs, and
+        // the audit stands in front of it.
+        make: Some(|with, _| {
+            Ok(Operation::AddChainEffect {
+                procedure: address_of(with, "procedure")?,
+                cut: match with.get("cut") {
+                    None | Some(Value::Null) => None,
+                    Some(_) => Some(word_of(
                         with,
                         "cut",
                         &karakuri_operation::Cut::ALL,
                         karakuri_operation::Cut::name,
                         "a cut of the previous frame",
-                    )?,
+                    )?),
                 },
             })
         }),
         shape: Some(|| {
             shaped(
                 json!({
-                    "amount": p_number("how much of the retained frame comes back, up to 0.95"),
+                    "procedure": p_string("the content address of a `kind L5` procedure's source, as a record spells one — `sha256:…`"),
                     "cut": p_word(
                         words(&karakuri_operation::Cut::ALL, karakuri_operation::Cut::name),
-                        "which frame the amount is of — the two are one operation because the same amount means two different pictures",
+                        "which retained frame the slot reads — said exactly where the procedure declares `retains`, and left out where it does not",
                     ),
                 }),
-                &["amount", "cut"],
+                &["procedure"],
             )
         }),
     },
     Spelled {
-        sample: || {
-            (
-                Operation::SetBloom {
-                    params: karakuri_operation::Bloom { amount: 0.25 },
-                },
-                json!({ "amount": 0.25 }),
-            )
-        },
+        sample: || (Operation::RemoveChainEffect { at: 1 }, json!({ "at": 1 })),
         make: Some(|with, _| {
-            Ok(Operation::SetBloom {
-                params: karakuri_operation::Bloom {
-                    amount: f32_of(with, "amount")?,
-                },
+            Ok(Operation::RemoveChainEffect {
+                at: u32_of(with, "at")?,
             })
         }),
         shape: Some(|| {
             shaped(
-                json!({ "amount": p_number("how much of the blurred bright part is added back, `[0, 1]`") }),
-                &["amount"],
-            )
-        }),
-    },
-    Spelled {
-        sample: || {
-            (
-                Operation::SetRgbShift {
-                    params: karakuri_operation::RgbShift { amount: 0.25 },
-                },
-                json!({ "amount": 0.25 }),
-            )
-        },
-        make: Some(|with, _| {
-            Ok(Operation::SetRgbShift {
-                params: karakuri_operation::RgbShift {
-                    amount: f32_of(with, "amount")?,
-                },
-            })
-        }),
-        shape: Some(|| {
-            shaped(
-                json!({ "amount": p_number("how far the three channels are pulled apart, `[0, 1]` of the pass's own maximum") }),
-                &["amount"],
+                json!({
+                    "at": p_int("which slot of the master chain, by its position — the slots after it move up"),
+                }),
+                &["at"],
             )
         }),
     },

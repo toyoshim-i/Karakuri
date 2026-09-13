@@ -1224,7 +1224,14 @@ fn on_tempo(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 /// console with no level behind it has no row at all and pays nothing, and one
 /// with a level and no chain has the out knob alone.
 fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    master(ctx, panel.layout(), view.master_out, view.master_chain).is_some_and(|row| row.owns(p))
+    master(
+        ctx,
+        panel.layout(),
+        view.master_out,
+        view.master_chain.as_ref(),
+        &view.chain_choices(),
+    )
+    .is_some_and(|row| row.owns(p))
 }
 
 /// The name in each Inspector pane's head, and it is [`on_keep`]'s arrangement
@@ -1818,6 +1825,12 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         // bay along, and it can never be down while any of the four above it
         // is for their reason.
         || view.lane_open()
+        // The Master bay's `+ add` chooser is a sixth. It hangs down off the
+        // control at the end of that bay's list and stands over the bays beside
+        // it. While it is down a press inside it belongs to the card and a
+        // press anywhere else is the dismissal
+        // ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+        || view.chain_add_open()
     {
         return Claim::Panel;
     }

@@ -145,6 +145,51 @@ fn area((w, h): (u32, u32)) -> f64 {
     f64::from(w.max(1)) * f64::from(h.max(1))
 }
 
+/// The master chain the reference figures below were taken from: the three
+/// shipped L5 procedures in one chain, summed `ops_per_fragment`.
+///
+/// `karakuri-environment`'s `mix::shipped` holds the sources; this is what
+/// `karakuri_ir::cost::estimate` prices them at, and
+/// `crates/karakuri-engine/tests/master.rs` holds the three to it on a GPU.
+pub const CHAIN_REFERENCE_OPS: u32 = 3947;
+
+/// The resolution [`CHAIN_REFERENCE_MS`] was measured at
+/// ([ADR-0303](../../../docs/adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md)).
+pub const CHAIN_REFERENCE_SIZE: (u32, u32) = (1280, 720);
+
+/// What [`CHAIN_REFERENCE_OPS`] cost at [`CHAIN_REFERENCE_SIZE`]: 0.98 ms,
+/// host clock, one machine, 2026-09-10.
+///
+/// It is one reading and it is what [`chain_ms`] is calibrated on. Re-take it
+/// with the three shipped procedures in one chain at 1280x720 and re-date it.
+pub const CHAIN_REFERENCE_MS: f32 = 0.98;
+
+/// What a master chain costs per frame, in milliseconds.
+///
+/// `ops_per_fragment` is the sum over the chain's slots — the frame's texels
+/// covered once by every slot — and `target` is the size the frame is
+/// composited at, which is the largest enabled output's
+/// ([ADR-0247](../../../docs/adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md),
+/// [ADR-0325](../../../docs/adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)).
+/// The answer is linear in both: one rate, calibrated from
+/// [`CHAIN_REFERENCE_MS`] at [`CHAIN_REFERENCE_SIZE`].
+///
+/// An empty chain is exactly `0.0`, and the answer is finite and non-negative
+/// for every input.
+pub fn chain_ms(ops_per_fragment: u32, target: (u32, u32)) -> f32 {
+    if ops_per_fragment == 0 {
+        return 0.0;
+    }
+    let rate = f64::from(CHAIN_REFERENCE_MS)
+        / (f64::from(CHAIN_REFERENCE_OPS) * area(CHAIN_REFERENCE_SIZE));
+    let ms = rate * f64::from(ops_per_fragment) * area(target);
+    if ms.is_finite() {
+        ms as f32
+    } else {
+        0.0
+    }
+}
+
 /// Execution cost estimate for a Set at a target resolution.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Estimate {

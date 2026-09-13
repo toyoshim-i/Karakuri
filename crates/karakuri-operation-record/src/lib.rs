@@ -17,7 +17,7 @@
 //!   and `karakuri_store`.
 
 use karakuri_operation::Operation;
-use karakuri_store::record::{DeckSlot, Record};
+use karakuri_store::record::{ChainSlot, DeckSlot, Record};
 
 /// Output look parameters used to complete tone mapping and exposure records.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -28,53 +28,57 @@ pub struct Look {
     pub white_point: f32,
 }
 
-/// Master chain state used to complete master effect records.
-#[derive(Debug, Clone, PartialEq)]
+/// The master chain that is running, in record order: the reading every chain
+/// operation is completed into a whole [`Record::MasterChain`] from.
+///
+/// One field: `Record::MasterChain` carries the slot list and nothing else.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Chain {
-    /// Retained frame feedback configuration.
-    pub feedback: karakuri_operation::Feedback,
-    pub bloom: f32,
-    pub rgb_shift: f32,
     /// Active chain slots in record order.
     pub slots: Vec<karakuri_store::record::ChainSlot>,
-    /// Procedure content addresses for shipped effects.
-    pub shipped: Shipped,
-}
-
-/// Content addresses of shipped master procedures.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Shipped {
-    pub feedback: String,
-    pub bloom: String,
-    pub rgb_shift: String,
 }
 
 impl Chain {
-    /// Returns chain slots updated with the given parameter, appending a slot if missing.
-    fn moved(
-        &self,
-        procedure: &str,
-        cut: Option<&karakuri_operation::Cut>,
-        key: &str,
-        value: f32,
-    ) -> Vec<karakuri_store::record::ChainSlot> {
+    /// The slots with one of them set, or `None` where `at` is not a slot of this
+    /// chain.
+    ///
+    /// A parameter the slot's procedure does not declare, and a cut on a slot
+    /// whose procedure declares no `retains`, are refused where the chain is
+    /// built rather than here: this crate resolves no procedure.
+    fn set(&self, at: u32, param: &karakuri_operation::ChainParam) -> Option<Vec<ChainSlot>> {
         let mut slots = self.slots.clone();
-        let at = match slots.iter().position(|s| s.procedure == procedure) {
-            Some(at) => at,
-            None => {
-                slots.push(karakuri_store::record::ChainSlot {
-                    procedure: procedure.to_string(),
-                    cut: None,
-                    params: Default::default(),
-                });
-                slots.len() - 1
+        let slot = slots.get_mut(at as usize)?;
+        match param {
+            karakuri_operation::ChainParam::Declared { key, value } => {
+                slot.params.insert(key.clone(), *value);
             }
-        };
-        slots[at].params.insert(key.to_string(), value);
-        if let Some(cut) = cut {
-            slots[at].cut = Some(cut.name().to_string());
+            karakuri_operation::ChainParam::Cut(cut) => {
+                slot.cut = Some(cut.name().to_string());
+            }
         }
+        Some(slots)
+    }
+
+    /// The slots with one more at the end.
+    fn added(&self, procedure: &str, cut: Option<karakuri_operation::Cut>) -> Vec<ChainSlot> {
+        let mut slots = self.slots.clone();
+        slots.push(ChainSlot {
+            procedure: procedure.to_string(),
+            cut: cut.map(|cut| cut.name().to_string()),
+            params: Default::default(),
+        });
         slots
+    }
+
+    /// The slots with one taken out, or `None` where `at` is not a slot of this
+    /// chain.
+    fn removed(&self, at: u32) -> Option<Vec<ChainSlot>> {
+        let at = at as usize;
+        (at < self.slots.len()).then(|| {
+            let mut slots = self.slots.clone();
+            slots.remove(at);
+            slots
+        })
     }
 }
 
@@ -195,6 +199,8 @@ impl Silent {
 pub enum Owed {
     /// Missing required context snapshot in [`Current`].
     NotRead(Reading),
+    /// The chain that is running has no slot at the position the operation named.
+    NotInChain,
     /// Operation semantics are undecided in the vocabulary definition.
     Undecided,
     /// Operation requires engine-level arithmetic or beat tracking not provided in [`Current`].
@@ -220,6 +226,7 @@ impl Owed {
             Owed::NotRead(Reading::Mix) => {
                 "the blend mode and residency of the deck it names were not read"
             }
+            Owed::NotInChain => "the master chain that is running has no slot at that position",
             Owed::Undecided => "what it acts on is an open question in the vocabulary itself",
             Owed::NotSettled => {
                 "the record it writes is not a function of values alone, and who supplies the rest is undecided"
@@ -333,27 +340,28 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             }),
             None => Written::Owed(Owed::NotRead(Reading::Look)),
         },
-        Operation::SetFeedback { params } => match &current.master_chain {
+        // The whole chain, for whichever slot was asked for. An operation
+        // names one slot and `Record::MasterChain` carries the list, so the
+        // chain that is running fills in the slots the surface did not name. A
+        // position the chain has not got is said rather than appended.
+        Operation::SetChainParam { at, param } => match &current.master_chain {
+            Some(chain) => match chain.set(*at, param) {
+                Some(slots) => one(Record::MasterChain(karakuri_store::record::Chain { slots })),
+                None => Written::Owed(Owed::NotInChain),
+            },
+            None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
+        },
+        Operation::AddChainEffect { procedure, cut } => match &current.master_chain {
             Some(chain) => one(Record::MasterChain(karakuri_store::record::Chain {
-                slots: chain.moved(
-                    &chain.shipped.feedback,
-                    Some(&params.cut),
-                    "amount",
-                    params.amount,
-                ),
+                slots: chain.added(procedure, *cut),
             })),
             None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
         },
-        Operation::SetBloom { params } => match &current.master_chain {
-            Some(chain) => one(Record::MasterChain(karakuri_store::record::Chain {
-                slots: chain.moved(&chain.shipped.bloom, None, "amount", params.amount),
-            })),
-            None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
-        },
-        Operation::SetRgbShift { params } => match &current.master_chain {
-            Some(chain) => one(Record::MasterChain(karakuri_store::record::Chain {
-                slots: chain.moved(&chain.shipped.rgb_shift, None, "amount", params.amount),
-            })),
+        Operation::RemoveChainEffect { at } => match &current.master_chain {
+            Some(chain) => match chain.removed(*at) {
+                Some(slots) => one(Record::MasterChain(karakuri_store::record::Chain { slots })),
+                None => Written::Owed(Owed::NotInChain),
+            },
             None => Written::Owed(Owed::NotRead(Reading::MasterChain)),
         },
         Operation::SetMaskShape { deck, kind, angle } => match current.mask {
@@ -602,22 +610,11 @@ mod tests {
     /// it, never resolve it.
     fn chain() -> Chain {
         Chain {
-            feedback: karakuri_operation::Feedback {
-                amount: 0.34,
-                cut: karakuri_operation::Cut::Exit,
-            },
-            bloom: 0.6,
-            rgb_shift: 0.25,
             slots: vec![
                 slot("sha256:feedback", Some("exit"), 0.34),
                 slot("sha256:bloom", None, 0.6),
                 slot("sha256:rgb_shift", None, 0.25),
             ],
-            shipped: Shipped {
-                feedback: "sha256:feedback".into(),
-                bloom: "sha256:bloom".into(),
-                rgb_shift: "sha256:rgb_shift".into(),
-            },
         }
     }
 
@@ -708,18 +705,74 @@ mod tests {
         );
     }
 
-    /// The chain that is running is what fills in the rows nobody pressed,
-    /// which is the look pair's claim with one more row in it: a press on the
-    /// bloom row must not put the feedback back where a default left it.
+    /// The chain that is running fills in the slots nobody moved. A press on
+    /// one slot leaves the others where they stand.
     #[test]
-    fn a_bloom_press_keeps_the_feedback_and_the_shift_that_are_running() {
+    fn a_slot_moved_keeps_every_other_slot_that_is_running() {
         let current = Current {
             master_chain: Some(chain()),
             ..Current::default()
         };
         let written = written(
-            &Operation::SetBloom {
-                params: karakuri_operation::Bloom { amount: 0.6 },
+            &Operation::SetChainParam {
+                at: 1,
+                param: karakuri_operation::ChainParam::Declared {
+                    key: "amount".into(),
+                    value: 0.9,
+                },
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![chain_record(vec![
+                slot("sha256:feedback", Some("exit"), 0.34),
+                slot("sha256:bloom", None, 0.9),
+                slot("sha256:rgb_shift", None, 0.25),
+            ])],
+            "a press on one slot rewrote a slot it did not name — the record carries the \
+             whole list and only the slot at that position was asked for"
+        );
+    }
+
+    /// A cut is set on the slot and not on the chain: it is one of the things a
+    /// slot is set to, and it reaches the record through the same row.
+    #[test]
+    fn a_cut_is_set_on_the_slot_it_names_and_keeps_that_slots_values() {
+        let current = Current {
+            master_chain: Some(chain()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetChainParam {
+                at: 0,
+                param: karakuri_operation::ChainParam::Cut(karakuri_operation::Cut::Mix),
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![chain_record(vec![
+                slot("sha256:feedback", Some("mix"), 0.34),
+                slot("sha256:bloom", None, 0.6),
+                slot("sha256:rgb_shift", None, 0.25),
+            ])]
+        );
+    }
+
+    /// An add lands at the end and carries the values its procedure declares,
+    /// which is no `params` at all: the record carries what was asked for, and
+    /// a parameter nobody moved runs at the declaration's own default.
+    #[test]
+    fn an_add_appends_a_slot_with_its_cut_and_no_values() {
+        let current = Current {
+            master_chain: Some(chain()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::AddChainEffect {
+                procedure: "sha256:other".into(),
+                cut: Some(karakuri_operation::Cut::Mix),
             },
             &current,
         );
@@ -729,113 +782,71 @@ mod tests {
                 slot("sha256:feedback", Some("exit"), 0.34),
                 slot("sha256:bloom", None, 0.6),
                 slot("sha256:rgb_shift", None, 0.25),
-            ])],
-            "a bloom press rewrote a slot it did not name — the record carries the \
-             whole list and only the bloom slot was asked for"
+                ChainSlot {
+                    procedure: "sha256:other".into(),
+                    cut: Some("mix".into()),
+                    params: Default::default(),
+                },
+            ])]
         );
     }
 
-    /// Feedback carries two of the four, and the cut is one of them: the same
-    /// amount is a one-frame echo under `mix` and a compounding trail under
-    /// `exit`, so a surface that could move the amount without saying the cut
-    /// would be asking for a picture it had not named.
+    /// A remove takes the slot out and the slots after it move up.
     #[test]
-    fn a_feedback_press_carries_its_cut_and_keeps_the_other_two_passes() {
+    fn a_remove_takes_one_slot_out_and_closes_the_gap() {
         let current = Current {
             master_chain: Some(chain()),
             ..Current::default()
         };
-        let written = written(
-            &Operation::SetFeedback {
-                params: karakuri_operation::Feedback {
-                    amount: 0.9,
-                    cut: karakuri_operation::Cut::Mix,
-                },
-            },
-            &current,
-        );
+        let written = written(&Operation::RemoveChainEffect { at: 0 }, &current);
         assert_eq!(
             records(written),
             vec![chain_record(vec![
-                slot("sha256:feedback", Some("mix"), 0.9),
                 slot("sha256:bloom", None, 0.6),
                 slot("sha256:rgb_shift", None, 0.25),
             ])]
         );
     }
 
-    /// And the third row is the other two's arm. Worth its own test because it
-    /// is the row whose figure used to be a dash: an amount of zero is a value
-    /// that reaches a record, not a row with nothing to say.
+    /// A position the chain has not got writes nothing and says so.
     #[test]
-    fn an_rgb_shift_press_writes_a_zero_rather_than_nothing() {
+    fn a_position_the_chain_has_not_got_is_owed_rather_than_appended() {
         let current = Current {
             master_chain: Some(chain()),
             ..Current::default()
         };
-        let written = written(
-            &Operation::SetRgbShift {
-                params: karakuri_operation::RgbShift { amount: 0.0 },
-            },
-            &current,
-        );
-        assert_eq!(
-            records(written),
-            vec![chain_record(vec![
-                slot("sha256:feedback", Some("exit"), 0.34),
-                slot("sha256:bloom", None, 0.6),
-                slot("sha256:rgb_shift", None, 0.0),
-            ])]
-        );
-    }
-
-    /// A row naming a procedure the chain has not got appends a slot, which is
-    /// the *for now* in ADR-0340 §7: with a list, *feedback* is a pass that may
-    /// not be in the chain, and until the three rows retire the honest answer
-    /// to *turn feedback up* is a chain with feedback in it. It lands at the
-    /// end, which is where a drop on the chain lands one too.
-    #[test]
-    fn a_row_naming_a_procedure_the_chain_has_not_got_appends_a_slot() {
-        let mut chain = chain();
-        chain.slots = vec![slot("sha256:rgb_shift", None, 0.25)];
-        let current = Current {
-            master_chain: Some(chain),
-            ..Current::default()
-        };
-        let written = written(
-            &Operation::SetFeedback {
-                params: karakuri_operation::Feedback {
-                    amount: 0.5,
-                    cut: karakuri_operation::Cut::Mix,
+        for operation in [
+            Operation::SetChainParam {
+                at: 3,
+                param: karakuri_operation::ChainParam::Declared {
+                    key: "amount".into(),
+                    value: 0.5,
                 },
             },
-            &current,
-        );
-        assert_eq!(
-            records(written),
-            vec![chain_record(vec![
-                slot("sha256:rgb_shift", None, 0.25),
-                slot("sha256:feedback", Some("mix"), 0.5),
-            ])],
-            "a row naming a procedure the chain has not got wrote a chain without it"
-        );
+            Operation::RemoveChainEffect { at: 3 },
+        ] {
+            assert_eq!(
+                written(&operation, &current),
+                Written::Owed(Owed::NotInChain),
+                "{operation:?} wrote a chain for a slot that is not in it"
+            );
+        }
     }
 
     /// A chain that was not read is said, never defaulted — the look pair's
-    /// rule at the row below it. A default chain here would let a bloom press
-    /// silently zero a trail somebody set a moment earlier.
+    /// rule at the row below it.
     #[test]
-    fn a_master_row_with_no_chain_read_is_owed_it_rather_than_given_a_default() {
+    fn a_chain_operation_with_no_chain_read_is_owed_it_rather_than_given_a_default() {
         for operation in [
-            Operation::SetFeedback {
-                params: karakuri_operation::Feedback::default(),
+            Operation::SetChainParam {
+                at: 0,
+                param: karakuri_operation::ChainParam::Cut(karakuri_operation::Cut::Mix),
             },
-            Operation::SetBloom {
-                params: karakuri_operation::Bloom::default(),
+            Operation::AddChainEffect {
+                procedure: "sha256:other".into(),
+                cut: None,
             },
-            Operation::SetRgbShift {
-                params: karakuri_operation::RgbShift::default(),
-            },
+            Operation::RemoveChainEffect { at: 0 },
         ] {
             assert_eq!(
                 written(&operation, &Current::default()),

@@ -458,6 +458,36 @@ fn the_offset_steps_down_and_up_by_the_one_step_both_keyboards_use() {
     assert_eq!(offset_key(Step::Down, 20.0), 15.0);
 }
 
+/// The tempo steps by one beat a minute, counted from the grid it is standing
+/// on, and is floored where the oscillator's own clamp is (ADR-0350).
+///
+/// `space` is not a destination on this control: the figure has no value it was
+/// declared at, so `karakuri_console::focus` declines there.
+///
+/// One step is inside the ±15% a press on the figure is trusted with at every
+/// tempo the trackable range holds.
+#[test]
+fn the_tempo_steps_by_one_beat_a_minute_from_the_grid_it_is_standing_on() {
+    assert_eq!(tempo_key(Step::Up, 128.0), 129.0);
+    assert_eq!(tempo_key(Step::Down, 128.0), 127.0);
+    assert_eq!(
+        TEMPO_STEP_BPM, 1.0,
+        "the page says one beat a minute a press and the constant says otherwise — the page is \
+         the specification"
+    );
+    assert_eq!(
+        tempo_key(Step::Default, 92.5),
+        92.5,
+        "the tempo figure has no value it was declared at, so a default is the grid unchanged"
+    );
+    // Floored where `karakuri_signal` floors it: a grid at zero has no beat to
+    // run, and this decides what the record says.
+    assert_eq!(tempo_key(Step::Down, 1.0), 1.0);
+    // And one step is inside the guard a press on the figure is held to, at
+    // the slowest tempo the tracker searches.
+    const { assert!(TEMPO_STEP_BPM <= 60.0 * karakuri_console::view::TEMPO_BAND) };
+}
+
 /// The master out steps by the trim's tenth and is held inside `[0, 1]`, which
 /// is the range `Knob::Out` drags over — so a key and a hand can reach the same
 /// values and no others.
@@ -715,6 +745,7 @@ fn a_press_on_the_tracker_group_reaches_the_operation_its_key_reaches() {
         fps: Some(58.0),
         frame_ms: 12.4,
         budget_ms: Some(16.6),
+        chain_ms: None,
         // The mock's `landed`, so the group is measured against the row
         // the mock draws rather than a shorter one.
         health: Some(view::Stage::Landed),

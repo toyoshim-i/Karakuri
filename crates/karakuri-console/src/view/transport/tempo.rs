@@ -98,6 +98,18 @@ pub struct Transport {
     /// rule the whole of this value follows: a reading nobody has is not drawn as a
     /// plausible one.
     pub budget_ms: Option<f32>,
+    /// What the master chain costs this frame, in milliseconds — the `+ 0.98
+    /// chain` after the budget, and `None` for a chain with no slot in it and for
+    /// a console with no engine behind it.
+    ///
+    /// A term beside the decks and charged to none of them
+    /// ([ADR-0349](../../../../docs/adr/0349-the-chain-is-the-frames-so-it-reads-the-session-clock-and-is-charged-against-the-frames-budget.md)).
+    ///
+    /// It is an estimate and not a measurement — one rate against the chain's
+    /// static op count and the frame's area — where [`Transport::frame_ms`]
+    /// beside it is a measurement. Zero draws nothing rather than a `0.00`,
+    /// which is the rule the two readings above follow.
+    pub chain_ms: Option<f32>,
     /// What the last write did — the mock's `landed` capsule at the end of this
     /// row, and `None` until a write has done anything.
     ///
@@ -1040,6 +1052,14 @@ fn frame_job(t: &Transport, val: Color32, faint: Color32) -> LayoutJob {
     match t.budget_ms {
         Some(budget) => push(format!("/{budget:.1} ms"), faint),
         None => push(" ms".to_owned(), faint),
+    }
+    // The chain's own term, after the frame's: it is charged against the frame
+    // and to no deck (ADR-0349). It drops its own words when there is nothing to
+    // say, which is the rule the two readings above follow.
+    if let Some(chain) = t.chain_ms.filter(|ms| *ms > 0.0) {
+        push(" + ".to_owned(), faint);
+        push(format!("{chain:.2}"), val);
+        push(" chain".to_owned(), faint);
     }
     job
 }

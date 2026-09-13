@@ -200,6 +200,12 @@ pub(crate) fn answered(
             focus::Level::Out => Acted::Emitted(Some(Operation::SetMasterOut {
                 out: out_key(*step, gfx.engine.deck.out()),
             })),
+            // The grid's own tempo, read off the oscillator at the press —
+            // the same reading the transport row is drawn from. What a press
+            // moves it by is [`tempo_key`].
+            focus::Level::Tempo => Acted::Emitted(Some(Operation::SetFreeRunTempo {
+                bpm: tempo_key(*step, gfx.engine.deck.signals().oscillator().bpm()),
+            })),
             focus::Level::Exposure => Acted::Emitted(Some(Operation::SetExposure {
                 exposure: exposure_key(*step, gfx.engine.look.exposure),
             })),
@@ -213,6 +219,35 @@ pub(crate) fn answered(
                 }
             },
         },
+        // A press on the audio-in pill or on one of its rows, performed
+        // through the method a pointer press on the same rectangle already
+        // reaches: opening the card enumerates the machine's inputs, which is a
+        // device read and not a thing `karakuri-console` can do at all
+        // (ADR-0156, ADR-0350).
+        focus::Asked::Listened(ask) => {
+            let acted = readout.listened(ask.clone());
+            return App::performed(
+                gfx,
+                started,
+                readout,
+                recorder,
+                &acted,
+                Change::Pointed(true).repaint(),
+            );
+        }
+        // And a press on the arrangement pill or on one of its menu rows: the
+        // names filed are a directory and a save writes a file.
+        focus::Asked::Arranged(ask) => {
+            let acted = readout.arranged(ask.clone());
+            return App::performed(
+                gfx,
+                started,
+                readout,
+                recorder,
+                &acted,
+                Change::Pointed(true).repaint(),
+            );
+        }
         // The caller answers these two, and it returns before it gets here.
         focus::Asked::Scope | focus::Asked::Load => {
             unreachable!("the scope and the load are answered where the store is")

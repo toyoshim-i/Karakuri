@@ -356,11 +356,10 @@ pub fn build_chain(
     slots: &[SlotSpec],
     resolve: &dyn Fn(&str) -> Option<String>,
 ) -> Result<Chain, String> {
+    let sources = resolve_chain(slots, resolve)?;
     let mut built = Vec::with_capacity(slots.len());
-    for (at, spec) in slots.iter().enumerate() {
-        let source = resolve(&spec.procedure)
-            .ok_or_else(|| format!("master chain slot {at}: nothing holds `{}`", spec.procedure))?;
-        let checked = crate::compile::check(&source)
+    for (at, (spec, source)) in slots.iter().zip(&sources).enumerate() {
+        let checked = crate::compile::check(source)
             .map_err(|e| format!("master chain slot {at}: {}: {e}", spec.procedure))?;
         built.push(
             Slot::build(
@@ -377,7 +376,33 @@ pub fn build_chain(
     Ok(Chain::new(built))
 }
 
-/// What an address resolves to, for [`apply_chain`] and [`build_chain`].
+/// The source behind every slot of a described chain, in order, or the one
+/// refusal for an address nothing holds.
+///
+/// Holds no device, so whether a run can resolve a chain at all is settled
+/// before anything is compiled: the same question is answered the same way on
+/// the frame path, at replay, and anywhere a chain is checked before it is
+/// installed. The refusal names the slot's position and its address (ADR-0340),
+/// and it refuses at the first such slot.
+///
+/// `resolve` is [`resolve_procedure`] bound to whatever store the caller has.
+pub fn resolve_chain(
+    slots: &[SlotSpec],
+    resolve: &dyn Fn(&str) -> Option<String>,
+) -> Result<Vec<String>, String> {
+    slots
+        .iter()
+        .enumerate()
+        .map(|(at, spec)| {
+            resolve(&spec.procedure).ok_or_else(|| {
+                format!("master chain slot {at}: nothing holds `{}`", spec.procedure)
+            })
+        })
+        .collect()
+}
+
+/// What an address resolves to, for [`resolve_chain`], [`build_chain`] and
+/// [`apply_chain`] — the one resolution every host uses.
 ///
 /// The shipped three first and without a store at all — a windowed run that has
 /// never saved anything can still put a preset in its chain — and then whatever
@@ -571,38 +596,12 @@ pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
 
 /// The master chain that is running, as the reading the conversion needs.
 ///
-/// [`current_look`]'s function one pass upstream and its argument with one more
-/// row in it: `Operation::SetBloom` carries an amount and nothing else, because
-/// that is what a row of the Master bay can say, and `Record::MasterChain`
-/// carries all four because that is what a replay can reconstruct a chain from
-/// — the same 0.5 is a one-frame echo under `mix` and a compounding trail under
-/// `exit`, so an amount without its cut is not a picture. See
-/// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
-///
-/// The amount is the engine's and not a track position. A fader draws where it
-/// is along its own travel and divides by `Feedback::MAX` to do it; a reading
-/// is what the pass is *at*, which is what the record carries.
+/// [`current_look`]'s function one pass along: an operation names one slot of
+/// the chain and `Record::MasterChain` carries the whole list, so the list that
+/// is running is what completes the record. See
+/// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`.
 pub fn current_chain(slots: &[SlotSpec]) -> karakuri_operation_record::Chain {
-    let shipped = shipped::addresses();
-    // **The three rows read the three shipped slots**, and a row whose slot is
-    // not in the chain reads zero — which is the honest reading of *this pass
-    // is not running*, and is what the row will stop asking for when the rows
-    // retire (ADR-0340 §7).
-    let amount = |address: &str| {
-        slots
-            .iter()
-            .find(|s| s.procedure == address)
-            .and_then(|s| s.params.get("amount").copied())
-            .unwrap_or(0.0)
-    };
-    let feedback_slot = slots.iter().find(|s| s.procedure == shipped.feedback);
     karakuri_operation_record::Chain {
-        feedback: karakuri_operation::Feedback {
-            amount: amount(&shipped.feedback),
-            cut: cut(feedback_slot.and_then(|s| s.cut).unwrap_or_default()),
-        },
-        bloom: amount(&shipped.bloom),
-        rgb_shift: amount(&shipped.rgb_shift),
         slots: slots
             .iter()
             .map(|s| karakuri_store::record::ChainSlot {
@@ -611,8 +610,24 @@ pub fn current_chain(slots: &[SlotSpec]) -> karakuri_operation_record::Chain {
                 params: s.params.clone(),
             })
             .collect(),
-        shipped: shipped.clone(),
     }
+}
+
+/// What one `kind L5` source offers a chain, or `None` for a source that is not
+/// one: the content address a slot of it is named by, and whether it declares
+/// `retains`.
+///
+/// A surface offering a procedure to the chain needs both: an add carries the
+/// address and carries a cut exactly where the procedure declares `retains`
+/// (`docs/adr/0348-a-chain-slots-cut-is-set-through-the-parameter-row.md`). Both
+/// are facts about the file rather than about the store it came from, so this
+/// takes the source and not a path.
+///
+/// It checks rather than scanning for a word: `retains` is a header declaration
+/// of the language and `check` is the one reader of it.
+pub fn l5_offer(source: &str) -> Option<(String, bool)> {
+    let checked = crate::compile::check(source).ok()?;
+    (checked.kind == karakuri_ir::Kind::L5).then(|| (shipped::address(source), checked.retains))
 }
 
 /// The shape every scheduled fade takes, which is what [`current_transition`]

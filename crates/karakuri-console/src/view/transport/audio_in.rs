@@ -135,7 +135,11 @@ impl AudioIn {
 
     /// How many rows the open card has: one per input. Zero while it is shut, and
     /// zero on a machine with no inputs — that card is a sentence, not a list.
-    fn rows(&self) -> usize {
+    ///
+    /// The address descends into this card and a digit names the nth row of it,
+    /// which is the same number [`AudioInPill`] lays out
+    /// ([ADR-0350](../../../../docs/adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)).
+    pub fn rows(&self) -> usize {
         match self.down {
             true => self.inputs.len(),
             false => 0,

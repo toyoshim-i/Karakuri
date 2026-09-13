@@ -960,6 +960,97 @@ fn a_slot_costing_more_than_the_whole_budget_is_refused() {
     assert_eq!(fits.decisions[0].reason, Reason::Fits);
 }
 
+/// The master chain is reserved out of the budget ahead of every slot, and it
+/// is charged against no one of them.
+///
+/// A chain is one pass per slot over the whole frame and belongs to no deck, so
+/// what it costs leaves the headroom a priming request is judged against and
+/// never appears in `committed_ms` — a slot that fitted before the chain was
+/// added may not fit after it.
+#[test]
+fn the_master_chain_is_reserved_ahead_of_the_slots() {
+    let mut governor = Governor::new(16.0);
+    let free = governor.decide(&[live(10.0), priming(5.0)]);
+    assert_eq!(free.chain_ms, 0.0, "an empty chain cost something");
+    assert_eq!(free.spendable_ms(), 16.0);
+    assert_eq!(free.headroom_ms(), Some(6.0));
+    assert_eq!(
+        free.decisions[1].reason,
+        Reason::Fits,
+        "5 ms into 6 ms of headroom did not fit"
+    );
+
+    governor.set_chain_ms(2.0);
+    let charged = governor.decide(&[live(10.0), priming(5.0)]);
+    assert_eq!(charged.chain_ms, 2.0);
+    assert_eq!(
+        charged.committed_ms, 10.0,
+        "the chain was summed into the live slots"
+    );
+    assert_eq!(charged.spendable_ms(), 14.0);
+    assert_eq!(charged.headroom_ms(), Some(4.0));
+    assert_eq!(
+        charged.decisions[1].reason,
+        Reason::NoHeadroom,
+        "the chain's 2 ms did not come out of what a request is judged against"
+    );
+    assert_eq!(
+        charged.decisions[0].effective,
+        Residency::Live,
+        "the governor took a live slot off air to pay for the chain"
+    );
+    assert!(charged.to_string().contains("chain"), "{charged}");
+
+    // And it can put a deck over budget on its own.
+    governor.set_chain_ms(12.0);
+    let over = governor.decide(&[live(10.0)]);
+    assert!(
+        over.over_budget,
+        "10 ms of live under a 12 ms chain is not flagged"
+    );
+    assert_eq!(
+        over.decisions[0].effective,
+        Residency::Live,
+        "the governor took a live slot off air"
+    );
+}
+
+/// What a chain costs is its ops against the frame's area, linear in both, and
+/// the rate is calibrated on one measurement whose resolution is named.
+///
+/// The engine-side half — that a `Deck` charges what its `Present` is running,
+/// and that the governor spends it — is in `src/frame.rs`'s
+/// `a_composed_frame_hands_the_chain_its_clock_and_the_deck_its_price`.
+#[test]
+fn a_chains_price_is_linear_in_its_ops_and_in_the_frames_area() {
+    use karakuri_engine::estimate::{
+        chain_ms, CHAIN_REFERENCE_MS, CHAIN_REFERENCE_OPS, CHAIN_REFERENCE_SIZE,
+    };
+
+    assert_eq!(
+        chain_ms(0, CHAIN_REFERENCE_SIZE),
+        0.0,
+        "an empty chain is free"
+    );
+    let reference = chain_ms(CHAIN_REFERENCE_OPS, CHAIN_REFERENCE_SIZE);
+    assert!(
+        (reference - CHAIN_REFERENCE_MS).abs() < 1e-3,
+        "the rate does not return the measurement it was calibrated on: {reference}"
+    );
+    assert!(
+        (chain_ms(CHAIN_REFERENCE_OPS / 2, CHAIN_REFERENCE_SIZE) - reference / 2.0).abs() < 1e-3,
+        "half the ops is not half the price"
+    );
+    assert!(
+        (chain_ms(CHAIN_REFERENCE_OPS, (640, 360)) - reference / 4.0).abs() < 1e-3,
+        "a quarter of the area is not a quarter of the price"
+    );
+    assert!(
+        chain_ms(u32::MAX, (u32::MAX, u32::MAX)).is_finite(),
+        "an absurd chain priced at something that is not a number"
+    );
+}
+
 // The eight of thirty that take a device. The rest reason over a budget and a
 // verdict, which is arithmetic — so the majority of this file stays in the set
 // `cargo test -- --skip gpu::` runs. See `tests/gpu_tests_are_under_mod_gpu.rs`.

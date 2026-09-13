@@ -53,7 +53,7 @@ pub use graph::{
     TextureDesc, TransientMemoryPool,
 };
 pub use karakuri_store::record::{Layer, NodeAddress, Value};
-pub use master::{Chain, Clock, Cut, Slot, SlotError, SlotSpec};
+pub use master::{Chain, Clock, Cut, Slot, SlotError, SlotParam, SlotReading, SlotSpec};
 pub use meter::{Level, Meters};
 pub use pass::{BoundImagePass, ImagePass, RenderPassNode, RetentionManager};
 pub use points::{Params, Points};

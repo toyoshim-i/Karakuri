@@ -572,12 +572,14 @@ impl Readout {
                     // is what is worth saying**, because an amount of zero is
                     // no pass at all rather than a pass at nothing — see
                     // `karakuri_engine::master`.
-                    Kind::Master => match (self.view.master_out, self.view.master_chain) {
+                    Kind::Master => match (self.view.master_out, self.view.master_chain.as_ref()) {
                         (Some(out), Some(chain)) => format!(
-                            "bay, out {out:.2}, {} of three passes running",
-                            usize::from(chain.feedback > 0.0)
-                                + usize::from(chain.bloom > 0.0)
-                                + usize::from(chain.rgb_shift > 0.0)
+                            "bay, out {out:.2}, {} slot{} in the chain",
+                            chain.slots.len(),
+                            match chain.slots.len() {
+                                1 => "",
+                                _ => "s",
+                            }
                         ),
                         (Some(out), None) => format!("bay, out {out:.2}, no chain behind it"),
                         (None, _) => "bay, no engine behind it".to_owned(),
@@ -756,9 +758,7 @@ pub(crate) fn knob_word(knob: &Knob) -> &'static str {
         Knob::Trim { .. } => "trim",
         Knob::Fader { .. } => "fader",
         Knob::Out => "out",
-        Knob::Feedback { .. } => "feedback",
-        Knob::Bloom => "bloom",
-        Knob::RgbShift => "rgb shift",
+        Knob::Chain { .. } => "chain effect",
         Knob::Param { .. } => "parameter",
     }
 }
