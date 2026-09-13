@@ -51,13 +51,13 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 
 ### Phase 5 Initiatives
 
-#### P34. Hierarchical Architecture Documentation (`docs/architecture/`)
-Establish hierarchical architecture documentation:
-1. `docs/architecture/README.md`: Subsystem architectural map, dataflow, and navigation index.
-2. `docs/architecture/console.md`: UI components, bay subdirectories, `ControlDescriptor` registry, hover layer, and focus graph.
-3. `docs/architecture/engine.md`: Rendering engine pipeline, Deck/Set execution graph, residency model, HotSwap, and GPU buffers.
-4. `docs/architecture/runtime.md`: Application lifecycle, Bridge, Readout event dispatch, Environment services, and Store.
-5. `docs/architecture/operations.md`: Single vocabulary, authority model, operator permission gates, MCP tools, and session streams.
+#### P34. Hierarchical Architecture Documentation (`docs/architecture/`) — **COMPLETED**
+Established a 3-tier architecture documentation hierarchy linked with crate-level `README.md` docs:
+1. `docs/architecture/README.md`: Subsystem architectural map, 16-crate dependency graph, and catalog.
+2. `docs/architecture/console.md`: `karakuri-console` and `karakuri-layout` (widgets, bays, control registry).
+3. `docs/architecture/engine.md`: `karakuri-engine`, `karakuri-codegen`, and `karakuri-ir` (8-stage pipeline, residency).
+4. `docs/architecture/runtime.md`: `karakuri`, `karakuri-cli`, `karakuri-environment`, `karakuri-store`.
+5. `docs/architecture/operations.md`: `karakuri-operation`, `karakuri-operation-record`, `karakuri-mcp`.
 6. `docs/architecture.md`: Updated top-level portal pointing to subsystem documents.
 
 #### P35. Modularize GUI App & Event Loop (`karakuri::app`)
@@ -86,7 +86,7 @@ Decompose `crates/karakuri-engine/src/set.rs` (3,705 lines) into `crates/karakur
 
 | Initiative | Target Subsystem | Actionable Deliverable | Readiness |
 |---|---|---|:---:|
-| **P34** | `docs/architecture/` | Establish hierarchical architecture documentation (`console`, `engine`, `runtime`, `operations`) | **Ready to Execute** |
+| **P34** | `docs/architecture/` | Establish hierarchical architecture documentation (`console`, `engine`, `runtime`, `operations`) | **COMPLETED** |
 | **P35** | `karakuri::app` | Decompose `app.rs` into `handler.rs`, `operations.rs`, `audio_midi.rs`, `mod.rs` | **Ready to Execute** |
 | **P36** | `karakuri-console::hover` | Integrate `ControlDescriptor` hotkey badges into tooltips | **Ready to Execute** |
 | **P37** | `karakuri-engine::set` | Modularize `set.rs` into `schedule.rs`, `layers.rs`, `types.rs`, `mod.rs` | **Ready to Execute** |
