@@ -1,1729 +1,538 @@
 # Karakuri — Vision and Roadmap
 
-**This file tracks milestones and implementation status. It is not a manual and not a design document.**
-Before implementing any task here, contributors and coding agents MUST review the mandatory engineering invariants in [principles/](principles/) and adhere to the ADR lifecycle in [contributing.md](contributing.md) §4 (when changing behaviour governed by an ADR, create a new superseding ADR rather than revising history).
-The code and what the words mean is [architecture.md](architecture.md); the language is [ir-spec.md](ir-spec.md); how to play it is [manual.md](manual.md) and [manual/](manual/); why a thing was decided is [adr/](adr/); milestones that closed are kept whole in [history/](history/). Where a later milestone constrains earlier code, that is stated under **Demands on earlier work**.
+**This file is the ledger of open work.** It is not a manual and not a design document.
+Before implementing anything here, read [principles/](principles/) for the rules in force and
+[contributing.md](contributing.md) §4 for the ADR lifecycle.
+The code is [architecture.md](architecture.md); the language is [ir-spec.md](ir-spec.md); how to play
+it is [manual.md](manual.md) and [manual/](manual/); why a thing was decided is [adr/](adr/);
+milestones that closed are kept whole in [history/](history/).
 
-**No count, figure or percentage is written into this file.** Every one that ever was went stale,
-usually within days and usually in silence. *The instrumentation*, below, is the four commands
-that answer them, and there is nothing here to keep in step.
+**No count, figure or percentage is written into this file.** *The instrumentation*, below, is the
+commands that derive them.
 
 ---
 
 ## The end state
 
-A performer opens an empty session and types a prompt. Over the course of a set, the
-system generates visual material, warms it up out of sight, and offers it at musically
-sensible moments. The performer takes control of anything they want and leaves the rest to
-the system. Everything generated is saved, searchable, and reusable in later sessions.
-Nothing stops working when the network drops or the DJ gear changes.
+A performer opens an empty session and types a prompt. Over the course of a set the system generates
+visual material, warms it up out of sight, and offers it at musically sensible moments. The performer
+takes control of anything they want and leaves the rest to the system. Everything generated is saved,
+searchable and reusable in later sessions.
 
 Four properties define whether this succeeded:
 
-1. **Procedural, not generated frames.** The AI writes procedures that run on the GPU
-   every frame, not images or video. What gets saved is an instrument with parameters, not
-   a recording.
-2. **Manual and autonomous on the same mechanism.** A human and an agent affect the system
-   through the identical interface. **Authority is set per node of a Set**, not a global mode
-   — [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md). This
-   sentence read *a per-layer setting* until then, which was one of three answers in play and
-   was the oldest of them; it loses because no operation in this system addresses a layer of a
-   live Set, and per *deck slot* loses to rule 06 of the manual, which rules out any switch
-   that hands a whole instrument over. The senses each word carries are in
-   [architecture.md](architecture.md#words-that-carry-more-than-one-sense).
+1. **Procedural, not generated frames.** The AI writes procedures that run on the GPU every frame,
+   not images or video. What is saved is an instrument with parameters, not a recording.
+2. **Manual and autonomous on the same mechanism.** A human and an agent affect the system through
+   the identical interface. Authority is set per node of a Set
+   ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)). The senses each
+   word carries are in [architecture.md](architecture.md#words-that-carry-more-than-one-sense).
 3. **Reproducible.** The same record stream and the same seeds produce the same show.
-4. **Unbreakable on stage.** Nothing stops working when the network drops or the DJ gear
-   changes. Defended continuously rather than built once — see Continuous concerns.
+4. **Unbreakable on stage.** Nothing stops working when the network drops or the DJ gear changes.
+   Defended continuously rather than built once — see *Continuous concerns*.
 
 ### What this is not
 
-- Not a general-purpose compositor. Video file playback and editing are out of scope
-  except as an external source node.
-- Not a 3D content creation tool. There is no modelling, no asset import pipeline, no
-  animation timeline.
-- Not primarily a live-coding environment for humans. The IR is written by LLMs and read
-  by humans, not the other way round.
-- Not a cloud service. The engine runs locally and keeps running when generation is
-  unavailable.
+- Not a general-purpose compositor. Video file playback and editing are out of scope except as an
+  external source node.
+- Not a 3D content creation tool. There is no modelling, no asset import pipeline, no animation
+  timeline.
+- Not primarily a live-coding environment for humans. The IR is written by LLMs and read by humans,
+  not the other way round.
+- Not a cloud service. The engine runs locally and keeps running when generation is unavailable.
 
 ### The reference point
 
-TouchDesigner is the closest existing thing, and the deliberate divergence is worth
-stating. TouchDesigner is largely one operator per GPU pass, connected by texture
-ping-pong, driven from the CPU. Karakuri compiles a subgraph into a minimal set of passes
-and fuses procedural chains into single shaders. The cost is a compilation step and less
-immediate feedback; the gain is that primitive-centric generation at high element counts
-becomes affordable.
+TouchDesigner is the closest existing thing. It is largely one operator per GPU pass, connected by
+texture ping-pong, driven from the CPU. Karakuri compiles a subgraph into a minimal set of passes and
+fuses procedural chains into single shaders. The cost is a compilation step and less immediate
+feedback; the gain is that primitive-centric generation at high element counts becomes affordable.
 
 ---
 
 ## Milestones
 
-Sizes are rough and relative — a sense of which milestone is larger than which, not an
-estimate of anyone's calendar.
+### M1 — Closing the loop — closed, [history/m1.md](history/m1.md)
 
-### M1 — Closing the loop — **closed**
+### M2 — Playable — closed, [history/m2.md](history/m2.md)
 
-Proved the assumption the whole project rests on: an LLM can generate constrained IR, it can
-be validated and compiled to WGSL, and it can be hot-swapped without dropping a frame.
-[history/m1.md](history/m1.md).
+### M3 — Expressive depth — closed, [history/m3.md](history/m3.md)
 
----
+### M4 — Library at scale — closed, [history/m4.md](history/m4.md)
 
-### M2 — Playable — **closed**
-
-A deck of Sets, a mix, transitions on a beat grid, MIDI and audio in, a session recorded and
-replayed frame for frame. [history/m2.md](history/m2.md).
-
-What M2 left owed is rescheduled: MIDI *out* and 14-bit control changes are the third MIDI
-phase's, named on M5.12's stub (ADR-0337), and a session stream that cannot say what a deck held
-is under *Mx — TODO*.
-
----
-
-### M3 — Expressive depth — **closed**
-
-Every `Ln` in the algebra is a node with a `kind` behind it, and a Set holds a chain of them.
-`--set` reaches all of it with no new syntax, parameters and bindings address a *node* rather
-than a layer, and a Set can say which of them a console sees.
-[history/m3.md](history/m3.md).
-
-What M3 left owed is rescheduled: fusing adjacent nodes into one pass is under *Deferred by
-decision*, and how a mask names a source is under *Mx — TODO*.
-
----
-
-### M4 — Library at scale — **closed**
-
-A Set can be named, saved from a running session as the material on screen, listed, read
-without compiling anything, round-tripped whole with its layering and fold, and sent to
-somebody else as one self-contained file whose every inlined source is checked against the
-address it claims. [history/m4.md](history/m4.md).
-
-The goal sentence — *finding the right thing among two thousand artifacts is faster than
-generating a new one* — cannot be checked, because there are no two thousand artifacts and
-nothing generates one. What closed is the machinery, tested at the scale that exists.
-
-What M4 left owed is rescheduled: `parent` and a deck-slot variant pool are M6's; what a
-thumbnail is *of* went to M5.3 to judge and that bay closed without judging it, so it sits under
-*Mx — TODO* beside the drawing it waits on; and `perf`, dual embeddings, search and grouping are
-under *Mx — TODO* as well.
-
----
-
-### M5 — Interface
-
-**Goal: the application.** Karakuri is a GUI application for playing a VJ set in real time — you
-pick a Set per deck and mix them live — and this milestone is where that application exists.
-**MCP is a mouth, not the control stick**: the four properties at the head of this document are
-all about what a *person* can do in front of an audience.
-
-**And it has an exit condition, which a goal sentence is not**: M5 closes when everything the
-manual describes is implemented — no `plan` badge left in the panel column of [every
-operation](manual/operations.html)
-([ADR-0226](adr/0226-m5-closes-when-the-manual-is-implemented-and-the-meter-is-progress-rather-than-completion.md)).
-The split below decides how that column is reached and in what order; it does not change what
-closes M5.
-
-This comes before agents deliberately: an autonomous system that cannot be observed and overridden
-is not usable on stage, and building the observation surface afterwards means retrofitting it into
-decisions already made.
-
-#### The manual is the reference, and it was written before the panel
-
-[`docs/manual/`](manual/) is the console's manual, written ahead of the implementation on
-purpose: a sentence you cannot write about a control is a control designed wrong. Read it before
-touching this milestone. Four pages: [the seven rules](manual/index.html), [what the words
-mean](manual/concepts.html), [the console](manual/console.html) region by region with a working
-mock in it, and [every operation](manual/operations.html) with each way in. Its seven rules are
-capped and [`docs/principles/`](principles/) is not — adding a rule there means removing or
-merging one, because they are the model somebody holds before the panel makes sense.
-
-#### One vocabulary, and this milestone opened with naming
-
-Every operation is reachable from the panel, from the keyboard alone, from a mapped MIDI control,
-and from MCP. That is structural before it is visual: **each operation is named once, and every
-surface routes into that name.** An operation only the mouse can reach breaks it; so does one the
-map cannot address. A sequencer lane is a fifth route and works for the same reason (ADR-0222).
-
-`crates/karakuri-operation/` is that vocabulary — a leaf crate with no dependencies at all, whose
-specification is [every operation](manual/operations.html), checked both ways round by a test
-([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)), and
-`crates/karakuri-operation-record/` is where one becomes a record (ADR-0194). **All four surfaces
-are answered rather than pending** — MIDI moved outright (ADR-0196), MCP names its operations and
-performs them itself (ADR-0199), the console's `panel::Op` stays permanently (ADR-0197, ADR-0204),
-and the CLI's keys are surveyed and partly moved (ADR-0198, ADR-0232). The per-surface breakdown
-is `karakuri-operation`'s own crate documentation, which tests check rather than prose
-transcribes.
-
-**A model reaches every operation, and what could stop a show is shut until a hand opens it**
-([ADR-0235](adr/0235-mcp-reaches-every-operation-and-what-could-stop-the-show-is-refused-until-the-operator-opens-it.md)).
-`gate` is the audit and the one place the split lives, with no wildcard arm, so a new operation
-stops the build until somebody says which class it is in; an opening is map configuration rather
-than an operation of its own (ADR-0236). **`crates/karakuri` serves MCP**, on `--mcp PORT`, and it
-hands `karakuri_environment::mcp::serve` the same `Opening` the four bay-head pills write — so a
-pill opens a class the server reads on the next call rather than one only the panel sees. Four
-switches still do not cover every closed row: the clock's, the sequencer's, `Quit`, *Select a deck*
-and rule 06's authority belong to no class.
-
-**Some operations are named and left `Undecided`**, and the list has shrunk: choosing where the frame goes is decided (ADR-0324), walking the edit history is built (ADR-0308), and the camera's numbers are parameter rows (ADR-0318), so what is left `Undecided` is *moving a boundary* and *edit the file instead*. Where each sits in the split is under *The estimate is retired rather than re-cut*, below.
-
-#### How the work below is split
-
-**M5.1 to M5.9 are one sub-milestone per console bay, in the order below.** Each is the same job:
-complete that bay's GUI components and connect them to operations from the mouse and the keyboard.
-MCP, hover tooltips, MIDI and **the keyboard** cut across every bay, so they are M5.10, M5.11,
-M5.12 and M5.13 rather than a share of each bay's work. The keyboard joined them on 2026-09-05 and
-was a share of each bay's work until then: it stopped being one when
-[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-made a key press a consequence of one mechanism — the bay that has focus — rather than a letter each
-bay chose for itself. **Each names its rows, its exit condition and what it is blocked on**,
-and is the one place those are written down. The maintainer, 2026-09-01: *"you have to get to the
-point where all the bay GUI components are there and assembled, or you cannot even try it out."*
-
-**The order is the order below, and the work goes top to bottom.** If an order needs changing the
-sub-milestones are reordered; if a row needs a note the note goes in the sub-milestone that owns it.
-
-**A sub-milestone's exit condition is a grep over one column**: no `plan` badge in the **panel**
-column of that bay's rows on [every operation](manual/operations.html). The key, MIDI and MCP
-columns are out of scope for M5.1 to M5.9, being M5.13's, M5.12's and M5.10's.
-
-**It was two columns until 2026-09-05, and the key column left for a reason rather than for
-convenience.** While a key was a letter a bay chose, a bay owed its own keys and the exit said so.
-ADR-0259 makes a key press an address into whichever bay has focus, so no bay chooses letters any
-more and none can be held to them: the column is now one mechanism's, the way the MIDI column is the
-map's. M5.2 is the sub-milestone this was noticed in — it had finished its panel column and was
-being held open by four key badges naming letters the record had just retired. **ADR-0226 is unchanged by the split**: M5 closes when M5.1 to
-M5.9 close and the two sections *Rows the manual has not given a home* and *The console's own
-shape* close with them — named rather than placed, because M5.14 now sits after both and *at the end
-of this list* stopped locating them.
-
-**No sub-milestone below is open, as of 2026-09-14.** M5.1 to M5.9 have all closed — M5.5 —
-Inspector was the last of them, on 2026-09-10 — and so have M5.14, M5.15 and *The console's own
-shape*. The cross-cutting run is closed too: **M5.12 — MIDI on 2026-09-10** when its column's grep
-returned nothing, **M5.10 — MCP the same day** when the MCP column's did, **M5.11 — hover tooltips the
-same day** on an exit that is not a grep at all, **M5.16 on 2026-09-13** on M5.8's exit read a second
-time, and **M5.13 — the keyboard on 2026-09-14**, which was the key column of
-[every operation](manual/operations.html) rather than a bay and which the panel column's grep does not
-read. Each entry above is a stub naming what it decided, when its exit was met and where every owed
-item went; [history/m5.md](history/m5.md) keeps them whole.
-
-**M5.15 was the first sub-milestone whose rows are in two bays, and its exit said so.** It was a
-change to what a library row *is* — a procedure is one, and loading one writes a single layer over
-what a deck is playing
-([ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md))
-— so it landed in the Library and in the Inspector at once and belonged to neither. Its exit was
-therefore a grep over the **panel** column of the rows it named rather than over a bay's, which is
-the same test read on the list the sub-milestone owns. **Those rows were M5.15's and not the two
-bays'**, which had to be said rather than assumed: M5.3 and M5.5 each closed their column against
-the rows on their own list, and neither list is *Inside a Set*, so `plan` panel badges arriving
-there would otherwise have reopened an exit already met. M5.5's rows are **enumerated by name**,
-spread over several sections and deliberately not *Inside a Set*, and neither of the two that
-arrived there is on that list. They were named in M5.15 and nowhere else, and the stub that closed
-it keeps them named.
-
-**M5.16 sat after the bays and after the cross-cutting run, and it was neither of those things.**
-It was a language change wearing a bay's surface — `kind L5`, and the master chain as an ordered
-list of them, decided on 2026-09-10
-([ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)) — so
-it was not a share of any bay's work and no column of [every operation](manual/operations.html) was
-its subject. It carried M5.8's exit a second time rather than an exit of its own, because retiring
-that bay's three rows is what turned that grep red, and it closed on 2026-09-13 with the page and
-the panel landing together.
-
-##### Every bay ends by rewriting its own prose as tooltips
-
-**The last item of M5.1 to M5.9 is the same job**: the notes about that bay in [the console
-page](manual/console.html), condensed into the `data-tip` of the controls the mock draws. The
-reason is written here once for all nine. The same prose sits in three places — this file, the
-console page and [every operation](manual/operations.html) — and duplication produces gaps and
-contradictions; the console page's own layout does not work, its sections long and its columns
-sparse with the mock far from the text explaining it; and nobody reads a large manual, so a short
-dialog beside the control has to carry the whole of it — what the control is, what state it is
-in, what a click will do, and its MIDI assignment.
-
-**And a gap gets a note.** The maintainer's reading rule, 2026-08-31: *the mock is not
-exhaustive. A tooltip is something everything should carry in the end, but only the characteristic
-ones are worked out. There will be gaps in the functions too — leave a purposeful note for those,
-aimed at what the thing is for — **and the more detail something is written in, the more important
-it is and the sooner it is wanted.*** **An empty tooltip is not a defect to fill in**; what *is*
-owed where a function is missing is a note saying what it would be for, because a gap with no note
-is indistinguishable from a decision.
-
-**Doing this at the end of each bay means M5.11 starts with its specification already written**,
-and owes only the pointer decision and the drawing.
-
-##### What no sub-milestone owns
-
-Four things the seven-item *Adds* list and the withdrawn estimate carried between them. Each is
-real work, none of it closes a badge, and no exit condition above measures it.
-
-- **Adding or removing a node.** The node editor needs it, and there is no such operation and no
-  row on [every operation](manual/operations.html). The gap has an arena half: `karakuri-layout`'s
-  arena has no insert and no remove, and `NodeId` is a bare index, so a removal shifts every id
-  anything is holding.
-- **The mock's six body controls**, of which `2 up` names a region of the arrangement and the other
-  five add something a bay draws inside its own body. None is an operation and none has a row.
-- **Thumbnails and live previews in the Set browser.** The drawing was M5.3's and what a thumbnail
-  is *of* was M4's undecided question, handed to that bay to judge; it closed without judging
-  either, so both are under *Mx — TODO*. Neither has a row.
-- **Reaching a MIDI map while running.** A map is a file saved and recalled per controller. The file
-  exists; no row says it can be loaded while the instrument runs. It is under *Mx — TODO* since M5.12
-  closed, which is where it is tracked; this list says only that no sub-milestone's exit reads it.
-
-*An arrangement is saved and restored* has no entry here because it is finished: the record, the
-place, the two operations and the transport row's arrangement pill all exist.
-
-##### The estimate is retired rather than re-cut
-
-**The ~10–14 week range does not survive the split and is withdrawn**: it was taken against the
-seven *Adds* items, which ADR-0226 has since refused as this milestone's finish line, and every
-assumption it carried now sits in the sub-milestone that owns it, stated as a blocker rather than
-as weeks. When a range is wanted it is taken from the blocker lists still open below and from the
-panel column, both of which move on their own.
-
-What the range assumed and excluded went to the sub-milestones that own it: the two bays undrawn
-when it was taken to M5.8 and M5.9, both of which have since closed; the pointer decision to M5.11;
-M4's thumbnail judgement to M5.3, which closed without taking it, so it is under *Mx — TODO*; a
-second `Sink` to M5.6, which built it; and the sequencer's producer to M5.9, which placed it. Of the
-five operations that were left `Undecided`, *choosing where the frame goes* is not one any more —
-ADR-0324 gives `RouteFrame` a destination from a closed list and an on/off, and M5.6 closed on it;
-*the camera* is M5.5's; *walking the edit history* is M5.3's, is built, and left the no-home section;
-and *moving a boundary* and *"edit the file instead"* carry no `plan` badge in either column and are
-in no sub-milestone. The arena's insert and remove is above.
-
-#### M5.1 — Program — **closed**
-
-The picture is one of the outputs — the set `Operation::RouteFrame` has to name, and it can never
-name a cell — and the four cells are monitors welded to the letters under them, each drawing its own
-slot's material whatever that slot's residency
-([ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md)).
-[history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-03**: no `plan` badge in the panel or key column of this bay's rows on
-[every operation](manual/operations.html). It closed one drawing short of the mock — the risk badge,
-undrawn because nothing could then estimate what a slot costs — which did not block the exit and
-which M5.14 exists to name and has since drawn.
-
-What M5.1 left owed is rescheduled: the rejected build's cell — black, or the sentence saying what
-went wrong — is
-[ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)'s
-and is stated under *Where to start*, below.
-
-#### M5.2 — Mixer — **closed**
-
-The mixer draws the deck: a trim, a fader, a blend button, a meter and a mask mini per deck the
-session has, no strip at all for a track nothing fills
-([ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md)), and under
-them a transition row that sets the wipe's shape, quantum and length and emits the wipe. A fade has
-no control of its own, because the fader is already the control for moving an opacity — *Nothing on
-a strip starts a fade* on [the console page](manual/console.html). [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-05**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). It closed short of the key column on purpose.
-
-What M5.2 left owed is rescheduled: **the key column, on four rows — *Fade a deck out or in*,
-*Crossfade to the next deck*, *Wipe the next deck in* and *Choose the wipe shape, the quantum, the
-length* — is M5.13's**, because
-[ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)
-addresses a key press to the bay that has focus: what those rows want is one pass over the keyboard
-and not a letter apiece, the maintainer has decided the global shortcuts get that pass together, and
-the letters those badges used to print are not the debt. **And *Set a deck's mask position* is under
-*Mx — TODO*** rather than here: it carries no `plan` badge in either column, so no exit condition in
-this file reads it, and a debt only a closed milestone names is the failure this file has now been
-caught by twice.
-
-#### M5.3 — Library — **closed**
-
-The bay lists what the store holds, most recent first, because the listing is the operation's and
-not the surface's
-([ADR-0263](adr/0263-the-library-bay-lists-most-recent-first-because-the-listing-is-the-operations-and-not-the-surfaces.md)),
-and its filter fields step through what the store already holds rather than taking letters
-([ADR-0262](adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md)).
-A folder is chosen by dropping one on the **window** rather than on a bay
-([ADR-0275](adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows-rather-than-a-bays.md));
-a reading is one question and only the opening asks it
-([ADR-0264](adr/0264-a-reading-is-one-question-and-only-the-opening-asks-it.md)), reached by a
-`params` pill that is a toggle, over a list that scrolls
-([ADR-0312](adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)); `load` is a
-button and a pulldown, and the deck it names is not the selection
-([ADR-0305](adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md));
-a carried Set names its deck at the release and the panel refuses no drop
-([ADR-0265](adr/0265-a-carried-set-names-its-deck-at-the-release-and-the-panel-refuses-no-drop.md),
-[ADR-0273](adr/0273-the-carry-lands-on-two-sets-of-rectangles-and-wears-a-face.md)); a row's own
-menu loads onto a named deck and sends a Set through the system's own save dialog
-([ADR-0311](adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md),
-which supersedes ADR-0267 and leaves the `.path` row the folder scope's readout rather than an
-outbox); and a scope chip walks one Set's edit history, a row landing that version on a node
-([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)).
-[history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). *Send a Set to somebody, and take one in* was the last
-row still reading `library`, and moved with ADR-0311. **The exit rule's one defect is unchanged**:
-*Keep what a deck is playing* is one of this bay's rows by the page's grouping and is the
-Inspector's control, which is said in [history/m5.md](history/m5.md) and in M5.5.
-
-What M5.3 left owed is rescheduled: **the keyboard's routes to the controls this bay grew — the
-split `load` button and its pulldown, a row's own menu, the landing on a `history` row, and a key
-that moves the scroll window — are M5.13's**, which is what each of those records says of its own;
-**the structured reading in `karakuri-environment` that both the tool and the panel render is
-M5.10's**, where the model-facing surface is, this bay's stake in it having closed the day *Read
-what one Set holds and declares* went `has`; and **whether `l` should follow the pulldown's deck
-rather than the selection — ADR-0305's one assumption, left for the maintainer — together with
-thumbnails and live previews in the Set browser and M4's question of what a thumbnail is *of*, and
-what the filter fields should be, are under *Mx — TODO***, none of them being read by any exit
-condition in this file.
-
-#### M5.4 — Transport — **closed**
-
-The transport row is the grid and what drives it. The latency offset is a track rather than the
-capsule the mock had, because a press has to name a value
-([ADR-0277](adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)); the
-tap and the octave leave `App::performed` before `written` is reached, which is what lets one press
-and one key be one route
-([ADR-0278](adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md));
-the free-run tempo is the figure itself, and what a press is trusted with is a band round the
-number under it — a guard on a hand, in the hit test and nowhere an estimate travels
-([ADR-0291](adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)); `rec`
-is a record/stop toggle and each start takes a fresh stamp
-([ADR-0289](adr/0289-the-rec-pill-is-a-record-stop-toggle-and-each-start-takes-a-fresh-stamp.md));
-and the health capsule is a readout of what the last write did, declaring nothing because a save is
-not a rate ([ADR-0283](adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-A row the page marks `read` may have its built badge met by a **drawing** this crate can name and
-find rather than by an emission
-([ADR-0288](adr/0288-a-read-rows-built-badge-is-met-by-an-emission-or-by-a-drawing-this-file-can-find.md)),
-which is what let the readout in this row be counted at all. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-08**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). Every row of this bay reads `has`, including the two the
-page files under other groups — *Find out what a write did* and *Record the session*.
-
-What M5.4 left owed is rescheduled, and all of it is under *Mx — TODO*: **`written(TapBeat)` and
-`written(ScaleGrid)` answering `Owed(NotSettled)`**, which is a gap in `karakuri-operation-record`
-rather than in the panel and closes by saying what a `Current` carries about a beat lock; **which
-number the frame readout carries** — the period in place of the CPU figure, both side by side, or
-the tooltip's promise rewritten, a decision nobody has taken and a page change before it is code;
-and **the tooltip item**, which is not a drawing but a reading of this bay's own notes against what
-its tips now say.
-
-#### M5.5 — Inspector — **closed**
-
-The pane and the deck head over it, which is rule 05's *everything about what a deck **is***. A control
-that moves a field of the aim re-aims the slot and the rebuild is the write, which is why this bay
-needed no live setter and why two of its blockers were wrong in the same way
-([ADR-0314](adr/0314-a-control-that-moves-a-field-of-the-aim-re-aims-the-slot-and-the-rebuild-is-the-write.md));
-the built-in camera's three placement numbers are parameter rows, so the vocabulary lost an arm rather
-than gaining a payload
-([ADR-0318](adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md)); an attachment
-is a session record and taking a parameter back removes it, there being no suspended state to leave
-behind ([ADR-0319](adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md));
-the deck head steps a slot's capacity over the powers of two its geometries declare and re-salts it from
-the slot's own sequence, and `Property` loses the node address nothing filled
-([ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md)); and an input
-is wired on the node that declares it while the number at the left of a parameter row **is** the publish
-mark, which is what emptied *Rows the manual has not given a home*
-([ADR-0329](adr/0329-an-input-is-wired-on-the-node-that-declares-it-and-the-number-is-the-publish-mark.md)).
-[history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-10**: no `plan` badge in the panel column of this bay's **ten** rows on
-[every operation](manual/operations.html), a `gap` meeting it as a `has` does. Every one of the ten
-reads `has`. The four `plan` panel badges left on the page on the day of the close were M5.15's, and M5.15 closed on them the same day, so the panel column carries none.
-
-What M5.5 left owed is rescheduled, and all of it is under *Mx — TODO*: **a narrowing survives no replay
-and no keep**, which is a gap in the record format rather than a decision and the one row where a keep
-does not close it (ADR-0329); **a renderer's declared input is unreachable from the panel**, the folded
-`L4` head standing over several nodes taking no `uses` line for the reason it takes no authority chip
-(ADR-0329, alternative **e**); **the candidate list is inferred from the layer the input already
-reaches**, so a kind the deck reaches by no edge offers nothing; **the aim carries one capacity per
-slot**, so a per-geometry capacity is unaskable from any surface, with ADR-0328's revival condition —
-a pairing Set whose two geometries want two capacities — written into the record; and **the pane's
-scroll and the deck head's two build chips dropping before the row**, which are one reading arriving
-twice and sit under the existing entry that a region's declared minimum is a reading of its content and
-a bay that grows a control invalidates it. The scroll's other half, the keyboard's route to it, is
-**M5.13's** rather than owed here. **Every row of this bay but *Write a parameter* reads nothing in the MIDI
-column, and that is settled rather than owed**: a map line names a slot number, a word from a closed
-list or a range, and cannot say a node address.
-
-#### M5.6 — Outputs — **closed**
-
-An output is a named destination with a size and an on/off, and the three are answered in three
-different places
-([ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md)):
-`Operation::RouteFrame` names one with a word from a closed list and never a label, because a
-projector's label carries the display it is on; what it writes is nothing, on a fifth `Silent`
-variant saying that publishing is not the performance. The frame is composited at the largest
-enabled output's size and the program view's is the rectangle the Program bay gives the picture, so
-a divider drag moves what the frame is rendered at — a derivation settled by measuring the resize
-rather than by arguing it
-([ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)),
-which leaves `CANVAS` the smaller job of the shape every output is fitted to and the size a run
-starts at. The projector window is the second `Sink`
-[ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md) said was
-owed, opened and dropped by the route operation itself. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). *Choose where the frame goes* was the one row that
-carried it, and ADR-0324 and ADR-0325 between them moved it.
-
-What M5.6 left owed is rescheduled. **The `+ add output` chip is the arena's insert and is already
-under *What no sub-milestone owns***, as the arena half of *Adding or removing a node*: the panel
-cannot grow a bay's body while it runs, and what the chip owed was the note, which is written.
-**The plugin sinks are [`docs/plugins.md`](plugins.md)'s** — `Output::Plugin(n)` exists, nothing
-constructs one, and that page already says of itself that the distribution machinery is a design
-rather than a description; the chips say so rather than the row omitting them. **Fullscreen on a
-chosen display**, **[`docs/manual.md`](manual.md)'s *The canvas is fixed for a run*, now false for
-the panel and still true for `karakuri-cli`'s `--canvas`**, and **the estimate a slot drops on every
-frame of a drag**, which nothing sets today and which whoever wires the estimate meets, are under
-*Mx — TODO*. The MCP route is M5.10's column and MIDI reads `gap` on the page — no chip carries a
-target — so neither is a debt this bay leaves.
-
-#### M5.7 — Staging — **closed**
-
-A staging row is a node a build changed rather than a slot, so a save touching two files draws a row
-each with the build's one verdict repeated on them; the row itself is the keep, and a `back` capsule
-at its end is the put-back
-([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). A source can say
-it refused, which is what let the lane draw the disagreement an operator most wants to see instead of
-printing it to stderr
-([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)), and an over-budget
-candidate now stays in the slot with the slot stopping rather than anything being put back
-([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)) —
-so the disagreement between the picture and the disk that this lane was built to show cannot arise,
-and what the lane says instead is which slot stopped and why. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). Both rows read `has`, and **the exit rule's second defect
-closed with them**: *Put a node's previous version back* names two controls in one badge — this
-lane's capsule and the Library bay's `history` row — which is the shape M5.3 still carries in the
-other direction.
-
-What M5.7 left owed is rescheduled, and it is under *Mx — TODO*: **the watcher's other two dead ends
-go unreported** — a file that will not read and a stack that will not sort into a Set both still
-print and return nothing, ADR-0310 having declined to give either a word because `did not compile`
-is the wrong one; and **the lane omits `origin`, the timestamp and the head's count**, the first
-having no producer anywhere and the second waiting on the spelling the Library bay's own time column
-waits on. **ADR-0310's other consequence — a refusal arriving while a candidate is on trial waits
-for the verdict — is moot rather than owed**: ADR-0313 deleted the trial and states that the
-sentence is false in both halves, and a refusal reaches the lane on the first frame boundary after
-the worker sends it.
-
-#### M5.8 — Master — **closed**
-
-The chain this bay closed on was **three fixed passes in the engine** — feedback, then bloom, then
-rgb shift, between the composite's write and the present pass, each with parameters the vocabulary
-names and none of them a `kind` a `.kir` can declare — and *Feedback* read **either cut** of the
-previous frame, `mix` as the
-mixer wrote it or this chain's own `exit`, chosen by a parameter of the pass with only the chosen cut
-retained
-([ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md), which
-annotates `docs/ir-spec.md`'s paragraph on why `L5` is absent rather than overturning it). The `out`
-fader at the chain's entry and the tone mapper's `exposure` at its far end stay two levels that
-multiply in different places, which is why the far end is a control in the transport row and not here
-([ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md)). An
-amount of zero recorded no pass at all, so with all three at zero the frame was bit for bit the
-frame this program drew before the chain existed. **M5.16 replaced that chain on 2026-09-13** with an
-ordered list of `kind L5` slots and retired the three rows this exit was met on; the `out` fader, the
-`exposure` at the far end and the cut are unchanged. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). All four rows read `has` — *Master out* since it landed
-with ADR-0224, and *Feedback*, *Bloom* and *RGB shift* since ADR-0317 flipped the three together.
-
-What M5.8 left owed is rescheduled, and none of it is a control this bay has not built. **A writable
-`L5`, and the operator-written frame effects it would buy, was deferred rather than refused, and it
-has since been built**: ADR-0317 made the case — a language change bought to draw three rows the
-console already draws — and [`docs/ir-spec.md`](ir-spec.md) stated what would revive it, somebody
-writing the compositing down, which happened on 2026-09-10 and which M5.16 closed on 2026-09-13. The
-three passes are procedures under `examples/` now, and the vocabulary and the record did move: three
-rows and three operations retired for three of each. **The bay's `+ add` left the arena's gap list
-on 2026-09-13**, for the Sequencer's reason rather than a new one — a chain slot is a row from the
-chain and not a region — so it is no longer under *What no sub-milestone owns*;
-[the console page](manual/console.html) calls that gap one drawn wherever a control would add a
-region, which is now the Outputs row's `+ add output`, the library's `+` on the scope list and the
-inspector's `2 up`. What that row owed was the note, and the note is written. **What a master chain
-saved under a name looks like — ADR-0227's library tier, which ADR-0317 leaves untouched — is under
-*Mx — TODO***, having no row on the operations page and so never having been in this exit. **The
-*decisions nobody has taken* entry on the feedback cut has left that list by being decided**, which
-was that section's own pass and is done. And **two things this item carried as owed are delivered
-rather than rescheduled**: the CLI's `MasterOut` and `MasterChain` replay arms, which landed with
-ADR-0317 and closed a stream this program wrote and could not reproduce, and the bay's tooltip item,
-which `71419c2` found delivered rather than owed and ADR-0317's pass rewrote again to say what a
-press does.
-
-#### M5.9 — Sequencer — **closed**
-
-A pattern is one bar, a mode and a list of lanes — sixteen slots in both modes, a cell a bit, the
-two levels the lane's, and four fixed banks that are not saved names
-([ADR-0320](adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md));
-a lane's target is an operation of the vocabulary with its value elided, which is what lets a fader
-lane and a parameter lane sit in the same list
-([ADR-0321](adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md)); the producer is the
-render thread, polled against `beats` like a transition one row finer, live only, emitting through
-the same `operate` a hand does, so its writes are its record
-([ADR-0322](adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md));
-a scheduled move is refused on a control a lane holds, and the refusal names the lane
-([ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md)); the `+ lane` card
-lists one deck's published keys and the bank pills are the banks themselves, so there is no `+`
-([ADR-0327](adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md));
-and the grid head is one pill because the bar is one bar and the count follows the mode
-([ADR-0306](adr/0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md)).
-[history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-09**: no `plan` badge in the panel column of this bay's rows on
-[every operation](manual/operations.html). Two slices the same day moved every row of the bay — the
-grid, the lane label and the mode pill first, then the `+ lane` card and the bank pills — from a bay
-that drew nothing but its head.
-
-What M5.9 left owed is rescheduled. **ADR-0323's refusal is still uncalled** — the lookup is built
-and the caller is not, so a live lane on a deck's fader kills a fade onto that deck, on any deck the
-mixer draws — and it is an engine item rather than a badge, under *Mx — TODO*. **A channel fader
-does not say who is holding it**, which rule 02 asks for and which no row carries, and **removing a
-lane** has no control, no row and no operation: both are under *Mx — TODO*, with the console page's
-purposeful notes standing until they are drawn. **What a pattern saved under a name looks like —
-ADR-0227's pattern tier — is under *Mx — TODO* beside the master chain's half of the same record**,
-neither having a row on [every operation](manual/operations.html). And **the `Param` lane arm
-reaches only the decks the Inspector holds a pane for**, so a target deck no pane is showing offers
-its fader and no parameters, which is under *Mx — TODO* as well. The bay's five MCP badges are `gap`
-rather than debt on ADR-0315's sentence; what reopens them is a model handed a view of this console,
-which that record leaves to the day it happens and which is **M6 — Autonomy**'s.
-
-#### M5.10 — MCP — **closed**
-
-The MCP column of [every operation](manual/operations.html), which the bays leave out. An eighth tool,
-`operate`, takes an operation of the vocabulary by its own heading, is audited by `gate` and is
-performed on the frame the panel performs a press on
-([ADR-0334](adr/0334-mcp-names-an-operation-by-the-vocabularys-own-name-and-the-frame-performs-it.md)),
-and what closed the column after it was asking each row still `plan` what it was waiting for rather
-than writing performers for it. **A route that answers is a built route even where the answer is no**,
-and a send that ends in the system's own save dialog is `gap`
-([ADR-0341](adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)) — the
-performers were already sitting in the window's own press arm and the drain calls them where the
-pointer's button-up arm does. **A walk names the Set it is a walk of** and reaches a model through a
-ninth tool of its own, because a directory walk is what only the server can do, while the two rows
-beside it are `gap` with a sentence each
-([ADR-0342](adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md)). The server
-runs in the instrument — `karakuri --mcp PORT` against the panel's own `Opening` — and `mcp.rs`'s
-classification has lost both of the groups a `plan` badge here ever meant, each variant deleted on the
-day it emptied. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-10**: no `plan` badge in the MCP column of
-[every operation](manual/operations.html). `grep -c 'rt plan">MCP' docs/manual/operations.html`
-returns `0`, which is ADR-0342's own reading on the day it landed the last three rows. Every other row
-reads `has` or `gap`, and a `gap` meets this exit as it meets a bay's: since ADR-0341 it says a route
-is refused with a reason and nothing is owed, where `plan` says a route is coming — which is why the
-rows nobody intends to build one for are `gap` rather than waiting.
-
-What M5.10 left owed is rescheduled, and all of it is under *Mx — TODO*: **the walk's row does not
-carry the page's `read` mark**, which ADR-0342's alternative (e) left open rather than refusing —
-`WalkHistory` is `Silent(Question)` and whether ADR-0281's mark tracks that arm is a decision about
-the manual, with nothing on the page false today; **listing procedures over MCP**, which arrived as
-M5.15's and is *List what the store holds*' to grow rather than this column's debt, *Filter the library
-by kind* reading `gap` because a model has no window; and **a press on a kind chip narrows what the
-console draws and does not re-read the listing the narrowing is applied to**, which ADR-0342 recorded
-rather than fixed — having fixed the same defect on the `history` chip in that pass — and gave to
-*that row's own pass*, a row of M5.15, which closed the same day and left it with no open
-sub-milestone over it.
-
-What it does not owe, each named so it is met as a decision rather than as a surprise. **The CLI's
-`--mcp` drain refusing what it cannot perform is done**, in ADR-0341's annotation of 2026-09-10:
-`karakuri-cli --mcp` serves the same tools behind the same audit with none of the panel's performers
-and answered `Ok` regardless, so a model was told an operation was performed when nothing happened; it
-refuses now in one sentence naming the operation, saying that program has no control for it and naming
-the instrument as the surface that answers it, decided per call off `written` rather than from a list
-either side keeps. **No column reads that**, a badge here being a claim about the frame the panel
-drains. **Two payloads stay `Undecided` by design** — *Edit the file instead*, which keeps one as the
-row's marker for `--watch`, and *Move a boundary*, which keeps one because a key press cannot mean a
-viewport pixel (ADR-0259) — and **the place each is written is the vocabulary's own docs**, on the
-payload itself in `crates/karakuri-operation/`, where ADR-0342 put the sentence saying what it is;
-settling either would move no badge and no exit reads them. **The audit's surface is open on
-[the console page](manual/console.html)** under *What a model is refused, and where a class opens* —
-whether a press covers a class or one operation of it, whether an opening outlives a restart, and
-whether an open class shuts itself — which is the specification this milestone is measured against
-rather than a list kept here; the four class pills are drawn, pressed and tipped.
-
-#### M5.11 — Hover tooltips — **closed**
-
-Every compact control explains itself on hover. **The console paints its own hover layer and the tips
-are the manual's own words**
-([ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)),
-which is the decision this sub-milestone was blocked on from the day it was written: `input::PROBES`
-already answers what is under the pointer and ADR-0156's seam is that the console paints and the
-toolkit receives a rectangle, so the `egui`-widget alternative is rejected there with what would
-revive it written down. `docs/manual/console.html` is embedded and parsed at start-up, so the page
-stays the only copy of a tip and what is in Rust is a **citation** per control; the table is one entry
-per row of `input::PROBES`, so a control added to that register arrives here as a compile error. No
-operation on [every operation](manual/operations.html) is a tooltip, so this sub-milestone closed no
-badge and its exit was never a grep. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-10**: *every compact control explains itself on hover*. Every control the mock
-tips and this console draws resolves to its own tip, held by the three checks in
-`crates/karakuri-console/tests/hover.rs` rather than by a reading of the page — the array is
-`PROBES.len()` long, so a row that goes untipped is a compile error; a row carries one entry per
-control it claims unless `UNEVEN` names it with the reason and with the count it does carry; and every
-citation is resolved against the page, so a tip rewritten out of it fails there naming the control.
-**The one exception was the Master bay's effect rows, and it was M5.16's pass 2b** rather than this
-sub-milestone's: [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
-made the master chain an ordered list of kind L5 procedures, so a citation per row of the chain the
-mock drew would have been written against a bay about to be rebuilt — and those rows are the ones
-M5.16 retired from the page. `UNEVEN` carried the exception with that owner named, so it was an
-excused row rather than a silent one. **M5.16 closed on 2026-09-13** and the chain's rows are the
-bay's own now.
-
-What M5.11 left owed is rescheduled. **The Master bay's effect rows were M5.16's**, above, and were
-the one thing this exit handed on; that sub-milestone closed on 2026-09-13. Under *Mx — TODO*: **the hover layer does not know that a card is
-down** — `claim`'s rule 2 gives every press to whichever card is open and this layer is handed
-`claim`'s answer rather than re-deriving its condition, so a pointer resting over a control an open
-card covers still resolves to that control, and closing it is a seam in `input` that answers *is a
-card down* for both surfaces.
-
-What it does not owe. **The rows the mock is silent about carry no tip and that is settled** — a pane
-head's name, a bay head's grip, the Library bay's list and the Staging lane's `back` capsules, each
-with ADR-0330's own reason: the page tips the pane head's count and its `keep` capsule and not the
-name between them, folding is explained in the page's prose rather than on `.grip`, what the page tips
-in the Library bay is the rows of a reading and the items of a row's menu rather than the listing row
-that probe claims, and a `back` capsule is tipped through the candidate row it sits in. **An empty
-tooltip is not a defect to fill in**, and the test holds the list at exactly those rows, so one more
-empty row fails rather than passing quietly. **Rule 03's second clause is paid in the mock's tense and
-that is settled too**: a tip quoted from the page says what a control is and what a click will do
-exactly, and says what state it is in in the state the mock is drawn in, and reading the live value
-would mean composing the sentence rather than quoting it — what that takes is the page marking its
-substitutable spans, a change to the manual which ADR-0330 wrote down as the revival condition rather
-than as work owed. The one value a tip does read live is the `⊕ MIDI:` line, which
-[ADR-0336](adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md) put there because
-the page's own assignments are the mock's and no operator's. **A control the page tips that no row of
-`input::PROBES` claims is not caught**, which is that register's documented blind spot rather than a
-second one.
-
-#### M5.12 — MIDI — **closed**
-
-The MIDI column of [every operation](manual/operations.html), which the bays leave out. The panel opens
-the first surface there is at start-up — no flag — and resolves a map in two tiers, `<store>/maps/default.map`
-then the `examples/surface.map` that ships, draining what arrives into `App::performed` beside the MCP
-drain, so a mapped knob writes the record a fader writes
-([ADR-0335](adr/0335-the-panel-opens-the-first-surface-there-is-and-the-map-is-two-tiers-under-the-store.md));
-and a learn is a **map edit** rather than an operation — its operand is the pointer, a permission an
-actor can grant itself is not one, and a record of a learn would put the room's wiring in the session
-stream — binding a deck and a **position** in the published interface rather than a parameter by name,
-with the tip's `⊕ MIDI:` line read off the live map instead of the page's own words
-([ADR-0336](adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)). That closed what
-ADR-0220 left open for this column: MIDI measures the instrument rather than `karakuri-cli` alone, and
-no badge moved for it, because the grammar is one file both programs read.
-[history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-10**: no `plan` badge in the MIDI column of
-[every operation](manual/operations.html). `grep -c 'rt plan">MIDI' docs/manual/operations.html` returns
-`0`. *Write a parameter* was the one row and now reads `cc → param N M`; every other row reads `has` or
-`gap`, and a `gap` here says a map line cannot name that operation rather than that one is waited for.
-
-What M5.12 left owed. **MIDI *out* and 14-bit control changes were the third MIDI phase's and landed
-on 2026-09-10** — every mapped control written back to the surface on the frame the deck changes it, so
-LEDs and motorised faders follow whichever of the four things moved the fader; and `cc14 <msb> <lsb>`,
-so a fader is 16384 positions, with the coarse half alone still reaching both ends exactly
-([ADR-0337](adr/0337-a-surface-is-written-to-as-well-and-a-fader-is-sixteen-thousand-positions.md)).
-They were M2's, they are the surface itself rather than a route into it, and they carry no row — a
-column measures what a map line can *name*, and neither of these changes that. **14-bit learn is owed**:
-inside one drain two faders 32 apart are indistinguishable from one pair, so `learn` writes a `cc` line
-and an operator changes the one word. **Reaching a map while running** is under
-*Mx — TODO*: the `map` pill is a **readout** of which file is loaded and has no chevron for that reason,
-and what is missing is the menu under it — *save · load · new*, and a `Surface::reload` beside
-`Surface::first` — which the arrangement pill already is over a different file (ADR-0221). Learning
-never waited on it: a learned line goes into `<store>/maps/default.map` and is loaded from there on the
-next start. **A learn over a control with no position is refused and is not owed**: a position counts
-from one and is the number the Inspector draws, the only place a position is visible, so a control off
-the published interface has none and `param N 0` is refused with that sentence (ADR-0336).
-
-#### M5.13 — The keyboard — **closed**
-
-A key press is addressed to the bay that has focus, the four keys that act inside a bay are the same
-four everywhere because they are rules about kinds of thing, and a global letter survives only where
-the operation it names has no operand
-([ADR-0259](adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md)).
-The key column is spelled two ways and the page's head says which is which
-([ADR-0331](adr/0331-the-key-column-is-spelled-two-ways-and-a-built-badge-keeps-its-bare-letter.md));
-focus is a pointer the console owns and `Tab` walks it, `esc` going up one level and no longer
-quitting
-([ADR-0332](adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md));
-the console resolves the address and the window loop names the operation
-([ADR-0333](adr/0333-the-console-resolves-the-address-and-the-window-loop-names-the-operation.md));
-the grammar reaches all nine bays and `space` on a bay is the fold
-([ADR-0343](adr/0343-the-grammar-reaches-all-nine-bays-and-space-on-a-bay-is-the-fold.md)); three
-cards are rungs of the address, and the tempo figure is a track the arrows step by a beat a minute
-([ADR-0350](adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md),
-[ADR-0351](adr/0351-the-lane-chooser-is-a-rung-of-the-address.md)). The last two rows were a decision
-rather than a slice: the panel and the keyboard are real-time routes, a fade from either is the
-opacity fader moved, and no control that asks for a scheduled fade or crossfade is drawn on either,
-so both rows read `gap` in the panel column and in the key column
-([ADR-0353](adr/0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md)).
-The program binds eighteen keys:
-`awk '/^pub\(crate\) const KEYS/,/^\];/' crates/karakuri/src/readout/mod.rs | grep -cE '^    \('`
-returns 18 — `tab`, `esc`, the seven keys of the grammar (a digit, four arrows, `space` and `enter`),
-the rub-out, and eight letters. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-14**: no `plan` badge in the key column of
-[every operation](manual/operations.html). `grep -c 'rt plan">key' docs/manual/operations.html`
-returns 0, against 2 on 2026-09-13, 7 on 2026-09-10 and 27 on 2026-09-09. The column reads 46 `has` /
-0 `plan` / 22 `gap`, each count its own grep over `rt has">key`, `rt plan">key` and `rt gap">key`.
-The two badges that closed it crossed from `plan` to `gap`, so nothing about what is built changed on
-the day of the close.
-
-What M5.13 left owed is rescheduled, and all of it is under *Mx — TODO*: **the eight free letters**
-`y`, `x`, `c`, `t`, `-`, `=`, the backtick and `a`, which is what a global key could still bind and
-which no badge reserves; **`z` as a bulk act**, whose recorded reason — a region a pointer cannot
-reach — is gone now that focus can name a folded bay; **`map.rs` moving to `karakuri-map`**, a global
-key being a complete line exactly as a `cc` is; **the axis on the page**, `SPELLED` resolving both
-arrow pairs to *the arrows* so a badge naming the wrong pair passes; **`focus::Addressed`'s five
-path-shaped variants and the `walk_card` / `walk_chooser` duplication**, recorded as the reviewer's
-on 2026-09-13 and not taken; **the *console's own shape* stub's `esc` still quits**, which stopped
-being true on 2026-09-09; and **the two Mixer rows' MIDI badges**, which stay `gap` until a map line
-names a helper that carries time.
-
-#### Rows the manual has not given a home
-
-**This list is empty as of 2026-09-09**, and the two rows that were on it are the Inspector's
-([ADR-0329](adr/0329-an-input-is-wired-on-the-node-that-declares-it-and-the-number-is-the-publish-mark.md)).
-It is kept because the next row the manual has not placed is the next entry, and because how these
-two left it is the reading the next one gets.
-
-**They were homeless because nobody had asked where they went, not because it was hard.** The
-section said *"the manual has to name a home before they can be scheduled"*, which is true and was
-being read as *the manual will have to invent one*. It did not: rule 05 puts **what a deck is** in
-the Inspector, and both of these are what a deck is. *Wire a procedure's input to a node* is a
-node's own declared input, so the home is the node group, on a line under its head — `uses far`,
-with a capsule naming the node that fills it and ADR-0305's card under that. *Narrow the published
-interface* is a per-parameter decision that the parameter row already draws: the row's leftmost cell
-is the control's **position** in the interface, which is what a MIDI knob counts, so the number
-being there or not **is** whether it is published, and the cell is the mark. Neither needed a
-control invented; both needed the page read against the mock it already had.
-
-**The second blocker on *Narrow the published interface* dissolved the same way.** It read *"it is
-upstream of the Inspector, and until something publishes, every control that bay will ever draw is a
-wildcard"* — true of the *default* interface and not a blocker on the control, because narrowing is
-what turns the default into an authored one. The bay is not downstream of publishing; it is where
-publishing is chosen ([ADR-0100](adr/0100-a-published-interface-is-a-choice-of-attention.md)), which
-is why the Inspector now draws the rows the interface leaves out rather than only the ones it
-carries: a choice nobody can see is one nobody can unmake.
-
-**What each cost, said plainly.** Wiring cost nothing in the engine: an unbound declared input is
-refused where the Set is built (ADR-0152), so a *running* slot has an edge for every input it
-declares, and the run's edge list filtered to the nodes a Set holds is the list of `uses` lines
-exactly. Narrowing cost one reader — `Set::declared_interface`, which is the default interface
-whether or not one is authored, and is what the mark is chosen *from*. Both re-aim the slot, which
-is the fold's mechanism a third and fourth time (ADR-0314, ADR-0328). **Neither writes a session
-record**, and the two silences differ: an edge is a Set file's record with no slot, so a keep carries
-it; a published interface has no record in this format at all, so a narrowing survives neither a
-replay nor a keep. That is a gap on both manual pages rather than a decision.
-
-**A third was here and it has been built.** *Walk the edit history* left this list on the reading
-that it is a listing and a load rather than undo, became M5.3's, and landed on 2026-09-08 as a fifth
-scope chip in the Library bay with a landing on its rows
-([ADR-0308](adr/0308-the-library-bays-fifth-chip-walks-one-sets-history-and-a-row-lands-that-version-on-a-node.md)).
-The half-finished page edit this section used to describe — the row in *The library*'s group with
-its panel cell and tip still unmoved — is finished: the badge reads `library history chip`.
-
-**This list held three, and the third left it by being read again rather than by being decided.**
-*Walk the edit history* was here because the operations page calls the surface over those files
-*undo* and *a later milestone*, and undo is nobody's bay. It is not undo. A Set's history is a list
-of the versions it has had, walking it is a listing, and landing on one is a load — all three of
-which the Library bay already does — so the row became M5.3's. **What it needed was a lister**:
-`karakuri_environment::history::list`. **What it needed next was a history to read, and a panel run
-writes one** — one `Snapshots` for the run, seeded before the window and handed to every slot's
-watcher, with the Set a version is filed under moved by a library load. That was M5.10's, and
-neither the Library bay's task 2 — now in [history/m5.md](history/m5.md), that sub-milestone having
-closed — nor this paragraph said the walk depended on it. **A blocker that names a milestone rather
-than a mechanism is a blocker nobody can check**: this one survived two readings of
-this file before the question *what actually stops it* was asked of it, and naming the mechanism is
-what got it built. **The page then named the control and the bay drew it**, which is the whole of
-the distance between *homeless* and *built* and took three records to cross.
-
-#### The console's own shape — **closed**
-
-Four rows have a panel home that is not a bay — *Fold a bay away* at the bay head, *Fold a pane
-away* at the pane edge, *Size the window* at a drag and *Quit* at the window's own close — so no
-M5.x above owns them and ADR-0226 does not close without them. A pane folds by dragging its boundary
-out and comes back by dragging it in, which is why that row needed no probe, no claim and no press
-arm
-([ADR-0300](adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)),
-while a bay's grip was painted and never hit-tested and now is. A model has no window, so the
-surface rows' MCP badges are `gap` rather than debt, *Quit*'s route is the window's own close with no
-`close` control drawn on the panel, and `a` is bound to nothing so *Size the window*'s key badge is
-`gap` too
-([ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)). The
-window declares a minimum, the declared minima summed along each axis
-([ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)),
-with the centre's term set by what a pane needs before its fader has any width
-([ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)).
-[history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-09**: ADR-0226's grep read over this section's four rows — no `plan` badge in
-the panel column of *Fold a bay away*, *Fold a pane away*, *Size the window* and *Quit* on
-[every operation](manual/operations.html). The first two read `has` at the bay head and the pane
-edge; the last two read `gap`, which is finished because the page has already said the panel cannot
-reach them. ***Size the window* was met by M5.6 rather than by this section**: a window drag sets an
-output's size (ADR-0325), and the fifth cell carries `window drag` the way *Quit*'s carries `window
-close`.
-
-What this section left owed is rescheduled. **`esc` still quits, and what a global letter is under
-ADR-0259's grammar is M5.13's** — that row's key badge reads `has` and stays there until the one
-pass over the keyboard takes it. **The window minimum is a measurement a bay growing a control
-invalidates**: a region's declared minimum is a reading of its content, and `centre`'s first number
-was a CSS track rather than a reading, which is the warning; it is under *Mx — TODO*. **Three of the
-seven headed regions carry no grip**, so the mixer, the staging lane and the sequencer fold from the
-keyboard alone, and whether that is the exit met or a page that has to change is not this file's to
-say. ***Move a boundary*'s MCP badge stays `plan`**, because a row filed under `Owed(Undecided)` is
-not in the arm ADR-0315 took the twelve off, and it moves the day somebody settles the payload.
-
-#### M5.14 — The frame's cost — **closed**
-
-A renderer's floor is bounded from its declared ranges or refused
-([ADR-0285](adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md)), and a
-rung may sit under the floor because what it hides is bounded and paid for
-([ADR-0293](adr/0293-a-rung-may-sit-under-the-floor-because-what-it-hides-is-bounded-and-paid.md));
-a frame's cost is the period, and a measurement names which resolution it is about
-([ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md));
-the governor budgets on the estimate where it answers and on the measurement where it does not,
-which changes admissions rather than only reports
-([ADR-0296](adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md));
-the badge is the band of the number the governor spent
-([ADR-0298](adr/0298-the-badge-is-the-band-of-the-number-the-governor-spent-and-how-it-was-taken-crosses-the-seam-undrawn.md));
-and a region declares when its picture next changes rather than that something is pending
-([ADR-0283](adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-It exists because the risk badge M5.1 left undrawn was hooked from *Performance discipline*, which
-closes nothing. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-08**, and it is deliberately not a badge grep: the panel draws a dot whose
-band a test can predict from a measurement, held from both sides — the engine's, which fails when
-the number stops arriving, and the console's, which predicts a band from a number. This
-sub-milestone has no column and no row of [every operation](manual/operations.html), which is why no
-exit of the shape M5.1 to M5.9 use could hold it; its precedent is M5.11.
-
-What M5.14 left owed is rescheduled, and all of it is under *Mx — TODO*: **item 3 —
-`committed_ms` as the deck's total and what `over_budget` then says**, now with
-[ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)'s
-`Report::deck_over_period` beside it as a second flag rather than as an answer to it; **what is left
-of item 6, caching a bay to a texture**, whose precondition and whose measurement are both built;
-and **the badge's estimated/measured mark**, which is what mark the page gains and is the
-maintainer's.
-
-#### M5.15 — Procedures in the library — **closed**
-
-A procedure is a row of the library, and one loaded over a layer makes a Set with no name
-([ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md)),
-from the maintainer's request of 2026-09-10. A procedure is a row in the two tiers every other kind
-of library data is in — what ships under the presets root, the operator's under
-`<store>/procedures/` — a badge at the right of a row's name says which layer it implements, and a
-row of kind chips says which kinds show, OR across the ones that are on. A load re-aims the slot with
-that one file replaced and every other field restated, which is ADR-0314's derivation and ADR-0228's
-path, so what the deck plays afterwards is a **derived Set with no name**: the strip reads
-`<base> + <kir>`, `keep` is what names it, and `Aim::set` stays the base id so the snapshot every
-compile takes stays alive. The Inspector keeps a node's source into the operator's tier, refusing a
-name already kept, and a pane is pointed at a deck by a pulldown per pane — which is what makes slots
-C and D reachable at all. It is the first sub-milestone whose rows sit in two bays and belong to
-neither. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-10**: no `plan` badge in the panel column of the rows it named on
-[every operation](manual/operations.html), which is M5.1 to M5.9's grep narrowed to a list of rows
-rather than to a bay.
-`awk '/<h2/{h=$0} /rt plan">panel/{print h" || "$0}' docs/manual/operations.html` prints nothing at
-all, under any `<h2>` — so the narrowed reading and the whole-page reading agree, and every row this
-sub-milestone named reads `has`. The key, MIDI and MCP columns were out of scope for the reason they
-are there, being M5.13's, M5.12's and M5.10's; **the MCP column moved anyway and on merit**. *Load a
-procedure over a layer* and *Keep a node's procedure* read `operate` rather than waiting on M5.10 —
-the load's performer was never missing, and the keep gained its arm on the frame the capsule did —
-while *Filter the library by kind* and *Point an Inspector pane at a deck* read `gap`, which says a
-model has no window ([ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md))
-rather than that a performer is owed.
-
-What M5.15 left owed is rescheduled, and all of it is under *Mx — TODO*: **a `params` press on a
-procedure row asks nothing**, the reading a `ReadSet` opens being a Set's and a procedure row's own
-card a reading nobody has drawn; **a preset Set row carries no badge**, which
-[P-0091](principles/0091-cost-is-known-before-it-is-paid.md) prices rather than refuses — the reading
-is known before it is paid and is off the frame path — so what stands is the badge the mock draws on
-a row the panel leaves bare; **listing procedures over MCP**, which is *List what the store holds*'
-to grow and a decision nobody has taken; **a procedure load landing on node 0 of its kind**, whose
-revival condition ADR-0338 writes down — the day the Inspector's node head grows a *replace this
-node* control is the day the payload gains a `NodeAt`; and **what a keep does to a derived deck's own
-identity**, since `keep` names the material and re-points nothing.
-
-What it does not owe, each named so it is met as a decision rather than as a surprise. **The
-`layer…` filter field is gone**, off the mock and off the panel together, with `hover::TIPS`' `layer
-field` entry deleted with it — `.lib-filters` draws `holds…` alone and `Field` is down to that one
-variant — so nothing is owed for it; *which Sets hold a node on this layer* lives in `list_sets` and
-`--list-sets`, and the panel's way to it is `holds…`, which asks by node name. **A bare `.kir` in a
-dropped folder is not a row**, because a folder row is a take and nothing takes a loose file in.
-**A `.kir` declaring no `kind` is listed rather than dropped**, badgeless, showing while no chip is
-on, with a load off it refused by name. **A node head with nothing to keep draws no capsule** — a
-head standing over several nodes, and the built-in camera, which has an authority and no source to
-write. **A node's keep and a pane's target have no key and can have no map line**, a map line naming
-a slot, a range or a word from a closed list and neither a node address nor a pane's name being one
-of the three. **The seventh kind chip and the `L5` badge word were M5.16's** and landed with it on
-2026-09-13, and **14-bit learn is M5.12's**.
-
-#### M5.16 — L5, the writable frame effect — **closed**
-
-`kind L5` is in the language and the master chain is an ordered list of L5 slots
-([ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)), which
-meets [ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)'s
-own revival condition rather than reversing it. *Feedback*, *Bloom* and *RGB shift* are off the page
-and *Set a chain effect's parameter*, *Add an effect to the master chain* and *Remove an effect from
-the master chain* are on it, a slot addressed by its position in the chain and a cut set through the
-parameter row
-([ADR-0348](adr/0348-a-chain-slots-cut-is-set-through-the-parameter-row.md)); `frame::compose` hands
-the chain the session clock and the governor reserves the chain ahead of every slot
-([ADR-0349](adr/0349-the-chain-is-the-frames-so-it-reads-the-session-clock-and-is-charged-against-the-frames-budget.md));
-and the Master bay's items are the out fader, one per slot of the running chain, then `+ add`, with
-a slot taken out by a `−` on its own row and a Library drop landing on the whole list
-([ADR-0352](adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
-The three shipped passes are `examples/feedback.kir`, `examples/bloom.kir` and
-`examples/rgb_shift.kir`, addressed by the hash of their bytes. It is a language change wearing a
-bay's surface, so it is neither a bay nor a column. [history/m5.md](history/m5.md).
-
-**Exit, met on 2026-09-13**: no `plan` badge in the panel column of the Master bay's rows on
-[every operation](manual/operations.html) — M5.8's own exit met a second time, because retiring that
-bay's three rows for three that start at `plan` is what turned that grep red.
-`grep -c 'rt plan">panel' docs/manual/operations.html` returns 0, so the Master bay's reading and the
-whole-page reading agree, and `panel_column.rs`'s `UNREACHABLE` is empty. The three rows read `has`
-in the key column as well, which is M5.13's column and not this exit's.
-
-What M5.16 left owed is rescheduled, and all of it is under *Mx — TODO*: **reordering the chain**,
-which has no operation, no control and no row, and which ADR-0340 states as a limit; **a Library
-drop that inserts at a position**, which is a payload change to `AddChainEffect` and is why the
-chain's list is one landing rectangle rather than one per slot; **a per-deck chain**, which
-[architecture.md](architecture.md) names as what the kind makes possible and which there is one of,
-at the master; **the library tier of a chain saved under a name**, which is ADR-0227's and sits in
-the entry it shares with a pattern saved under a name; **the tap-weight re-measurement
-`crates/karakuri-ir/src/cost.rs` names in its own comment**, the run that priced the chain
-over-predicting a cached tap by about four to one on this machine; and **`mix::apply_chain`
-compiling on the caller's thread**, which is what an add, a remove or a drop costs the thread that
-reached it.
-
----
+### M5 — Interface — closed 2026-09-14, [history/m5.md](history/m5.md)
 
 ### M6 — Autonomy
 
-**Goal:** the system prepares material without being asked and is safe to let run.
+The system prepares material without being asked and is safe to let run. It follows M5 because an
+autonomous system that cannot be observed and overridden is not usable on stage.
 
-**Adds**
+What it owes, all of it scheduled in M6:
 
-- Agents, and **what each one is attached to is still undecided.** This bullet asks for one per
-  *deck slot*; the older statement of the control plane called them *node agents*, and naming it
-  either way would settle the question by wording. **What is no longer part of that question is the authority**: it is set per node
-  ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)), and an
-  agent scoped to a deck slot can respect a per-node authority perfectly well — so this
-  granularity is a question about agents and not about rule 06 any more. Whatever it is
-  attached to, each owns a prompt,
-  watches designated inputs, selects from its prepared variants, and queues generation for
-  material it expects to need. Autonomous selection means choosing among what already exists,
-  never generating on a path the frame waits for
-- Director. Coherence across the **kinds** — whether the camera behaviour suits the
-  geometry, whether L4 is killing the shape L1 produced
-- Mix agent. Set-level arc, energy trajectory, monitoring for staleness
-- Authority model. Budget constraints ("camera changes at most once per four bars"),
-  and manual intervention instantly demoting to `Suggest` whichever agent was moving the
-  control — *which* agent that is depends on the undecided granularity above. **What the
-  demotion writes is decided**: `Operation::SetAuthority` on the node, and
-  [P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md) is
-  the rule it is the standing case of
-- Generation queue with priority and cost awareness
-- **`parent`, recorded from the first generated artifact**, or the genealogy has a hole at its root
-  that no later pass can fill. It is M6's because this is where something first generates a
-  procedure; an empty one written before then would fill the hole rather than leave it visible.
-  **The sharpest demand in this document**, and the one most likely to be missed by arriving late
-- A deck-slot variant pool, where alternatives differ at L1 or L2 and so carry state of their own,
-  and the unselected ones are primed off air. It is the machinery under *selects from its prepared
-  variants* above. The half that lives inside one Set is built
+- **Agents.** Each owns a prompt, watches designated inputs, selects among its prepared variants and
+  queues generation for material it expects to need. Selection chooses among what already exists and
+  never generates on a path the frame waits for. What an agent is attached to — a deck slot or a node
+  — is undecided and is under *The decisions nobody has taken*.
+- **Director.** Coherence across the kinds: whether the camera behaviour suits the geometry, whether
+  L4 is killing the shape L1 produced.
+- **Mix agent.** Set-level arc, energy trajectory, monitoring for staleness.
+- **Authority model.** Budget constraints such as *camera changes at most once per four bars*, and
+  manual intervention demoting to `Suggest` whichever agent was moving the control. The demotion
+  writes `Operation::SetAuthority` on the node, under
+  [P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
+- **Generation queue** with priority and cost awareness.
+- **`parent`, recorded from the first generated artifact.** M6 is where something first generates a
+  procedure, and an empty `parent` written before then fills the genealogy's root hole rather than
+  leaving it visible. From M4.
+- **A deck-slot variant pool**, where alternatives differ at L1 or L2 and so carry state of their
+  own, and the unselected ones are primed off air. The half that lives inside one Set is built.
+  From M4.
 
-**Demands on earlier work**
+Demands on earlier work: the record stream is the sole mutation path, so an agent is structurally
+incapable of doing anything a human could not do through the same interface; every procedure declares
+parameter ranges, from M1, because an agent with no declared ranges has nothing to search over.
 
-- The record stream must be the sole mutation path, so that an agent is structurally
-  incapable of doing anything a human could not do through the same interface
-- Parameter schemas with ranges on every procedure, from M1 — an agent with no declared
-  ranges has nothing to search over
-
-~8–10 weeks.
-
----
+Exit condition: none recorded. ADR-0226 gave M5 one; M6's is the maintainer's.
 
 ### M7 — Musical foresight
 
-**Goal:** transitions land on phrase boundaries because the system knew they were coming.
+Transitions land on phrase boundaries because the system knew they were coming. Audio analysis
+reports what already happened; track analysis is anticipatory, which is what makes generation-time
+latency compatible with live performance.
 
-Audio analysis is reactive; it reports what already happened. Track analysis is
-anticipatory. This is what makes generation-time latency compatible with live performance:
-knowing a chorus arrives in 32 bars is enough time to generate, compile, and prime.
+What it owes, all of it scheduled in M7:
 
-**Adds**
+- **rekordbox integration.** Beatgrid and transport position, current track identification, and
+  phrase structure (`PSSI`) from the local collection database.
+- **A lookahead timeline as a queryable structure**, not a signal — *the first Chorus within 16
+  bars*.
+- **Backward scheduling.** The transition point fixes priming start, which fixes generation start,
+  and *will not make it* becomes a decision to postpone rather than a dropped frame.
+- **Track metadata into visual direction.** Key to palette, colour tags, and a convention for writing
+  VJ hints in the rekordbox comment field.
+- **PRO DJ LINK via beat-link and crate-digger**, optionally, for club CDJs.
 
-- rekordbox integration. Beatgrid and transport position, current track identification,
-  and phrase structure (`PSSI`) from the local collection database
-- Lookahead timeline as a queryable structure, not a signal — "the first Chorus within 16
-  bars"
-- Backward scheduling. Transition point fixes priming start, which fixes generation start.
-  "Will not make it" becomes a decision to postpone rather than a dropped frame
-- Track metadata into visual direction: key to palette, colour tags, and a convention for
-  writing VJ hints in the rekordbox comment field
-- Optionally PRO DJ LINK via beat-link and crate-digger, if playing on club CDJs
+Demands on earlier work: the Set lifecycle must be schedulable by absolute time. A transition
+schedules on beat count and nothing else, which is what makes a fade reproduce at a different frame
+rate and follow a tempo change mid-fade, so absolute time is a second axis rather than a correction
+and arrives with whatever needs it. Signal confidence must drive transition policy, these sources
+being unofficial reverse-engineered integrations that will break.
 
-**Demands on earlier work**
-
-- The Set lifecycle must already be schedulable by absolute time, not just triggered.
-  **Undischarged by two closed milestones, and deliberately**: a transition schedules on beat
-  count and nothing else, which is what makes a fade reproduce on a machine at a different
-  frame rate and follow a tempo change mid-fade. Absolute time is a second axis rather than a
-  correction, and it arrives with whatever needs it
-- Signal confidence must already drive transition policy, since these sources are
-  unofficial reverse-engineered integrations that will break
-
-~6–8 weeks.
-
----
+Exit condition: none recorded.
 
 ### Mx — TODO
 
-**Work that is owed, has no milestone whose subject it is, and is not scheduled.** It is here
-rather than under a closed milestone because work left under one is never picked up again, and it
-carries no number because a holding list with a milestone number would claim a goal it does not
-have.
+Work that is owed, has no milestone whose subject it is, and is not scheduled. It carries no number
+because a holding list with a milestone number would claim a goal it does not have. Each entry names
+what it is, what it needs, and the milestone it came from.
 
-- **The mixer's mask has no front position, and no column asks for one.** *Set a deck's mask
-  position* carries no badge in either the panel or the key column, so no sub-milestone's exit reads
-  it, and it left M5.2 by being unreadable rather than by being done. What it wants is a surface
-  that gives the mask's front a position —
-  [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md) is the record.
-  **It is here for the reason the risk badge should have been**: an unfinished task under a closed
-  milestone is never picked up, and that is exactly what happened to the badge between 2026-09-03
-  and 2026-09-08.
+- **The mixer's mask has no front position.** *Set a deck's mask position* carries no badge in the
+  panel or key column, so no exit condition reads it. It needs a surface that gives the mask's front
+  a position; [ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md) is
+  the record. From M5.2.
 
 - **A session stream cannot say what a deck held.** A Set file describes one Set, so only slot 0's
   material reaches the head of a recording and a multi-slot session replays the rest against a deck
-  of one, reporting what it skipped. A format change. From M2.
-- **How a mask names a source**, with the `source` uniform it would read — the L2 `mask` block
-  comparing a `Source` slot, specified in `docs/ir-spec.md` under *A mask that names the source it
-  applies to*. Not the mixer's mask, which is a different sense of the word and already reaches the
-  panel. From M3.
-- **`perf` on a card.** It is a measurement and wants the stage-7 probe; what a compile pass can
+  of one, reporting what it skipped. It needs a format change. From M2.
+
+- **How a mask names a source.** The L2 `mask` block would compare a `Source` slot against a `source`
+  uniform, specified in [ir-spec.md](ir-spec.md) under *A mask that names the source it applies to*.
+  Not the mixer's mask, which is a different sense of the word and already reaches the panel.
+  From M3.
+
+- **`perf` on a card.** It is a measurement and needs the stage-7 probe; what a compile pass can
   answer is `ops_per_element`, a different quantity in different units. From M4.
-- **Dual embeddings.** The text side needs `origin` and `tag`, which have no producer until
-  something generates procedures; the visual side needs the thumbnail below, which M5.3 closed
-  without judging. From M4.
-- **Search over more than a node's name, and grouping.** The same absent card fields. From M4.
-- **MCP offers the effective limit beside the declared one.** A model writing a procedure is told
-  what the *language* permits — the ceiling `cost::estimate` refuses at — and never what this
-  machine has actually been able to afford. The second number is inferable from what has run: the
-  preparation slot's measurements and the governor's history. The two do not compare directly, a
-  ceiling being in ops and a measurement in milliseconds, so what a model would be handed is closer
-  to a rate than to a limit and the shape of it is not settled here. **Polishing rather than a
-  feature**, and it wants two things first: the estimate *The preparation slot is the measurement*
-  builds, and a run long enough to have a history worth quoting. From M5.
+
+- **Dual embeddings.** The text side needs `origin` and `tag`, which have no producer until something
+  generates procedures; the visual side needs the thumbnail below. From M4.
+
+- **Search over more than a node's name, and grouping.** Both need the same absent card fields.
+  From M4.
 
 - **An artifact card states no default for a vector param.** `meta.rs` writes
-  `default: p.default_scalar()`, which is `None` for a `vec3` since ADR-0268 gave the engine three
-  keys and three numbers. The card and the run cannot disagree — both folds share one literal
-  reader — but the card is silent where the run is not, and the Library's reading draws that field.
-  What it waits on is a decision the metadata format owns: whether `Record::ParamDecl`'s `default`
-  grows an array, or a card carries one record per component. **M6 is what makes it matter** — an
-  agent with no declared ranges has nothing to search over. From M4's three card fields, which are
-  the same absence.
-
-- **A Set installed part-way through a session starts at `t = 0` against a clock that has run.**
-  So material reading `beats` jumps when that slot goes on air, which is the last live case of the
-  lag correction and a preview-honesty defect of exactly the kind ADR-0258 and ADR-0269 exist for.
-  Recorded in ADR-0269 and hooked from nowhere until now; the bay that would have owned it, M5.1,
-  is closed. From M5.
-
-- **Whether `l` loads onto the deck selection or onto the load pulldown's deck.** ADR-0305 split
-  `load → A` into a button and a pulldown and left the key on the selection, saying outright that
-  this is its one assumption and the maintainer's to confirm — nothing in the manual, in this file
-  or in ADR-0228 says which mark the key should read. Changing it is a line in
-  `crates/karakuri/src/main.rs` and a paragraph on two pages; leaving it takes the deck selection's
-  one reason for existing away from the row that has always read it. From M5.3.
+  `default: p.default_scalar()`, which is `None` for a `vec3` since
+  [ADR-0268](adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md) gave the engine three
+  keys and three numbers, so the card is silent where the run is not and the Library's reading draws
+  that field. It needs a decision the metadata format owns: whether `Record::ParamDecl`'s `default`
+  grows an array, or a card carries one record per component. M6's agents are what make it matter.
+  From M4.
 
 - **Thumbnails and live previews in the Set browser, and what a thumbnail is *of*.** The drawing was
-  the Library bay's and the judgement was M4's, handed to that bay. Neither has a row on
-  [every operation](manual/operations.html), so no exit condition read either and the bay closed
-  without them; the visual half of dual embeddings above waits on the same absence. From M5.3, and
-  from M4 before it.
+  the Library bay's and the judgement was M4's, handed to that bay; neither has a row on
+  [every operation](manual/operations.html), so no exit condition read either. From M5.3, and from M4
+  before it.
 
-- **What the Library bay's filter fields should be.** ADR-0262 refused to invent a text-entry flow
-  there rather than on the merits and deferred it to a console-wide decision about focus; ADR-0292
-  took that decision, so the deferral is spent and the question is open rather than closed. It is
-  not the same question the two built flows answer: both are bounded to one path component, and a
-  filter is an unbounded fragment matched against what a node is called. ADR-0262's stepping stands
-  as the first cut until somebody answers it. From M5.3.
+- **MCP offers the effective limit beside the declared one.** A model writing a procedure is told the
+  ceiling `cost::estimate` refuses at and never what this machine has afforded. The second number is
+  inferable from the preparation slot's measurements and the governor's history; the two do not
+  compare directly, a ceiling being in ops and a measurement in milliseconds. It needs the estimate
+  wired and a run long enough to have a history. From M5.
+
+- **A Set installed part-way through a session starts at `t = 0` against a clock that has run**, so
+  material reading `beats` jumps when that slot goes on air. Recorded in
+  [ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md).
+  From M5.
+
+- **Whether `l` loads onto the deck selection or onto the load pulldown's deck.**
+  [ADR-0305](adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)
+  left the key on the selection and names this as its one assumption, the maintainer's to confirm.
+  Changing it is a line in `crates/karakuri/src/main.rs` and a paragraph on two manual pages.
+  From M5.3.
+
+- **What the Library bay's filter fields should be.**
+  [ADR-0262](adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md)
+  deferred it to a console-wide decision about focus and
+  [ADR-0292](adr/0292-the-pane-heads-name-takes-letters-and-the-keep-capsule-stays-a-stamp.md) took
+  that decision, so the deferral is spent. Both built letter-taking flows are bounded to one path
+  component and a filter is an unbounded fragment matched against what a node is called; ADR-0262's
+  stepping stands as the first cut. From M5.3.
 
 - **`written(TapBeat)` and `written(ScaleGrid)` answer `Owed(NotSettled)`.** A gap in
-  `karakuri-operation-record` rather than in the panel: it cost one early return in `App::performed`
-  and the record that argues for it (ADR-0278), and both controls are built. Closing it means saying
-  what a `Current` carries about a beat lock. From M5.4.
+  `karakuri-operation-record` rather than in the panel — both controls are built
+  ([ADR-0278](adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md)).
+  It needs somebody to say what a `Current` carries about a beat lock. From M5.4.
 
 - **Which number the transport's frame readout carries.** The numerator is `Cost::whole`, the CPU's
-  three stretches, while `Cost::period` is the frame (ADR-0303) — so a frame the GPU is holding up
-  draws as headroom, which is the one case the readout exists for. The period in place of the CPU
-  figure, both numbers side by side, or the tooltip's promise rewritten: all three are page changes
-  before they are code and none has been chosen. From M5.4.
+  three stretches, while `Cost::period` is the frame
+  ([ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md)),
+  so a frame the GPU is holding up draws as headroom. The period in place of the CPU figure, both
+  side by side, or the tooltip's promise rewritten: all three are page changes before they are code.
+  From M5.4.
 
 - **The transport's own notes, read against the tips its controls now carry.** Every control in that
-  row carries a `data-tip`, the last of them written the day the bay's controls landed. What is left
-  is the reading rather than a drawing — that bay's notes against what the tips now say. From M5.4.
+  row carries a `data-tip`; what is left is the reading rather than a drawing. From M5.4.
 
-- **What `over_budget` says once `committed_ms` is the deck's total.** `committed_ms` and
-  `headroom_ms` sum only Live slots, so since ADR-0269 they understate the deck by three slots of
-  step and draw and a four-slot frame registers as no violation at all; making `committed_ms` the
-  total would leave `over_budget` permanently on for any four-slot deck of heavy material. ADR-0313
-  put `Report::deck_over_period` beside it as a **second** flag rather than as an answer, and made a
-  slot's own number what decides its verdict — so a deck can be over its period with every candidate
-  kept on its own merits, and that is the state the ruling has to speak to. From M5.14.
+- **What `over_budget` says once `committed_ms` is the deck's total, and the budget is still measured
+  over one slot rather than over the frame.** `committed_ms` and `headroom_ms` sum only Live slots,
+  so since ADR-0269 they understate the deck by three slots of step and draw. Making `committed_ms`
+  the total would leave `over_budget` permanently on for any four-slot deck of heavy material.
+  [ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+  put `Report::deck_over_period` beside it as a second flag rather than as an answer, and a frame
+  interval cannot be divided among slots, which is what this needs. From M5.14.
 
-- **Caching a bay to a texture.** ADR-0283 is its precondition and it is built; ADR-0303's frame
-  instrument is what would measure it. From M5.14.
+- **Caching a bay to a texture.**
+  [ADR-0283](adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
+  is its precondition and is built; ADR-0303's frame instrument is what would measure it.
+  From M5.14.
 
 - **Whether the risk badge marks an estimated number differently from a measured one.** The dot is
-  the band of the number the governor spent, and whether that number was estimated or measured
-  crosses the seam on `Decision::basis` and is drawn nowhere, because the mock does not distinguish
-  them and the page moves first (ADR-0298). P-0095 rules out handing an inferred number out as a
-  measured one, so what is open is what mark the page gains, and that is the maintainer's. From
-  M5.14.
+  the band of the number the governor spent, and which it was crosses the seam on `Decision::basis`
+  and is drawn nowhere
+  ([ADR-0298](adr/0298-the-badge-is-the-band-of-the-number-the-governor-spent-and-how-it-was-taken-crosses-the-seam-undrawn.md)).
+  [P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
+  rules out handing an inferred number out as a measured one, so what is open is the mark the page
+  gains, and that is the maintainer's. From M5.14.
 
 - **The extrapolation is wrong on a concentrated Set.** `estimate` measures how much coverage a Set
-  has and not how concentrated it is, so it is right at the sizes it measures and wrong
-  extrapolating a concentrated Set to full size. The case is *What a machine's size is allowed to
-  decide*'s, which names it and adds no limit for it, so what is owed here is what the estimate says
-  about a Set it cannot extrapolate: a refusal on ADR-0266's terms, or a fit that reads
-  concentration as well as coverage. That section pointed it at M5.14, which closed without it ever
-  having been one of that sub-milestone's items. From M5.14.
+  has and not how concentrated it is, so it is right at the sizes it measures and wrong extrapolating
+  a concentrated Set to full size. The worked case is a Set whose elements land on one destination
+  texel; no limit is added for it. It needs either a refusal on
+  [ADR-0266](adr/0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md)'s
+  terms or a fit that reads concentration as well as coverage. From M5.14.
+
+- **`estimate` is built, exported and wired to nothing.**
+  `crates/karakuri-engine/src/estimate.rs` draws a Set at two rungs, solves `a + b·area` through
+  them, and returns either the fit or a named refusal (ADR-0266). Wiring it to `Deck::govern` is
+  undecided, and it is what would produce the risk badge's estimate. From M5.14.
+
+- **`estimate` refuses every `Points` and `Lines` Set with `Unfit::FloorUnknown`**, because
+  `point_rate` is a per-element vertex expression the CPU side never reads, so the floor below is not
+  a number it can compute; `estimate_above_floor` takes the floor from a caller that knows it.
+  Closing it needs a static analysis of the `point_rate` expression against its params' declared
+  ranges, and that is not written. From M5.14.
+
+- **The four cost ceilings have never been measured against a frame time.**
+  `MAX_OPS_PER_ELEMENT`, `MAX_OPS_PER_SPAWN`, `MAX_OPS_PER_FRAGMENT` and the fullscreen one arrived
+  in one commit; the doc on the first says it will need retuning once stage-7 probe data exists, and
+  that data exists. They are a backstop rather than a budget, the governor being what enforces.
+  From M5.14.
 
 - **What a pattern or a master chain saved under a name looks like.**
-  [ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) puts
-  the two in the library as two tiers, and both were built without touching that half: no store
-  directory holds a chain, and `crates/karakuri-pattern` ships with no serialiser, ADR-0320 fixing
-  banks that are positions in the session rather than saved names. Neither tier carries a row on
-  [every operation](manual/operations.html), so no exit condition in this file reads either.
-  **ADR-0340 says what the chain's file would hold** — `Record::MasterChain`'s slot list and nothing
-  else — and leaves the directory's name, so what is owed is the tier rather than the format. From
-  M5.8, M5.9 and M5.16.
+  [ADR-0227](adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md) puts the
+  two in the library as two tiers and both were built without that half: no store directory holds a
+  chain and `crates/karakuri-pattern` ships with no serialiser.
+  [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) says
+  what the chain's file would hold — `Record::MasterChain`'s slot list — and leaves the directory's
+  name, so what is owed is the tier rather than the format. From M5.8, M5.9 and M5.16.
 
-- **Reordering the master chain has no operation, no control and no row.** The chain is an ordered
-  list and nothing moves a slot within it: the vocabulary's three chain operations name a position,
-  add at the end and remove, and the Master bay draws no handle.
-  [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md) states
-  it as a limit and M5.16 carried it forward rather than meeting it; no row on
-  [every operation](manual/operations.html) names it, so no exit condition reads it. From M5.16.
+- **Reordering the master chain has no operation, no control and no row.** The vocabulary's three
+  chain operations name a position, add at the end and remove, and the Master bay draws no handle.
+  ADR-0340 states it as a limit. From M5.16.
 
 - **A Library drop on the chain appends rather than inserting at a position.**
   `Operation::AddChainEffect` carries no position, which is why the chain's list is one landing
-  rectangle rather than one per slot — a ring per slot would promise a position the vocabulary
-  cannot carry
+  rectangle rather than one per slot
   ([ADR-0352](adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
-  An insert is a payload change to that operation and is the same question reordering asks from the
-  other end. From M5.16.
+  An insert is a payload change to that operation. From M5.16.
 
 - **A per-deck chain does not exist.** [architecture.md](architecture.md)'s *a per-deck effect and a
   master effect become one node at different points* is what `kind L5` makes possible, and there is
-  one chain, at the master. It has no row on [every operation](manual/operations.html) and no
-  control. From M5.16.
+  one chain, at the master. No row and no control. From M5.16.
 
 - **The tap weights are chosen against a raymarcher and not measured against a blur.**
-  `crates/karakuri-ir/src/cost.rs` says so in its own comment: `W_TEXEL`, `W_TAP` and
-  `W_FRAME_STEP` are the three numbers a measurement should replace, and the run that priced the
-  chain over-predicts a cached tap by about four to one on this machine — bloom at 3889 of 4096
-  against 0.92 ms measured.
-  `crates/karakuri-engine/tests/master.rs::the_three_shipped_procedures_price_the_chains_rate`
-  fails if a re-weighting moves the chain's price silently, which is a guard rather than the
-  measurement. ADR-0340 owes that pass and ADR-0349 names it again. From M5.16.
+  `crates/karakuri-ir/src/cost.rs` names `W_TEXEL`, `W_TAP` and `W_FRAME_STEP` as the three numbers a
+  measurement should replace.
+  `crates/karakuri-engine/tests/master.rs::the_three_shipped_procedures_price_the_chains_rate` fails
+  if a re-weighting moves the chain's price silently, which is a guard rather than the measurement.
+  ADR-0340 owes that pass and
+  [ADR-0349](adr/0349-the-chain-is-the-frames-so-it-reads-the-session-clock-and-is-charged-against-the-frames-budget.md)
+  names it again. From M5.16.
 
-- **`mix::apply_chain` compiles on the caller's thread.** Where the chain's shape is the one already
-  running the call is a uniform write, which is what a press on a parameter row produces; where the
-  shape changed — an add, a remove, a drop — it compiles the procedures and allocates the targets
-  inline, on the thread that reached it, in `crates/karakuri/src/app/handler.rs`,
-  `crates/karakuri-cli/src/live.rs` and `crates/karakuri-environment/src/render.rs`. A swapped-in
-  Set gets a worker and the chain does not.
-  [P-0091](principles/0091-cost-is-known-before-it-is-paid.md) is what the cheap path is written
-  for; what is owed is the other path. From M5.16.
+- **`mix::apply_chain` compiles on the caller's thread.** Where the chain's shape changed — an add, a
+  remove, a drop — it compiles the procedures and allocates the targets inline, in
+  `crates/karakuri/src/app/handler.rs`, `crates/karakuri-cli/src/live.rs` and
+  `crates/karakuri-environment/src/render.rs`. A swapped-in Set gets a worker and the chain does not;
+  [P-0091](principles/0091-cost-is-known-before-it-is-paid.md) is what the cheap path is written for.
+  From M5.16.
 
 - **Fullscreen on a chosen display.** The projector window is a second `winit` window with a surface
-  and a `WindowSink`, and it is neither made fullscreen nor put on a named monitor: that is one line
-  of `winit` and one list of monitors this program does not read, and a fullscreen with no way to say
-  *where* is worse than none. It closes no badge — the row it belongs to reads `has` — so nothing
-  reads it. From M5.6.
+  and a `WindowSink`, made neither fullscreen nor put on a named monitor. It needs one line of
+  `winit` and the monitor list this program does not read. From M5.6.
 
-- **[`docs/manual.md`](manual.md)'s *The canvas is fixed for a run* is false for the panel.** The
-  render size belongs to the output and the frame follows the largest enabled one (ADR-0325), so the
-  sentence holds only for `karakuri-cli`, whose `--canvas` is untouched. ADR-0246 predicted it would
-  go false the day this was built and ADR-0325 names it without closing it. It is a page change on
-  the CLI's own page. From M5.6.
+- **[manual.md](manual.md)'s *The canvas is fixed for a run* is false for the panel.** The render
+  size belongs to the output and the frame follows the largest enabled one
+  ([ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)),
+  so the sentence holds only for `karakuri-cli`, whose `--canvas` is untouched. It is a page change
+  on the CLI's own page. From M5.6.
 
 - **A slot's estimate is dropped on every frame of a drag**, because `HotSwap::resize` drops it and
-  the frame is re-derived per changed output size. Nothing sets an estimate today —
-  `set_estimated_cost` has no caller — so it costs nothing now, and whoever wires the estimate meets
-  it here rather than finding it later. From M5.6.
+  the frame is re-derived per changed output size. `set_estimated_cost` has no caller today, so it
+  costs nothing now and whoever wires the estimate meets it. From M5.6.
 
-- **The watcher's other two dead ends go unreported.** `Source::poll` can answer *I refused* and the
-  Staging lane draws it, but only for the checker's refusal: the two other paths in `Watch::rebuild`
-  that answer nothing — a file that will not read, and a stack that will not sort into a Set — still
-  print and return `None`.
+- **The watcher's other two dead ends go unreported.** `Source::poll` answers *I refused* for the
+  checker's refusal only; the two other paths in `Watch::rebuild` — a file that will not read, and a
+  stack that will not sort into a Set — still print and return `None`.
   [ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md) names them and declines
-  to give them a word, because `did not compile` is the wrong one for either and naming them is a
-  further decision. Neither has a row on [every operation](manual/operations.html). From M5.7.
+  to give either a word, so naming them is a further decision. From M5.7.
 
 - **The Staging lane omits `origin`, the timestamp and the head's count.** Each is named at the code
-  and none of them is a row on the page. The first has no producer anywhere; the second waits on the
-  spelling the Library bay's own time column waits on, which is one decision that bay declined to
-  take twice. From M5.7.
+  and none is a row on the page. The first has no producer anywhere; the second waits on the spelling
+  the Library bay's own time column waits on. From M5.7.
 
 - **ADR-0323's refusal is built and uncalled, so a live lane still kills a fade onto its deck.** A
-  lane reaches `Deck::set_opacity`, which cancels, and
-  [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) decides that the
-  schedule is refused instead and that the refusal names the lane. The lookup exists and the caller
-  does not, on any deck the mixer draws rather than only the one the run seeds. It is engine-facing
-  rather than a badge, which is why no exit condition reads it. From M5.9.
+  lane reaches `Deck::set_opacity`, which cancels, where
+  [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md) decides the schedule
+  is refused and the refusal names the lane. The lookup exists and the caller does not. From M5.9.
 
 - **A channel fader does not say who is holding it.** The mock draws `seq 1` as a source on a
-  parameter row and nothing of the kind on a strip, so a fader lane drives a control that says
-  nothing about what is driving it, which is rule 02 of [the seven](manual/index.html). It has no row
-  of its own, and [the console page](manual/console.html) carries a purposeful note until the readout
-  is drawn. From M5.9.
+  parameter row and nothing of the kind on a strip, which rule 02 of
+  [the seven](manual/index.html) asks for. [The console page](manual/console.html) carries a
+  purposeful note until the readout is drawn. From M5.9.
 
 - **Removing a lane has no control, no row and no operation.** `+ lane` adds one and nothing takes
-  one away; the tip beside it says so rather than the bay pretending otherwise. From M5.9.
+  one away. From M5.9.
 
 - **The `Param` lane arm reaches only the decks the Inspector holds a pane for.** The published rows
   come from `View::inspector`, which is pointed at two decks, so a target deck no pane is showing
-  offers its fader and no parameters. What the console has not been handed it does not offer, which
-  is the right behaviour and the wrong reach. From M5.9.
+  offers its fader and no parameters. From M5.9.
 
 - **The window's minimum is a measurement, and a bay that grows a control invalidates it.**
-  `MINIMUM_VIEWPORT` is the declared minima summed along each axis (ADR-0272), a test recomputes it
-  from the tree, and what the test cannot check is whether a region's *declared* minimum is still a
-  reading of its content. `centre`'s first number was a CSS track rather than a reading, and at it
-  the parameter faders were not drawn (ADR-0279) — so every bay still growing controls owes that
-  reading again. **M5.5 is where it arrived twice and it is the worked example**: an Inspector pane
-  at the declared minimum window is 237.5 pixels wide against the deck head's 296 for seven
-  controls, so the two build chips are **dropped before the row is** (ADR-0328 §5) — the first
-  control on this console that comes and goes with the window — and the pane **scrolls** rather than
-  drawing a node group whole or not at all (ADR-0307), which is the same reading taken down the
-  other axis. The scroll's own remainder, a keyboard route to it, is M5.13's and not this entry's.
-  From *The console's own shape* and M5.5.
+  `MINIMUM_VIEWPORT` is the declared minima summed along each axis
+  ([ADR-0272](adr/0272-the-window-has-a-minimum-and-only-one-of-adr-0250s-three-cases-is-real.md)),
+  a test recomputes it from the tree, and what the test cannot check is whether a region's *declared*
+  minimum is still a reading of its content. `centre`'s first number was a CSS track rather than a
+  reading, and at it the parameter faders were not drawn
+  ([ADR-0279](adr/0279-the-centre-is-two-parameter-rows-wide-because-a-pane-that-cannot-draw-a-fader-is-not-a-minimum.md)).
+  Every bay still growing controls owes that reading again. From *The console's own shape* and M5.5.
 
 - **A narrowing survives no replay and no keep.** `Operation::Publish` writes `Silent(NoRecord)` and
-  nothing in this vocabulary says what a Set publishes — not in a Set file and not in a session — so
-  a narrowing lives in the run that made it and a keep does not carry it.
+  nothing in the vocabulary says what a Set publishes, so a narrowing lives in the run that made it.
   [ADR-0329](adr/0329-an-input-is-wired-on-the-node-that-declares-it-and-the-number-is-the-publish-mark.md)
-  refuses to invent the spelling here, on ADR-0046's terms, and says outright that this is the one
-  row where the keep does not close what a session leaves out. A gap in the record format rather
-  than a decision, and both manual pages carry it. From M5.5.
+  refuses to invent the spelling. A gap in the record format, carried on both manual pages.
+  From M5.5.
 
-- **A renderer's declared input is unreachable from the panel.** The renderers of a deck are drawn
-  as one group under a bare `L4` head, and a renderer may declare an input —
+- **A renderer's declared input is unreachable from the panel.** The renderers of a deck are drawn as
+  one group under a bare `L4` head, and a renderer may declare an input —
   `examples/second_eye.kir` declares `uses view : Camera`. A `uses` line on that head would be one
-  node's declaration drawn on a head standing for several, which is what ADR-0216 refuses for the
-  authority chip, so the folded head takes no line and the input is reached from the file and from a
-  model (ADR-0329, alternative **e**). Named as a limit rather than left to be found. From M5.5.
+  node's declaration drawn on a head standing for several, so the folded head takes no line and the
+  input is reached from the file and from a model (ADR-0329, alternative **e**). From M5.5.
 
 - **The `uses` capsule's candidate list is inferred from the layer the input already reaches**, so a
-  kind the deck currently reaches by no edge offers nothing — a control offering less than the
-  language allows, which is the side of
-  [P-0090](principles/0090-a-surface-offers-it-never-decides.md) to be wrong on. An engine reader
-  for a node's declared inputs is the honest-looking fix and ADR-0329 refuses it as a second answer
-  to a question `Set::validate` already settles, so what this wants is a way to widen the offer
-  without keeping a second answer in step. From M5.5.
+  kind the deck reaches by no edge offers nothing, which is the side of
+  [P-0090](principles/0090-a-surface-offers-it-never-decides.md) to be wrong on. ADR-0329 refuses an
+  engine reader for a node's declared inputs as a second answer to a question `Set::validate` already
+  settles, so this needs a way to widen the offer without keeping a second answer in step. From M5.5.
 
 - **The aim carries one capacity per slot, so a per-geometry capacity is unaskable from any
   surface.** `Property::Capacity` lost its node rather than `Aim::capacity` gaining an entry per
-  geometry, because no route filled the address and nothing could have honoured it
-  ([ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md), which is
-  ADR-0228's own recorded limit closed by narrowing the payload). **The revival condition is written
-  into the record**: a pairing Set whose two geometries want two capacities. Until one exists this
-  is a statement rather than a gap. From M5.5.
+  geometry, because no route filled the address
+  ([ADR-0328](adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md)). The
+  revival condition is in the record: a pairing Set whose two geometries want two capacities.
+  From M5.5.
 
 - **Reaching a MIDI map while running.** A map is a file saved and recalled per controller; the file
-  exists, the map is migrated and `Action` is deleted
-  ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)), and no row on
-  [every operation](manual/operations.html) says a map can be loaded while the instrument runs.
-  **The `map` pill is a readout** of which file is loaded and carries no chevron for that reason —
-  `▾` on this console means *there is a menu under this*, and drawing one over a readout is
-  scaffolding (ADR-0336 §5). What is missing is the menu: *save · load · new*, and a
-  `Surface::reload` beside `Surface::first`. The arrangement pill is that menu over a different file
-  and is built (ADR-0221), which is what makes this an entry rather than a design. Learning never
-  waited on it — a learned line goes into `<store>/maps/default.map` and is loaded from there on the
-  next start. From M5.12.
+  exists ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)) and no row
+  says it can be loaded while the instrument runs. The `map` pill is a readout and carries no chevron
+  for that reason. It needs the menu — *save · load · new* — and a `Surface::reload` beside
+  `Surface::first`; the arrangement pill is that menu over a different file and is built
+  ([ADR-0221](adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)).
+  From M5.12.
+
+- **14-bit learn is owed.** Inside one drain two faders 32 apart are indistinguishable from one pair,
+  so `learn` writes a `cc` line and an operator changes the one word. From M5.12.
 
 - **A `params` press on a procedure row asks nothing.** The chip is on every row of the Library bay
-  and the reading a `ReadSet` opens is a **Set's** — its slots, its params, its ranges — so a
-  procedure row has the chip and no answer behind it. What a procedure row's own card would be is a
-  reading nobody has drawn, and drawing it is a page change before it is code: the reading's shape is
-  specified in [the console page](manual/console.html) for a Set alone. From M5.15.
+  and the reading a `ReadSet` opens is a Set's, so a procedure row has the chip and no answer behind
+  it. What a procedure row's card would be is specified nowhere;
+  [the console page](manual/console.html) specifies the reading's shape for a Set alone. From M5.15.
 
 - **A preset Set row carries no badge, and the mock draws one.** `Presets::list_sets` opens no file,
-  so the shipped tier's Set rows have no layers to say, while the shipped tier's *procedure* rows are
-  badged because that listing does read one small file per row. The reason recorded at the code is
-  the cost of opening every Set file in the presets root on a press —
-  [P-0091](principles/0091-cost-is-known-before-it-is-paid.md) **prices that rather than refusing
-  it**: the reading is known before it is paid, bounded by the directory, and off the frame path,
-  which is where that principle's rule bites, and the mock's own bar is *a listing costs a directory
-  read and never a compile*. So this is owed rather than settled, and what is owed is either the
-  badge or a sentence on the page saying the shipped Sets do not carry one. From M5.15.
+  so the shipped tier's Set rows have no layers to say, while its procedure rows are badged.
+  [P-0091](principles/0091-cost-is-known-before-it-is-paid.md) prices the reading rather than
+  refusing it — bounded by the directory and off the frame path — so what is owed is either the badge
+  or a sentence on the page. From M5.15.
 
 - **Listing procedures over MCP is nobody's.** *Filter the library by kind* is `gap` because a bay's
-  own narrowing is a window and a model has no window (ADR-0315), so the question a model actually
-  has — *what procedures does this store hold* — has no route: it is *List what the store holds*' to
-  grow rather than that row's, and nobody has decided what a listing hands back for a row that is a
-  procedure. A `gap` standing in front of a real gap is what this entry exists to stop. From M5.15.
+  narrowing is a window and a model has no window
+  ([ADR-0315](adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)), so
+  *what procedures does this store hold* has no route. It is *List what the store holds*' to grow,
+  and what a listing hands back for a procedure row is undecided. From M5.15.
 
 - **A procedure load lands on node 0 of its kind.** A procedure declares one `kind` and nothing about
-  where it goes, and a library row cannot say an index, so the second renderer of a three-renderer
-  Set is unreachable from a row and a `kind L4` always replaces `L4:0`. **The revival condition is
-  written into ADR-0338**: the day the Inspector's node head grows a *replace this node* control is
-  the day the payload gains a `NodeAt`. A limit stated where it bites rather than a defect. From
-  M5.15.
+  where it goes, and a library row cannot say an index, so a `kind L4` always replaces `L4:0`. The
+  revival condition is in
+  [ADR-0338](adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md):
+  the day the Inspector's node head grows a *replace this node* control is the day the payload gains
+  a `NodeAt`. From M5.15.
 
-- **A keep of a derived deck names a Set and re-points nothing.** `keep` is what gives derived
-  material a name and it files the aim's own files as any other deck's are filed — but only `played`
-  and `overlaid` write the strip's readout, so it goes on reading `<base> + <kir>` after the keep, and
-  `Aim::set` goes on being the base id. That is ADR-0338's own answer for the **load**, deliberately,
-  so the `history` chip does not go blank on the deck being edited; it is not an answer for what
-  follows a keep, and whether a keep adopts the name it just wrote is undecided. From M5.15.
+- **A keep of a derived deck names a Set and re-points nothing.** Only `played` and `overlaid` write
+  the strip's readout, so it goes on reading `<base> + <kir>` after the keep and `Aim::set` goes on
+  being the base id. Whether a keep adopts the name it just wrote is undecided (ADR-0338).
+  From M5.15.
 
 - **The walk's row does not carry the page's `read` mark.** `Operation::WalkHistory` is
   `Silent(Question)`, and
   [ADR-0281](adr/0281-every-route-reaches-every-write-and-a-read-is-the-routes-own-interface-design.md)
-  marks a read row so that an empty column reads as that route's own design rather than as a debt.
+  marks a read row so an empty column reads as design rather than debt;
   [ADR-0342](adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md)'s
-  alternative (e) left the mark open rather than refusing it: the mark's rows are that arm's
-  membership as of ADR-0281, `FilterLibrary` joined the arm in ADR-0338 with the page not moving, and
-  **whether the mark tracks the arm is a decision about the manual** rather than about the
-  vocabulary. Nothing on the page is false today — the walk's key and MIDI columns are `gap`, which is
-  what they were — so what is owed is a page edit nobody has scheduled. It is here rather than under
-  *The decisions nobody has taken* because it blocks nothing, which is what every entry of that
-  section names. From M5.10.
+  alternative (e) left the mark open. Whether the mark tracks the arm is a decision about the manual,
+  and nothing on the page is false today. From M5.10.
 
 - **A press on a kind chip narrows what the console draws and does not re-read the listing the
   narrowing is applied to.** The window's re-listing branch matches the scope press, the walk, a
   listing and a favourite, and not `Operation::FilterLibrary`, so ADR-0338's six kind chips mark a
   narrowing over rows that were read before it. ADR-0342 fixed the same defect on the `history` chip
-  in the pass that found this one and **recorded this one rather than fixing it**, giving it to *that
-  row's own pass* — *Filter the library by kind*, a row of M5.15, which closed on 2026-09-10. It is
-  here because a defect whose owner is a closed sub-milestone has nobody. From M5.10.
+  and recorded this one. From M5.10.
 
 - **The hover layer does not know that a card is down.** `claim`'s rule 2 gives every press to
   whichever card is open, and the hover layer is handed `claim`'s answer rather than re-deriving its
-  condition, so a pointer resting over a control an open card covers still resolves to that control
-  and draws its tip.
-  [ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)
-  wrote it down rather than leaving it in a comment nobody meets, and what closes it is a seam in
-  `input` answering *is a card down* for the press path and the hover path at once, rather than a
-  second condition in the layer. From M5.11.
+  condition, so a pointer over a control an open card covers still draws that control's tip. What
+  closes it is a seam in `input` answering *is a card down* for the press path and the hover path at
+  once
+  ([ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md)).
+  From M5.11.
 
 - **Eight letters are free and nothing binds them.** `y`, `x`, `c`, `t`, `-`, `=`, the backtick and
   `a` are bound to nothing in `crates/karakuri` and no badge on
-  [every operation](manual/operations.html) reserves one: the five rows that named a free letter were
-  re-spelled into the grammar on 2026-09-09. The list is what a global key could still bind, which is
-  the question a global key asks under ADR-0259's operand rule. From M5.13.
+  [every operation](manual/operations.html) reserves one. The list is what a global key could still
+  bind. From M5.13.
 
 - **`z` is a bulk act whose recorded reason is gone.** *Bring back what is folded* unfolds everything
-  rather than one region because *"a region a pointer cannot reach is a region a key has no way to
-  name either"*, and focus can name a folded bay since ADR-0332. The key may still earn its place as
-  a bulk act, and nothing has said whether it does. From M5.13.
+  rather than one region because a region a pointer cannot reach is one a key cannot name either, and
+  focus can name a folded bay since ADR-0332. Whether the key still earns its place as a bulk act is
+  unanswered. From M5.13.
 
 - **`map.rs` has not moved to `karakuri-map`.** A global key is a complete line exactly as a `cc` is,
   so it is a third `Key` beside `Cc` and `Note`, and the crate holding the layer between a surface
-  and the vocabulary (ADR-0236) then stops being named for a wire. `ls crates/` lists no
-  `karakuri-map` and the file is `crates/karakuri-midi/src/map.rs`. Keys reached under focus are
-  deliberately not customisable, which is a property rather than a gap. From M5.13.
+  and the vocabulary
+  ([ADR-0236](adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md))
+  then stops being named for a wire. `ls crates/` lists no `karakuri-map` and the file is
+  `crates/karakuri-midi/src/map.rs`. From M5.13.
 
 - **The page is not held to which pair of arrows a badge spells.** `SPELLED` in
   `crates/karakuri/src/keymap.rs` resolves `&uarr;&darr;` and `&larr;&rarr;` both to *the arrows*, so
-  a badge naming the wrong pair passes both badge checks. What the axis is, is
-  `karakuri_console::focus::Built::across`, and `karakuri-console`'s `grammar.rs` holds the console
-  against it where nothing holds the page. From M5.13.
+  a badge naming the wrong pair passes. The axis is `karakuri_console::focus::Built::across`, and
+  `karakuri-console`'s `grammar.rs` holds the console against it where nothing holds the page.
+  From M5.13.
 
 - **`focus::Addressed` carries five variants that differ only in the path they hang from.** `OfHead`,
   `UnderHead`, `InCard`, `Of` and `Under` each name a control at a different depth, and `walk_card`
   and `walk_chooser` in `crates/karakuri-console/src/focus.rs` are one walk written twice over two of
-  them. ADR-0350 recorded the fold as the reviewer's on 2026-09-13 and it has not been taken. From
-  M5.13.
+  them.
+  [ADR-0350](adr/0350-the-transports-two-cards-are-walked-and-the-tempo-figure-steps-by-a-beat-a-minute.md)
+  recorded the fold as the reviewer's on 2026-09-13 and it has not been taken. From M5.13.
 
-- **The *console's own shape* stub says `esc` still quits.** It rescheduled that sentence onto M5.13
-  and said *Quit*'s key badge reads `has`. `esc` stopped quitting under ADR-0332 and that badge reads
-  `&mdash;`, so the stub describes a state that ended on 2026-09-09 and points at a sub-milestone that
-  closed on 2026-09-14. It is a documentation edit and nobody has made it. From M5.13.
+- **The *console's own shape* stub in [history/m5.md](history/m5.md) says `esc` still quits.** It
+  stopped quitting under ADR-0332 and *Quit*'s key badge reads `&mdash;`. It is a documentation edit.
+  From M5.13.
 
 - **The two Mixer rows' MIDI badges stay `gap`.** *Fade a deck out or in* and *Crossfade to the next
-  deck* read nothing in the MIDI column: a map line names a slot number, a range, a word from a closed
-  list or a position in a published interface, and a scheduled move names an instant, a length and a
-  curve. The badges move the day a map line names a helper that carries time, which is ADR-0236's
+  deck* read nothing in the MIDI column: a map line names a slot number, a range, a word from a
+  closed list or a position in a published interface, and a scheduled move names an instant, a length
+  and a curve. They move the day a map line names a helper that carries time, which is ADR-0236's
   third job and does not exist. From M5.13.
+
+- **Adding or removing a node has no operation and no row.** `karakuri-layout`'s arena has no insert
+  and no remove, and `NodeId` is a bare index, so a removal shifts every id anything is holding. The
+  node editor needs it. From M5.
+
+- **The mock's six body controls are not operations and have no rows.** `2 up` names a region of the
+  arrangement; the other five add something a bay draws inside its own body. From M5.
+
+- **Nothing in the test suite reaches the startup path.** On 2026-09-08 `cargo test --workspace` was
+  green while `cargo run -p karakuri` aborted on its first frame, because nothing in the suite
+  reaches `resumed`. What closes it is a test that does. From M5.
+
+- **A `#[cfg(test)]` above a source-scanning test silences it.** Each such test bounds its scan at
+  the first `#[cfg(test)]` it finds, so one placed above the test modules in
+  `crates/karakuri/src/main.rs` silenced five of them. Nothing is written down that closes this.
+  From M5.
+
+- **P-0094 owes a delete-and-re-record pass and it is the maintainer's.** Its *Undo* example is
+  `swap.rs`, which no longer rolls anything back
+  ([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md));
+  [ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
+  left a pass owed on it too. From M5.
 
 ---
 
-## The handover
+## The decisions nobody has taken
 
-**Read this if you are picking the work up.** It says where to start, what that piece needs, and
-what nobody has decided. Everything else is in the sub-milestone above, in the code, or in a record.
+Each is open. Nothing below is settled by a record; everything that was has been deleted from this
+list and lives in [adr/](adr/).
 
-### Where to start: M5 has no open sub-milestone
-
-**Every sub-milestone of M5 has closed.** M5.5 — Inspector was the last bay, on 2026-09-10, with
-M5.14 and *The console's own shape* among them, and M5.12 — MIDI, M5.15 — Procedures in the library,
-M5.10 — MCP and M5.11 — Hover tooltips closed the same day; **M5.16 — L5 closed on 2026-09-13**, and
-**M5.13 — The keyboard on 2026-09-14**, when the last two `plan` badges in the key column became
-`gap`
-([ADR-0353](adr/0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md)).
-What a closed sub-milestone left owed is under *Mx — TODO* and in
-[history/m5.md](history/m5.md), and each stub above names what it decided, when its exit was met and
-where every owed item went.
-
-**What is left is M5's own exit, and this file does not take it here.** ADR-0226 makes it a grep over
-the panel column of [every operation](manual/operations.html);
-`grep -c 'rt plan">panel' docs/manual/operations.html` returns 0, and the two sections M5 closes with
-— *Rows the manual has not given a home* and *The console's own shape* — are empty and closed. Whether
-M5 closes on that reading is the maintainer's, and the M5 entry above states the condition.
-
-**The panel is a program.** `cargo run -p karakuri` opens the console over a real deck: the
-picture, four deck previews, the transport, the mixer, the Library bay, the Inspector, the
-Staging lane and the Master fader. It is [`crates/karakuri`](../crates/karakuri), a binary of its
-own since ADR-0214; what it needs that is not a surface is
-[`karakuri-environment`](../crates/karakuri-environment)'s (ADR-0215), and
-`crates/karakuri-cli/src/` is `main.rs` alone. `--presets DIR` and `--store DIR` name where the
-data lives, and with neither given a four-candidate search runs (ADR-0230). `examples/` ships the
-`.kset` files a fresh clone opens on; `my sets` is empty until something is saved.
-
-**M5.1 was the current sub-milestone until it closed on 2026-09-03, and what it settled is below.**
-The Program bay carries no `plan` panel or key badges on
-[every operation](manual/operations.html). The preview sizing and arrangement
-was settled by ADR-0239 (preserving operator preview size across arrangements, pure area comparison
-at crossover 706px, and widening outer panes to 340px / 400px so standard windows open in Below
-placement). The two remaining key badges were resolved: *Put a deck on air* retired its shortcut
-in favor of mixer controls, and *Choose what the output shows* was retired
-([ADR-0240](adr/0240-the-output-shows-the-mix-and-residency-keys-belong-to-the-mixer.md); see
-[docs/history/m5.md](history/m5.md)) — for redundancy with the cells, which
-[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) has since
-corrected to the operation having been wrong from the start. **That answered what the deck A preview cell shows**, which
-was one of the decisions nobody had taken: the panel aims **a sink per cell**, each presented from
-`Deck::slot_view` for the slot it is lettered for, so no cell can show another deck's material under
-the wrong letter. `Deck::set_preview` and `Deck::preview` are **deleted** — that question is
-answered, in
-[ADR-0241](adr/0241-auditioning-survives-the-control-that-was-retired-and-is-re-recorded-as-a-property.md),
-which also retired P-0070 and re-recorded the requirement as P-0080,
-*An operator can see a slot's own material without putting it on air* — itself retired on
-2026-09-05, because every question it decided was inside auditioning and it had to name the crate it
-bound. The requirement is stated in
-[ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
-
-**Residency does not gate a cell, and the two gaps that paragraph used to name are gone.** `Deck`
-draws every slot into its own target on every frame, whatever its residency, and the field that
-chose one slot is deleted (`crates/karakuri-engine/src/deck.rs`). `Engine::aim` asks whether there
-is a slot behind the cell — `slot_bind_groups[slot]`, which is `None` past `slot_count` — and never
-what that slot's residency is (`crates/karakuri/src/main.rs`). That closes the second gap. The
-first, that `karakuri-cli` cannot audition a slot, is not a gap:
-[ADR-0242](adr/0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)
-makes the command line test tooling and scopes it out of the instrument's principles, so a rule
-written for the person playing the instrument does not reach it. **The prose that narrated the old behaviour is corrected**, on 2026-09-02: the *Three of the four
-preview cells are off at a time* paragraph is gone, the doc on `ON_AIR` reads *"every cell draws its
-own slot whatever its residency"*, and the deck's fullness doc says each resting slot is *"still
-drawn into its own cell"*. `docs/contributing.md` §4 is met here, and this paragraph said otherwise until 2026-09-03.
-**The clause
-[ADR-0258](adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md)
-left owed is written.** It was the rejected build's cell — black, or the sentence saying what went
-wrong — which [the console page](manual/console.html) specified under *What a deck preview cell
-shows, and when* and said of *"neither can happen yet, so nothing draws either word"*. **Half of
-that reason was wrong and the conclusion was not.** The panel watches every slot's `.kir` pair, so a
-build can be refused while a slot is running and the Staging lane draws that verdict — on the word
-`did not compile`, carrying the first diagnostic
-([ADR-0310](adr/0310-a-source-can-say-it-refused-and-the-lane-draws-it.md)). What cannot happen is
-the *cell* that page described: a refused build installs nothing, a failed compile makes no
-`Request`, and the honest picture after a rejection is the material that is still there, which
-`crates/karakuri-engine/tests/deck.rs`'s `a_rejected_build_shows_what_is_still_running` asserts.
-**What a cell does say is `overloaded`**, and that is the state that arrived in place of the one the
-page described: an over-budget candidate stays in the slot and the slot stops updating, so the image
-is the last frame it drew and the caption marks it, because a still nothing marks is a preview that
-lies
-([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
-The page is written to that, and the state it still names as unable to happen is `empty`. **The
-question under the owed sentence went the way ADR-0258 offered**: a cell carries no diagnostic, and
-saying what went wrong stays the Staging lane's.
-
-**A cell now shows material *running*, which is the other half of the same requirement and was
-missing until 2026-09-07.** Every slot was drawn and only some were stepped, so a cell for an
-off-air slot showed the still it stopped at — or, for a slot that had been off air since the window
-opened, near-black. **A still is not what the operator is deciding from**, and a cell off the room's
-tempo is not a preview of what putting that slot on air would look like, so every drawn slot is now
-stepped on every frame at the session's tempo:
-[ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md). That
-retires the governor's priming rate, makes `Residency::Allocated` mean *off air and asked of
-nothing* rather than *at rest*, and takes the *cold slot shows black* half of the test above with it
-— no deck can show a never-stepped Set any more. **What it leaves owed is one number**, and it is
-under *Performance discipline* below rather than here.
-
-**The panel serves MCP.** `karakuri --mcp PORT` binds `127.0.0.1:PORT` and runs
-`karakuri_environment::mcp::serve` with the same `Opening` the four bay-head pills write, so a pill
-opens a class the server reads on the next call. Seven tools: `read_procedure`, `write_procedure`,
-`wire_input`, `swap_outcome`, `save_set`, `read_set` and `list_sets`. The last three came with a
-**save path this program did not have** — `Live::save_set`, which is the one place a Set is written
-here and where the `k` key, the MCP tool and whatever control the Library bay grows all end. **What
-that one path now differs on is one argument**: a save asked for over MCP lands in
-`<store>/sandbox/` and the operator's own act writes `<store>/sets/`
-([ADR-0261](adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)),
-which leaves the Library bay's planned *keep* pill an operator's act and owing nothing new, and
-leaves a model unable to read back what it saved — `read_set` and `list_sets` read the library. The
-server addresses each deck's working copies rather than the paths the operator typed, so a model
-cannot rewrite the preset library, and there is no bind option: reaching it from another machine is
-`ssh -L`. **M5.10 has since closed on it** — see its stub and [history/m5.md](history/m5.md).
-
-**A cell's letter and state are outside the image**, in a caption band under it, with a place kept
-for a risk badge that is not drawn. And
-[ADR-0243](adr/0243-the-program-picture-is-an-output-and-the-four-cells-are-monitors.md) settles the
-bay's model: the picture is one of the outputs and is in the set `Operation::RouteFrame` has to
-name; the four cells are monitors and are not outputs at all. Both are M5.1's, above.
-
-**Nothing above blocks M5.1**: what remains for its exit is condensing the bay's tooltip notes.
-
-**The fate of `karakuri-cli` is open.** The recommendation on record is to shrink it as each M5.x
-moves its features to the panel, rather than delete it; ADR-0242 says deleting it is out of that
-record's scope.
-
-**The order is the sub-milestone list above.** Work them top to bottom; each one names its own
-rows, its exit condition and its blockers. Run the fourth command beside them: a `plan` badge does
-not distinguish a drawing that is owed from a machine that is missing, and a row has already been
-picked up as the first while being the second. **Master and Sequencer were last for machinery rather
-than for drawing, and both have closed** — the chain was three fixed passes in the engine (ADR-0317)
-and the sequencer's producer is the frame loop polled against `beats` (ADR-0322), which is what that
-ordering was waiting on. **The chain is an ordered list of `kind L5` slots since M5.16**
-(ADR-0340), which is that bay's machinery taken a second time.
-
-### Built: a sub-pixel primitive is floored at one pixel and compensated in the alpha
-
-**This was the *Decided and not built* item and it is built**
-([ADR-0245](adr/0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md),
-which supersedes [ADR-0244](adr/0244-a-sub-pixel-primitive-is-drawn-at-one-pixel-and-compensated-in-the-alpha.md)).
-A sprite of side `s` pixels with `s < 1` produced no fragment unless its quad happened to cover a
-pixel centre, so a small target lost most of its material and lost it *arbitrarily* — measured,
-one sprite at the shipped default covered sixteen texels at 1280x720 and none at 128x72. It is now
-drawn at one pixel with the fragment's **colour** multiplied by the coverage the floor took: `s²`
-for a sprite, `s` for a stroke, carried from the vertex stage as a flat varying. The alpha is left
-alone because alpha is coverage — what the mix's `over` hides behind and what leaves the mix into
-the master chain — so the price is that a rounded-up primitive occludes as though it filled the
-texel. Exact under `additive`, approximate under `over`, and inert at or above a pixel — so no
-host-clock figure in this file was taken on material it touches.
-
-**Two things it changed that are not the renderer.** `tests/deck.rs` argued that re-rendering into
-a preview cell is *cheaper and wrong*; the *wrong* was this defect, and the cost has moved with it
-— a 112x63 render went from 0.6x the whole 720p frame to 1.1x of it, measured as a pair on one
-machine and recorded in that file. And a `Points` procedure's fragment count no longer falls with
-the target's area all the way down: it bottoms out at one fragment per element, which is what the
-*preparation slot is the measurement* extrapolation below has to be read against.
-
-**What it did not touch is the canvas, and it is what unblocked it.** Looking for what the canvas
-was waiting on found that the model was not missing but four weeks old, and that its one restrictive
-clause — *the window gets no vote* — rested on the picture depending on the render size, which this
-work and `point_rate` between them removed. The size now belongs to the output
-([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
-and what made that safe is a rule:
-[P-0086](principles/0086-a-procedure-knows-only-what-it-declares.md) — a procedure does not know
-how large its target is, so the same Set at two sizes is one picture at two resolutions.
-
-### The decisions nobody has taken
-
-Each is listed with what it blocks, and every one was found by building the thing next to it.
-
-**Which cut of the previous frame a feedback effect reads has left this list by being decided.**
-[ADR-0317](adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md) takes
-it, on the maintainer's ruling: the master chain was fixed built-in passes rather than a writable
-L5, and feedback reads either cut — `mix`, the frame as the mixer wrote it, or `exit`, this chain's
-own output — with the parameter choosing and **only the chosen cut retained**, which is the holding
-cost this entry argued, honoured rather than dodged. What it blocked was M5.8 and M5 itself, and
-M5.8 closed with the chain ADR-0317 specifies built. **The chain is a list of `kind L5` slots
-since M5.16 closed on 2026-09-13** (ADR-0340) and the cut survived the change: it is a word on the
-slot's record, set through the parameter row (ADR-0348). The account of both is in
-[history/m5.md](history/m5.md).
-
-**Others left this list before it, and none of those by being decided here.** *What the deck A
-preview cell is showing* is answered in the M5.1 paragraph above. *The instrument has no resolution
-model* was not a decision at all: the model was
-[ADR-0077](adr/0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md)'s, four weeks
-old and never cited from this file, and its one restrictive clause held only while the picture
-depended on the render size — which `point_rate` and the sub-pixel floor removed.
-[ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)
-gives the size to the output,
-[ADR-0247](adr/0247-one-frame-is-rendered-and-scaled-into-each-output.md) says one render scaled into
-each, and [P-0086](principles/0086-a-procedure-knows-only-what-it-declares.md) is the rule that
-keeps both safe. What was left of it — **what names an output** — was M5.6's implementation item
-rather than a standing question, and it is answered:
-[ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md) names one with a
-word from a closed list and never a label, and that bay closed on 2026-09-09. So the risk badge's
-bands and the whole-frame budget below are not waiting on anybody's decision, and an output has a
-size.
-
-**`crates/karakuri/src/main.rs` no longer composites at `const CANVAS`**, and **every cost figure in
-this file was measured while it did**. That constant was a measuring harness's default standing in
-for an instrument's; what replaced it is the largest enabled output's size
-([ADR-0325](adr/0325-the-frame-follows-the-largest-enabled-output-and-a-resize-costs-0-145-ms.md)),
-leaving `CANVAS` the shape every output is fitted to and the size a run starts at. **This was never
-a question and it was never this section's** — ADR-0247 decided it and ADR-0246 named M5.6 as the
-owner of implementing it, which that bay has done — so it stays here only as the reason every number
-below carries the same caveat, each having been taken at a fixed pair rather than at whatever an
-output now asks for. This paragraph also said the constant's *"own doc says why: it is the workspace's reference
-workload"*; that doc was rewritten under ADR-0270 and now disclaims the material half outright. **What the reference workload now is** — `examples/drift_cloud.kset` at 1280x720, named
-rather than taken from whatever the default pair happens to be — is
-[ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md),
-which also says what it leaves undone here: a panel figure is a deck of four stepped and drawn
-slots and a headless figure is one Set, so the sentence above about a panel number sitting beside
-every other number in this repository holds only against other panel numbers.
-
-- **Whether loading a shipped preset should write into the operator's own library.** ADR-0229
-  makes a load a packaging step that stores the bundle, so opening a shipped Set adds an entry to
+- **Whether loading a shipped preset should write into the operator's own library.**
+  [ADR-0229](adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md) makes a
+  load a packaging step that stores the bundle, so opening a shipped Set adds an entry to
   `<store>/sets/` — a consequence of two decisions rather than a decision anybody took. It is
-  probably right, being copy-on-load exactly as `scratch.rs` performs it for material and what
-  keeps `examples/` unwritten (P-0096). **The first symptom if it is wrong** is a `my sets` filling
-  up with things the operator did not make.
+  copy-on-load exactly as `scratch.rs` performs it for material, and what keeps `examples/` unwritten
+  is [P-0096](principles/0096-the-operators-library-is-written-by-an-operators-own-act.md). The first
+  symptom if it is wrong is a `my sets` filling with things the operator did not make.
 
-- **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it
-  and `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in
-  collapsed flags any later `expand` may contradict, and the next `unsolo` restores its snapshot
-  and throws the expand away with nothing said. Nothing reaches that state today.
+- **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
+  `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in collapsed
+  flags any later `expand` may contradict, and the next `unsolo` restores its snapshot and throws the
+  expand away with nothing said.
+  [ADR-0161](adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md) stores the soloed
+  node and settles nothing about `expand`. Nothing reaches that state today.
 
-**A question this clause carried has left it by being decided.** *What the Staging lane draws when
-one build changes two nodes* was M5.7's item 4, and the maintainer took it on 2026-09-09 — 変更ノー
-ドごとに 1 行, one row per changed node, so a row is a node a build changed and the build's one
-verdict is repeated on each of its rows
-([ADR-0326](adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md)). The account of it
-is in [history/m5.md](history/m5.md) under M5.7.
+- **What an agent is one of.** M6's first item asks for one per deck slot; the older statement of the
+  control plane called them node agents. The authority is no longer part of the question: it is set
+  per node ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)), and an
+  agent scoped to a deck slot can respect a per-node authority. M6's.
 
-Two more questions are named where they are met rather than here: who owns the pointer (decided by ADR-0330: the console paints its own hover layer; M5.11 has closed), and
-whether an addressed write by an agent onto a node the operator kept is refused, which cannot be
-decided until something writes a parameter on an agent's behalf — M6's, now that the Inspector has closed. **What an agent is one *of***
-is M6's and is open there.
+- **Whether an addressed write by an agent onto a node the operator kept is refused.** It cannot be
+  decided until something writes a parameter on an agent's behalf.
+  [P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+  is the rule it is a case of. M6's.
+
+- **The fate of `karakuri-cli`.** The recommendation on record is to shrink it as features move to
+  the panel rather than delete it;
+  [ADR-0242](adr/0242-the-command-line-is-test-tooling-and-the-instruments-principles-do-not-bind-it.md)
+  scopes deleting it out of that record.
 
 ---
 
 ## The instrumentation
 
-**Nothing in the test suite opens a window, and on 2026-09-08 that cost a program that would not
-start.** `cargo test --workspace` was green over 1953 tests while `cargo run -p karakuri` aborted on
-its first frame: a startup line asserted `View::select_scope`'s return value, which answers whether
-the mark *moved*, and the scope it selects is the console's own default — so the console agreeing
-read as the console refusing. Nothing in the suite reaches `resumed`, so nothing ran the line.
-`mod gpu`'s tests take a device and still open no window.
+These commands are the only source of the numbers in this project. They are not to be summarised or
+transcribed into prose.
 
-**The same shape was caught the same day by a different route.** A `#[cfg(test)]` placed nine
-thousand lines above the test modules silenced five source-scanning tests in
-`crates/karakuri/src/main.rs`, because each bounds its scan at the first `#[cfg(test)]` it finds.
-That one was found by verifying in a throwaway `git worktree` at HEAD plus one change. **The pair is
-worth keeping together**: a green suite proves that what ran passed, and neither of these ran.
-What closes the first is a test that reaches the startup path; what closes the second is nothing
-written down yet.
-
-**These four commands are the only source of the numbers in this project, and they are not to be
-summarised or transcribed into prose.** Every figure ever written into this file went stale — the
-meter four times, the vocabulary count six, the panel's allocation figure twice, the program's own
-startup legend five ways at once — so the numbers are gone rather than corrected.
-
-**The meter is the panel column** of [every operation](manual/operations.html), where a `has`
-badge means an operator running the instrument reaches that operation
+The meter is the panel column of [every operation](manual/operations.html), where a `has` badge means
+an operator running the instrument reaches that operation
 ([ADR-0213](adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)),
 and the key column is the instrument's keyboard rather than the command line's
 ([ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)).
-The board is the page's rather than this file's: every `plan` badge names where its control
-lives, so what is left arrives grouped by region and ordered by weight.
 
 ```sh
 # the meter — how far each surface has got
@@ -1753,276 +562,63 @@ sed -n '/^operations! {/,/^}$/p' crates/karakuri-operation/src/lib.rs |
   done
 ```
 
-**The fourth answers a question the badges cannot.** A `plan` badge says a surface is meant to
-reach an operation and does not yet; it says nothing about *why*, and an operation nothing
-constructs is one nobody can route to at all. Two cuts make it honest, both the ones
-`karakuri-console/tests/panel_column.rs` already makes: the record crate is excluded because it
-would answer *constructed* for every operation, and each line is truncated at its first `//`,
-because a doc comment naming an operation is not a call site. Seven of what it returns are
-expected. Five of those are the console's own shape, which reaches its rows through
-`karakuri_console::panel::Op` — moving a boundary, folding a bay, folding a pane, bringing one
-back, and resetting the arrangement. The other two, sizing the window and quitting, are the
-host's `winit` events.
+The fourth answers a question the badges cannot: a `plan` badge says a surface is meant to reach an
+operation and does not yet, and an operation nothing constructs is one nobody can route to at all.
+Two cuts make it honest, both of them `crates/karakuri-console/tests/panel_column.rs`' — the record
+crate is excluded because it would answer *constructed* for every operation, and each line is
+truncated at its first `//`, because a doc comment naming an operation is not a call site. Its
+pattern reads only the macro arms whose payload fits one line.
 
-**The panel measures itself rather than being measured here.** `crates/karakuri` installs a
-counting `#[global_allocator]` and holds each run against its own `WRITTEN_ALLOCS`, saying so
-when the two part company (ADR-0217); `karakuri-console`'s `tests/schedulable.rs` holds both of
-ADR-0164's schedulability conditions and `tests/parked.rs` holds the still panel's zero. Take any
-figure from them as an order of magnitude rather than a quantity two of them can be subtracted
-from.
+The panel measures itself rather than being measured here. `crates/karakuri` installs a counting
+`#[global_allocator]` and holds each run against its own `WRITTEN_ALLOCS`, saying so when the two
+part company
+([ADR-0217](adr/0217-the-counting-allocator-ships-because-a-written-number-nothing-checks-goes-stale.md));
+`karakuri-console`'s `tests/schedulable.rs` holds both of ADR-0164's schedulability conditions and
+`tests/parked.rs` holds the still panel's zero.
 
 ---
 
 ## Continuous concerns
 
-Not milestones. These degrade silently if not defended at every step.
+Not milestones. These degrade silently if not defended at every step, and the rules in force are in
+[principles/](principles/) rather than here.
 
 ### Live safety
 
-- No allocation or compilation on the render thread, ever. **Defended structurally and
-  asserted by proxy**, where the audio thread has a counting global allocator behind it: the
-  render path's claim rests on where allocation is *possible*, not on a harness that would
-  catch it
-- Watchdog on new pipelines, which **stops the slot rather than rolling back**. Both halves of it
-  moved on 2026-09-09. **What it judges was wrong**: it compared the deck's whole frame interval —
-  every slot's step and draw, the composite, the cell presents, the picture, the `egui` pass and the
-  vsync wait — so one slot's candidate was thrown out for the other three slots' cost plus the
-  console's, and a Set whose own frame costs 9.58 ms was rolled back on a number that read 33 ms. A
-  candidate is judged on **its own** measured cost now, against one frame of the display, with
-  nothing about the other slots on either side; the deck's period is still measured and is a
-  deck-level alarm that warns and never acts
-  ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
-  **And what it does about it was unreadable**: a rollback restored the previous *Set* and could not
-  restore the previous *file*, so the disk went on holding the refused version and the next
-  unrelated save reinstalled it — *"事情を知らないとバグってるようにしか見えない"*. The verdict against
-  is now `overloaded`: the version stays in the slot, the slot stops updating — no step, no draw, its
-  target holding the last frame it made — and the lane, the health capsule, that deck's cell caption,
-  the CLI status line and `swap_outcome` all say so. Nothing is put back and nothing ends it on its
-  own; the three ways out are the operator's fader, an earlier version landed out of the history, and
-  the next build
-  ([ADR-0316](adr/0316-an-over-budget-candidate-stays-in-the-slot-and-the-slot-stops-updating.md)).
-  This is `P-0094`'s *be loud* in place of its *undo*, taken because the undo was not one — and
-  **that principle's own delete-and-re-record pass is owed and is the maintainer's**, its *Undo*
-  example being `swap.rs`, which no longer rolls anything back; ADR-0313 left a pass owed on it too
-- The show continues when the generation API is unavailable. This becomes meaningful once
-  there is a pool to fall back on, so it is a promise from M4 onward rather than from M1
-- Graceful degradation for every input source, with confidence driving how conservative
-  transition scheduling becomes
+[P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+is the whole of it: what a mechanism does at its worst, the three admissible answers, and what each
+rules out. The show continuing when the generation API is unavailable is meaningful only once there
+is a pool to fall back on, so it is a promise from M4 onward rather than from M1.
 
 ### Determinism
 
-Reproducibility is not a nice-to-have; it is what makes the record stream meaningful.
-Undo, replay, A/B comparison, and session recording all follow from it. Anything
-introducing run-to-run variance — atomic append ordering, real frame delta, wall-clock
-seeds — breaks all four at once.
+[P-0092](principles/0092-the-same-inputs-produce-the-same-frame.md) is the whole of it. Undo, replay,
+A/B comparison and session recording all follow from it, and anything introducing run-to-run variance
+breaks all four at once.
 
 ### Performance discipline
 
-Per-element cost is the artifact's intrinsic property; total cost is a function of capacity.
-Metadata records the former. Any change touching the frame path comes with a measurement.
+Per-element cost is the artifact's intrinsic property; total cost is a function of capacity, and
+metadata records the former. Any change touching the frame path comes with a measurement;
+[contributing.md](contributing.md) §1 holds the benchmarking standards — the reference workload, the
+timestamp caveat and the conditions a figure must carry —
+[P-0091](principles/0091-cost-is-known-before-it-is-paid.md) holds when a cost must be known, and
+[P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md)
+holds what an instrument may report.
 
-**The machine this is developed on is not the baseline, and saying so is a rule rather than
-a caveat.** It has been wrong twice in the same direction. Its GPU timestamps advertise a
-feature it does not deliver, which is why the probe calibrates instead of trusting a flag.
-And it has enough memory that no VRAM figure this project has produced has ever been
-uncomfortable — which was then used, once, as evidence that a memory question could wait.
-A number measured here is a number from a rich machine: it bounds nothing.
+The machine this is developed on is not the baseline, and 4 GiB of dedicated VRAM is the reference
+for *does this fit* rather than a cap:
+[ADR-0110](adr/0110-this-machine-is-not-the-reference.md) holds both. A rich machine is allowed to
+spend what it has — more capacity, more slots resident, longer chains — and what is not allowed is
+waste a bigger machine merely hides; the test between them is whether spending it buys anything.
+Development is a desktop and a performance is probably a laptop, and the second is the machine that
+matters.
 
-**Development is a desktop and a performance is probably a laptop.** Those are different
-machines with different thermal limits and different memory, and the second one is the one
-that matters — rehearsal and the night itself run on the same box, and which box that is
-belongs to whoever is playing.
-
-#### The budget is measured over one slot, and it has to be measured over the frame
-
-**Decided, not built.** `Deck::govern` builds its `SlotState` list from `swap.measured_cost()`, which
-is one slot's Set measured on its own. Nothing measures the composite, the present passes or the
-panel, so the number the governor decides on is not the number the frame costs.
-
-**The frame *is* measured now, and it is a reading rather than a budget.**
-[ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
-took the deck's frame period off the swap watchdog's verdict — where it had been judging individual
-candidates on their neighbours' cost — and put it on `Deck::frame_period_ms` and
-`Report::deck_over_period`, a rolling median on a host clock that says the deck as a whole is or is
-not keeping up and acts on nothing. **That does not close this item.** The period is one number for
-four slots and cannot be divided among them, which is exactly what this heading asks for; what it
-supplies is the measurement *What `over_budget` says once `committed_ms` is the deck's total*
-needs — the *Mx — TODO* entry that item became — and an alarm where there was silence.
-
-**The failure is silence rather than slowness.** Four slots at 262144 elements measured about 10 ms
-a frame and registered as no violation at all. The maintainer's point: the problem is not that it is
-slow, it is that it is not detected. **Half of that is answered**: the deck's own period is measured
-and `Report::deck_over_period` says when it is over, so the silence is gone from the *deck*. What is
-still not detected is which slot, because a frame interval cannot be divided — that is the per-slot
-question and it is `committed_ms`'s, below.
-
-**What must not be done about an over-budget slot.** Forcing it to keep drawing, or lowering the
-frame rate to fit it, confuses the means with the end — the frame rate is what the show is played at,
-not a dial to spend. **A slot over budget is stopped.** That is the last of the risk badge's five
-bands and the one that is also a behaviour ([the console page](manual/console.html), *What a deck
-preview cell shows, and when*).
-
-**What is thin.** What the whole-frame measurement is taken *with* is not settled — the probe
-measures a Set, and a frame is passes this project has never timed together. The instrument question
-[P-0095](principles/0095-an-instrument-that-cannot-measure-says-so-rather-than-reporting-a-number.md) asks of any number applies to
-this one and has no answer yet.
-
-**The gap widened on 2026-09-07 and the record says so rather than closing it.**
-[ADR-0269](adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md) steps
-every drawn slot on every frame, so an off-air slot now costs its L1 as well as its L4 and neither is
-in `Report::committed_ms`, which sums the **Live** slots. That field says what it means and an
-admission decision needs exactly it; what nothing computes is the deck's total, which is the
-per-slot `Decision::cost_ms` summed. Making `committed_ms` that total would leave `over_budget` — the
-governor's one warning — permanently on for any four-slot deck of heavy material, which is why it was
-not done in passing. **There is a second warning beside it since 2026-09-09** and it is deliberately
-not the same flag: `Report::deck_over_period` is one measured frame of the whole deck against one
-frame's deadline, where `over_budget` is a sum of per-Set costs against the compute budget
-([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md),
-which supplies that measurement and takes none of this ruling). **The same change also measured the thing this item is about**: the four-slot
-frame that *"measured about 10 ms and registered as no violation at all"* is 21 ms with every slot
-warm and was 209 ms with three of them cold, and it still registers as no violation at all.
-
-#### The preparation slot is the measurement
-
-**Built, and not wired — it is what would produce the risk badge's estimate.** Today a reference
-measurement is the hint that admits a Set into a slot at all. The slot is then **drawn small while it
-prepares**, and that small draw is a second measurement — a higher-confidence estimate of what the
-same material costs at full size, on this machine, in this environment, rather than a number carried
-from elsewhere.
-
-**`Topology` looked like the discriminator and is not**, which took a measurement to settle. This
-item said *a `Fullscreen` procedure's cost is the pixel count so it scales with the target's area; a
-`Points` procedure is dominated by primitive work so it does not; `Lines` is unmeasured*. The
-fragment stage tracks the area for **all three**, and what decides whether a procedure looks
-invariant is its coverage rather than its enum — see *The rule that follows from the language* below,
-and [ADR-0266](adr/0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md),
-which rejects the per-topology branch and says what it would have got wrong.
-
-**The small draw has a floor under it now**, which cuts both ways for this.
-[ADR-0245](adr/0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md)
-holds a sub-pixel primitive to one fragment rather than dropping it, so a small target's picture is
-the same picture and the measurement is of the same material — which is the whole premise of
-measuring there. It also puts a floor under the *cost*: below the size at which sprites reach a
-pixel, a `Points` procedure costs one fragment per element whatever the target is, so a draw made
-smaller past that point stops getting cheaper and stops saying anything new. `tests/deck.rs`
-measures the pair: a 112x63 render of the panel's own material went from 0.6x the whole 720p frame
-to 1.1x of it.
-
-**Built on 2026-09-06, and the area-ratio extrapolation it shipped with was replaced the same day**
-by [ADR-0266](adr/0266-two-rungs-and-a-fit-because-a-frame-is-an-invariant-part-plus-a-fragment-part.md).
-`crates/karakuri-engine/src/estimate.rs` now draws a Set at **two** rungs — half and a quarter of the
-target's height — solves `a + b·area` through them, rewinds and restores the viewport, and returns
-either the fit or a named refusal. It is still exported from `lib.rs` and wired to nothing; wiring it
-to `Deck::govern` is undecided and is where to resume.
-
-**The rule that follows from the language rather than from a machine.** A frame is three parts: the
-simulation over `capacity`, the vertex stage per primitive, and the fragment stage over covered
-pixels. The first two do not depend on the target's size. The third does, and it does so for *every*
-topology, because `point_rate` is a **fraction of the target** rather than pixels — a fullscreen pass
-covers the target's area, a sprite covers `capacity × (rate × height)²`, a stroke covers its length
-times its width and both are fractions. So the cost is `a + b·area`, and **`Topology` is not the
-discriminator**: what decides whether a procedure looks invariant or looks area-proportional is
-coverage, `capacity × rate²`, which a param can move. The same procedure sits on either side of any
-rule keyed on the enum.
-
-**Two terms need two rungs, and that is what it does now.** One draw at one size gives `a + b·A` and
-no way to separate them, and scaling that sum by the area ratio scales `a` with it — which for
-per-element material is most of the frame. Measured on one machine, the shipped corpus overshot by
-very nearly the whole area ratio and every `Points` and `Lines` slot landed in the badge's last band.
-ADR-0266 takes the second rung, fits, and extrapolates the fragment term alone.
-
-**What that decision leaves undone**, because a consequence recorded only in the record is one the
-next person meets rather than reads:
-
-- **`estimate` refuses every `Points` and `Lines` Set** with `Unfit::FloorUnknown` and draws nothing,
-  because `point_rate` is a per-element vertex expression the CPU side never reads and the floor
-  below is therefore not a number it can compute. `estimate_above_floor` takes the floor from a
-  caller that knows it. **Closing this is a static analysis of the `point_rate` expression against
-  its params' declared ranges, and it is not written.**
-- **The fit is noisier per call than the number it replaced**, by about fivefold on the difference
-  between the two rungs, and on a host clock that is the clock rather than the fit: driven with the
-  full-size truth interleaved, one unchanged configuration measured 8.85 to 28.00 ms **at the same
-  size**, which `examples/small_draw.rs` would discard on its own spread limit. What the fit does
-  with that is refuse — about half the attempts on dense material returned
-  `Unfit::FragmentTermNegative` rather than a wrong number — which is the design working and is the
-  second reason nothing is wired to the governor yet.
-
-**Numbers taken here are not a basis for a decision.** Development is one unified-memory Metal
-machine; a tile-based renderer's binning behaviour and its thermal drift are that machine's and not
-the instrument's. Measurement is for confirming a rule that logic already argued, and for finding a
-floor. The floors themselves are the language's: ADR-0245 stops a sprite's coverage falling below one
-pixel, so both rungs must sit above `1/rate` rows — and `speed_lines` ships a stroke one pixel wide
-at 720 rows, so the reference size is already at its floor and no smaller draw says anything new
-about it.
-
-**What the ceilings turned out to be.** `MAX_OPS_PER_ELEMENT`, `MAX_OPS_PER_SPAWN`,
-`MAX_OPS_PER_FRAGMENT` and the fullscreen one all arrived in one commit whose message does not
-mention them, and **none has ever been measured against a frame time**. 4096 was chosen as an order
-of magnitude above two spec examples; 16384 is that times four with nothing arguing the factor; 512
-stands in for a quantity — `capacity × sprite area × overdraw` — that is nowhere counted. The doc on
-`MAX_OPS_PER_ELEMENT` says it *"will need retuning once real probe data (stage 7) exists"*; that data
-exists and nothing was retuned. **They are a backstop, not a budget**, and the governor is what
-enforces: a refusal before the show costs nothing, which is why a bound stays, but it belongs where
-it catches absurdity rather than where it negotiates a surface's normal.
-
-**Round the estimate toward refusing.** A show is cheaper to protect before it starts than to rescue
+Round the estimate toward refusing. A show is cheaper to protect before it starts than to rescue
 during it.
 
-**`Priming` gains a second meaning.** It already means warming buffers
-([ADR-0053](adr/0053-priming-runs-the-simulation-and-skips-rendering.md)); this makes it also mean
-measuring.
-
-**Two slots live and two preparing is the standard way of working.** That is why drawing a small
-target cheaply matters, and it is the premise the risk badge's bands are read against — *blue* is the
-ordinary state of good material precisely because two at 60 Hz is the ordinary case.
-
-**What is thin.** How small *small* is now follows from the target — half and a quarter of its
-height, both above ADR-0245's floor — and `Lines` is measured: at the declared maximum stroke width
-the fragment term is 67 ms of an 87 ms frame, so it tracks the area like everything else. **How the
-extrapolation's confidence is expressed is still unstated**, and it is the live question: the fit
-either answers or names a refusal, and there is nothing between those two. A third rung's residual is
-what would say whether the cost is affine at all, and it is deferred in ADR-0266 on what it costs and
-on this machine's spread. And every one of these numbers was taken at a resolution nobody chose — the
-panel's `CANVAS` constant. What replaces it is the output's own size
-([ADR-0246](adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)),
-which makes an extrapolation a per-output question rather than a global one.
-
-#### What a machine's size is allowed to decide
-
-**No hard limit, and no ceiling chosen here.** A rich machine should be allowed to spend
-what it has: more capacity, more slots resident, longer chains. Capping that to make a small
-machine's experience the only experience would be this project choosing against its own
-operator.
-
-**The case that tested this rule is not named anywhere else, so it is named here.** A Set whose
-elements land on one destination texel costs about 74 ms where the same Set scattered costs 2.6 —
-the raster back-end serialising order-dependent blending at one address, and the cost tracking the
-number of distinct texels rather than the number of fragments. Nothing about the arithmetic is
-wrong, an operator can reach it with a picture anybody would write, and **no limit is being added**:
-somebody with the hardware who wants that picture is allowed it (ADR-0269). What it does break is
-the extrapolation, which measures how much coverage there is and not how concentrated — so
-`estimate` is right at the sizes it measures and wrong extrapolating a concentrated Set to full
-size. This file pointed that at M5.14, which closed without it ever being one of that
-sub-milestone's items; it is under *Mx — TODO*, and it is a gap in the extrapolation rather than a
-limit here.
-
-**What is not allowed is waste that a bigger machine merely hides.** The two are easy to
-confuse and the test between them is simple: *does spending it buy anything?* Capacity buys
-elements. A resident Set buys an instant transition. Sixteen bytes holding a four-byte
-`seed` buys nothing at any size, so it is not a budget question and does not wait for one —
-it is tightened because it is slack, and the argument is theoretical rather than measured.
-
-**4 GiB of dedicated VRAM is the reference for "does this fit"**, and it is a reference and
-not a cap: it is the number a design is checked against, the machine a default has to be
-comfortable on, and the size at which a refusal must carry a sentence rather than a driver
-error. Above it, the operator's machine decides.
-
-**"GPU timestamp" is what that used to say, and it is honoured in labelled substitute.** The
-probe asks for timestamps, proves them with a calibration workload, and reports which
-instrument it actually used — `GpuTimestamp` or `HostWallClock` — because this crate's own
-development machine advertises the feature and lies. So the rule is a measurement that names
-its instrument, and the headline frame-path numbers in this repository came from a host
-clock and say so.
+Two slots live and two preparing is the standard way of working, and it is the premise the risk
+badge's bands are read against.
 
 ---
 
@@ -2030,90 +626,52 @@ clock and say so.
 
 Designed, understood, deliberately not scheduled.
 
-**Fusion — the graph compiler's other half.** Folding a chain of stateless stages into one
-shader at codegen. The language already makes it legal rather than merely plausible: an L2's
-statelessness is *structural*, since every generated `deform` overwrites its output from its
-input before the block runs, so there is no previous value left to accumulate onto. Nothing
-has to change in the language for this. It is an optimisation over a materialising
-implementation that is already correct.
+**Fusion — the graph compiler's other half.** Folding a chain of stateless stages into one shader at
+codegen. An L2's statelessness is structural, since every generated `deform` overwrites its output
+from its input before the block runs, so nothing in the language has to change. It is deferred
+because it is a trade rather than a win — it pays the stage's cost once per reader, so a heavy
+deformation read by three renderers costs three times, where materialising pays once — and because
+nothing is near a budget: a stage is one compute pass and one read-write of the element buffer, and
+the longest chain anything ships is two stages. What revives it is a probe measurement putting a Set
+over budget where the cost is in a chain of stateless stages with one reader; `probe.rs` measures at
+real capacity and the governor acts on the number, so the instrument to notice it exists.
 
-**It is deferred on a measurement and against an argument, not on cost.**
+**External shader source compatibility.** Shadertoy-style material is a single fullscreen fragment
+shader with no geometry stage and no parameters. Two import modes are designed: wholesale, as an
+opaque L4 fullscreen node, and extraction, where an LLM pulls out the SDF or noise function and
+discards the raymarch loop so it becomes a composable `Field`. The value in both is parameter
+lifting — hardcoded constants become declared `param`s. It is deferred rather than dropped because
+`VideoSource` makes it cheap later: a foreign source only needs to produce a colour texture.
+Imported material is often extremely expensive, which makes the budget governor mandatory rather than
+advisory.
 
-The argument is that fusion is a trade and not a win: it costs no memory and **pays the
-stage's cost once per reader**, so a heavy deformation read by three renderers costs three
-times. Materialising pays once however many nodes read it — which is the shape M3 just spent
-a milestone building. Fusion makes the multi-renderer case *worse*.
+**A keyboard is mapped and learned the same way a control surface is.** The vocabulary is what made a
+MIDI map possible and a key is another way to name the same operation; the grammar is written —
+`examples/surface.map` says `<target> <deck> <value>` and a key is a third `Key` beside `Cc` and
+`Note` — so the map file's parser is nearly all of the work, and moving it out of `karakuri-midi` is
+the *Mx — TODO* entry above. Learning belongs on the control: a GUI component is a translator between
+one operation and N ways in, so *learn this control* is one gesture from one place. The MIDI half
+landed in the hover layer
+([ADR-0330](adr/0330-the-console-paints-its-own-hover-layer-and-the-tips-are-the-manuals-own-words.md),
+[ADR-0336](adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md)); the key's own
+teaching path does not exist, which is rule 01's keyboard surface with no teaching path
+([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)). A keyboard
+map would be the first map file naming operations the record layer never sees — twelve of the CLI's
+keys write no record at all, being the surface's own state
+([ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md)) — so what a map file may
+say is a larger question than *which keys*.
 
-The measurement is that nothing is near a budget. A stage is one compute pass and one
-read-write of the element buffer; at 262144 elements and a 96-byte stride that is about
-50 MB a frame, or 3 GB/s at sixty — a few percent of a modern part's bandwidth — and the
-longest chain anything ships is two stages. There is nothing here to reclaim yet.
-
-**What would revive it**, written down so this is an observation and not a mood: a probe
-measurement putting a Set over budget where the cost is in a chain of stateless stages with
-**one reader**. `probe.rs` already measures at real capacity with real parameters and the
-governor already acts on the number, so the instrument to notice this exists — it does not
-need building first, and this item does not need scheduling until it fires.
-
-**External shader source compatibility.** Shadertoy-style material does not fit the
-primitive-centric model directly: it is a single fullscreen fragment shader, with no
-geometry stage and no parameters. Two import modes were designed — wholesale, as an opaque
-L4 fullscreen node, and extraction, where an LLM pulls out the SDF or noise function and
-discards the raymarch loop so it becomes a composable `Field`. The real value in both is
-parameter lifting: hardcoded constants become declared `param`s, turning a frozen image
-into an instrument.
-
-This is deferred rather than dropped because `VideoSource` makes it cheap later. A foreign
-source only needs to produce a colour texture. It slots in beside a Set without touching
-the Set model.
-
-Note that imported material is often extremely expensive. Allowing it makes the budget
-governor mandatory rather than advisory.
-
-**A keyboard is mapped and learned the same way a control surface is.** The keys are a `match`
-in `karakuri-cli` today, and there is no reason they should be: the vocabulary is what made a
-MIDI map possible, and a key is another way to name the same operation. The grammar is already
-written — `examples/surface.map` says `<target> <deck> <value>`, and a key is a third `Key`
-beside `Cc` and `Note` — so the map file's parser is nearly all of the work, and whether that
-lives in `karakuri-midi` or moves out of it is the question that goes with it, since a crate
-named for a wire would then be parsing something that never touches one.
-
-**Learning it belongs on the control**, which is the maintainer's own model: a GUI component is a
-translator between one operation and N ways in, so *learn this control* is one gesture from one
-place and MIDI is only the first of the N. The MIDI learn path landed in the hover layer (ADR-0330, ADR-0336); what is still missing is the key's own
-teaching path, so the console as drawn gives an operator no way to learn a key binding, which is rule 01's
-keyboard surface with no teaching path
-([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)).
-
-**What a keyboard map has to name that a MIDI map never did**: twelve of the CLI's thirty-nine
-keys write no record at all — the deck selection, the transition settings, the window, quitting
-— because they are the surface's own state (ADR-0194's group (c), ADR-0198). Every operation a
-map line can produce today writes a record, so a keyboard map is the first map file that would
-name operations the record layer never sees, and what a map file may say is then a slightly
-larger question than *which keys*.
-
-**Also deferred:** projection mapping and multi-output warping, DMX and Art-Net lighting
-sync, collaborative multi-operator sessions, video file playback, and any browser or wasm
-target. The engine is native for Syphon, NDI, low-latency audio, MIDI, and GPU timestamp
-queries.
+**Also deferred:** projection mapping and multi-output warping, DMX and Art-Net lighting sync,
+collaborative multi-operator sessions, video file playback, and any browser or wasm target. The
+engine is native for Syphon, NDI, low-latency audio, MIDI, and GPU timestamp queries.
 
 ---
 
 ## Settled decisions
 
-**These moved.** Every rule that was listed here is now one file in
-[docs/principles/](principles/) — stated once, so it cannot drift between documents — and the
-decision behind each, with the alternative that lost, is one record in [docs/adr/](adr/).
-`ls docs/principles/` is the index, because each filename is the rule it states.
-
-This section said *reference, not history*, and that was the right split; what it had no room for was
-the history, which is what `docs/adr/` is. It also had to carry supersessions inline — *this said per
-layer until a Set could hold two geometries* — which a record's front matter now carries instead.
-
-Nothing was left behind. The one entry that had been held here as unsettled — whether reference
-material handed to a generator belongs in `origin` — is settled in
-[ADR-0133](adr/0133-what-was-fed-to-a-generator-is-a-field-not-an-object.md): the object stays
-rejected, the field does not.
+[docs/adr/INDEX.md](adr/INDEX.md) is the index of every decision, with the alternative that lost in
+each record. Every standing rule that was once listed here is one file in
+[principles/](principles/), where `ls` is the index because each filename is the rule it states.
 
 ---
 
@@ -2126,15 +684,14 @@ rejected, the field does not.
 | [`docs/principles/`](principles/) | The rules in force, one file each — `ls` is the index |
 | [`docs/adr/`](adr/) | Every decision, with the alternatives that lost — append-only |
 | [`docs/history/`](history/) | Milestones that closed, kept whole. History, never the present tense |
-| `docs/ir-spec.md` | The IR: grammar, semantics, lowering, record formats |
-| `docs/manual.md` | How to play it: every flag, every key, and what each does |
-| [`docs/manual/`](manual/) | The console's manual, published — and the specification M5 is measured against |
-| `docs/plugins.md` | The out-of-process boundary, and why those two things are outside it |
-| This file | The milestones, what each is waiting on, and the handover |
+| [`docs/ir-spec.md`](ir-spec.md) | The IR: grammar, semantics, lowering, record formats |
+| [`docs/manual.md`](manual.md) | How to play it: every flag, every key, and what each does |
+| [`docs/manual/`](manual/) | The console's manual, published |
+| [`docs/plugins.md`](plugins.md) | The out-of-process boundary, and why those two things are outside it |
+| This file | The open milestones, what each owes, and the holding list under *Mx — TODO* |
 
-None of the others should restate this one, and this one should not restate them. **What is
-built, part by part, is not here**: the code's own documentation and the two manuals are the
-primary sources, and a status page that repeated them went stale faster than any of them.
+None of the others restates this one, and this one does not restate them. What is built, part by
+part, is not here: the code's own documentation and the two manuals are the primary sources.
 
 ---
 
@@ -2142,6 +699,6 @@ primary sources, and a status page that repeated them went stale faster than any
 
 1. [`docs/principles/`](principles/) — the rules in force
 2. [`docs/architecture.md`](architecture.md) — the crates, the pipeline, and what the words mean
-3. `docs/ir-spec.md` — the whole thing before writing any parser code
-4. This file — *The handover* first if you are picking work up
-5. [`docs/manual/`](manual/) — before touching M5, because it is what M5 is checked against
+3. [`docs/ir-spec.md`](ir-spec.md) — the whole thing before writing any parser code
+4. This file — *Mx — TODO* first if you are picking work up
+5. [`docs/manual/`](manual/) — what the console is checked against
