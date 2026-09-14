@@ -75,12 +75,11 @@ pub(crate) fn missed(outcome: &wgpu::CurrentSurfaceTexture) -> Option<Missed> {
 /// [ADR-0246](../../../docs/adr/0246-the-render-size-belongs-to-the-output-and-the-sessions-canvas-is-only-its-default.md)'s
 /// *the destination window decides*: `WindowEvent::Resized` on this window
 /// reconfigures the swapchain and the next frame's [`render_size`] follows it.
-/// Fullscreen on a chosen display is not built and is not one line — the
-/// operator makes this window fullscreen the way they make any window
-/// fullscreen, which is the console page's *fullscreen is just what an
-/// application does*; naming *which* display wants a list of monitors this
-/// program does not read, and a chip that carried one would carry a label that
-/// changes when the cable does.
+/// No operation names a display. The window is made fullscreen by the
+/// operating system's own gesture, on the display it is on when the gesture is
+/// made, and a picture for another application goes out through a plugin sink
+/// (`docs/plugins.md`) rather than through a window
+/// ([ADR-0358](../../../docs/adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md)).
 pub(crate) struct Projector {
     /// Held because the surface borrows it for `'static` and because the window is
     /// what a close event and a resize arrive on. Read by [`App::window_event`],

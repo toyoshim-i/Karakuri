@@ -383,6 +383,7 @@ number; new records continue from the end.
 | [ADR-0355](0355-a-session-head-says-what-the-deck-held-in-the-records-that-already-say-it.md) | A session head says what the deck held, in the records that already say it | 2026-09-14 | accepted |
 | [ADR-0356](0356-the-worker-estimates-what-it-built-and-an-estimate-is-a-fit-rather-than-a-number-at-one-size.md) | The worker estimates what it built, and an estimate is a fit rather than a number at one size | 2026-09-14 | accepted |
 | [ADR-0357](0357-a-lane-is-taken-out-by-a-glyph-on-its-row-and-enter-on-the-lane-is-the-key.md) | A lane is taken out by a glyph on its row, and `enter` on the lane is the key that reaches it | 2026-09-14 | accepted |
+| [ADR-0358](0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md) | The projector is fullscreened by the operating system on the display it is on, and another application is reached through a plugin | 2026-09-14 | accepted |
 
 ## Retired numbers
 
