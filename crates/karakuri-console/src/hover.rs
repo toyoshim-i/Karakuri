@@ -82,9 +82,18 @@
 //!
 //! # Modal overlay suppression
 //!
-//! When a modal overlay card, menu, or chooser is down ([`View::has_modal_overlay`]),
-//! [`resolve`] returns `None` to suppress tooltips on background controls underneath
-//! the modal overlay.
+//! While a modal overlay card, menu, or chooser is down
+//! ([`View::has_modal_overlay`]), this layer rests on nothing: [`resolve`] answers
+//! `None` for a pointer move made under one, and [`Hover::paint`] forgets the rest
+//! it was holding — exactly as [`Hover::left`] does — so a tip that is up goes, a
+//! dwell that is running is abandoned, nothing is owed, and the words return only
+//! once the card is gone *and* the pointer rests on the control again.
+//!
+//! It is asked in both places because a card comes down two ways. A press that
+//! opens one is a move, and [`resolve`] is asked on moves; a key, or a press that
+//! moved the pointer nowhere, is no move at all, and the frame the card is drawn on
+//! is where the layer hears about it. [`View::has_modal_overlay`] is the only
+//! derivation of *is a card down* on either path.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -2346,7 +2355,21 @@ impl Hover {
     ///
     /// Nothing is allocated after the first frame it is up: the galley is laid out
     /// once for the control the pointer is on and kept until the pointer leaves it.
+    ///
+    /// **A frame with a modal overlay down rests on nothing.** The layer forgets
+    /// where the pointer was resting, exactly as [`Hover::left`] does, so a tip
+    /// that is up goes on the frame the card is drawn on, a dwell that is running
+    /// is abandoned, and the words come back only once the overlay is gone *and*
+    /// the pointer rests on the control again — a fresh dwell and not the old one.
+    /// This is the frame's own reading of [`View::has_modal_overlay`], which is the
+    /// only derivation of *is a card down*: [`resolve`] answers `None` for a move
+    /// made under one, and a card put down by a key or by a press that moved the
+    /// pointer nowhere reaches this layer through no move at all.
     pub fn paint(&mut self, ui: &Ui, panel: &Panel, view: &View, now: Duration) {
+        if view.has_modal_overlay() {
+            self.left();
+            return;
+        }
         let Some(rest) = self.resting else {
             return;
         };
