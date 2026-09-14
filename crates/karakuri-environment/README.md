@@ -30,7 +30,7 @@ System coordination environment bridging runtime engine, content storage, extern
    - Coordinates transition states, parameter interpolation, and crossfade timing between decks.
    - Applies tonemapping and compositing rules across multiple active render slots.
    - Turns a described master chain into one the engine runs (`build_chain`, `apply_chain`). `resolve_procedure` is the one resolution every host uses: the three procedures shipped in `mix/shipped.rs` answer without a store, any other content address is the run's store's to answer, and `resolve_chain` is the one refusal — it names the slot's position and the address nothing holds, before anything is compiled.
-4. **Session Journaling & Scratchpad (`session.rs`, `scratch.rs`)**:
+4. **Session Journaling & Scratchpad (`session/`, `scratch.rs`)**:
    - Records frame metadata, parameter events, and audio analysis frames to append-only journals.
    - Isolates live edits into scratch paths, preserving pristine presets in the library.
 5. **Tempo Synchronization (`tempo_source.rs`, `clock.rs`)**:

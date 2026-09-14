@@ -119,7 +119,7 @@ pub(crate) fn measure_audio(
     // operator who cannot see that happen cannot tell a lock from a coincidence.
     // Scalars only, so pushing it allocates nothing — which is why the tempo
     // half of the audio path can be recorded on a frame and the measurement half
-    // cannot yet. See the note in `karakuri-environment`'s `session.rs`.
+    // cannot yet. See the note in `karakuri-environment`'s `session/mod.rs`.
     let reason = audio.reason();
     if let Some(record) = tempo {
         if let (karakuri_store::record::Record::Tempo { bpm, .. }, Some(reason)) = (&record, reason)
