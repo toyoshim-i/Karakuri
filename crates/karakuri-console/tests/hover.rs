@@ -233,9 +233,9 @@ const UNEVEN: [(&str, &str, usize); 8] = [
     // each and the fixed controls — four banks, the mode pill, `+ lane` — are
     // one apiece.
     (
-        "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
-        "the cells and the labels are per lane",
-        8,
+        "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane",
+        "the cells, the labels and the minus glyphs are per lane",
+        9,
     ),
 ];
 

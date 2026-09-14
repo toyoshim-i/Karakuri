@@ -1160,6 +1160,19 @@ pub(crate) const SPELLED: &[Spelled] = &[
     Spelled {
         sample: || {
             (
+                Operation::RemoveLane {
+                    pattern: 0,
+                    lane: 0,
+                },
+                Value::Null,
+            )
+        },
+        make: None,
+        shape: None,
+    },
+    Spelled {
+        sample: || {
+            (
                 Operation::SetPatternGrid {
                     pattern: 0,
                     grid: karakuri_operation::StepMode::Sixteenth,

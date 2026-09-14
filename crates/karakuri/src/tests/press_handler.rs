@@ -434,7 +434,7 @@ const ASKED: [(&str, &str, &[&str]); PROBES.len()] = [
     // an operation but a card going down, so it answers an enum, and the
     // card's own picks and dismissals come back through the same method.
     (
-        "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
+        "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane",
         "sequencer_bay(",
         &["bay.press(", "bay.chose("],
     ),

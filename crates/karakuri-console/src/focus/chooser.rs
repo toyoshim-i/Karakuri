@@ -284,7 +284,9 @@ pub fn drawn(view: &View, built: &Built, path: &[usize]) -> usize {
                 .and_then(|pane| pane.nodes.get(through.wrapping_sub(2)))
                 .map_or(0, |node| 2 + node.params.len()),
         },
-        // A lane draws its label and a cell per step of the mode.
+        // A lane draws its label and a cell per step of the mode. The minus at
+        // the end of the row is not one of them: it is the lane's own act,
+        // reached by `enter` on the lane rather than by a digit under it.
         (SEQUENCER, [lane]) if *lane <= lanes(view) => 1 + steps(view),
         // **A card hanging off a head control**, which the Sequencer's
         // `+ lane` chooser is the one of: the card draws one row per thing it
@@ -843,6 +845,23 @@ fn lane_state(view: &View, lane: usize) -> Asked {
     }
 }
 
+/// `enter` on a lane: the lane, taken out of the pattern by the position it is
+/// drawn at — which is what the minus at the end of its row asks for. The lanes
+/// after it move up, which is what a lane index means
+/// (`karakuri_pattern::Pattern::remove`).
+fn lane_removed(view: &View, lane: usize) -> Asked {
+    let Some(seq) = view.sequencer.as_ref() else {
+        return Asked::Nothing("this console has no pattern behind it");
+    };
+    match seq.pattern.lanes().get(lane.wrapping_sub(1)) {
+        Some(_) => Asked::Emitted(Operation::RemoveLane {
+            pattern: seq.bank as u8,
+            lane: (lane - 1) as u8,
+        }),
+        None => Asked::Nothing("this pattern has no lane with that number"),
+    }
+}
+
 /// `space` on a cell: the step, named as the state it arrives at — and the
 /// stored slot rather than the drawn step, which is what keeps the payload
 /// independent of the mode.
@@ -983,6 +1002,10 @@ pub fn performed(view: &View, item: Option<usize>, act: Act) -> Asked {
         Act::Remove | Act::Add => Asked::Nothing(
             "this is not the rung this act is on — press a digit to name a slot of the chain",
         ),
+        // **A lane is an item and taking it out is the item's own act**, so
+        // unlike the two chain acts above this one *is* reached here, with the
+        // lane's own number in hand.
+        Act::RemoveLane => lane_removed(view, item.unwrap_or(1)),
         Act::Read => match view.rows().set(item.unwrap_or(1) - 1) {
             Some(id) => Asked::Emitted(Operation::ReadSet { id: id.to_owned() }),
             None => Asked::Nothing(

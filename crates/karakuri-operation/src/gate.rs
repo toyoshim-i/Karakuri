@@ -500,12 +500,17 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
 
         // ----- The sequencer's lanes ----------------------------------------
         //
-        // *"The route that would defeat it is a lane, not a tool."* All five
+        // *"The route that would defeat it is a lane, not a tool."* All six
         // carry `Undecided` today; they are classed now so that the pattern
         // arriving is not also the day the audit acquires a hole.
+        //
+        // `RemoveLane` is here with the other five and not with the master
+        // chain's remove: what it takes out is a row of a pattern, so the route
+        // it would open is a lane.
         Operation::SetStep { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
         Operation::SetLaneMute { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
         Operation::PointLane { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
+        Operation::RemoveLane { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
         Operation::SetPatternGrid { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
         Operation::SelectPattern { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
 
@@ -712,6 +717,10 @@ mod tests {
                 pattern: 0,
                 target: LaneTarget::Fader { deck: 0 },
             },
+            Operation::RemoveLane {
+                pattern: 0,
+                lane: 0,
+            },
             Operation::SetPatternGrid {
                 pattern: 0,
                 grid: StepMode::Sixteenth,
@@ -897,8 +906,9 @@ mod tests {
         }
     }
 
-    /// 41 closed, 27 open, 68 total — ADR-0235's count less the one row ADR-0240
-    /// retired, plus the one ADR-0299 added, plus ADR-0338's four. It is still the
+    /// 42 closed, 27 open, 69 total — ADR-0235's count less the one row ADR-0240
+    /// retired, plus the one ADR-0299 added, plus ADR-0338's four, plus *Remove a
+    /// lane* on the closed side with the sequencer's other five. It is still the
     /// one number that says the classification was applied to the whole vocabulary
     /// rather than to the rows somebody remembered: the record read 41, 23, 64,
     /// *Choose what the output shows* leaving the vocabulary took one off the
@@ -913,7 +923,7 @@ mod tests {
     /// predicate over the same slot. Those two are the only rows whose standing is
     /// not a function of the operation alone, so the split is a split *given a
     /// reading* — and the reading that makes it 41 is the one the class was drawn
-    /// for. With nothing live it is 39 and 29, which is the same classification and
+    /// for. With nothing live it is 40 and 29, which is the same classification and
     /// not a second one.
     #[test]
     fn the_classification_is_the_split_adr_0235_states() {
@@ -928,7 +938,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!((closed, open, closed + open), (41, 27, 68));
+        assert_eq!((closed, open, closed + open), (42, 27, 69));
     }
 
     fn members(class: Class) -> Vec<&'static str> {

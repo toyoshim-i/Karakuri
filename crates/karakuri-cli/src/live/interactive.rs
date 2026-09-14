@@ -122,7 +122,8 @@ pub(crate) fn next_tonemap(op: TonemapOp) -> TonemapOp {
 ///
 /// An operation that writes no record writes nothing here. This surface
 /// performs an operation by converting it to records and reading them back —
-/// there is no second arm — so `Written::Silent` and `Written::Owed` both mean
+/// there is no second arm — so `Written::Silent`, `Written::Owed` and
+/// `Written::Refused` all mean
 /// nothing on this run changed, and a caller that reported success for one
 /// would be reporting a change it did not make
 /// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
@@ -158,6 +159,17 @@ pub(crate) fn answered(operation: &Operation, current: &Current) -> Result<Vec<R
             "`{}` was not performed and nothing on this run changed: {}",
             operation.title(),
             owed.why()
+        )),
+        // **A decision and not a gap**, in the words the crate that took it
+        // says them in: a scheduled move on a fader a lane of the armed
+        // pattern holds writes no record, here and on every other surface
+        // (ADR-0323). No lane can hold anything on this program — it runs no
+        // sequencer — and the arm is here because the sentence is one sentence
+        // wherever it is met.
+        Written::Refused(refusal) => Err(format!(
+            "`{}` was not performed and nothing on this run changed: {}",
+            operation.title(),
+            refusal.why()
         )),
     }
 }
@@ -1533,6 +1545,14 @@ impl Live {
             tempo,
             transition,
             mix,
+            // **Which lanes hold which controls, and on this program the
+            // answer is none of them**: there is no sequencer here, no pattern
+            // and no bank, so nothing can be holding a fader when a move is
+            // scheduled. It is a reading that was taken and is empty rather
+            // than `None`, which is a reading nobody took — the two behave
+            // alike today and say different things, and this one is the true
+            // one (ADR-0323).
+            lanes: Some(karakuri_operation_record::Lanes::default()),
         };
         for record in answered(operation, &current)? {
             self.record(record);

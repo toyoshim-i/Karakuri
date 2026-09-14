@@ -989,6 +989,33 @@ fn space_in_the_sequencer_names_the_state_it_arrives_at() {
     );
 }
 
+/// `enter` on a lane takes that lane out of the pattern, by the position the bay
+/// drew it at — the minus at the end of the row, reached by the one key that can
+/// reach it (a lane draws eighteen controls and the digits stop at nine).
+#[test]
+fn enter_on_a_lane_takes_it_out_of_the_pattern() {
+    for (lane, at) in [(1usize, 0u8), (2, 1)] {
+        let (panel, mut view) = console();
+        walk_to(&mut view, &panel, "sequencer", &[lane]);
+        assert_eq!(
+            press(&mut view, &panel, Press::Enter),
+            Asked::Emitted(Operation::RemoveLane {
+                pattern: 2,
+                lane: at
+            }),
+            "`{lane} enter` in the Sequencer did not take lane {at} out of bank 2"
+        );
+    }
+    // A lane this pattern does not draw is refused and says what was named,
+    // rather than taking the nearest row out.
+    let (panel, mut view) = console();
+    focus_on(&mut view, &panel, "sequencer");
+    assert!(matches!(
+        press(&mut view, &panel, Press::Digit(3)),
+        Asked::Nothing(_)
+    ));
+}
+
 /// The Inspector's four chips, each on the third rung and each naming the state
 /// it arrives at.
 #[test]

@@ -10,11 +10,12 @@ Operation-to-Record translation layer: converts high-level, surface-agnostic [`k
 
 - **Inputs**:
   - An [`Operation`](../karakuri-operation/README.md) describing user intent (e.g. `SetGain { deck: 1, gain: 0.8 }`, `SetExposure { exposure: 1.2 }`).
-  - A [`Current`](src/lib.rs) context snapshot capturing existing engine parameters (e.g., current tone mapper, mask angle/softness) needed to produce complete, self-contained record representations.
+  - A [`Current`](src/lib.rs) context snapshot capturing existing engine parameters (e.g., current tone mapper, mask angle/softness, which lanes of the armed pattern hold which controls) needed to produce complete, self-contained record representations.
 - **Output**: A [`Written`] classification:
   - `Written::Records(Vec<Record>)`: Emits one or more journal records to append to the session history.
   - `Written::Silent(Silent)`: Acknowledges operations that intentionally emit no journal record (e.g. transient UI focus, queries).
   - `Written::Owed(Owed)`: Identifies unimplemented or future operations with explanatory diagnostics.
+  - `Written::Refused(Refusal)`: A scheduled move on a control an unmuted lane of the armed pattern holds. No record is written, and the refusal carries the one sentence naming the lane ([ADR-0323](../../docs/adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md)).
 - **Consumer**: Engine mutation handlers, headless replay runners, and MCP mutation pipelines.
 
 ---

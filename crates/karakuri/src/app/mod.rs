@@ -719,6 +719,11 @@ impl App {
                     // settings the operator can see rather than the ones they
                     // just left.
                     let settings = readout.view.transition();
+                    // **And the banks, read after [`sequenced`] has run** for
+                    // the settings' reason one line up: a lane muted by this
+                    // same drain is muted before the move beside it is
+                    // converted, so the take-back an operator was told about is
+                    // the one the conversion sees (ADR-0323).
                     let written = written(
                         operation,
                         &reading(
@@ -727,6 +732,7 @@ impl App {
                             &gfx.engine.look,
                             &gfx.engine.chain,
                             settings,
+                            &readout.sequencer,
                         ),
                     );
                     // **A press that wrote no record says so**, and says

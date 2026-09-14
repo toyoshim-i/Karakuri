@@ -557,7 +557,7 @@ fn sample(variant: &str) -> Operation {
                 id: "night01".to_owned(),
             },
         },
-        // **The Sequencer bay's three, and every one of them names the bank it
+        // **The Sequencer bay's four, and every one of them names the bank it
         // acts on**: implying the armed one is the shape `SelectDeck`'s rule
         // refuses, so the pattern travels *in* the payload where
         // `SelectScope`'s chip travels beside it.
@@ -599,6 +599,14 @@ fn sample(variant: &str) -> Operation {
         "PointLane" => Operation::PointLane {
             pattern: 0,
             target: karakuri_operation::LaneTarget::Fader { deck: 0 },
+        },
+        // **The minus at the end of a lane's row**, addressed by the position
+        // the lane is drawn at: the lanes after it move up, so an index names
+        // whichever lane holds that position when the press lands (ADR-0352's
+        // property, one bay along).
+        "RemoveLane" => Operation::RemoveLane {
+            pattern: 0,
+            lane: 0,
         },
         // **A bank pill in the bay head**, naming a bank and never a
         // direction: with four fixed banks a press on an empty one is the

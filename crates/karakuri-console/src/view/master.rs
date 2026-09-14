@@ -18,7 +18,7 @@ const ADD_LABEL: &str = "+ add";
 
 /// The glyph at the end of a slot's row, which takes that slot out of the
 /// chain — `docs/manual/console.html`'s own mark for it.
-const REMOVE_GLYPH: &str = "\u{2212}";
+pub(super) const REMOVE_GLYPH: &str = "\u{2212}";
 
 /// The Master bay's body, laid out: the out row, then one well per slot of the
 /// running chain, then `+ add`.

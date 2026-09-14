@@ -2684,6 +2684,56 @@ mod live_save_tests {
         );
     }
 
+    /// A scheduled move on a fader a lane holds is refused here in the one
+    /// sentence, and this program hands over the reading that decides it.
+    ///
+    /// Two halves, because the first alone would pass on a surface that never
+    /// filled the reading: [`answered`] refuses when it is handed a lane, and
+    /// the `Current` this program builds is scanned for the field being filled
+    /// at all. Nothing here can hold a fader in practice — there is no
+    /// sequencer on this surface — so the scan is the only thing that can catch
+    /// the reading going missing (ADR-0323).
+    ///
+    /// The sentence is pinned with a `contains` against `Refusal::why` rather
+    /// than spelled out, which is [`no_such_slot`]'s lesson: a second spelling
+    /// of one refusal is what an operator meets as two explanations for one
+    /// mistake. The same sentence goes back over `--mcp`, because a model and a
+    /// terminal are answered from this one string.
+    #[test]
+    fn a_move_a_lane_holds_is_refused_here_in_the_one_sentence() {
+        let current = Current {
+            transition: Some(karakuri_operation_record::Transition {
+                start: 12.0,
+                beats: 4.0,
+                curve: karakuri_operation::Curve::Smooth,
+                wipe_kind: karakuri_operation::WipeKind::None,
+                wipe_angle: 0.0,
+            }),
+            lanes: Some(karakuri_operation_record::Lanes {
+                held: vec![(2, karakuri_operation::LaneTarget::Fader { deck: 1 })],
+            }),
+            ..Current::default()
+        };
+        let said = answered(&Operation::FadeDeck { deck: 1, to: 0.0 }, &current)
+            .expect_err("a fade onto a deck whose fader a lane holds was performed");
+        assert!(
+            said.contains(&karakuri_operation_record::Refusal { lane: 2, deck: 1 }.why()),
+            "this surface said `{said}`, which is not the sentence the refusal is \
+             worded in — one mistake, one explanation, whichever surface meets it"
+        );
+        // And the reading itself: a `Current` with no `lanes` in it refuses
+        // nothing, so a surface that stopped filling the field would go on
+        // scheduling moves over lanes in silence, with every test above green.
+        // Whitespace taken out, so a reformat is not a failing test and a line
+        // `cargo fmt` wrapped is not a silence.
+        let source: String = SOURCE.split_whitespace().collect();
+        assert!(
+            source.contains("lanes:Some(karakuri_operation_record::Lanes::default())"),
+            "the `Current` this program builds no longer fills the lanes reading — a \
+             field left out is a reading nobody took, which refuses nothing"
+        );
+    }
+
     /// This file's own source, at compile time. The scanner below reads
     /// [`Live::key`] out of it rather than being told what the keys are — the shape
     /// `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` set: read the
