@@ -290,15 +290,27 @@ impl ApplicationHandler for App {
                     .and_then(|procs| procs.first())
                     .map(|m| m.l1s.as_slice())
                     .unwrap_or(&[]);
-                let head = session_head(&self.args, &self.placed, geometries, &store, id);
+                // **The sources first**, because the head names them: a
+                // `procedure` record for slot 1 is an address, and an address
+                // the store cannot resolve is the same silence as no record.
                 seed_store_for_replay(&store, &self.placed);
+                // **The head slot's Set file, then what the deck held**, put
+                // together by the one function both this program and the
+                // console's `rec` pill write a head through.
+                let material = session_head(&self.args, &self.placed, geometries, &store, id);
+                let head = session::head(
+                    material,
+                    &held_deck(&self.args, &self.placed, &deck, (canvas_w, canvas_h)),
+                );
                 match session::Recorder::open(&store, id, &head) {
                     Ok(recorder) => {
                         eprintln!(
-                            "recording session `{id}` — {} record{} of material at its head, \
-                             so `--replay {id}` needs nothing else",
+                            "recording session `{id}` — {} record{} at its head, saying what \
+                             all {} slot{} held, so `--replay {id}` needs nothing else",
                             head.len(),
-                            if head.len() == 1 { "" } else { "s" }
+                            if head.len() == 1 { "" } else { "s" },
+                            deck.slot_count(),
+                            if deck.slot_count() == 1 { "" } else { "s" }
                         );
                         Some(recorder)
                     }
@@ -368,19 +380,13 @@ impl ApplicationHandler for App {
             recorder,
             demo_started: Instant::now(),
         };
-        // Through a record at startup too, on the same terms as every later
-        // change: `--tonemap` and `--exposure` are an operator's choices rather
-        // than the engine's defaults, so a session that did not carry them
-        // would replay under whatever look the next build happens to default
-        // to. This is also the first thing that decodes one, so a `look` this
-        // build cannot obey is reported before a frame is drawn.
-        let mut live = live;
-        // **Before the look, and once.** A replay reads this out of the stream
-        // to size everything it allocates, so it has to be there before any
-        // record that describes a frame — and there is deliberately no second
-        // writer anywhere, which is what "fixed for the run" means in practice.
-        live.record(mix::canvas_record(canvas_w, canvas_h));
-        live.record(mix::look_record(&self.args.look));
+        // **The canvas and the look are the head's, and there is no second
+        // writer of either.** They used to be pushed here as records, which
+        // was the only way a session could carry them before a head could say
+        // what the deck held; `session::head` writes both now, so pushing them
+        // again would put a second `canvas` in the stream — and a replay
+        // reports every `canvas` after the first, because the canvas is fixed
+        // for a run.
         self.live = Some(live);
     }
 

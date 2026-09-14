@@ -380,6 +380,7 @@ number; new records continue from the end.
 | [ADR-0352](0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md) | The chain's list is the Master bay's items, and a slot is taken out by a glyph on its row | 2026-09-13 | accepted |
 | [ADR-0353](0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md) | A scheduled fade is not drawn on a real-time surface, so the two rows read `gap` in both hand columns | 2026-09-14 | accepted |
 | [ADR-0354](0354-a-chain-is-compiled-on-a-thread-of-its-own-and-lands-at-a-frame-boundary.md) | A chain is compiled on a thread of its own and lands at a frame boundary | 2026-09-14 | accepted |
+| [ADR-0355](0355-a-session-head-says-what-the-deck-held-in-the-records-that-already-say-it.md) | A session head says what the deck held, in the records that already say it | 2026-09-14 | accepted |
 | [ADR-0356](0356-the-worker-estimates-what-it-built-and-an-estimate-is-a-fit-rather-than-a-number-at-one-size.md) | The worker estimates what it built, and an estimate is a fit rather than a number at one size | 2026-09-14 | accepted |
 | [ADR-0357](0357-a-lane-is-taken-out-by-a-glyph-on-its-row-and-enter-on-the-lane-is-the-key.md) | A lane is taken out by a glyph on its row, and `enter` on the lane is the key that reaches it | 2026-09-14 | accepted |
 

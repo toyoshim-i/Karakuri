@@ -704,6 +704,91 @@ fn a_session_head_carries_the_material_a_replay_needs() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
+/// **A head written for a two-slot deck splits back into the material and the
+/// deck**, and the material still loads clean.
+///
+/// The writer's own output through the reader's own rule. `session_head` writes
+/// the head slot's Set file, `session::head` puts the deck's records after it,
+/// and `session::split` is what `--replay` sorts the two with — so a head whose
+/// deck records leaked into the material, or whose material leaked into the
+/// deck, fails here rather than on the way back from a set.
+///
+/// What this cannot check is the *reading* of a live deck — `held_deck` takes a
+/// `Deck` and a deck takes a device. The values below are written by hand for
+/// that reason, and the far end of the claim is
+/// `karakuri-cli/tests/replay.rs`'s two-slot head driven through the binary.
+#[test]
+fn a_two_slot_head_splits_into_the_material_and_the_deck() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let store = karakuri_store::store::Store::open(dir.path()).expect("store");
+
+    let mut args = parse(&[]).expect("parses");
+    args.sets = vec![(
+        Named::bare(root.join("examples/coil_vortex.kir")),
+        vec![Named::bare(root.join("examples/star_flares.kir"))],
+    )];
+    args.store = dir.path().to_path_buf();
+    let (material, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
+    // The same material in the second slot, which is what this program's own
+    // deck holds when it is given one `--set`: four slots of one pair.
+    let nodes: Vec<_> = placed
+        .iter()
+        .map(|node| {
+            (
+                karakuri_environment::meta::layer_of(node.layer),
+                node.index,
+                node.hash(),
+            )
+        })
+        .collect();
+
+    let head = session::head(
+        session_head(&args, &[placed], &material.l1s, &store, "two"),
+        &session::Held {
+            canvas: (640, 360),
+            look: args.look,
+            master_out: 1.0,
+            master_chain: Vec::new(),
+            slots: (0..2)
+                .map(|_| session::SlotHeld {
+                    nodes: nodes.clone(),
+                    gain: 1.0,
+                    opacity: 1.0,
+                    blend: karakuri_engine::deck::Blend::Add,
+                    residency: karakuri_engine::deck::Residency::Live,
+                    mask: karakuri_engine::deck::Mask::default(),
+                    transport: karakuri_engine::transport::Transport::default(),
+                })
+                .collect(),
+        },
+    );
+
+    let stream = session::split(head);
+    // The material loads the way `--replay` loads it, with nothing of the deck's
+    // among it: a `gain` reaching `from_lines` comes back as a note.
+    let loaded = setfile::from_lines(&store, "two", &stream.head)
+        .expect("the head a recording writes is a head a replay can load");
+    assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    assert_eq!(loaded.l1s[0].kind, karakuri_ir::Kind::L1);
+
+    let named: Vec<usize> = stream
+        .opening
+        .iter()
+        .filter_map(|record| match record {
+            karakuri_store::record::Record::Procedure { slot, .. } => Some(slot.index()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        named,
+        vec![1, 1],
+        "the second slot's two nodes, and none for the first — whose Set file is the \
+         material above"
+    );
+    assert!(stream.frames.is_empty(), "a head is not a frame");
+}
+
 /// A session opens with a Set file, so what a Set file cannot hold is a
 /// performance that cannot be recorded.
 ///

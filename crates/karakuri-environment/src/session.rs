@@ -1,9 +1,19 @@
 //! Writing a session stream, and replaying one.
 //!
-//! A Set file says what the material *is*. A session stream is the timeline:
-//! that file's records, then `tick` records and the edits between them, so
-//! every edit lands at an exact frame position because it sits between two
-//! known ticks.
+//! A Set file says what one Set's material *is*. A session stream is the
+//! timeline: a **head** saying what the whole deck held, then `tick` records and
+//! the edits between them, so every edit lands at an exact frame position
+//! because it sits between two known ticks.
+//!
+//! ## The head
+//!
+//! Everything before the first `tick` that is not a frame's own — see [`split`]
+//! and [`head`], and `docs/ir-spec.md` for the specification. One Set file's
+//! records for slot 0, one `procedure` record per node of every other slot, and
+//! then the deck: the canvas, every slot's gain, opacity, blend, residency, mask
+//! and transport, the look, the level at the master chain's entry and the chain
+//! itself. A replay builds a deck as wide as the head names and puts all of it
+//! back before the first frame renders.
 //!
 //! With this, `tick` finally has a writer and the record stream is the whole
 //! path — every control ending at the same record
@@ -48,9 +58,14 @@
 use std::io::Write;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 
+use karakuri_engine::deck::{Blend, Mask, Residency};
+use karakuri_engine::master::SlotSpec;
+use karakuri_engine::transport::Transport;
+use karakuri_engine::Look;
 use karakuri_signal::measured::MAX_BANDS;
+use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
-use karakuri_store::record::Record;
+use karakuri_store::record::{DeckSlot, Layer, NodeAddress, Record};
 use karakuri_store::store::Store;
 
 /// Records per batch. A frame emits at most a handful — a tick, an audio frame,
@@ -301,9 +316,21 @@ impl Drop for Recorder {
 /// A session stream, split into what it says about the material and what it
 /// says about the performance.
 pub struct Session {
-    /// The head: the Set file's records, in order, so the material can be built the
-    /// same way `--load-set` builds it.
+    /// The head's material: one Set file's records, in order, so the Set the head
+    /// slot held can be built the same way `--load-set` builds it.
+    ///
+    /// One Set file and not one per slot. The other slots' material is named in
+    /// [`Session::opening`], by the `procedure` records that already name it
+    /// mid-stream — see [`head`].
     pub head: Vec<Line>,
+    /// The deck's state at frame 0: every record before the first `tick` that is
+    /// not a Set file's and not a frame's own measurement.
+    ///
+    /// `procedure` records naming what every slot beyond the head's held, and then
+    /// the mix — `canvas`, `look`, `master_out`, `master_chain`, and per slot
+    /// `gain`, `opacity`, `blend`, `residency`, `mask` and `transport`. Applied
+    /// before the first frame renders, which is where they were true.
+    pub opening: Vec<Record>,
     /// One entry per `tick`: what to apply *before* that frame, and how many steps
     /// the frame advances.
     pub frames: Vec<Frame>,
@@ -329,16 +356,18 @@ impl Session {
     pub fn canvas(&self) -> (Option<(u32, u32)>, usize) {
         let mut found = None;
         let mut extra = 0;
-        // **`trailing` as well**, because a session that never drew a frame
-        // puts everything there: no tick means no `Frame` to hold it, and a
-        // run closed before the first frame — or one whose every frame was
-        // abandoned — still recorded the canvas it was going to use. Scanning
-        // the frames alone reported "no `canvas` record" about a stream that
-        // plainly has one.
+        // **`opening` and `trailing` as well.** The canvas is written into the
+        // head by both writers, so `opening` is where a session written by this
+        // program keeps it; `trailing` is where a session that never drew a
+        // frame puts everything, because no tick means no `Frame` to hold it,
+        // and a run closed before the first frame — or one whose every frame
+        // was abandoned — still recorded the canvas it was going to use.
+        // Scanning the frames alone reported "no `canvas` record" about a
+        // stream that plainly has one.
         for record in self
-            .frames
+            .opening
             .iter()
-            .flat_map(|f| f.before.iter())
+            .chain(self.frames.iter().flat_map(|f| f.before.iter()))
             .chain(self.trailing.iter())
         {
             if let Record::Canvas { width, height } = record {
@@ -363,12 +392,22 @@ pub struct Frame {
 
 /// Split a session stream into its head and its frames.
 ///
-/// A record is the head's if [`Record::is_set_state`] says so and no tick has
-/// happened yet. The second half matters: a `param` record after the first tick
-/// is an edit made during the performance, and folding it into the head would
-/// apply it before the run started.
+/// **The head is everything before the first `tick` that is not a frame's own.**
+/// A record after the first tick is an edit made during the performance, and
+/// folding it into the head would apply it before the run started; a
+/// [`Record::is_measurement`] record before the first tick is the first frame's
+/// `audio` or `tempo` and belongs to that frame, because a frame writes its
+/// edits, then what it heard, then the tick that closes it.
+///
+/// The head reaches the caller as two lists rather than one, because it has two
+/// readers and they read two vocabularies. [`Record::is_set_state`] says which:
+/// a Set file's records go to [`Session::head`], where `setfile::from_lines`
+/// builds a Set out of them, and the deck's own records go to
+/// [`Session::opening`], where a replay applies them to the deck it has just
+/// built. The file has one rule and the struct has two fields.
 pub fn split(lines: Vec<Line>) -> Session {
     let mut head = Vec::new();
+    let mut opening = Vec::new();
     let mut frames = Vec::new();
     let mut pending = Vec::new();
     let mut started = false;
@@ -383,15 +422,145 @@ pub fn split(lines: Vec<Line>) -> Session {
                 });
             }
             record if !started && record.is_set_state() => head.push(line),
+            record if !started && !record.is_measurement() => opening.push(record.clone()),
             record => pending.push(record.clone()),
         }
     }
 
     Session {
         head,
+        opening,
         frames,
         trailing: pending,
     }
+}
+
+/// What one deck slot held when a recording began.
+///
+/// The nodes it was playing, by the addresses a [`Record::Procedure`] names, and
+/// the mix controls the deck holds for it. Plain data with nothing borrowed, so
+/// a surface can read it on a frame and write it on a thread.
+#[derive(Debug, Clone)]
+pub struct SlotHeld {
+    /// Every node of the Set in the slot: which layer, which index on that layer,
+    /// and the store address its source is at.
+    ///
+    /// The address is the promise. A `procedure` record names bytes the store must
+    /// already hold, so a writer puts every one of these before it writes a head —
+    /// `setfile::Sources::into_nodes` on one side, `Placed::put` on the other.
+    pub nodes: Vec<(Layer, u32, Hash)>,
+    pub gain: f32,
+    pub opacity: f32,
+    pub blend: Blend,
+    /// What the slot was *asked* to do, never the level the governor granted:
+    /// [`Record::Residency`] records the request, so a session recorded on a fast
+    /// machine and replayed on a slow one re-derives the rest.
+    pub residency: Residency,
+    pub mask: Mask,
+    pub transport: Transport,
+}
+
+/// What the deck held when a recording began: one entry per slot, and the four
+/// values that belong to the fold rather than to anything folded.
+#[derive(Debug, Clone)]
+pub struct Held {
+    pub canvas: (u32, u32),
+    pub look: Look,
+    pub master_out: f32,
+    /// The master chain as it stands, whole. A Set file carries nothing for the
+    /// chain (ADR-0340), so this is the only thing in a head that can put it back.
+    pub master_chain: Vec<SlotSpec>,
+    /// Every slot of the deck, in deck order. A slot cannot hold nothing — a deck
+    /// is built with one `HotSwap` per slot — so this is as long as the deck is,
+    /// and `slots[0]` is the slot whose Set is the head's material.
+    pub slots: Vec<SlotHeld>,
+}
+
+/// The head of a session stream: what the deck held at frame 0, said in the
+/// records that already say it.
+///
+/// `material` is one Set file's records, read back out of the store — the Set in
+/// the head slot, with its params, its bindings, its seeds and its edges. Every
+/// other slot is named by `procedure` records, one per node, which is the record
+/// a swap already writes and a replay already obeys; those slots are built
+/// against this file's parameter table rather than against a second copy of it.
+///
+/// Then the deck, as ordinary session records: the canvas, every slot's gain,
+/// opacity, blend, residency, mask and transport, the look, the level at the
+/// chain's entry and the chain itself.
+///
+/// **Written always and never only where it differs from a fresh deck.** A
+/// replay that had to know what a deck starts at would be a second derivation of
+/// the deck's defaults, kept in step with the engine's by nothing; a head that
+/// says all of it is a head a reader can obey without knowing anything.
+///
+/// The one derivation of the sentence *what did this deck hold*. Both writers —
+/// `karakuri-cli`'s `--record-session` and the console's `rec` pill — call this
+/// one function, so the two cannot spell a head two ways.
+pub fn head(material: Vec<Line>, held: &Held) -> Vec<Line> {
+    let mut lines = material;
+    // **The canvas first among the deck's records**, because a replay reads it
+    // before it allocates anything — see [`Session::canvas`].
+    lines.push(Line::new(Record::Canvas {
+        width: held.canvas.0,
+        height: held.canvas.1,
+    }));
+    for (slot, state) in held.slots.iter().enumerate() {
+        // **Material before mix, and the head slot's material is the file
+        // above.** A `procedure` record for slot 0 would restate what the Set
+        // file already says, and a replay obeying it would rebuild that slot
+        // from addresses alone — without the params, bindings and seeds only
+        // the file carries.
+        if slot > 0 {
+            for (layer, index, hash) in &state.nodes {
+                lines.push(Line::new(Record::Procedure {
+                    slot: DeckSlot(slot as u8),
+                    at: NodeAddress {
+                        layer: *layer,
+                        index: *index,
+                    },
+                    proc_hash: *hash,
+                }));
+            }
+        }
+        lines.push(Line::new(Record::Gain {
+            slot: DeckSlot(slot as u8),
+            value: state.gain,
+        }));
+        lines.push(Line::new(Record::Opacity {
+            slot: DeckSlot(slot as u8),
+            value: state.opacity,
+        }));
+        lines.push(Line::new(Record::Blend {
+            slot: DeckSlot(slot as u8),
+            mode: state.blend.name().to_string(),
+        }));
+        lines.push(Line::new(Record::Residency {
+            slot: DeckSlot(slot as u8),
+            level: crate::mix::residency_wire_name(state.residency).to_string(),
+        }));
+        lines.push(Line::new(Record::Mask {
+            slot: DeckSlot(slot as u8),
+            kind: state.mask.kind().name().to_string(),
+            angle: state.mask.angle(),
+            position: state.mask.position(),
+            softness: state.mask.softness(),
+        }));
+        lines.push(Line::new(crate::mix::transport_record(
+            slot,
+            &state.transport,
+        )));
+    }
+    lines.push(Line::new(crate::mix::look_record(&held.look)));
+    lines.push(Line::new(Record::MasterOut {
+        value: held.master_out,
+    }));
+    lines.push(Line::new(Record::MasterChain(
+        karakuri_store::record::Chain {
+            slots: crate::mix::current_chain(&held.master_chain).slots,
+        },
+    )));
+    lines
 }
 
 #[cfg(test)]
@@ -741,6 +910,236 @@ mod tests {
             "the frame path ran out of shells, so it would have had to allocate"
         );
         assert_eq!(w.records, (BATCH * 2) as u64);
+    }
+
+    /// A `Held` for a deck of `slots`, at values nothing else in this file uses,
+    /// so an assertion naming one is naming the value the head carried.
+    fn held(slots: usize) -> Held {
+        Held {
+            canvas: (640, 360),
+            look: karakuri_engine::Look {
+                op: karakuri_engine::present::TonemapOp::Aces,
+                exposure: 1.25,
+                white_point: 4.0,
+            },
+            master_out: 0.75,
+            master_chain: Vec::new(),
+            slots: (0..slots)
+                .map(|slot| SlotHeld {
+                    nodes: vec![
+                        (Layer::L1, 0, Hash::of(format!("l1 {slot}").as_bytes())),
+                        (Layer::L4, 0, Hash::of(format!("l4a {slot}").as_bytes())),
+                        (Layer::L4, 1, Hash::of(format!("l4b {slot}").as_bytes())),
+                    ],
+                    gain: 0.1 * slot as f32,
+                    opacity: 0.5,
+                    blend: Blend::Over,
+                    residency: Residency::Priming,
+                    mask: Mask::default(),
+                    transport: Transport::default(),
+                })
+                .collect(),
+        }
+    }
+
+    /// **The head names every slot of the deck and the chain**, which is the whole
+    /// of what a session stream could not say.
+    ///
+    /// One Set file for slot 0 and a `procedure` record per node of every other
+    /// slot — never one for slot 0, whose Set file already carries its nodes *and*
+    /// the params, bindings and seeds a `procedure` record cannot. Then the mix,
+    /// for every slot and not only for the ones that differ from a fresh deck: a
+    /// replay that had to know the deck's defaults would be a second derivation of
+    /// them.
+    #[test]
+    fn the_head_names_every_slot_and_the_chain() {
+        let head = head(vec![set_line()], &held(3));
+        let records: Vec<Record> = head.iter().map(|line| line.record().clone()).collect();
+
+        let procedures: Vec<usize> = records
+            .iter()
+            .filter_map(|r| match r {
+                Record::Procedure { slot, .. } => Some(slot.index()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            procedures,
+            vec![1, 1, 1, 2, 2, 2],
+            "every node of every slot but the head's, and none for the head's"
+        );
+
+        for slot in 0..3 {
+            let about: Vec<&Record> = records
+                .iter()
+                .filter(|r| match r {
+                    Record::Gain { slot: s, .. }
+                    | Record::Opacity { slot: s, .. }
+                    | Record::Blend { slot: s, .. }
+                    | Record::Residency { slot: s, .. }
+                    | Record::Mask { slot: s, .. }
+                    | Record::Transport { slot: s, .. } => s.index() == slot,
+                    _ => false,
+                })
+                .collect();
+            assert_eq!(
+                about.len(),
+                6,
+                "slot {slot}: the six the deck holds per slot, always and not only \
+                 where they differ from a fresh deck"
+            );
+        }
+
+        assert!(
+            records.contains(&Record::Canvas {
+                width: 640,
+                height: 360
+            }),
+            "no canvas: a replay reads it before it allocates anything"
+        );
+        assert!(
+            records.contains(&Record::MasterOut { value: 0.75 }),
+            "no level at the chain's entry"
+        );
+        assert!(
+            records.iter().any(|r| matches!(r, Record::MasterChain(_))),
+            "no `master_chain`: a Set file carries nothing for the chain, so the head \
+             is the only thing that can put it back"
+        );
+        assert!(
+            records.iter().any(|r| matches!(r, Record::Look { .. })),
+            "no look"
+        );
+    }
+
+    /// A head goes through [`split`] as a head: the Set file's records on one side,
+    /// the deck's on the other, and no frame in between.
+    #[test]
+    fn a_head_round_trips_through_split() {
+        let written = head(vec![set_line()], &held(2));
+        let deck_records = written.len() - 1;
+        let session = split(written);
+
+        assert_eq!(
+            session.head.len(),
+            1,
+            "the material is the Set file's records and nothing else"
+        );
+        assert_eq!(
+            session.opening.len(),
+            deck_records,
+            "every record the head wrote about the deck is in `opening`"
+        );
+        assert!(session.frames.is_empty(), "a head is not a frame");
+        assert!(session.trailing.is_empty());
+        assert_eq!(
+            session.canvas(),
+            (Some((640, 360)), 0),
+            "the canvas is read out of the head"
+        );
+    }
+
+    /// **A measurement before the first tick belongs to the first frame**, not to
+    /// the head.
+    ///
+    /// A frame writes its edits, then what it heard, then the tick that closes it —
+    /// so the `audio` line in front of the very first tick is frame 0's
+    /// measurement. Sorting the head by position alone would move it into the head
+    /// and replay frame 0 at what the bus invents rather than at what the room
+    /// heard.
+    #[test]
+    fn the_first_frames_measurement_is_not_the_heads() {
+        let session = split(vec![
+            set_line(),
+            Line::new(Record::Gain {
+                slot: DeckSlot(0),
+                value: 0.5,
+            }),
+            Line::new(Record::Audio {
+                energy: 0.4,
+                onset: 0.0,
+                bands: vec![0.1; 4],
+                confidence: 1.0,
+            }),
+            Line::new(Record::Tick { steps: 1 }),
+        ]);
+        assert_eq!(session.head.len(), 1, "the Set file's record");
+        assert_eq!(session.opening.len(), 1, "the deck's gain");
+        assert_eq!(
+            session.frames[0].before.len(),
+            1,
+            "the measurement stayed with the frame it was measured in"
+        );
+        assert!(matches!(session.frames[0].before[0], Record::Audio { .. }));
+    }
+
+    /// **Every program that opens a recorder writes its head through [`head`].**
+    ///
+    /// A recorder takes a head and appends nothing to it afterwards, so whatever
+    /// is handed to [`Recorder::open`] *is* the head of that stream. Two surfaces
+    /// record sessions — `karakuri-cli`'s `--record-session` and the console's
+    /// `rec` pill — and what a head has to say is the same sentence for both: what
+    /// every slot of the deck held. A second assembly of that sentence is a second
+    /// answer to it, which is what this file's two writers used to be.
+    ///
+    /// **A source scan, because the round trip it would rather be cannot be run.**
+    /// Both writers need a deck and a deck needs a device; `karakuri-cli`'s live
+    /// path needs a *window* on top of that, which is why `--record-session` is
+    /// refused alongside `--render`, `--seq` and `--replay`. So the far end of the
+    /// claim is checked where it can be — `karakuri-cli/tests/replay.rs` drives a
+    /// hand-written two-slot head through the binary — and this is the near end.
+    ///
+    /// What it cannot see is a writer that calls [`head`] and then appends records
+    /// of its own. It is coarse in the safe direction: the failure it refuses is
+    /// the one that already happened.
+    #[test]
+    fn every_recorder_is_opened_over_a_head_this_module_wrote() {
+        fn walk(dir: &std::path::Path, into: &mut Vec<std::path::PathBuf>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, into);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    into.push(path);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("workspace root");
+        let mut files = Vec::new();
+        walk(&root.join("crates"), &mut files);
+        // This module's own tests open recorders over heads written by hand, to
+        // check the recorder rather than the head.
+        let defines = root.join("crates/karakuri-environment/src/session.rs");
+        let mut opened = 0;
+        for path in files {
+            if path == defines {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read source");
+            if !text.contains("Recorder::open(") {
+                continue;
+            }
+            opened += 1;
+            assert!(
+                text.contains("session::head("),
+                "{}: opens a session recorder over a head it assembled itself — a head \
+                 says what the deck held, and `session::head` is the one place that \
+                 sentence is spelled",
+                path.display()
+            );
+        }
+        assert_eq!(
+            opened, 2,
+            "expected the two surfaces that record a session — `karakuri-cli`'s \
+             `--record-session` and the console's `rec` pill. A third is welcome and owes \
+             this count a line; fewer means the scan has stopped finding either"
+        );
     }
 
     /// What was pushed is what the file holds, in order.

@@ -29,14 +29,14 @@ use std::time::Instant;
 // Recording the session
 // ---------------------------------------------------------------------------
 
-/// Which deck slot's material a session's head describes.
+/// Which deck slot's Set file a session's head carries.
 ///
-/// `karakuri-cli`'s `session_head` says why there is a number here at all: *"a
-/// session stream cannot say what a deck held"*, so a head describes one Set
-/// and the slots beside it will not replay. That program takes slot 0 and says
-/// so out loud, and this takes the same one for the same reason — a replay
-/// drives slot 0, and a head written from whichever deck happened to be
-/// selected would make *which slot replays* depend on where a hand was.
+/// A head says what every slot held — the others by the `procedure` records
+/// that name their sources — and exactly one of them by a whole Set file, which
+/// is what carries the params, the bindings and the seeds the rest are built
+/// against. Slot 0, and not whichever deck happened to be selected: a replay
+/// numbers its slots the way the deck did, so *which slot is described in full*
+/// must not depend on where a hand was.
 const HEAD_SLOT: usize = 0;
 
 /// One open recording: the writer, and the id it is filing under.
@@ -237,18 +237,20 @@ impl Sessions {
             );
         }
         let id = karakuri_environment::history::stamped_id();
-        let material = match keeping.head_material(engine, root, &id) {
-            Ok(material) => material,
+        let starting = match keeping.head_opening(engine, root, &id) {
+            Ok(starting) => starting,
             Err(why) => return println!("  rec: {why}"),
         };
         println!(
-            "  rec: opening `{id}` — its head is deck {}'s material as it stands, so \
-             `--replay {id}` will need nothing else. A replay starts that material from the \
-             top: a Set file says what is playing and at what values and carries no running \
-             state, so material that accumulates begins again rather than continuing the picture \
-             on screen now. Its ticks carry the step count measured between one frame and the \
-             last, capped at four, so the replay runs at the speed this run ran and not at the \
-             speed the machine playing it draws",
+            "  rec: opening `{id}` — its head says what all {} decks held, deck {} in full as a \
+             Set file and the rest by the addresses they are playing, so `--replay {id}` will \
+             need nothing else. A replay starts that material from the top: a Set file says what \
+             is playing and at what values and carries no running state, so material that \
+             accumulates begins again rather than continuing the picture on screen now. Its \
+             ticks carry the step count measured between one frame and the last, capped at four, \
+             so the replay runs at the speed this run ran and not at the speed the machine \
+             playing it draws",
+            starting.held.slots.len(),
             deck_letter(HEAD_SLOT as u8)
         );
         let root = root.to_path_buf();
@@ -258,7 +260,7 @@ impl Sessions {
         // this line is a store being opened, two files being written and one
         // being read back.
         std::thread::spawn(move || {
-            let _ = tx.send(began(root, id, material));
+            let _ = tx.send(began(root, id, starting));
         });
     }
 
@@ -377,12 +379,60 @@ impl Sessions {
     }
 }
 
-/// A recording, opened: the material written, read back, and a writer started
-/// over it.
+/// One node of a running Set as a `procedure` record addresses it: which layer,
+/// which index on it, and the store address of its source.
+///
+/// `None` for a node on a layer the record vocabulary has no word for, which is
+/// [`karakuri_environment::meta::layer_named`]'s answer and not a second one —
+/// a head that invented a layer would be a head a replay refuses.
+fn addressed(
+    node: &setfile::SavedNode,
+) -> Option<(
+    karakuri_store::record::Layer,
+    u32,
+    karakuri_store::hash::Hash,
+)> {
+    let kind = karakuri_environment::meta::layer_named(node.layer)?;
+    Some((
+        karakuri_environment::meta::layer_of(kind),
+        node.index,
+        node.hash,
+    ))
+}
+
+/// Everything a start gathers on the frame, for the thread to write.
+///
+/// Named for the press rather than for the head's second half, because
+/// `karakuri_environment::Opening` is a different thing this crate uses a lot.
+/// Three parts because a head has three: the head slot's Set file, the bytes
+/// every *other* slot's address has to resolve at, and what the deck held.
+/// Nothing here borrows and nothing here is I/O — [`Sessions::begin`]'s whole
+/// division.
+struct Starting {
+    /// The head slot's Set file, written and read back by [`began`].
+    material: Save,
+    /// Every other slot's sources, so that the `procedure` records naming them
+    /// resolve. Slot 0's ride along inside `material`.
+    ///
+    /// A slot the run has no addresses for contributes nothing, which is
+    /// [`Playing::at`]'s `None`: a build whose sources never reached the store has
+    /// no address until the next one lands.
+    sources: Vec<setfile::Sources>,
+    /// What the deck held at the press, read off the deck.
+    held: session::Held,
+}
+
+/// A recording, opened: the material written, every slot's sources stored, the
+/// head assembled and a writer started over it.
 ///
 /// A free function because every line of it is on the thread
 /// [`Sessions::begin`] spawned, and none of it may be reachable from a frame.
-fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
+fn began(root: std::path::PathBuf, id: String, starting: Starting) -> Ended {
+    let Starting {
+        material,
+        sources,
+        held,
+    } = starting;
     let name = material.id.clone();
     if let Err(why) = material.run() {
         return Ended::Failed(format!(
@@ -398,10 +448,23 @@ fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
             ))
         }
     };
+    // **Every other slot's bytes before the head that names them.** A
+    // `procedure` record is an address, and a replay refuses a slot whose
+    // address the store cannot resolve — so a head written over sources that
+    // did not land would be a recording that cannot be played back, which is
+    // the one failure this start must not report as a success.
+    for (slot, sources) in sources.into_iter().enumerate() {
+        if let Err(why) = sources.into_nodes(&store) {
+            return Ended::Failed(format!(
+                "`{id}` was not opened — storing what deck {} is playing: {why}",
+                deck_letter(slot as u8)
+            ));
+        }
+    }
     // **Read back rather than kept**, which is `karakuri-cli`'s own route to a
     // head: the writer is what decides the lines a Set file is, so a head
     // assembled here would be a second spelling of that format.
-    let head = match store.read_set(&name) {
+    let material = match store.read_set(&name) {
         Ok(head) => head,
         Err(e) => {
             return Ended::Failed(format!(
@@ -409,6 +472,10 @@ fn began(root: std::path::PathBuf, id: String, material: Save) -> Ended {
             ))
         }
     };
+    // **The one function either writer spells a head with.** `karakuri-cli`
+    // calls this same one over its own deck reading, so the two programs cannot
+    // write two shapes of head.
+    let head = session::head(material, &held);
     match session::Recorder::open(&store, &id, &head) {
         Ok(recorder) => Ended::Began {
             id,
@@ -1176,12 +1243,18 @@ impl Keeping {
     /// moved since this run started, so a head written from the launch arguments
     /// would describe a deck nobody is looking at. That is also what makes a
     /// recording begun mid-performance possible at all.
-    fn head_material(
+    ///
+    /// **Every slot, not just [`HEAD_SLOT`].** The Set file is the head slot's and
+    /// the others are named by address, so this gathers three things: that Set,
+    /// every slot's sources, and what the deck held. All three are values already
+    /// in memory — `Playing` holds the addresses and the bytes, and the deck
+    /// answers its own mix — so the press pays for no I/O and no compile.
+    fn head_opening(
         &self,
         engine: &Engine,
         root: &std::path::Path,
         session: &str,
-    ) -> Result<Save, String> {
+    ) -> Result<Starting, String> {
         let count = engine.deck.slot_count();
         if !slot_in_range(HEAD_SLOT, count) {
             return Err(karakuri_environment::no_such_slot(HEAD_SLOT, count));
@@ -1195,16 +1268,68 @@ impl Keeping {
         if sources.is_empty() {
             return Err(karakuri_environment::nothing_to_save(HEAD_SLOT, None, true));
         }
-        Ok(Save {
-            slot: HEAD_SLOT,
-            asked: Asked::Operator,
-            id: format!("{session}-material"),
-            root: root.to_path_buf(),
-            sources,
-            values: playing_values(
-                engine.deck.slot(EngineSlot(HEAD_SLOT as u8)).set(),
-                &engine.edges,
-            ),
+        let held = session::Held {
+            // **What the frame is composited at, and not [`crate::CANVAS`]** —
+            // the frame follows the largest enabled output (ADR-0247), so the
+            // constant is the size this run *started* at rather than the size
+            // it is running at.
+            canvas: engine.present.size(),
+            look: engine.look,
+            master_out: engine.deck.out(),
+            master_chain: engine.chain.clone(),
+            slots: (0..count)
+                .map(|slot| {
+                    let at = EngineSlot(slot as u8);
+                    session::SlotHeld {
+                        nodes: self
+                            .playing
+                            .at(slot)
+                            .map(|nodes| nodes.iter().filter_map(addressed).collect())
+                            .unwrap_or_default(),
+                        gain: engine.deck.gain(at),
+                        opacity: engine.deck.opacity(at),
+                        blend: engine.deck.blend(at),
+                        // **The request and not the grant.**
+                        // `Record::Residency` records what a slot was asked to
+                        // do; the governor re-derives the rest on whatever
+                        // machine replays it.
+                        residency: engine.deck.requested_residency(at),
+                        mask: engine.deck.mask(at),
+                        transport: *engine.deck.transport(at),
+                    }
+                })
+                .collect(),
+        };
+        // **Slot 0's ride inside the `Save`**, which puts them as it writes the
+        // file — see [`setfile::Sources::into_nodes`]. These are the others, and
+        // an empty list for slot 0 keeps the index meaning the deck slot.
+        let others = (0..count)
+            .map(|slot| {
+                if slot == HEAD_SLOT {
+                    return setfile::Sources(Vec::new());
+                }
+                setfile::Sources(
+                    self.playing
+                        .at(slot)
+                        .map(|nodes| nodes.iter().map(copied).collect())
+                        .unwrap_or_default(),
+                )
+            })
+            .collect();
+        Ok(Starting {
+            sources: others,
+            held,
+            material: Save {
+                slot: HEAD_SLOT,
+                asked: Asked::Operator,
+                id: format!("{session}-material"),
+                root: root.to_path_buf(),
+                sources,
+                values: playing_values(
+                    engine.deck.slot(EngineSlot(HEAD_SLOT as u8)).set(),
+                    &engine.edges,
+                ),
+            },
         })
     }
 
