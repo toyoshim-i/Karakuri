@@ -54,11 +54,11 @@ The remaining open work is structured into four sequential milestones focused on
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ M6: Live Performance Hardening & Runtime Safety (Immediate Priority)   │
-│ - Async Master Chain Compilation (Worker Thread)                        │
-│ - Dedicated Fullscreen Projector Window Output                          │
-│ - Unified Multi-Slot Budget Governor & Telemetry                        │
-│ - Multi-Slot Session Recording & Replay Fidelity                        │
-│ - Mixer & Sequencer Safeguards (Lane Conflicts, Keybindings)            │
+│ - Chain compiled on a worker, installed at a frame boundary (closed)   │
+│ - Session head names the whole deck; replay builds it (closed)         │
+│ - Lane/hand refusal called; a lane can be removed (closed)             │
+│ - Projector display, transport figure, deck total (maintainer's)       │
+│ - Chain-build badge, ridden values in the head, clippy baseline (open) │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
@@ -93,30 +93,45 @@ The remaining open work is structured into four sequential milestones focused on
 
 ### M6 — Live Performance Hardening & Runtime Safety
 
-**Objective**: Resolve all critical operational and architectural debts identified during M5 testing to guarantee uninterrupted, drop-free 60+ FPS live performance.
+**Objective**: the render thread never compiles, allocates or frees; a session replays the deck it was recorded on; a hand and a lane never fight over one control silently.
 
-#### Key Deliverables:
-1. **Asynchronous Master Chain Compilation**:
-   - Move `mix::apply_chain` shader compilation and target texture allocation off the main/render thread to a background worker thread (enforcing Principle [P-0091](principles/0091-cost-is-known-before-it-is-paid.md)).
-   - Swap compiled chain effects atomically at frame boundaries without stalling ongoing rendering.
-2. **Dedicated Fullscreen Projector Output**:
-   - Enable borderless fullscreen presentation on an operator-selected display/projector using `winit` monitor enumeration.
-   - Decouple projector display refresh from console UI rendering passes.
-3. **Deck-Wide Budget Governor & Telemetry**:
-   - Wire `karakuri-engine::estimate` into `Deck::govern` to evaluate procedural GPU cost before activation.
-   - Extend budget accounting across all four active deck slots plus the master chain, replacing single-slot assumptions with holistic frame period monitoring ([ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)).
-   - Update Transport frame telemetry to clearly display total frame period and GPU headroom.
-4. **Complete Session Recording & Replay Fidelity**:
-   - Expand `Record::MasterChain` and session stream headers to capture the complete multi-slot state of the deck at session start.
-   - Ensure session journal replay reproduces all multi-slot assignments and parameter overrides byte-for-byte.
-5. **Mixer & Sequencer Conflict Safeguards**:
-   - Enforce [ADR-0323](adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md): reject manual scheduled fades on controls currently driven by an active sequencer lane.
-   - Implement `RemoveLane` operation and UI control to allow removing modulation lanes from the sequencer.
-   - Finalize keybindings and panel cells for Mixer fade and crossfade operations.
-6. **Modal Overlay Interaction & Tooltip Suppression**:
-   - Connect modal card state to the hover layer to suppress underlying bay tooltips when a popup card is open.
+#### Closed (2026-09-14)
 
-**Exit Condition**: Zero frame drops or stalls during continuous chain edits, clean multi-slot session replay, and zero remaining `plan` badges in the key column of `docs/manual/operations.html`.
+- **The master chain is compiled on a thread of its own and lands at a frame boundary.** [ADR-0354](adr/0354-a-chain-is-compiled-on-a-thread-of-its-own-and-lands-at-a-frame-boundary.md); `karakuri-engine::chain_swap`; held by `crates/karakuri-engine/tests/chain_swap.rs`.
+- **A swapped-in Set arrives with its own estimate, and a resize re-reads it rather than dropping it.** [ADR-0356](adr/0356-the-worker-estimates-what-it-built-and-an-estimate-is-a-fit-rather-than-a-number-at-one-size.md).
+- **A session head says what the deck held.** [ADR-0355](adr/0355-a-session-head-says-what-the-deck-held-in-the-records-that-already-say-it.md); `--replay` builds the deck the head names; [ir-spec.md](ir-spec.md) *The head — what the deck held at frame 0*.
+- **ADR-0323's refusal is called**: a scheduled fade, crossfade or wipe on a fader a lane holds is refused before any record is written, in one sentence naming the lane.
+- **A lane can be taken out of a pattern**: `Operation::RemoveLane`, a minus glyph on the lane's row, `enter` on the lane. [ADR-0357](adr/0357-a-lane-is-taken-out-by-a-glyph-on-its-row-and-enter-on-the-lane-is-the-key.md).
+- **A tip already up goes on the frame a card comes down** (`Hover::paint` asks `View::has_modal_overlay`; all nine overlays tested).
+
+#### Settled by decision, not built
+
+- **Fade and crossfade keybindings and panel cells**: both rows read `gap` in the panel and key columns by [ADR-0353](adr/0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md). What is open on those rows is MIDI only, and it waits on a map-layer helper that carries time (ADR-0236's third job), unscheduled.
+- **A candidate judged against the deck's period or a share of the budget**: refused by [ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md) — a verdict is the candidate's own cost against one frame; the period is a deck-level alarm that warns and never acts.
+- **A projector frame loop decoupled from the console's**: refused by [ADR-0166](adr/0166-the-engines-frame-and-the-panels-are-one-submission.md) — one encoder, one submission; a second submission over the deck's targets is the race that record is about.
+
+#### Open — the maintainer's
+
+- **Fullscreen on a chosen display.** The projector is a second `winit` window ([ADR-0324](adr/0324-an-output-is-a-named-destination-with-a-size-and-an-on-off.md)), not made fullscreen and not put on a display, because *choosing which display is the part that is missing and a fullscreen with no way to say where is worse than none*, and a display name may not be an `Output` payload (it changes when the cable does). Needs: how a display is named. Options: (a) leave it to the operating system, as the console page says today, and strike this; (b) `Operation::PlaceOutput { output, display: u8 }` with the index into `available_monitors()` read at the press and drawn as a pulldown on the projector chip, refused when the index is gone; (c) the projector goes fullscreen on whichever display it is on, one key, no naming. Recommendation: (c) now — it is the one line ADR-0324 named, it names nothing that changes with a cable, and (b) can follow if a set ever needs the display chosen from a map or a model.
+- **Which number the transport row carries.** The row draws `Cost::whole` (the CPU's three stretches) against the refresh interval, so a GPU-bound frame draws as headroom; [ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md) measured `Cost::period` and left the row to the maintainer. `Report::headroom_ms` and `Report::deck_over_period` reach the CLI's status line and no bay. Options: the period in place of the CPU figure; both side by side; the CPU figure with the tooltip's promise rewritten. Recommendation: the period in place, and the deck's headroom from `Report` beside the chain term, because the row's tooltip already promises *headroom* and the CPU figure cannot say it.
+- **What `over_budget` says as the deck's total.** `committed_ms` sums Live slots only; ADR-0313 supplied `Report::deck_over_period` and took none of this decision; nothing acts on or draws it. Two single-slot readings survive in code and are facts for the decision: `Deck::frame_period_ms` reads slot 0's watchdog alone (`deck.rs:801`), and the GUI calibrates the compute budget from slots 0 and 1 only (`bridge/engine.rs:1239`).
+
+#### Open — owed by today's work, unscheduled
+
+- Nothing on the console says a chain build is in flight; `ChainSwap::building()` is the reading a badge would draw from. `MasterChain::resize` still frees on the render thread. A `SlotError` arrives a frame later as `ChainEvent::Refused`.
+- A value ridden on a non-head slot before the press is not in the session head (needs a per-slot parameter table `karakuri-cli` does not hold); the GUI records the canvas at the press and never again.
+- The build worker's two rungs are taken on a host clock while the render thread draws, so an estimate can refuse under load and the slot falls to its measurement; a param write does not invalidate the estimate.
+- The GUI's MCP reply on a refused, owed or silent operation — in progress 2026-09-14.
+- A channel fader does not say who is holding it (rule 02); lanes cannot be reordered; `Hover::owed` is asked before `paint` on the frame a card comes down.
+- `cargo clippy --workspace --all-targets -- -D warnings` is red at HEAD on `doc_lazy_continuation` in files untouched today (karakuri-ir, karakuri-store, karakuri-console); the pre-push hook runs it on tag pushes.
+
+**Exit**: the three commands below are green, and the three maintainer's items above are each decided (built or struck with the ADR that struck it).
+
+```sh
+cargo test -p karakuri-engine --test chain_swap --test master      # no chain build on a render thread; worker bytes == synchronous bytes
+cargo test -p karakuri-cli --test replay                           # a two-slot head replays both slots; same session, same bytes
+test "$(grep -c 'rt plan">key' docs/manual/operations.html)" = 0   # no key route left as a plan
+```
 
 ---
 
