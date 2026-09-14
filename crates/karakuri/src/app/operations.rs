@@ -89,7 +89,11 @@ pub(crate) fn routed(
         // Objective-C frame on macOS, so it aborts with no sentence anywhere.
         Err(e) => return Some(format!("outputs: the projector window did not open: {e}")),
     };
-    let surface = match Gpu::instance().create_surface(window.clone()) {
+    // **The instance the adapter came from**, and never a fresh one: a
+    // surface asked about an adapter of another instance is a resource that
+    // instance does not hold, and `wgpu-core` aborts on it inside a `winit`
+    // callback with no sentence anywhere.
+    let surface = match gfx.gpu.instance.create_surface(window.clone()) {
         Ok(surface) => surface,
         Err(e) => return Some(format!("outputs: the projector has no surface: {e}")),
     };

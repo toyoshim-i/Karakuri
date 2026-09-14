@@ -8642,3 +8642,63 @@ pub(crate) fn empty_keeping() -> Keeping {
         in_flight: 0,
     }
 }
+
+/// **A surface is made by the instance its adapter came from, and this
+/// program has one.** `routed` opened the projector's surface on a fresh
+/// `Gpu::instance()` and then asked it about `gfx.gpu.adapter`, which belongs
+/// to the instance `resumed` made — a resource the fresh instance does not
+/// hold, so `wgpu-core` aborted inside the `winit` mouse callback with no
+/// sentence anywhere the moment the projector chip was pressed. Nothing can
+/// open that window in a test (ADR-0324), so the wiring is pinned by reading
+/// the source: exactly one `Gpu::instance()` in this crate, in `resumed`, and
+/// every `create_surface` after it on the instance the `Gpu` keeps.
+#[test]
+fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut fresh = Vec::new();
+    let mut surfaces = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|n| n == "tests") {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap();
+            let rel = path.strip_prefix(&root).unwrap().display().to_string();
+            for (i, line) in src.lines().enumerate() {
+                let code = line.split("//").next().unwrap_or("");
+                if code.contains("Gpu::instance()") {
+                    fresh.push(format!("{rel}:{}", i + 1));
+                }
+                if code.contains("create_surface(") {
+                    surfaces.push((format!("{rel}:{}", i + 1), code.trim().to_string()));
+                }
+            }
+        }
+    }
+    assert_eq!(
+        fresh,
+        vec!["app/handler.rs:80".to_string()],
+        "a second wgpu::Instance would hold none of the first one's adapters: {fresh:?}"
+    );
+    assert!(!surfaces.is_empty(), "no surface is made anywhere");
+    for (at, code) in &surfaces {
+        assert!(
+            code.contains("instance.create_surface(")
+                || code.contains("gfx.gpu.instance.create_surface("),
+            "{at}: a surface made off something other than the adapter's own instance: `{code}`"
+        );
+        assert!(
+            !code.contains("Gpu::instance().create_surface("),
+            "{at}: a surface on a fresh instance, whose adapter is another instance's: `{code}`"
+        );
+    }
+}
