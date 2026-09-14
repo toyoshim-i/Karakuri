@@ -86,7 +86,9 @@ pub struct Transport {
     /// those two differ by the whole vsync wait, which is most of the frame.
     pub fps: Option<f32>,
     /// What one frame cost on the CPU, in milliseconds — the `12.4` in the mock's
-    /// `12.4/16.6 ms`.
+    /// `cpu 12.4/16.6 ms`. The three stretches this program times stop at the
+    /// submission; what the GPU then takes is not in this number, and the row
+    /// says `cpu` for that reason (ADR-0359).
     ///
     /// It is a fact about a frame that has already been drawn, so it does not go
     /// stale on a still window the way a rate does: the last frame did cost this.
@@ -1048,6 +1050,10 @@ fn frame_job(t: &Transport, val: Color32, faint: Color32) -> LayoutJob {
         push(format!("{fps:.0}"), val);
         push(" fps · ".to_owned(), faint);
     }
+    // **The CPU's figure, and the word says so** (ADR-0359): the three stretches
+    // this program times stop at the submission, and the rate beside them is what
+    // says whether the display is being kept.
+    push("cpu ".to_owned(), faint);
     push(format!("{:.1}", t.frame_ms), val);
     match t.budget_ms {
         Some(budget) => push(format!("/{budget:.1} ms"), faint),

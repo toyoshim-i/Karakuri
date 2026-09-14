@@ -911,7 +911,7 @@ fn the_grid_is_as_many_dots_as_the_bar_has_beats() {
 /// A reading nobody has is not drawn as a plausible one, which is the whole
 /// value's rule read at the one place it is a word rather than a shape.
 ///
-/// The mock's `58 fps · 12.4/16.6 ms` has two numbers this console may not
+/// The mock's `58 fps · cpu 12.4/16.6 ms` has two numbers this console may not
 /// have: the rate, which needs a stretch of untouched window to measure, and
 /// the budget, which is the display's refresh interval and which `winit` will
 /// not always name. Neither absence draws a `0`, a `—`, or the mock's own 16.6
@@ -939,7 +939,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     view.transport = Some(mock());
     let all = words(&mut view, &mut panel);
     assert!(
-        all.iter().any(|line| line == "58 fps · 12.4/16.6 ms"),
+        all.iter().any(|line| line == "58 fps · cpu 12.4/16.6 ms"),
         "the mock's own frame readout is not on the row: {all:?}"
     );
     assert!(all.iter().any(|line| line == "128.0"), "{all:?}");
@@ -953,7 +953,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     });
     let no_rate = words(&mut view, &mut panel);
     assert!(
-        no_rate.iter().any(|line| line == "12.4/16.6 ms"),
+        no_rate.iter().any(|line| line == "cpu 12.4/16.6 ms"),
         "with no rate the frame readout reads {no_rate:?}"
     );
     assert!(
@@ -969,7 +969,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     });
     let no_budget = words(&mut view, &mut panel);
     assert!(
-        no_budget.iter().any(|line| line == "58 fps · 12.4 ms"),
+        no_budget.iter().any(|line| line == "58 fps · cpu 12.4 ms"),
         "with no budget the frame readout reads {no_budget:?}"
     );
     assert!(
@@ -989,7 +989,7 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
     assert!(
         words(&mut view, &mut panel)
             .iter()
-            .any(|line| line == "12.4 ms"),
+            .any(|line| line == "cpu 12.4 ms"),
         "with neither, the frame readout is the frame time and its unit"
     );
 }
@@ -1298,7 +1298,7 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
     assert_ne!(
         first.frame.width(),
         other.frame.width(),
-        "`58 fps · 12.4/16.6 ms` and `4.0 ms` laid out to the same width"
+        "`58 fps · cpu 12.4/16.6 ms` and `cpu 4.0 ms` laid out to the same width"
     );
 
     // Asked again with the first, and it is the first answer: nothing was
