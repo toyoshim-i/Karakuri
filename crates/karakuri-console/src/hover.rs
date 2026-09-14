@@ -989,21 +989,22 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             },
         ],
     ),
-    // **Five kinds of control and eight entries**, in `Sequencer::press`'s own
-    // order — the bank pills, a cell, a label, the mode pill — and then
-    // `+ lane`, whose press is not an operation and comes back through
-    // `Sequencer::chose`.
+    // **Six kinds of control and nine entries**, in `Sequencer::press`'s own
+    // order — the bank pills, a cell, a label, a lane's minus, the mode pill
+    // — and then `+ lane`, whose press is not an operation and comes back
+    // through `Sequencer::chose`.
     //
-    // **The four banks are four entries and the cells and the labels are
-    // one each.** A bank is one of `karakuri_pattern::BANKS` fixed pills that
+    // **The four banks are four entries and the cells, the labels and the
+    // minus glyphs are one each.** A bank is one of `karakuri_pattern::BANKS` fixed pills that
     // the page tips one at a time — `seq 3` is where the plus went and its tip
     // says so, which is not what `seq 1`'s says — and `SelectPattern` carries
     // which one. A cell and a label are per drawn step and per lane of a
     // pattern the host handed in: the page tips lane A's row and this console
     // draws whatever lanes there are, so a second entry there would be a cite
-    // for a lane the mock does not have.
+    // for a lane the mock does not have. A lane's minus is the same reading:
+    // the page draws one per lane and this cites lane A's.
     (
-        "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
+        "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane",
         &[
             Tipped {
                 control: "the seq 1 bank pill",
@@ -1058,6 +1059,18 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
                     nth: 0,
                 },
                 at: on_lane_label,
+            },
+            // **The third `.minus` on the page**, the two before it being the
+            // chain's slots: the Master bay's glyph drawn on a lane's row, and
+            // the page tips lane A's the way it tips lane A's cells.
+            Tipped {
+                control: "a lane's minus",
+                cites: Cite {
+                    class: "minus",
+                    text: "&minus;",
+                    nth: 2,
+                },
+                at: on_lane_remove,
             },
             Tipped {
                 control: "the mode pill",
@@ -1714,6 +1727,12 @@ fn on_step(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
 fn on_lane_label(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     on_seq(panel, ctx, view, p, |op| {
         matches!(op, Operation::SetLaneMute { .. })
+    })
+}
+
+fn on_lane_remove(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    on_seq(panel, ctx, view, p, |op| {
+        matches!(op, Operation::RemoveLane { .. })
     })
 }
 

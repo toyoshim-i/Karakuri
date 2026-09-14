@@ -101,20 +101,24 @@ fn the_bay_is_laid_out_under_its_head_and_stays_inside_the_card() {
         "the label column is before the cells and does not overlap the first one"
     );
     assert!(
-        row.cells.last().unwrap().max.x <= region.x + region.w - size::SEQ_PAD_X,
-        "and the last cell stops at the bay's own padding"
+        row.cells.last().unwrap().max.x <= row.remove.min.x,
+        "the cells stop short of the minus at the end of the row"
+    );
+    assert!(
+        row.remove.max.x <= region.x + region.w - size::SEQ_PAD_X,
+        "and the minus stops at the bay's own padding"
     );
     assert!(
         bay.ruler.max.y <= row.cells[0].min.y,
         "the ruler is over the rows it counts"
     );
     // **What this bay claims**, which is what `input::PROBES` registers a
-    // bound for: a cell per drawn step, a label per lane, the mode pill, the
-    // four bank pills in the bay head and the foot's `+ lane`.
+    // bound for: a cell per drawn step, a label and a minus per lane, the mode
+    // pill, the four bank pills in the bay head and the foot's `+ lane`.
     assert_eq!(
         bay.controls(),
-        SLOTS + 2 + BANKS + 1,
-        "one lane of sixteen cells, its label, the pill, four banks and + lane"
+        SLOTS + 3 + BANKS + 1,
+        "one lane of sixteen cells, its label, its minus, the pill, four banks and + lane"
     );
 }
 
@@ -310,6 +314,99 @@ fn a_muted_lanes_label_asks_for_it_to_drive() {
         }),
         "the bank is the one these rows are, and not whichever one is armed by the time the \
          press is performed"
+    );
+}
+
+/// The minus at the end of a lane's row takes that lane out, naming the bank
+/// these rows are and the position the lane is drawn at — the Master bay's chain
+/// glyph on a lane (ADR-0352).
+#[test]
+fn the_minus_takes_the_lane_out_by_the_position_it_is_drawn_at() {
+    let ctx = drawn_once();
+    let panel = arranged(PLAUSIBLE, (1920, 1080));
+    let mut view = View::new(Room::Day);
+    let mut pattern = Pattern::empty();
+    pattern.push(lane_a());
+    pattern.push(Lane::new(LaneTarget::Fader { deck: 1 }, 1.0, 0.0));
+    view.sequencer = Some(Sequenced {
+        pattern,
+        bank: 2,
+        step: None,
+    });
+    let bay = sequencer(
+        &ctx,
+        panel.layout(),
+        view.sequencer.as_ref(),
+        &view.lane_choices(),
+    )
+    .unwrap();
+    for lane in 0..2 {
+        let at = bay.rows[lane].remove.center();
+        assert_eq!(
+            bay.press(Point { x: at.x, y: at.y }),
+            Some(Operation::RemoveLane {
+                pattern: 2,
+                lane: lane as u8,
+            }),
+            "the glyph on row {lane} is addressed to the lane it is drawn on, and names the \
+             bank these rows are"
+        );
+    }
+    assert!(
+        bay.owns(Point {
+            x: bay.rows[0].remove.center().x,
+            y: bay.rows[0].remove.center().y
+        }),
+        "and the bay owns the press, so `input::claim` hands it to the panel"
+    );
+}
+
+/// The glyph is the panel's press and not `egui`'s, which is rule 4 asked of the
+/// one control this bay gained.
+#[test]
+fn a_press_on_a_lanes_minus_is_the_panels() {
+    let ctx = drawn_once();
+    let mut panel = arranged(PLAUSIBLE, (1920, 1080));
+    let view = view(StepMode::Sixteenth, None);
+    let bay = sequencer(
+        &ctx,
+        panel.layout(),
+        view.sequencer.as_ref(),
+        &view.lane_choices(),
+    )
+    .unwrap();
+    let at = bay.rows[0].remove.center();
+    assert_eq!(
+        claim(&mut panel, &ctx, &view, Point { x: at.x, y: at.y }),
+        Claim::Panel,
+        "a control the bay draws is hit-tested by this crate, and a press on it never reaches \
+         `egui`"
+    );
+}
+
+/// The minus explains itself on hover, in the page's own words — the third
+/// `.minus` of `docs/manual/console.html`, the two before it being chain slots.
+#[test]
+fn a_lanes_minus_resolves_to_its_own_tip() {
+    use karakuri_console::hover::{flat, resolve};
+
+    let ctx = drawn_once();
+    let panel = arranged(PLAUSIBLE, (1920, 1080));
+    let view = view(StepMode::Sixteenth, None);
+    let bay = sequencer(
+        &ctx,
+        panel.layout(),
+        view.sequencer.as_ref(),
+        &view.lane_choices(),
+    )
+    .unwrap();
+    let at = bay.rows[0].remove.center();
+    let index = resolve(&panel, &ctx, &view, Point { x: at.x, y: at.y })
+        .expect("the pointer is on a control the page tips");
+    assert_eq!(
+        flat().nth(index).expect("a tip at that index").control,
+        "a lane's minus",
+        "the pointer on the glyph resolves to the glyph's tip and not to the row it is in"
     );
 }
 

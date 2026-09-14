@@ -1700,9 +1700,8 @@ operations! {
     /// It appends, so there is no lane index. The panel draws no control for
     /// re-pointing a lane that already exists, so this row is where a target is
     /// chosen; if it turns out to be two operations it will be because a control
-    /// was drawn for the second. Removing a lane has no control, no row and no
-    /// operation, and that is a gap the console page carries a note for rather than
-    /// an invention here.
+    /// was drawn for the second. Taking one away is [`Operation::RemoveLane`],
+    /// which names the lane by index because by then there is a row to point at.
     ///
     /// The two levels are not here, and that is a decision taken when the chooser
     /// was drawn
@@ -1714,6 +1713,30 @@ operations! {
     /// caller could supply meaningfully. A map line and a model can name neither,
     /// which is ADR-0192's rule read the other way.
     PointLane { pattern: u8, target: LaneTarget } => "Point a lane at what it drives",
+
+    /// The minus at the end of a lane's row, which takes that lane out of the
+    /// pattern. Its steps go with it: there is nothing left to unmute onto, which
+    /// is what separates it from [`Operation::SetLaneMute`].
+    ///
+    /// A bank and a lane, addressed the way [`Operation::SetStep`] and
+    /// [`Operation::SetLaneMute`] are addressed and for their reason. **A lane
+    /// index is a position and not an identity**: the lanes after the removed one
+    /// move up, so every index above it names a different lane once this has been
+    /// applied (`karakuri_pattern::Pattern::remove`). A slot of the master chain is
+    /// addressed on the same terms
+    /// (`docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md`),
+    /// and a glyph on the row is where that record puts the control.
+    ///
+    /// A lane index the pattern does not hold is refused and the refusal says what
+    /// there was to name
+    /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
+    ///
+    /// Removing the lane that drives a control a hand is also on is allowed and
+    /// needs no refusal: a lane's writes are its whole record
+    /// (`docs/adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md`),
+    /// so they stop at the removal and the control keeps the value the last step
+    /// wrote it.
+    RemoveLane { pattern: u8, lane: u8 } => "Remove a lane",
 
     /// A mode with two values — a sixteenth or an eighth — drawn as one pill on the
     /// grid head. The pattern is one bar, fixed, so the step count is not a second

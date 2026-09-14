@@ -1290,9 +1290,11 @@ pub mod size {
     /// rows are one pattern read against itself, which is why they share a ruler.
     pub const SEQ_BODY_GAP: f32 = 3.0;
 
-    /// `.seq-row`'s `grid-template-columns: 30px 1fr` and its `gap: 5px`: the label
-    /// column every lane's name is right-aligned into, and the gap before the
-    /// cells.
+    /// `.seq-row`'s `grid-template-columns: 30px 1fr auto` and its `gap: 5px`: the
+    /// label column every lane's name is right-aligned into, the gap before the
+    /// cells, and the same gap again before the minus at the end of the row —
+    /// `auto` is as wide as the glyph, which is measured rather than written
+    /// down.
     pub const SEQ_LABEL_W: f32 = 30.0;
     pub const SEQ_ROW_GAP: f32 = 5.0;
 

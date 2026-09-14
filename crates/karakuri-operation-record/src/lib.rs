@@ -12,7 +12,11 @@
 //!   identical journal records for identical actions.
 //! - **Deterministic Classification**: [`written`] performs an exhaustive match
 //!   over every operation, classifying it into [`Written::Records`],
-//!   [`Written::Silent`], or [`Written::Owed`].
+//!   [`Written::Silent`], [`Written::Owed`], or [`Written::Refused`].
+//! - **Refusal Before Records**: a scheduled move on a control an unmuted lane
+//!   of the armed pattern holds is refused here, before any record is written,
+//!   so that a replay — which runs no sequencer — sees exactly what the live run
+//!   did (ADR-0323).
 //! - **Zero GPU Dependency**: Keeps dependencies limited to `karakuri_operation`
 //!   and `karakuri_store`.
 
@@ -118,6 +122,34 @@ pub struct Transition {
     pub wipe_angle: f32,
 }
 
+/// Which lanes of the armed pattern hold which controls: one entry per lane
+/// that holds one, as `(lane index, target)` pairs in lane order.
+///
+/// A muted lane holds nothing and is not in this list — that is applied where
+/// the pattern is read (`karakuri_pattern::Pattern::held`), so a muted lane
+/// arrives here as an absent one. The index is the lane's own, because the
+/// refusal built from this reading names the lane to mute
+/// (`docs/adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Lanes {
+    /// Every lane holding a control, in lane order.
+    pub held: Vec<(usize, karakuri_operation::LaneTarget)>,
+}
+
+impl Lanes {
+    /// The index of the lane holding `target`, or `None` where none does.
+    ///
+    /// The one answer to *which lane holds this control* (ADR-0323): a lane's
+    /// target is the control's address — deck and what on it — so holding is
+    /// equality against what was read, and no surface derives it a second way.
+    pub fn holder(&self, target: &karakuri_operation::LaneTarget) -> Option<usize> {
+        self.held
+            .iter()
+            .find(|(_, held)| held == target)
+            .map(|(at, _)| *at)
+    }
+}
+
 /// Deck blend and residency state in the engine mix.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Mix {
@@ -141,6 +173,13 @@ pub struct Current {
     pub transition: Option<Transition>,
     /// Mix status of the deck arriving in a transition.
     pub mix: Option<Mix>,
+    /// Which lanes of the armed pattern hold which controls.
+    ///
+    /// `None` is a reading that was not taken: nothing is held, nothing is
+    /// refused, and every scheduling operation writes the records it writes with
+    /// no sequencer in the room. A surface that runs one hands this in
+    /// (ADR-0323).
+    pub lanes: Option<Lanes>,
 }
 
 /// Identifies a specific reading required by an operation when missing from [`Current`].
@@ -235,6 +274,39 @@ impl Owed {
     }
 }
 
+/// A scheduled move refused because a lane of the armed pattern holds the
+/// control it would move.
+///
+/// The refusal is taken here, before any record is written, and that is the
+/// whole of it: a record written live would be replayed by a run with no
+/// sequencer in it, where nothing holds the control and the move runs
+/// (`docs/adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md`,
+/// ADR-0322, P-0092).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Refusal {
+    /// The lane holding the control, indexed in the armed pattern's lane order.
+    pub lane: usize,
+    /// The deck whose channel fader that lane drives.
+    pub deck: u8,
+}
+
+impl Refusal {
+    /// The one sentence every surface refuses in, naming the lane to mute.
+    ///
+    /// One wording, in one place, so the pointer, the keys, a mapped control
+    /// and a model meet the same sentence (ADR-0131). It carries what the next
+    /// attempt needs — mute that lane and ask again — which is one press on the
+    /// lane's label (P-0083). Decks and lanes are counted from zero, as the
+    /// vocabulary counts them.
+    pub fn why(&self) -> String {
+        let Refusal { lane, deck } = *self;
+        format!(
+            "deck {deck}'s fader is held by lane {lane} of the armed pattern: mute that lane \
+             and ask again"
+        )
+    }
+}
+
 /// Translation outcome of converting an [`Operation`] into journal records.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Written {
@@ -244,6 +316,12 @@ pub enum Written {
     Silent(Silent),
     /// Operation cannot produce a record given the current context.
     Owed(Owed),
+    /// Operation is refused by decision, and no record is written.
+    ///
+    /// Not an [`Written::Owed`]: a gap nobody has closed and a decision taken
+    /// are two different answers, and a surface says them in two different
+    /// sentences (ADR-0323).
+    Refused(Refusal),
 }
 
 /// Translates an [`Operation`] and the [`Current`] engine state into journal records.
@@ -406,25 +484,41 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // ----- What it schedules, given the surface's settings -------------
         //
         // Scheduled transitions requiring timing and curve from Current::transition.
-        Operation::FadeDeck { deck, to } => match current.transition {
-            Some(transition) => one(fade(*deck, *to, transition)),
-            None => Written::Owed(Owed::NotRead(Reading::Transition)),
+        //
+        // **A lane of the armed pattern holding one of the faders a move
+        // writes refuses that move before any record is written**, which is
+        // the clause a replay depends on (ADR-0323, and [`Refusal`] for why it
+        // is taken here). The check is ahead of the readings because what is
+        // refused is the ask, whether or not the settings were handed over.
+        Operation::FadeDeck { deck, to } => match held_fader(current, *deck) {
+            Some(refusal) => Written::Refused(refusal),
+            None => match current.transition {
+                Some(transition) => one(fade(*deck, *to, transition)),
+                None => Written::Owed(Owed::NotRead(Reading::Transition)),
+            },
         },
-        Operation::Crossfade { from, to } => match current.transition {
-            Some(transition) => Written::Records(vec![
-                Record::Opacity {
-                    slot: DeckSlot(*to),
-                    value: 0.0,
+        // Both ends, because a crossfade moves both faders: the deck leaving is
+        // asked about first, so a lane on each end names the one going out.
+        Operation::Crossfade { from, to } => {
+            match held_fader(current, *from).or_else(|| held_fader(current, *to)) {
+                Some(refusal) => Written::Refused(refusal),
+                None => match current.transition {
+                    Some(transition) => Written::Records(vec![
+                        Record::Opacity {
+                            slot: DeckSlot(*to),
+                            value: 0.0,
+                        },
+                        Record::Residency {
+                            slot: DeckSlot(*to),
+                            level: karakuri_operation::Residency::Live.name().to_string(),
+                        },
+                        fade(*from, 0.0, transition),
+                        fade(*to, 1.0, transition),
+                    ]),
+                    None => Written::Owed(Owed::NotRead(Reading::Transition)),
                 },
-                Record::Residency {
-                    slot: DeckSlot(*to),
-                    level: karakuri_operation::Residency::Live.name().to_string(),
-                },
-                fade(*from, 0.0, transition),
-                fade(*to, 1.0, transition),
-            ]),
-            None => Written::Owed(Owed::NotRead(Reading::Transition)),
-        },
+            }
+        }
         Operation::SelectRenderer { deck, renderer } => match current.transition {
             Some(transition) => one(Record::Select {
                 slot: DeckSlot(*deck),
@@ -433,7 +527,16 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             }),
             None => Written::Owed(Owed::NotRead(Reading::Transition)),
         },
-        Operation::Wipe { from: _, to } => match (current.transition, current.mask, current.mix) {
+        // **The deck arriving, whose fader a wipe writes.** The move a wipe
+        // schedules is on the mask front, which no lane target names — but the
+        // records it writes put that deck's fader at full for the front to
+        // reveal, and a lane holding that fader writes it back within one step.
+        // So the wipe is refused on the same lane a fade onto that deck is
+        // (ADR-0323). The deck covered is not asked about: a wipe writes
+        // nothing about it.
+        Operation::Wipe { from: _, to } => match held_fader(current, *to) {
+        Some(refusal) => Written::Refused(refusal),
+        None => match (current.transition, current.mask, current.mix) {
             (Some(transition), Some(mask), Some(mix)) => {
                 let mut records = vec![
                     Record::Mask {
@@ -481,6 +584,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             (_, None, _) => Written::Owed(Owed::NotRead(Reading::Mask)),
             (_, _, None) => Written::Owed(Owed::NotRead(Reading::Mix)),
         },
+        },
 
         // ----- Owed: the tracker ------------------------------------------
         //
@@ -513,6 +617,10 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::SetStep { .. }
         | Operation::SetLaneMute { .. }
         | Operation::PointLane { .. }
+        // `RemoveLane` edits the same pattern the five around it edit, so it
+        // answers what they answer: a pattern is library data under the store
+        // and a lane's writes are the lane's own record.
+        | Operation::RemoveLane { .. }
         | Operation::SetPatternGrid { .. }
         | Operation::SelectPattern { .. } => Written::Silent(Silent::Surface),
 
@@ -545,6 +653,19 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::RecordSession { .. }
         | Operation::Quit => Written::Silent(Silent::NoRecord),
     }
+}
+
+/// The refusal for `deck`'s channel fader, where the lanes were read and one
+/// holds it.
+///
+/// `None` covers both *no lanes were read* and *no lane holds it*, which are
+/// one answer to the caller: nothing is refused (ADR-0323).
+fn held_fader(current: &Current, deck: u8) -> Option<Refusal> {
+    let lane = current
+        .lanes
+        .as_ref()?
+        .holder(&karakuri_operation::LaneTarget::Fader { deck })?;
+    Some(Refusal { lane, deck })
 }
 
 /// Wraps a single record into [`Written::Records`].
@@ -2044,15 +2165,16 @@ mod tests {
     /// Editing a pattern writes a file's worth of nothing, exactly as keeping
     /// an arrangement does.
     ///
-    /// The five answered `Owed(Undecided)` until 2026-09-09, and the objection
+    /// The first five answered `Owed(Undecided)` until 2026-09-09, and the objection
     /// at the arm was that `Silent::Surface` *"would call a pattern the
     /// console's own state, where ADR-0227 makes it library data under the
     /// store."* The test above is the refutation: an arrangement is library
     /// data under the store on the same terms and answers `Silent(Surface)`,
     /// and the sentence that pins it transfers word for word. So this asserts
-    /// the second family of the same kind, all five together, because what
+    /// the second family of the same kind, all six together, because what
     /// makes the answer right is that they are one family — a step, a mute, a
-    /// target, a mode and a bank are five edits to one pattern.
+    /// target, a lane taken out by `RemoveLane`, a mode and a bank are six
+    /// edits to one pattern.
     ///
     /// What a lane *does* is not silent and is not asserted here: a lane emits
     /// `Operation::SetOpacity` and `Operation::WriteParam`, whose records are
@@ -2075,6 +2197,10 @@ mod tests {
             Operation::PointLane {
                 pattern: 0,
                 target: karakuri_operation::LaneTarget::Fader { deck: 0 },
+            },
+            Operation::RemoveLane {
+                pattern: 0,
+                lane: 0,
             },
             Operation::SetPatternGrid {
                 pattern: 0,
@@ -2154,6 +2280,145 @@ mod tests {
             Written::Silent(Silent::OnLanding),
             "landing a version is a procedure change and its record is written where the \
              swap lands — the walk is the listing it was picked out of"
+        );
+    }
+
+    /// The lanes reading with one lane holding `deck`'s fader, and a lane in
+    /// front of it that holds something else — so a refusal naming the first
+    /// lane it found rather than the lane that holds the fader is visible here
+    /// (ADR-0323).
+    fn holding(deck: u8) -> Lanes {
+        Lanes {
+            held: vec![
+                (
+                    0,
+                    karakuri_operation::LaneTarget::Param {
+                        deck: 3,
+                        param: karakuri_operation::ParamAt {
+                            node: None,
+                            key: "twist".to_string(),
+                        },
+                    },
+                ),
+                (1, karakuri_operation::LaneTarget::Fader { deck }),
+            ],
+        }
+    }
+
+    /// A scheduled move on a control a lane holds is refused, no record is
+    /// written, and the refusal names the lane to mute (ADR-0323).
+    ///
+    /// The clause a replay depends on is *no record*: a record written live
+    /// would be replayed by a run with no sequencer in it, where nothing holds
+    /// the control and the fade runs (ADR-0322, P-0092). An `assert!` on the
+    /// records being absent is therefore the point of this test and not a
+    /// detail of it.
+    #[test]
+    fn a_scheduled_move_on_a_held_control_is_refused_and_writes_no_record() {
+        let current = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            mix: Some(mix()),
+            lanes: Some(holding(1)),
+            ..Current::default()
+        };
+        // Every scheduling operation that can meet a lane: the fade on the deck
+        // it names, the crossfade on either end, and the wipe on the deck
+        // arriving — whose fader it writes to full for the mask to reveal.
+        for operation in [
+            Operation::FadeDeck { deck: 1, to: 0.0 },
+            Operation::Crossfade { from: 1, to: 2 },
+            Operation::Crossfade { from: 0, to: 1 },
+            Operation::Wipe { from: 0, to: 1 },
+        ] {
+            assert_eq!(
+                written(&operation, &current),
+                Written::Refused(Refusal { lane: 1, deck: 1 }),
+                "`{operation:?}` over a lane holding deck 1's fader was not refused, or \
+                 was refused naming another lane — the lane in front of it holds a \
+                 parameter on another deck"
+            );
+        }
+        assert_eq!(
+            Refusal { lane: 1, deck: 1 }.why(),
+            "deck 1's fader is held by lane 1 of the armed pattern: mute that lane and \
+             ask again",
+            "the one sentence changed wording — every surface says this one, and the \
+             next attempt it carries is the mute"
+        );
+    }
+
+    /// The same four asks with the lane muted, and with no lanes read at all,
+    /// write exactly the records they write with no sequencer in the room.
+    ///
+    /// A muted lane is dropped from the reading where the pattern is read
+    /// (`karakuri_pattern::Pattern::held`), so *muted* arrives here as *absent*:
+    /// this is what makes the mute the operator's take-back. `lanes: None` is a
+    /// reading that was not taken and refuses nothing, which is what every
+    /// surface that has no sequencer relies on.
+    #[test]
+    fn a_muted_lane_and_a_reading_nobody_took_refuse_nothing() {
+        let over = Current {
+            transition: Some(transition()),
+            mask: Some(mask()),
+            mix: Some(mix()),
+            ..Current::default()
+        };
+        for lanes in [None, Some(Lanes::default()), Some(holding(3))] {
+            let current = Current {
+                lanes: lanes.clone(),
+                ..over.clone()
+            };
+            for operation in [
+                Operation::FadeDeck { deck: 1, to: 0.0 },
+                Operation::Crossfade { from: 0, to: 1 },
+                Operation::Wipe { from: 0, to: 1 },
+            ] {
+                assert_eq!(
+                    written(&operation, &current),
+                    written(&operation, &over),
+                    "`{operation:?}` against `{lanes:?}` wrote something other than what \
+                     it writes with no lane holding anything — a lane that was muted, \
+                     or a reading nobody took, refuses nothing"
+                );
+                assert!(
+                    matches!(written(&operation, &current), Written::Records(_)),
+                    "`{operation:?}` wrote no records at all, so this half is asserting \
+                     two refusals are equal rather than that the move still schedules"
+                );
+            }
+        }
+    }
+
+    /// A selection is not a move on a control, so a lane holding the deck's
+    /// fader does not reach it (ADR-0323).
+    ///
+    /// `Operation::SelectRenderer` schedules a `Record::Select` — which renderer
+    /// a slot draws with, at an instant — and no lane target names it. Refusing
+    /// it would be a fourth operation taken away from an operator for a
+    /// collision that cannot happen.
+    #[test]
+    fn a_renderer_choice_is_untouched_by_a_lane_on_the_same_deck() {
+        let current = Current {
+            transition: Some(transition()),
+            lanes: Some(holding(1)),
+            ..Current::default()
+        };
+        assert_eq!(
+            records(written(
+                &Operation::SelectRenderer {
+                    deck: 1,
+                    renderer: 2
+                },
+                &current
+            )),
+            vec![Record::Select {
+                slot: DeckSlot(1),
+                renderer: 2,
+                start: 37.0,
+            }],
+            "a renderer choice on a deck whose fader a lane holds was refused or \
+             rewritten — a selection moves no control a lane can drive"
         );
     }
 }

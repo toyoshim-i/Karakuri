@@ -136,6 +136,18 @@ impl Pattern {
         self.lanes.push(lane);
     }
 
+    /// Removes the lane at `at` and returns it, or `None` for an index this
+    /// pattern does not hold.
+    ///
+    /// A lane's index is its position in [`Pattern::lanes`] and not an identity:
+    /// the lanes after `at` move up one, so every index above it names a
+    /// different lane after this call. `Operation::SetStep`,
+    /// `Operation::SetLaneMute` and `Operation::RemoveLane` address whichever
+    /// lane holds that position at the moment they are applied.
+    pub fn remove(&mut self, at: usize) -> Option<Lane> {
+        (at < self.lanes.len()).then(|| self.lanes.remove(at))
+    }
+
     /// Returns whether this pattern contains any lanes.
     pub fn is_empty(&self) -> bool {
         self.lanes.is_empty()
@@ -159,11 +171,22 @@ impl Pattern {
             .map(move |lane| lane.operation_at(step, mode))
     }
 
-    /// Returns the index of the lane driving `deck`'s channel fader, if any.
-    pub fn holder_of_fader(&self, deck: u8) -> Option<usize> {
-        self.lanes.iter().position(|lane| {
-            !lane.muted() && matches!(lane.target(), LaneTarget::Fader { deck: at } if *at == deck)
-        })
+    /// Returns the lanes that hold a control, as `(lane index, target)` pairs in
+    /// lane order.
+    ///
+    /// A muted lane holds nothing, because it drives nothing, and is not in this
+    /// list. That is the one place the mute is applied to the question *is this
+    /// control held*; which lane holds a given control is then
+    /// `karakuri_operation_record::Lanes::holder` over this list, at the
+    /// operation-to-records boundary where a scheduled move on a held control is
+    /// refused (ADR-0323). The index is the lane's own, because a refusal names
+    /// the lane to mute.
+    pub fn held(&self) -> impl Iterator<Item = (usize, &LaneTarget)> + '_ {
+        self.lanes
+            .iter()
+            .enumerate()
+            .filter(|(_, lane)| !lane.muted())
+            .map(|(at, lane)| (at, lane.target()))
     }
 }
 
@@ -449,18 +472,92 @@ mod tests {
         );
     }
 
-    /// Verifies that muted lanes release fader holding to allow manual overrides.
+    /// Verifies that muted lanes hold no control and unmuted ones hold what they drive.
+    ///
+    /// A fader lane and a parameter lane, each muted and unmuted: the reading a
+    /// scheduled move is refused against is this list, so a muted lane appearing
+    /// in it is a fade refused against a lane that drives nothing (ADR-0323).
     #[test]
-    fn a_muted_lane_holds_no_fader() {
+    fn a_muted_lane_holds_no_control_and_an_unmuted_one_holds_what_it_drives() {
+        let twist = LaneTarget::Param {
+            deck: 1,
+            param: ParamAt {
+                node: None,
+                key: "twist".to_string(),
+            },
+        };
         let mut pattern = Pattern::empty();
         pattern.push(fader(0));
-        assert_eq!(pattern.holder_of_fader(0), Some(0));
-        assert_eq!(pattern.holder_of_fader(1), None, "no lane drives deck B");
+        pattern.push(Lane::new(twist.clone(), 1.0, 0.0));
+        assert_eq!(
+            pattern.held().collect::<Vec<_>>(),
+            vec![(0, &LaneTarget::Fader { deck: 0 }), (1, &twist)],
+            "an unmuted lane holds the control its target names, and the index is the \
+             lane's own: a fade is refused by naming the lane to mute"
+        );
         pattern.lane_mut(0).unwrap().set_muted(true);
         assert_eq!(
-            pattern.holder_of_fader(0),
-            None,
-            "a muted lane drives nothing, so there is nothing for a fade to collide with"
+            pattern.held().collect::<Vec<_>>(),
+            vec![(1, &twist)],
+            "a muted lane drives nothing, so there is nothing for a fade to collide \
+             with — and the lane beside it keeps the index it had"
+        );
+        pattern.lane_mut(1).unwrap().set_muted(true);
+        assert_eq!(
+            pattern.held().count(),
+            0,
+            "a parameter lane muted holds no more than a fader lane muted does"
+        );
+        pattern.lane_mut(1).unwrap().set_muted(false);
+        assert_eq!(
+            pattern.held().collect::<Vec<_>>(),
+            vec![(1, &twist)],
+            "unmuting is the take-back, and what comes back is the control the lane drives"
+        );
+    }
+
+    /// Verifies that removing a lane hands it back and closes the gap it left.
+    #[test]
+    fn a_removed_lane_comes_back_and_the_ones_after_it_move_up() {
+        let mut pattern = Pattern::empty();
+        for deck in 0..3 {
+            pattern.push(fader(deck));
+        }
+        let taken = pattern.remove(1).expect("lane 1 is drawn");
+        assert_eq!(
+            taken.target(),
+            &LaneTarget::Fader { deck: 1 },
+            "the lane that was at that position is the one that comes back"
+        );
+        assert_eq!(pattern.lanes().len(), 2);
+        assert_eq!(
+            pattern.lanes()[1].target(),
+            &LaneTarget::Fader { deck: 2 },
+            "a lane index is a position, so the lanes after the removed one move up"
+        );
+    }
+
+    /// Verifies that the last lane is removable and leaves an empty pattern.
+    #[test]
+    fn the_last_lane_can_be_taken_out_and_the_pattern_is_empty() {
+        let mut pattern = Pattern::empty();
+        pattern.push(fader(0));
+        assert!(pattern.remove(0).is_some());
+        assert!(pattern.is_empty(), "the pattern is kept and holds no lane");
+        assert_eq!(pattern.due(0).count(), 0, "and nothing is due at any step");
+    }
+
+    /// Verifies that an index the pattern does not hold moves nothing.
+    #[test]
+    fn removing_a_lane_that_is_not_there_moves_nothing() {
+        let mut pattern = Pattern::empty();
+        pattern.push(fader(0));
+        assert_eq!(pattern.remove(1), None, "there is no lane 1 to take out");
+        assert_eq!(pattern.remove(usize::MAX), None);
+        assert_eq!(
+            pattern.lanes().len(),
+            1,
+            "and a refused removal leaves the pattern as it was"
         );
     }
 

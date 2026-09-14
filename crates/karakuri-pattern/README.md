@@ -33,7 +33,7 @@ A sequencer lane serves as a declarative route into `karakuri-operation`: on bea
 
 | Type | Description | Key Methods / Fields |
 |:---|:---|:---|
-| [`Pattern`] | A single musical bar composed of a `StepMode` and a list of `Lane`s | `lanes()`, `add_lane()`, `remove_lane()`, `toggle_slot()` |
+| [`Pattern`] | A single musical bar composed of a `StepMode` and a list of `Lane`s | `lanes()`, `add_lane()`, `remove_lane()`, `toggle_slot()`, `held()` |
 | [`Lane`] | A single sequence lane driving an operation target with 16 slots and on/off levels | `target()`, `is_on()`, `set_on()`, `levels()`, `value_at()` |
 | [`Banks`] | Session container managing 4 pattern banks (`A`, `B`, `C`, `D`) and the armed bank | `armed()`, `arm()`, `bank()`, `bank_mut()`, `first_empty()` |
 | [`Playhead`] | Tracks step progression and detects step boundary crossings | `advance()`, `last_step()`, `reset()` |

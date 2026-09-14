@@ -147,6 +147,12 @@ pub struct SeqRow {
     /// sixteenth and eight at an eighth: the row keeps its width and the cells
     /// halve in the finer one (ADR-0306).
     pub cells: Vec<Rect>,
+    /// The minus at the far end of the row, which takes this lane out of the
+    /// pattern — the Master bay's chain slot glyph on a lane's row
+    /// ([ADR-0352](../../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
+    /// The cells stop short of it, so the label, the track and the glyph are
+    /// three columns and nothing on the row moves when the mode changes.
+    pub remove: Rect,
     /// What the row draws from: the lane's own label, which slots are on, and
     /// whether it is muted.
     pub words: String,
@@ -277,9 +283,26 @@ pub fn sequencer(
     if track_x >= right {
         return None;
     }
+    // **The minus is at the far end of every lane's row**, where the chain
+    // slot's sits on its head line: one column of glyphs against the bay's own
+    // padding, so the track is what is left between the label and it
+    // (ADR-0352).
+    let minus_w = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            super::master::REMOVE_GLYPH.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    let track_right = right - minus_w - size::SEQ_ROW_GAP;
+    if track_right <= track_x {
+        return None;
+    }
     let count = mode.count();
     let gaps = size::SEQ_CELL_GAP * (count as f32 - 1.0);
-    let cell_w = (right - track_x - gaps) / count as f32;
+    let cell_w = (track_right - track_x - gaps) / count as f32;
     // **A cell with no width is no control**, which is `master`'s own refusal
     // one bay up: a bay narrow enough that the label and the track meet has
     // nothing to draw sixteen cells in, and half a grid is worse than none.
@@ -300,9 +323,14 @@ pub fn sequencer(
             egui::vec2(size::SEQ_LABEL_W, size::SEQ_CELL_H),
         );
         let cells: Vec<Rect> = (0..count).map(|at| cell_at(y, at)).collect();
+        let remove = Rect::from_min_size(
+            Pos2::new(right - minus_w, y),
+            egui::vec2(minus_w, size::SEQ_CELL_H),
+        );
         rows.push(SeqRow {
             label,
             cells,
+            remove,
             words: lane_label(lane.target()),
             muted: lane.muted(),
             on: (0..count).map(|at| lane.step_on(at, mode)).collect(),
@@ -577,12 +605,12 @@ pub enum Chose {
 impl Sequencer {
     /// What a press at `p` asks for, or `None` where there is nothing under it.
     ///
-    /// Four controls and one answer, in the order the mock draws them: a bank pill
-    /// chooses the pattern, a cell sets a step, a label mutes a lane, and the pill
-    /// chooses what a step is worth. The mode pill is asked last and none of the
-    /// four can overlap another, so the order is arbitrary rather than a precedence
-    /// — it is written down so that this file and the window that acts on it ask in
-    /// one order.
+    /// Five controls and one answer, in the order the mock draws them: a bank pill
+    /// chooses the pattern, a cell sets a step, a label mutes a lane, the minus at
+    /// the end of the row takes that lane out, and the pill chooses what a step is
+    /// worth. The mode pill is asked last and none of the five can overlap another,
+    /// so the order is arbitrary rather than a precedence — it is written down so
+    /// that this file and the window that acts on it ask in one order.
     ///
     /// The `+ lane` control is not here, because its press is not an operation: it
     /// puts a card down, and what comes back from that card is
@@ -631,6 +659,15 @@ impl Sequencer {
                     pattern: self.bank as u8,
                     lane: index as u8,
                     muted: !row.muted,
+                });
+            }
+            // **The minus takes the lane out**, addressed by the position it is
+            // drawn at: the lanes after it move up, which is what a lane index
+            // means (ADR-0352's own property, one bay along).
+            if row.remove.contains(at) {
+                return Some(Operation::RemoveLane {
+                    pattern: self.bank as u8,
+                    lane: index as u8,
                 });
             }
         }
@@ -702,12 +739,12 @@ impl Sequencer {
     }
 
     /// How many controls this bay draws, which is what [`crate::input::PROBES`]
-    /// registers: a cell per drawn step of every lane, a label per lane, the mode
-    /// pill, the four bank pills and `+ lane`.
+    /// registers: a cell per drawn step of every lane, a label and a minus per
+    /// lane, the mode pill, the four bank pills and `+ lane`.
     pub fn controls(&self) -> usize {
         self.rows
             .iter()
-            .map(|row| row.cells.len() + 1)
+            .map(|row| row.cells.len() + 2)
             .sum::<usize>()
             + 1
             + self.banks.len()
@@ -734,6 +771,8 @@ impl Sequencer {
 ///   its lane is.
 /// - a lane's label — `.seq-label`, right-aligned, with the mark in the
 ///   lavender; and `.seq-row.mute`'s faint ink where the lane is muted.
+/// - a lane's minus — `.minus`, the Master bay's own glyph and ink at the far
+///   end of the row, which takes that lane out of the pattern.
 /// - a cell — `.seq-lane i`, the well with its hairline; `.on` in the mint;
 ///   `.on.hot` in the pink where the lane drives the deck on air, which this
 ///   console cannot know here and so does not draw; and `.seq-row.mute`'s
@@ -813,6 +852,22 @@ pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
             ),
             galley,
             ink,
+        );
+        // **The minus, in the faint ink the chain slot's is drawn in** — it is
+        // an act rather than a state, so it is never armed and never lit, and a
+        // muted row dims it with everything else on the row.
+        let glyph = painter.layout_no_wrap(
+            super::master::REMOVE_GLYPH.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.faint,
+        );
+        painter.galley(
+            Pos2::new(
+                row.remove.max.x - glyph.size().x,
+                row.remove.center().y - glyph.size().y * 0.5,
+            ),
+            glyph,
+            pal.faint,
         );
         for (at, cell) in row.cells.iter().enumerate() {
             let radius = CornerRadius::same(size::SEQ_CELL_RADIUS);

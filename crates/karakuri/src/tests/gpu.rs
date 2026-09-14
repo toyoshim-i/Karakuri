@@ -2841,6 +2841,9 @@ fn the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on() {
         &engine.look,
         &engine.chain,
         settings,
+        // No lane holds anything here: the banks a run starts with hold one
+        // muted lane, and a muted lane holds no control (ADR-0323).
+        &karakuri_pattern::Banks::default(),
     );
     let wiped = written(&operation, &current);
     assert!(
@@ -2939,7 +2942,14 @@ fn the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on() {
     assert_eq!(
         written(
             &front,
-            &reading(&front, &engine.deck, &engine.look, &engine.chain, settings)
+            &reading(
+                &front,
+                &engine.deck,
+                &engine.look,
+                &engine.chain,
+                settings,
+                &karakuri_pattern::Banks::default(),
+            )
         ),
         Written::Records(vec![Record::Mask {
             slot: DeckSlot(over as u8),
@@ -3278,6 +3288,7 @@ fn a_press_on_the_mask_mini_chooses_a_shape_and_keeps_the_angle() {
             &engine.look,
             &engine.chain,
             TransitionSettings::START,
+            &karakuri_pattern::Banks::default(),
         ),
     );
     let Written::Records(records) = &written else {
@@ -3464,6 +3475,7 @@ fn a_press_on_the_look_controls_moves_the_look_every_sink_is_drawn_under() {
             &engine.look,
             &engine.chain,
             TransitionSettings::START,
+            &karakuri_pattern::Banks::default(),
         ),
     );
     let Written::Records(records) = &chosen else {
@@ -3530,6 +3542,7 @@ fn a_press_on_the_look_controls_moves_the_look_every_sink_is_drawn_under() {
             &engine.look,
             &engine.chain,
             TransitionSettings::START,
+            &karakuri_pattern::Banks::default(),
         ),
     );
     let Written::Records(records) = &levelled else {

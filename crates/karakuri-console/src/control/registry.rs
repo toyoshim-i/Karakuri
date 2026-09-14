@@ -251,7 +251,7 @@ pub const DESCRIPTORS: [ControlDescriptor; 38] = [
     ControlDescriptor {
         id: ControlId::Sequencer,
         probe_name: ControlId::Sequencer.probe_name(),
-        label: "Sequencer bay controls",
+        label: "Sequencer bay controls, including a lane's minus",
         hotkey: None,
         operation_title: Some("Toggle a step"),
     },

@@ -128,7 +128,7 @@ impl ControlId {
             ControlId::LibraryList => "the Library bay's list",
             ControlId::ClassPills => "the class pills",
             ControlId::Sequencer => {
-                "the Sequencer bay's cells, labels, mode pill, bank pills and + lane"
+                "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane"
             }
             ControlId::StagingBack => "the Staging lane's back capsules",
             ControlId::StagingCandidate => "the Staging lane's rows",

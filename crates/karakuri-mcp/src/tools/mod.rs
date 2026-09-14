@@ -664,7 +664,7 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
 
         // ----- the seventeen a model has no window for ---------------------
         //
-        // ADR-0315's twelve and the sequencer's five, which carry that record's
+        // ADR-0315's twelve and the sequencer's six, which carry that record's
         // sentence on the page for the same reason: a route into a surface's
         // own state is a route into a window the model is not looking at.
         Operation::SelectDeck { .. }
@@ -682,6 +682,9 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
         | Operation::SetStep { .. }
         | Operation::SetLaneMute { .. }
         | Operation::PointLane { .. }
+        // `RemoveLane` is the sixth of them and joins them for their sentence:
+        // taking a lane out of a pattern is a move inside one console's window.
+        | Operation::RemoveLane { .. }
         | Operation::SetPatternGrid { .. }
         | Operation::SelectPattern { .. }
         // **A bay's own narrowing of what it is drawing**, which is

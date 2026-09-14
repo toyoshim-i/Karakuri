@@ -775,7 +775,8 @@
   .seq { padding: 7px 9px 9px; display: flex; flex-direction: column; gap: 5px; }
   .seq-head { display: flex; align-items: center; gap: 6px; color: var(--c-faint); flex-wrap: wrap; }
   .seq-body { position: relative; display: flex; flex-direction: column; gap: 3px; }
-  .seq-row { display: grid; grid-template-columns: 30px 1fr; gap: 5px; align-items: center; }
+  .seq-row { display: grid; grid-template-columns: 30px 1fr auto; gap: 5px; align-items: center; }
+  .seq-row .minus { color: var(--c-faint); font-size: 11px; line-height: 1; }
   .seq-lane { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; }
   .seq-lane i { height: 15px; border-radius: 3px; background: var(--c-well); box-shadow: inset 0 0 0 1px var(--c-hair); display: block; }
   .seq-lane i.on { background: var(--c-mint); box-shadow: 0 0 8px var(--c-glow); }
@@ -789,8 +790,9 @@
   .seq-row.mute .seq-label { color: var(--c-faint); font-weight: 400; }
   .seq-row.mute .seq-label .g { color: var(--c-faint); }
   .seq-row.mute .seq-lane { opacity: 0.3; }
+  .seq-row.mute .minus { opacity: 0.3; }
 
-  .seq-play { position: absolute; inset: 0; display: grid; grid-template-columns: 30px 1fr; gap: 5px; pointer-events: none; }
+  .seq-play { position: absolute; inset: 0; display: grid; grid-template-columns: 30px 1fr auto; gap: 5px; pointer-events: none; }
   .seq-play .lane { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; }
   .seq-play .lane i { display: block; height: 100%; border-radius: 5px; }
   .seq-play .lane i.at { background: color-mix(in srgb, var(--c-lav) 22%, transparent); box-shadow: 0 0 14px 3px color-mix(in srgb, var(--c-lav) 45%, transparent), inset 0 0 0 1px var(--c-lav); }

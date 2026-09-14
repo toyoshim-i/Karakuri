@@ -68,7 +68,7 @@ fn hover_flat_indices_map_to_control_ids_and_descriptors() {
     use karakuri_console::hover::{control_id_at, descriptor_at, flat};
 
     let total = flat().count();
-    assert_eq!(total, 76);
+    assert_eq!(total, 77);
 
     for i in 0..total {
         let id = control_id_at(i).expect("every flat tip index must map to a ControlId");

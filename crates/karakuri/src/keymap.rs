@@ -937,10 +937,10 @@ pub(crate) mod key_column {
         // not an operation, so neither key names a row.
         (Some("sequencer"), DIGIT, &[]),
         (Some("sequencer"), "arrows", &[]),
-        // `space` is four of this bay's five controls: the head's mode and
+        // `space` is four of this bay's six controls: the head's mode and
         // bank pills, a lane's label and a lane's cells, each named as the
-        // state it arrives at. `+ lane` is not here — it performs rather than
-        // sets, so it is `enter`'s.
+        // state it arrives at. `+ lane` and a lane's minus are not here — they
+        // perform rather than set, so they are `enter`'s.
         (
             Some("sequencer"),
             "space",
@@ -955,10 +955,15 @@ pub(crate) mod key_column {
         // entries points the lane at that target, which is the one row this
         // bay's head reaches: the digits and `↑↓` name what is on the card and
         // `esc` takes it away (ADR-0351).
+        //
+        // **And `enter` on a lane takes that lane out**, which is the minus at
+        // the end of its row: a lane draws its label and sixteen cells before
+        // that glyph, so the digits stop short of it and an item's own act is
+        // the rung that reaches it (ADR-0352 read on a row the digits outrun).
         (
             Some("sequencer"),
             "enter",
-            &["Point a lane at what it drives"],
+            &["Point a lane at what it drives", "Remove a lane"],
         ),
         // ------------------------------------------------------------------
         // The Outputs row's grammar

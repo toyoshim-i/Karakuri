@@ -123,10 +123,10 @@ pub(crate) fn pointed_lane(
 }
 
 /// A press in the Sequencer bay, applied to the pattern it names, and what to
-/// say about it. `None` for every operation that is not one of the three.
+/// say about it. `None` for every operation that is not one of the six.
 ///
 /// [`scheduled`]'s shape one bay along, and for the same reason: `written`
-/// answers `Silent(Surface)` for all five of the sequencer's operations — a
+/// answers `Silent(Surface)` for all six of the sequencer's operations — a
 /// pattern is library data under the store on the arrangement's terms, and what
 /// a *lane* does reaches the stream as its own writes (ADR-0320, ADR-0322) — so
 /// there is nothing on the deck for [`apply`] to move and the surface that
@@ -205,6 +205,56 @@ pub(crate) fn sequenced(
                         "The pattern is kept and drives nothing, and the fader is a hand's \
                              again — which is where this lane's take-back sits",
                     false => "It writes its target at the next step boundary",
+                }
+            ))
+        }
+        // **A lane taken out, by the position it was drawn at.** The lanes
+        // after it move up, which is what a lane index means
+        // (`karakuri_pattern::Pattern::remove`), and the steps on it go with
+        // it — there is nothing left to unmute onto, which is what separates
+        // this from the mute above.
+        //
+        // The playhead is not reset, for the step press's reason: a removal
+        // changes what is under the current step and not which step it is.
+        Operation::RemoveLane { pattern, lane } => {
+            let Some(bank) = banks.at_mut(usize::from(pattern)) else {
+                return Some(format!(
+                    "  lane: pattern {pattern} is not a bank this session holds"
+                ));
+            };
+            let held = bank.lanes().len();
+            let Some(taken) = bank.remove(usize::from(lane)) else {
+                // `karakuri_environment::no_such_slot`'s sentence, one address
+                // along: the thing named, then what there was to name.
+                return Some(match held {
+                    0 => format!(
+                        "  lane: no lane {lane} in pattern {pattern}: this pattern holds none"
+                    ),
+                    n => format!(
+                        "  lane: no lane {lane} in pattern {pattern}: this pattern holds lanes \
+                         0-{}",
+                        n - 1
+                    ),
+                });
+            };
+            let left = bank.lanes().len();
+            Some(format!(
+                "  lane: pattern {pattern} lane {lane} taken out -> no record. Its steps went \
+                 with it and the lanes after it moved up, so {left} lane{} {} under the rows. \
+                 {}",
+                match left == 1 {
+                    true => "",
+                    false => "s",
+                },
+                match left == 1 {
+                    true => "is",
+                    false => "are",
+                },
+                match taken.muted() {
+                    true => "It was muted and drove nothing",
+                    false =>
+                        "It was driving, and what it drove keeps the value its last step wrote \
+                         it: a lane's writes are its whole record",
                 }
             ))
         }

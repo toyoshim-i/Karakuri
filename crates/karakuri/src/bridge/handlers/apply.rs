@@ -4,10 +4,10 @@ use super::*;
 /// the two ways that happens are not the same thing — so they are not the
 /// same sentence.
 ///
-/// [`written`] has three answers and only one of them is a record.
+/// [`written`] has four answers and only one of them is a record.
 /// A harness that printed a line for that one and nothing at all for the
-/// other two would tell an operator that a press did nothing, which is true
-/// of neither:
+/// other three would tell an operator that a press did nothing, which is true
+/// of none of them:
 ///
 /// - [`Written::Silent`] is settled. Selecting a deck or folding a bay is
 ///   a surface's own state and there is nothing to write; the sentence says
@@ -17,6 +17,12 @@ use super::*;
 ///   happened* is exactly the wrong reading — the sentence names the question
 ///   instead, which is `Owed::why`'s whole job and the reason `Owed` is not
 ///   an error.
+/// - [`Written::Refused`] is a decision taken, and it is the one answer here
+///   that is neither settled silence nor a gap: a scheduled move on a fader an
+///   unmuted lane of the armed pattern holds writes no record, and the sentence
+///   names the lane to mute (ADR-0323). It is `Refusal::why`'s words and not
+///   this file's, because the keys, the pointer, a mapped control and a model
+///   meet the same sentence.
 ///
 /// `None` for [`Written::Records`], because that line is [`apply`]'s: it says
 /// the record *and* what the deck holds afterwards, and printing both would
@@ -75,6 +81,13 @@ pub(crate) fn unwritten(operation: &Operation, written: &Written) -> Option<Stri
             "  emitted: {operation:?} -> no record, and that is a gap rather than a \
              decision: {}. nothing moved, and nothing here decides it",
             owed.why()
+        )),
+        // **A decision rather than a gap, so it is not the line above**
+        // (ADR-0323). Nothing was scheduled and no record was written, which is
+        // what a replay of this session will also see.
+        Written::Refused(refusal) => Some(format!(
+            "  emitted: {operation:?} -> refused, and nothing was scheduled: {}",
+            refusal.why()
         )),
     }
 }
@@ -1320,12 +1333,18 @@ pub(crate) fn apply(
 /// A slot the deck has not got answers `None`, and [`written`] then says the
 /// reading was owed rather than indexing something that is not there — the
 /// guard [`apply`] has, at the other end of the same press.
+///
+/// The last reading is the session's four banks, and it is the one that is not
+/// about a deck at all: which lanes of the armed pattern hold which controls,
+/// so that a scheduled move on a fader a lane holds is refused before any
+/// record is written (ADR-0323).
 pub(crate) fn reading(
     operation: &Operation,
     deck: &Deck,
     look: &Look,
     chain: &[karakuri_engine::SlotSpec],
     settings: TransitionSettings,
+    banks: &karakuri_pattern::Banks,
 ) -> Current {
     // The whole chain, for whichever slot was asked for: `Record::MasterChain`
     // carries the whole list and a press names one slot of it, so the chain
@@ -1504,6 +1523,22 @@ pub(crate) fn reading(
             .map(|slot| mix::current_mix(deck.blend(slot), deck.residency(slot))),
         _ => None,
     };
+    // **The armed pattern's lanes, handed in for every operation** — unlike the
+    // readings above, which are taken for the operations that need them. A
+    // `transition` this file forgot to hand over is said out loud
+    // (`Owed::NotRead`); a `lanes` this file forgot to hand over refuses
+    // nothing and says nothing, so it is taken once here rather than off a
+    // second list of which operations can be refused (ADR-0323).
+    //
+    // It is the armed bank alone, because a lane in a bank that is not armed
+    // drives nothing: `Banks::pattern` is what the sequencer polls.
+    let lanes = Some(karakuri_operation_record::Lanes {
+        held: banks
+            .pattern()
+            .held()
+            .map(|(at, target)| (at, target.clone()))
+            .collect(),
+    });
     Current {
         look,
         master_chain,
@@ -1512,5 +1547,6 @@ pub(crate) fn reading(
         tempo,
         transition,
         mix,
+        lanes,
     }
 }

@@ -494,6 +494,11 @@ pub enum Act {
     Restore,
     /// The addressed slot, taken out of the master chain.
     Remove,
+    /// The addressed lane, taken out of the pattern — what the minus at the end of
+    /// the lane's row asks for, reached by `enter` on the lane itself. A second
+    /// variant rather than the one above because the two are reached at different
+    /// rungs and name different operations.
+    RemoveLane,
     /// A slot of the addressed procedure, appended to the master chain. After it
     /// the card is gone and the address is back on `+ add`.
     Add,
@@ -980,7 +985,16 @@ pub const BUILT: &[Built] = &[
                 then: Some(Control::LaneTarget),
             },
         )],
-        act: None,
+        // **`enter` on a lane takes that lane out of the pattern**, which is the
+        // minus the bay draws at the end of the row reached by the one key that
+        // can reach it. The Master chain's minus is the last of a slot's
+        // controls and a digit names it
+        // ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md));
+        // a lane draws its label and sixteen cells before its minus, so a
+        // suffix here would be the eighteenth control of a rung the digits stop
+        // at nine of. An item's own act is the rung above that, and it is the
+        // Library row's `enter` read on a lane.
+        act: Some(Act::RemoveLane),
         selects: false,
         across: false,
     },

@@ -885,7 +885,7 @@ pub const PROBES: [Probe; 38] = [
         ask: on_mcp,
     },
     Probe {
-        name: "the Sequencer bay's cells, labels, mode pill, bank pills and + lane",
+        name: "the Sequencer bay's cells, labels, minus glyphs, mode pill, bank pills and + lane",
         claims: SEQ_CONTROLS,
         ask: on_step,
     },
@@ -931,8 +931,8 @@ pub struct Probe {
 }
 
 /// How many controls the Sequencer bay claims: a cell per drawn step of every
-/// lane, a label per lane, the mode pill, the four bank pills in the bay head
-/// and the foot's `+ lane`.
+/// lane, a label and a minus per lane, the mode pill, the four bank pills in
+/// the bay head and the foot's `+ lane`.
 ///
 /// The chooser's card is not counted, exactly as the Library's two are not: a
 /// card that is down claims every press on the console under rule 2, which is
@@ -941,15 +941,15 @@ pub struct Probe {
 /// A count of what a *full* pattern draws rather than of what is on screen,
 /// which is [`BAY_GRIPS`]' shape asked of a bay whose rows are data: this is a
 /// `const` and a pattern arrives at run time, so the number registered is the
-/// most a pointer could reach — four lanes, sixteen cells apiece — and a
-/// console drawing one lane claims one lane's worth. That is the honest
+/// most a pointer could reach — four lanes, sixteen cells and two glyphs apiece
+/// — and a console drawing one lane claims one lane's worth. That is the honest
 /// direction for a registration: [`CONTROLS`] is what the pointer *may* have to
 /// hit-test, and a number that followed the pattern would make the console's
 /// own legend move when an operator added a lane.
 ///
 /// `karakuri_console::view::Sequencer::controls` is what a drawn bay answers,
 /// and it is the number this bounds.
-const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 1) + 1 + karakuri_pattern::BANKS + 1;
+const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 2) + 1 + karakuri_pattern::BANKS + 1;
 
 /// How many controls rule 4 hit-tests, summed over [`PROBES`].
 ///
@@ -982,9 +982,9 @@ pub enum Claim {
 }
 
 /// The Sequencer bay's controls, derived once for all of them, which is a mixer
-/// strip's arrangement one bay down: a cell, a label and the mode pill are
-/// three questions about one laid-out bay, and a second walk would put the cell
-/// a press lands on somewhere the cell that was painted is not.
+/// strip's arrangement one bay down: a cell, a label, a minus and the mode pill
+/// are four questions about one laid-out bay, and a second walk would put the
+/// cell a press lands on somewhere the cell that was painted is not.
 ///
 /// A console with no pattern behind it pays one branch — [`sequencer`]'s first
 /// line is the reading, and `None` is a bay that draws nothing.

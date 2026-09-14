@@ -4044,6 +4044,155 @@ fn a_pointed_lane_takes_its_levels_from_the_published_range() {
     );
 }
 
+/// A lane is taken out by its position, the lanes after it move up, and an index
+/// this pattern has not got is refused in `no_such_slot`'s own sentence.
+///
+/// The other half of the minus at the end of a lane's row: the bay hands back
+/// `Operation::RemoveLane { pattern, lane }` and takes nothing out itself, so
+/// this is where the pattern actually loses the row (ADR-0352's property read on
+/// a lane).
+#[test]
+fn a_removed_lane_takes_its_steps_with_it_and_the_rest_move_up() {
+    let mut banks = karakuri_pattern::Banks::default();
+    let mut playhead = karakuri_pattern::Playhead::default();
+    let view = View::new(Room::Day);
+    for deck in 0..3 {
+        assert!(sequenced(
+            &mut banks,
+            &mut playhead,
+            &view,
+            &Operation::PointLane {
+                pattern: 0,
+                target: karakuri_operation::LaneTarget::Fader { deck },
+            }
+        )
+        .is_some());
+    }
+    assert_eq!(banks.pattern().lanes().len(), 3);
+
+    let line = sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::RemoveLane {
+            pattern: 0,
+            lane: 1,
+        },
+    )
+    .expect("a lane press says what it did");
+    assert!(line.contains("taken out"), "{line}");
+    assert!(
+        line.contains("no record"),
+        "a pattern is not a session record: {line}"
+    );
+    assert_eq!(banks.pattern().lanes().len(), 2);
+    assert_eq!(
+        banks.pattern().lanes()[1].target(),
+        &karakuri_operation::LaneTarget::Fader { deck: 2 },
+        "the lanes after the removed one move up, which is what a lane index means"
+    );
+
+    // **An index this pattern has not got is refused in the words every
+    // surface refuses an address in**: the thing named, then what there was to
+    // name (`karakuri_environment::no_such_slot`).
+    let refused = sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::RemoveLane {
+            pattern: 0,
+            lane: 7,
+        },
+    )
+    .expect("a press this window cannot perform says so rather than going quiet");
+    assert!(
+        refused.contains("no lane 7") && refused.contains("holds lanes 0-1"),
+        "{refused}"
+    );
+    assert_eq!(
+        banks.pattern().lanes().len(),
+        2,
+        "and a refused press takes nothing out"
+    );
+
+    // A bank this session does not hold is the other refusal, and it is the
+    // one every arm of this handler makes.
+    let refused = sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::RemoveLane {
+            pattern: 9,
+            lane: 0,
+        },
+    )
+    .expect("a press naming no bank says so");
+    assert!(
+        refused.contains("not a bank this session holds"),
+        "{refused}"
+    );
+
+    // **The lane that is driving comes out too**, and nothing refuses it: a
+    // lane's writes are its whole record, so they stop here (ADR-0322).
+    assert!(sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::SetLaneMute {
+            pattern: 0,
+            lane: 0,
+            muted: false,
+        }
+    )
+    .is_some());
+    assert_eq!(
+        banks.pattern().held().next(),
+        Some((0, &karakuri_operation::LaneTarget::Fader { deck: 0 })),
+        "an unmuted lane holds the control it drives"
+    );
+    let line = sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::RemoveLane {
+            pattern: 0,
+            lane: 0,
+        },
+    )
+    .expect("a lane press says what it did");
+    assert!(line.contains("It was driving"), "{line}");
+    assert_eq!(
+        banks.pattern().held().count(),
+        0,
+        "and nothing holds deck A's fader once the lane that did is gone"
+    );
+
+    // The last lane out leaves an empty pattern, and the refusal then says
+    // there is nothing to name.
+    assert!(sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::RemoveLane {
+            pattern: 0,
+            lane: 0,
+        }
+    )
+    .is_some());
+    assert!(banks.pattern().is_empty());
+    let refused = sequenced(
+        &mut banks,
+        &mut playhead,
+        &view,
+        &Operation::RemoveLane {
+            pattern: 0,
+            lane: 0,
+        },
+    )
+    .expect("a press on an empty pattern says so");
+    assert!(refused.contains("this pattern holds none"), "{refused}");
+}
+
 /// A finished name is one operation of the vocabulary, and the card is gone
 /// before it is emitted — whether or not the name is any good, since the
 /// refusal is said out loud by `checked_name` and a card left standing over it
@@ -7099,6 +7248,91 @@ fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
         None,
         "an operation that wrote a record was also announced as writing none"
     );
+}
+
+/// A scheduled move on a fader a lane of the armed pattern holds is refused,
+/// says so in the one sentence, and that sentence is not the gap's
+/// (ADR-0323).
+///
+/// Three halves, and the third is the one that could go quietly stale. The
+/// first is the answer: a fade over a held fader comes back `Refused` and
+/// carries no record, which is the clause a replay depends on — a record
+/// written live would be replayed by a run with no sequencer in it (ADR-0322,
+/// P-0092). The second is this window's line for it, which has to be a
+/// different sentence from an `Owed`: a gap nobody has closed and a decision
+/// taken read alike otherwise.
+///
+/// The third is the reading. [`reading`] cannot be called here — it takes a
+/// `Deck` and this binary has no device — so the source is scanned for the
+/// banks arriving and for the field being filled from them. Without that, this
+/// whole test passes against a `Current` built by hand while the window
+/// schedules moves over lanes in silence, which is the failure
+/// `docs/contributing.md` §3 is about.
+#[test]
+fn a_move_on_a_fader_a_lane_holds_is_refused_and_said_as_a_decision() {
+    let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
+    let current = Current {
+        transition: Some(karakuri_operation_record::Transition {
+            start: 8.0,
+            beats: 4.0,
+            curve: karakuri_operation::Curve::Smooth,
+            wipe_kind: karakuri_operation::WipeKind::None,
+            wipe_angle: 0.0,
+        }),
+        lanes: Some(karakuri_operation_record::Lanes {
+            held: vec![(3, karakuri_operation::LaneTarget::Fader { deck: 1 })],
+        }),
+        ..Current::default()
+    };
+    let refused = written(&fade, &current);
+    assert_eq!(
+        refused,
+        Written::Refused(karakuri_operation_record::Refusal { lane: 3, deck: 1 }),
+        "a fade onto a deck whose fader a lane holds was converted into records — the \
+         lane cancels the fade within one step and a replay, which runs no sequencer, \
+         would run it"
+    );
+    let told = unwritten(&fade, &refused).expect(
+        "a fade this window refused said nothing at all, so a key that emitted one \
+         reads exactly like a key that is not bound",
+    );
+    assert!(
+        told.contains(&karakuri_operation_record::Refusal { lane: 3, deck: 1 }.why()),
+        "the window said `{told}`, which is not the sentence the refusal is worded in \
+         — the next attempt is to mute the lane it names"
+    );
+    let gap = unwritten(
+        &Operation::TapBeat,
+        &written(&Operation::TapBeat, &Current::default()),
+    )
+    .expect("a tap owes a record and this window says so");
+    assert_ne!(
+        told, gap,
+        "a decision taken and a gap nobody has closed came out of this window as the \
+         same sentence"
+    );
+
+    // **And the reading this window hands over.** `reading` takes the banks
+    // and fills the field from the armed pattern; either half missing is a
+    // refusal that silently never happens.
+    // Read with the whitespace taken out, so that a reformat of the file is
+    // not a failing test and a line wrapped by `cargo fmt` is not a silence.
+    const APPLY: &str = include_str!("../bridge/handlers/apply.rs");
+    let apply: String = APPLY.split_whitespace().collect();
+    for wanted in [
+        "banks:&karakuri_pattern::Banks,",
+        "banks.pattern().held()",
+        // The field of the `Current` this window builds, and not a mention of
+        // the word in a comment above it.
+        "mix,lanes,}",
+    ] {
+        assert!(
+            apply.contains(wanted),
+            "`reading` no longer carries `{wanted}` — the lanes reading is how a \
+             scheduled move meets the lane holding its fader, and a field left out \
+             refuses nothing and says nothing"
+        );
+    }
 }
 
 /// The deck head's two operations, as far as this program can take them without

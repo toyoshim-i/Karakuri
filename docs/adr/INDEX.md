@@ -381,6 +381,7 @@ number; new records continue from the end.
 | [ADR-0353](0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md) | A scheduled fade is not drawn on a real-time surface, so the two rows read `gap` in both hand columns | 2026-09-14 | accepted |
 | [ADR-0354](0354-a-chain-is-compiled-on-a-thread-of-its-own-and-lands-at-a-frame-boundary.md) | A chain is compiled on a thread of its own and lands at a frame boundary | 2026-09-14 | accepted |
 | [ADR-0356](0356-the-worker-estimates-what-it-built-and-an-estimate-is-a-fit-rather-than-a-number-at-one-size.md) | The worker estimates what it built, and an estimate is a fit rather than a number at one size | 2026-09-14 | accepted |
+| [ADR-0357](0357-a-lane-is-taken-out-by-a-glyph-on-its-row-and-enter-on-the-lane-is-the-key.md) | A lane is taken out by a glyph on its row, and `enter` on the lane is the key that reaches it | 2026-09-14 | accepted |
 
 ## Retired numbers
 
