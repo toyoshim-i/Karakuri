@@ -139,38 +139,38 @@ pub(crate) fn next_tonemap(op: TonemapOp) -> TonemapOp {
 /// performer instead of the one that has one. `Silent::why` and `Owed::why` are
 /// the reasons in the words the crate that decided them says them in, so
 /// nothing is written down twice.
+///
+/// And the sentence they are carried in is that crate's too —
+/// `karakuri_operation_record::not_performed`, which the instrument's MCP drain
+/// answers a refusal and a gap in as well. A model reaching `--mcp` and a model
+/// reaching `cargo run -p karakuri` made the same mistake and were answered in
+/// two different sentences until it was stated once (ADR-0131), and the tail
+/// below is the one thing that is true of this program alone: it has no control
+/// for a `Silent` and the instrument does, so the instrument performs one and
+/// says so.
 pub(crate) fn answered(operation: &Operation, current: &Current) -> Result<Vec<Record>, String> {
+    let title = operation.title();
     match karakuri_operation_record::written(operation, current) {
         Written::Records(records) => Ok(records),
         Written::Silent(silent) => Err(format!(
-            "`{}` was not performed and nothing on this run changed: {}, and this program \
-             performs an operation by writing the records it converts to. `karakuri-cli` has \
-             no control for this one — the instrument, `cargo run -p karakuri`, is the \
-             surface that answers it.",
-            operation.title(),
-            silent.why()
+            "{}, and this program performs an operation by writing the records it converts \
+             to. `karakuri-cli` has no control for this one — the instrument, `cargo run -p \
+             karakuri`, is the surface that answers it.",
+            not_performed(title, silent.why())
         )),
         // **The reading, and not the control.** `Owed` says a record is owed
         // and could not be made here — a deck the run does not hold, or a
         // vocabulary question nobody has settled — so the sentence is that
         // reason and not *this program has no control for it*, which would be
         // false of an operation whose key is on this keyboard.
-        Written::Owed(owed) => Err(format!(
-            "`{}` was not performed and nothing on this run changed: {}",
-            operation.title(),
-            owed.why()
-        )),
+        Written::Owed(owed) => Err(not_performed(title, owed.why())),
         // **A decision and not a gap**, in the words the crate that took it
         // says them in: a scheduled move on a fader a lane of the armed
         // pattern holds writes no record, here and on every other surface
         // (ADR-0323). No lane can hold anything on this program — it runs no
         // sequencer — and the arm is here because the sentence is one sentence
         // wherever it is met.
-        Written::Refused(refusal) => Err(format!(
-            "`{}` was not performed and nothing on this run changed: {}",
-            operation.title(),
-            refusal.why()
-        )),
+        Written::Refused(refusal) => Err(not_performed(title, &refusal.why())),
     }
 }
 

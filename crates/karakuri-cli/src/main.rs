@@ -65,7 +65,7 @@ use karakuri_engine::{
     Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_operation::Operation;
-use karakuri_operation_record::{Current, Written};
+use karakuri_operation_record::{not_performed, Current, Written};
 use karakuri_signal::NoiseConfig;
 use karakuri_store::record::{BindNoise, DeckSlot, Layer, Record};
 use winit::application::ApplicationHandler;

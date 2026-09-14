@@ -18,6 +18,8 @@ Operation-to-Record translation layer: converts high-level, surface-agnostic [`k
   - `Written::Refused(Refusal)`: A scheduled move on a control an unmuted lane of the armed pattern holds. No record is written, and the refusal carries the one sentence naming the lane ([ADR-0323](../../docs/adr/0323-a-scheduled-move-is-refused-on-a-control-a-lane-holds.md)).
 - **Consumer**: Engine mutation handlers, headless replay runners, and MCP mutation pipelines.
 
+`not_performed(title, why)` is the sentence a surface answers an operation that wrote no record in, carrying the reason in the words `Refusal::why`, `Owed::why` or `Silent::why` says it. Both `karakuri` and `karakuri-cli` answer a model over `--mcp` through it, so one mistake gets one explanation whichever program the model reached ([ADR-0131](../../docs/adr/0131-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md)).
+
 ---
 
 ## 2. Key Invariants

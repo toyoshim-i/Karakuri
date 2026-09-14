@@ -234,7 +234,8 @@ pub(crate) fn answered(
                 recorder,
                 &acted,
                 Change::Pointed(true).repaint(),
-            );
+            )
+            .repaint;
         }
         // And a press on the arrangement pill or on one of its menu rows: the
         // names filed are a directory and a save writes a file.
@@ -247,14 +248,15 @@ pub(crate) fn answered(
                 recorder,
                 &acted,
                 Change::Pointed(true).repaint(),
-            );
+            )
+            .repaint;
         }
         // The caller answers these two, and it returns before it gets here.
         focus::Asked::Scope | focus::Asked::Load => {
             unreachable!("the scope and the load are answered where the store is")
         }
     };
-    App::performed(gfx, started, readout, recorder, &acted, Repaint::Never)
+    App::performed(gfx, started, readout, recorder, &acted, Repaint::Never).repaint
 }
 
 /// A load, performed — [`loading`] reached from an operation, and `None` for
