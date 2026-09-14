@@ -2799,12 +2799,32 @@ mod live_save_tests {
             }),
             ..Current::default()
         };
-        let said = answered(&Operation::FadeDeck { deck: 1, to: 0.0 }, &current)
-            .expect_err("a fade onto a deck whose fader a lane holds was performed");
+        let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
+        let said = answered(&fade, &current).expect_err(
+            "a fade onto a deck whose fader a lane holds \
+                                                  was performed",
+        );
         assert!(
             said.contains(&karakuri_operation_record::Refusal { lane: 2, deck: 1 }.why()),
             "this surface said `{said}`, which is not the sentence the refusal is \
              worded in — one mistake, one explanation, whichever surface meets it"
+        );
+        // **And the whole sentence, pinned to the one function that spells
+        // it.** The instrument's own `--mcp` drain answers a refusal through
+        // `not_performed` too and pins it the same way
+        // (`karakuri::tests::a_model_is_answered_the_refusal_rather_than_told_its_move_was_performed`),
+        // so the two programs cannot answer one refusal in two sentences
+        // without one of these two tests failing (ADR-0131). A `contains` on
+        // either side alone is what let four spellings of `no_such_slot` live
+        // together.
+        assert_eq!(
+            said,
+            not_performed(
+                fade.title(),
+                &karakuri_operation_record::Refusal { lane: 2, deck: 1 }.why()
+            ),
+            "this program answered `{said}`, which is not the sentence the instrument \
+             answers the same refusal in"
         );
         // And the reading itself: a `Current` with no `lanes` in it refuses
         // nothing, so a surface that stopped filling the field would go on

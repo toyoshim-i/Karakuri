@@ -683,7 +683,8 @@ impl ApplicationHandler for App {
                     self.recording.recorder(),
                     &acted,
                     Change::Pointer(claim).repaint(),
-                );
+                )
+                .repaint;
                 // **And the hover layer is told where the pointer went**, with
                 // the claim `input::claim` has just answered: `Claim::Egui` is
                 // the panel saying the pointer is on none of its controls, so
@@ -945,7 +946,8 @@ impl ApplicationHandler for App {
                                     self.recording.recorder(),
                                     &Acted::Emitted(Some(take)),
                                     Repaint::Never,
-                                );
+                                )
+                                .repaint;
                                 Acted::Emitted(Some(load))
                             }
                             // Which of the two acts failed is the whole of what
@@ -979,6 +981,7 @@ impl ApplicationHandler for App {
                     &acted,
                     Change::Pointer(claim).repaint(),
                 )
+                .repaint
                 .soonest(took);
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
@@ -1029,7 +1032,8 @@ impl ApplicationHandler for App {
                     self.recording.recorder(),
                     &acted,
                     Change::Pointer(claim).repaint(),
-                );
+                )
+                .repaint;
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -1162,7 +1166,8 @@ impl ApplicationHandler for App {
                         self.recording.recorder(),
                         &acted,
                         Change::Naming(moved).repaint(),
-                    );
+                    )
+                    .repaint;
                     App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                     handle_post_event_side_effects(
                         &mut self.keeping,
@@ -1283,7 +1288,8 @@ impl ApplicationHandler for App {
                                     self.recording.recorder(),
                                     &acted,
                                     Repaint::Never,
-                                );
+                                )
+                                .repaint;
                                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                                 return;
                             }
@@ -1400,7 +1406,8 @@ impl ApplicationHandler for App {
                                                     self.recording.recorder(),
                                                     &Acted::Emitted(Some(take)),
                                                     Repaint::Never,
-                                                );
+                                                )
+                                                .repaint;
                                                 Acted::Emitted(Some(load))
                                             }
                                             // **Which of the two acts failed is the
@@ -1487,6 +1494,7 @@ impl ApplicationHandler for App {
                                     &acted,
                                     Repaint::Never,
                                 )
+                                .repaint
                                 .soonest(took);
                                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                                 return;

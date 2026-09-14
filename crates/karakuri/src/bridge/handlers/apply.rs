@@ -92,6 +92,53 @@ pub(crate) fn unwritten(operation: &Operation, written: &Written) -> Option<Stri
     }
 }
 
+/// What a model is told about an operation this window drained off `--mcp`,
+/// and `None` where the answer is *it was performed*.
+///
+/// [`unwritten`]'s neighbour and its opposite audience: that one writes the
+/// terminal's line, which reaches an operator who can see the deck and read
+/// every other line this frame printed, and this one writes the reply that
+/// leaves the process. A model has neither the terminal nor the window
+/// ([ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)),
+/// so an answer of *performed* over a refusal is the whole of what it is
+/// given: it reads the fade as done, sees no frame, and asks for the next
+/// thing.
+///
+/// The two that are answered, and they are the two [`written`] does not perform:
+///
+/// - [`Written::Refused`] is a decision taken. The move was not scheduled, the
+///   lane still holds the fader, and what the next attempt needs is to mute
+///   that lane
+///   ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md),
+///   ADR-0323).
+/// - [`Written::Owed`] is a gap nobody has closed. Nothing moved and nothing
+///   here decides it, which is the terminal's own words for it one function up.
+///
+/// `None` for [`Written::Records`], which is a performance, **and `None` for
+/// [`Written::Silent`], which is one too**. That is where this differs from
+/// `karakuri-cli`'s `answered`, and the difference is the two programs rather
+/// than the two sentences: that program performs an operation *by* writing the
+/// records it converts to, so a `Silent` there is an operation it has no
+/// control for. This window has the control. A `LoadSet`, a `SelectDeck`, a
+/// `RouteFrame`, a `SetTransition` and a save all answer `Silent`, and every one
+/// of them is performed a few lines above the conversion in `App::performed`
+/// or in `App::operated` itself — telling a model that its `load_set` changed
+/// nothing would be this fix committing the defect it repairs, in the other
+/// direction.
+///
+/// The sentence is `karakuri_operation_record::not_performed`'s and not this
+/// file's, for the reason `Refusal::why` is the refusal crate's: `--mcp` on
+/// this program and `--mcp` on `karakuri-cli` are two front doors onto one
+/// vocabulary, and one mistake gets one explanation whichever a model came
+/// through (ADR-0131).
+pub(crate) fn unperformed(title: &str, written: &Written) -> Option<String> {
+    match written {
+        Written::Records(_) | Written::Silent(_) => None,
+        Written::Owed(owed) => Some(not_performed(title, owed.why())),
+        Written::Refused(refusal) => Some(not_performed(title, &refusal.why())),
+    }
+}
+
 /// A press on a strip or a deck key, applied to the console's own pointer, and
 /// what to say about it. `None` for every operation that is not it.
 ///

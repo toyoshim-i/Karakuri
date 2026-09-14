@@ -324,6 +324,33 @@ pub enum Written {
     Refused(Refusal),
 }
 
+/// The one sentence a surface answers an operation that wrote no record in.
+///
+/// `title` is [`Operation::title`] and `why` is the reason in the words the
+/// type that decided it says them in — [`Refusal::why`], [`Owed::why`] or
+/// [`Silent::why`] — so nothing here is written down twice and a caller cannot
+/// invent a reason of its own.
+///
+/// `karakuri_environment::no_such_slot`'s arrangement, one question along,
+/// and for its reason (ADR-0131): the instrument and
+/// `karakuri-cli` both hand a model an answer through `--mcp`, and two
+/// spellings of *nothing happened, and here is why* is one mistake explained
+/// twice. It is stated once, here, where the three reasons already live, and
+/// each surface pins it with an `assert_eq!` rather than trusting a comment.
+///
+/// What the next attempt needs is in `why` and not in this wrapper
+/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)):
+/// a lane to mute, a reading nobody handed over, a question the vocabulary has
+/// not settled. What this adds is the half a model cannot see — that the ask
+/// reached a performer and the run is where it was (ADR-0315).
+///
+/// A surface may follow it with what is true of that surface alone;
+/// `karakuri-cli` does, for a [`Written::Silent`] it has no control for. None
+/// of them may respell it.
+pub fn not_performed(title: &str, why: &str) -> String {
+    format!("`{title}` was not performed and nothing on this run changed: {why}")
+}
+
 /// Translates an [`Operation`] and the [`Current`] engine state into journal records.
 pub fn written(operation: &Operation, current: &Current) -> Written {
     match operation {

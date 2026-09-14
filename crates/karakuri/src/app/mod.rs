@@ -247,6 +247,35 @@ pub(crate) enum EventLoopAction {
     Continue,
 }
 
+/// What one call of [`App::performed`] came to: the frame it is owed, and —
+/// where an emitted operation reached the conversion — what the conversion
+/// answered.
+///
+/// Every caller but one reads `repaint` and drops the rest, because a press
+/// and a mapped control are already at the surface that printed the outcome.
+/// The one that reads `written` is [`App::operated`], which owes a model a
+/// sentence and has no terminal to say it on (ADR-0315).
+///
+/// It is carried back rather than asked for again. `written` is a pure
+/// function and a second call would be free, but it would not be the same
+/// answer: the readings are taken *after* this frame's [`scheduled`] and
+/// [`sequenced`] have run, so a conversion done before the drain would be
+/// converted against lanes the same drain has since muted, and a move an
+/// operator was told is now free would be refused — or the reverse (ADR-0323).
+/// One conversion, at the one place the readings are true.
+///
+/// `None` for every [`Acted`] that is not an emission, for the empty emission,
+/// and for the two operations that leave the emission arm at [`tracked`]
+/// before the conversion runs: *no outcome to report* rather than *an outcome
+/// that was nothing*, which is the distinction [`unperformed`] answers `None`
+/// on.
+pub(crate) struct Performed {
+    /// The frame this performance is owed.
+    pub(crate) repaint: Repaint,
+    /// What [`written`] made of the operation, where one reached it.
+    pub(crate) written: Option<Written>,
+}
+
 impl App {
     /// Reaction to a window event regarding event loop termination.
     pub(crate) fn event_loop_action_for(
@@ -459,8 +488,13 @@ impl App {
         recorder: Option<&mut karakuri_environment::session::Recorder>,
         acted: &Acted,
         otherwise: Repaint,
-    ) -> Repaint {
-        match acted {
+    ) -> Performed {
+        // **What the conversion answered, filled by the one arm that runs
+        // it**, and carried out of this function because the drain that has no
+        // terminal has to say it over a socket — see [`Performed`], where why
+        // it is carried rather than converted a second time is written down.
+        let mut converted = None;
+        let repaint = match acted {
             Acted::Nothing => otherwise,
             // **A class pill earns the frame the claimed press already earns,
             // and no more.** Nothing in the arrangement moved and no operation
@@ -501,7 +535,15 @@ impl App {
                     // both arrive here.
                     if let Some(line) = tracked(gfx, started, operation) {
                         println!("{line}");
-                        return Change::Emitted(Some(operation)).repaint();
+                        // **And no conversion goes back with it**, which is
+                        // this arm's own sentence read from the other end: the
+                        // grid moved, so a model is owed *performed* and not
+                        // the `Owed(NotSettled)` a conversion that never ran
+                        // would have answered.
+                        return Performed {
+                            repaint: Change::Emitted(Some(operation)).repaint(),
+                            written: None,
+                        };
                     }
                     // **The two operations that reach a disk**, and they are
                     // taken first because they are not about the deck at all:
@@ -823,9 +865,14 @@ impl App {
                             );
                         }
                     }
+                    converted = Some(written);
                 }
                 Change::Emitted(operation.as_ref()).repaint()
             }
+        };
+        Performed {
+            repaint,
+            written: converted,
         }
     }
 
@@ -860,6 +907,30 @@ impl App {
     /// deck's own reading — so the sentence says where each of those is rather
     /// than holding a connection open across a transition. That is
     /// `mcp::WireRequest`'s third point, one route along.
+    ///
+    /// # Answered, and not answered *performed* regardless
+    ///
+    /// The answer says what happened and not that something did. An operation
+    /// the conversion refused or owed goes back as an `Err` in
+    /// [`unperformed`]'s sentence — the crate that took the decision words it,
+    /// and `karakuri-cli` answers the same string over its own `--mcp`, so one
+    /// mistake gets one explanation whichever program a model came through
+    /// (ADR-0131, P-0083). A fade onto a fader an unmuted lane of the armed
+    /// pattern holds is the case that was reported as performed: nothing was
+    /// scheduled, nothing moved, the refusal named the lane to mute on this
+    /// run's terminal, and the socket carried *was performed* (ADR-0323).
+    ///
+    /// A model has neither this window nor this terminal
+    /// ([ADR-0315](../../../docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md)),
+    /// so the reply is the whole of what it is told. That is why the outcome is
+    /// carried back out of [`App::performed`] rather than converted again here
+    /// — see [`Performed`], where the readings that make a second conversion a
+    /// different answer are written down.
+    ///
+    /// A `Written::Silent` is still answered *performed*, which is
+    /// [`unperformed`]'s own paragraph and the one place this program's answer
+    /// differs from `karakuri-cli`'s: a `load_set`, a `select_deck` and a
+    /// `route_frame` write no record and are all performed here.
     ///
     /// # The three whose performer is not in [`App::performed`]
     ///
@@ -969,7 +1040,7 @@ impl App {
             if let Some(line) = aside.as_deref() {
                 println!("{line}");
             }
-            let repaint = App::performed(
+            let Performed { repaint, written } = App::performed(
                 gfx,
                 started,
                 readout,
@@ -978,6 +1049,21 @@ impl App {
                 Repaint::Never,
             );
             App::wants(gfx, egui_due, costs, repaint);
+            // **What the conversion refused or owed is the answer, where there
+            // is one**, and it leaves as an `Err` for the reason the star above
+            // does: a refusal reported as a success is a model told the fade it
+            // asked for is running. It is the sentence `karakuri-cli` answers
+            // over its own `--mcp`, out of the crate that took the decision
+            // (ADR-0131, P-0083) — the terminal has had it from [`unwritten`]
+            // for as long as there has been a window, and the socket had
+            // nothing.
+            if let Some(refused) = written
+                .as_ref()
+                .and_then(|written| unperformed(title, written))
+            {
+                reply.settled(Err(refused));
+                continue;
+            }
             // **The performer's own line goes back where there is one**, which
             // is the projector's: whether a window opened, was already open,
             // or could not be made at the format the present pass draws. The
@@ -1091,6 +1177,10 @@ impl App {
             &mut asked,
         );
         for operation in asked.drain(..) {
+            // **The conversion's answer is dropped here and read in
+            // [`App::operated`]**, and that is the difference between the two
+            // drains rather than an omission: a hand is at the surface that
+            // printed the outcome and a model is not (ADR-0315).
             let repaint = App::performed(
                 gfx,
                 started,
@@ -1098,7 +1188,8 @@ impl App {
                 recording.recorder(),
                 &Acted::Emitted(Some(operation)),
                 Repaint::Never,
-            );
+            )
+            .repaint;
             App::wants(gfx, egui_due, costs, repaint);
         }
         gfx.performed_by_hand = asked;

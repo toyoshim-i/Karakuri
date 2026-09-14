@@ -23,7 +23,7 @@ use karakuri_ir::Kind as Layer;
 use karakuri_layout::Layout;
 use karakuri_mcp as mcp;
 use karakuri_operation::{BlendMode, Operation, SetTransfer};
-use karakuri_operation_record::{Current, Written};
+use karakuri_operation_record::{not_performed, Current, Written};
 use karakuri_store::record::{DeckSlot, Record};
 use karakuri_store::store::Store;
 use winit::keyboard::{Key, NamedKey};

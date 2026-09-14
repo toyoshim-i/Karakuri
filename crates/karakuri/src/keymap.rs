@@ -354,7 +354,8 @@ fn key_save(ctx: &mut KeyCtx, gfx: &mut Gfx) {
         ctx.recording.recorder(),
         &acted,
         Repaint::Never,
-    );
+    )
+    .repaint;
     ctx.keeping.save_set(
         &gfx.engine,
         ctx.store,
@@ -375,7 +376,8 @@ fn key_tap_beat(ctx: &mut KeyCtx, gfx: &mut Gfx) {
         ctx.recording.recorder(),
         &acted,
         Repaint::Never,
-    );
+    )
+    .repaint;
     App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
 }
 
@@ -390,7 +392,8 @@ fn key_scale_grid(ctx: &mut KeyCtx, gfx: &mut Gfx, by: GridScale) {
         ctx.recording.recorder(),
         &acted,
         Repaint::Never,
-    );
+    )
+    .repaint;
     App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
 }
 
