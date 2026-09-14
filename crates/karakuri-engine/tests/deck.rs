@@ -3338,8 +3338,19 @@ proc wash {
             SWAPPED,
             "the verdict said kept and the slot is not holding the candidate"
         );
-        assert_eq!(basis, karakuri_engine::Basis::Measured);
-        let cost_ms = cost_ms.expect("the worker measured this Set");
+        // **A number and not the absence of one.** Which of the slot's two
+        // readings answered is `governor::budgeted`'s and not this test's: a
+        // candidate arrives with a measurement and an `estimate` at the deck's
+        // own size since ADR-0356, and on this machine the fit can refuse. What
+        // this test turns on is that the verdict was reached on the candidate's
+        // own frame rather than on the deck's interval, which the band below is
+        // what says.
+        assert_ne!(
+            basis,
+            karakuri_engine::Basis::Unbudgetable,
+            "the verdict was reached on nothing"
+        );
+        let cost_ms = cost_ms.expect("the worker measured and estimated this Set");
         assert!(
             cost_ms < OVER_A_SLOW_FRAME_MS,
             "this machine reads {cost_ms} ms for one frame of a {SWAPPED}-element Set at \
@@ -3701,7 +3712,22 @@ proc wash {
             "the same candidate was kept on one deck and thrown out on another; the \
              only difference between them is what the other slots are carrying"
         );
-        assert_eq!(idle.2, loaded.2, "the two verdicts read different numbers");
+        // **Both verdicts read a number of the candidate's own**, and which of
+        // its two readings that was is not asserted. A candidate arrives with a
+        // measurement and an `estimate` since ADR-0356, and the estimate's two
+        // rungs are a few hundred microseconds each on a host clock — so on the
+        // loaded deck the slope through them can come out negative, which is
+        // `Unfit::FragmentTermNegative` and sends the slot to its measurement
+        // (ADR-0296 §2). That is the fallback working and it is load-dependent
+        // by construction. What is *not* allowed to move with the neighbours is
+        // the verdict, which is the equality above.
+        for (which, basis) in [("idle", idle.2), ("loaded", loaded.2)] {
+            assert_ne!(
+                basis,
+                karakuri_engine::Basis::Unbudgetable,
+                "the {which} deck's verdict was reached on nothing"
+            );
+        }
 
         // **Not vacuous.** The two decks really were in different states, and the
         // one thing that is allowed to notice is the deck-level alarm.

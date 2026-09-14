@@ -173,9 +173,9 @@ impl ApplicationHandler for App {
         let governed = engine.ask_to_prime(&gpu);
         // **The four risk badges, from the pass that just decided them.** The
         // dot is as fresh as the last governor pass and no fresher: a Set that
-        // swaps in arrives unestimated and a resize drops the estimate
-        // (ADR-0296), so this is written again wherever a later `Deck::govern`
-        // report is kept.
+        // swaps in arrives with its own estimate and a resize re-targets it
+        // (ADR-0356), so the number moves without a pass and this is written
+        // again wherever a later `Deck::govern` report is kept.
         self.readout.view.costs = costs(&governed);
         let info = gpu.adapter.get_info();
         self.costs.taken_on = format!(
@@ -1978,11 +1978,13 @@ impl ApplicationHandler for App {
                     &mut self.readout.health,
                 ) {
                     // **And the risk badges, because a Set that landed is a
-                    // Set nothing has estimated.** ADR-0296 drops the estimate
-                    // on an install, so the slot that just swapped is governed
-                    // on its measurement until something estimates it again —
-                    // and a dot left saying what the Set before it cost would
-                    // be the meter this whole sub-milestone exists to stop.
+                    // Set with its own two numbers.** The build worker
+                    // measures and estimates what it built and both install
+                    // with it (ADR-0356), so the slot that just swapped is
+                    // governed on the candidate's own frame from the install
+                    // onward — and a dot left saying what the Set before it
+                    // cost would be the meter this whole sub-milestone exists
+                    // to stop.
                     // This is the one place in the program that knows a Set
                     // landed, which is why it is here rather than per frame.
                     self.readout.view.costs = costs(&gfx.engine.deck.govern());

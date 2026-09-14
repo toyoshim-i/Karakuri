@@ -583,7 +583,8 @@ fn a_cell_with_no_slot_draws_no_dot_even_with_a_number() {
 /// That is a decision and this is where it is written down. The number is the
 /// one the governor spent, so a badge that appeared only for estimated slots
 /// would show a different quantity from the one the deck is governed on and
-/// would vanish on every swap (ADR-0296 leaves an incoming Set unestimated).
+/// would vanish wherever the estimator refuses to answer and the slot falls
+/// back to its measurement (ADR-0356).
 /// And the mock has five classes on `.risk` and no sixth mark: saying *which*
 /// is a page change, and the page moves first. If it moves, this test is what
 /// fails, which is the point of writing it as an assertion rather than as a

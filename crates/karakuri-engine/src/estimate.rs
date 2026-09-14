@@ -225,6 +225,37 @@ impl Estimate {
     pub fn biased_high(&self) -> bool {
         self.method() == Some(MeasurementMethod::HostWallClock)
     }
+
+    /// Returns this estimate re-evaluated at `target`, without drawing.
+    ///
+    /// An estimate is a fit rather than a number at one size: `a + b * area`
+    /// and the two rungs it was fitted through are on the record, so the answer
+    /// at another target is arithmetic. The sub-pixel correction is recomputed
+    /// against the new target — rungs that hid nothing at the old size may hide
+    /// too much at a larger one, which is [`Unfit::FlooringHidesTooMuch`] and a
+    /// refusal rather than a number — and the floor and its provenance are
+    /// carried over unchanged, because neither depends on the target.
+    ///
+    /// An estimate with no rungs is a refusal taken before any draw. It keeps
+    /// its refusal and records the new target.
+    pub fn at(&self, target: (u32, u32)) -> Estimate {
+        let Some([low, high]) = self.rungs else {
+            return Estimate {
+                target,
+                ..self.clone()
+            };
+        };
+        let mut refitted = fit(
+            low,
+            high,
+            target,
+            self.floor.unwrap_or(u32::MAX),
+            self.topologies.clone(),
+        );
+        refitted.floor = self.floor;
+        refitted.floor_from = self.floor_from.clone();
+        refitted
+    }
 }
 
 /// Parameters of the linear cost model `a + b * area`.
@@ -1029,6 +1060,83 @@ mod tests {
         assert_eq!(e.method(), Some(MeasurementMethod::HostWallClock));
         assert!(e.biased_high());
         assert_eq!(e.rungs.expect("recorded")[0].capacity, 262_144);
+    }
+
+    /// **An estimate is a fit, so it is re-read at another target rather than
+    /// dropped** (ADR-0356). The rungs are what was paid for; the answer at a
+    /// second size is arithmetic over them and draws nothing.
+    ///
+    /// `a` is 9.0 ms and `b` is chosen so the fragment term is 9.2 ms at
+    /// 1280x720, which is [`two_rungs_recover_the_a_and_b_they_were_built_from`]'s
+    /// shape. At a quarter of the area the invariant term must not move and the
+    /// fragment term must be a quarter of what it was.
+    #[test]
+    fn an_estimate_is_re_read_at_a_new_target_rather_than_dropped() {
+        let a = 9.0_f64;
+        let b = 9.2 / area(AT);
+        let (low, high) = ((320, 180), (640, 360));
+        let e = fit(
+            measured((a + b * area(low)) as f32, low),
+            measured((a + b * area(high)) as f32, high),
+            AT,
+            180,
+            vec![Topology::Points],
+        );
+        let moved = e.at((640, 360));
+
+        assert_eq!(moved.target, (640, 360));
+        assert_eq!(moved.rungs, e.rungs, "the re-read drew again");
+        assert_eq!(moved.floor, e.floor);
+        assert_eq!(moved.floor_from, e.floor_from);
+        let (was, now) = (e.fit.expect("fitted"), moved.fit.expect("re-read"));
+        assert_eq!(now.ms_per_pixel, was.ms_per_pixel);
+        assert!(
+            (now.invariant_ms - was.invariant_ms).abs() < 1e-3,
+            "the invariant term moved with the target: {} then {}",
+            was.invariant_ms,
+            now.invariant_ms
+        );
+        assert!(
+            (now.fragment_ms - was.fragment_ms / 4.0).abs() < 1e-2,
+            "a quarter of the area is not a quarter of the fragment term: {} then {}",
+            was.fragment_ms,
+            now.fragment_ms
+        );
+        assert!(
+            (now.ms - (9.0 + 2.3)).abs() < 2e-2,
+            "the answer at a quarter of the area came out {}",
+            now.ms
+        );
+    }
+
+    /// **A refusal taken before any draw keeps its refusal and records the new
+    /// target.** There are no rungs to re-read, so there is nothing a second
+    /// size can say that the first did not.
+    #[test]
+    fn a_refusal_with_no_rungs_is_re_targeted_and_stays_a_refusal() {
+        // `speed_lines`' floor against a target with no room under it.
+        let e = estimate_above_floor_refusal();
+        assert_eq!(e.rungs, None);
+        let moved = e.at((1280, 720));
+        assert_eq!(moved.target, (1280, 720));
+        assert_eq!(moved.fit, e.fit, "a refusal changed kind without drawing");
+        assert_eq!(moved.rungs, None);
+    }
+
+    /// The placement refusal [`rungs`] hands back for a target with no room
+    /// under it, wrapped as the [`Estimate`] `estimate_above_floor` would
+    /// return without a device.
+    fn estimate_above_floor_refusal() -> Estimate {
+        let (target, floor) = ((2, 2), 64);
+        Estimate {
+            target,
+            topologies: vec![Topology::Points],
+            floor: Some(floor),
+            floor_from: Floor::Stated,
+            floored: None,
+            rungs: None,
+            fit: Err(rungs(target, floor).expect_err("a 2x2 target holds no rungs")),
+        }
     }
 
     /// A target smaller than either rung is answered rather than clamped: with the

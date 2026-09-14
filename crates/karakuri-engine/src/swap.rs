@@ -15,9 +15,13 @@
 //!   and fresh element buffers. Parameter adjustments and bound inputs are carried
 //!   over from the outgoing Set via [`Set::carry_moved_from`] and [`Set::carry_bound_from`].
 //! - **Watchdog Budgeting**: Candidate Sets are measured on the worker thread prior
-//!   to handover. If candidate frame execution time exceeds the target budget,
-//!   the slot is flagged as overloaded and frozen on its current still to protect
-//!   the render loop from frame drops.
+//!   to handover, and an `estimate` is fitted there too — two further draws, at the
+//!   output's size rather than at the measurement's. Both travel with the build and
+//!   install with it, so a swapped-in Set is judged and governed on the same
+//!   precedence a cold one is: the estimate where it answers, the measurement where
+//!   it refuses. If the number that answers exceeds the target budget, the slot is
+//!   flagged as overloaded and frozen on its current still to protect the render
+//!   loop from frame drops.
 //! - **Asynchronous Deallocation**: Retired Sets are queued into a graveyard mutex
 //!   and dropped by the background worker, preventing GPU resource deallocations
 //!   from stalling the render thread.
@@ -267,6 +271,20 @@ fn said(basis: Basis) -> &'static str {
     }
 }
 
+/// The two resolutions the worker takes its readings at, shared with the render
+/// thread.
+///
+/// They are two questions and not one size read twice. A measurement is one
+/// draw at `measure_at`, which is whatever a caller named — the preview cell a
+/// slot is auditioned in. An `estimate` is a fit whose rungs are placed against
+/// `estimate_at`, which is the frame the slot actually draws; it is written by
+/// [`HotSwap::resize`], the only call that knows it.
+#[derive(Clone)]
+struct Sizes {
+    measure_at: Arc<AtomicU64>,
+    estimate_at: Arc<AtomicU64>,
+}
+
 /// Worker response containing either a finished build or a pre-build refusal.
 #[allow(clippy::large_enum_variant)]
 enum Done {
@@ -280,6 +298,11 @@ struct Built {
     label: Arc<str>,
     result: Result<Set, SetError>,
     cost: Option<Measurement>,
+    /// The worker's `estimate` of the built Set at the output's size, or its
+    /// named refusal. `None` only where the estimate itself panicked; a
+    /// refusal is `Some` carrying `Err(Unfit)`, because an estimate that
+    /// declined to answer has not said the answer is small.
+    estimate: Option<Estimate>,
 }
 
 /// Rolling median frame period measured across successive frame boundaries.
@@ -342,6 +365,12 @@ pub struct HotSwap {
     done: Receiver<Done>,
     /// Target resolution for probe measurements, packed as `(width << 32) | height`.
     measure_at: Arc<AtomicU64>,
+    /// Output resolution the worker's `estimate` answers for, packed as
+    /// `(width << 32) | height`. Distinct from `measure_at`: a measurement is
+    /// one draw at whatever size the caller named, and an estimate is a fit
+    /// evaluated at the frame the slot actually draws. Written by
+    /// [`HotSwap::resize`], which is the only call that knows that size.
+    estimate_at: Arc<AtomicU64>,
     graveyard: Arc<Mutex<Vec<Set>>>,
     /// Sets retired by the render thread pending handover to the worker graveyard.
     retired: Vec<Set>,
@@ -364,18 +393,24 @@ impl HotSwap {
         let graveyard = Arc::new(Mutex::new(Vec::with_capacity(GRAVEYARD_CAPACITY)));
         let stop = Arc::new(AtomicBool::new(false));
         let measure_at = Arc::new(AtomicU64::new(packed(live.viewport())));
+        // The viewport below, and not the Set's: nothing has told this slot
+        // what it draws into yet, so the worker's `estimate` answers for the
+        // same 1x1 frame `install_if_ready` will re-target it to. A target
+        // that small holds no rungs, so it refuses without spending a draw.
+        let estimate_at = Arc::new(AtomicU64::new(packed((1, 1))));
+        let sizes = Sizes {
+            measure_at: Arc::clone(&measure_at),
+            estimate_at: Arc::clone(&estimate_at),
+        };
 
         let worker = {
             let device = device.clone();
             let queue = queue.clone();
             let graveyard = Arc::clone(&graveyard);
             let stop = Arc::clone(&stop);
-            let measure_at = Arc::clone(&measure_at);
             std::thread::Builder::new()
                 .name("karakuri-build".into())
-                .spawn(move || {
-                    run_worker(device, queue, source, done_tx, graveyard, stop, measure_at)
-                })
+                .spawn(move || run_worker(device, queue, source, done_tx, graveyard, stop, sizes))
                 .expect("spawn build worker")
         };
 
@@ -391,6 +426,7 @@ impl HotSwap {
             events: Vec::with_capacity(EVENT_CAPACITY),
             done: done_rx,
             measure_at,
+            estimate_at,
             graveyard,
             retired: Vec::with_capacity(GRAVEYARD_CAPACITY),
             stop,
@@ -427,6 +463,9 @@ impl HotSwap {
             events: Vec::with_capacity(EVENT_CAPACITY),
             done: done_rx,
             measure_at: Arc::new(AtomicU64::new(packed(live_viewport))),
+            // No worker, so nothing reads this; `resize` writes it anyway so a
+            // fixed slot's estimate target is not a second rule.
+            estimate_at: Arc::new(AtomicU64::new(packed((1, 1)))),
             graveyard: Arc::new(Mutex::new(Vec::new())),
             retired: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
@@ -559,11 +598,24 @@ impl HotSwap {
         &self.events
     }
 
-    /// Resizes the live Set viewport to `(width, height)`.
+    /// Resizes the live Set viewport to `(width, height)` and re-targets the
+    /// estimate to it.
+    ///
+    /// An `estimate` is a fit rather than a number at one size, so a resize
+    /// re-evaluates it at the new viewport instead of dropping it: the rungs it
+    /// was taken through are on the record and re-reading them is arithmetic.
+    /// Where the new target is one those rungs cannot answer for, the
+    /// re-evaluation is a named refusal and the slot falls back to its
+    /// measurement.
+    ///
+    /// This is also the only call that knows the size the worker's `estimate`
+    /// should answer for, so it is what tells the worker.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = (width, height);
         self.live.resize(device, width, height);
-        self.estimate = None;
+        self.estimate_at
+            .store(packed((width, height)), Ordering::Relaxed);
+        self.estimate = self.estimate.take().map(|e| e.at((width, height)));
     }
 
     /// Sets the target resolution for future worker probe measurements.
@@ -577,6 +629,16 @@ impl HotSwap {
     /// Returns the resolution configured for probe measurements.
     pub fn measure_size(&self) -> (u32, u32) {
         unpacked(self.measure_at.load(Ordering::Relaxed))
+    }
+
+    /// Returns the output resolution the worker's `estimate` answers for.
+    ///
+    /// The live viewport, written by [`HotSwap::resize`]. Not
+    /// [`HotSwap::measure_size`]: a measurement is one draw at the size a
+    /// caller named — the preview cell, where a slot is auditioned — and an
+    /// estimate is about the frame this slot draws.
+    pub fn estimate_size(&self) -> (u32, u32) {
+        unpacked(self.estimate_at.load(Ordering::Relaxed))
     }
 
     /// Evaluates candidate cost against `budget_ms` and updates overloaded state.
@@ -658,7 +720,13 @@ impl HotSwap {
                 candidate.carry_bound_from(&self.live);
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.cost = built.cost;
-                self.estimate = None;
+                // **The candidate's own estimate, re-targeted to the viewport
+                // it is landing in.** The worker takes the estimate at the
+                // output size this slot last reported, and the output may have
+                // moved while the build was in flight; an estimate is a fit,
+                // so the answer at the size the Set is actually installed at is
+                // arithmetic over the rungs already on the record.
+                self.estimate = built.estimate.map(|e| e.at(self.viewport));
                 self.retire(outgoing);
                 self.overloaded = false;
                 self.events.push(Event::Swapped {
@@ -738,8 +806,9 @@ pub fn measure(
 
 /// Main execution loop for the background build and compilation worker.
 ///
-/// Polls `source`, compiles requested Sets, performs probe measurements, and deallocates
-/// retired Sets received from the render thread.
+/// Polls `source`, compiles requested Sets, performs probe measurements and an
+/// `estimate` at the output's size, and deallocates retired Sets received from
+/// the render thread.
 fn run_worker(
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -747,7 +816,7 @@ fn run_worker(
     out: Sender<Done>,
     graveyard: Arc<Mutex<Vec<Set>>>,
     stop: Arc<AtomicBool>,
-    measure_at: Arc<AtomicU64>,
+    sizes: Sizes,
 ) {
     let mut probe: Option<Probe> = None;
 
@@ -850,12 +919,13 @@ fn run_worker(
 
         let mut result = result;
         let mut cost = None;
+        let mut prediction: Option<Estimate> = None;
         if let Ok(set) = &mut result {
             // Flush initial element buffer uploads so the Set is resident on the GPU.
             queue.submit([]);
             let _ = device.poll(wgpu::PollType::wait_indefinitely());
 
-            let at = unpacked(measure_at.load(Ordering::Relaxed));
+            let at = unpacked(sizes.measure_at.load(Ordering::Relaxed));
             let probe = probe.get_or_insert_with(|| {
                 Probe::new(
                     &device,
@@ -872,7 +942,26 @@ fn run_worker(
                 eprintln!("  `{label}` could not be measured; it will not be budgeted for");
             }
 
-            // Flush rewind uploads so they do not stall the render thread upon installation.
+            // **And the estimate beside the measurement, at the output's
+            // size.** `estimate` places its two rungs against the target it is
+            // asked for, so the target is the frame this slot draws rather
+            // than `measure_at`, which is the cell a slot is auditioned in. A
+            // refusal is a value here and not a failure: it travels on the
+            // build and leaves the measurement deciding.
+            let target = unpacked(sizes.estimate_at.load(Ordering::Relaxed));
+            prediction = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                estimate(probe, &device, &queue, set, target)
+            }))
+            .ok();
+            if prediction.is_none() {
+                eprintln!(
+                    "  `{label}` could not be estimated; it will be budgeted on its \
+                     measurement"
+                );
+            }
+
+            // Flush the rewind uploads both the measurement and the estimate
+            // left, so they do not stall the render thread upon installation.
             queue.submit([]);
             let _ = device.poll(wgpu::PollType::wait_indefinitely());
         }
@@ -883,6 +972,7 @@ fn run_worker(
                 label,
                 result,
                 cost,
+                estimate: prediction,
             }))
             .is_err()
         {
