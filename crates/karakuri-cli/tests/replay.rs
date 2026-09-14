@@ -105,6 +105,128 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The store addresses the saved Set names, by layer, so a hand-written head
+    /// can put the same material in a second slot.
+    ///
+    /// Read out of the Set file rather than computed here: the address a record
+    /// names has to be the one the store actually holds, and hashing the `.kir`
+    /// again would be a second derivation of it that is right until the compiler
+    /// changes what it stores.
+    fn addresses(head: &str) -> (String, String) {
+        let of = |layer: &str| {
+            head.lines()
+                .find(|line| {
+                    line.contains(&format!(r#""layer":"{layer}""#))
+                        && line.contains(r#""t":"slot""#)
+                })
+                .and_then(|line| line.split(r#""proc":""#).nth(1))
+                .and_then(|rest| rest.split('"').next())
+                .unwrap_or_else(|| panic!("no {layer} slot in the saved Set"))
+                .to_string()
+        };
+        (of("L1"), of("L4"))
+    }
+
+    /// **A head naming two slots replays both of them.**
+    ///
+    /// A session stream used to have no way to say what a *deck* held — a Set file
+    /// describes one Set — so `--replay` built a deck of one and reported every
+    /// record naming another slot rather than obeying it. A head says it now: one
+    /// Set file for slot 0 and one `procedure` record per node of every other slot.
+    ///
+    /// **Three streams differing by what the head names**, on the `look` test's
+    /// terms. `one` is the head alone; `two` puts the same material in slot 1,
+    /// which draws at its own seed and so is a second picture rather than the first
+    /// one twice; `muted` is `two` with slot 1's fader at zero. The first pair says
+    /// the second slot reached the mix at all, and the second says a record naming
+    /// it is *obeyed* rather than skipped — which is the half that a deck of one
+    /// silently got wrong.
+    #[test]
+    fn a_head_naming_two_slots_replays_both_of_them() {
+        let dir = scratch("deck");
+        let (store, head) = store_with_a_set(&dir);
+        let (l1, l4) = addresses(&head);
+        let slot_1 = [
+            format!(r#"{{"t":"procedure","slot":1,"layer":"L1","proc":"{l1}"}}"#),
+            format!(r#"{{"t":"procedure","slot":1,"layer":"L4","proc":"{l4}"}}"#),
+        ];
+
+        write_session(&store, "one", &head, &[CANVAS, TICK, TICK]);
+        write_session(
+            &store,
+            "two",
+            &head,
+            &[&slot_1[0], &slot_1[1], CANVAS, TICK, TICK],
+        );
+        write_session(
+            &store,
+            "muted",
+            &head,
+            &[
+                &slot_1[0],
+                &slot_1[1],
+                r#"{"t":"gain","slot":1,"value":0.0}"#,
+                CANVAS,
+                TICK,
+                TICK,
+            ],
+        );
+
+        let one = replay(&store, "one", &dir.join("one.png"));
+        let two = replay(&store, "two", &dir.join("two.png"));
+        let muted = replay(&store, "muted", &dir.join("muted.png"));
+
+        assert_ne!(
+            one, two,
+            "the head's second slot is not in the picture — a replay is still building \
+             a deck of one"
+        );
+        assert_ne!(
+            two, muted,
+            "a `gain` naming slot 1 changed nothing — records naming a slot beyond the \
+             head's are still being skipped"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A `master_chain` in the head is the chain frame 0 renders through.**
+    ///
+    /// A Set file carries nothing for the chain
+    /// ([ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)),
+    /// so the head's own record is the only thing that can put one back. A replay
+    /// used to start with an empty chain whatever the head said and take the first
+    /// `master_chain` record as a *change* — which replayed a session performed
+    /// through a chain as one performed through none until an operator happened to
+    /// touch it.
+    ///
+    /// Two frames only, and the difference must be on the first: the chain is
+    /// handed to the driver before any frame renders, so a replay that seeded it
+    /// from nothing would draw frame 0 through an empty chain.
+    #[test]
+    fn a_master_chain_in_the_head_reaches_the_first_frame() {
+        let dir = scratch("chain");
+        let (store, head) = store_with_a_set(&dir);
+        // One of the three shipped effects, at the address a record names it by —
+        // `mix::resolve_procedure` finds these without a store at all.
+        let bloom =
+            karakuri_environment::mix::shipped::address(karakuri_environment::mix::shipped::BLOOM);
+        let chain = format!(
+            r#"{{"t":"master_chain","slots":[{{"proc":"{bloom}","params":{{"amount":3.0}}}}]}}"#
+        );
+
+        write_session(&store, "bare", &head, &[CANVAS, TICK]);
+        write_session(&store, "bloomed", &head, &[CANVAS, &chain, TICK]);
+
+        let bare = replay(&store, "bare", &dir.join("bare.png"));
+        let bloomed = replay(&store, "bloomed", &dir.join("bloomed.png"));
+        assert_ne!(
+            bare, bloomed,
+            "the head's `master_chain` did not reach the first frame — the chain is \
+             being seeded from nothing and moved only by a later record"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A `look` record part-way through a session changes what the rest of it
     /// renders as.
     ///

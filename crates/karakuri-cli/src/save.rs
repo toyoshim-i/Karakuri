@@ -16,13 +16,17 @@ use super::*;
 /// back. The Set file it leaves behind is named after the session, so a
 /// recording is also a saved Set and neither had to be asked for twice.
 ///
-/// Only slot 0's material, and it says so, which is the limitation underneath
-/// rather than a choice made here: a Set file describes one Set and a session
-/// stream has no way to say what a *deck* held. Everything else about the
-/// performance is recorded per slot — gain, blend, residency, preview — so a
-/// multi-slot session replays those against a deck of one and reports the rest.
-/// Closing it is a format change, and it is named in `docs/ir-spec.md` where
-/// the records are.
+/// **The head slot's Set file, which is half of a head.** A Set file describes
+/// one Set, so this is slot 0's material — its params, its bindings, its seeds
+/// and its edges. The other half is what the deck held, and
+/// [`karakuri_environment::session::head`] is where the two are put together:
+/// every other slot named by the `procedure` records a swap already writes, and
+/// then the mix. Both writers — this program and the console's `rec` pill — go
+/// through that one function, so a head has one spelling.
+///
+/// The bytes every one of those addresses resolves at are
+/// [`seed_store_for_replay`]'s: a record naming bytes nobody kept is the same
+/// silence as no record at all.
 pub(crate) fn session_head(
     args: &Args,
     placed: &[Vec<Placed>],
@@ -30,13 +34,6 @@ pub(crate) fn session_head(
     store: &karakuri_store::store::Store,
     id: &str,
 ) -> Vec<karakuri_store::ndjson::Line> {
-    if placed.len() > 1 {
-        eprintln!(
-            "  only slot 0's material is in the session's head — a session stream cannot \
-             say what a deck held, so the other {} will not replay",
-            placed.len() - 1
-        );
-    }
     if let Some(set) = &args.load_set {
         return match store.read_set(set) {
             Ok(lines) => lines,
@@ -112,6 +109,68 @@ pub(crate) fn session_head(
     }
 }
 
+/// What the deck holds at the instant a recording opens, read off the deck.
+///
+/// **Read rather than restated from the flags.** `--gain`, `--blend` and the
+/// rest reach the deck before this runs, and the deck is where a value ends up
+/// whatever put it there — so asking it is one derivation of *what is in the
+/// mix* where asking the arguments again would be a second one.
+///
+/// The look and the chain are the two the deck does not hold. The look is the
+/// present pass's and is the flag's until a record moves it; the chain is empty
+/// until an operator puts something in it, and this runs before the first frame,
+/// so an empty chain is not a default standing in for a reading — it is the
+/// reading.
+pub(crate) fn held_deck(
+    args: &Args,
+    placed: &[Vec<Placed>],
+    deck: &karakuri_engine::Deck,
+    canvas: (u32, u32),
+) -> session::Held {
+    session::Held {
+        canvas,
+        look: args.look,
+        master_out: deck.out(),
+        master_chain: Vec::new(),
+        slots: (0..deck.slot_count())
+            .map(|slot| {
+                let at = EngineSlot(slot as u8);
+                session::SlotHeld {
+                    // **The addresses the run compiled with**, which are the
+                    // ones `seed_store_for_replay` puts in the store. A slot
+                    // with nothing placed names no node and replays as the
+                    // Set it was built with — which, for this program, cannot
+                    // happen: every slot of this deck is built from a `--set`.
+                    nodes: placed
+                        .get(slot)
+                        .map(|nodes| {
+                            nodes
+                                .iter()
+                                .map(|node| {
+                                    (
+                                        karakuri_environment::meta::layer_of(node.layer),
+                                        node.index,
+                                        node.hash(),
+                                    )
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    gain: deck.gain(at),
+                    opacity: deck.opacity(at),
+                    blend: deck.blend(at),
+                    // **The request and not the grant**, which is
+                    // `Record::Residency`'s own rule: the governor re-derives
+                    // the effective level on the machine that replays.
+                    residency: deck.requested_residency(at),
+                    mask: deck.mask(at),
+                    transport: *deck.transport(at),
+                }
+            })
+            .collect(),
+    }
+}
+
 /// Every slot's launch sources into the store, because this run records one.
 ///
 /// A `procedure` record naming a slot's launch hashes is resolved by a replay
@@ -137,10 +196,11 @@ pub(crate) fn session_head(
 /// What the wider version cost was a `.karakuri` directory created by a plain
 /// windowed run, which `docs/manual.md` promises does not happen.
 ///
-/// [`session_head`] has already put slot 0's material here on its way past;
-/// `put_artifact` is content-addressed, so this repeats nothing and exists for
-/// the other slots, which a session head cannot describe but a `procedure`
-/// record can still name.
+/// **Before [`session_head`] rather than after it**, because the head names these
+/// addresses: a `procedure` record for slot 1 is an address, and a replay refuses
+/// a slot whose address the store cannot resolve. `put_artifact` is
+/// content-addressed, so the slot-0 material `session_head` writes a moment later
+/// repeats nothing.
 ///
 /// Reported and not fatal. The recorder itself is fatal on failure because a
 /// run that continued would be a performance nobody can replay with nothing

@@ -250,16 +250,61 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
         live,
     );
     set.resize(&gpu.device, w, h);
-    // **A deck of one, from one Set file**, which is what a replay can build
-    // today: a session stream names the slots its records act on but carries no
-    // way to say what was in them, since a Set file describes one Set and there
-    // is no record for "this deck held these four". So a record naming slot 1
-    // or beyond is reported and skipped — see `apply_replayed` — and a session
-    // recorded on a full deck replays the first slot's performance rather than
-    // the deck's. That is a hole in the *stream's* vocabulary rather than in
-    // this function, and it is the same hole `gain`, `blend`, `residency` and
-    // `preview` all fall into.
-    let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], w, h);
+    // **A deck as wide as the head says the deck was.** The head names one Set
+    // file — the head slot's, built above — and one `procedure` record per node
+    // of every other slot, so this is the highest slot any of them names plus
+    // one. A stream that names none is a deck of one, which is every session
+    // written before a head could say what a deck held.
+    let named = slots_named(&stream.opening);
+    // What each slot is playing, as the stream names it, seeded from what the
+    // head named. The L1, and the renderers by index — a slot draws with one
+    // geometry and however many L4s, so the second half is a list.
+    let mut playing: Vec<(
+        Option<karakuri_store::hash::Hash>,
+        Vec<Option<karakuri_store::hash::Hash>>,
+    )> = vec![(None, Vec::new()); named];
+    let mut opened: Vec<usize> = Vec::new();
+    let mut restated: Vec<usize> = Vec::new();
+    for record in &stream.opening {
+        if matches!(record, karakuri_store::record::Record::Procedure { .. }) {
+            place_procedure(record, &mut playing, &mut opened, &mut restated);
+        }
+    }
+    // **What every Set this replay builds is built against**, gathered once:
+    // the flags a replay was typed with for what the stream cannot say, and the
+    // *stream's* own table for everything it can.
+    let settings = Settings {
+        args,
+        layering,
+        live,
+        params: &loaded.params,
+        bindings: &loaded.bindings,
+    };
+    let mut swaps = vec![HotSwap::fixed(set)];
+    for (slot, playing) in playing.iter().enumerate().take(named).skip(1) {
+        // **Built against the head's own parameter table**, which is
+        // [`Settings`]' rule and the whole reason a head needs no second copy
+        // of the params for the slots it names by address.
+        match rebuild(&gpu, &store, playing, slot, &settings) {
+            Ok(mut set) => {
+                set.resize(&gpu.device, w, h);
+                swaps.push(HotSwap::fixed(set));
+            }
+            // **Fatal, where the same failure mid-stream is a note.** A slot
+            // that fails to rebuild at minute ten keeps what it had; a slot
+            // the head could not build has nothing to keep, and a replay that
+            // dropped it would renumber every record after it — slot 2's gain
+            // would land on slot 1's material.
+            Err(e) => {
+                eprintln!(
+                    "karakuri-cli: session `{id}`: slot {slot}: {e} — the head names what \
+                     this deck held and a replay builds all of it or none"
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+    let mut deck = Deck::new(&gpu.device, swaps, w, h);
     deck.set_signals(Signals::new(args.bpm, u64::from(SEED)));
 
     let frames = u32::try_from(stream.frames.len()).unwrap_or(u32::MAX);
@@ -270,35 +315,40 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
         out.display()
     );
 
-    // What each slot is playing, as the stream names it. Seeded from nothing:
-    // the head already built the Sets a run started with, so the first
-    // `procedure` record is the first *change*.
-    // The L1, and the renderers by index — a slot draws with one geometry and
-    // however many L4s, so the second half is a list rather than a slot.
-    let mut playing: Vec<(
-        Option<karakuri_store::hash::Hash>,
-        Vec<Option<karakuri_store::hash::Hash>>,
-    )> = vec![(None, Vec::new()); deck.slot_count()];
     // A `look` record in the stream moves this, so it is **returned** from the
     // driver each frame rather than handed to the renderer once before the run.
     // It used to be both, and the parameter is the one that won: a session where
     // the operator changed the tone mapper or the exposure replayed under
     // whatever it started with, however many `look` records the stream carried.
-    // The `--look` and `--exposure` flags are only the value it starts at, on
-    // the same terms as a live run.
+    // The `--look` and `--exposure` flags are only what it starts at for a
+    // stream whose head says nothing; a head written by this program says it.
     let mut look = args.look;
-    // **And the master chain, on the same terms and from nothing.** There is no
-    // flag for it — a flag writes into a record it does not invent (ADR-0046)
-    // and no flag names a slot of this chain — so a replay starts with an empty
-    // chain, which draws nothing at all, and the stream's first `master_chain`
-    // record is the first *change*. That is exactly what `playing` above is
-    // seeded from nothing for.
+    // **And the master chain, from the head.** There is no flag for it — a flag
+    // writes into a record it does not invent (ADR-0046) and no flag names a
+    // slot of this chain — so the only thing that can put a chain back is the
+    // head's own `master_chain` record, which is why a head carries one whether
+    // or not anything was in it (a Set file carries nothing for the chain:
+    // ADR-0340).
     //
     // **Handed on only where a record moved it**, which is `render::replay`'s
     // own rule for the third value: putting a chain on the `Present` may mean
     // compiling procedures, so the frames nothing changed hand `None`.
     let mut chain: Vec<karakuri_engine::SlotSpec> = Vec::new();
     let mut chain_moved = false;
+    // **The deck as the head left it, before the first frame renders.** Every
+    // record here was true at frame 0 — the gains, the blends, the masks, the
+    // residencies, the transports, the look and the chain — so applying them
+    // here is applying them where they were true. The `procedure` records are
+    // already spent: the deck above was built from them.
+    for record in &stream.opening {
+        match record {
+            karakuri_store::record::Record::Procedure { .. } => {}
+            karakuri_store::record::Record::Save { slot, id } => {
+                eprintln!("{}", skipped_save(*slot, id))
+            }
+            record => apply_replayed(&mut deck, &mut look, &mut chain, &mut chain_moved, record),
+        }
+    }
     let result = render::replay(
         &gpu,
         &mut deck,
@@ -337,50 +387,8 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
             let mut changed: Vec<usize> = Vec::new();
             let mut restated: Vec<usize> = Vec::new();
             for record in &frame.before {
-                if let karakuri_store::record::Record::Procedure {
-                    slot,
-                    at,
-                    proc_hash,
-                } = record
-                {
-                    let (layer, index) = (&at.layer, &at.index);
-                    let slot = slot.index();
-                    if slot >= playing.len() {
-                        eprintln!(
-                            "  a `procedure` for slot {slot} was skipped: this replay \
-                             builds a deck of one"
-                        );
-                        continue;
-                    }
-                    match layer {
-                        Layer::L1 => playing[slot].0 = Some(*proc_hash),
-                        // **Indexed, and the list grows to fit.** A stack's
-                        // renderers arrive as one `procedure` record each,
-                        // numbered in draw order; a stream from before stacks
-                        // existed carries index 0 and lands in the same place
-                        // the old code put it.
-                        Layer::L4 => {
-                            // The first L4 record for this slot in this frame
-                            // starts the list over — see "replaced, not merged"
-                            // above.
-                            if !restated.contains(&slot) {
-                                restated.push(slot);
-                                playing[slot].1.clear();
-                            }
-                            let at = *index as usize;
-                            if playing[slot].1.len() <= at {
-                                playing[slot].1.resize(at + 1, None);
-                            }
-                            playing[slot].1[at] = Some(*proc_hash);
-                        }
-                        other => {
-                            eprintln!("  a `procedure` for {other:?} was skipped");
-                            continue;
-                        }
-                    }
-                    if !changed.contains(&slot) {
-                        changed.push(slot);
-                    }
+                if matches!(record, karakuri_store::record::Record::Procedure { .. }) {
+                    place_procedure(record, &mut playing, &mut changed, &mut restated);
                     continue;
                 }
                 // **A replay is a sandbox, and this is the record that makes
@@ -404,7 +412,7 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
                 apply_replayed(deck, &mut look, &mut chain, &mut chain_moved, record);
             }
             for slot in changed {
-                match rebuild(&gpu, &store, &playing[slot], args, slot, layering, live) {
+                match rebuild(&gpu, &store, &playing[slot], slot, &settings) {
                     Ok(set) => deck.install(&gpu.device, EngineSlot(slot as u8), set),
                     Err(e) => eprintln!("  slot {slot}: {e} — it keeps what it had"),
                 }
@@ -423,6 +431,146 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
         eprintln!("karakuri-cli: {e}");
         std::process::exit(1);
     }
+}
+
+/// How many slots the head names, which is how wide the deck a replay builds is.
+///
+/// The highest slot any `procedure` record in the head names, plus one. A head
+/// that names none is a deck of one — the head slot's Set file is the whole of
+/// what it says, which is every session written before a head could say what a
+/// deck held.
+///
+/// Capped at [`karakuri_engine::deck::MAX_SLOTS`], because `Deck::new` asserts
+/// it: a hand-written stream naming slot 9 is a refusal with a sentence rather
+/// than a panic with a backtrace.
+fn slots_named(opening: &[Record]) -> usize {
+    let widest = opening
+        .iter()
+        .filter_map(|record| match record {
+            Record::Procedure { slot, .. } => Some(slot.index() + 1),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(1);
+    if widest > karakuri_engine::deck::MAX_SLOTS {
+        eprintln!(
+            "  the head names {widest} slots and a deck holds {} — the rest are skipped",
+            karakuri_engine::deck::MAX_SLOTS
+        );
+    }
+    widest.clamp(1, karakuri_engine::deck::MAX_SLOTS)
+}
+
+/// One `procedure` record, placed in the list of what each slot is playing.
+///
+/// The head and a frame both meet these records in a batch, and they place them
+/// the same way — one derivation of *which node of which slot this address is
+/// for*, so the deck a head builds and the deck a swap rebuilds cannot come
+/// apart.
+///
+/// **A slot's renderer list is replaced, not merged.** A rebuild restates the
+/// whole stack, so the records in one batch are the whole stack; keeping what
+/// was there would leave a stale renderer behind whenever a slot went from three
+/// to one, and nothing in the vocabulary can say "one fewer" on its own.
+/// `restated` is what makes the first L4 of a batch clear the list and the rest
+/// of that batch add to it, and it is the caller's because a batch is the
+/// caller's.
+///
+/// `changed` collects the slots this batch touched, in the order it touched
+/// them, so a rebuild happens once per slot after the whole batch is in.
+fn place_procedure(
+    record: &Record,
+    playing: &mut [(
+        Option<karakuri_store::hash::Hash>,
+        Vec<Option<karakuri_store::hash::Hash>>,
+    )],
+    changed: &mut Vec<usize>,
+    restated: &mut Vec<usize>,
+) {
+    let Record::Procedure {
+        slot,
+        at,
+        proc_hash,
+    } = record
+    else {
+        return;
+    };
+    let (layer, index) = (&at.layer, &at.index);
+    let slot = slot.index();
+    if slot >= playing.len() {
+        eprintln!(
+            "  a `procedure` for slot {slot} was skipped: the head named {} slot{}",
+            playing.len(),
+            if playing.len() == 1 { "" } else { "s" }
+        );
+        return;
+    }
+    match layer {
+        Layer::L1 => playing[slot].0 = Some(*proc_hash),
+        // **Indexed, and the list grows to fit.** A stack's renderers arrive as
+        // one `procedure` record each, numbered in draw order; a stream from
+        // before stacks existed carries index 0 and lands in the same place the
+        // old code put it.
+        Layer::L4 => {
+            if !restated.contains(&slot) {
+                restated.push(slot);
+                playing[slot].1.clear();
+            }
+            let at = *index as usize;
+            if playing[slot].1.len() <= at {
+                playing[slot].1.resize(at + 1, None);
+            }
+            playing[slot].1[at] = Some(*proc_hash);
+        }
+        other => {
+            eprintln!("  a `procedure` for {other:?} was skipped");
+            return;
+        }
+    }
+    if !changed.contains(&slot) {
+        changed.push(slot);
+    }
+}
+
+/// What every Set a replay builds is built against, whichever end of the stream
+/// asked for it.
+///
+/// One value so that the head's install and a mid-stream rebuild cannot be
+/// handed different answers to the same question — and so that adding one more
+/// does not add one more argument to every call.
+struct Settings<'a> {
+    /// The replay's own command line, for the things a stream does not say: a
+    /// capacity default, and the flags `capacities_for` reads.
+    args: &'a Args,
+    /// **The layering and the selection the head was built at**, restated rather
+    /// than re-derived — `watch::Watch::layering` states the rule and this is the
+    /// replay's copy of the same hazard: a `procedure` record names a swapped-in
+    /// procedure and says nothing about how the slot's renderers meet, so a
+    /// rebuild that worked it out again would put a composited session onto
+    /// overdraw at the first swap, with a `select` landing on a fold that is no
+    /// longer there.
+    ///
+    /// **A later `select` in the stream moves the selection and this does not know
+    /// it**, which is the same thing a live rebuild does to a slot the operator
+    /// pressed `r` on. It is the head's fold, restated; a stream that selected
+    /// again after the swap selects again on replay.
+    layering: karakuri_engine::set::Layering,
+    live: Option<u32>,
+    /// **The head's parameter table, never this command line's.** A `procedure`
+    /// record names a source and carries no value, so what a rebuilt slot runs at
+    /// has to come from somewhere — and the somewhere is the stream, because a
+    /// replay is a function of the stream
+    /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
+    /// It used to be `args.overrides` and `args.bindings`, which made the picture
+    /// depend on the flags the *replay* was typed with: the same session replayed
+    /// without the `--param` the run was started with came back different, and the
+    /// slots a head names by address would have had no values at all.
+    ///
+    /// A name the slot's own procedure does not declare is passed over where the
+    /// Set is built, which is what lets one table serve a deck whose slots run
+    /// different material.
+    params: &'a [karakuri_engine::ParamWrite],
+    bindings: &'a [karakuri_engine::Binding],
 }
 
 /// Build the Set a slot's `procedure` records name.
@@ -445,23 +593,17 @@ fn rebuild(
         Option<karakuri_store::hash::Hash>,
         Vec<Option<karakuri_store::hash::Hash>>,
     ),
-    args: &Args,
     slot: usize,
-    // **The layering and the selection the head was built at**, restated here
-    // rather than re-derived — `watch::Watch::layering` states the rule and
-    // this is the replay's copy of the same hazard: a `procedure` record names
-    // a swapped-in procedure and says nothing about how the slot's renderers
-    // meet, so a rebuild that worked it out again would put a composited
-    // session onto overdraw at the first swap, with a `select` landing on a
-    // fold that is no longer there.
-    //
-    // **A later `select` in the stream moves the selection and this does not
-    // know it**, which is the same thing a live rebuild does to a slot the
-    // operator pressed `r` on. It is the head's fold, restated; a stream that
-    // selected again after the swap selects again on replay.
-    layering: karakuri_engine::set::Layering,
-    live: Option<u32>,
+    settings: &Settings,
 ) -> Result<Set, String> {
+    let Settings {
+        args,
+        layering,
+        live,
+        params,
+        bindings,
+    } = settings;
+    let (layering, live) = (*layering, *live);
     let (Some(l1_hash), l4_hashes) = playing else {
         return Err("its L1 has not been named".into());
     };
@@ -501,9 +643,9 @@ fn rebuild(
         // Nothing recorded: a `procedure` record names a swapped-in procedure
         // and carries no capacity, so each source runs at what it declares.
         &capacities_for(args, std::slice::from_ref(&l1), &[]),
-        &mut vec![false; args.bindings.len()],
-        &args.overrides,
-        &args.bindings,
+        &mut vec![false; bindings.len()],
+        params,
+        bindings,
         &[],
         seed_for(slot),
         // **Nothing recorded, on the same terms as the capacity above.** A

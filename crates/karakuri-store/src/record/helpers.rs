@@ -161,6 +161,23 @@ impl Record {
         matches!(self.vocabulary(), Vocabulary::Set | Vocabulary::Unknown)
     }
 
+    /// Whether this record is a frame's own — what one frame saw or decided, rather
+    /// than state something holds between frames. Three say yes: [`Record::Tick`],
+    /// [`Record::Audio`] and [`Record::Tempo`].
+    ///
+    /// A fourth question for a fourth sentence, and the one `session::split` asks
+    /// to decide where a record written before the first `tick` belongs. A stream's
+    /// head is everything before the first tick *except* these: a frame writes its
+    /// edits, then its measurement, then the tick that closes it, so the `audio`
+    /// line in front of the first tick is the first frame's measurement and moving
+    /// it into the head would replay frame 0 at what no microphone heard.
+    ///
+    /// Read off [`Vocabulary`] like the other three, so a new variant with no arm
+    /// does not compile.
+    pub fn is_measurement(&self) -> bool {
+        matches!(self.vocabulary(), Vocabulary::Frame)
+    }
+
     /// Which file's vocabulary this record is part of. The one place any record is
     /// classified — see [`Vocabulary`] for why it is one place.
     fn vocabulary(&self) -> Vocabulary {

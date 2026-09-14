@@ -2793,8 +2793,10 @@ carries no time.
 ## Session stream format
 
 What the engine actually consumes is a **timeline**, and it lives in its own file. Same
-ndjson, same records, plus `tick` — a session stream is a Set file followed by the record
-of what happened:
+ndjson, same records, plus `tick` — a session stream is a **head** saying what the deck held,
+followed by the record of what happened. The head is specified under
+[The head](#the-head--what-the-deck-held-at-frame-0) below; at its simplest, on a deck of one,
+it is a Set file:
 
 ```ndjson
 {"t":"set","id":"drift_01","v":1}
@@ -2814,9 +2816,9 @@ something a Set file cannot express: every edit lands at an exact frame position
 it sits between two known ticks. That is what makes replaying a live performance exact
 rather than approximate.
 
-A Set file is the session stream with the ticks dropped and the state folded down. Saving a
-Set is that projection; loading one is a session whose head is a Set file and whose tail has
-not been written yet.
+A Set file is one slot's session stream with the ticks dropped and the state folded down.
+Saving a Set is that projection; loading one is a session whose head describes a deck of one
+and whose tail has not been written yet.
 
 ### Measurement in the stream — `audio` and `tempo`
 
@@ -3007,14 +3009,73 @@ A stream written before this holds `preview` lines; they are an unknown `t` now 
 passed over by the rule above, which is what that rule is for. **The name is not reused**
 — `thumbnail` is the library asset, and that stays (see the metadata file format below).
 
-**What no record says is what the deck held.** Every record above names a slot, and the
-format has no way to say that a session ran on four slots or what was in them — a Set file
-describes one Set. So `--replay` builds a deck of one and reports every record naming
-another slot rather than obeying it. That is a gap in this format, not in the replay driver,
-and it is the same gap for `gain`, `blend` and `residency` alike. It is also the
-one place "a session replays what happened" is currently short of true, and the cost grew
-the moment a control surface arrived: a map is written per slot, so a four-slot surface
-produces a session three quarters of whose moves are skipped on the way back.
+### The head — what the deck held at frame 0
+
+**The head is every record before the first `tick` that is not a frame's own.** A frame
+writes its edits, then what it heard, then the tick that closes it, so an `audio` or `tempo`
+line in front of the very first tick is that frame's measurement and belongs to it; every
+other record before that tick describes the deck a replay is about to build.
+
+It has two halves, and they are two vocabularies rather than two positions:
+
+```ndjson
+{"t":"set","id":"drift_01","v":1}
+{"t":"slot","layer":"L1","proc":"sha256:a3f2c1…"}
+{"t":"slot","layer":"L4","proc":"sha256:9c1b04…"}
+{"t":"param","layer":"L1","key":"radius","value":2.6}
+{"t":"seed","stream":"L1","value":19274}
+{"t":"canvas","width":1280,"height":720}
+{"t":"gain","slot":0,"value":1.0}
+{"t":"opacity","slot":0,"value":1.0}
+{"t":"blend","slot":0,"mode":"add"}
+{"t":"residency","slot":0,"level":"live"}
+{"t":"mask","slot":0,"kind":"none","angle":0.0,"position":1.0,"softness":0.0}
+{"t":"transport","slot":0,"sync":"free","anchor_bpm":120.0,"scrub_beats":0.0}
+{"t":"procedure","slot":1,"layer":"L1","proc":"sha256:7d40ae…"}
+{"t":"procedure","slot":1,"layer":"L4","proc":"sha256:9c1b04…"}
+{"t":"gain","slot":1,"value":0.4}
+{"t":"opacity","slot":1,"value":1.0}
+{"t":"blend","slot":1,"mode":"over"}
+{"t":"residency","slot":1,"level":"live"}
+{"t":"mask","slot":1,"kind":"none","angle":0.0,"position":1.0,"softness":0.0}
+{"t":"transport","slot":1,"sync":"free","anchor_bpm":120.0,"scrub_beats":0.0}
+{"t":"look","op":"aces","exposure":1.0,"white_point":4.0}
+{"t":"master_out","value":1.0}
+{"t":"master_chain","slots":[]}
+{"t":"tick","steps":1}
+```
+
+**One Set file, for slot 0.** A Set file describes one Set, and it is the only thing that
+carries a Set's params, bindings, seeds, edges, capacity, camera and layering. It is slot 0's
+and never whichever slot was selected, because a replay numbers its slots the way the deck
+did and *which slot is described in full* must not depend on where a hand was.
+
+**One `procedure` record per node of every other slot.** The same record a hot swap writes
+mid-stream and a replay already obeys: a deck slot, a node of it, and the store address its
+source is at. The bytes are in the store before the head names them — a record naming bytes
+nobody kept is the same silence as no record at all. Those slots are built against the head's
+Set file: its parameter table and its bindings, because a run has one of each and writing a
+second copy per slot would be the same numbers said twice. What a `procedure` record cannot
+carry, it does not — a slot's own capacity and salt are the procedure's declared defaults,
+and a value ridden onto another slot before the recording began is not in the head.
+
+**Then the deck, always and for every slot.** `canvas` first, because a replay reads it before
+it allocates anything. Then, slot by slot in deck order, that slot's `procedure` records —
+where it has any — followed by its `gain`, `opacity`, `blend`, `residency`, `mask` and
+`transport`; then `look`, `master_out` and `master_chain`, which belong to the fold rather
+than to anything folded. **Every one of them is written whether or not it differs from what a
+fresh deck holds.** A head that omitted the defaults would need a reader that knew them, and
+a reader that knows the engine's defaults is a second place they are written down.
+
+A replay builds a deck as wide as the head names — one slot more than the highest any
+`procedure` record names — installs each named slot, applies those records in order, and then
+reads frames. A head that names no other slot is a deck of one, which is every session
+written before this.
+
+What a head is **not** is a resume. A Set file carries no running state, so a recording begun
+mid-performance replays the same material from the top rather than continuing the picture that
+was on screen; for a closed-form renderer the two are the same and for an accumulating one
+they are not.
 
 **`residency` is what a slot is asked to do** — `live`, `priming` or `allocated` — and it
 is always the *request*, never the effective level. The governor recomputes the second
@@ -3248,10 +3309,12 @@ because there is one entry point into a Set's parameters and every route comes t
 
 **It goes in a session stream and never in a Set file**, and it is the sharpest of the drops
 a projection makes: it names a layer, an index, a key and a value, so a fold *could* key it
-and the result would look right. What it also names is a deck slot, and nothing in a stream
-says which deck slot the Set at its head was played in — "What no record says is what the
-deck held", above. The value an operator ended on reaches a Set file the other way, through
-`save`, which reads the live Set. Decided in
+and the result would look right. What it also names is a deck slot, and a Set file has no
+deck: a stream's head says which slot each Set was played in —
+[The head](#the-head--what-the-deck-held-at-frame-0), above — and a projection folds to *one*
+Set, which is then loaded into whatever slot an operator picks, so folding a `ride` into it
+would carry one slot's value onto another's material. The value an operator ended on reaches
+a Set file the other way, through `save`, which reads the live Set. Decided in
 [ADR-0280](adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md).
 
 **What no reader does yet is put it back after a rebuild.** A `--watch` rebuild restates the
@@ -3321,9 +3384,10 @@ session's rather than any Set's and `transition` and `select` because they are n
 all.  `select` is out for a second reason of its own, and it is no longer that a Set file
 cannot say whether a slot composites its renderers — the `merge` record says exactly that,
 and a composited Set now loads back composited. It is that no **session** record says it: a
-selection names a deck slot, and nothing in a stream says which slots composite, nor which
-deck slot the Set at the head of the stream was played in — "What no record says is what the
-deck held", above. So a projection cannot tell whether a selection it meets is about the Set
+selection names a deck slot, and nothing in a stream says which of the deck's slots
+composite. The head says what each slot *held* —
+[The head](#the-head--what-the-deck-held-at-frame-0), above — and a projection folds to one Set
+out of a deck of them, so it cannot tell whether a selection it meets is about the Set
 it is folding, and folding it into a `merge` would be guessing that it is. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that

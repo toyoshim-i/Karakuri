@@ -365,8 +365,8 @@ the status table in [roadmap.md](roadmap.md).
 
 **A Set file carries the whole chain.** A slot holding L2s, an L3, one or several
 `kind Field` files or several geometries is saved as the chain it is — one `slot` record per node, on the layer
-that node's own `kind` declares — and `--record-session` takes it too, since a session opens
-with a Set file. Each geometry's own capacity and its own hash salt are written down, and so
+that node's own `kind` declares — and `--record-session` takes it too, since a session's head
+carries deck A as a Set file. Each geometry's own capacity and its own hash salt are written down, and so
 is every `--edge`, so a cube morphing into a sphere is a Set you can keep and reload with
 the colours and the pairing it had.
 
@@ -607,8 +607,8 @@ back.
 record and its `live` — so a composited Set saved while you are watching one renderer loads
 back compositing and watching that renderer. A Set nobody has selected in writes no `live` and
 comes back with every renderer folded, which is where it was. What is still a property of the
-run, like a gain, is the `select` *record*: it names a deck slot at an instant, and a session
-stream never says which slot held which Set.
+run, like a gain, is the `select` *record*: it names a deck slot at an instant, and a Set file
+is one Set rather than a deck.
 
 ### The two faders and the blend mode
 
@@ -1012,12 +1012,17 @@ cc 30 -> param 0 3          # deck A, third published control, over its declared
 cc 31 -> param 1 5 [0, 2]   # deck B, fifth, over a range of your own
 ```
 
-### A session cannot say what a deck held
+### A session says what the deck held, with one slot in full
 
-A Set file describes one Set, and there is no record for "this deck held these four". So a
-recorded session puts **slot 0's material** at its head, and replaying a multi-slot
-performance renders the rest of it — the gains, the blends, the residencies — against a deck
-of one, reporting what it skipped. Closing that is a format change.
+A recorded session's head describes the whole deck: **deck A as a Set file**, with its
+parameter values, its bindings and its seeds, and **every other slot by the address of what
+it was playing**. A replay builds a deck that wide, puts each slot's material back, and
+restores the gains, the opacities, the blends, the masks, the residencies, the transports,
+the look, the master level and the master chain before the first frame.
+
+What the other slots do not get is a parameter table of their own: they are built at deck A's
+values, so a knob you rode on deck C before you started recording is not in the head. Every
+move you make *after* it is, on every slot.
 
 ### The canvas is fixed for a run
 
