@@ -130,14 +130,44 @@ pub struct Clock {
     pub seed_salt: u32,
 }
 
+/// Retention targets and their bind groups, detached from any manager.
+///
+/// What [`RetentionManager::build`] produces and [`RetentionManager::install`]
+/// adopts: the per-cut history textures and the bind groups that copy into
+/// them. Holds only wgpu handles, so it crosses a thread boundary.
+#[derive(Default)]
+pub struct Retained {
+    retained: [Option<wgpu::TextureView>; 2],
+    binds: [Option<wgpu::BindGroup>; 2],
+}
+
+impl Retained {
+    /// The retained view for `cut`, if one is allocated.
+    pub fn held(&self, cut: Cut) -> Option<&wgpu::TextureView> {
+        self.retained[cut.index()].as_ref()
+    }
+
+    /// Which cuts are allocated.
+    pub fn active_cuts(&self) -> Vec<Cut> {
+        Cut::ALL
+            .into_iter()
+            .filter(|c| self.retained[c.index()].is_some())
+            .collect()
+    }
+
+    /// How many retained frame targets are allocated (0..=2).
+    pub fn count(&self) -> usize {
+        self.active_cuts().len()
+    }
+}
+
 /// Manages retained frame pipelines, targets, and bind groups for historical frame cuts.
 ///
 /// Retained frames are sanitized via `fs_keep` to prevent propagation of NaN or infinity.
 pub struct RetentionManager {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
-    retained: [Option<wgpu::TextureView>; 2],
-    binds: [Option<wgpu::BindGroup>; 2],
+    held: Retained,
 }
 
 impl RetentionManager {
@@ -193,8 +223,7 @@ impl RetentionManager {
         RetentionManager {
             pipeline,
             layout,
-            retained: [None, None],
-            binds: [None, None],
+            held: Retained::default(),
         }
     }
 
@@ -205,31 +234,41 @@ impl RetentionManager {
 
     /// Access the retained view for `cut`, if currently allocated.
     pub fn held(&self, cut: Cut) -> Option<&wgpu::TextureView> {
-        self.retained[cut.index()].as_ref()
+        self.held.held(cut)
     }
 
     /// Whether a target for `cut` is currently retained.
     pub fn is_held(&self, cut: Cut) -> bool {
-        self.retained[cut.index()].is_some()
+        self.held.held(cut).is_some()
     }
 
     /// Which cuts are currently retained.
     pub fn active_cuts(&self) -> Vec<Cut> {
-        Cut::ALL
-            .into_iter()
-            .filter(|c| self.retained[c.index()].is_some())
-            .collect()
+        self.held.active_cuts()
     }
 
     /// How many retained frame targets are currently allocated (0..=2).
     pub fn count(&self) -> usize {
-        self.active_cuts().len()
+        self.held.count()
     }
 
     /// Release all allocated retention targets and bind groups.
     pub fn clear(&mut self) {
-        self.retained = [None, None];
-        self.binds = [None, None];
+        drop(self.take());
+    }
+
+    /// Detach the allocated retention targets and bind groups, leaving none.
+    ///
+    /// The returned value owns the GPU textures, so dropping it frees them.
+    pub fn take(&mut self) -> Retained {
+        std::mem::take(&mut self.held)
+    }
+
+    /// Adopt targets and bind groups built by [`RetentionManager::build`].
+    ///
+    /// `held` must have been built against this manager's [`RetentionManager::layout`].
+    pub fn install(&mut self, held: Retained) {
+        self.held = held;
     }
 
     /// Allocate targets and bind groups for the requested cuts.
@@ -242,17 +281,44 @@ impl RetentionManager {
         mix_source: Option<&wgpu::TextureView>,
         exit_source: Option<&wgpu::TextureView>,
     ) {
-        self.retained = [None, None];
+        let held = Self::build(
+            &self.layout,
+            device,
+            width,
+            height,
+            cuts,
+            mix_source,
+            exit_source,
+        );
+        self.install(held);
+    }
+
+    /// Build targets and bind groups for the requested cuts against `layout`,
+    /// holding no manager.
+    ///
+    /// Takes a device and nothing of the caller's, so it runs wherever a chain
+    /// is built — including a worker thread. [`RetentionManager::allocate`] is
+    /// this function against the manager's own layout, and is the only other
+    /// derivation of these textures.
+    pub fn build(
+        layout: &wgpu::BindGroupLayout,
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+        cuts: &[Cut],
+        mix_source: Option<&wgpu::TextureView>,
+        exit_source: Option<&wgpu::TextureView>,
+    ) -> Retained {
+        let mut retained: [Option<wgpu::TextureView>; 2] = [None, None];
         for &cut in cuts {
             let label = format!("retention {} cut", cut.name());
-            self.retained[cut.index()] =
-                Some(create_hdr_target(device, width, height, Some(&label)));
+            retained[cut.index()] = Some(create_hdr_target(device, width, height, Some(&label)));
         }
 
         let make_bind = |from: &wgpu::TextureView| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("retention bind group"),
-                layout: &self.layout,
+                layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(from),
@@ -260,26 +326,28 @@ impl RetentionManager {
             })
         };
 
-        self.binds = [
-            if self.retained[Cut::Mix.index()].is_some() {
+        let binds = [
+            if retained[Cut::Mix.index()].is_some() {
                 mix_source.map(make_bind)
             } else {
                 None
             },
-            if self.retained[Cut::Exit.index()].is_some() {
+            if retained[Cut::Exit.index()].is_some() {
                 exit_source.map(make_bind)
             } else {
                 None
             },
         ];
+        Retained { retained, binds }
     }
 
     /// Execute retention passes for all active cuts.
     pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
         for cut in Cut::ALL {
-            if let (Some(target), Some(bind)) =
-                (&self.retained[cut.index()], &self.binds[cut.index()])
-            {
+            if let (Some(target), Some(bind)) = (
+                &self.held.retained[cut.index()],
+                &self.held.binds[cut.index()],
+            ) {
                 let label = match cut {
                     Cut::Mix => "master chain retain mix",
                     Cut::Exit => "master chain retain exit",

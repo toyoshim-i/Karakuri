@@ -1230,7 +1230,7 @@ proc clock_probe {
             let chain = clock_chain(&gpu, &present);
             let ops = chain.ops_per_fragment();
             assert!(ops > 0, "the probe costs nothing at all");
-            present.set_chain(&gpu.device, &gpu.queue, chain);
+            drop(present.set_chain(&gpu.device, &gpu.queue, chain));
 
             assert_eq!(
                 present.chain_clock(),

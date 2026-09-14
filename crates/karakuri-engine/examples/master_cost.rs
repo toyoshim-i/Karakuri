@@ -115,7 +115,7 @@ fn median(xs: &mut [f64]) -> f64 {
 /// a submit and a poll with nothing recorded between them, which is exactly the
 /// floor every other row is over.
 fn run(gpu: &Gpu, deck: &mut Deck, present: &mut Present, chain: Chain) -> f64 {
-    present.set_chain(&gpu.device, &gpu.queue, chain);
+    drop(present.set_chain(&gpu.device, &gpu.queue, chain));
     // One real frame into whatever the mix writes now, so the chain's entry
     // holds material rather than whatever the last setting left — and so a
     // retaining slot has a history that is a picture.

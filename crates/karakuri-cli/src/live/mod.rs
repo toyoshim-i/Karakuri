@@ -24,6 +24,12 @@ pub(crate) struct Live {
     /// see `docs/plugins.md`, where the others hang.
     pub(crate) sink: frame::WindowSink,
     pub(crate) present: Present,
+    /// Where the master chain is compiled and where the chain it replaces is
+    /// freed. A press on the Master rows asks this for a build and the frame
+    /// loop installs the result at a frame boundary; nothing on this thread
+    /// compiles a shader, creates a pipeline or allocates a chain target
+    /// (ADR-0354).
+    pub(crate) chain_swap: karakuri_engine::ChainSwap,
     /// Every Set, whatever is being built to replace any of them, and the mix.
     /// Without `--watch` every slot is a `HotSwap::fixed` and there is no worker at
     /// all, so the frame loop below is the same code either way.
@@ -632,17 +638,20 @@ impl Live {
             //
             // **What it costs is now two things and the record decides
             // which**: a list whose shape is the shape already running is a
-            // uniform write per slot, and any other is a build. See
-            // `mix::apply_chain`.
+            // uniform write per slot here, and any other is a build asked of
+            // `karakuri-chain` and installed at the frame boundary in
+            // [`Live::frame`]. See `mix::apply_chain`.
             //
             // **A refusal is said and the chain that is running stays.** An
             // address the store does not hold is a record this build cannot
             // obey, which is reported at the operation rather than drawn as a
-            // wrong picture.
+            // wrong picture. A source that compiles and refuses as a chain slot
+            // is said where the build lands instead, for the same reason and a
+            // frame or two later.
             mix::Change::MasterChain(slots) => {
                 if let Err(refusal) = mix::apply_chain(
+                    &mut self.chain_swap,
                     &mut self.present,
-                    &self.gpu.device,
                     &self.gpu.queue,
                     &slots,
                     // The shipped three first and then this run's store, which
@@ -716,6 +725,16 @@ impl Live {
         // between frames: the gap that still has to survive is the one where
         // this function does not run at all, and `MAX_STEPS` is the anti-spiral
         // clamp on it however long it was.
+        // **The frame boundary the chain lands on**, before the encoder
+        // `frame::compose` opens below: a chain arriving mid-frame would move
+        // what the mix writes into after the mix had decided. Nothing here
+        // waits — a build still running is not collected, and the chain that is
+        // running draws this frame (ADR-0354).
+        self.chain_swap
+            .begin_frame(&mut self.present, &self.gpu.device, &self.gpu.queue);
+        for event in self.chain_swap.events() {
+            eprintln!("  {event}");
+        }
         let Live {
             gpu,
             deck,

@@ -2,6 +2,8 @@
 //!
 //! # Architectural Invariants
 //! - Zero allocation on the render thread; shaders are never compiled on the render thread.
+//!   This covers both a Set (`swap`) and the master chain (`chain_swap`); each has a worker of its
+//!   own, and freeing is the same invariant as allocating, so what either replaces is dropped there.
 //! - Pipelines are double-buffered; hot-swaps occur strictly on frame boundaries.
 //! - Over-budget pipeline loads disable the offending slot rather than rolling back global state.
 //! - Structural modifications fork a new Set instance; active Sets are never mutated in place.
@@ -11,6 +13,8 @@
 
 pub mod binding;
 pub mod camera;
+/// Master chain compilation on a worker thread.
+pub mod chain_swap;
 pub mod compaction;
 pub mod deck;
 pub mod estimate;
@@ -41,6 +45,7 @@ pub mod video_source;
 
 pub use binding::{Binding, Curve, ParamWrite, Signals};
 pub use camera::Orbit;
+pub use chain_swap::{ChainEvent, ChainRefusal, ChainSlot, ChainSwap};
 pub use compaction::Compaction;
 pub use deck::{Blend, Deck, DeckSlot, Frame, Mask, MaskKind, Residency};
 pub use estimate::{Estimate, Fit, Unfit, PREPARATION_RESOLUTION};
@@ -53,9 +58,12 @@ pub use graph::{
     TextureDesc, TransientMemoryPool,
 };
 pub use karakuri_store::record::{Layer, NodeAddress, Value};
-pub use master::{Chain, Clock, Cut, Slot, SlotError, SlotParam, SlotReading, SlotSpec};
+pub use master::{
+    Chain, ChainTargets, ChainWorkshop, Clock, Cut, RetiredChain, Slot, SlotError, SlotParam,
+    SlotReading, SlotSpec,
+};
 pub use meter::{Level, Meters};
-pub use pass::{BoundImagePass, ImagePass, RenderPassNode, RetentionManager};
+pub use pass::{BoundImagePass, ImagePass, RenderPassNode, Retained, RetentionManager};
 pub use points::{Params, Points};
 pub use present::{letterbox, Present, TonemapOp};
 pub use probe::{check_degeneracy, Degeneracy, Measurement, Probe};

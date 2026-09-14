@@ -310,14 +310,37 @@ impl Present {
         self.chain.layout()
     }
 
-    /// Installs an ordered master chain, allocating required intermediate textures.
-    pub fn set_chain(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, chain: Chain) {
+    /// Everything a chain build needs from this `Present`, in one value.
+    ///
+    /// Taken at the moment a build is asked for and carried to wherever the
+    /// build runs — see [`crate::chain_swap::ChainSwap`]. It fixes the size the
+    /// build's targets are made at, so a resize between the request and the
+    /// install is detectable rather than silent.
+    pub fn chain_workshop(&self) -> crate::master::ChainWorkshop {
+        self.chain.workshop(&self.hdr_view)
+    }
+
+    /// Installs an ordered master chain and returns what it displaced.
+    ///
+    /// Targets built alongside `chain` are adopted where they were made at this
+    /// `Present`'s current size; otherwise they are retired and the textures are
+    /// allocated here, on the calling thread. The returned [`RetiredChain`]
+    /// owns the outgoing chain's pipelines and textures and frees them when it
+    /// is dropped — which is why the render thread hands it to a worker rather
+    /// than dropping it (ADR-0033).
+    #[must_use = "the outgoing chain's GPU objects are freed where this is dropped"]
+    pub fn set_chain(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        chain: Chain,
+    ) -> crate::master::RetiredChain {
         let Present {
             chain: master,
             hdr_view,
             ..
         } = self;
-        master.set(device, queue, hdr_view, chain);
+        master.set(device, queue, hdr_view, chain)
     }
 
     /// Updates running chain slot parameters in place without reallocating textures.

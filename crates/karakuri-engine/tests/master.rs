@@ -36,8 +36,8 @@ mod gpu {
     use std::collections::BTreeMap;
 
     use karakuri_engine::{
-        Chain, Clock, Cut, Gpu, Points, Present, RenderPassNode, RetentionManager, Slot,
-        VideoSource,
+        Chain, ChainEvent, ChainSlot, ChainSwap, Clock, Cut, Gpu, Points, Present, RenderPassNode,
+        RetentionManager, Slot, SlotSpec, VideoSource,
     };
     use karakuri_ir::typed::Checked;
 
@@ -186,6 +186,42 @@ proc clock_probe {
 
     fn params(amount: f32) -> BTreeMap<String, f32> {
         [("amount".to_string(), amount)].into_iter().collect()
+    }
+
+    /// What a slot of the shipped chain is called. A function of the source, so
+    /// the address a spec names and the address a built slot reports are one
+    /// answer.
+    fn address(source: &str) -> String {
+        format!("test:{:x}", source.len())
+    }
+
+    /// One slot of the shipped chain as a description, for the worker to build.
+    fn spec(source: &str, cut: Option<Cut>, amount: f32) -> SlotSpec {
+        SlotSpec {
+            procedure: address(source),
+            cut,
+            params: params(amount),
+        }
+    }
+
+    /// One slot of the shipped chain as `ChainSwap` takes it: the description
+    /// and the checked source behind it.
+    fn asked(source: &str, cut: Option<Cut>, amount: f32) -> ChainSlot {
+        ChainSlot {
+            spec: spec(source, cut, amount),
+            checked: checked(source),
+        }
+    }
+
+    /// Spins until `done`, or fails after 30 seconds saying what never
+    /// happened. Nothing here sleeps on a fixed interval: the wait is on a
+    /// worker thread's progress and the failure is a deadline, not a guess.
+    fn until(what: &str, mut done: impl FnMut() -> bool) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !done() {
+            assert!(std::time::Instant::now() < deadline, "{what}");
+            std::thread::yield_now();
+        }
     }
 
     /// One slot of the shipped chain, built against the `Present` that will run
@@ -522,7 +558,7 @@ proc clock_probe {
         let untouched = frame(&gpu, &present(&gpu), &mut points);
 
         let mut emptied = present(&gpu);
-        emptied.set_chain(&gpu.device, &gpu.queue, Chain::default());
+        drop(emptied.set_chain(&gpu.device, &gpu.queue, Chain::default()));
         assert_eq!(emptied.chain_targets(), 0, "an empty chain took a target");
         assert_eq!(
             frame(&gpu, &emptied, &mut points),
@@ -536,10 +572,10 @@ proc clock_probe {
             slot(&gpu, &returned, BLOOM, None, 0.5),
             slot(&gpu, &returned, RGB_SHIFT, None, 0.5),
         ]);
-        returned.set_chain(&gpu.device, &gpu.queue, full);
+        drop(returned.set_chain(&gpu.device, &gpu.queue, full));
         frame(&gpu, &returned, &mut points);
         frame(&gpu, &returned, &mut points);
-        returned.set_chain(&gpu.device, &gpu.queue, Chain::default());
+        drop(returned.set_chain(&gpu.device, &gpu.queue, Chain::default()));
         assert_eq!(
             frame(&gpu, &returned, &mut points),
             untouched,
@@ -572,11 +608,11 @@ proc clock_probe {
             gpu.queue.submit([encoder.finish()]);
             let wanted = readback(&gpu, &out);
 
-            present.set_chain(
+            drop(present.set_chain(
                 &gpu.device,
                 &gpu.queue,
                 Chain::new(vec![slot(&gpu, &present, RGB_SHIFT, None, amount)]),
-            );
+            ));
             let mut points = hot_points(&gpu);
             let got = frame(&gpu, &present, &mut points);
             assert_eq!(
@@ -620,11 +656,11 @@ proc clock_probe {
         gpu.queue.submit([encoder.finish()]);
         let wanted = readback(&gpu, &out);
 
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![slot(&gpu, &present, FEEDBACK, Some(Cut::Mix), AMOUNT)]),
-        );
+        ));
         let mut points = hot_points(&gpu);
         frame(&gpu, &present, &mut points);
         let got = frame(&gpu, &present, &mut points);
@@ -678,11 +714,11 @@ proc clock_probe {
         gpu.queue.submit([encoder.finish()]);
         let two_pass = channels(&readback(&gpu, &out));
 
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![slot(&gpu, &present, BLOOM, None, AMOUNT)]),
-        );
+        ));
         let mut points = hot_points(&gpu);
         let one_pass = channels(&frame(&gpu, &present, &mut points));
 
@@ -728,44 +764,44 @@ proc clock_probe {
         let mut present = present(&gpu);
 
         // Nothing retains: two targets, both of them the chain's own.
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
                 slot(&gpu, &present, BLOOM, None, 0.5),
                 slot(&gpu, &present, RGB_SHIFT, None, 0.5),
             ]),
-        );
+        ));
         assert_eq!(present.chain_retained(), Vec::new());
         assert_eq!(present.chain_targets(), 2, "the entry and one intermediate");
 
         // One slot retaining: one cut held.
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
                 slot(&gpu, &present, FEEDBACK, Some(Cut::Exit), 0.5),
                 slot(&gpu, &present, RGB_SHIFT, None, 0.5),
             ]),
-        );
+        ));
         assert_eq!(present.chain_retained(), vec![Cut::Exit]);
         assert_eq!(present.chain_targets(), 3);
 
         // **Two slots reading the same cut read one frame**, so it is still one
         // target.
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
                 slot(&gpu, &present, FEEDBACK, Some(Cut::Mix), 0.5),
                 slot(&gpu, &present, FEEDBACK, Some(Cut::Mix), 0.25),
             ]),
-        );
+        ));
         assert_eq!(present.chain_retained(), vec![Cut::Mix]);
         assert_eq!(present.chain_targets(), 3);
 
         // Two slots naming *different* cuts: both, and that is the ceiling.
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
@@ -773,7 +809,7 @@ proc clock_probe {
                 slot(&gpu, &present, BLOOM, None, 0.5),
                 slot(&gpu, &present, FEEDBACK, Some(Cut::Exit), 0.25),
             ]),
-        );
+        ));
         assert_eq!(present.chain_retained(), vec![Cut::Mix, Cut::Exit]);
         assert_eq!(
             present.chain_targets(),
@@ -800,7 +836,7 @@ proc clock_probe {
                 slot(&gpu, &present, BLOOM, None, 0.8),
                 slot(&gpu, &present, RGB_SHIFT, None, 0.5),
             ]);
-            present.set_chain(&gpu.device, &gpu.queue, chain);
+            drop(present.set_chain(&gpu.device, &gpu.queue, chain));
             let mut points = hot_points(&gpu);
             let mut last = Vec::new();
             for _ in 0..4 {
@@ -840,14 +876,14 @@ proc clock_probe {
     fn the_mix_cut_is_the_previous_frame_wherever_the_slot_sits() {
         let gpu = Gpu::headless().expect("no GPU available");
         let mut present = present(&gpu);
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
                 slot(&gpu, &present, RGB_SHIFT, None, 0.4),
                 slot(&gpu, &present, FEEDBACK, Some(Cut::Mix), 0.8),
             ]),
-        );
+        ));
         let mut points = hot_points(&gpu);
         let first = frame(&gpu, &present, &mut points);
         let second = frame(&gpu, &present, &mut points);
@@ -859,11 +895,11 @@ proc clock_probe {
         // And the same chain with nothing retained draws a different frame,
         // which is what says the trail is the retention rather than the shift.
         let mut plain = self::present(&gpu);
-        plain.set_chain(
+        drop(plain.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![slot(&gpu, &plain, RGB_SHIFT, None, 0.4)]),
-        );
+        ));
         let mut points = hot_points(&gpu);
         frame(&gpu, &plain, &mut points);
         assert_ne!(
@@ -888,11 +924,11 @@ proc clock_probe {
         let plain = frame(&gpu, &present(&gpu), &mut points);
 
         let mut fed = present(&gpu);
-        fed.set_chain(
+        drop(fed.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![slot(&gpu, &fed, FEEDBACK, Some(Cut::Mix), 0.95)]),
-        );
+        ));
         assert_eq!(
             frame(&gpu, &fed, &mut hot_points(&gpu)),
             plain,
@@ -918,7 +954,7 @@ proc clock_probe {
                 slot(&gpu, &present, BLOOM, None, 0.4),
                 slot(&gpu, &present, RGB_SHIFT, None, 0.3),
             ]);
-            present.set_chain(&gpu.device, &gpu.queue, chain);
+            drop(present.set_chain(&gpu.device, &gpu.queue, chain));
             let mut points = hot_points(&gpu);
             let mut frames = Vec::new();
             for _ in 0..5 {
@@ -951,25 +987,25 @@ proc clock_probe {
         let shape = |present: &Present| -> Vec<(String, Option<Cut>)> { present.chain_shape() };
 
         let mut built = present(&gpu);
-        built.set_chain(
+        drop(built.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
                 slot(&gpu, &built, BLOOM, None, 0.9),
                 slot(&gpu, &built, RGB_SHIFT, None, 0.2),
             ]),
-        );
+        ));
         let wanted = frame(&gpu, &built, &mut hot_points(&gpu));
 
         let mut moved = present(&gpu);
-        moved.set_chain(
+        drop(moved.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![
                 slot(&gpu, &moved, BLOOM, None, 0.1),
                 slot(&gpu, &moved, RGB_SHIFT, None, 0.7),
             ]),
-        );
+        ));
         let before = moved.chain_targets();
         assert!(
             moved.set_chain_params(&gpu.queue, &shape(&moved), &[params(0.9), params(0.2)]),
@@ -1016,7 +1052,7 @@ proc clock_probe {
 
         let one = Chain::new(vec![slot(&gpu, &present, RGB_SHIFT, None, 0.5)]);
         let alone = one.ops_per_fragment();
-        present.set_chain(&gpu.device, &gpu.queue, one);
+        drop(present.set_chain(&gpu.device, &gpu.queue, one));
         assert_eq!(present.chain_ops_per_fragment(), alone);
 
         let three = Chain::new(vec![
@@ -1032,7 +1068,7 @@ proc clock_probe {
             three.slots()[1].ops_per_fragment(),
             three.slots()[2].ops_per_fragment(),
         );
-        present.set_chain(&gpu.device, &gpu.queue, three);
+        drop(present.set_chain(&gpu.device, &gpu.queue, three));
         assert_eq!(present.chain_ops_per_fragment(), sum);
     }
 
@@ -1050,11 +1086,11 @@ proc clock_probe {
         let gpu = Gpu::headless().expect("no GPU available");
         let mut present = present(&gpu);
         let mut points = hot_points(&gpu);
-        present.set_chain(
+        drop(present.set_chain(
             &gpu.device,
             &gpu.queue,
             Chain::new(vec![slot(&gpu, &present, CLOCK, None, 0.0)]),
-        );
+        ));
 
         let read = |present: &Present, points: &mut Points, clock: Clock| {
             present.set_chain_clock(&gpu.queue, clock);
@@ -1109,7 +1145,7 @@ proc clock_probe {
             .iter()
             .map(|s| (s.proc().to_string(), s.cut()))
             .collect();
-        present.set_chain(&gpu.device, &gpu.queue, built);
+        drop(present.set_chain(&gpu.device, &gpu.queue, built));
 
         let clock = Clock {
             t: 3.0,
@@ -1249,5 +1285,144 @@ proc clock_probe {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         bound.record(&mut encoder, &dst);
         gpu.queue.submit([encoder.finish()]);
+    }
+
+    /// **A chain built on `karakuri-chain` draws what a chain built here
+    /// draws**, and it lands at a frame boundary rather than when the build
+    /// finished.
+    ///
+    /// Three slots including a retention, because that is the whole of what a
+    /// build allocates: a pipeline and a uniform buffer per slot, an entry
+    /// target, the ping-pong between slots, and the history the `mix` cut is
+    /// held in. A worker that made any of them differently would draw a
+    /// different frame here.
+    ///
+    /// The frame between the build finishing and the boundary is the one that
+    /// says the install waits: the empty chain draws it, and it is not the
+    /// frame the built chain draws (P-0094 — the show does not stop).
+    #[test]
+    fn a_chain_built_on_the_worker_draws_what_building_it_here_draws() {
+        let gpu = Gpu::headless().expect("no GPU available");
+
+        let mut here = present(&gpu);
+        drop(here.set_chain(
+            &gpu.device,
+            &gpu.queue,
+            Chain::new(vec![
+                slot(&gpu, &here, FEEDBACK, Some(Cut::Mix), 0.7),
+                slot(&gpu, &here, BLOOM, None, 0.4),
+                slot(&gpu, &here, RGB_SHIFT, None, 0.3),
+            ]),
+        ));
+        let wanted = frame(&gpu, &here, &mut hot_points(&gpu));
+
+        let mut there = present(&gpu);
+        let mut swap = ChainSwap::new(&gpu.device, &gpu.queue);
+        let id = swap.request(
+            &there,
+            vec![
+                asked(FEEDBACK, Some(Cut::Mix), 0.7),
+                asked(BLOOM, None, 0.4),
+                asked(RGB_SHIFT, None, 0.3),
+            ],
+        );
+        assert_eq!(
+            there.chain_len(),
+            0,
+            "asking for a chain installed one on the calling thread"
+        );
+
+        until("the worker never finished the build", || swap.built() == 1);
+        assert_eq!(
+            there.chain_len(),
+            0,
+            "a finished build installed itself without a frame boundary"
+        );
+        let meanwhile = frame(&gpu, &there, &mut hot_points(&gpu));
+        assert_ne!(
+            meanwhile, wanted,
+            "the frame before the boundary was already the built chain's"
+        );
+
+        swap.begin_frame(&mut there, &gpu.device, &gpu.queue);
+        assert_eq!(swap.installs(), 1, "the frame boundary installed nothing");
+        assert_eq!(there.chain_len(), 3);
+        assert_eq!(
+            there.chain_shape(),
+            vec![
+                (address(FEEDBACK), Some(Cut::Mix)),
+                (address(BLOOM), None),
+                (address(RGB_SHIFT), None),
+            ]
+        );
+        let ids: Vec<u64> = swap
+            .events()
+            .map(|event| match event {
+                ChainEvent::Installed { id, slots } => {
+                    assert_eq!(slots, 3);
+                    id
+                }
+                other => panic!("{other}"),
+            })
+            .collect();
+        assert_eq!(ids, vec![id]);
+
+        assert_eq!(
+            frame(&gpu, &there, &mut hot_points(&gpu)),
+            wanted,
+            "the chain built on the worker drew a different frame from the one built here"
+        );
+    }
+
+    /// **Two builds waiting at one frame boundary install the newest, once**,
+    /// and the one it superseded is retired without ever being seen.
+    ///
+    /// Both are waited for before the boundary is taken, so this is about which
+    /// one an install chooses rather than about how fast either was.
+    #[test]
+    fn the_newest_of_two_pending_builds_wins() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut present = present(&gpu);
+        let mut swap = ChainSwap::new(&gpu.device, &gpu.queue);
+
+        let stale = swap.request(&present, vec![asked(BLOOM, None, 0.4)]);
+        let newest = swap.request(
+            &present,
+            vec![asked(RGB_SHIFT, None, 0.3), asked(BLOOM, None, 0.9)],
+        );
+        assert_ne!(stale, newest);
+        until("the worker never finished both builds", || {
+            swap.built() == 2
+        });
+
+        swap.begin_frame(&mut present, &gpu.device, &gpu.queue);
+        assert_eq!(
+            swap.installs(),
+            1,
+            "one frame boundary installed more than one chain"
+        );
+        assert_eq!(
+            present.chain_shape(),
+            vec![(address(RGB_SHIFT), None), (address(BLOOM), None)],
+            "the boundary installed the build the newer one superseded"
+        );
+        let ids: Vec<u64> = swap
+            .events()
+            .map(|event| match event {
+                ChainEvent::Installed { id, .. } => id,
+                other => panic!("{other}"),
+            })
+            .collect();
+        assert_eq!(
+            ids,
+            vec![newest],
+            "the superseded build was announced as well as retired"
+        );
+
+        // **And nothing is left waiting**: a second boundary with no request
+        // behind it installs nothing.
+        swap.begin_frame(&mut present, &gpu.device, &gpu.queue);
+        assert_eq!(swap.installs(), 1);
+        assert!(swap.pending_events().is_empty());
     }
 }

@@ -329,6 +329,11 @@ fn sequence_driven(
         // where this parts company with the tone map at the other end of the
         // same chain: that is a `queue.write_buffer` into storage sized at
         // construction and this is a build.
+        //
+        // **`install_chain` and not `apply_chain`**: this loop has no frame
+        // waiting on a clock, so the build runs here and the next statement is
+        // the frame it is in. The two real-time hosts ask a worker instead
+        // (ADR-0354).
         if let Some(slots) = chain {
             // **A refusal is said and the chain that is running stays**, which
             // is this file's rule for everything else a stream can get wrong: a
@@ -336,7 +341,7 @@ fn sequence_driven(
             // to draw either way, and stopping the render over it would lose
             // every frame after it as well.
             if let Err(refusal) =
-                crate::mix::apply_chain(&mut present, &gpu.device, &gpu.queue, &slots, resolve)
+                crate::mix::install_chain(&mut present, &gpu.device, &gpu.queue, &slots, resolve)
             {
                 eprintln!("  {refusal} — the chain keeps what it had");
             }
