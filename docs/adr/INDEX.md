@@ -385,6 +385,7 @@ number; new records continue from the end.
 | [ADR-0357](0357-a-lane-is-taken-out-by-a-glyph-on-its-row-and-enter-on-the-lane-is-the-key.md) | A lane is taken out by a glyph on its row, and `enter` on the lane is the key that reaches it | 2026-09-14 | accepted |
 | [ADR-0358](0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md) | The projector is fullscreened by the operating system on the display it is on, and another application is reached through a plugin | 2026-09-14 | accepted |
 | [ADR-0359](0359-the-transport-rows-frame-figure-stays-the-cpus-and-says-so.md) | The transport row's frame figure stays the CPU's, and says so | 2026-09-14 | accepted |
+| [ADR-0360](0360-over-budget-stays-the-live-slots-sum-and-no-deck-total-is-drawn.md) | over_budget stays the Live slots' sum, and no deck total is drawn | 2026-09-14 | accepted |
 
 ## Retired numbers
 
