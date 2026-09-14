@@ -1208,6 +1208,12 @@ impl Engine {
         // ([ADR-0296](../../../docs/adr/0296-the-governor-budgets-on-the-estimate-where-it-answers-and-on-the-measurement-where-it-does-not.md)),
         // and it is taken at the deck's own size, so a deck on a small output
         // stops being judged against a frame nobody is drawing.
+        //
+        // **A startup step and only that.** Every Set loaded afterwards
+        // arrives with its own estimate, taken on the build worker at the
+        // output's size and installed with the Set, and a resize re-reads what
+        // a slot holds rather than dropping it
+        // ([ADR-0356](../../../docs/adr/0356-the-worker-estimates-what-it-built-and-an-estimate-is-a-fit-rather-than-a-number-at-one-size.md)).
         self.deck.estimate_slots(&gpu.device, &gpu.queue);
         self.deck
             .set_residency(EngineSlot(ASKED_TO_PRIME as u8), Residency::Priming);

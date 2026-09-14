@@ -1404,11 +1404,11 @@ pub const BAND_PURPLE_MS: f32 = 16.0;
 ///
 /// - The number is the one the governor spent. A badge that drew a dot
 ///   only where the basis is [`Basis::Estimated`] would be drawing a different
-///   quantity from the one the deck is being governed on: every Set swapped in
-///   on a live run arrives unestimated (ADR-0296, *Consequences*), so the dot
-///   would vanish at the moment an operator loaded something — and a slot the
-///   governor parks on a measured number would be parked with no visible
-///   cause, which is
+///   quantity from the one the deck is being governed on: a slot falls back to
+///   its measurement wherever its estimate refuses (ADR-0356), so the dot
+///   would vanish on material the estimator declines to answer for — and a
+///   slot the governor parks on a measured number would be parked with no
+///   visible cause, which is
 ///   [ADR-0191](../../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)'s
 ///   complaint. A refusal is not a green dot; a number that was spent is not
 ///   a refusal.

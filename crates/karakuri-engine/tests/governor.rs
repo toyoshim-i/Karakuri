@@ -1612,19 +1612,42 @@ mod gpu {
             "the floor's provenance did not survive the summary"
         );
 
-        // **A resize drops it**, because the size the answer was for has moved.
-        // Without this the deck would go on budgeting a 128x128 number against
-        // a frame twice as wide.
+        // **A resize re-reads it at the new size rather than dropping it**
+        // (ADR-0356). ADR-0296 dropped it, because a number taken for 128x128
+        // is the wrong number for a frame twice as wide — true of the number
+        // and not of the estimate: the fit and the rungs it came from are on
+        // the record, so the answer at the new target is arithmetic and no
+        // draw. Dropping it put every slot back on its measurement for every
+        // frame of a drag.
         deck.resize(&gpu.device, WIDTH * 2, HEIGHT * 2);
-        assert!(deck
+        let kept = deck
             .slot(karakuri_engine::DeckSlot(0))
             .estimated_cost()
-            .is_none());
+            .expect("a resize dropped the estimate instead of re-reading it")
+            .clone();
+        assert_eq!(
+            kept.target,
+            (WIDTH * 2, HEIGHT * 2),
+            "the estimate still answers for the size the deck left"
+        );
+        assert_eq!(
+            kept.rungs, e.rungs,
+            "the re-read drew again; the rungs are data already taken"
+        );
+        assert_eq!(kept.floor, e.floor);
         let resized = deck.govern();
         assert_eq!(
             resized.decisions[0].basis,
-            Basis::Measured,
-            "an estimate for the old size survived the resize"
+            match kept.ms() {
+                Some(_) => Basis::Estimated,
+                None => Basis::Measured,
+            },
+            "the re-read estimate is not what the slot was budgeted on"
+        );
+        assert_eq!(
+            resized.estimated_target(),
+            kept.ms().map(|_| (WIDTH * 2, HEIGHT * 2)),
+            "the report names a size the estimates did not answer for"
         );
     }
 }
