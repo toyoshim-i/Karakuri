@@ -1770,68 +1770,10 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, view: &View, p: Point) -> C
         return Claim::Panel;
     }
     panel.solve();
-    // Rule 2: a menu that is down is a hand mid-choice, and every point of the
-    // console is part of that gesture until it is shut. Before the boundary,
-    // because the card is drawn across boundaries on purpose.
-    // **Either card**, and they are two clauses of one rule rather than two
-    // rules: a card that is down is a hand mid-choice whichever pill put it
-    // there, and the next press is part of that gesture either way. They can
-    // never both be down — the press that would open the second one lands
-    // while the first is open, so this claims it and it shuts that one.
-    if view.arrangement.open()
-        || view.audio.as_ref().is_some_and(|audio| audio.open())
-        // **A field taking the keyboard is a hand mid-gesture**, exactly as a
-        // card that is down is: every letter goes into it, so every key that
-        // is an operation the rest of the time is not one while it is open,
-        // and the next press is part of that gesture (ADR-0292).
-        || view.naming_set().is_some()
-        // **And the Library bay's deck list, which is a third card**: it is
-        // drawn over that bay's own rows, so while it is down a press inside
-        // it belongs to the card and not to the listing it is covering — and a
-        // press anywhere else is the dismissal (ADR-0305). It can never be
-        // down while either of the two above is, for the reason they can never
-        // both be down: the press that would open the second one lands while
-        // the first is open, so this claims it and it shuts that one.
-        || view.target_open()
-        // **And a `uses` line's card, which is a fifth**: it hangs off a line
-        // inside an Inspector pane and down over the groups under it, so while
-        // it is down a press inside it belongs to the card and a press anywhere
-        // else is the dismissal (`docs/adr/0329-…`). It can never be down while
-        // any of the others is, for their reason.
-        || view.wiring_open().is_some()
-        // **And a pane head's deck list, which is a sixth**: it hangs off the
-        // `▾` in a pane head and down over that pane's own groups, so while it
-        // is down a press inside it belongs to the card and a press anywhere
-        // else is the dismissal (`docs/adr/0338-…`, decision 5). It can never
-        // be down while any of the others is, for their reason.
-        || view.pane_target_open().is_some()
-        // **And a row's menu, which is a fourth**, hanging off a row of that
-        // same list and down over the rows under it. It is here rather than
-        // among rule 4's controls for the reason the three above it are: a
-        // card is a hand mid-choice, the next press is part of that gesture
-        // whichever way it ends, and the card crosses boundaries the
-        // clearance arithmetic cannot be done for
-        // ([ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
-        //
-        // **It is the one card a *secondary* press opens**, and that changes
-        // nothing here: this rule is about a card that is down and not about
-        // what put it there, so a press of either button while it is down is
-        // the card's.
-        || view.menu_open()
-        // **And the Sequencer bay's `+ lane` chooser, which is a fifth.** It
-        // hangs up off a pill in that bay's foot and stands over its own rows,
-        // so while it is down a press inside it belongs to the card and a
-        // press anywhere else is the dismissal — the deck list's clause one
-        // bay along, and it can never be down while any of the four above it
-        // is for their reason.
-        || view.lane_open()
-        // The Master bay's `+ add` chooser is a sixth. It hangs down off the
-        // control at the end of that bay's list and stands over the bays beside
-        // it. While it is down a press inside it belongs to the card and a
-        // press anywhere else is the dismissal
-        // ([ADR-0352](../../../docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md)).
-        || view.chain_add_open()
-    {
+    // Rule 2: a menu, popup card, or modal chooser that is down is a hand mid-choice,
+    // and every point of the console is part of that gesture until it is shut.
+    // Unified across all 9 modal overlays via [`View::has_modal_overlay`].
+    if view.has_modal_overlay() {
         return Claim::Panel;
     }
     // Rule 3 before rule 4: the boundary's first refusal is what the ordering
@@ -1887,16 +1829,9 @@ pub fn wheeled(panel: &mut Panel, view: &View, p: Point) -> Option<Turned> {
     if panel.dragging() {
         return None;
     }
-    // Rule 2, the same cards and the same order as [`claim`]: a hand
+    // Rule 2, the same cards and choosers as [`claim`]: a hand
     // mid-choice is not a hand on a pane.
-    if view.arrangement.open()
-        || view.audio.as_ref().is_some_and(|audio| audio.open())
-        || view.naming_set().is_some()
-        || view.target_open()
-        || view.wiring_open().is_some()
-        || view.pane_target_open().is_some()
-        || view.menu_open()
-    {
+    if view.has_modal_overlay() {
         return None;
     }
     panel.solve();

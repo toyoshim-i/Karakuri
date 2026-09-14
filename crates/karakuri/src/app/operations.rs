@@ -3,6 +3,7 @@
 use super::*;
 use karakuri_console::focus;
 use karakuri_console::repaint::{Change, Repaint};
+pub(crate) use karakuri_console::view::TextInputKind;
 use karakuri_console::view::View;
 use karakuri_engine::{Gpu, WindowSink};
 use karakuri_operation::{Operation, Output};
@@ -498,4 +499,31 @@ pub(crate) fn aimed_set(gfx: &Gfx, view: &View) -> Option<String> {
         .aimed
         .get(usize::from(view.target_deck()))
         .and_then(|aiming| aiming.at.set.clone())
+}
+
+/// Coordinates post-event side-effects (disk saving, Set reading) that
+/// cannot run inside a rendering frame.
+pub(crate) fn handle_post_event_side_effects(
+    keeping: &mut super::Keeping,
+    engine: &crate::Engine,
+    store: &std::path::Path,
+    view: &mut View,
+    acted: &Acted,
+) {
+    match acted {
+        Acted::Emitted(Some(Operation::SaveSet { deck, id })) => {
+            keeping.save_set(
+                engine,
+                store,
+                karakuri_environment::Asked::Operator,
+                usize::from(*deck),
+                id.clone(),
+                None,
+            );
+        }
+        Acted::Emitted(Some(Operation::ReadSet { .. })) => {
+            println!("{}", crate::bridge::read_reading(view, store));
+        }
+        _ => {}
+    }
 }

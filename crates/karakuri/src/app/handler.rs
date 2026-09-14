@@ -808,32 +808,14 @@ impl ApplicationHandler for App {
                         )
                     );
                 }
-                // **And a press that asked to read a Set is a Set file and its
-                // cards to read**, on the same branch and for the same
-                // reason: the store is here, a file read is not a thing to do
-                // on a frame (P-0091), and `karakuri-console` reaches no disk
-                // at all (ADR-0156). What the console holds is the answer and
-                // whether the block is down — `view::View::reading`.
-                if matches!(acted, Acted::Emitted(Some(Operation::ReadSet { .. }))) {
-                    println!("{}", read_reading(&mut self.readout.view, &self.store));
-                }
-                // **And a press that asked to keep a deck is a Set to
-                // write**, here for the reason the two above are: the engine
-                // and the store are the window's, and a disk write is not a
-                // thing to do on a frame (P-0091). It is `k`'s own call with
-                // the deck the *pill* named rather than the one the selection
-                // is on, and `Asked::Operator` because a hand on this panel is
-                // the operator's own act.
-                if let Acted::Emitted(Some(Operation::SaveSet { deck, ref id })) = acted {
-                    self.keeping.save_set(
-                        &gfx.engine,
-                        &self.store,
-                        Asked::Operator,
-                        usize::from(deck),
-                        id.clone(),
-                        None,
-                    );
-                }
+                // Post-event side-effects (Set reading and disk saving) coordinated through operations.rs.
+                handle_post_event_side_effects(
+                    &mut self.keeping,
+                    &gfx.engine,
+                    &self.store,
+                    &mut self.readout.view,
+                    &acted,
+                );
                 // **And a press that asked to keep a node's procedure is one
                 // file to write**, here for the Set keep's reason one line up:
                 // the bytes are the run's, the store is the window's, and a
@@ -1142,73 +1124,34 @@ impl ApplicationHandler for App {
                 // **Nothing typed is checked here**, which is
                 // [`checked_name`]'s half of the same split: the pill takes
                 // the letters, and the wall is where the file is written.
-                if self.readout.view.arrangement.naming().is_some() {
+                // **Inline text input session (Arrangement save or Inspector deck rename)**:
+                // Rule 2 claims the keyboard while either flow is active. Handled symmetrically
+                // through [`TextInputSession`] (P42) with post-event side-effects decoupled (P46).
+                if let Some(session) = self.readout.view.active_text_input() {
                     let (acted, moved) = match key.logical_key.as_ref() {
                         Key::Named(NamedKey::Escape) => {
-                            println!("arrangement: nothing was saved");
-                            self.readout.view.arrangement.shut();
-                            (Acted::Nothing, true)
-                        }
-                        Key::Named(NamedKey::Enter) => (self.readout.named(), true),
-                        Key::Named(NamedKey::Backspace) => {
-                            (Acted::Nothing, self.readout.view.arrangement.rubbed_out())
-                        }
-                        // **A `Key::Character` is text and not a key**, so it
-                        // may be more than one character — a dead key
-                        // resolving, an IME committing a run — and every one
-                        // of them goes in. `Arrangement::typed` is what
-                        // refuses a control character, because a newline
-                        // arriving as text is the commit rather than a letter.
-                        Key::Character(text) => {
-                            let mut moved = false;
-                            for c in text.chars() {
-                                moved |= self.readout.view.arrangement.typed(c);
+                            match session {
+                                TextInputKind::Arrangement => {
+                                    println!("arrangement: nothing was saved");
+                                }
+                                TextInputKind::DeckName(_) => {
+                                    println!("inspector: nothing was kept");
+                                }
                             }
-                            (Acted::Nothing, moved)
-                        }
-                        Key::Named(NamedKey::Space) => {
-                            (Acted::Nothing, self.readout.view.arrangement.typed(' '))
-                        }
-                        _ => (Acted::Nothing, false),
-                    };
-                    let repaint = App::performed(
-                        gfx,
-                        self.started,
-                        &mut self.readout,
-                        self.recording.recorder(),
-                        &acted,
-                        Change::Naming(moved).repaint(),
-                    );
-                    App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                    return;
-                }
-                // **The second letter-taking flow takes the keyboard on the
-                // same terms as the first** (ADR-0292). The two can never both
-                // be open — `input::claim`'s rule 2 claims every press while
-                // either is — so this is a second store for one gesture rather
-                // than an order between two.
-                if self.readout.view.naming_set().is_some() {
-                    let (acted, moved) = match key.logical_key.as_ref() {
-                        Key::Named(NamedKey::Escape) => {
-                            println!("inspector: nothing was kept");
-                            self.readout.view.stop_naming_set();
+                            self.readout.view.cancel_active_text_input();
                             (Acted::Nothing, true)
                         }
                         Key::Named(NamedKey::Enter) => {
-                            (Acted::Emitted(self.readout.view.named_set()), true)
+                            (self.readout.commit_active_text_input(), true)
                         }
                         Key::Named(NamedKey::Backspace) => {
-                            (Acted::Nothing, self.readout.view.rub_out_of_name())
+                            (Acted::Nothing, self.readout.view.rub_out_active())
                         }
                         Key::Character(text) => {
-                            let mut moved = false;
-                            for c in text.chars() {
-                                moved |= self.readout.view.type_into_name(c);
-                            }
-                            (Acted::Nothing, moved)
+                            (Acted::Nothing, self.readout.view.type_into_active(text))
                         }
                         Key::Named(NamedKey::Space) => {
-                            (Acted::Nothing, self.readout.view.type_into_name(' '))
+                            (Acted::Nothing, self.readout.view.type_into_active(" "))
                         }
                         _ => (Acted::Nothing, false),
                     };
@@ -1221,18 +1164,13 @@ impl ApplicationHandler for App {
                         Change::Naming(moved).repaint(),
                     );
                     App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                    // **And the save is the window's, exactly as the capsule's
-                    // is**: a disk write is not a thing to do on a frame.
-                    if let Acted::Emitted(Some(Operation::SaveSet { deck, ref id })) = acted {
-                        self.keeping.save_set(
-                            &gfx.engine,
-                            &self.store,
-                            Asked::Operator,
-                            usize::from(deck),
-                            id.clone(),
-                            None,
-                        );
-                    }
+                    handle_post_event_side_effects(
+                        &mut self.keeping,
+                        &gfx.engine,
+                        &self.store,
+                        &mut self.readout.view,
+                        &acted,
+                    );
                     return;
                 }
                 let op = match key.logical_key.as_ref() {
