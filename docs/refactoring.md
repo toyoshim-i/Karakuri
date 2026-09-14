@@ -4,7 +4,7 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases (P1–P46)
+## 1. Completed Phases (P1–P51)
 
 All prior refactoring phases are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
 
@@ -14,6 +14,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 - **Phase 5 (P34–P37)**: 3-tier hierarchical architecture documentation (`docs/architecture/`), GUI application event loop modularization (`karakuri::app`), control-aware dynamic tooltip shortcut badges in `karakuri-console::hover`, and engine Set execution decomposition (`karakuri-engine::set`).
 - **Phase 6 (P38–P41)**: Console glyph componentization (`glyph.rs`), popup card row text deduplication (`card_row_text`), root view modularization (`draw.rs`, `regions.rs`), and GUI milestone M5 exit condition verification.
 - **Phase 7 (P42–P46)**: GUI interaction & event dispatch modernization: unified modal overlays (`ModalOverlay`), tooltip suppression under open cards, text input session abstraction (`TextInputSession`), post-event side-effect decoupling (`handle_post_event_side_effects`), and per-bay pointer dispatch decomposition in `readout::dispatch`.
+- **Phase 8 (P47–P51)**: Core subsystem monolith decomposition: `karakuri-ir::check` (P47), `karakuri::bridge::handlers` (P48), `karakuri-store::record` (P49), `karakuri-cli::live` (P50), and `karakuri-console::focus` (P51) bringing all core files comfortably below 2,000 lines.
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
@@ -40,20 +41,11 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P44** | `karakuri-console::hover` | Connect `ModalOverlay` to the hover layer to suppress tooltips on background controls beneath open cards and choosers | **COMPLETED** |
 | **P45** | `karakuri::readout::dispatch` | Leverage `ControlId` in `input::claim` and decompose 1,100-line pointer dispatch into per-bay handlers | **COMPLETED** |
 | **P46** | `karakuri::app::handler` | Decouple post-event side-effects (I/O, set saving, projector routing) out of `handler.rs` into `operations.rs` | **COMPLETED** |
-
----
-
-## 3. Planned Phase: Phase 8 — Core Subsystem Monolith Decomposition
-
-Targets the largest remaining production monoliths across the repository to bring all files comfortably below 2,000 lines without breaking cross-crate invariants:
-
-| Initiative | Target Subsystem | Actionable Deliverable | Status |
-|---|---|---|:---:|
 | **P47** | `karakuri-ir::check` (4,061 lines) | Decomposed into `check/` submodules (`contracts.rs`, `coverage.rs`, `context.rs`, `eval.rs`, `mod.rs`) | **COMPLETED** |
-| **P48** | `karakuri::bridge::handlers` (3,896 lines) | Decompose console-to-engine state updates into per-bay modules (`mixer.rs`, `transport.rs`, `inspector.rs`, `sequencer.rs`, `master.rs`, `mod.rs`) | **PENDING** |
-| **P49** | `karakuri-store::record` (3,222 lines) | Decompose ndjson schema & serialization into `record/` submodules (`types.rs`, `variants.rs`, `serde.rs`, `helpers.rs`, `mod.rs`) | **PENDING** |
-| **P50** | `karakuri-cli::live` (3,056 lines) | Decompose interactive runtime controller into `live/` submodules (`interactive.rs`, `demo.rs`, `audio.rs`, `mod.rs`) | **PENDING** |
-| **P51** | `karakuri-console::focus` (3,664 lines) | Decompose 2D spatial focus navigation and deduplicate card/chooser traversals into `focus/` submodules (`model.rs`, `card.rs`, `chooser.rs`, `ladder.rs`, `mod.rs`) | **PENDING** |
+| **P48** | `karakuri::bridge::handlers` (3,896 lines) | Decomposed console-to-engine state updates into per-bay modules (`mixer.rs`, `transport.rs`, `inspector.rs`, `staging.rs`, `sequencer.rs`, `master.rs`, `apply.rs`, `mod.rs`) | **COMPLETED** |
+| **P49** | `karakuri-store::record` (3,222 lines) | Decomposed into `record/` submodules (`types.rs`, `variants.rs`, `helpers.rs`, `tests.rs`, `mod.rs`) | **COMPLETED** |
+| **P50** | `karakuri-cli::live` (3,056 lines) | Decomposed interactive runtime controller into `live/` submodules (`interactive.rs`, `demo.rs`, `audio.rs`, `mod.rs`) | **COMPLETED** |
+| **P51** | `karakuri-console::focus` (3,664 lines) | Decomposed 2D spatial focus navigation and deduplicate card/chooser traversals into `focus/` submodules (`model.rs`, `card.rs`, `chooser.rs`, `ladder.rs`, `mod.rs`) | **COMPLETED** |
 
 ---
 
