@@ -2195,8 +2195,19 @@ impl ApplicationHandler for App {
                         slot_bind_groups,
                         look,
                         chain,
+                        chain_swap,
                         ..
                     } = engine;
+                    // **The frame boundary the chain lands on**, before the
+                    // encoder below exists: a chain arriving mid-frame would
+                    // move what the mix writes into after the mix had decided.
+                    // Nothing here waits — a build that is not finished is not
+                    // collected and the chain that is running draws this frame
+                    // (P-0094).
+                    chain_swap.begin_frame(present, &gpu.device, &gpu.queue);
+                    for event in chain_swap.events() {
+                        eprintln!("{event}");
+                    }
                     // **On the frames it moved and on no others**, which is
                     // where this parts company with the tone map one pass
                     // along: that is one `queue.write_buffer` into storage
@@ -2205,7 +2216,10 @@ impl ApplicationHandler for App {
                     // targets to allocate. `mix::apply_chain` takes the cheap
                     // path where the shape is the one already running, which
                     // is what a press on a Master row produces
-                    // (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
+                    // (`docs/principles/0091-cost-is-known-before-it-is-paid.md`),
+                    // and asks `karakuri-chain` for anything else. It is safe
+                    // to ask on every frame: a list already being built is not
+                    // asked for twice (ADR-0354).
                     //
                     // The shipped three first, then this run's store, which is
                     // the order `mix::resolve_procedure` states: a chain of
@@ -2215,8 +2229,8 @@ impl ApplicationHandler for App {
                     // with the address in the message (ADR-0340).
                     if present.chain_spec() != *chain {
                         if let Err(refusal) = karakuri_environment::mix::apply_chain(
+                            chain_swap,
                             present,
-                            &gpu.device,
                             &gpu.queue,
                             chain,
                             &|address| {

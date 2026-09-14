@@ -121,6 +121,14 @@ pub(crate) struct Engine {
     /// the chain should be. The frame loop puts one on the other where the two
     /// differ.
     pub(crate) chain: Vec<karakuri_engine::SlotSpec>,
+    /// Where a chain is compiled and where the chain it replaces is freed.
+    ///
+    /// The frame loop asks this for a build when [`Engine::chain`] and
+    /// `Present::chain_spec` differ, and installs what it finished at the frame
+    /// boundary before `compose`. Nothing here compiles a shader, creates a
+    /// pipeline or allocates a target on this thread
+    /// ([ADR-0354](../../../docs/adr/0354-a-chain-is-compiled-on-a-thread-of-its-own-and-lands-at-a-frame-boundary.md)).
+    pub(crate) chain_swap: karakuri_engine::ChainSwap,
     /// How many registrations have been freed, over both textures. The atlas leak
     /// this exists to prevent is invisible from outside: a resize that registers
     /// without freeing leaves a bind group per drag frame and nothing says so, so
@@ -1126,6 +1134,7 @@ impl Engine {
             // reads, so the frame this program opens on is the frame it drew
             // before the chain existed — bit for bit and for free.
             chain: Vec::new(),
+            chain_swap: karakuri_engine::ChainSwap::new(&gpu.device, &gpu.queue),
             freed: 0,
             aimed,
             pointing,

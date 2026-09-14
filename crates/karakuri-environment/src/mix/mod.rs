@@ -164,6 +164,7 @@
 //! stops it hiding what is beneath.
 
 use karakuri_engine::binding::Curve;
+use karakuri_engine::chain_swap::ChainSlot;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
 use karakuri_engine::master::{Chain, Cut, Slot, SlotSpec};
 use karakuri_engine::present::TonemapOp;
@@ -337,38 +338,60 @@ pub enum Change {
 /// so a run that records nothing creates nothing.
 pub mod shipped;
 
-/// Compile a described chain into one the engine can run.
+/// Resolve and check every slot of a described chain, holding no device.
 ///
 /// `resolve` answers what an address's source is — the shipped three without a
 /// store, anything else out of one — and a slot whose address nothing holds is
 /// refused with the address in the message, which is what ADR-0340 asks of a
-/// replay meeting a procedure the store does not have.
+/// replay meeting a procedure the store does not have. A source that does not
+/// check is refused with the slot's position and its address.
 ///
-/// Where the work happens is the caller's answer and not this function's. It
-/// compiles and it builds pipelines, so it belongs off the render thread — a
-/// Set's build runs on `HotSwap`'s worker for exactly this reason
-/// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`,
-/// `docs/adr/0033-…`) — and the built list is installed at a frame boundary by
-/// `Present::set_chain`.
+/// The one derivation of a chain's [`ChainSlot`]s: [`build_chain`] compiles
+/// these against a device on the calling thread, and [`apply_chain`] hands them
+/// to the chain worker.
+pub fn check_chain(
+    slots: &[SlotSpec],
+    resolve: &dyn Fn(&str) -> Option<String>,
+) -> Result<Vec<ChainSlot>, String> {
+    let sources = resolve_chain(slots, resolve)?;
+    let mut checked = Vec::with_capacity(slots.len());
+    for (at, (spec, source)) in slots.iter().zip(&sources).enumerate() {
+        checked.push(ChainSlot {
+            spec: spec.clone(),
+            checked: crate::compile::check(source)
+                .map_err(|e| format!("master chain slot {at}: {}: {e}", spec.procedure))?,
+        });
+    }
+    Ok(checked)
+}
+
+/// Compile a described chain into one the engine can run, on the calling
+/// thread.
+///
+/// Creates a shader module and a render pipeline per slot, which is why the
+/// real-time hosts do not call this: they call [`apply_chain`], which does the
+/// same work on `karakuri-chain`. This is the synchronous path — the offline
+/// renderer and replay, where no frame is waiting (ADR-0354).
+///
+/// The chain it returns carries no targets, so the `Present` it is installed on
+/// allocates them.
 pub fn build_chain(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     slots: &[SlotSpec],
     resolve: &dyn Fn(&str) -> Option<String>,
 ) -> Result<Chain, String> {
-    let sources = resolve_chain(slots, resolve)?;
-    let mut built = Vec::with_capacity(slots.len());
-    for (at, (spec, source)) in slots.iter().zip(&sources).enumerate() {
-        let checked = crate::compile::check(source)
-            .map_err(|e| format!("master chain slot {at}: {}: {e}", spec.procedure))?;
+    let checked = check_chain(slots, resolve)?;
+    let mut built = Vec::with_capacity(checked.len());
+    for (at, want) in checked.iter().enumerate() {
         built.push(
             Slot::build(
                 device,
                 layout,
-                spec.procedure.clone(),
-                &checked,
-                spec.cut,
-                spec.params.clone(),
+                want.spec.procedure.clone(),
+                &want.checked,
+                want.spec.cut,
+                want.spec.params.clone(),
             )
             .map_err(|e| format!("master chain slot {at}: {e}"))?,
         );
@@ -420,28 +443,66 @@ pub fn resolve_procedure(
     String::from_utf8(bytes).ok()
 }
 
-/// Put a described chain on a `Present`, building a list only where the list
-/// itself changed.
+/// Put a described chain on a `Present` without compiling anything on the
+/// calling thread.
 ///
 /// Two paths, and which one is taken is P-0091's question rather than a
 /// convenience. `Record::MasterChain` is written whole — a stream that moved
 /// one slot without saying where the others stood describes a chain a replay
 /// cannot put back — so the ordinary case of applying one is a record whose
 /// *shape* is the shape already running with one number different. That is a
-/// `queue.write_buffer` per slot and nothing else. A record whose shape differs
-/// is a build: sources resolved, procedures compiled, pipelines made, targets
-/// allocated.
+/// `queue.write_buffer` per slot and nothing else, and it returns having
+/// applied it.
 ///
-/// The build is on the caller's thread and this says so rather than hiding it.
-/// A Set's build runs on `HotSwap`'s worker
-/// (`docs/adr/0033-freeing-on-the-render-thread-is-the-same-invariant-as-allocating.md`);
-/// a chain's runs here, at the point in the frame loop where a record is
-/// applied, which is before the frame's encoder exists on every path that calls
-/// it. What that costs is a `naga` pass and a pipeline per slot, on the frames
-/// an operator changed the *list* — which is a press, not a fader ride.
-/// Compiling it on a worker instead is what M5.16's second pass owes when the
-/// Library can drop a procedure on the chain.
+/// A record whose shape differs is a build, and the build is asked for here and
+/// happens on `karakuri-chain`: sources are resolved and checked on this thread
+/// — neither touches a device — and the procedures, the pipelines and the
+/// targets are made on the worker. Until the build lands the chain that is
+/// running keeps drawing and `Present::chain_spec` still reads it, so a surface
+/// that draws the chain draws the outgoing list until the frame the new one is
+/// installed on. Calling again with a list already being built is a no-op, so a
+/// host may ask on every frame.
+///
+/// `Ok` means the list was applied or a build was asked for, not that a build
+/// succeeded: a slot that refuses at compile time is a
+/// [`ChainEvent::Refused`](karakuri_engine::ChainEvent) on `swap`, and the
+/// chain keeps what it had. `Err` is a slot whose address nothing holds or
+/// whose source does not check, and then nothing was asked for.
+///
+/// [`ChainSwap::begin_frame`](karakuri_engine::ChainSwap::begin_frame) is what
+/// installs the result, and must be called before the frame's encoder exists.
 pub fn apply_chain(
+    swap: &mut karakuri_engine::ChainSwap,
+    present: &mut karakuri_engine::Present,
+    queue: &wgpu::Queue,
+    slots: &[SlotSpec],
+    resolve: &dyn Fn(&str) -> Option<String>,
+) -> Result<(), String> {
+    let shape: Vec<(String, Option<Cut>)> =
+        slots.iter().map(|s| (s.procedure.clone(), s.cut)).collect();
+    let params: Vec<std::collections::BTreeMap<String, f32>> =
+        slots.iter().map(|s| s.params.clone()).collect();
+    if present.set_chain_params(queue, &shape, &params) {
+        return Ok(());
+    }
+    if swap.is_building(slots) {
+        return Ok(());
+    }
+    swap.request(present, check_chain(slots, resolve)?);
+    Ok(())
+}
+
+/// Put a described chain on a `Present`, compiling it on the calling thread.
+///
+/// The synchronous path, and [`karakuri_engine::HotSwap::install`] is its
+/// counterpart one layer down: a run with no frame waiting on the clock — the
+/// offline renderer, a replay — builds where it stands rather than carrying a
+/// worker. The cheap path is the same one [`apply_chain`] takes and for the
+/// same reason.
+///
+/// Returns having applied the list or having refused it. A refusal names the
+/// slot and the chain keeps what it had.
+pub fn install_chain(
     present: &mut karakuri_engine::Present,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -456,7 +517,7 @@ pub fn apply_chain(
         return Ok(());
     }
     let chain = build_chain(device, present.chain_layout(), slots, resolve)?;
-    present.set_chain(device, queue, chain);
+    drop(present.set_chain(device, queue, chain));
     Ok(())
 }
 

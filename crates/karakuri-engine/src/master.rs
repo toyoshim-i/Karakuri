@@ -14,7 +14,8 @@ use std::fmt;
 use karakuri_ir::typed::Checked;
 
 pub use crate::pass::{
-    create_hdr_target, BoundImagePass, Clock, Cut, ImagePass, RenderPassNode, RetentionManager,
+    create_hdr_target, BoundImagePass, Clock, Cut, ImagePass, RenderPassNode, Retained,
+    RetentionManager,
 };
 
 /// Describes an uncompiled slot specification within the master chain.
@@ -298,16 +299,198 @@ impl Slot {
     }
 }
 
-/// Ordered list of slots comprising the master chain.
-#[derive(Debug, Default)]
+/// Everything a chain needs from a running [`Present`](crate::Present) in order
+/// to be built somewhere else.
+///
+/// Holds wgpu handles and two numbers, so it crosses a thread boundary. Taken
+/// from the `Present` at the moment a build is asked for, which is what fixes
+/// the size the build's targets are made at: a build whose `at` no longer
+/// matches the `Present` at install time is stale and its targets are retired
+/// unused.
+#[derive(Clone)]
+pub struct ChainWorkshop {
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    retention_layout: wgpu::BindGroupLayout,
+    /// The view the `exit` cut is held from — the `Present`'s HDR target.
+    out: wgpu::TextureView,
+    at: (u32, u32),
+}
+
+impl ChainWorkshop {
+    /// The bind group layout every chain slot's pipeline is built against.
+    pub fn layout(&self) -> &wgpu::BindGroupLayout {
+        &self.layout
+    }
+
+    /// The frame size this workshop's targets are made at.
+    pub fn at(&self) -> (u32, u32) {
+        self.at
+    }
+}
+
+/// The GPU textures and bind groups one chain runs through: the entry target
+/// the mix writes, the ping-pong targets between slots, the retention history,
+/// and one bind group per slot.
+///
+/// Allocated by [`ChainTargets::build`], which takes a device and a
+/// [`ChainWorkshop`] and nothing else, so it runs on a worker thread. Holds
+/// only wgpu handles, so it crosses a thread boundary in both directions:
+/// built off the render thread, and dropped off it once retired.
+pub struct ChainTargets {
+    at: (u32, u32),
+    entry: Option<wgpu::TextureView>,
+    ping: Vec<wgpu::TextureView>,
+    binds: Vec<wgpu::BindGroup>,
+    retained: Retained,
+}
+
+impl ChainTargets {
+    /// Allocates the entry target, the ping-pong targets, the retention
+    /// history and one bind group per slot, for `slots` at the workshop's size.
+    ///
+    /// An empty slot list allocates nothing.
+    pub fn build(device: &wgpu::Device, workshop: &ChainWorkshop, slots: &[Slot]) -> ChainTargets {
+        let total = slots.len();
+        let (width, height) = workshop.at;
+        if total == 0 {
+            return ChainTargets {
+                at: workshop.at,
+                entry: None,
+                ping: Vec::new(),
+                binds: Vec::new(),
+                retained: Retained::default(),
+            };
+        }
+        let entry = create_hdr_target(device, width, height, Some("master chain entry"));
+        let pings = (total - 1).min(2);
+        let ping: Vec<wgpu::TextureView> = (0..pings)
+            .map(|i| {
+                create_hdr_target(
+                    device,
+                    width,
+                    height,
+                    Some(&format!("master chain ping {i}")),
+                )
+            })
+            .collect();
+        let cuts: Vec<Cut> = {
+            let mut c: Vec<Cut> = slots.iter().filter_map(|s| s.cut).collect();
+            c.sort_unstable();
+            c.dedup();
+            c
+        };
+        let retained = RetentionManager::build(
+            &workshop.retention_layout,
+            device,
+            width,
+            height,
+            &cuts,
+            Some(&entry),
+            Some(&workshop.out),
+        );
+        let held_for = |at: usize, src: &wgpu::TextureView| -> wgpu::BindGroup {
+            let held: &wgpu::TextureView = slots[at]
+                .cut
+                .and_then(|cut| retained.held(cut))
+                .unwrap_or(src);
+            slots[at].bind(device, &workshop.layout, src, held, &workshop.sampler)
+        };
+        let binds: Vec<wgpu::BindGroup> = (0..total)
+            .map(|at| {
+                let src = if at == 0 {
+                    &entry
+                } else {
+                    &ping[(at - 1) % ping.len().max(1)]
+                };
+                held_for(at, src)
+            })
+            .collect();
+        ChainTargets {
+            at: workshop.at,
+            entry: Some(entry),
+            ping,
+            binds,
+            retained,
+        }
+    }
+
+    /// The frame size these targets were allocated at.
+    pub fn at(&self) -> (u32, u32) {
+        self.at
+    }
+}
+
+/// The GPU objects one install took out of service: the outgoing chain's slots
+/// — each holding a pipeline and a uniform buffer — and its targets.
+///
+/// Dropping this frees GPU memory, which is the allocation invariant read
+/// backwards (ADR-0033), so a render thread hands it to a worker rather than
+/// letting it fall out of scope.
+#[derive(Default)]
+pub struct RetiredChain {
+    slots: Vec<Slot>,
+    targets: Vec<ChainTargets>,
+}
+
+impl RetiredChain {
+    /// Whether this holds nothing, in which case there is nothing to retire.
+    pub fn is_empty(&self) -> bool {
+        self.slots.is_empty() && self.targets.iter().all(|t| t.entry.is_none())
+    }
+}
+
+impl From<Chain> for RetiredChain {
+    /// A chain that was built and never installed is retired exactly as one
+    /// that was.
+    fn from(chain: Chain) -> RetiredChain {
+        RetiredChain {
+            slots: chain.slots,
+            targets: chain.targets.into_iter().collect(),
+        }
+    }
+}
+
+/// Ordered list of slots comprising the master chain, and — where it was built
+/// off the render thread — the targets they run through.
+#[derive(Default)]
 pub struct Chain {
     slots: Vec<Slot>,
+    /// Targets allocated alongside the slots. `None` means the installing
+    /// `Present` allocates them, which is an allocation on whichever thread
+    /// installs.
+    targets: Option<ChainTargets>,
+}
+
+impl fmt::Debug for Chain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Chain")
+            .field("slots", &self.slots)
+            .field("targets", &self.targets.as_ref().map(ChainTargets::at))
+            .finish()
+    }
 }
 
 impl Chain {
-    /// Creates a master chain from the given slots.
+    /// Creates a master chain from the given slots, with no targets.
+    ///
+    /// The `Present` this is installed on allocates them.
     pub fn new(slots: Vec<Slot>) -> Chain {
-        Chain { slots }
+        Chain {
+            slots,
+            targets: None,
+        }
+    }
+
+    /// Creates a master chain from slots and the targets built beside them.
+    ///
+    /// The targets are used only where their size still matches the `Present`
+    /// at install time; a resize in between retires them unused.
+    pub fn resident(slots: Vec<Slot>, targets: ChainTargets) -> Chain {
+        Chain {
+            slots,
+            targets: Some(targets),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -408,16 +591,76 @@ impl MasterChain {
         self.allocate(device, queue, out);
     }
 
-    /// Installs a new chain and allocates required intermediate targets.
+    /// Installs a new chain and returns what it took out of service.
+    ///
+    /// Targets built alongside the incoming chain are adopted where their size
+    /// matches this chain's; otherwise they are retired unused and the targets
+    /// are allocated here. The returned [`RetiredChain`] owns the outgoing
+    /// slots and targets and frees them when dropped.
+    #[must_use = "the outgoing chain's GPU objects are freed where this is dropped"]
     pub(crate) fn set(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         out: &wgpu::TextureView,
         chain: Chain,
-    ) {
+    ) -> RetiredChain {
+        let mut retired = RetiredChain {
+            slots: std::mem::take(&mut self.slots),
+            targets: vec![self.take_targets()],
+        };
         self.slots = chain.slots;
-        self.allocate(device, queue, out);
+        match chain.targets {
+            Some(targets) if targets.at == (self.width, self.height) => {
+                self.install_targets(queue, targets)
+            }
+            stale => {
+                retired.targets.extend(stale);
+                self.allocate(device, queue, out);
+            }
+        }
+        retired
+    }
+
+    /// Everything a chain build needs from this `Present`'s chain, in one
+    /// value: the two layouts, the sampler, the view the `exit` cut is held
+    /// from, and the size to build at.
+    pub(crate) fn workshop(&self, out: &wgpu::TextureView) -> ChainWorkshop {
+        ChainWorkshop {
+            layout: self.layout.clone(),
+            sampler: self.sampler.clone(),
+            retention_layout: self.retention.layout().clone(),
+            out: out.clone(),
+            at: (self.width, self.height),
+        }
+    }
+
+    /// Detaches the running targets, leaving the chain with none.
+    fn take_targets(&mut self) -> ChainTargets {
+        ChainTargets {
+            at: (self.width, self.height),
+            entry: self.entry.take(),
+            ping: std::mem::take(&mut self.ping),
+            binds: std::mem::take(&mut self.binds),
+            retained: self.retention.take(),
+        }
+    }
+
+    /// Adopts `targets` and writes every slot's uniform block against them.
+    ///
+    /// The uniform write is a `queue.write_buffer` per slot and carries the
+    /// clock that is running, so a chain installed mid-session reads the
+    /// session clock on its first frame rather than a default.
+    fn install_targets(&mut self, queue: &wgpu::Queue, targets: ChainTargets) {
+        self.entry = targets.entry;
+        self.ping = targets.ping;
+        self.binds = targets.binds;
+        self.retention.install(targets.retained);
+        let viewport = [self.width.max(1) as f32, self.height.max(1) as f32];
+        let clock = self.clock.get();
+        for slot in &mut self.slots {
+            slot.write_uniform(queue, clock, viewport);
+        }
     }
 
     /// Updates parameters for running slots without reallocating textures.
@@ -551,70 +794,14 @@ impl MasterChain {
         self.retention.record(encoder);
     }
 
-    /// Allocates intermediate targets, ping-pong views, and slot bind groups.
+    /// Allocates intermediate targets, ping-pong views, and slot bind groups
+    /// on the calling thread.
+    ///
+    /// [`ChainTargets::build`] is the one derivation of these textures; this
+    /// calls it against this chain's own workshop and installs the result.
     fn allocate(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, out: &wgpu::TextureView) {
-        let total = self.slots.len();
-        if total == 0 {
-            self.entry = None;
-            self.ping.clear();
-            self.retention.clear();
-            self.binds.clear();
-            return;
-        }
-        self.entry = Some(create_hdr_target(
-            device,
-            self.width,
-            self.height,
-            Some("master chain entry"),
-        ));
-        let pings = (total - 1).min(2);
-        self.ping = (0..pings)
-            .map(|i| {
-                create_hdr_target(
-                    device,
-                    self.width,
-                    self.height,
-                    Some(&format!("master chain ping {i}")),
-                )
-            })
-            .collect();
-        let cuts: Vec<Cut> = {
-            let mut c: Vec<Cut> = self.slots.iter().filter_map(|s| s.cut).collect();
-            c.sort_unstable();
-            c.dedup();
-            c
-        };
-
-        let entry_view: &wgpu::TextureView = self.entry.as_ref().expect("just allocated");
-        self.retention.allocate(
-            device,
-            self.width,
-            self.height,
-            &cuts,
-            Some(entry_view),
-            Some(out),
-        );
-
-        self.binds = (0..total)
-            .map(|at| {
-                let src = if at == 0 {
-                    entry_view
-                } else {
-                    &self.ping[(at - 1) % self.ping.len().max(1)]
-                };
-                let held: &wgpu::TextureView = self.slots[at]
-                    .cut
-                    .and_then(|cut| self.retention.held(cut))
-                    .unwrap_or(src);
-                self.slots[at].bind(device, &self.layout, src, held, &self.sampler)
-            })
-            .collect();
-
-        let viewport = [self.width.max(1) as f32, self.height.max(1) as f32];
-        let clock = self.clock.get();
-        for slot in &mut self.slots {
-            slot.write_uniform(queue, clock, viewport);
-        }
+        let targets = ChainTargets::build(device, &self.workshop(out), &self.slots);
+        self.install_targets(queue, targets);
     }
 }
 

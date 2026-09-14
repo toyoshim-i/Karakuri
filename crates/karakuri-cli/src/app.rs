@@ -321,11 +321,15 @@ impl ApplicationHandler for App {
         // fail: the addresses come off the bytes the compile read — see
         // [`Running::at_launch`].
         let running = Running::at_launch(&self.placed, slot_count);
+        // **Before the first frame, because it spawns a thread**, and one per
+        // run: the chain is the master's and there is one master.
+        let chain_swap = karakuri_engine::ChainSwap::new(&gpu.device, &gpu.queue);
         let live = Live {
             window,
             gpu,
             sink: frame::WindowSink::new(surface, config),
             present,
+            chain_swap,
             deck,
             look: self.args.look,
             focus: 0,
