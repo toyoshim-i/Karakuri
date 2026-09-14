@@ -4,7 +4,7 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases (P1–P41)
+## 1. Completed Phases (P1–P46)
 
 All prior refactoring phases are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
 
@@ -13,6 +13,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 - **Phase 4 (P30–P33)**: Console UI componentization (`card`, `chip`, `track`, `field`), bay monolith decomposition (`mixer/`, `transport/`, `library/`, `inspector/`), unified `ControlDescriptor` registry in `karakuri-console::control`, and `Readout` event dispatch decoupling into `readout/` (`costs`, `hud`, `dispatch`, `mod`).
 - **Phase 5 (P34–P37)**: 3-tier hierarchical architecture documentation (`docs/architecture/`), GUI application event loop modularization (`karakuri::app`), control-aware dynamic tooltip shortcut badges in `karakuri-console::hover`, and engine Set execution decomposition (`karakuri-engine::set`).
 - **Phase 6 (P38–P41)**: Console glyph componentization (`glyph.rs`), popup card row text deduplication (`card_row_text`), root view modularization (`draw.rs`, `regions.rs`), and GUI milestone M5 exit condition verification.
+- **Phase 7 (P42–P46)**: GUI interaction & event dispatch modernization: unified modal overlays (`ModalOverlay`), tooltip suppression under open cards, text input session abstraction (`TextInputSession`), post-event side-effect decoupling (`handle_post_event_side_effects`), and per-bay pointer dispatch decomposition in `readout::dispatch`.
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
@@ -34,20 +35,11 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P39** | `karakuri-console::view::widgets::card` | Standardize popup card row text layout using `card_row_text` across `audio_in`, `arrangement`, and `wiring` | **COMPLETED** |
 | **P40** | `karakuri-console::view` | Decompose `view/mod.rs` (3,001 lines) by extracting `draw.rs` (`draw`, `cursor`) and `regions.rs` (`Region`, `REGIONS`, `Kind`) | **COMPLETED** |
 | **P41** | `docs/roadmap.md` & Console Verification | Verify M5 exit conditions (`grep -c 'rt plan">panel' docs/manual/operations.html` == 0) and full workspace test suite | **COMPLETED** |
-
----
-
-## 2. Planned Phase: Phase 7 — GUI Interaction & Event Dispatch Modernization
-
-Based on architectural analysis of the GUI event handling pipeline (`karakuri-console::input`, `karakuri::readout::dispatch`, `karakuri::app::handler`), Phase 7 modernizes event routing, eliminates hit-testing duplication, unifies modal overlay states (including new M5.16 Master Chain Add Chooser and Sequencer Lane Chooser cards), and abstracts text input handling:
-
-| Initiative | Target Subsystem | Actionable Deliverable | Status |
-|---|---|---|:---:|
-| **P42** | `karakuri::app` / Text Input | Abstract inline naming modes (`arrangement.naming` & `view.naming_set`) into a unified `TextInputSession` handler | **PENDING** |
-| **P43** | `karakuri-console::view` | Unify popup card and modal chooser open/close states into a type-safe `ModalOverlay` enum to guarantee Rule 2 mutual exclusion | **PENDING** |
-| **P44** | `karakuri-console::hover` | Connect `ModalOverlay` to the hover layer to suppress tooltips on background controls beneath open cards and choosers | **PENDING** |
-| **P45** | `karakuri::readout::dispatch` | Leverage `ControlId` in `input::claim` to eliminate double hit-testing and decompose 1,200-line pointer dispatch into per-bay handlers | **PENDING** |
-| **P46** | `karakuri::app::handler` | Decouple post-event side-effects (I/O, set saving, projector routing) out of `handler.rs` into `operations.rs` | **PENDING** |
+| **P42** | `karakuri::app` / Text Input | Abstract inline naming modes (`arrangement.naming` & `view.naming_set`) into a unified `TextInputSession` handler | **COMPLETED** |
+| **P43** | `karakuri-console::view` | Unify popup card and modal chooser open/close states into a type-safe `ModalOverlay` enum to guarantee Rule 2 mutual exclusion | **COMPLETED** |
+| **P44** | `karakuri-console::hover` | Connect `ModalOverlay` to the hover layer to suppress tooltips on background controls beneath open cards and choosers | **COMPLETED** |
+| **P45** | `karakuri::readout::dispatch` | Leverage `ControlId` in `input::claim` and decompose 1,100-line pointer dispatch into per-bay handlers | **COMPLETED** |
+| **P46** | `karakuri::app::handler` | Decouple post-event side-effects (I/O, set saving, projector routing) out of `handler.rs` into `operations.rs` | **COMPLETED** |
 
 ---
 

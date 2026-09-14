@@ -80,15 +80,11 @@
 //!   [ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)'s
 //!   `moves_in` on a region whose motion is a hand holding still.
 //!
-//! # What it does not do
+//! # Modal overlay suppression
 //!
-//! It does not know that a card is down. `claim`'s rule 2 gives every
-//! press to whichever card is open, and this layer is told `claim`'s answer
-//! rather than re-deriving its condition — so a pointer resting over a control
-//! that an open card happens to cover still resolves to that control. Copying
-//! the condition here would be the second copy this module exists to avoid;
-//! what closes it is a seam in [`crate::input`] that answers *is a card down*
-//! for both, and it is not worth one until a tip is seen under a card.
+//! When a modal overlay card, menu, or chooser is down ([`View::has_modal_overlay`]),
+//! [`resolve`] returns `None` to suppress tooltips on background controls underneath
+//! the modal overlay.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -1103,6 +1099,9 @@ pub fn flat() -> impl Iterator<Item = &'static Tipped> {
 /// The first row that answers wins, which is why the order inside a slice is
 /// the caller's: the controls inside a container come before the container.
 pub fn resolve(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option<usize> {
+    if view.has_modal_overlay() {
+        return None;
+    }
     flat().position(|tip| (tip.at)(panel, ctx, view, p))
 }
 

@@ -449,8 +449,10 @@ pub use widgets::*;
 pub(crate) use widgets::*;
 
 pub mod draw;
+pub mod modal;
 pub mod regions;
 
+pub use modal::*;
 pub use regions::*;
 
 /// The whole of a texture, in `egui`'s texture coordinates. The picture fills

@@ -71,1145 +71,19 @@ impl Readout {
             // strip, and five derivations would be five answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
-                // **A row's menu is asked before every other control**, and
-                // that ordering is the rule rather than a convenience: it is
-                // the only card whose *pill* is not a capsule of its own, so
-                // there is no press that both opens it and belongs to
-                // something else, and while it is down `input::claim`'s rule 2
-                // has already given every press on the console to the panel.
-                // Asked after the two pills below, a press on one of *their*
-                // capsules would open that card instead of dismissing this one
-                // — a second card down while the first still was, which is the
-                // one thing rule 2 is written to make impossible (ADR-0311).
-                //
-                // **Only while it is down.** A primary press never opens this
-                // menu — that is the secondary button's, in the arm at the
-                // bottom of this match — so with no card down this block does
-                // not run at all and every control below goes on meaning what
-                // it means, the Library bay's own rows included.
-                if self.view.menu_open() {
-                    let picked = library_bay(
-                        self.panel.layout(),
-                        &self.view.scopes,
-                        &self.view.library,
-                        self.view.opened(),
-                        self.view.pointed(),
-                        self.view.library_scroll(),
-                    )
-                    .and_then(|bay| {
-                        bay.menu_ask(
-                            ctx,
-                            view::to_egui(self.panel.layout().viewport()),
-                            self.view.menued(),
-                            // **The rows, for the load button's reason two
-                            // controls along**: a `history` row is a version
-                            // and this menu's items name none, and which of
-                            // the two loads an item asks for is what the row
-                            // *is* — a Set or a procedure (ADR-0338).
-                            self.view.rows(),
-                            at,
-                        )
-                    });
-                    did = self.menued(picked.unwrap_or(Picked::Shut));
-                    return (claim, did);
-                }
-                // **The audio-in pill first of the rest**, and it and the arrangement pill
-                // are the only two whose order matters: each
-                // draws a card *over* the bays, so while one is down a press
-                // inside it belongs to the card and not to whatever it is
-                // covering. They are asked in the order they are drawn, which
-                // is also the order they are laid out in — the arrangement
-                // pill's place is measured from this one's right edge.
-                //
-                // **Only one card can be down**, so the two blocks cannot both
-                // claim a press: `input::claim`'s rule 2 gives the press to
-                // the panel while either is open, and a press outside the open
-                // card is that card's dismissal.
-                let listing = audio_in_pill(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.transport,
-                    self.view.audio.as_ref(),
-                );
-                let heard = listing
-                    .as_ref()
-                    .zip(self.view.audio.as_ref())
-                    .and_then(|(pill, audio)| pill.ask(audio, at));
-                if self.view.audio.as_ref().is_some_and(AudioIn::open) {
-                    did = self.listened(heard.unwrap_or(AudioAsk::Shut));
-                    return (claim, did);
-                }
-                if let Some(ask) = heard {
-                    did = self.listened(ask);
-                    return (claim, did);
-                }
-                // **The arrangement pill next, for the same reason.** Its menu is drawn *over* the
-                // bays, so while it is down a press inside the card belongs to
-                // the card and not to whatever it happens to be covering — and
-                // a press anywhere else is the dismissal, which is why the
-                // `None` below is `Ask::Shut` rather than a press that fell
-                // through. Shut, this is one capsule among many that never
-                // overlap and the order is arbitrary.
-                let pill = arrangement_pill(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.transport,
-                    self.view.audio.as_ref(),
-                    self.view.tracker,
-                    self.view.map.as_ref(),
-                    &self.view.arrangement,
-                );
-                let asked = pill
-                    .as_ref()
-                    .and_then(|pill| pill.ask(&self.view.arrangement, at));
-                if self.view.arrangement.open() {
-                    did = self.arranged(asked.unwrap_or(Ask::Shut));
-                    return (claim, did);
-                }
-                if let Some(ask) = asked {
-                    did = self.arranged(ask);
-                    return (claim, did);
-                }
-                // **A `uses` line's card, which is a fifth**, asked here for
-                // the four above it and its own: it hangs out of a line inside
-                // an Inspector pane and down over the groups under it, so while
-                // it is down a press anywhere on the console belongs to it
-                // (`input::claim`'s rule 2, `docs/adr/0329-…`), and a press
-                // outside it is the dismissal.
-                //
-                // **The pick is asked before the capsule.** A press inside the
-                // card belongs to the card, and the capsule the card came out
-                // of is under it: asking the capsule first would make a press
-                // on the row that happens to overlap it re-open the list it was
-                // picking from.
-                //
-                // **Derived inline, like the load control below it**, because
-                // the press handler is where a control's derivation and its ask
-                // are held together — `press_handler::ASKED` reads this body and
-                // a call in a helper is a control this window is claiming and
-                // then declining, which is the seam that module exists for.
-                let room = view::to_egui(self.panel.layout().viewport());
-                let picked = self.view.wiring_open().and_then(|(pane_at, node, input)| {
-                    let pane = self.view.inspector.get(pane_at)?;
-                    let laid = inspector_pane(
-                        self.panel.layout(),
-                        pane_at,
-                        pane,
-                        self.view.scroll_in(pane_at),
-                    )?;
-                    laid.wired(ctx, pane, room, (node, input), at)
-                        .map(Wiring::Pick)
-                });
-                let wiring = picked.or_else(|| {
-                    self.view
-                        .inspector
-                        .iter()
-                        .enumerate()
-                        .find_map(|(index, pane)| {
-                            let laid = inspector_pane(
-                                self.panel.layout(),
-                                index,
-                                pane,
-                                self.view.scroll_in(index),
-                            )?;
-                            let (node, input) = laid.uses_chip(ctx, pane, at)?;
-                            Some(Wiring::Chip {
-                                pane: index,
-                                node,
-                                input,
-                            })
-                        })
-                });
-                if self.view.wiring_open().is_some() {
-                    did = self.wired(wiring.unwrap_or(Wiring::Shut));
-                    return (claim, did);
-                }
-                if let Some(ask) = wiring {
-                    did = self.wired(ask);
-                    return (claim, did);
-                }
-                // **A pane head's deck list is a card too**, and it is asked
-                // here for the `uses` card's reason one block up: it hangs out
-                // of a head at the top of a pane and down over that pane's own
-                // groups, so while it is down a press anywhere on the console
-                // belongs to it (`input::claim`'s rule 2) and a press outside
-                // it is the dismissal.
-                //
-                // **The pick is asked before the mark**, which is that block's
-                // ordering and its reason: a press inside the card belongs to
-                // the card, and the mark the card came out of is above it.
-                let picked = self.view.pane_target_open().and_then(|pane_at| {
-                    let pane = self.view.inspector.get(pane_at)?;
-                    let laid = inspector_pane(
-                        self.panel.layout(),
-                        pane_at,
-                        pane,
-                        self.view.scroll_in(pane_at),
-                    )?;
-                    self.view
-                        .pane_pulldown(ctx, &laid, pane, pane_at)?
-                        .picked(room, at)
-                        .map(view::Pointing::Pick)
-                });
-                let pointing = picked.or_else(|| {
-                    self.view
-                        .inspector
-                        .iter()
-                        .enumerate()
-                        .find_map(|(index, pane)| {
-                            let laid = inspector_pane(
-                                self.panel.layout(),
-                                index,
-                                pane,
-                                self.view.scroll_in(index),
-                            )?;
-                            let target = self.view.pane_pulldown(ctx, &laid, pane, index)?;
-                            target.hit(at).then_some(view::Pointing::Mark(index))
-                        })
-                });
-                if self.view.pane_target_open().is_some() {
-                    did = self.pointing(pointing.unwrap_or(view::Pointing::Shut));
-                    return (claim, did);
-                }
-                if let Some(ask) = pointing {
-                    did = self.pointing(ask);
-                    return (claim, did);
-                }
-                // **The Library bay's load control, and its list is a third
-                // card**, so it is asked here rather than beside the bay's own
-                // rows below: the card hangs up out of that bay's foot and
-                // over its list, and while it is down a press anywhere on the
-                // console belongs to it (`input::claim`'s rule 2, ADR-0305).
-                // A press outside it is the dismissal, which is why the `None`
-                // below is `Aim::Shut` — the same shape the two pills above
-                // are in, and for their reason.
-                //
-                // **The four cards can never be down together**: the press
-                // that would open a second one lands while the first is open,
-                // so whichever is open claims it and that press shuts it.
-                //
-                // **Both operands go in with the point.** The deck is the
-                // pulldown's (`View::target`) and never the deck selection —
-                // that is the whole of the record — and the Set is the row
-                // under the cursor, which this side read out of the store
-                // (ADR-0156).
-                let aimed = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| {
-                    bay.aim(
-                        ctx,
-                        view::to_egui(self.panel.layout().viewport()),
-                        self.view.target(),
-                        // **The rows and the cursor, which is empty under
-                        // `history`**: this button loads what the cursor is
-                        // on and that scope's rows are versions, so it
-                        // answers `Aim::NoSet` there rather than naming a
-                        // load of a word no store holds
-                        // (`view::View::rows`). Which of the two loads it
-                        // names is the row's own kind (ADR-0338).
-                        self.view.rows(),
-                        self.view.cursor_row(),
-                        at,
-                    )
-                });
-                if self.view.target_open() {
-                    did = self.aimed(aimed.unwrap_or(Aim::Shut));
-                    return (claim, did);
-                }
-                if let Some(ask) = aimed {
-                    did = self.aimed(ask);
-                    return (claim, did);
-                }
-                // **The tracker group's three, derived once for all of
-                // them** — the offset's figure is as wide as the number in it
-                // and the octave is laid out from where the tap ends, so they
-                // are three questions about one laid-out group, exactly as the
-                // look's two are about theirs. Nothing here can overlap either
-                // card: both are asked above, and each takes every press on
-                // the console while it is down.
-                //
-                // **The three are asked in the order they sit in the row**,
-                // and no two of them can answer for one point:
-                // `TrackerGroup::owns` is the union of exactly these three.
-                let group = tracker_group(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.transport,
-                    self.view.audio.as_ref(),
-                    self.view.tracker,
-                );
-                let tracked = group.as_ref().and_then(|group| {
-                    group
-                        .tapped(at)
-                        .or_else(|| group.octave(at))
-                        .or_else(|| group.nudge(at))
-                });
-                if let Some(operation) = tracked {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The two look controls, derived once for both** — the
-                // exposure track's place is measured from the tone map
-                // capsule's, so they are two questions about one laid-out
-                // group, exactly as the mixer's four are about one strip.
-                // Neither can overlap the pill: this group starts one
-                // `.transport` gap after it.
-                let look = look_row(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.transport,
-                    self.view.audio.as_ref(),
-                    self.view.tracker,
-                    self.view.map.as_ref(),
-                    &self.view.arrangement,
-                    self.view.look,
-                );
-                let tone = look.as_ref().and_then(|row| row.tonemap(at));
-                let exposure = look.as_ref().and_then(|row| row.exposure(at));
-                if let Some(operation) = tone.or(exposure) {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The `learn` pill, and a press on it is not an
-                // operation.**
-                //
-                // It is the same kind of control as the four `mcp` pills and
-                // for a stronger version of their reason —
-                // [ADR-0236](../../../docs/adr/0236-a-map-is-the-layer-between-a-surface-and-the-vocabulary-and-the-audit-is-one-of-the-things-it-does.md),
-                // and
-                // [ADR-0336](../../../docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md),
-                // which carries the argument. **A learn edits the map**: the
-                // layer every surface reaches the vocabulary through, rather
-                // than a member of the vocabulary the map addresses. Three
-                // things make it not an operation, and the last one is
-                // mechanical:
-                //
-                // - **Its operand is the pointer.** Which control a knob binds
-                //   to is *what the pointer is on*, and a model has no window
-                //   (ADR-0315) while a map line has no pointer — so an
-                //   operation for it would be `gap` in three of the page's
-                //   four columns, which is a gesture rather than an operation.
-                // - **A permission an actor can grant itself is not a
-                //   permission**, which is the `mcp` pills' own sentence: a
-                //   learn reachable over MCP would let a model rewire the
-                //   operator's hands.
-                // - **It must not reach the session stream.** A session
-                //   recorded from a controller replays with neither controller
-                //   nor map attached
-                //   (`docs/principles/0092-the-same-inputs-produce-the-same-frame.md`),
-                //   because which knob is which is a property of the room's
-                //   hardware. An operation writes a record; a record of a
-                //   learn would put the room's wiring in the timeline and a
-                //   replay would re-learn against whatever map was there.
-                //
-                // So: no `Operation`, no `Record`, and `Acted::Opened` — the
-                // type that will not let this be quietly fixed into the
-                // vocabulary.
-                if let Some(pill) = view::learn_pill(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.transport,
-                    self.view.audio.as_ref(),
-                    self.view.tracker,
-                    self.view.map.as_ref(),
-                    self.view.learn,
-                ) {
-                    if pill.hit(at) {
-                        self.view.learn = pill.next();
-                        println!(
-                            "{}",
-                            match self.view.learn {
-                                true =>
-                                    "learn: armed. point at a control and move a knob or hit a                                      pad, and the two are bound — the line goes in your own map                                      file. nothing is played from the surface while this is                                      lit, and it stays lit until you press it again.",
-                                false => "learn: off. the surface plays again.",
-                            }
-                        );
-                        return (claim, Acted::Opened);
-                    }
-                }
-                // **The `map` pill is a readout, and the press is swallowed
-                // here rather than left to fall through.** `input::claim`
-                // already keeps it off `egui`, so this changes nothing an
-                // operator can see — what it buys is that *this control asks
-                // for nothing* is a line of code rather than an absence, and
-                // that `ASKED` can name a derivation for it instead of
-                // carrying an entry that passes vacuously.
-                //
-                // It asks for nothing because reaching a different map while
-                // running is not built, and a capsule that opened a menu with
-                // nothing in it would be the scaffolding `view::transport`
-                // refuses.
-                if view::map_pill(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.transport,
-                    self.view.audio.as_ref(),
-                    self.view.tracker,
-                    self.view.map.as_ref(),
-                )
-                .is_some_and(|row| row.pill.contains(egui::Pos2::new(at.x, at.y)))
-                {
-                    return (claim, Acted::Nothing);
-                }
-                //
-                // **The `rec` pill at the end of that row**, and the row is
-                // the whole derivation: the pill takes the row's right padding
-                // and the health capsule and the frame readout are laid out
-                // backwards from it, so where it is is `transport`'s answer
-                // rather than a second one. Nothing else in the row overlaps
-                // it — the look group ends one `.transport` gap before the
-                // frame readout, which ends one before the capsule before
-                // this.
-                //
-                // **What the press asks for is the pill's own state**, which
-                // is why nothing here decides which end of the toggle it is:
-                // `TransportRow::record` reads the value the pill was drawn
-                // from, so the capsule an operator is looking at and the
-                // operation the press names cannot come apart.
-                let row = transport_row(ctx, self.panel.layout(), self.view.transport);
-                let recording = row.as_ref().and_then(|row| row.record(at));
-                if let Some(operation) = recording {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The tempo figure at the head of the same row**, asked
-                // through the one derivation for the reason the pill is: the
-                // figure is the row's first item and the control is the
-                // reading itself. A press names a tempo outright — where along
-                // the number it landed is the value — and a press on the guard
-                // either side of the band asks for nothing and falls through
-                // (ADR-0291).
-                let tempo = row.as_ref().and_then(|row| row.tempo(at));
-                if let Some(operation) = tempo {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The deck head's six, one pane at a time.** Each pane is
-                // derived once and asked for all six, exactly as the mixer
-                // bay is asked for its four: the anchor's place is measured
-                // from the mode chip's and the arrows' from the anchor's, and
-                // the three at the right are measured leftwards from the fold,
-                // so they are six questions about one laid-out pane. Nothing
-                // else on the panel overlaps a pane — the Inspector's card is
-                // its own bay — so the order against the mixer below is
-                // arbitrary.
-                //
-                // **The six are asked in the order they sit in the row**,
-                // and no two of them can answer for one point:
-                // `DeckHead::owns` is the union of exactly these six, and
-                // `tests/deck_head.rs` asserts a press is one of them or none.
-                //
-                // **The last three are not mix controls**: each one asks for a
-                // different field of what this slot's watcher is pointed at —
-                // the layering, the capacity its geometries run at, and the
-                // salt its randomness comes from — and `composited`, `resized`
-                // and `re_salted` below are what turn those into a re-aim.
-                // They are asked here with the other three because it is the
-                // same laid-out row and the same derivation, not because they
-                // go to the same place (ADR-0314, ADR-0328).
-                let deck_head = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        let head = deck_head_row(ctx, &at_pane, pane)?;
-                        head.sync(at)
-                            .or_else(|| head.reanchor(at))
-                            .or_else(|| head.scrub(at))
-                            .or_else(|| head.resized(at))
-                            .or_else(|| head.re_salted(at))
-                            .or_else(|| head.compositing(at))
-                    });
-                if let Some(operation) = deck_head {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The Inspector pane heads' name, one pane at a time**, and
-                // it is the capsule's arrangement at the other end of the same
-                // row: a press puts that head into a naming state and the
-                // letters go into it until return or escape (ADR-0292).
-                // **Nothing is emitted here** — the operation is the commit's,
-                // and the commit is a key.
-                let naming = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        let named = deck_name(ctx, &at_pane, pane, self.view.naming_set_in(index))?;
-                        named.hit(at).then_some(index)
-                    });
-                if let Some(index) = naming {
-                    println!(
-                        "inspector: type a name and press return — letters, digits, `-` and \
-                         `_`, and escape keeps nothing"
-                    );
-                    self.view.name_set(index);
-                    return (claim, Acted::Nothing);
-                }
-                // **The Inspector pane heads' `keep`, one pane at a time.**
-                // It keeps the deck the pane is *showing* rather than the deck
-                // the selection is on, which is what `k` keeps: a bare key
-                // press cannot say which deck and a capsule drawn inside a
-                // pane can (ADR-0287). The capsule is derived from the
-                // laid-out pane, exactly as the deck head above it is, and the
-                // write itself is at the call site because a disk write is not
-                // a thing to do on a frame.
-                let keep = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        let pill = keep_pill(ctx, &at_pane, pane)?;
-                        pill.keep(at)
-                    });
-                if let Some(operation) = keep {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The renderer chips, one pane at a time**, and the pane is
-                // the whole derivation: which group and which chip are inside
-                // `InspectorPane::select_renderer`, which is the `params` chip's
-                // arrangement in the Library bay. A press on an overdrawn
-                // deck's chips, or on the one chip of a Set with one renderer,
-                // answers `None` — drawn and not claimed.
-                let chosen = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        at_pane.select_renderer(ctx, pane, at)
-                    });
-                if let Some(operation) = chosen {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The `man / sug / auto` chips on a node head**, and the
-                // pane is the whole derivation for the renderer chips' reason:
-                // which group and which chip are inside
-                // `InspectorPane::set_authority`. A head standing over more
-                // than one node draws no chip and answers `None` — drawn and
-                // not claimed, which is the renderer row's arrangement one row
-                // down.
-                let spoken = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        at_pane.set_authority(ctx, pane, at)
-                    });
-                if let Some(operation) = spoken {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The `keep` capsule at the right of the same head**, and
-                // the pane is the whole derivation for the authority chips'
-                // reason: which group and where the capsule is are inside
-                // `InspectorPane::keep_procedure`. **Two heads carry none and
-                // answer `None`** — a head standing over several nodes, and
-                // the built-in camera, which is a node with no procedure
-                // behind it — so both are drawn without a capsule rather than
-                // drawn with one that refuses (ADR-0338, decision 4).
-                let kept = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        at_pane.keep_procedure(ctx, pane, at)
-                    });
-                if let Some(operation) = kept {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The sensitivity row's chips under a bound parameter**, and
-                // two of its four are controls: the curve chip re-attaches the
-                // same signal through the next shape, and `take back` removes
-                // the attachment. The source and the range answer `None` —
-                // drawn and claimed by nothing, for the reason
-                // `view::SensChip` carries.
-                let sensed = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        at_pane.sensitivity(ctx, pane, at)
-                    });
-                if let Some(operation) = sensed {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **A parameter row's publish mark, one pane at a time**, and
-                // it is the leftmost cell of the row the fader is on: the
-                // number where the control is on the deck's interface and a dot
-                // where it is not. It is asked *before* the fader below because
-                // the two are on one row and never overlap — the mark is a
-                // fixed track of the mock's grid and the fader begins two
-                // tracks along — so the order is arbitrary in fact and this one
-                // reads down the row.
-                //
-                // **What it asks for is the whole interface**, not this entry:
-                // a knob is learned against a position, so an operation that
-                // said *drop this one* would leave two surfaces disagreeing
-                // about what the positions are (`view::InspectorPane::publishing`,
-                // `docs/adr/0329-…`).
-                let published = self
-                    .view
-                    .inspector
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, pane)| {
-                        let at_pane = inspector_pane(
-                            self.panel.layout(),
-                            index,
-                            pane,
-                            self.view.scroll_in(index),
-                        )?;
-                        at_pane.publishing(pane, at)
-                    });
-                if let Some(operation) = published {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The Program bay head's `solo`**, and it is the one
-                // control on this panel that acts on the console's own shape
-                // from inside a bay rather than from the Outputs row. What it
-                // asks for is `ProgramHead::op` — the same two operations
-                // `s` and `u` perform, chosen from the layout rather than
-                // toggled — and this file performs it exactly as it performs
-                // the dot's.
-                if let Some(head) = program_head(ctx, self.panel.layout(), self.view.opening)
-                    .filter(|head| head.hit(at))
-                {
-                    return (claim, Acted::Operated(self.soloed(head.op())));
-                }
-                // **The grip in a bay head**, and it is the `solo` capsule's
-                // neighbour in the same head: one derivation per bay, asked
-                // whether the point is on the mark, and `FoldGrip::op` for what
-                // a press folds. A fold is the console's own shape and writes
-                // no record, so this leaves by the door the Outputs dot's fold
-                // leaves by rather than through `written`.
-                //
-                // **Asked before the Library bay's rows**, so a capsule in a
-                // head is asked before the list under it — and a pane needs no
-                // arm at all, because it folds by its own boundary and rule 3
-                // claims that before any control is asked (ADR-0300).
-                if let Some(grip) = REGIONS.iter().find_map(|region| {
-                    bay_grip(self.panel.layout(), region.name).filter(|grip| grip.hit(at))
-                }) {
-                    return (claim, Acted::Operated(self.folded(grip.op())));
-                }
-                // **The four class pills**, and this is the one press in this
-                // file that leaves by neither of the other two doors. See
-                // `Readout::opened`, which is where the reason is.
-                if let Some(pill) = Class::ALL.iter().find_map(|class| {
-                    mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)
-                        .filter(|pill| pill.hit(at))
-                }) {
-                    return (claim, self.opened(&pill));
-                }
-                // **The Library bay's scope chips**, which are the first
-                // controls on this panel whose number is a value rather than a
-                // constant: one per scope the bay was handed. The bay is
-                // derived once and walked once, exactly as `claim` walks it —
-                // a chip is as wide as the word in it, so where the fourth one
-                // is depends on the first three and a second walk would put
-                // the capsule a press lands on somewhere the wash is not.
-                //
-                // **A press names the chip; it does not step.** `space` on
-                // the addressed chip steps, and
-                // wraps because a bare press cannot say *which*, and this one
-                // can — P-0090's division met by two surfaces rather than an
-                // inconsistency between them. What comes back is `Chosen`: the
-                // chip, and `Operation::SelectScope` beside it, because that
-                // operation's payload is `Undecided` and cannot carry a chip.
-                if let Some(chosen) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
-                {
-                    return (claim, self.chose(chosen));
-                }
-                // **The Library bay's two filter fields**, one row under the
-                // chips and derived from the same call for the same reason:
-                // where the second field is depends on how wide the row is, and
-                // a second derivation would put the box a press lands on
-                // somewhere the border is not.
-                //
-                // **A press steps the field; it does not name a value.** A chip
-                // is one of a row and a pointer lands on exactly one, so it
-                // names; a field is one box standing for a list, so a press on
-                // it moves along that list and the operation names where it
-                // arrived — `LibraryBay::filter`, and `TransitionRow::shape`'s
-                // affordance three bays along. What comes back is a whole
-                // `Operation::ListSets`: unlike `SelectScope` this payload can
-                // carry everything the press decided, so there is no `Chosen`
-                // here and nothing beside the operation.
-                if let Some(operation) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
-                {
-                    return (claim, self.narrowed(operation));
-                }
-                // **The six kind chips, one row under the field**, derived from
-                // the same call for the row above's reason and asked after it
-                // because the row they are in is drawn only where that one is.
-                //
-                // **A press names all six.** A chip flips its own field and
-                // what leaves carries the whole row — `Operation::FilterLibrary
-                // { kinds }` — because six statements each saying *this one
-                // changed* are six things a second surface can arrive in the
-                // middle of, and one saying *these are the kinds showing* is a
-                // destination (ADR-0338). So it lands in `Readout::narrowed`
-                // beside the field's own press: a scope, a filter and a kind
-                // are one question asked of different halves.
-                if let Some(operation) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| bay.kind(ctx, self.view.filters(), at))
-                {
-                    return (claim, self.narrowed(operation));
-                }
-                // **The `params` chip in the Library bay's foot**, and the bay
-                // is derived a third time for the reason `claim` derives it a
-                // third time: each of these is a question about one laid-out
-                // bay and a value held across all three would outlive the
-                // question it answers.
-                //
-                // **The Set under the cursor goes in with the point**, because
-                // the operand of a reading is the cursor — the same operand
-                // the `load` button beside it reads, which is what
-                // `console.html`'s note means by *"the route costs one chip in
-                // the foot and nothing else"*.
-                if let Some(ask) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| {
-                    bay.read(
-                        ctx,
-                        self.view.target(),
-                        // **The Sets, for the load button's reason one
-                        // control along**: `Operation::ReadSet` names a Set
-                        // this store holds, and a `history` row is a version.
-                        self.view
-                            .sets()
-                            .get(self.view.cursor_row())
-                            .map(String::as_str),
-                        at,
-                    )
-                }) {
-                    return (claim, self.asked_to_read(ask));
-                }
-                // **The star at the left of a row**, asked before the row it
-                // is in: a star is inside a row, so the order here is what
-                // makes a press on the mark reach the mark — `input::claim`'s
-                // rule 4, *a control claims what it acts on and no more*.
-                //
-                // **The bay is derived a fourth time**, for the reason it is
-                // derived a third: each of these is a question about one
-                // laid-out bay, and a value held across all of them would
-                // outlive the question it answers.
-                //
-                // **The listing and the marks go in with the point**, exactly
-                // as the listing does for the `params` chip: a star names a Set
-                // this program read out of the store, and which rows are
-                // already starred is this side's answer too (ADR-0156). The
-                // write itself is not here — it is a disk write, which is the
-                // window's, on the branch every other press that reaches a
-                // disk takes.
-                if let Some(operation) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                // **The Sets, for the `params` chip's reason one control up**: a star is
-                // a control over a Set this store holds, and a `history` row is
-                // not one.
-                .and_then(|bay| bay.starred(self.view.rows(), &self.view.starred, at))
-                {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **A row of the Library bay's list, and this is the one press
-                // on this panel that asks for nothing at all.** What it does
-                // is take a Set in hand: `console.html`'s *How a Set reaches a
-                // deck* has the panel's route to that row as a drag —
-                // *"Dragging a row onto a strip … names both operands in the
-                // one gesture"* — and a press names one of the two. The
-                // operation is built where the second one is, which is the
-                // release, over whatever strip the pointer is then on.
-                //
-                // **The bay is derived a fifth time**, for the reason it is
-                // derived a third: each of these is a question about one
-                // laid-out bay, and a value held across all of them would
-                // outlive the question it answers.
-                //
-                // **The listing goes in with the point**, exactly as it does
-                // for the `params` chip above: what a row means is a name this
-                // program read out of the store and handed over, and the
-                // console reads no store (ADR-0156).
-                if let Some(taken) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| bay.take(self.view.rows(), at))
-                {
-                    return (claim, self.took(at, taken));
-                }
-                // **The same rows, meaning the other thing.** Under
-                // `history` a row is a version rather than a Set, so a press
-                // on it is a landing — `Operation::RestoreProcedure` on the
-                // deck the load pulldown names — where the carry above takes
-                // nothing in hand because `View::sets` handed it nothing.
-                // The two are told apart by which listing goes in with the
-                // point and not by an arm that asks the scope, so exactly one
-                // of them can answer and `input::claim`'s one row for this
-                // rectangle stays one row.
-                if let Some(operation) = library_bay(
-                    self.panel.layout(),
-                    &self.view.scopes,
-                    &self.view.library,
-                    self.view.opened(),
-                    self.view.pointed(),
-                    self.view.library_scroll(),
-                )
-                .and_then(|bay| bay.land(self.view.versions(), self.view.target(), at))
-                {
-                    return (claim, self.landed(operation));
-                }
-                // **The Staging lane's `back` capsule, asked before the row
-                // it sits in.** The capsule is inside the row, so this order
-                // is what makes a press on the capsule reach the capsule —
-                // `input::claim`'s rule 4, and the Library bay's star and its
-                // row two arms up, in the same order and for the same reason.
-                //
-                // **The candidates go in with the point**, exactly as the
-                // Library's listing does: what a row is — which node, which
-                // deck, which verdict — is a value this file derived off the
-                // deck and handed the console, and the console holds no store
-                // and no engine (ADR-0156).
-                //
-                // **It emits and performs nothing here**: what a landing does
-                // is write a file the store owns, and [`restored`] is where
-                // that is done, on the branch every emitted operation already
-                // takes.
-                if let Some(operation) = staging_bay(self.panel.layout(), &self.view.staging)
-                    .and_then(|bay| bay.back(ctx, &self.view.staging, at))
-                {
-                    return (claim, self.landed(operation));
-                }
-                // **And the row itself, which is the keep.** A press anywhere
-                // on a candidate row that the capsule did not take settles
-                // that node: the row leaves the lane, the picture does not
-                // move and no record is written. The bay is derived a second
-                // time rather than held across the two questions, which is the
-                // Library bay's rule one bay up.
-                if let Some(operation) = staging_bay(self.panel.layout(), &self.view.staging)
-                    .and_then(|bay| bay.keep(ctx, &self.view.staging, at))
-                {
-                    return (claim, self.kept(operation));
-                }
-                // **The transition row's four capsules, derived once for all
-                // of them**, exactly as `claim` does it: the three settings
-                // are laid end to end from the block's left padding and `go`
-                // is measured back from the right one, so where each of them
-                // is depends on the words beside it and a second walk would
-                // put the capsule a press lands on somewhere the word is not.
-                //
-                // **It cannot overlap the bay below**: `.xfade` is under
-                // `.mixer-strips` and outside every strip's rectangle, so the
-                // order against the mixer is arbitrary. This is asked first
-                // because it is the one control on this panel whose press can
-                // be *refused*, and a refusal is a line rather than a value
-                // the arms below could carry.
-                let row = transition_row(ctx, self.panel.layout(), self.view.transition());
-                if let Some(row) = row.as_ref() {
-                    if let Some(operation) = row
-                        .shape(at)
-                        .or_else(|| row.quantum(at))
-                        .or_else(|| row.length(at))
-                    {
-                        return (claim, Acted::Emitted(Some(operation)));
-                    }
-                    // **The `go` capsule**, which is the only control here
-                    // that answers something other than an operation or
-                    // nothing: a one-strip mixer and a shape reading `no
-                    // shape` are turned away by the control itself, because
-                    // the shape is the console's own setting and no conversion
-                    // can see it is unset. `karakuri-cli`'s `c` refuses the
-                    // same two before it asks, and this is that pair as a
-                    // value with the sentence on this side of the seam.
-                    match row.go(at, self.view.selection(), self.view.mixer.len()) {
-                        Some(Go::Wipe(operation)) => {
-                            return (claim, Acted::Emitted(Some(operation)))
-                        }
-                        Some(refused) => {
-                            println!("{}", refusal(&refused, self.view.mixer.len()));
-                            return (claim, Acted::Nothing);
-                        }
-                        None => {}
-                    }
-                }
-                // **The Sequencer bay's three, asked before the knobs
-                // below**, and the order is arbitrary rather than a
-                // precedence: this bay is in the right pane under the master
-                // and no rectangle of it overlaps a strip, a knob or a chip.
-                // It is asked as one derivation for all three — a cell, a
-                // label and the mode pill are three questions about one
-                // laid-out bay, which is `input::claim`'s own row for them.
-                //
-                // **The press names the bank it landed on**, which is inside
-                // the operation: `Sequencer::press` carries `Sequencer::bank`
-                // so that a press cannot mean *whichever pattern is armed by
-                // the time this is performed*.
-                let choices = self.view.lane_choices();
-                let seq = sequencer_bay(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.sequencer.as_ref(),
-                    &choices,
-                );
-                // **With the chooser's card down, every press is the card's
-                // and this arm is asked first** — `input::claim`'s rule 2, and
-                // it has to be *here* rather than after the four controls
-                // below: the card hangs over this bay's own rows, so a press
-                // on a cell under it is part of the gesture the hand is in the
-                // middle of and not a step being set. That is the deck
-                // pulldown's `if self.view.target_open()` one bay along, and
-                // for its reason.
-                //
-                // **A pick emits and the two card moves do not**, which is that
-                // control's other half: putting a card down is the console's
-                // own state and no operation names it (P-0090).
-                if self.view.lane_open() {
-                    did = self.chosen(
-                        seq.as_ref()
-                            .and_then(|bay| bay.chose(at, &choices))
-                            .unwrap_or(Chose::Shut),
-                    );
-                    return (claim, did);
-                }
-                if let Some(operation) = seq.as_ref().and_then(|bay| bay.press(at)) {
-                    return (claim, Acted::Emitted(Some(operation)));
-                }
-                // **The foot's `+ lane` with its card up**, asked after the
-                // four above it because the pill is outside every one of their
-                // rectangles, so the order is arbitrary rather than a
-                // precedence — written down so this file and `input::claim`
-                // ask in one order.
-                if let Some(chose) = seq.as_ref().and_then(|bay| bay.chose(at, &choices)) {
-                    did = self.chosen(chose);
-                    return (claim, did);
-                }
-                // **The whole row now, not the first chip.** `chip_at` asks
-                // every chip the row draws and answers with the output it
-                // names — which is the same question `input::claim` asks, off
-                // the same derivation, so a chip that lights under the pointer
-                // is a chip a press reaches.
-                let sink = outputs(ctx, self.panel.layout(), self.view.opening)
-                    .map(|row| row.told(self.view.projector))
-                    .and_then(|row| row.chip_at(at).map(|output| (row, output)));
-                let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
-                // **The Master bay's out is a `Grab` like a strip's**, so it
-                // joins the knob rather than taking an arm of its own: what
-                // this file does with either is take it in hand, and which
-                // fader it was is inside the `Knob`. The two bays cannot
-                // overlap, so the order is arbitrary — the mixer is asked
-                // first because it has five questions to this one's one.
-                // **Laid out once and asked twice**, where the mixer is: this
-                // bay has a knob question and a chip question now, and two
-                // derivations of it would be a chip painted where a hand
-                // cannot press it.
-                let adding = self.view.chain_choices();
-                let master = master_row(
-                    ctx,
-                    self.panel.layout(),
-                    self.view.master_out,
-                    self.view.master_chain.as_ref(),
-                    &adding,
-                );
-                let knob = bay
-                    .as_ref()
-                    .and_then(|bay| bay.grab(at))
-                    .or_else(|| master.as_ref().and_then(|row| row.grab(at)))
-                    // **A parameter fader is a `Grab` like a strip's**, so it
-                    // joins the knob rather than taking an arm of its own —
-                    // the Master bay's arrangement one bay along, and which
-                    // fader it was is inside the `Knob`. No two of the three
-                    // bays overlap, so the order between them is arbitrary.
-                    .or_else(|| {
-                        self.view
-                            .inspector
-                            .iter()
-                            .enumerate()
-                            .find_map(|(index, pane)| {
-                                let at_pane = inspector_pane(
-                                    self.panel.layout(),
-                                    index,
-                                    pane,
-                                    self.view.scroll_in(index),
-                                )?;
-                                at_pane.grab(pane, at)
-                            })
-                    });
-                // **The blend chip and the feedback row's cut chip are one
-                // question here**, because what this file does with either is
-                // the same three steps and which it was is in the operation.
-                let chip = bay
-                    .as_ref()
-                    .and_then(|bay| bay.blend(at))
-                    .or_else(|| master.as_ref().and_then(|row| row.chip(at)));
-                let tally = bay.as_ref().and_then(|bay| bay.tally(at));
-                let mask = bay.as_ref().and_then(|bay| bay.mask(at));
-                // `+ add` and its card are asked before anything else, which
-                // is `input::claim`'s rule 2 read from this side: while a card
-                // is down every press on the console belongs to it, and a
-                // press outside it dismisses it.
-                let chose = master.as_ref().and_then(|row| row.chose(at, &adding));
-                if let Some(chose) = chose {
-                    return (claim, self.chain_chose(chose));
-                }
-                match (sink, knob, chip, tally, mask) {
-                    // **One press, two performers, and which is which is
-                    // the output.** The picture's on and off is a layout node,
-                    // so the console performs that one and reports an
-                    // `Outcome`; a projector is a window this file owns, so
-                    // that one leaves as the operation it is and is performed
-                    // where the event loop is (`routed`). Both *ask* for
-                    // `Operation::RouteFrame` and the row is what constructs
-                    // it — see `view::Outputs::route`.
-                    (Some((row, Output::Program)), ..) => {
-                        did = Acted::Operated(self.sink(row.route(), row.op()))
-                    }
-                    (Some((row, output)), ..) => {
-                        did = Acted::Emitted(
-                            row.more
-                                .iter()
-                                .find(|chip| chip.output == output)
-                                .and_then(view::SinkChip::route),
-                        )
-                    }
-                    // **The value does not move on the press.** The grab keeps
-                    // the offset it took hold at, so the first move continues
-                    // from where the knob already was — and a press that was
-                    // on the *track* never gets here, because `Mixer::grab`
-                    // answers `None` for it rather than jumping the mix.
-                    (None, Some(grab), ..) => {
-                        println!(
-                            "press ({:.0}, {:.0}): {} — the {} is in hand",
-                            at.x,
-                            at.y,
-                            knob_where(&grab.knob()),
-                            knob_word(&grab.knob())
-                        );
-                        self.panel.grab(at, grab);
-                    }
-                    // **A chip acts on the press itself**, where a fader acts
-                    // on the moves after it: there is no gesture here, only
-                    // one operation naming where the cycle arrived. Both go
-                    // down the same path a fader's does — `Acted::Emitted`,
-                    // then a record, then the deck — because P-0090 is that
-                    // every control ends in the same record, and a chip that
-                    // reached the deck another way would be a second route for
-                    // the same change.
-                    //
-                    // **One arm for the four chips**, because what this file
-                    // does with any of them is the same three steps; which chip
-                    // it was is in the operation, and the line `apply` prints
-                    // says so. The fourth is the Master bay's cut chip, which
-                    // is a cycle over a closed list of two exactly as the
-                    // blend's is over three.
-                    (None, None, Some(operation), ..)
-                    | (None, None, None, Some(operation), _)
-                    | (None, None, None, None, Some(operation)) => {
-                        did = Acted::Emitted(Some(operation))
-                    }
-                    // **The strip itself, asked last.** A strip's rectangle
-                    // contains all four of the questions above, so this is
-                    // what is left over — a press on the name, on the number,
-                    // on the ground between the rows — and it means *address
-                    // the keys to this deck*. It is the only control in this
-                    // bay that is not drawn as one, which is
-                    // `console.html`'s *"a press anywhere on a strip that no
-                    // knob under the pointer claimed"*: the whole column is
-                    // the affordance, and a sixth capsule would be a control
-                    // over a pointer.
-                    (None, None, None, None, None) => {
-                        match bay.as_ref().and_then(|bay| bay.select(at)) {
-                            Some(operation) => did = Acted::Emitted(Some(operation)),
-                            None => self.press(at),
-                        }
-                    }
-                }
+                // Decomposed pointer press dispatch across modal overlays and individual bays.
+                // Each bay handler returns `Some(Acted)` if it claims the press, or `None` to pass through.
+                let did = self
+                    .dispatch_modal_press(ctx, at)
+                    .or_else(|| self.dispatch_transport_press(ctx, at))
+                    .or_else(|| self.dispatch_inspector_press(ctx, at))
+                    .or_else(|| self.dispatch_head_press(ctx, at))
+                    .or_else(|| self.dispatch_library_press(ctx, at))
+                    .or_else(|| self.dispatch_staging_press(ctx, at))
+                    .or_else(|| self.dispatch_transition_press(ctx, at))
+                    .or_else(|| self.dispatch_sequencer_press(ctx, at))
+                    .unwrap_or_else(|| self.dispatch_mixer_and_master_press(ctx, at));
+                return (claim, did);
             }
             // **Where a drop names its deck**, and there are two sets of
             // rectangles it can name it by. A carry is the one gesture here
@@ -1348,6 +222,671 @@ impl Readout {
             (Pointer::Down | Pointer::Up | Pointer::Secondary, _) => {}
         }
         (claim, did)
+    }
+
+    // =========================================================================
+    // Decomposed per-bay press dispatch helpers (P45)
+    // =========================================================================
+
+    /// Dispatches pointer presses to open modal cards and pulldown overlay menus.
+    ///
+    /// Per Rule 2 (ADR-0311), while a modal overlay is open, every press on the console
+    /// belongs to it, and a press outside its bounds dismisses the overlay.
+    fn dispatch_modal_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        // Library bay context menu
+        if self.view.menu_open() {
+            let picked = library_bay(
+                self.panel.layout(),
+                &self.view.scopes,
+                &self.view.library,
+                self.view.opened(),
+                self.view.pointed(),
+                self.view.library_scroll(),
+            )
+            .and_then(|bay| {
+                bay.menu_ask(
+                    ctx,
+                    view::to_egui(self.panel.layout().viewport()),
+                    self.view.menued(),
+                    self.view.rows(),
+                    at,
+                )
+            });
+            return Some(self.menued(picked.unwrap_or(Picked::Shut)));
+        }
+
+        // Audio-in device selection pill and card
+        let listing = audio_in_pill(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+        );
+        let heard = listing
+            .as_ref()
+            .zip(self.view.audio.as_ref())
+            .and_then(|(pill, audio)| pill.ask(audio, at));
+        if self.view.audio.as_ref().is_some_and(AudioIn::open) {
+            return Some(self.listened(heard.unwrap_or(AudioAsk::Shut)));
+        }
+        if let Some(ask) = heard {
+            return Some(self.listened(ask));
+        }
+
+        // Arrangement preset pill and card
+        let pill = arrangement_pill(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+            self.view.tracker,
+            self.view.map.as_ref(),
+            &self.view.arrangement,
+        );
+        let asked = pill
+            .as_ref()
+            .and_then(|pill| pill.ask(&self.view.arrangement, at));
+        if self.view.arrangement.open() {
+            return Some(self.arranged(asked.unwrap_or(Ask::Shut)));
+        }
+        if let Some(ask) = asked {
+            return Some(self.arranged(ask));
+        }
+
+        // Inspector wiring / uses card
+        let room = view::to_egui(self.panel.layout().viewport());
+        let picked = self.view.wiring_open().and_then(|(pane_at, node, input)| {
+            let pane = self.view.inspector.get(pane_at)?;
+            let laid = inspector_pane(
+                self.panel.layout(),
+                pane_at,
+                pane,
+                self.view.scroll_in(pane_at),
+            )?;
+            laid.wired(ctx, pane, room, (node, input), at)
+                .map(Wiring::Pick)
+        });
+        let wiring = picked.or_else(|| {
+            self.view
+                .inspector
+                .iter()
+                .enumerate()
+                .find_map(|(index, pane)| {
+                    let laid = inspector_pane(
+                        self.panel.layout(),
+                        index,
+                        pane,
+                        self.view.scroll_in(index),
+                    )?;
+                    let (node, input) = laid.uses_chip(ctx, pane, at)?;
+                    Some(Wiring::Chip {
+                        pane: index,
+                        node,
+                        input,
+                    })
+                })
+        });
+        if self.view.wiring_open().is_some() {
+            return Some(self.wired(wiring.unwrap_or(Wiring::Shut)));
+        }
+        if let Some(ask) = wiring {
+            return Some(self.wired(ask));
+        }
+
+        // Pane head deck selection pulldown
+        let picked = self.view.pane_target_open().and_then(|pane_at| {
+            let pane = self.view.inspector.get(pane_at)?;
+            let laid = inspector_pane(
+                self.panel.layout(),
+                pane_at,
+                pane,
+                self.view.scroll_in(pane_at),
+            )?;
+            self.view
+                .pane_pulldown(ctx, &laid, pane, pane_at)?
+                .picked(room, at)
+                .map(view::Pointing::Pick)
+        });
+        let pointing = picked.or_else(|| {
+            self.view
+                .inspector
+                .iter()
+                .enumerate()
+                .find_map(|(index, pane)| {
+                    let laid = inspector_pane(
+                        self.panel.layout(),
+                        index,
+                        pane,
+                        self.view.scroll_in(index),
+                    )?;
+                    let target = self.view.pane_pulldown(ctx, &laid, pane, index)?;
+                    target.hit(at).then_some(view::Pointing::Mark(index))
+                })
+        });
+        if self.view.pane_target_open().is_some() {
+            return Some(self.pointing(pointing.unwrap_or(view::Pointing::Shut)));
+        }
+        if let Some(ask) = pointing {
+            return Some(self.pointing(ask));
+        }
+
+        // Library bay target deck pulldown / load control
+        let aimed = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| {
+            bay.aim(
+                ctx,
+                view::to_egui(self.panel.layout().viewport()),
+                self.view.target(),
+                self.view.rows(),
+                self.view.cursor_row(),
+                at,
+            )
+        });
+        if self.view.target_open() {
+            return Some(self.aimed(aimed.unwrap_or(Aim::Shut)));
+        }
+        if let Some(ask) = aimed {
+            return Some(self.aimed(ask));
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in the Transport bay.
+    fn dispatch_transport_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        let group = tracker_group(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+            self.view.tracker,
+        );
+        let tracked = group.as_ref().and_then(|group| {
+            group
+                .tapped(at)
+                .or_else(|| group.octave(at))
+                .or_else(|| group.nudge(at))
+        });
+        if let Some(operation) = tracked {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let look = look_row(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+            self.view.tracker,
+            self.view.map.as_ref(),
+            &self.view.arrangement,
+            self.view.look,
+        );
+        let tone = look.as_ref().and_then(|row| row.tonemap(at));
+        let exposure = look.as_ref().and_then(|row| row.exposure(at));
+        if let Some(operation) = tone.or(exposure) {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        if let Some(pill) = view::learn_pill(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+            self.view.tracker,
+            self.view.map.as_ref(),
+            self.view.learn,
+        ) {
+            if pill.hit(at) {
+                self.view.learn = pill.next();
+                println!(
+                    "{}",
+                    match self.view.learn {
+                        true =>
+                            "learn: armed. point at a control and move a knob or hit a pad, and the two are bound — the line goes in your own map file. nothing is played from the surface while this is lit, and it stays lit until you press it again.",
+                        false => "learn: off. the surface plays again.",
+                    }
+                );
+                return Some(Acted::Opened);
+            }
+        }
+
+        if view::map_pill(
+            ctx,
+            self.panel.layout(),
+            self.view.transport,
+            self.view.audio.as_ref(),
+            self.view.tracker,
+            self.view.map.as_ref(),
+        )
+        .is_some_and(|row| row.pill.contains(egui::Pos2::new(at.x, at.y)))
+        {
+            return Some(Acted::Nothing);
+        }
+
+        let row = transport_row(ctx, self.panel.layout(), self.view.transport);
+        let recording = row.as_ref().and_then(|row| row.record(at));
+        if let Some(operation) = recording {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let tempo = row.as_ref().and_then(|row| row.tempo(at));
+        if let Some(operation) = tempo {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in Inspector bay panes.
+    fn dispatch_inspector_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        let deck_head = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                let head = deck_head_row(ctx, &at_pane, pane)?;
+                head.sync(at)
+                    .or_else(|| head.reanchor(at))
+                    .or_else(|| head.scrub(at))
+                    .or_else(|| head.resized(at))
+                    .or_else(|| head.re_salted(at))
+                    .or_else(|| head.compositing(at))
+            });
+        if let Some(operation) = deck_head {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let naming = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                let named = deck_name(ctx, &at_pane, pane, self.view.naming_set_in(index))?;
+                named.hit(at).then_some(index)
+            });
+        if let Some(index) = naming {
+            println!(
+                "inspector: type a name and press return — letters, digits, `-` and `_`, and escape keeps nothing"
+            );
+            self.view.name_set(index);
+            return Some(Acted::Nothing);
+        }
+
+        let keep = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                let pill = keep_pill(ctx, &at_pane, pane)?;
+                pill.keep(at)
+            });
+        if let Some(operation) = keep {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let chosen = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                at_pane.select_renderer(ctx, pane, at)
+            });
+        if let Some(operation) = chosen {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let spoken = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                at_pane.set_authority(ctx, pane, at)
+            });
+        if let Some(operation) = spoken {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let kept = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                at_pane.keep_procedure(ctx, pane, at)
+            });
+        if let Some(operation) = kept {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let sensed = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                at_pane.sensitivity(ctx, pane, at)
+            });
+        if let Some(operation) = sensed {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        let published = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                at_pane.publishing(pane, at)
+            });
+        if let Some(operation) = published {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses to bay grips, Program head solo, and MCP class pills.
+    fn dispatch_head_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        if let Some(head) =
+            program_head(ctx, self.panel.layout(), self.view.opening).filter(|head| head.hit(at))
+        {
+            return Some(Acted::Operated(self.soloed(head.op())));
+        }
+
+        if let Some(grip) = REGIONS.iter().find_map(|region| {
+            bay_grip(self.panel.layout(), region.name).filter(|grip| grip.hit(at))
+        }) {
+            return Some(Acted::Operated(self.folded(grip.op())));
+        }
+
+        if let Some(pill) = Class::ALL.iter().find_map(|class| {
+            mcp_pill(ctx, self.panel.layout(), *class, self.view.opening)
+                .filter(|pill| pill.hit(at))
+        }) {
+            return Some(self.opened(&pill));
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in the Library bay.
+    fn dispatch_library_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        if let Some(chosen) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| bay.chip(ctx, &self.view.scopes, at))
+        {
+            return Some(self.chose(chosen));
+        }
+
+        if let Some(operation) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| bay.filter(&self.view.holds, self.view.filters(), at))
+        {
+            return Some(self.narrowed(operation));
+        }
+
+        if let Some(operation) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| bay.kind(ctx, self.view.filters(), at))
+        {
+            return Some(self.narrowed(operation));
+        }
+
+        if let Some(ask) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| {
+            bay.read(
+                ctx,
+                self.view.target(),
+                self.view
+                    .sets()
+                    .get(self.view.cursor_row())
+                    .map(String::as_str),
+                at,
+            )
+        }) {
+            return Some(self.asked_to_read(ask));
+        }
+
+        if let Some(operation) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| bay.starred(self.view.rows(), &self.view.starred, at))
+        {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        if let Some(taken) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| bay.take(self.view.rows(), at))
+        {
+            return Some(self.took(at, taken));
+        }
+
+        if let Some(operation) = library_bay(
+            self.panel.layout(),
+            &self.view.scopes,
+            &self.view.library,
+            self.view.opened(),
+            self.view.pointed(),
+            self.view.library_scroll(),
+        )
+        .and_then(|bay| bay.land(self.view.versions(), self.view.target(), at))
+        {
+            return Some(self.landed(operation));
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in the Staging bay.
+    fn dispatch_staging_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        if let Some(operation) = staging_bay(self.panel.layout(), &self.view.staging)
+            .and_then(|bay| bay.back(ctx, &self.view.staging, at))
+        {
+            return Some(self.landed(operation));
+        }
+
+        if let Some(operation) = staging_bay(self.panel.layout(), &self.view.staging)
+            .and_then(|bay| bay.keep(ctx, &self.view.staging, at))
+        {
+            return Some(self.kept(operation));
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in the Transition controls row.
+    fn dispatch_transition_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        let row = transition_row(ctx, self.panel.layout(), self.view.transition());
+        if let Some(row) = row.as_ref() {
+            if let Some(operation) = row
+                .shape(at)
+                .or_else(|| row.quantum(at))
+                .or_else(|| row.length(at))
+            {
+                return Some(Acted::Emitted(Some(operation)));
+            }
+
+            match row.go(at, self.view.selection(), self.view.mixer.len()) {
+                Some(Go::Wipe(operation)) => return Some(Acted::Emitted(Some(operation))),
+                Some(refused) => {
+                    println!("{}", refusal(&refused, self.view.mixer.len()));
+                    return Some(Acted::Nothing);
+                }
+                None => {}
+            }
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in the Sequencer bay.
+    fn dispatch_sequencer_press(&mut self, ctx: &egui::Context, at: Point) -> Option<Acted> {
+        let choices = self.view.lane_choices();
+        let seq = sequencer_bay(
+            ctx,
+            self.panel.layout(),
+            self.view.sequencer.as_ref(),
+            &choices,
+        );
+
+        if self.view.lane_open() {
+            let did = self.chosen(
+                seq.as_ref()
+                    .and_then(|bay| bay.chose(at, &choices))
+                    .unwrap_or(Chose::Shut),
+            );
+            return Some(did);
+        }
+        if let Some(operation) = seq.as_ref().and_then(|bay| bay.press(at)) {
+            return Some(Acted::Emitted(Some(operation)));
+        }
+
+        if let Some(chose) = seq.as_ref().and_then(|bay| bay.chose(at, &choices)) {
+            let did = self.chosen(chose);
+            return Some(did);
+        }
+
+        None
+    }
+
+    /// Dispatches pointer presses in the Mixer and Master bays and parameter knob grabs.
+    fn dispatch_mixer_and_master_press(&mut self, ctx: &egui::Context, at: Point) -> Acted {
+        let sink = outputs(ctx, self.panel.layout(), self.view.opening)
+            .map(|row| row.told(self.view.projector))
+            .and_then(|row| row.chip_at(at).map(|output| (row, output)));
+        let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
+        let adding = self.view.chain_choices();
+        let master = master_row(
+            ctx,
+            self.panel.layout(),
+            self.view.master_out,
+            self.view.master_chain.as_ref(),
+            &adding,
+        );
+        let knob = bay
+            .as_ref()
+            .and_then(|bay| bay.grab(at))
+            .or_else(|| master.as_ref().and_then(|row| row.grab(at)))
+            .or_else(|| {
+                self.view
+                    .inspector
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, pane)| {
+                        let at_pane = inspector_pane(
+                            self.panel.layout(),
+                            index,
+                            pane,
+                            self.view.scroll_in(index),
+                        )?;
+                        at_pane.grab(pane, at)
+                    })
+            });
+        let chip = bay
+            .as_ref()
+            .and_then(|bay| bay.blend(at))
+            .or_else(|| master.as_ref().and_then(|row| row.chip(at)));
+        let tally = bay.as_ref().and_then(|bay| bay.tally(at));
+        let mask = bay.as_ref().and_then(|bay| bay.mask(at));
+        let chose = master.as_ref().and_then(|row| row.chose(at, &adding));
+        if let Some(chose) = chose {
+            return self.chain_chose(chose);
+        }
+        match (sink, knob, chip, tally, mask) {
+            (Some((row, Output::Program)), ..) => Acted::Operated(self.sink(row.route(), row.op())),
+            (Some((row, output)), ..) => Acted::Emitted(
+                row.more
+                    .iter()
+                    .find(|chip| chip.output == output)
+                    .and_then(view::SinkChip::route),
+            ),
+            (None, Some(grab), ..) => {
+                println!(
+                    "press ({:.0}, {:.0}): {} — the {} is in hand",
+                    at.x,
+                    at.y,
+                    knob_where(&grab.knob()),
+                    knob_word(&grab.knob())
+                );
+                self.panel.grab(at, grab);
+                Acted::Nothing
+            }
+            (None, None, Some(operation), ..)
+            | (None, None, None, Some(operation), _)
+            | (None, None, None, None, Some(operation)) => Acted::Emitted(Some(operation)),
+            (None, None, None, None, None) => match bay.as_ref().and_then(|bay| bay.select(at)) {
+                Some(operation) => Acted::Emitted(Some(operation)),
+                None => {
+                    self.press(at);
+                    Acted::Nothing
+                }
+            },
+        }
     }
 
     /// A press on the audio-in pill or on its card, and what this program does
@@ -1768,6 +1307,15 @@ impl Readout {
         let name = typed.to_owned();
         self.view.arrangement.shut();
         Acted::Emitted(Some(Operation::SaveArrangement { name }))
+    }
+
+    /// Commits whichever inline text input session is active, emitting the save operation.
+    pub(crate) fn commit_active_text_input(&mut self) -> Acted {
+        match self.view.active_text_input() {
+            Some(view::TextInputKind::Arrangement) => self.named(),
+            Some(view::TextInputKind::DeckName(_)) => Acted::Emitted(self.view.named_set()),
+            None => Acted::Nothing,
+        }
     }
 
     /// A press on the Program bay head's `solo`. The pill says what it did — which
