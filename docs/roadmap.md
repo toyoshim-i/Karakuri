@@ -57,7 +57,7 @@ The remaining open work is structured into four sequential milestones focused on
 │ - Chain compiled on a worker, installed at a frame boundary (closed)   │
 │ - Session head names the whole deck; replay builds it (closed)         │
 │ - Lane/hand refusal called; a lane can be removed (closed)             │
-│ - Transport figure, deck total (maintainer's)                          │
+│ - over_budget as the deck's total (maintainer's)                       │
 │ - Chain-build badge, ridden values in the head, clippy baseline (open) │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
@@ -109,11 +109,11 @@ The remaining open work is structured into four sequential milestones focused on
 - **Fade and crossfade keybindings and panel cells**: both rows read `gap` in the panel and key columns by [ADR-0353](adr/0353-a-scheduled-fade-is-not-drawn-on-a-real-time-surface-so-the-two-rows-read-gap-in-both-hand-columns.md). What is open on those rows is MIDI only, and it waits on a map-layer helper that carries time (ADR-0236's third job), unscheduled.
 - **A candidate judged against the deck's period or a share of the budget**: refused by [ADR-0313](adr/0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md) — a verdict is the candidate's own cost against one frame; the period is a deck-level alarm that warns and never acts.
 - **Fullscreen on a chosen display, and a monitor list**: [ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md) — the projector is a window, the operating system's own gesture makes it fullscreen on the display it is on, and a destination that is not a display in the room is a plugin sink's ([plugins.md](plugins.md)), scheduled under M8.
+- **The transport row's frame figure**: stays the CPU's and says `cpu` ([ADR-0359](adr/0359-the-transport-rows-frame-figure-stays-the-cpus-and-says-so.md)); the period would read full on every frame that is fine, and the GPU's time is not measurable per frame on Metal or Vulkan (ADR-0169) — `Cost::drained` is the once-per-500 ms flush in the readout.
 - **A projector frame loop decoupled from the console's**: refused by [ADR-0166](adr/0166-the-engines-frame-and-the-panels-are-one-submission.md) — one encoder, one submission; a second submission over the deck's targets is the race that record is about.
 
 #### Open — the maintainer's
 
-- **Which number the transport row carries.** The row draws `Cost::whole` (the CPU's three stretches) against the refresh interval, so a GPU-bound frame draws as headroom; [ADR-0303](adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md) measured `Cost::period` and left the row to the maintainer. `Report::headroom_ms` and `Report::deck_over_period` reach the CLI's status line and no bay. Options: the period in place of the CPU figure; both side by side; the CPU figure with the tooltip's promise rewritten. Recommendation: the period in place, and the deck's headroom from `Report` beside the chain term, because the row's tooltip already promises *headroom* and the CPU figure cannot say it.
 - **What `over_budget` says as the deck's total.** `committed_ms` sums Live slots only; ADR-0313 supplied `Report::deck_over_period` and took none of this decision; nothing acts on or draws it. Two single-slot readings survive in code and are facts for the decision: `Deck::frame_period_ms` reads slot 0's watchdog alone (`deck.rs:801`), and the GUI calibrates the compute budget from slots 0 and 1 only (`bridge/engine.rs:1239`).
 
 #### Open — owed by today's work, unscheduled
@@ -125,7 +125,7 @@ The remaining open work is structured into four sequential milestones focused on
 - A channel fader does not say who is holding it (rule 02); lanes cannot be reordered; `Hover::owed` is asked before `paint` on the frame a card comes down.
 - `cargo clippy --workspace --all-targets -- -D warnings` is red at HEAD on `doc_lazy_continuation` in files untouched today (karakuri-ir, karakuri-store, karakuri-console); the pre-push hook runs it on tag pushes.
 
-**Exit**: the three commands below are green, and the two maintainer's items above are each decided (built or struck with the ADR that struck it).
+**Exit**: the three commands below are green, and the maintainer's item above is decided (built or struck with the ADR that struck it).
 
 ```sh
 cargo test -p karakuri-engine --test chain_swap --test master      # no chain build on a render thread; worker bytes == synchronous bytes
