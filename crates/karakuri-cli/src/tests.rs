@@ -2689,7 +2689,7 @@ mod live_save_tests {
     /// `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` set: read the
     /// checked-in source, and carry a floor so the scan cannot silently match
     /// nothing.
-    const SOURCE: &str = include_str!("live.rs");
+    const SOURCE: &str = include_str!("live/interactive.rs");
 
     /// How [`BINDINGS`] spells the arms whose pattern is a name rather than a
     /// character. Nothing in `Key::Named(NamedKey::Escape)` says `esc`, so this one
@@ -3081,10 +3081,17 @@ mod live_save_tests {
     /// otherwise answer for the method it sits in. The needle is spelled with a
     /// leading newline so a `fn` inside an expression cannot match.
     fn enclosing_method(blanked: &str, at: usize) -> &str {
-        let start = blanked[..at]
-            .rfind("\n    fn ")
-            .expect("every record written in this file is inside a method")
-            + "\n    fn ".len();
+        let (start, prefix_len) = [
+            "\n    fn ",
+            "\n    pub(super) fn ",
+            "\n    pub(crate) fn ",
+            "\n    pub fn ",
+        ]
+        .into_iter()
+        .filter_map(|prefix| blanked[..at].rfind(prefix).map(|pos| (pos, prefix.len())))
+        .max_by_key(|(pos, _)| *pos)
+        .expect("every record written in this file is inside a method");
+        let start = start + prefix_len;
         let name_end = blanked[start..]
             .find(|c: char| !c.is_alphanumeric() && c != '_')
             .map_or(blanked.len(), |n| start + n);
@@ -3278,7 +3285,7 @@ mod live_save_tests {
     /// dropped first, so prose about returning cannot stand in for a `return`.
     #[test]
     fn a_frame_attends_to_its_saves_before_anything_can_stop_them() {
-        let source = include_str!("live.rs");
+        let source = include_str!("live/mod.rs");
         let body = source
             .split_once("\n    pub(crate) fn frame(&mut self) {")
             .or_else(|| source.split_once("\n    fn frame(&mut self) {"))
@@ -4068,7 +4075,7 @@ mod wire_tests {
     /// draining cannot stand in for a drain.
     #[test]
     fn a_frame_takes_the_edges_a_client_asked_for_and_not_only_the_saves() {
-        let source = include_str!("live.rs");
+        let source = include_str!("live/mod.rs");
         let body = source
             .split_once("\n    fn run_requests(&mut self) {")
             .expect("`Live::run_requests` is no longer spelled that way")
