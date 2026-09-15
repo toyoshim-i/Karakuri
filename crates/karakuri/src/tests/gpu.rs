@@ -22,6 +22,16 @@ use karakuri_engine::letterbox;
 /// writes it into the `tick` (ADR-0297).
 const STEPS_A_FRAME: u8 = 1;
 
+/// The picture format a headless harness hands [`Engine::new`].
+///
+/// A stand-in, and it is named here once rather than at nineteen call sites: a
+/// run reads its picture format off the console's own surface (`Gfx::
+/// picture_format`) and there is no surface here, so these tests name an sRGB
+/// 8-bit format every backend can make a texture in. What is asserted is never
+/// the value — `a_picture_format_is_a_value_read_off_a_surface` in `mod tests`
+/// is what holds the source to one derivation.
+const HEADLESS_PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
 /// A [`Keeping`] with nothing served and nothing yet built, which is what a run
 /// holds on its first frame.
 fn keeping() -> Keeping {
@@ -128,6 +138,7 @@ fn a_save_writes_what_the_deck_is_playing_as_a_set_file_that_loads_back() {
     let engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -252,6 +263,7 @@ fn the_swap_report_says_what_the_lane_says() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &running,
         panel.layout(),
         1.0,
@@ -475,6 +487,7 @@ fn a_pane_reads_a_running_set() {
     let engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -740,6 +753,7 @@ fn the_engines_frame_reaches_the_picture_in_the_program_bay() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -1070,6 +1084,7 @@ fn the_picture_is_the_canvass_shape_and_carries_no_bars() {
     let engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -1172,6 +1187,7 @@ fn the_frame_is_composited_at_the_largest_enabled_output() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -1285,6 +1301,7 @@ fn a_wider_window_remakes_nothing_and_a_taller_picture_frees_the_old_texture() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -1419,6 +1436,7 @@ fn every_cell_with_a_slot_behind_it_is_aimed_whatever_its_residency() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -1721,6 +1739,7 @@ fn deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -1889,6 +1908,7 @@ fn a_drag_moves_the_deck_and_the_strip_follows_the_deck() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -2031,6 +2051,7 @@ fn a_mix_key_moves_the_deck_the_operator_selected_and_leaves_the_others_alone() 
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -2312,6 +2333,7 @@ fn holding_reads_the_addressed_decks_own_state_and_never_a_strip_that_predates_i
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -2420,6 +2442,7 @@ fn every_slot_is_its_own_simulation() {
     let engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -2505,6 +2528,7 @@ fn the_budget_parks_a_deck_and_the_strip_carries_both_residencies() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &slots,
         panel.layout(),
         1.0,
@@ -2737,6 +2761,7 @@ fn the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -3001,6 +3026,7 @@ fn a_press_on_a_parked_tally_withdraws_the_request_and_the_strip_follows_the_dec
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -3203,6 +3229,7 @@ fn a_press_on_the_mask_mini_chooses_a_shape_and_keeps_the_angle() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -3394,6 +3421,7 @@ fn a_press_on_the_look_controls_moves_the_look_every_sink_is_drawn_under() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,
@@ -3625,6 +3653,7 @@ fn the_frame_aims_each_sink_at_its_own_rectangle() {
     let mut engine = Engine::new(
         &gpu,
         &mut renderer,
+        HEADLESS_PICTURE_FORMAT,
         &shipped_slots(),
         panel.layout(),
         1.0,

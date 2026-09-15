@@ -33,6 +33,11 @@ impl ApplicationHandler for App {
         if self.gfx.is_some() {
             return;
         }
+        #[cfg(target_os = "macos")]
+        {
+            use winit::platform::macos::ActiveEventLoopExtMacOS;
+            event_loop.set_allows_automatic_window_tabbing(false);
+        }
         let attrs = Window::default_attributes()
             .with_title("The Karakuri console")
             .with_inner_size(winit::dpi::LogicalSize::new(WINDOW.0, WINDOW.1))
@@ -113,6 +118,28 @@ impl ApplicationHandler for App {
             .copied()
             .find(|f| !f.is_srgb())
             .unwrap_or(caps.formats[0]);
+        // **The picture format, read off this same surface and nowhere else.**
+        // The engine's present pass writes gamma-encoded texels through the
+        // hardware, so it needs an sRGB target (P-0064), and *which* sRGB
+        // format exists is the display's and the backend's answer rather than
+        // this program's: Metal offers `Bgra8UnormSrgb` and no 8-bit RGBA sRGB
+        // format at all. `karakuri-cli` picks its present format the same way
+        // — `crates/karakuri-cli/src/app.rs`, `.find(|f| f.is_srgb())` feeding
+        // `Present::new`.
+        let picture_format = match caps.formats.iter().copied().find(|f| f.is_srgb()) {
+            Some(format) => format,
+            // **Refused with the offered list**, which is
+            // [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md):
+            // there is no sRGB target to draw the picture into, and a run that
+            // continued would encode twice or not at all with nothing saying
+            // so.
+            None => no_gpu(&format!(
+                "no sRGB surface format: the present pass writes through the hardware's sRGB \
+                 encode and this surface offers {:?}, none of which carries the transfer \
+                 function",
+                caps.formats
+            )),
+        };
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -153,6 +180,7 @@ impl ApplicationHandler for App {
         let mut engine = Engine::new(
             &gpu,
             &mut renderer,
+            picture_format,
             &self.running,
             self.readout.panel.layout(),
             self.scale as f32,
@@ -384,6 +412,7 @@ impl ApplicationHandler for App {
             gpu,
             surface,
             config,
+            picture_format,
             egui,
             renderer,
             engine,
@@ -566,13 +595,11 @@ impl ApplicationHandler for App {
                     if let Some(projector) = gfx.projector.as_mut() {
                         projector.sink.resize(&gfx.gpu.device, at.0, at.1);
                         projector.size = at;
+                        projector.window.request_redraw();
                     }
-                    App::wants(
-                        gfx,
-                        &mut self.egui_due,
-                        &mut self.costs,
-                        Change::Viewport.repaint(),
-                    );
+                    self.costs.owes();
+                    gfx.window.request_redraw();
+                    return;
                 }
                 WindowEvent::CloseRequested => {
                     if let Some(line) = routed(gfx, event_loop, Output::Projector(0), false) {
@@ -585,10 +612,16 @@ impl ApplicationHandler for App {
                         &mut self.costs,
                         Change::Viewport.repaint(),
                     );
+                    return;
                 }
-                _ => {}
+                WindowEvent::RedrawRequested => {
+                    // Fall through to the common frame composition below.
+                    // When the projector is fullscreen or maximized, the console
+                    // window may be occluded or in a different Space, so the projector
+                    // window drives the redraw loop.
+                }
+                _ => return,
             }
-            return;
         }
         // **The stillness clock, and it is reset by everything except a frame
         // this loop asked for itself.** A frame drawn while this has not been
@@ -1576,6 +1609,14 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
+                let now = Instant::now();
+                if let Some(last) = self.frame_drawn_at {
+                    if now.duration_since(last) < Duration::from_millis(4) {
+                        return;
+                    }
+                }
+                self.frame_drawn_at = Some(now);
+
                 // **The frame's own clock, and the first statement of the
                 // frame because that is the whole of what makes it one.** Two
                 // consecutive readings of this bracket a whole redraw — the
@@ -1583,7 +1624,7 @@ impl ApplicationHandler for App {
                 // one and `Queue::present` — so [`Cost::period`] is the frame
                 // and not a part of it. Nothing else in this handler can say
                 // that: every other clock here starts after the wait.
-                let period = self.costs.tick(Instant::now());
+                let period = self.costs.tick(now);
                 // **What a model asked for, and what a save came back with —
                 // both above everything that touches the window.** A client
                 // asking to keep what is playing should not be waiting on a
@@ -1658,7 +1699,7 @@ impl ApplicationHandler for App {
                 let waited = Instant::now();
                 let acquired = gfx.surface.get_current_texture();
                 let waited = waited.elapsed();
-                if let Some(missed) = missed(&acquired) {
+                let frame = if let Some(missed) = missed(&acquired) {
                     match missed {
                         Missed::Remake => {
                             gfx.surface.configure(&gfx.gpu.device, &gfx.config);
@@ -1680,14 +1721,22 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                    return;
-                }
-                self.faulted = false;
-                let frame = match acquired {
-                    wgpu::CurrentSurfaceTexture::Success(frame)
-                    | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-                    // `missed` returned `None`, so there is a texture here.
-                    _ => return,
+                    if gfx.projector.is_none() {
+                        return;
+                    }
+                    None
+                } else {
+                    self.faulted = false;
+                    match acquired {
+                        wgpu::CurrentSurfaceTexture::Success(frame)
+                        | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => Some(frame),
+                        _ => {
+                            if gfx.projector.is_none() {
+                                return;
+                            }
+                            None
+                        }
+                    }
                 };
 
                 let mut cost = Cost {
@@ -2171,9 +2220,10 @@ impl ApplicationHandler for App {
                     size_in_pixels: [gfx.config.width, gfx.config.height],
                     pixels_per_point: output.pixels_per_point,
                 };
-                let view_target = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let view_target = frame.as_ref().map(|f| {
+                    f.texture
+                        .create_view(&wgpu::TextureViewDescriptor::default())
+                });
                 // **Read from inside the closure, because that is where the
                 // engine's half ends and the panel's begins.** `Cost::engine`
                 // and `Cost::paint` are then adjacent by construction, rather
@@ -2307,11 +2357,11 @@ impl ApplicationHandler for App {
                             );
                             cost.buffers = uploading.elapsed();
                             let recording = Instant::now();
-                            {
+                            if let Some(view_target) = &view_target {
                                 let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                                     label: Some("console"),
                                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                        view: &view_target,
+                                        view: view_target,
                                         depth_slice: None,
                                         resolve_target: None,
                                         ops: wgpu::Operations {
@@ -2391,20 +2441,22 @@ impl ApplicationHandler for App {
                 // not happen has no duration, and 0.0 ms here would read as a
                 // GPU with nothing to do — the exact failure P-0095 exists to
                 // refuse.
-                cost.drained = self
-                    .costs
-                    .audit()
-                    .then(|| {
-                        let owed = Instant::now();
-                        gfx.gpu
-                            .device
-                            .poll(wgpu::PollType::wait_indefinitely())
-                            .is_ok()
-                            .then(|| owed.elapsed())
-                    })
-                    .flatten();
+                if let Some(frame) = frame {
+                    cost.drained = self
+                        .costs
+                        .audit()
+                        .then(|| {
+                            let owed = Instant::now();
+                            gfx.gpu
+                                .device
+                                .poll(wgpu::PollType::wait_indefinitely())
+                                .is_ok()
+                                .then(|| owed.elapsed())
+                        })
+                        .flatten();
 
-                gfx.gpu.queue.present(frame);
+                    gfx.gpu.queue.present(frame);
+                }
 
                 // **The `tick` that closes this frame, where one is being
                 // recorded**, and it is last for `karakuri-cli`'s reason: *"a
@@ -2487,6 +2539,9 @@ impl ApplicationHandler for App {
                 self.costs.declared = self.readout.view.animating(self.readout.panel.layout());
                 if live {
                     gfx.window.request_redraw();
+                    if let Some(projector) = &gfx.projector {
+                        projector.window.request_redraw();
+                    }
                 }
             }
             _ => App::to_egui(gfx, &mut self.costs, &event),

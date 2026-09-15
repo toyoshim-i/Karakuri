@@ -8686,7 +8686,7 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
     }
     assert_eq!(
         fresh,
-        vec!["app/handler.rs:80".to_string()],
+        vec!["app/handler.rs:85".to_string()],
         "a second wgpu::Instance would hold none of the first one's adapters: {fresh:?}"
     );
     assert!(!surfaces.is_empty(), "no surface is made anywhere");
@@ -8701,4 +8701,70 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
             "{at}: a surface on a fresh instance, whose adapter is another instance's: `{code}`"
         );
     }
+}
+
+/// **The picture format is a value read off a surface, and never a constant.**
+/// It was `const PICTURE_FORMAT: TextureFormat = Rgba8UnormSrgb`, and no Metal
+/// surface offers that format — so `routed` refused to open the projector on
+/// every macOS run, naming a format the machine was never going to have. The
+/// format is now read off the console's own surface in `resumed` and threaded
+/// from there (ADR-0361). Nothing can open that window in a test (ADR-0324),
+/// so both halves are pinned by reading the source: no 8-bit sRGB format is
+/// named anywhere outside `tests/`, and the projector's check is against the
+/// value the surface gave.
+#[test]
+fn a_picture_format_is_a_value_read_off_a_surface() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut named = Vec::new();
+    let mut compared = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|n| n == "tests") {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap();
+            let rel = path.strip_prefix(&root).unwrap().display().to_string();
+            for (i, line) in src.lines().enumerate() {
+                let code = line.split("//").next().unwrap_or("");
+                for spelling in ["Rgba8UnormSrgb", "Bgra8UnormSrgb"] {
+                    if code.contains(spelling) {
+                        named.push(format!("{rel}:{}: `{}`", i + 1, code.trim()));
+                    }
+                }
+                if code.contains("caps.formats.contains(") {
+                    compared.push((format!("{rel}:{}", i + 1), code.trim().to_string()));
+                }
+            }
+        }
+    }
+    assert!(
+        named.is_empty(),
+        "an 8-bit sRGB format named in the source is a guess about a display that Metal \
+         already falsifies — read it off the surface instead: {named:?}"
+    );
+    assert_eq!(
+        compared.len(),
+        1,
+        "the projector's format check is the one place a surface's formats are asked for a \
+         member, and it has moved or multiplied: {compared:?}"
+    );
+    let (at, code) = &compared[0];
+    assert!(
+        at.starts_with("app/operations.rs"),
+        "{at}: the projector's format check has moved out of `routed`: `{code}`"
+    );
+    assert!(
+        code.contains("gfx.picture_format"),
+        "{at}: the projector is checked against something other than the format the console's \
+         surface gave: `{code}`"
+    );
 }
