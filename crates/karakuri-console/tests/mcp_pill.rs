@@ -395,7 +395,7 @@ fn a_press_opens_exactly_one_class_and_leaves_the_other_three_shut() {
         // operator reads rather than the value the press composed.
         let lit = mcp_pill(&ctx, panel.layout(), *class, after).expect("a class pill");
         assert!(lit.open);
-        assert_eq!(mcp_word(lit.open), "mcp · open");
+        assert_eq!(mcp_word(lit.open), "mcp · on");
     }
 }
 
@@ -435,8 +435,8 @@ fn a_second_press_shuts_it_and_leaves_the_rest_alone() {
 /// not there.
 #[test]
 fn the_word_says_the_state_and_the_capsule_is_measured_for_it() {
-    assert_eq!(mcp_word(false), "mcp · shut");
-    assert_eq!(mcp_word(true), "mcp · open");
+    assert_eq!(mcp_word(false), "mcp · off");
+    assert_eq!(mcp_word(true), "mcp · on");
 
     let (panel, ctx) = console(PLAUSIBLE);
     for class in Class::ALL {

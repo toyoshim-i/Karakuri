@@ -4,33 +4,17 @@ use super::super::*;
 // The four class pills: what a model may reach, and the hand that opens it
 // ---------------------------------------------------------------------------
 
-/// The word on a class's pill while the class is shut, in the mock's own
-/// spelling. `docs/manual/console.html` draws all four of them this way and
-/// draws none of them any other way, because every class starts shut and shut
-/// is the console the page draws.
-pub(crate) const MCP_SHUT: &str = "mcp · shut";
+/// The word on a class's pill while the class is off.
+pub(crate) const MCP_OFF: &str = "mcp · off";
 
-/// And the word while it is open, which `docs/manual/console.html` specifies
-/// under *what a model is refused, and where a class opens*: *"open, it reads
-/// `mcp · open` and is drawn armed"*. It is the other half of a sentence its
-/// four tooltips write — *"Click to open the class; click again to shut it"* —
-/// rather than a second control. A pill reading `shut` in both states would be
-/// a control that never answers a press, which is the one thing those tooltips
-/// rule out.
-pub(crate) const MCP_OPEN: &str = "mcp · open";
+/// And the word while it is on.
+pub(crate) const MCP_ON: &str = "mcp · on";
 
-/// Which of the two a class reads as. Two constants and this, so that the word
-/// a hand presses, the word [`crate::input`] measures the capsule by, and the
-/// word a program prints in a legend are one string.
-///
-/// Exported for the third of those: the answer to *what does this pill say* is
-/// this crate's and nobody else's, and a caller that wrote the words out again
-/// would be the copy that goes stale — which is the defect `karakuri`'s startup
-/// legend has already been repaired of once.
+/// Which of the two a class reads as.
 pub fn mcp_word(open: bool) -> &'static str {
     match open {
-        true => MCP_OPEN,
-        false => MCP_SHUT,
+        true => MCP_ON,
+        false => MCP_OFF,
     }
 }
 
