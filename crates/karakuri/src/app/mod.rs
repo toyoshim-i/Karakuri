@@ -126,6 +126,10 @@ pub(crate) struct App {
     /// `None` where `egui` asked for nothing, which is every frame on a panel with
     /// nothing on it.
     pub(crate) egui_due: Option<Instant>,
+    /// The timestamp of the last composed frame, used to prevent duplicate frame
+    /// rendering when both the console window and the projector window receive
+    /// `RedrawRequested` within the same vsync interval.
+    pub(crate) frame_drawn_at: Option<Instant>,
     /// The origin every animation on the panel is measured from, and the only clock
     /// behind `view::Phase`.
     ///
@@ -364,6 +368,7 @@ impl App {
             costs: Costs::new(),
             scale: 1.0,
             egui_due: None,
+            frame_drawn_at: None,
             // **Due at once on a served run**, so the first thing a model asks
             // for is taken on the first wake rather than a tenth of a second
             // after it.

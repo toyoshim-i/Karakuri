@@ -889,6 +889,12 @@ impl Engine {
     pub(crate) fn new(
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
+        // **What the present pass draws into, and what every texture here is
+        // in.** Handed in rather than named here: it is the first sRGB format
+        // the console's own surface offers, read off it once in
+        // [`App::resumed`] — see [`crate::Gfx::picture_format`]. `mod gpu` has
+        // no surface and names a headless stand-in.
+        picture_format: wgpu::TextureFormat,
         slots: &[Sources],
         layout: &karakuri_layout::Layout,
         scale: f32,
@@ -1080,14 +1086,22 @@ impl Engine {
         // for a slot that is not being drawn — which is the meter saying what
         // it measured rather than a strip with a gap in it.
         deck.enable_meters(&gpu.device);
-        let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
+        let present = Present::new(&gpu.device, picture_format, CANVAS.0, CANVAS.1);
         let (picture_at, preview_ats) = aims(layout, present.size());
-        let picture = Presented::new(gpu, renderer, "program view", picture_at, scale);
+        let picture = Presented::new(
+            gpu,
+            renderer,
+            "program view",
+            picture_format,
+            picture_at,
+            scale,
+        );
         let previews = [
             Presented::new(
                 gpu,
                 renderer,
                 "deck A preview",
+                picture_format,
                 preview_ats.and_then(|c| c.first().copied()),
                 scale,
             ),
@@ -1095,6 +1109,7 @@ impl Engine {
                 gpu,
                 renderer,
                 "deck B preview",
+                picture_format,
                 preview_ats.and_then(|c| c.get(1).copied()),
                 scale,
             ),
@@ -1102,6 +1117,7 @@ impl Engine {
                 gpu,
                 renderer,
                 "deck C preview",
+                picture_format,
                 preview_ats.and_then(|c| c.get(2).copied()),
                 scale,
             ),
@@ -1109,6 +1125,7 @@ impl Engine {
                 gpu,
                 renderer,
                 "deck D preview",
+                picture_format,
                 preview_ats.and_then(|c| c.get(3).copied()),
                 scale,
             ),

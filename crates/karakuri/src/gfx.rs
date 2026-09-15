@@ -104,6 +104,23 @@ pub(crate) struct Gfx {
     pub(crate) gpu: Gpu,
     pub(crate) surface: wgpu::Surface<'static>,
     pub(crate) config: wgpu::SurfaceConfiguration,
+    /// What the present pass draws into, what every picture texture is in, and
+    /// what every window surface that shows a picture is configured to: the
+    /// first sRGB format this console's own surface offers, read off it once in
+    /// [`App::resumed`] and never named as a constant anywhere.
+    ///
+    /// It is sRGB so the hardware does the one encode
+    /// ([P-0064](../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)),
+    /// and it is the *surface's* rather than a chosen value because a surface
+    /// offers what the display and the backend offer and no more —
+    /// `Bgra8UnormSrgb` on Metal, where no 8-bit RGBA sRGB format is offered at
+    /// all. `karakuri-cli` picks its present format the same way, off its own
+    /// surface, and hands it to `Present::new` (`crates/karakuri-cli/src/app.rs`).
+    ///
+    /// `config.format` is *not* this: the console's own swapchain is the
+    /// non-sRGB one `egui` wants (ADR-0162), and this is what the engine's
+    /// picture is in.
+    pub(crate) picture_format: wgpu::TextureFormat,
     pub(crate) egui: egui_winit::State,
     pub(crate) renderer: egui_wgpu::Renderer,
     /// The engine, on the same device as the panel. It lives beside the renderer

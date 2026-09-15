@@ -5,7 +5,7 @@ use karakuri_console::focus;
 use karakuri_console::repaint::{Change, Repaint};
 pub(crate) use karakuri_console::view::TextInputKind;
 use karakuri_console::view::View;
-use karakuri_engine::{Gpu, WindowSink};
+use karakuri_engine::WindowSink;
 use karakuri_operation::{Operation, Output};
 use std::sync::Arc;
 use std::time::Instant;
@@ -43,14 +43,19 @@ use crate::CANVAS;
 /// # The surface has to be the format the present pass was built for
 ///
 /// [`Present`]'s pipeline names one target format at construction, and that is
-/// [`PICTURE_FORMAT`] — the picture's texture, sRGB, so the encode is the
+/// [`Gfx::picture_format`] — the first sRGB format the console's own surface
+/// offers, read off it once in [`App::resumed`], so the encode is the
 /// hardware's and happens exactly once (P-0064). A surface in another format
 /// would need a second pipeline, which is a *second present pipeline* and is
-/// exactly what ADR-0247 says nothing needs. So this asks the surface for that
-/// format and refuses to open the window when it is not offered, naming
-/// both — a window that opened and drew nothing would be the silent wrong
-/// picture P-0094 refuses, and this is a refusal before the show rather than a
-/// fault during one.
+/// exactly what ADR-0247 says nothing needs. So this asks the projector's
+/// surface for that same format and refuses to open the window when it is not
+/// offered, naming both — a window that opened and drew nothing would be the
+/// silent wrong picture P-0094 refuses, and this is a refusal before the show
+/// rather than a fault during one.
+///
+/// Two surfaces of one adapter offer the same formats, so the refusal is
+/// reached only where the projector's window is on a display the console's
+/// adapter does not drive.
 pub(crate) fn routed(
     gfx: &mut Gfx,
     event_loop: &ActiveEventLoop,
@@ -63,7 +68,8 @@ pub(crate) fn routed(
         Output::Projector(n) => n,
         Output::Plugin(n) => {
             return Some(format!(
-                "outputs: plugin {n} is not loaded — there is no plugin manifest to read a                  sink out of, and `docs/plugins.md` is the specification nothing implements"
+                "outputs: plugin {n} is not loaded — there is no plugin manifest to read a \
+                 sink out of, and `docs/plugins.md` is the specification nothing implements"
             ))
         }
     };
@@ -76,12 +82,17 @@ pub(crate) fn routed(
     if gfx.projector.is_some() {
         return Some(format!("outputs: projector {n} is already on"));
     }
-    let attrs = Window::default_attributes()
+    let mut attrs = Window::default_attributes()
         .with_title("Karakuri — projector")
         // **The session canvas**, which is the size an output starts at when
         // nothing else says (ADR-0246). The operator resizes it, or makes it
         // fullscreen, and the frame follows.
         .with_inner_size(winit::dpi::LogicalSize::new(CANVAS.0, CANVAS.1));
+    #[cfg(target_os = "macos")]
+    {
+        use winit::platform::macos::WindowAttributesExtMacOS;
+        attrs = attrs.with_tabbing_identifier("projector");
+    }
     let window = match event_loop.create_window(attrs) {
         Ok(window) => Arc::new(window),
         // **Reported rather than panicked**, for `resumed`'s reason: a panic
@@ -98,17 +109,19 @@ pub(crate) fn routed(
         Err(e) => return Some(format!("outputs: the projector has no surface: {e}")),
     };
     let caps = surface.get_capabilities(&gfx.gpu.adapter);
-    if !caps.formats.contains(&PICTURE_FORMAT) {
+    if !caps.formats.contains(&gfx.picture_format) {
         return Some(format!(
-            "outputs: the projector window cannot be opened — the present pass draws              {PICTURE_FORMAT:?} and this surface offers {:?}. A second format would want a              second present pipeline, which is what one render scaled into every output              exists to avoid",
-            caps.formats
+            "outputs: the projector window cannot be opened — the present pass draws {:?} \
+             and this surface offers {:?}. A second format would want a second present \
+             pipeline, which is what one render scaled into every output exists to avoid",
+            gfx.picture_format, caps.formats
         ));
     }
     let size = window.inner_size();
     let size = (size.width.max(1), size.height.max(1));
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: PICTURE_FORMAT,
+        format: gfx.picture_format,
         color_space: wgpu::SurfaceColorSpace::Auto,
         width: size.0,
         height: size.1,

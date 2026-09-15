@@ -5,23 +5,6 @@ use karakuri_engine::{Gpu, Present, Sink, Skip};
 #[allow(unused_imports)]
 use super::*;
 
-/// What the picture and every preview are rendered in: an sRGB format, so the
-/// hardware does the one encode `Present`'s shader relies on
-/// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
-pub(crate) const PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-
-/// The same texels, read as if they were not sRGB, which is how `egui` wants
-/// them.
-///
-/// `egui`'s fragment shader says so outright — *"We expect 'normal' textures
-/// that are NOT sRGB-aware"* — and multiplies the sample by the vertex tint in
-/// gamma space. A view in [`PICTURE_FORMAT`] would have the hardware decode to
-/// linear on the way in and `egui` would then write those linear values into a
-/// gamma-space surface, which is a picture that comes out visibly dark with no
-/// error anywhere. So the render target is sRGB, the sampled view is this, and
-/// the encode still happens exactly once — in the present pass.
-pub(crate) const PICTURE_SAMPLED_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
 /// What the view `egui` samples is called on the device. The texture carries
 /// the name that says which of the two it is — see [`Presented::label`] — and
 /// this says which view of that texture it is, so the pair reads as one thing
@@ -71,7 +54,8 @@ pub(crate) struct Presented {
     pub(crate) texture: wgpu::Texture,
     /// What [`Present::draw`] draws into: sRGB, so the encode is the hardware's.
     pub(crate) target: wgpu::TextureView,
-    /// The registration `egui` draws by, of a view in [`PICTURE_SAMPLED_FORMAT`].
+    /// The registration `egui` draws by, of a view of this texture in
+    /// [`Presented::format`]'s `remove_srgb_suffix()`.
     pub(crate) id: egui::TextureId,
     /// The texture's size in physical pixels — its region's, not the window's.
     pub(crate) size: (u32, u32),
@@ -80,6 +64,16 @@ pub(crate) struct Presented {
     /// replaces was called; and its own per texture, so a device message about the
     /// preview does not read as one about the picture.
     pub(crate) label: &'static str,
+    /// What this texture is in: the picture format, which is
+    /// [`crate::Gfx::picture_format`] — an sRGB format, so the hardware does the
+    /// one encode `Present`'s shader relies on
+    /// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
+    ///
+    /// Kept rather than passed to [`Presented::fit`], for [`Presented::label`]'s
+    /// reason: the texture a resize makes is in the format the one it replaces
+    /// was in, and there is no argument at a resize site that could say
+    /// otherwise.
+    pub(crate) format: wgpu::TextureFormat,
     /// Whether this sink has a rectangle on screen this frame, written by
     /// [`Presented::aim`] and read by nothing but [`Sink::acquire`].
     ///
@@ -109,10 +103,11 @@ impl Presented {
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
         label: &'static str,
+        format: wgpu::TextureFormat,
         at: Option<egui::Rect>,
         scale: f32,
     ) -> Presented {
-        let mut presented = Presented::made(gpu, renderer, label, (1, 1));
+        let mut presented = Presented::made(gpu, renderer, label, format, (1, 1));
         let mut construction = 0;
         presented.aim(gpu, renderer, at, scale, &mut construction);
         presented
@@ -127,8 +122,20 @@ impl Presented {
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
         label: &'static str,
+        format: wgpu::TextureFormat,
         size: (u32, u32),
     ) -> Presented {
+        // **The same texels, read as if they were not sRGB, which is how
+        // `egui` wants them.** `egui`'s fragment shader says so outright —
+        // *"We expect 'normal' textures that are NOT sRGB-aware"* — and
+        // multiplies the sample by the vertex tint in gamma space. A view in
+        // `format` would have the hardware decode to linear on the way in and
+        // `egui` would then write those linear values into a gamma-space
+        // surface, which is a picture that comes out visibly dark with no
+        // error anywhere. So the render target is sRGB, the sampled view is
+        // this, and the encode still happens exactly once — in the present
+        // pass.
+        let sampled_format = format.remove_srgb_suffix();
         let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
@@ -139,7 +146,7 @@ impl Presented {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: PICTURE_FORMAT,
+            format,
             // COPY_SRC is not for the frame path — nothing here ever copies
             // one of these — it is what lets a test read a cell back and say
             // that a pass really was recorded into it. `Deck::slot_target`
@@ -149,12 +156,12 @@ impl Presented {
                 | wgpu::TextureUsages::COPY_SRC,
             // Declared so the sampled view below may reinterpret it — the two
             // formats differ only in whether the transfer function is applied.
-            view_formats: &[PICTURE_SAMPLED_FORMAT],
+            view_formats: &[sampled_format],
         });
         let target = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampled = texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some(SAMPLED_LABEL),
-            format: Some(PICTURE_SAMPLED_FORMAT),
+            format: Some(sampled_format),
             ..Default::default()
         });
         let id = renderer.register_native_texture(&gpu.device, &sampled, wgpu::FilterMode::Linear);
@@ -164,6 +171,7 @@ impl Presented {
             id,
             size,
             label,
+            format,
             aimed: false,
         }
     }
@@ -241,7 +249,7 @@ impl Presented {
         // Carried across, because a resize is not an un-aiming: the rectangle
         // this was aimed at is the one it was just resized to.
         let aimed = self.aimed;
-        *self = Presented::made(gpu, renderer, self.label, size);
+        *self = Presented::made(gpu, renderer, self.label, self.format, size);
         self.aimed = aimed;
         true
     }
