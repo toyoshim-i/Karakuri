@@ -245,7 +245,9 @@ fn the_state_word_is_what_the_cell_actually_distinguishes() {
     // And neither word the cell does not distinguish, anywhere on the panel.
     for (_, text) in &painted {
         assert!(
-            text != "off" && text != "empty" && !text.ends_with("· off"),
+            text != "off"
+                && text != "empty"
+                && !DECK_LETTERS.iter().any(|l| text == &format!("{l} · off")),
             "{text:?} is drawn, and it is a state the program cannot be in"
         );
     }
