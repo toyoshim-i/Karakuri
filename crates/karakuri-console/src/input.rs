@@ -558,8 +558,8 @@ use crate::panel::{Panel, GRAB};
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
     library, look, map_pill, master, mcp_pill, mixer, outputs, program_bay, program_head,
-    sequencer, staging, tracker_group, transition, transport, Field, KindChip, Scope, View,
-    BAY_GRIPS, DECKS, REGIONS,
+    sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, Field, KindChip,
+    Scope, View, BAY_GRIPS, DECKS, REGIONS,
 };
 
 /// What each of rule 4's derivations answers for, one row per probe and in the
@@ -689,7 +689,7 @@ use crate::view::{
 /// question. So the list is the control and which row is inside
 /// [`crate::view::LibraryBay::take`], which is the `params` chip's row read the
 /// other way round.
-pub const PROBES: [Probe; 38] = [
+pub const PROBES: [Probe; 39] = [
     Probe {
         name: "the Outputs row's sinks",
         claims: 1,
@@ -764,6 +764,11 @@ pub const PROBES: [Probe; 38] = [
         name: "the Inspector pane heads' keep",
         claims: 1,
         ask: on_keep,
+    },
+    Probe {
+        name: "the Inspector pane heads' slot mcp policy",
+        claims: 1,
+        ask: on_slot_mcp,
     },
     // **The mark between the run and the count, and the card it puts down.**
     // Two controls and one row, which is the Library bay's `load` button and
@@ -1256,6 +1261,20 @@ fn on_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
             .and_then(|at| keep_pill(ctx, &at, pane))
+            .is_some_and(|pill| pill.hit(p))
+    })
+}
+
+/// The slot MCP policy capsule in each Inspector pane's head.
+fn on_slot_mcp(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
+    view.inspector.iter().enumerate().any(|(index, pane)| {
+        let policy = view
+            .slot_policies
+            .get(pane.deck)
+            .copied()
+            .unwrap_or_default();
+        inspector(panel.layout(), index, pane, view.scroll_in(index))
+            .and_then(|at| slot_mcp_pill(ctx, &at, pane, policy))
             .is_some_and(|pill| pill.hit(p))
     })
 }

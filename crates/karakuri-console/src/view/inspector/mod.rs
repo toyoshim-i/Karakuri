@@ -1052,6 +1052,7 @@ pub(super) fn inspector_into(
     at: &InspectorPane,
     pane: &Pane,
     on_air: bool,
+    policy: SlotPolicy,
     naming: Option<&str>,
     // **The pulldown's mark**, derived by the caller off the same reading the
     // press is hit-tested against — `View::pane_pulldown`. It is handed in
@@ -1066,6 +1067,7 @@ pub(super) fn inspector_into(
     // pane is narrow and the pill keeps its place. `None` is a head with no
     // room for the capsule, which draws none — see [`keep_pill`].
     let keep = keep_pill(ui.ctx(), at, pane);
+    let mcp = slot_mcp_pill(ui.ctx(), at, pane, policy);
     // **And the count beside it**, which is what rule 04 asks of a pane that
     // is showing part of itself — derived here off the same head and painted
     // below, exactly as the capsule is. See [`pane_count`].
@@ -1075,7 +1077,11 @@ pub(super) fn inspector_into(
     // that is clipped, which is the row's own answer to a long name either way
     // — the head is a clip rectangle and there is no ellipsis in this console
     // to draw.
-    let words = match count.map(|c| c.min.x).or(keep.map(|pill| pill.pill.min.x)) {
+    let words = match count
+        .map(|c| c.min.x)
+        .or(mcp.map(|pill| pill.pill.min.x))
+        .or(keep.map(|pill| pill.pill.min.x))
+    {
         Some(x) => Rect::from_min_max(
             at.head.min,
             Pos2::new(x - size::HALF_HEAD_GAP, at.head.max.y),
@@ -1147,6 +1153,19 @@ pub(super) fn inspector_into(
         match on_air {
             true => on_pill_at(ui, pal, pill.pill, KEEP_LABEL),
             false => pill_at(ui, pal, pill.pill, KEEP_LABEL),
+        }
+    }
+    if let Some(pill) = mcp {
+        match policy {
+            SlotPolicy::On => armed_pill_at(ui, pal, pill.pill, pill.policy.pill_word()),
+            SlotPolicy::Off => pill_at(ui, pal, pill.pill, pill.policy.pill_word()),
+            SlotPolicy::Auto => {
+                if on_air {
+                    pill_at(ui, pal, pill.pill, pill.policy.pill_word());
+                } else {
+                    armed_pill_at(ui, pal, pill.pill, pill.policy.pill_word());
+                }
+            }
         }
     }
     // **The count, in the label's own ink**: `.half-head`'s `color:

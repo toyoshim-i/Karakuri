@@ -48,10 +48,12 @@ use karakuri_layout::Point;
 /// value: *the mock is not exhaustive … there will be gaps in the functions
 /// too*. A row that quietly lost its tips fails against this list, and a row
 /// that gains one in the page is a line to delete from it.
-const SILENT: [&str; 4] = [
+const SILENT: [&str; 5] = [
     // The page tips a pane head's count and its `keep` capsule, and says
     // nothing about the name between them.
     "the Inspector pane heads' name",
+    // The slot's MCP policy pill is an agent control with no page tip.
+    "the Inspector pane heads' slot mcp policy",
     // `.grip` carries no tip; folding is explained in the page's prose.
     "the grip in a bay head",
     // The page tips the rows of a *reading* and the items of a row's menu,

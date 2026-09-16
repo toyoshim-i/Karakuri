@@ -45,8 +45,8 @@ pub(crate) use glyph::*;
 pub(crate) use head::*;
 #[allow(unused_imports)]
 pub(crate) use pills::{
-    head_pills, on_pill_at, pill_at, pill_into, pill_width, ARMED_GLOW, ARMED_WASH, ON_GLOW,
-    ON_WASH,
+    armed_pill_at, head_pills, on_pill_at, pill_at, pill_into, pill_width, ARMED_GLOW, ARMED_WASH,
+    ON_GLOW, ON_WASH,
 };
 #[allow(unused_imports)]
 pub(crate) use track::*;
