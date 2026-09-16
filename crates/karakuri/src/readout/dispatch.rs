@@ -514,7 +514,14 @@ impl Readout {
             .find_map(|(index, pane)| {
                 let at_pane =
                     inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
-                let named = deck_name(ctx, &at_pane, pane, self.view.naming_set_in(index))?;
+                let policy = self
+                    .view
+                    .slot_policies
+                    .get(pane.deck)
+                    .copied()
+                    .unwrap_or_default();
+                let mcp = slot_mcp_pill(ctx, &at_pane, pane, policy).map(|p| p.pill);
+                let named = deck_name(ctx, &at_pane, pane, self.view.naming_set_in(index), mcp)?;
                 named.hit(at).then_some(index)
             });
         if let Some(index) = naming {

@@ -72,3 +72,4 @@ a transport-level protocol fault ([P-0083](../principles/0083-a-refusal-carries-
   Returning a JSON-RPC error envelope (`{"error": {"code": ...}}`) causes standard MCP client
   libraries to raise unhandled exceptions rather than feeding the rejection back to the model as a
   re-tryable tool output.
+

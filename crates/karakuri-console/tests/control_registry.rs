@@ -129,3 +129,42 @@ fn hotkey_for_tip_resolves_accurately() {
         }
     }
 }
+
+#[test]
+fn descriptors_have_action_and_mcp_policies_configured() {
+    let tempo_desc = descriptor_for(ControlId::TransportTempo);
+    assert_eq!(tempo_desc.action, Some("Click or Drag"));
+    assert_eq!(tempo_desc.mcp_policy, Some("set_tempo"));
+
+    let tracker_desc = descriptor_for(ControlId::Tracker);
+    assert_eq!(tracker_desc.action, Some("Click / Tap"));
+    assert_eq!(tracker_desc.mcp_policy, Some("tap_tempo"));
+
+    let transition_desc = descriptor_for(ControlId::Transition);
+    assert_eq!(transition_desc.action, Some("Click to wipe"));
+    assert_eq!(transition_desc.mcp_policy, Some("transition"));
+}
+
+#[test]
+fn tooltip_card_layout_job_builds_structured_sections() {
+    use karakuri_console::hover::{build_tooltip_job, flat};
+    use karakuri_console::room::Room;
+
+    let tempo_idx = flat()
+        .position(|t| t.control == "the tempo figure")
+        .expect("tempo figure must exist");
+
+    let pal = Room::Day.palette();
+    let words = "What the grid is running at. \u{2295} MIDI: unassigned — sets tempo.";
+    let job = build_tooltip_job(tempo_idx, words, Some("cc 14"), &pal);
+
+    let text = &job.text;
+    // Header should contain operation title
+    assert!(text.contains("Set the free-run tempo"));
+    // Body should contain the prose specification
+    assert!(text.contains("What the grid is running at."));
+    // Footer should contain action, mapped MIDI, and MCP
+    assert!(text.contains("Action: Click or Drag"));
+    assert!(text.contains("● MIDI: cc 14"));
+    assert!(text.contains("MCP: set_tempo"));
+}

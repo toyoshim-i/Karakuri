@@ -74,3 +74,4 @@ Bay header switches and slot pills are standardized around uniform wording:
   A simple toggle forces the operator to remember to manually unlock a slot before issuing an agent
   prompt and manually relock it before fading it in. `Auto` eliminates this friction by binding
   permission directly to physical fader position.
+
