@@ -973,6 +973,14 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
         if let Err(e) = state.slot_policies.check_writable(to_slot) {
             return Ok(Called::Answered(Err(e)));
         }
+        let layer_filter = args.get("layer").and_then(Value::as_str);
+        if let Some(filter_name) = layer_filter {
+            if layer_named(filter_name).is_none() {
+                return Ok(Called::Answered(Err(format!(
+                    "`{filter_name}` is not a known layer"
+                ))));
+            }
+        }
 
         let from_nodes = match state.slots.nodes(from_slot) {
             Ok(n) => n,
@@ -982,25 +990,55 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             Ok(n) => n,
             Err(e) => return Ok(Called::Answered(Err(e))),
         };
-        let mut copied = 0;
+
+        // Stage files in temporary files before atomic move, preventing watchers
+        // from catching intermediate partial writes or mismatched multi-node compiles.
+        let mut staging = Vec::new();
         for (kind, index, from_path) in &from_nodes {
+            if let Some(filter_name) = layer_filter {
+                if layer_name(*kind) != filter_name {
+                    continue;
+                }
+            }
             if let Some((_, _, to_path)) = to_nodes.iter().find(|(k, i, _)| k == kind && i == index)
             {
-                let source = match std::fs::read_to_string(from_path) {
+                let source = match std::fs::read(from_path) {
                     Ok(s) => s,
                     Err(e) => {
+                        for (tmp, _) in &staging {
+                            let _ = std::fs::remove_file(tmp);
+                        }
                         return Ok(Called::Answered(Err(format!(
                             "{}: {e}",
                             from_path.display()
-                        ))))
+                        ))));
                     }
                 };
-                if let Err(e) = std::fs::write(to_path, source) {
-                    return Ok(Called::Answered(Err(format!("{}: {e}", to_path.display()))));
+                let mut tmp_name = to_path.file_name().unwrap_or_default().to_os_string();
+                tmp_name.push(".tmp");
+                let tmp_path = to_path.with_file_name(tmp_name);
+                if let Err(e) = std::fs::write(&tmp_path, &source) {
+                    for (tmp, _) in &staging {
+                        let _ = std::fs::remove_file(tmp);
+                    }
+                    let _ = std::fs::remove_file(&tmp_path);
+                    return Ok(Called::Answered(Err(format!(
+                        "{}: {e}",
+                        tmp_path.display()
+                    ))));
                 }
-                copied += 1;
+                staging.push((tmp_path, to_path.clone()));
             }
         }
+
+        let mut copied = 0;
+        for (tmp_path, to_path) in staging {
+            if let Err(e) = std::fs::rename(&tmp_path, &to_path) {
+                return Ok(Called::Answered(Err(format!("{}: {e}", to_path.display()))));
+            }
+            copied += 1;
+        }
+
         return Ok(Called::Answered(Ok(format!(
             "copied {copied} procedure{} from slot {from_slot} to slot {to_slot}",
             if copied == 1 { "" } else { "s" }

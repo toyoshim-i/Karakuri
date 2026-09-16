@@ -3099,4 +3099,25 @@ fn copy_slot_copies_and_respects_slot_policies() {
     slot_policies.set_in_mix(1, true);
     let (failed_on, text_on) = call(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
     assert!(!failed_on, "{text_on}");
+
+    // 5. Layer filter copies only the requested layer and leaves others untouched
+    std::fs::write(&l1_1, PROBE_L1_B).expect("reset l1_1");
+    std::fs::write(&l4_1, "initial l4").expect("reset l4_1");
+    let (failed_layer, text_layer) = call(
+        port,
+        "copy_slot",
+        json!({"from_slot": 0, "to_slot": 1, "layer": "L4"}),
+    );
+    assert!(!failed_layer, "{text_layer}");
+    assert_eq!(
+        std::fs::read_to_string(&l1_1).unwrap(),
+        PROBE_L1_B,
+        "L1 untouched"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&l4_1).unwrap(),
+        PROBE_L4,
+        "L4 copied"
+    );
+    assert!(!dir.path().join("l4_1.kir.tmp").exists(), "no tmp left");
 }

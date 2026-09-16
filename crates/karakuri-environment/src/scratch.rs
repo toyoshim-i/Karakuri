@@ -146,7 +146,7 @@ where
             let target = dir.join(format!("{}.kir", node_name(slot, at, &stem_of(path))));
             let source =
                 std::fs::read(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
-            std::fs::write(&target, &source).map_err(|e| format!("{}: {e}", target.display()))?;
+            write_atomic(&target, &source)?;
             *path = target;
         }
     }
@@ -224,8 +224,26 @@ pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, Str
     let dir = store_root.join(DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = dir.join(format!("{}.kir", sanitize(name)));
-    std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
+    write_atomic(&path, source.as_bytes())?;
     Ok(path)
+}
+
+/// Write `bytes` to `path` atomically by writing to a temporary file (`.tmp`)
+/// in the same directory and renaming it into place.
+///
+/// This guarantees that a file watcher or reader never observes a partially
+/// written or empty file, and that intermediate write states cannot trigger
+/// broken compiler runs.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
+    tmp_name.push(".tmp");
+    let tmp_path = path.with_file_name(tmp_name);
+    std::fs::write(&tmp_path, bytes).map_err(|e| format!("{}: {e}", tmp_path.display()))?;
+    std::fs::rename(&tmp_path, path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(())
 }
 
 /// A name as a path component. The same rule the edit history uses, and here
@@ -495,5 +513,20 @@ mod tests {
 
         let err = materialise(&store, nodes(&mut sets)).expect_err("the source is not there");
         assert!(err.contains("nope.kir"), "{err}");
+    }
+
+    #[test]
+    fn write_atomic_replaces_target_and_leaves_no_tmp() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let target = tmp.path().join("target.kir");
+        let tmp_file = tmp.path().join("target.kir.tmp");
+
+        write_atomic(&target, b"initial").expect("first write");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "initial");
+        assert!(!tmp_file.exists());
+
+        write_atomic(&target, b"updated").expect("second write");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "updated");
+        assert!(!tmp_file.exists());
     }
 }

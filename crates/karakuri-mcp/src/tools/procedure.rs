@@ -164,7 +164,7 @@ pub(crate) fn write_procedure(
         .map(|other| other.to_string())
         .collect();
 
-    std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
+    karakuri_environment::scratch::write_atomic(&path, source.as_bytes())?;
     let shared = if also.is_empty() {
         String::new()
     } else {
