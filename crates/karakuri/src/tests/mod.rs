@@ -29,6 +29,7 @@ use winit::event::WindowEvent;
 
 mod focus_keys;
 mod gpu;
+mod inspector_mcp;
 mod outputs_row;
 mod press_handler;
 

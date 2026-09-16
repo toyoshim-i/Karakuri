@@ -3036,12 +3036,18 @@ fn copy_slot_copies_and_respects_slot_policies() {
         (l1_0.clone(), vec![l4_0.clone()]),
         (l1_1.clone(), vec![l4_1.clone()]),
     ]);
+    let opening = karakuri_environment::Opening::closed();
+    let mut open = karakuri_operation::gate::Open::CLOSED;
+    for &class in karakuri_operation::gate::Class::ALL {
+        open = open.with(class, true);
+    }
+    opening.set(open);
     let reporter = serve(
         0,
         slots,
         store_root(&dir),
         true,
-        closed(),
+        opening,
         slot_policies.clone(),
     )
     .expect("serve");
@@ -3063,6 +3069,18 @@ fn copy_slot_copies_and_respects_slot_policies() {
     );
     assert!(failed_write);
     assert!(text_write.contains("active in the mix"), "{text_write}");
+
+    // Also SelectRenderer on slot 1 is refused
+    let (failed_rend, text_rend) = call(
+        port,
+        "operate",
+        json!({
+            "operation": "Choose which renderer of a deck is live",
+            "with": {"deck": 1, "renderer": 0}
+        }),
+    );
+    assert!(failed_rend);
+    assert!(text_rend.contains("active in the mix"), "{text_rend}");
 
     // 2. Slot 1 is off-air (in_mix = false) -> copy succeeds
     slot_policies.set_in_mix(1, false);

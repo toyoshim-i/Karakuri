@@ -43,7 +43,8 @@ pub(crate) fn operate(
     if let Operation::WriteParam { deck, .. }
     | Operation::TakeParamBack { deck, .. }
     | Operation::LoadProcedure { deck, .. }
-    | Operation::RestoreProcedure { deck, .. } = operation
+    | Operation::RestoreProcedure { deck, .. }
+    | Operation::SelectRenderer { deck, .. } = operation
     {
         state.slot_policies.check_writable(usize::from(*deck))?;
     }
