@@ -280,6 +280,7 @@ use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::gate::{Class, Open};
+pub use karakuri_operation::SlotPolicy;
 use karakuri_operation::{
     Authority, BeatSource, BlendMode, GridScale, LaneTarget, Layer, LibraryKinds, NodeAddress,
     Operation, Output, Recording, Residency, Revision, StepMode, Sync, Tonemap, TransitionSetting,
@@ -352,10 +353,10 @@ mod inspector;
 /// second path for it.
 pub use inspector::{
     auth_chips, count_text, deck_head, deck_name, inspector, keep_pill, node_keep, pane_count,
-    pane_target, rend_chips, sens_chips, AimChips, Aimed, DeckHead, DeckName, InspectorPane,
-    KeepPill, Naming, Node, NodeAuthority, Pane, PaneTarget, Param, ParamGrip, Renderer, SensChip,
-    Source, Uses, UsesLine, AUTHORITIES, PANES, PANE_DECKS, PANE_NAMES, RE_SALT_LABEL, SCRUB_BEATS,
-    SENS_LABEL, SYNCS, TAKE_BACK,
+    pane_target, rend_chips, sens_chips, slot_mcp_pill, AimChips, Aimed, DeckHead, DeckName,
+    InspectorPane, KeepPill, Naming, Node, NodeAuthority, Pane, PaneTarget, Param, ParamGrip,
+    Renderer, SensChip, SlotMcpPill, Source, Uses, UsesLine, AUTHORITIES, PANES, PANE_DECKS,
+    PANE_NAMES, RE_SALT_LABEL, SCRUB_BEATS, SENS_LABEL, SYNCS, TAKE_BACK,
 };
 // **The symbol Inspector keeps crate-internal rather than exporting**:
 // `next_sync` backs [`crate::focus`]'s own cycling of the deck head's sync
@@ -1058,6 +1059,8 @@ pub struct View {
     /// crate and is the state ADR-0235 says a run starts in: four classes shut, and
     /// no way to write down an `Open` that starts open.
     pub opening: Open,
+    /// Slot-level MCP modification policy for each deck slot.
+    pub slot_policies: [SlotPolicy; DECKS],
     /// How long the panel has been animating, written per frame by whoever has the
     /// clock — see [`Phase`], which carries the whole argument for why this is a
     /// value and not an `Instant`.
@@ -1499,6 +1502,7 @@ impl View {
             // Four classes shut, which is the run ADR-0235 describes and is
             // also a console nobody has handed an opening to.
             opening: Open::CLOSED,
+            slot_policies: [SlotPolicy::Auto; DECKS],
             phase: Phase::ZERO,
             // **Nothing addressed and no bay named**, which is the honest
             // start rather than a table of zeroes: `Focus::bay` answers *the

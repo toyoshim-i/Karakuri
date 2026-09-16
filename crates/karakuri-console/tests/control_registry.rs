@@ -6,12 +6,12 @@ use karakuri_console::input::PROBES;
 
 #[test]
 fn every_probe_matches_a_control_descriptor() {
-    assert_eq!(PROBES.len(), 38);
-    assert_eq!(TIPS.len(), 38);
-    assert_eq!(ControlId::ALL.len(), 38);
-    assert_eq!(DESCRIPTORS.len(), 38);
+    assert_eq!(PROBES.len(), 39);
+    assert_eq!(TIPS.len(), 39);
+    assert_eq!(ControlId::ALL.len(), 39);
+    assert_eq!(DESCRIPTORS.len(), 39);
 
-    for i in 0..38 {
+    for i in 0..39 {
         let probe = &PROBES[i];
         let descriptor = &DESCRIPTORS[i];
         let tip_probe_name = TIPS[i].0;
@@ -37,7 +37,7 @@ fn roundtrip_lookup_by_name_and_index() {
         );
     }
 
-    assert_eq!(ControlId::from_probe_index(38), None);
+    assert_eq!(ControlId::from_probe_index(39), None);
     assert_eq!(ControlId::from_probe_name("nonexistent"), None);
     assert_eq!(descriptor_for_probe("nonexistent"), None);
 }

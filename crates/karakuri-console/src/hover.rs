@@ -472,6 +472,7 @@ pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
             at: on_keep,
         }],
     ),
+    ("the Inspector pane heads' slot mcp policy", &[]),
     // **The mark between the run and the count**, whose words the mock has
     // carried since the chooser was drawn: it cites the *first* pane's `▾`,
     // and the second pane's own tip says the same thing about the head next

@@ -2,7 +2,7 @@ use super::descriptor::ControlDescriptor;
 use super::id::ControlId;
 
 /// Single declarative registry of interactive control descriptors.
-pub const DESCRIPTORS: [ControlDescriptor; 38] = [
+pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::OutputsSink,
         probe_name: ControlId::OutputsSink.probe_name(),
@@ -100,6 +100,13 @@ pub const DESCRIPTORS: [ControlDescriptor; 38] = [
         label: "Inspector pane keep capsule",
         hotkey: Some("k"),
         operation_title: Some("Keep what a deck is playing"),
+    },
+    ControlDescriptor {
+        id: ControlId::InspectorSlotMcp,
+        probe_name: ControlId::InspectorSlotMcp.probe_name(),
+        label: "Inspector pane slot MCP policy",
+        hotkey: None,
+        operation_title: None,
     },
     ControlDescriptor {
         id: ControlId::InspectorPaneTarget,

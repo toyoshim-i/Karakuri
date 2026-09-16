@@ -508,6 +508,10 @@ impl View {
                         &at,
                         pane,
                         inspector::on_air(strips, pane.deck),
+                        self.slot_policies
+                            .get(pane.deck)
+                            .copied()
+                            .unwrap_or_default(),
                         typed,
                         // **The same derivation `claim` hit-tests**, asked
                         // here rather than inside the paint because the rows

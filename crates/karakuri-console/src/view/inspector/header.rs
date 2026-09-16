@@ -845,6 +845,47 @@ pub fn keep_pill(ctx: &egui::Context, at: &InspectorPane, pane: &Pane) -> Option
     })
 }
 
+/// The slot's MCP policy pill in a pane's head, laid out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SlotMcpPill {
+    pub pill: Rect,
+    pub deck: usize,
+    pub policy: SlotPolicy,
+}
+
+impl SlotMcpPill {
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.pill.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+pub fn slot_mcp_pill(
+    ctx: &egui::Context,
+    at: &InspectorPane,
+    pane: &Pane,
+    policy: SlotPolicy,
+) -> Option<SlotMcpPill> {
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let head = at.head;
+    let right = match keep_pill(ctx, at, pane) {
+        Some(keep) => keep.pill.min.x - size::PILL_GAP,
+        None => head.max.x - size::HALF_HEAD_PAD_X,
+    };
+    let w = pill_width(ctx, policy.pill_word());
+    let pill = Rect::from_min_size(
+        Pos2::new(right - w, head.min.y + size::HALF_HEAD_PAD_Y),
+        egui::vec2(w, size::PILL_H),
+    );
+    let min_left = head.min.x + size::HALF_HEAD_PAD_X;
+    (positive(head) && pill.min.x >= min_left).then_some(SlotMcpPill {
+        pill,
+        deck: pane.deck,
+        policy,
+    })
+}
+
 /// The word in the capsule, which is the mock's own and is the row's name in
 /// the panel column of [every
 /// operation](../../../../docs/manual/operations.html).
