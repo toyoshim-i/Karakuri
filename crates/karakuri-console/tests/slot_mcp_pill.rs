@@ -6,7 +6,9 @@ mod common;
 use common::{drawn_once, near, PLAUSIBLE};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::size;
-use karakuri_console::view::{inspector, keep_pill, slot_mcp_pill, Pane, SlotPolicy, PANES, SYNCS};
+use karakuri_console::view::{
+    inspector, keep_pill, pane_count, slot_mcp_pill, Pane, SlotPolicy, PANES, SYNCS,
+};
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::Sync;
 
@@ -74,4 +76,32 @@ fn slot_mcp_pill_hit_tests_accurately() {
 
     let outside = Point::new(mcp.pill.min.x - 10.0, mcp.pill.min.y - 10.0);
     assert!(!mcp.hit(outside), "outside should not hit");
+}
+
+#[test]
+fn pane_count_does_not_overlap_slot_mcp_pill() {
+    let pane = mock();
+    let (panel, ctx) = console(PLAUSIBLE);
+    for policy in [SlotPolicy::Auto, SlotPolicy::On, SlotPolicy::Off] {
+        for index in 0..PANES {
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
+            let mcp = slot_mcp_pill(&ctx, &at_pane, &pane, policy).expect("slot mcp pill");
+            let count =
+                pane_count(&ctx, &at_pane, &pane, None, Some(mcp.pill)).expect("pane count");
+
+            assert!(
+                count.max.x <= mcp.pill.min.x - size::HALF_HEAD_GAP,
+                "pane_count max.x ({}) must be <= mcp.min.x - HALF_HEAD_GAP ({})",
+                count.max.x,
+                mcp.pill.min.x - size::HALF_HEAD_GAP
+            );
+            assert!(
+                !count.intersects(mcp.pill),
+                "pane_count ({:?}) and slot_mcp_pill ({:?}) must never overlap",
+                count,
+                mcp.pill
+            );
+        }
+    }
 }

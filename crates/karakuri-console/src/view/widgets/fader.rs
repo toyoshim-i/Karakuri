@@ -142,38 +142,45 @@ pub(crate) fn drop_ring(ui: &Ui, pal: &Palette, at: Rect, radius: f32) {
     );
 }
 
-/// The dashed ring on the bay a key press is addressed to, the mock's `.wfocus`
-/// — `outline: 2px dashed var(--c-sun)` at `outline-offset: 2px`.
+/// The focus indicator on the bay a key press is addressed to, replacing the
+/// legacy dashed sun outline with a clean, solid lavender accent (`pal.lav`).
 ///
-/// Dashed rather than a second solid ring, and the reason is `console.html`'s
-/// in its own words: *"the selection is a solid ring and focus is a dashed one,
-/// because drawing them the same way would erase which of the two you are
-/// looking at."* [`drop_ring`] above is the third mark on this panel and is
-/// solid in the text ink; the three are told apart by line and colour, which is
-/// why none of them is drawn at another's weight.
-///
-/// `egui` has no dashed stroke on a rectangle, so the four edges are laid out
-/// as one closed path and dashed along it. The corner radius the mock sets is
-/// not honoured for that reason and is not a loss: a 4px corner on a dash
-/// pattern of [`size::WFOCUS_DASH`] is a rounding of one dash.
+/// For headless rows (Transport at the top, Outputs at the bottom), an accent
+/// line is drawn along the boundary edge rather than an off-screen clipping box.
+/// For headed bays, a solid inset stroke frames the bay head with top corners
+/// matching the card radius.
 pub(crate) fn wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
-    let ring = at.expand(size::WFOCUS_OFFSET);
-    let path = [
-        ring.left_top(),
-        ring.right_top(),
-        ring.right_bottom(),
-        ring.left_bottom(),
-        ring.left_top(),
-    ];
-    let mut dashes = Vec::new();
-    egui::Shape::dashed_line_many(
-        &path,
-        Stroke::new(size::WFOCUS_RING, pal.sun),
-        size::WFOCUS_DASH,
-        size::WFOCUS_GAP,
-        &mut dashes,
-    );
-    ui.painter().extend(dashes);
+    let painter = ui.painter();
+    let stroke = Stroke::new(1.5, pal.lav);
+    if at.height() > size::HEAD_H + 2.0 {
+        // Headless rows: Transport at the top, Outputs at the bottom.
+        if at.min.y <= 1.0 {
+            // Transport: crisp accent line along the bottom border of the bar.
+            let y = at.max.y - 0.75;
+            painter.line_segment([Pos2::new(at.min.x, y), Pos2::new(at.max.x, y)], stroke);
+        } else {
+            // Outputs: crisp accent line along the top border of the bar.
+            let y = at.min.y + 0.75;
+            painter.line_segment([Pos2::new(at.min.x, y), Pos2::new(at.max.x, y)], stroke);
+        }
+    } else {
+        // Headed bay: clean inset accent framing the bay head with matching top radius.
+        let radius = CornerRadius {
+            nw: size::BAY_RADIUS as u8,
+            ne: size::BAY_RADIUS as u8,
+            sw: 0,
+            se: 0,
+        };
+        painter.rect_stroke(at, radius, stroke, StrokeKind::Inside);
+    }
+}
+
+/// The focus indicator on a folded bay's card, framing all four rounded corners.
+pub(crate) fn folded_wfocus_into(ui: &Ui, pal: &Palette, at: Rect) {
+    let stroke = Stroke::new(1.5, pal.lav);
+    let radius = CornerRadius::same(size::BAY_RADIUS as u8);
+    ui.painter()
+        .rect_stroke(at, radius, stroke, StrokeKind::Inside);
 }
 
 /// A fader: the well, the fill and the knob.

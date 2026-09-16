@@ -40,8 +40,8 @@ use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    deck_name, inspector, keep_pill, pane_count, InspectorPane, Pane, View, PANES, PANE_NAMES,
-    SYNCS,
+    deck_name, inspector, keep_pill, pane_count, slot_mcp_pill, InspectorPane, Pane, SlotPolicy,
+    View, PANES, PANE_NAMES, SYNCS,
 };
 use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Sync};
@@ -120,7 +120,8 @@ fn the_run_sits_one_gap_after_the_label() {
         for index in 0..PANES {
             let at_pane =
                 inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
-            let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
+            let named =
+                deck_name(&ctx, &at_pane, &pane, None, None).expect("a head with room for it");
             let head = at_pane.head;
 
             let left =
@@ -149,8 +150,8 @@ fn the_run_sits_one_gap_after_the_label() {
             // arrangement admits the *name* is clipped rather than the count
             // dropped. Both halves are asserted, because the derivation is a
             // `min` of exactly these two.
-            let count =
-                pane_count(&ctx, &at_pane, &pane, None).expect("a head with room for its count");
+            let count = pane_count(&ctx, &at_pane, &pane, None, None)
+                .expect("a head with room for its count");
             // **The chooser's own room comes off it too**, since 2026-09-10:
             // the `▾` sits between the run and everything else in the row and
             // is a control now, so the run is clipped short of it rather than
@@ -192,7 +193,8 @@ fn the_run_stops_one_gap_short_of_the_capsule() {
         for index in 0..PANES {
             let at_pane =
                 inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
-            let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
+            let named =
+                deck_name(&ctx, &at_pane, &pane, None, None).expect("a head with room for it");
             let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
             assert!(
                 named.name.max.x <= pill.pill.min.x - size::HALF_HEAD_GAP + common::EPS,
@@ -210,6 +212,34 @@ fn the_run_stops_one_gap_short_of_the_capsule() {
     }
 }
 
+/// When the MCP pill is present, the run stops one gap short of it.
+#[test]
+fn the_run_stops_one_gap_short_of_mcp_pill() {
+    let pane = mock();
+    for viewport in [SMALLEST, PLAUSIBLE] {
+        let (panel, ctx) = console(viewport);
+        for index in 0..PANES {
+            let at_pane =
+                inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
+            let mcp = slot_mcp_pill(&ctx, &at_pane, &pane, SlotPolicy::Auto).expect("mcp pill");
+            let named = deck_name(&ctx, &at_pane, &pane, None, Some(mcp.pill))
+                .expect("a head with room for it");
+            assert!(
+                named.name.max.x <= mcp.pill.min.x - size::HALF_HEAD_GAP + common::EPS,
+                "the run ends at {} and mcp pill starts at {}, which is less than the row's \
+                 own gap of {} away",
+                named.name.max.x,
+                mcp.pill.min.x,
+                size::HALF_HEAD_GAP
+            );
+            assert!(
+                !mcp.hit(at(named.name.right_center())),
+                "the mcp pill claims the right-hand end of the run"
+            );
+        }
+    }
+}
+
 /// A long name is clipped rather than growing over the capsule, which is the
 /// row's own answer to a long name either way — there is no ellipsis in this
 /// console to draw.
@@ -221,7 +251,8 @@ fn a_name_too_long_for_the_head_is_clipped_at_the_capsule() {
     };
     let (panel, ctx) = console(PLAUSIBLE);
     let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
-    let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for some of it");
+    let named =
+        deck_name(&ctx, &at_pane, &pane, None, None).expect("a head with room for some of it");
     let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
     assert!(
         named.name.max.x <= pill.pill.min.x - size::HALF_HEAD_GAP + common::EPS,
@@ -259,7 +290,7 @@ fn a_head_with_no_room_for_the_run_draws_none() {
     // place, so a head this wide has nowhere left to paint a name. Its width
     // is read off a head that has room rather than restated — the view owns
     // `CHEVRON_W`.
-    let chevron = deck_name(&ctx, &at_pane, &pane, None)
+    let chevron = deck_name(&ctx, &at_pane, &pane, None, None)
         .expect("a head with room for the run")
         .chevron
         .width();
@@ -272,12 +303,12 @@ fn a_head_with_no_room_for_the_run_draws_none() {
         + capsule
         + size::HALF_HEAD_PAD_X;
     assert!(
-        deck_name(&ctx, &narrowed(bare + 1.0), &pane, None).is_some(),
+        deck_name(&ctx, &narrowed(bare + 1.0), &pane, None, None).is_some(),
         "a head with one pixel of room for the run drew none, so this test cannot tell a fit \
          from a refusal"
     );
     assert_eq!(
-        deck_name(&ctx, &narrowed(bare), &pane, None),
+        deck_name(&ctx, &narrowed(bare), &pane, None, None),
         None,
         "a head with no room left between the label and the capsule drew a target anyway, and \
          `inspector_into`'s clip is what paints no ink under it"
@@ -293,7 +324,7 @@ fn a_console_that_has_not_drawn_has_no_run() {
     let (panel, _) = console(PLAUSIBLE);
     let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
     assert_eq!(
-        deck_name(&egui::Context::default(), &at_pane, &pane, None),
+        deck_name(&egui::Context::default(), &at_pane, &pane, None, None),
         None
     );
 }
@@ -314,7 +345,8 @@ fn the_run_clears_every_boundarys_grab() {
         for (index, name) in PANE_NAMES.iter().enumerate() {
             let at_pane =
                 inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
-            let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
+            let named =
+                deck_name(&ctx, &at_pane, &pane, None, None).expect("a head with room for it");
 
             let clearance = named.name.min.x - at_pane.head.min.x;
             assert!(
@@ -368,7 +400,8 @@ fn the_chevrons_place_is_beside_the_run_and_is_not_claimed() {
         for index in 0..PANES {
             let at_pane =
                 inspector(panel.layout(), index, &pane, 0.0).expect("a pane with room in it");
-            let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
+            let named =
+                deck_name(&ctx, &at_pane, &pane, None, None).expect("a head with room for it");
 
             assert!(
                 near(named.chevron.min.x - named.name.max.x, size::HALF_HEAD_GAP),
@@ -408,7 +441,7 @@ fn a_press_off_the_run_is_not_on_it() {
     let pane = mock();
     let (panel, ctx) = console(PLAUSIBLE);
     let at_pane = inspector(panel.layout(), 0, &pane, 0.0).expect("a pane with room in it");
-    let named = deck_name(&ctx, &at_pane, &pane, None).expect("a head with room for it");
+    let named = deck_name(&ctx, &at_pane, &pane, None, None).expect("a head with room for it");
     let pill = keep_pill(&ctx, &at_pane, &pane).expect("a head with room for its capsule");
     let head = at_pane.head;
     for probe in [

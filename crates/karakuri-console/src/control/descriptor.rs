@@ -13,4 +13,8 @@ pub struct ControlDescriptor {
     pub hotkey: Option<&'static str>,
     /// Bound operation name if applicable.
     pub operation_title: Option<&'static str>,
+    /// Primary gesture or interaction method (e.g. "Click", "Drag", "Click or Drag", "Key").
+    pub action: Option<&'static str>,
+    /// Associated MCP tool name or mutation policy if agent-accessible.
+    pub mcp_policy: Option<&'static str>,
 }

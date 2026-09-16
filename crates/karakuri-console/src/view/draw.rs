@@ -502,16 +502,19 @@ impl View {
                     let typed = naming
                         .filter(|naming| naming.pane == index)
                         .map(Naming::typed);
+                    let policy = self
+                        .slot_policies
+                        .get(pane.deck)
+                        .copied()
+                        .unwrap_or_default();
+                    let mcp = inspector::slot_mcp_pill(ui.ctx(), &at, pane, policy).map(|p| p.pill);
                     inspector::inspector_into(
                         ui,
                         &pal,
                         &at,
                         pane,
                         inspector::on_air(strips, pane.deck),
-                        self.slot_policies
-                            .get(pane.deck)
-                            .copied()
-                            .unwrap_or_default(),
+                        policy,
                         typed,
                         // **The same derivation `claim` hit-tests**, asked
                         // here rather than inside the paint because the rows
@@ -525,6 +528,7 @@ impl View {
                             typed,
                             load.decks,
                             pane_open == Some(index),
+                            mcp,
                         ),
                     );
                 }
@@ -613,8 +617,15 @@ impl View {
                             .filter(|naming| naming.pane == pane_at)
                             .map(Naming::typed);
                         let room = to_egui(panel.layout().viewport());
+                        let policy = self
+                            .slot_policies
+                            .get(pane.deck)
+                            .copied()
+                            .unwrap_or_default();
+                        let mcp =
+                            inspector::slot_mcp_pill(ui.ctx(), &at, pane, policy).map(|p| p.pill);
                         if let Some(target) =
-                            pane_target(ui.ctx(), &at, pane, pane_at, typed, load.decks, true)
+                            pane_target(ui.ctx(), &at, pane, pane_at, typed, load.decks, true, mcp)
                         {
                             if let Some(card) = target.list(room) {
                                 inspector::pane_list_into(ui, &pal, &target, pane.deck, card);
@@ -677,7 +688,7 @@ impl View {
             // folded case is argued.
             if let Some((mark, title)) = folded {
                 folded_head_into(ui, &pal, mark, title);
-                wfocus_into(ui, &pal, mark);
+                folded_wfocus_into(ui, &pal, mark);
             }
             if let Some(mark) = focused {
                 wfocus_into(ui, &pal, mark);

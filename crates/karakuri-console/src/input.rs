@@ -1247,8 +1247,16 @@ fn on_master(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool 
 /// it is the same one [`crate::view::View::draw`] paints from.
 fn on_deck_name(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
+        let policy = view
+            .slot_policies
+            .get(pane.deck)
+            .copied()
+            .unwrap_or_default();
         inspector(panel.layout(), index, pane, view.scroll_in(index))
-            .and_then(|at| deck_name(ctx, &at, pane, view.naming_set_in(index)))
+            .and_then(|at| {
+                let mcp = slot_mcp_pill(ctx, &at, pane, policy).map(|p| p.pill);
+                deck_name(ctx, &at, pane, view.naming_set_in(index), mcp)
+            })
             .is_some_and(|named| named.hit(p))
     })
 }

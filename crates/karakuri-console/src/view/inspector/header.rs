@@ -1042,6 +1042,7 @@ pub fn pane_count(
     at: &InspectorPane,
     pane: &Pane,
     naming: Option<&str>,
+    mcp: Option<Rect>,
 ) -> Option<Rect> {
     // Fonts are not valid until `egui` has run a pass — [`keep_pill`]'s guard,
     // and before the first one there is no head painted to read.
@@ -1063,9 +1064,12 @@ pub fn pane_count(
             .x
         })
     };
-    let right = match keep_pill(ctx, at, pane) {
-        Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
-        None => head.max.x - size::HALF_HEAD_PAD_X,
+    let right = match mcp {
+        Some(mcp_rect) => mcp_rect.min.x - size::HALF_HEAD_GAP,
+        None => match keep_pill(ctx, at, pane) {
+            Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
+            None => head.max.x - size::HALF_HEAD_PAD_X,
+        },
     };
     // Where the run beside it would start: the label inside the left padding,
     // and one gap. This is measured against that rather than against the
@@ -1116,6 +1120,7 @@ pub fn deck_name(
     at: &InspectorPane,
     pane: &Pane,
     naming: Option<&str>,
+    mcp: Option<Rect>,
 ) -> Option<DeckName> {
     // Fonts are not valid until `egui` has run a pass, exactly as in
     // [`keep_pill`] — and on the frame before the first one there is nothing
@@ -1141,13 +1146,16 @@ pub fn deck_name(
     // **The same clip [`inspector_into`] paints the words inside**, written
     // once here and read there: everything up to whatever is next along the
     // row, one `.half-head` gap short of it. That is the count where the head
-    // has room for one ([`pane_count`]), the capsule where it has not, and the
-    // head's own edge where it has neither.
-    let limit = match pane_count(ctx, at, pane, naming) {
+    // has room for one ([`pane_count`]), the mcp pill where it has one, the
+    // capsule where it has not, and the head's own edge where it has neither.
+    let limit = match pane_count(ctx, at, pane, naming, mcp) {
         Some(count) => count.min.x - size::HALF_HEAD_GAP,
-        None => match keep_pill(ctx, at, pane) {
-            Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
-            None => head.max.x,
+        None => match mcp {
+            Some(pill) => pill.min.x - size::HALF_HEAD_GAP,
+            None => match keep_pill(ctx, at, pane) {
+                Some(pill) => pill.pill.min.x - size::HALF_HEAD_GAP,
+                None => head.max.x,
+            },
         },
     };
     // **And the chooser's own room comes off it**, which is the half of
@@ -1315,8 +1323,9 @@ pub fn pane_target(
     naming: Option<&str>,
     decks: usize,
     open: bool,
+    mcp: Option<Rect>,
 ) -> Option<PaneTarget> {
-    let named = deck_name(ctx, at, pane, naming)?;
+    let named = deck_name(ctx, at, pane, naming, mcp)?;
     Some(PaneTarget {
         chevron: named.chevron,
         pane: index,

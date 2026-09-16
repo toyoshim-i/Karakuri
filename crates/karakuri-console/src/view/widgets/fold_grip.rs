@@ -72,6 +72,17 @@ pub(crate) fn pane_dividers(ui: &Ui, pal: &Palette, panel: &Panel, id: NodeId, r
                 CornerRadius::same((size::PANE_DIVIDER * 0.5) as u8),
                 pal.hair,
             );
+            // Draw the mock's vertical ellipsis grip decoration (`⋮`) in the center.
+            let center = bar.center();
+            let dot_r = 1.0;
+            let dot_step = 3.5;
+            for r in -1..=1 {
+                ui.painter().circle_filled(
+                    Pos2::new(center.x, center.y + (r as f32) * dot_step),
+                    dot_r,
+                    pal.faint,
+                );
+            }
         }
     }
 }

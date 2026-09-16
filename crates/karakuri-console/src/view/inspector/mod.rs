@@ -1071,7 +1071,13 @@ pub(super) fn inspector_into(
     // **And the count beside it**, which is what rule 04 asks of a pane that
     // is showing part of itself — derived here off the same head and painted
     // below, exactly as the capsule is. See [`pane_count`].
-    let count = pane_count(ui.ctx(), at, pane, naming);
+    let count = pane_count(
+        ui.ctx(),
+        at,
+        pane,
+        naming,
+        mcp.as_ref().map(|pill| pill.pill),
+    );
     // What is left of the head for the two words: everything up to whatever is
     // next along the row, one `.half-head` gap short of it. A name too long for
     // that is clipped, which is the row's own answer to a long name either way
@@ -1100,7 +1106,13 @@ pub(super) fn inspector_into(
     // `.what`, and the console's second letter-taking flow while a name is
     // going into it. `None` is a head with no room to paint any of it, which
     // is [`deck_name`]'s own refusal and leaves the label alone in the row.
-    if let Some(named) = deck_name(ui.ctx(), at, pane, naming) {
+    if let Some(named) = deck_name(
+        ui.ctx(),
+        at,
+        pane,
+        naming,
+        mcp.as_ref().map(|pill| pill.pill),
+    ) {
         // **A ground under the field while it is asking, and none while it is
         // reading.** A caret says letters are going *somewhere*; the tint says
         // where, which is the one thing a run of text in a row of readouts
@@ -1514,6 +1526,12 @@ impl View {
         pane: &Pane,
         index: usize,
     ) -> Option<PaneTarget> {
+        let policy = self
+            .slot_policies
+            .get(pane.deck)
+            .copied()
+            .unwrap_or_default();
+        let mcp = slot_mcp_pill(ctx, at, pane, policy).map(|p| p.pill);
         pane_target(
             ctx,
             at,
@@ -1522,6 +1540,7 @@ impl View {
             self.naming_set_in(index),
             self.mixer.len(),
             self.pane_open == Some(index),
+            mcp,
         )
     }
 }

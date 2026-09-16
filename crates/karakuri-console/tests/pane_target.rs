@@ -34,8 +34,8 @@ use common::{drawn_once, near, PLAUSIBLE};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    deck_name, inspector, to_egui, Mask, Pane, Strip, Tally, View, DECK_LETTERS, PANES, PANE_NAMES,
-    SYNCS,
+    deck_name, inspector, slot_mcp_pill, to_egui, Mask, Pane, Strip, Tally, View, DECK_LETTERS,
+    PANES, PANE_NAMES, SYNCS,
 };
 use karakuri_layout::Point;
 use karakuri_operation::{BlendMode, Operation, Sync};
@@ -126,7 +126,13 @@ fn the_mark_sits_one_gap_after_the_run() {
     for index in 0..PANES {
         let pane = &view.inspector[index];
         let laid = inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it");
-        let named = deck_name(&ctx, &laid, pane, None).expect("a head with room for the run");
+        let policy = view
+            .slot_policies
+            .get(pane.deck)
+            .copied()
+            .unwrap_or_default();
+        let mcp = slot_mcp_pill(&ctx, &laid, pane, policy).map(|p| p.pill);
+        let named = deck_name(&ctx, &laid, pane, None, mcp).expect("a head with room for the run");
         let target = pulldown(&panel, &ctx, &view, index);
         assert_eq!(target.chevron, named.chevron);
         assert!(

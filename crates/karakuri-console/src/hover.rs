@@ -108,6 +108,7 @@ use crate::control::{descriptor_for, ControlDescriptor, ControlId};
 use crate::input::{Claim, PROBES};
 use crate::panel::Panel;
 use crate::room::size::HAIRLINE;
+use crate::room::{Palette, Room};
 use crate::view::{
     arrangement, audio_in, deck_head, inspector, keep_pill, library, look, master, mcp_pill, mixer,
     outputs, program_bay, program_head, sequencer, staging, to_egui, tracker_group, transition,
@@ -2146,7 +2147,7 @@ pub struct Hover {
     /// to and its assignment has not moved. A learn changes the last line of the
     /// tip that is on screen, and a cache keyed on the control alone would go on
     /// drawing the old one.
-    galley: Option<(usize, Option<String>, Arc<Galley>)>,
+    galley: Option<(usize, Option<String>, Room, Arc<Galley>)>,
     /// Which knob the control under the pointer is on, as the host derived it from
     /// the live map — see [`Hover::assign`].
     assigned: Option<String>,
@@ -2400,27 +2401,18 @@ impl Hover {
             return;
         };
         let pal = view.room.palette();
-        let hotkey = hotkey_for_tip(rest.on);
-        let words = annotate(words, hotkey, self.assigned.as_deref());
         let galley = match &self.galley {
-            Some((on, was, galley))
-                if *on == rest.on && was.as_deref() == self.assigned.as_deref() =>
+            Some((on, was, room, galley))
+                if *on == rest.on
+                    && was.as_deref() == self.assigned.as_deref()
+                    && *room == view.room =>
             {
                 galley.clone()
             }
             _ => {
-                let mut job = LayoutJob::single_section(
-                    words.clone(),
-                    TextFormat {
-                        font_id: FontId::new(TIP_SIZE, FontFamily::Proportional),
-                        color: pal.text,
-                        line_height: Some(TIP_SIZE * TIP_LINE),
-                        ..Default::default()
-                    },
-                );
-                job.wrap.max_width = TIP_WRAP;
+                let job = build_tooltip_job(rest.on, words, self.assigned.as_deref(), &pal);
                 let galley = ui.painter().layout_job(job);
-                self.galley = Some((rest.on, self.assigned.clone(), galley.clone()));
+                self.galley = Some((rest.on, self.assigned.clone(), view.room, galley.clone()));
                 galley
             }
         };
@@ -2447,6 +2439,163 @@ impl Hover {
             pal.text,
         );
     }
+}
+
+/// Constructs a structured HUD card layout job for the tooltip.
+pub fn build_tooltip_job(
+    on: usize,
+    words: &str,
+    assigned: Option<&str>,
+    pal: &Palette,
+) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    let desc = descriptor_at(on);
+    let tipped = flat().nth(on);
+    let hotkey = hotkey_for_tip(on);
+
+    // 1. Header: Operation Title / Control Name + Hotkey Badge
+    let title = desc.and_then(|d| d.operation_title).unwrap_or_else(|| {
+        desc.map(|d| d.label)
+            .unwrap_or_else(|| tipped.map(|t| t.control).unwrap_or("Control"))
+    });
+
+    job.append(
+        title,
+        0.0,
+        TextFormat {
+            font_id: FontId::new(TIP_SIZE + 0.5, FontFamily::Proportional),
+            color: pal.text,
+            line_height: Some((TIP_SIZE + 0.5) * 1.3),
+            ..Default::default()
+        },
+    );
+
+    if let Some(hk) = hotkey {
+        job.append(
+            &format!("  {}", format_hotkey_badge(hk)),
+            0.0,
+            TextFormat {
+                font_id: FontId::new(TIP_SIZE, FontFamily::Monospace),
+                color: pal.lav,
+                line_height: Some((TIP_SIZE + 0.5) * 1.3),
+                ..Default::default()
+            },
+        );
+    }
+
+    // Spacing between Header and Body
+    job.append(
+        "\n\n",
+        0.0,
+        TextFormat {
+            font_id: FontId::new(3.0, FontFamily::Proportional),
+            line_height: Some(3.0),
+            ..Default::default()
+        },
+    );
+
+    // 2. Body: Concise factual specification
+    let (body_raw, midi_raw) = match words.rsplit_once(MIDI_LINE) {
+        Some((b, m)) => (b.trim(), Some(m.trim())),
+        None => (words.trim(), None),
+    };
+    let body_clean = body_raw
+        .trim_end_matches(['\u{2295}', ' ', '\t', '\n'])
+        .trim();
+
+    job.append(
+        body_clean,
+        0.0,
+        TextFormat {
+            font_id: FontId::new(TIP_SIZE, FontFamily::Proportional),
+            color: pal.dim,
+            line_height: Some(TIP_SIZE * TIP_LINE),
+            ..Default::default()
+        },
+    );
+
+    // 3. Footer: Action, MIDI mapping, MCP policy
+    let action = desc.and_then(|d| d.action);
+    let mcp = desc.and_then(|d| d.mcp_policy);
+
+    let has_footer = action.is_some() || assigned.is_some() || midi_raw.is_some() || mcp.is_some();
+    if has_footer {
+        job.append(
+            "\n\n",
+            0.0,
+            TextFormat {
+                font_id: FontId::new(4.0, FontFamily::Proportional),
+                line_height: Some(4.0),
+                ..Default::default()
+            },
+        );
+
+        if let Some(act) = action {
+            job.append(
+                &format!("Action: {act}\n"),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
+                    color: pal.faint,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        }
+
+        if let Some(map_desc) = assigned {
+            job.append(
+                &format!("● MIDI: {map_desc}\n"),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
+                    color: pal.sun,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        } else if let Some(m) = midi_raw {
+            let is_unassigned = m.starts_with("unassigned");
+            let (bullet, color) = if is_unassigned {
+                ("○", pal.faint)
+            } else {
+                ("●", pal.sun)
+            };
+            let summary = if is_unassigned {
+                "MIDI: unassigned"
+            } else if let Some((c, _)) = m.split_once(" — ") {
+                c
+            } else {
+                m
+            };
+            job.append(
+                &format!("{bullet} {summary}\n"),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
+                    color,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        }
+
+        if let Some(policy) = mcp {
+            job.append(
+                &format!("MCP: {policy}"),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Monospace),
+                    color: pal.mint,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        }
+    }
+
+    job.wrap.max_width = TIP_WRAP;
+    job
 }
 
 /// Formats a hotkey as a badge for tooltip display (e.g. `"[Space]"`, `"[K]"`).

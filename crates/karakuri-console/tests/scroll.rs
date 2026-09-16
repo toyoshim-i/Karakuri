@@ -407,7 +407,7 @@ fn the_head_says_how_many_groups_are_not_shown() {
     let all = laid(&tall, &view_at(&pane, 0.0), &pane);
     assert_eq!(count_text(&all, &pane), "3 of 3");
     assert!(
-        pane_count(&ctx, &all, &pane, None).is_some(),
+        pane_count(&ctx, &all, &pane, None, None).is_some(),
         "a pane with room for its words drew no count"
     );
 
@@ -429,7 +429,7 @@ fn the_head_says_how_many_groups_are_not_shown() {
         some.shown < pane.nodes.len(),
         "the short pane is showing everything, so there is nothing for it to say"
     );
-    let rect = pane_count(&ctx, &some, &pane, None).expect("a count in the head");
+    let rect = pane_count(&ctx, &some, &pane, None, None).expect("a count in the head");
     assert!(
         some.head.contains_rect(rect),
         "the count is drawn outside the head it is in"

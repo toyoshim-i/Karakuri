@@ -45,17 +45,27 @@ Karakuri is a real-time visual performance system where human performers and aut
   - Multi-level keyboard navigation and focus ladder.
   - Verified exit condition: 100% of panel operations implemented (`grep -c 'rt plan">panel' docs/manual/operations.html` returns 0).
 - **[M6: Live Performance Hardening & Runtime Safety](history/m6.md)** (Closed 2026-09-14): the chain compiles on a worker (ADR-0354), a swapped-in Set is estimated (ADR-0356), a session head names the deck (ADR-0355), ADR-0323's refusal is called, a lane can be removed (ADR-0357); the projector, the transport figure and `over_budget` settled by ADR-0358..0360.
-- **[M7: Autonomous Agent Control & MCP Integration](history/m7.md)** (Closed 2026-09-16): Slot-level MCP access policy in Inspector (`mcp · auto` / `on` / `off`; ADR-0362), live mixer contribution tracking (`tally == Live && opacity > 0.0`), live co-performance workflow tools (`get_permissions`, `read_slot`, `copy_slot`; ADR-0363), and atomic `.tmp` staging for live scratch editing and slot duplication.
+- **[M7: Autonomous Agent Control & MCP Integration](history/m7.md)** (Foundations closed 2026-09-16, usability & ergonomics active): Core slot policy (`Auto` / `On` / `Off`; ADR-0362), live mixer tracking, and workflow tools (`get_permissions`, `read_slot`, `copy_slot`; ADR-0363) completed and archived in history. Remaining usability, HUD cards, mixer terminology, focus redesign, and documentation remain active in Section 3 below.
 
 ---
 
 ## 3. The Path to MVP
 
-The remaining open work is structured into two sequential milestones focused on musical synchronization and final release polish.
+The remaining open work is structured into three sequential milestones: completing agent and console usability (M7), anchoring musical synchronization and hardware (M8), and final release polish (M9).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ M8: Musical Synchronization & Hardware Integration (Immediate Priority) │
+│ M7: Autonomous Agent Control & MCP Integration (Active / In Progress)  │
+│ - Tooltip HUD Visual Overhaul & Literature Copy Streamlining            │
+│ - Dedicated MCP Client Documentation & Connection Guides               │
+│ - Mixer Channel Strip Controls: SOLO / MUTE Migration                   │
+│ - Console Visual Parity & Active Focus (.wfocus) Redesign               │
+│ - MCP Policy Persistence & Programmatic Refusal Codes                   │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ M8: Musical Synchronization & Hardware Integration                      │
 │ - Ableton Link Out-of-Process Synchronization                           │
 │ - Live MIDI Surface Mapping & Profile Persistence                       │
 │ - Low-Latency Audio FFT & Onset Signal Pipeline                         │
@@ -71,6 +81,30 @@ The remaining open work is structured into two sequential milestones focused on 
 │ - Release Packaging, Verification & Documentation Audit                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+### M7 — Autonomous Agent Control & MCP Integration (Remaining Deliverables)
+
+**Objective**: Complete the human-AI co-performance ergonomics, console readability, and comprehensive developer/agent documentation. Foundational engine tracking and core tools are archived in [history/m7.md](history/m7.md).
+
+#### Key Deliverables:
+1. **Tooltip HUD Visual Overhaul & Copy Cleanup**:
+   - Migrate all 39 interactive probe tooltips from stream-of-consciousness literature strings to the concise, structured HUD card format (`eyebrow`, `title`, `state`, `summary`, `body`, `midi`, `mcp`).
+   - Implement Dark mode and Fancy/Day mode palette preview and runtime toggling.
+2. **Dedicated MCP Client Documentation**:
+   - Provide an official guide in `docs/manual/` (`mcp.html` / `mcp.md`) detailing agent connection setup, safety conventions, slot policies, and the M7 co-performance tool suite (`get_permissions`, `read_slot`, `copy_slot`).
+   - Update `karakuri-mcp/README.md` and architecture references from the legacy 10-tool to the current 13-tool catalog.
+3. **Mixer Channel Strip Controls (SOLO / MUTE Migration)**:
+   - Transition channel strip primary controls from internal engine pipeline states (`live`, `prim`, `alloc`) to conventional mixer terminology (`SOLO`, `MUTE`), decoupling operator performance intent from residency tallies.
+4. **Console Visual Parity & Focus Redesign**:
+   - Revisit the `.wfocus` active bay indicator: replace the prominent dashed amber outline on the top transport bar with a cleaner, subtle indicator (e.g. subtle glow or header accent).
+   - Restore visual decorations from `console.html`: vertical divider grip decoration (`⋮` on `.divider-v`).
+5. **Session Policy Persistence & Programmatic Refusals**:
+   - Persist per-slot MCP policies (`Auto`, `On`, `Off`) across sessions/restarts.
+   - Standardize agent refusal responses into machine-readable error codes.
+
+**Exit Condition**: 100% of console probes render structured HUD cards; dedicated MCP manual published; mixer channels expose SOLO/MUTE; active focus indicator polished; test suite green.
 
 ---
 

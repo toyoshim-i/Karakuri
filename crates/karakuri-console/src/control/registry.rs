@@ -9,6 +9,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Outputs row sinks",
         hotkey: None,
         operation_title: Some("Route outputs"),
+        action: Some("Click to toggle"),
+        mcp_policy: Some("route_output"),
     },
     ControlDescriptor {
         id: ControlId::AudioIn,
@@ -16,6 +18,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Audio-in pill",
         hotkey: None,
         operation_title: Some("Attach a beat source"),
+        action: Some("Click to select"),
+        mcp_policy: Some("set_audio_in"),
     },
     ControlDescriptor {
         id: ControlId::Tracker,
@@ -23,6 +27,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Tracker group",
         hotkey: Some("b"),
         operation_title: Some("Tap the beat"),
+        action: Some("Click / Tap"),
+        mcp_policy: Some("tap_tempo"),
     },
     ControlDescriptor {
         id: ControlId::TransportLearn,
@@ -30,6 +36,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Transport learn pill",
         hotkey: None,
         operation_title: None,
+        action: Some("Click to arm"),
+        mcp_policy: None,
     },
     ControlDescriptor {
         id: ControlId::TransportMap,
@@ -37,6 +45,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Transport map pill",
         hotkey: None,
         operation_title: None,
+        action: Some("Click to open"),
+        mcp_policy: None,
     },
     ControlDescriptor {
         id: ControlId::Arrangement,
@@ -44,6 +54,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Arrangement pill",
         hotkey: Some("r"),
         operation_title: Some("Reset the arrangement"),
+        action: Some("Click to reset"),
+        mcp_policy: Some("reset_arrangement"),
     },
     ControlDescriptor {
         id: ControlId::Look,
@@ -51,6 +63,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Look group",
         hotkey: None,
         operation_title: Some("Tone map"),
+        action: Some("Click to cycle"),
+        mcp_policy: Some("set_look"),
     },
     ControlDescriptor {
         id: ControlId::TransportRec,
@@ -58,6 +72,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Transport rec pill",
         hotkey: None,
         operation_title: Some("Record session"),
+        action: Some("Click to record"),
+        mcp_policy: Some("record_session"),
     },
     ControlDescriptor {
         id: ControlId::TransportTempo,
@@ -65,6 +81,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Transport tempo figure",
         hotkey: None,
         operation_title: Some("Set the free-run tempo"),
+        action: Some("Click or Drag"),
+        mcp_policy: Some("set_tempo"),
     },
     ControlDescriptor {
         id: ControlId::MixerStrip,
@@ -72,6 +90,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Mixer strip",
         hotkey: None,
         operation_title: Some("Select a deck"),
+        action: Some("Click to select"),
+        mcp_policy: Some("select_deck"),
     },
     ControlDescriptor {
         id: ControlId::Transition,
@@ -79,6 +99,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Transition row",
         hotkey: Some("space"),
         operation_title: Some("Wipe the next deck in"),
+        action: Some("Click to wipe"),
+        mcp_policy: Some("transition"),
     },
     ControlDescriptor {
         id: ControlId::Master,
@@ -86,6 +108,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Master bay",
         hotkey: None,
         operation_title: Some("Master out"),
+        action: Some("Drag fader"),
+        mcp_policy: Some("set_master"),
     },
     ControlDescriptor {
         id: ControlId::InspectorPaneName,
@@ -93,6 +117,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Inspector pane name",
         hotkey: None,
         operation_title: None,
+        action: Some("Click to rename"),
+        mcp_policy: Some("rename_set"),
     },
     ControlDescriptor {
         id: ControlId::InspectorPaneKeep,
@@ -100,6 +126,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Inspector pane keep capsule",
         hotkey: Some("k"),
         operation_title: Some("Keep what a deck is playing"),
+        action: Some("Click to save"),
+        mcp_policy: Some("keep_deck"),
     },
     ControlDescriptor {
         id: ControlId::InspectorSlotMcp,
@@ -107,6 +135,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Inspector pane slot MCP policy",
         hotkey: None,
         operation_title: None,
+        action: Some("Click to toggle"),
+        mcp_policy: Some("set_slot_mcp_policy"),
     },
     ControlDescriptor {
         id: ControlId::InspectorPaneTarget,
@@ -114,6 +144,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Inspector pane deck pulldown",
         hotkey: None,
         operation_title: Some("Point an Inspector pane at a deck"),
+        action: Some("Click to switch"),
+        mcp_policy: Some("target_deck"),
     },
     ControlDescriptor {
         id: ControlId::InspectorDeckHead,
@@ -121,6 +153,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Deck head controls",
         hotkey: None,
         operation_title: Some("Set a deck's sync mode"),
+        action: Some("Click to cycle"),
+        mcp_policy: Some("set_sync"),
     },
     ControlDescriptor {
         id: ControlId::InspectorRenderers,
@@ -128,6 +162,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Renderer chips",
         hotkey: None,
         operation_title: Some("Choose which renderer of a deck is live"),
+        action: Some("Click to choose"),
+        mcp_policy: Some("choose_renderer"),
     },
     ControlDescriptor {
         id: ControlId::InspectorParam,
@@ -135,6 +171,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Parameter row fader",
         hotkey: None,
         operation_title: Some("Write a parameter"),
+        action: Some("Drag fader"),
+        mcp_policy: Some("set_param"),
     },
     ControlDescriptor {
         id: ControlId::InspectorPublish,
@@ -142,6 +180,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Parameter row publish mark",
         hotkey: None,
         operation_title: Some("Narrow the published interface"),
+        action: Some("Click to toggle"),
+        mcp_policy: Some("publish_param"),
     },
     ControlDescriptor {
         id: ControlId::InspectorUses,
@@ -149,6 +189,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Node uses capsule and card",
         hotkey: None,
         operation_title: Some("Wire a procedure's input to a node"),
+        action: Some("Click to wire"),
+        mcp_policy: Some("wire_input"),
     },
     ControlDescriptor {
         id: ControlId::InspectorAuthority,
@@ -156,6 +198,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Node authority chips",
         hotkey: None,
         operation_title: Some("Set a node's authority"),
+        action: Some("Click to set"),
+        mcp_policy: Some("set_authority"),
     },
     ControlDescriptor {
         id: ControlId::InspectorNodeKeep,
@@ -163,6 +207,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Node keep capsule",
         hotkey: None,
         operation_title: Some("Keep a node's procedure"),
+        action: Some("Click to save"),
+        mcp_policy: Some("keep_node"),
     },
     ControlDescriptor {
         id: ControlId::InspectorSensitivity,
@@ -170,6 +216,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Sensitivity curve and take back",
         hotkey: None,
         operation_title: Some("Take a parameter back"),
+        action: Some("Click or Drag"),
+        mcp_policy: Some("take_param_back"),
     },
     ControlDescriptor {
         id: ControlId::ProgramSolo,
@@ -177,6 +225,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Program bay solo capsule",
         hotkey: None,
         operation_title: Some("Solo the program view"),
+        action: Some("Click to solo"),
+        mcp_policy: Some("solo_program"),
     },
     ControlDescriptor {
         id: ControlId::BayGrip,
@@ -184,6 +234,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Bay head fold grip",
         hotkey: Some("g"),
         operation_title: Some("Fold a pane away"),
+        action: Some("Click to fold"),
+        mcp_policy: None,
     },
     ControlDescriptor {
         id: ControlId::DeckPreview,
@@ -191,6 +243,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Deck preview cells",
         hotkey: None,
         operation_title: Some("Select a deck"),
+        action: Some("Click to select"),
+        mcp_policy: Some("select_deck"),
     },
     ControlDescriptor {
         id: ControlId::LibraryScope,
@@ -198,6 +252,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library scope chips",
         hotkey: None,
         operation_title: Some("Choose which scope the library shows"),
+        action: Some("Click to choose"),
+        mcp_policy: Some("list_library"),
     },
     ControlDescriptor {
         id: ControlId::LibraryFilter,
@@ -205,6 +261,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library filter fields",
         hotkey: None,
         operation_title: Some("Filter the library"),
+        action: Some("Type to filter"),
+        mcp_policy: Some("filter_library"),
     },
     ControlDescriptor {
         id: ControlId::LibraryKinds,
@@ -212,6 +270,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library kind chips",
         hotkey: None,
         operation_title: Some("Filter the library by kind"),
+        action: Some("Click to filter"),
+        mcp_policy: Some("filter_library_kind"),
     },
     ControlDescriptor {
         id: ControlId::LibraryBadges,
@@ -219,6 +279,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library row badges",
         hotkey: None,
         operation_title: None,
+        action: Some("Click to view"),
+        mcp_policy: None,
     },
     ControlDescriptor {
         id: ControlId::LibraryParams,
@@ -226,6 +288,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library params chip",
         hotkey: None,
         operation_title: Some("Read what one Set holds and declares"),
+        action: Some("Click to inspect"),
+        mcp_policy: Some("inspect_set"),
     },
     ControlDescriptor {
         id: ControlId::LibraryLoad,
@@ -233,6 +297,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library load button and deck pulldown",
         hotkey: Some("enter"),
         operation_title: Some("Load material into a deck"),
+        action: Some("Click or Drop"),
+        mcp_policy: Some("load_deck"),
     },
     ControlDescriptor {
         id: ControlId::LibraryStars,
@@ -240,6 +306,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library row stars",
         hotkey: None,
         operation_title: Some("Star a Set, or take the star off"),
+        action: Some("Click to star"),
+        mcp_policy: Some("star_set"),
     },
     ControlDescriptor {
         id: ControlId::LibraryList,
@@ -247,6 +315,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Library list rows",
         hotkey: None,
         operation_title: Some("List what the store holds"),
+        action: Some("Click or Drag"),
+        mcp_policy: Some("list_library"),
     },
     ControlDescriptor {
         id: ControlId::ClassPills,
@@ -254,6 +324,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "MCP safety class pills",
         hotkey: None,
         operation_title: None,
+        action: Some("Click to cycle"),
+        mcp_policy: Some("set_class_policy"),
     },
     ControlDescriptor {
         id: ControlId::Sequencer,
@@ -261,6 +333,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Sequencer bay controls, including a lane's minus",
         hotkey: None,
         operation_title: Some("Toggle a step"),
+        action: Some("Click to toggle"),
+        mcp_policy: Some("toggle_step"),
     },
     ControlDescriptor {
         id: ControlId::StagingBack,
@@ -268,6 +342,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Staging lane back capsules",
         hotkey: None,
         operation_title: Some("Take a candidate back"),
+        action: Some("Click to return"),
+        mcp_policy: Some("return_candidate"),
     },
     ControlDescriptor {
         id: ControlId::StagingCandidate,
@@ -275,6 +351,8 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
         label: "Staging lane candidate rows",
         hotkey: None,
         operation_title: Some("Promote a candidate"),
+        action: Some("Click to promote"),
+        mcp_policy: Some("promote_candidate"),
     },
 ];
 
