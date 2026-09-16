@@ -1217,10 +1217,22 @@ impl Engine {
     /// `Deck::is_parked` is not called in this file at all outside `mod gpu`.
     ///
     /// Where a measurement is missing the budget is left where it was, and the
+    /// Startup initialization for the engine before the first frame.
+    ///
+    /// Measures and estimates all cold slots so their costs are known,
+    /// and runs the initial governor pass against normal budget.
+    /// Slots other than ON_AIR remain cleanly resting at `Residency::Allocated`.
+    pub(crate) fn startup(&mut self, gpu: &Gpu) -> Report {
+        self.deck.measure_slots(&gpu.device, &gpu.queue);
+        self.deck.estimate_slots(&gpu.device, &gpu.queue);
+        self.deck.govern()
+    }
+
     /// governor parks the request anyway for a different and more serious reason —
     /// an unmeasured Live slot means the committed cost is unknown, which suspends
     /// priming wholesale. The caller prints the reason it got rather than the one
     /// this comment expects.
+    #[allow(dead_code)]
     pub(crate) fn ask_to_prime(&mut self, gpu: &Gpu) -> Report {
         // **Before the first frame, and this is the only place it can be.**
         // Measuring means stepping and ends in a rewind, so `measure_slots`

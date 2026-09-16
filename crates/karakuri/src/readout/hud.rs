@@ -1,7 +1,7 @@
 //! HUD legend formatting, status string generation, and console logging.
 
 use super::*;
-use crate::{presets_listing, ASKED_TO_PRIME};
+use crate::presets_listing;
 
 impl Readout {
     /// A drag, in words: what was asked, where it landed, what held it, and what
@@ -368,36 +368,46 @@ impl Readout {
         // describing a decision it did not read. The line under this one has
         // printed the governor's own word all along; the two disagreeing is
         // worse than either being wrong alone.
-        let why = match governed
+        let parked_decisions: Vec<_> = governed
             .decisions
             .iter()
-            .find(|decision| decision.slot == ASKED_TO_PRIME)
-            .map(|decision| decision.reason)
-        {
-            Some(Reason::NoHeadroom) => "the budget has no room",
-            Some(Reason::NoPrimingNeeded) => {
-                "the Set is closed form and has nothing to warm, which is the one park no \
-                 amount of budget resolves"
-            }
-            Some(Reason::Unmeasured) => "nothing measured what that slot costs",
-            Some(Reason::CommittedUnknown) => {
-                "what this deck is already spending is unknown, so there is no headroom \
-                 figure to admit against"
-            }
-            _ => "the governor did not grant it",
-        };
-        println!(
-            "deck {parked}'s strip is the one that MOVES: its chip reads ALLOC and rolls \
-             part of the way toward PRIM once a second and falls back, never landing, \
-             because what the slot was asked for and what it is doing disagree. this \
-             program asks for {parked} to be primed at startup and {why}, \
-             so `Deck::govern` holds it at allocated with the request intact — that is a \
-             PARK, which is `not now` and not `no`: nothing has to be asked twice, and the \
-             next pass over a deck with room admits it. nothing in this file writes an \
-             effective residency or draws a park; the strip carries both of the deck's own \
-             words for that slot and the view derives the rest.",
-            parked = deck_letter(ASKED_TO_PRIME as u8)
-        );
+            .filter(|decision| {
+                matches!(
+                    decision.reason,
+                    Reason::NoHeadroom
+                        | Reason::NoPrimingNeeded
+                        | Reason::Unmeasured
+                        | Reason::CommittedUnknown
+                )
+            })
+            .collect();
+        for parked_dec in parked_decisions {
+            let parked = deck_letter(parked_dec.slot as u8);
+            let why = match parked_dec.reason {
+                Reason::NoHeadroom => "the budget has no room",
+                Reason::NoPrimingNeeded => {
+                    "the Set is closed form and has nothing to warm, which is the one park no \
+                     amount of budget resolves"
+                }
+                Reason::Unmeasured => "nothing measured what that slot costs",
+                Reason::CommittedUnknown => {
+                    "what this deck is already spending is unknown, so there is no headroom \
+                     figure to admit against"
+                }
+                _ => "the governor did not grant it",
+            };
+            println!(
+                "deck {parked}'s strip is the one that MOVES: its chip reads ALLOC and rolls \
+                 part of the way toward PRIM once a second and falls back, never landing, \
+                 because what the slot was asked for and what it is doing disagree. slot \
+                 {parked} was asked to be primed and {why}, \
+                 so `Deck::govern` holds it at allocated with the request intact — that is a \
+                 PARK, which is `not now` and not `no`: nothing has to be asked twice, and the \
+                 next pass over a deck with room admits it. nothing in this file writes an \
+                 effective residency or draws a park; the strip carries both of the deck's own \
+                 words for that slot and the view derives the rest."
+            );
+        }
         // **The slots nobody asked anything of, counted off the report rather
         // than named here.** `Reason::OffAir` is the governor's own word for
         // *allocated, and that is what was asked for*: it was not asked about

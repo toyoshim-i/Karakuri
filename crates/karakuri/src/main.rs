@@ -481,6 +481,7 @@ pub(crate) const SLOTS: usize = MAX_SLOTS;
 /// cycles its tally or loads material into it. See [`Engine::new`], where that
 /// resting state is written and argued.
 pub(crate) const ON_AIR: usize = 0;
+#[allow(dead_code)]
 pub(crate) const ASKED_TO_PRIME: usize = 1;
 
 /// The `.kir` pair this plays, and the whole of how an operator names material.
