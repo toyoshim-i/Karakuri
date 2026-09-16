@@ -45,25 +45,17 @@ Karakuri is a real-time visual performance system where human performers and aut
   - Multi-level keyboard navigation and focus ladder.
   - Verified exit condition: 100% of panel operations implemented (`grep -c 'rt plan">panel' docs/manual/operations.html` returns 0).
 - **[M6: Live Performance Hardening & Runtime Safety](history/m6.md)** (Closed 2026-09-14): the chain compiles on a worker (ADR-0354), a swapped-in Set is estimated (ADR-0356), a session head names the deck (ADR-0355), ADR-0323's refusal is called, a lane can be removed (ADR-0357); the projector, the transport figure and `over_budget` settled by ADR-0358..0360.
+- **[M7: Autonomous Agent Control & MCP Integration](history/m7.md)** (Closed 2026-09-16): Slot-level MCP access policy in Inspector (`mcp · auto` / `on` / `off`; ADR-0362), live mixer contribution tracking (`tally == Live && opacity > 0.0`), live co-performance workflow tools (`get_permissions`, `read_slot`, `copy_slot`; ADR-0363), and atomic `.tmp` staging for live scratch editing and slot duplication.
 
 ---
 
 ## 3. The Path to MVP
 
-The remaining open work is structured into three sequential milestones focused on agent autonomy, musical synchronization, and final release polish.
+The remaining open work is structured into two sequential milestones focused on musical synchronization and final release polish.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ M7: Autonomous Agent Control & MCP Integration (Immediate Priority)     │
-│ - Asynchronous Background Generation Queue                              │
-│ - Tri-State Authority Protocol (Autonomous / Suggest / Takeover)        │
-│ - Coordinated Multi-Layer Set Generation Tools                          │
-│ - Candidate Set Priming & Variant Pool                                  │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ M8: Musical Synchronization & Hardware Integration                      │
+│ M8: Musical Synchronization & Hardware Integration (Immediate Priority) │
 │ - Ableton Link Out-of-Process Synchronization                           │
 │ - Live MIDI Surface Mapping & Profile Persistence                       │
 │ - Low-Latency Audio FFT & Onset Signal Pipeline                         │
@@ -79,31 +71,6 @@ The remaining open work is structured into three sequential milestones focused o
 │ - Release Packaging, Verification & Documentation Audit                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
-
----
-
-### M7 — Autonomous Agent Control & MCP Integration
-
-**Objective**: Turn the Model Context Protocol (MCP) server into an active co-performer capable of autonomously authoring, auditioning, and proposing visual sets during a performance.
-
-#### Key Deliverables:
-1. **Asynchronous Generation Queue**:
-   - Priority-based generation queue managing LLM requests in the background without blocking interactive response.
-   - Pre-validation of generated `.kir` code against IR grammar, type safety, and GPU cost ceilings before warm-up.
-2. **Tri-State Node Authority Protocol**:
-   - Implement node-level authority states:
-     - `Autonomous`: Agent drives parameter modulation and swaps.
-     - `Suggest`: Agent proposals are staged as candidate cards for operator confirmation.
-     - `Takeover`: Operator manual manipulation immediately demotes agent control ([P-0094](principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-3. **Coordinated Multi-Layer Set Authoring**:
-   - Provide high-level MCP tools allowing agents to generate coordinated multi-layer Sets (Geometry + Deform + Renderer) with declared parameter ranges and matching uniforms.
-   - Expose active store procedures and metadata cards to MCP clients for context-aware code generation.
-4. **Offline Priming & Variant Pool**:
-   - Support background priming of candidate Sets on off-air deck slots, enabling instantaneous, glitch-free swaps when visual themes shift.
-5. **Agent Telemetry & Real-Time Feedback**:
-   - Provide MCP tools with live governor feedback, available frame headroom, and audio energy descriptors.
-
-**Exit Condition**: An AI agent running over loopback MCP can autonomously generate, prime, and crossfade a sequence of valid procedural Sets in response to simulated music cues without manual intervention.
 
 ---
 

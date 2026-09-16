@@ -387,6 +387,8 @@ number; new records continue from the end.
 | [ADR-0359](0359-the-transport-rows-frame-figure-stays-the-cpus-and-says-so.md) | The transport row's frame figure stays the CPU's, and says so | 2026-09-14 | accepted |
 | [ADR-0360](0360-over-budget-stays-the-live-slots-sum-and-no-deck-total-is-drawn.md) | over_budget stays the Live slots' sum, and no deck total is drawn | 2026-09-14 | accepted |
 | [ADR-0361](0361-the-picture-format-is-read-off-the-consoles-own-surface-rather-than-named.md) | The picture format is read off the console's own surface rather than named | 2026-09-14 | accepted |
+| [ADR-0362](0362-a-slots-mcp-policy-is-auto-on-or-off-and-the-mixers-live-contribution-decides-auto.md) | A slot's MCP policy is auto, on, or off, and the mixer's live contribution decides auto | 2026-09-16 | accepted |
+| [ADR-0363](0363-agent-workflow-operations-are-read-slot-copy-slot-and-get-permissions-staged-through-atomic-rename.md) | Agent workflow operations are read_slot, copy_slot, and get_permissions, staged through atomic rename | 2026-09-16 | accepted |
 
 ## Retired numbers
 
