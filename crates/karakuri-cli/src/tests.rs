@@ -4333,6 +4333,7 @@ mod wire_tests {
             dir.path().join("store"),
             true,
             karakuri_environment::Opening::closed(),
+            karakuri_environment::SlotPolicies::default(),
         )
         .expect("serve");
         let port = reporter.port();
@@ -4445,6 +4446,7 @@ mod wire_tests {
             dir.path().join("store"),
             true,
             opening,
+            karakuri_environment::SlotPolicies::default(),
         )
         .expect("serve");
         let port = reporter.port();

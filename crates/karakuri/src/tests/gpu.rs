@@ -272,8 +272,15 @@ fn the_swap_report_says_what_the_lane_says() {
         pointing.clone(),
     );
 
-    let reporter =
-        mcp::serve(0, pointing, root.clone(), true, Opening::closed()).expect("an ephemeral port");
+    let reporter = mcp::serve(
+        0,
+        pointing,
+        root.clone(),
+        true,
+        Opening::closed(),
+        karakuri_environment::SlotPolicies::default(),
+    )
+    .expect("an ephemeral port");
     let port = reporter.port();
 
     let mut keeping = keeping();

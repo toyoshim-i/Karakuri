@@ -23,6 +23,7 @@ fn state(events: mpsc::Receiver<Event>) -> State {
         // **Closed, all four classes**, which is the state a run starts in
         // and the state every test in this module reasons under.
         opening: karakuri_environment::Opening::closed(),
+        slot_policies: karakuri_environment::SlotPolicies::default(),
         events,
         asked: mpsc::sync_channel(ASKED).0,
         wiring: mpsc::sync_channel(ASKED).0,

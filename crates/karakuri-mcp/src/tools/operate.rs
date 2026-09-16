@@ -40,6 +40,13 @@ pub(crate) fn operate(
     operation: &Operation,
     state: &State,
 ) -> Result<mpsc::Receiver<News>, String> {
+    if let Operation::WriteParam { deck, .. }
+    | Operation::TakeParamBack { deck, .. }
+    | Operation::LoadProcedure { deck, .. }
+    | Operation::RestoreProcedure { deck, .. } = operation
+    {
+        state.slot_policies.check_writable(usize::from(*deck))?;
+    }
     let (tx, rx) = mpsc::channel();
     state
         .operating

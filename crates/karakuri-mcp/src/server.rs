@@ -29,6 +29,7 @@ pub fn serve(
     store: std::path::PathBuf,
     watching: bool,
     opening: karakuri_environment::Opening,
+    slot_policies: karakuri_environment::SlotPolicies,
 ) -> Result<Reporter, String> {
     if slots.count() == 0 {
         return Err("this run has no procedure files to serve — see `--load-set`".into());
@@ -55,6 +56,7 @@ pub fn serve(
         store,
         watching,
         opening,
+        slot_policies,
         events: rx,
         asked,
         wiring,

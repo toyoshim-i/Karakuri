@@ -1042,6 +1042,80 @@ impl Authority {
     }
 }
 
+/// Slot-level MCP modification policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SlotPolicy {
+    /// Automatically permit writes when off-air (fader == 0 or muted),
+    /// and protect against writes when on-air.
+    #[default]
+    Auto,
+    /// Always allow MCP modifications to this slot.
+    On,
+    /// Always block MCP modifications to this slot.
+    Off,
+}
+
+impl SlotPolicy {
+    pub const ALL: [SlotPolicy; 3] = [SlotPolicy::Auto, SlotPolicy::On, SlotPolicy::Off];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            SlotPolicy::Auto => "auto",
+            SlotPolicy::On => "on",
+            SlotPolicy::Off => "off",
+        }
+    }
+
+    pub fn pill_word(self) -> &'static str {
+        match self {
+            SlotPolicy::Auto => "mcp · auto",
+            SlotPolicy::On => "mcp · on",
+            SlotPolicy::Off => "mcp · off",
+        }
+    }
+
+    pub fn next(self) -> SlotPolicy {
+        match self {
+            SlotPolicy::Auto => SlotPolicy::On,
+            SlotPolicy::On => SlotPolicy::Off,
+            SlotPolicy::Off => SlotPolicy::Auto,
+        }
+    }
+}
+
+/// Slot-level MCP access status and write-ability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SlotAccess {
+    pub policy: SlotPolicy,
+    pub in_mix: bool,
+}
+
+impl SlotAccess {
+    pub fn new(policy: SlotPolicy, in_mix: bool) -> Self {
+        Self { policy, in_mix }
+    }
+
+    pub fn is_writable(&self) -> bool {
+        match self.policy {
+            SlotPolicy::Auto => !self.in_mix,
+            SlotPolicy::On => true,
+            SlotPolicy::Off => false,
+        }
+    }
+
+    pub fn refusal_reason(&self, slot: usize) -> Option<String> {
+        match self.policy {
+            SlotPolicy::Auto if self.in_mix => Some(format!(
+                "slot {slot} is currently active in the mix and protected under `auto` policy"
+            )),
+            SlotPolicy::Off => Some(format!(
+                "slot {slot} is locked against MCP modifications under `off` policy"
+            )),
+            _ => None,
+        }
+    }
+}
+
 /// Which way [`Operation::ScaleGrid`] moves the grid. Two values and not an
 /// `f32`: the manual's row is *"Halve or double the grid"*, and a factor of 1.3
 /// is not an operation anything in this instrument has.

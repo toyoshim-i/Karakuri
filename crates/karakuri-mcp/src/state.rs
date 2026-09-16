@@ -739,6 +739,7 @@ pub(crate) struct State {
     /// can a caller forget it: it is positional, so a run that does not mention an
     /// opening does not compile.
     pub(crate) opening: karakuri_environment::Opening,
+    pub(crate) slot_policies: karakuri_environment::SlotPolicies,
     pub(crate) events: mpsc::Receiver<Event>,
     /// Where a save a client asks for goes. Bounded and never blocked on — see
     /// [`ASKED`]: this is sent into from a connection thread, and a render loop
