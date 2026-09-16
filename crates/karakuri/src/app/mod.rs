@@ -5,7 +5,7 @@ use std::time::Instant;
 use karakuri_console::egui_winit;
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_environment::clock::Clock;
-use karakuri_environment::{history, midi, watch, Asked, Opening};
+use karakuri_environment::{history, midi, watch, Asked, Opening, SlotPolicies};
 use karakuri_mcp as mcp;
 use karakuri_operation::Operation;
 use karakuri_operation_record::{written, Written};
@@ -334,6 +334,7 @@ impl App {
         // [`App::waker`]'s reason: the surface is opened in `resumed`, which
         // is handed an `ActiveEventLoop` and cannot make one of these.
         waker: EventLoopProxy<()>,
+        slot_policies: SlotPolicies,
     ) -> App {
         let mut readout = Readout::new(WINDOW.0 as f32, WINDOW.1 as f32);
         // **The one handle, and it lives on the readout because that is where
@@ -342,6 +343,13 @@ impl App {
         // was not.
         readout.view.opening = opening.read();
         readout.opening = opening;
+        readout.slot_policies = slot_policies.clone();
+        readout.view.slot_policies = [
+            slot_policies.policy(0),
+            slot_policies.policy(1),
+            slot_policies.policy(2),
+            slot_policies.policy(3),
+        ];
         let (built_tx, built) = std::sync::mpsc::channel();
         let (save_tx, saves) = std::sync::mpsc::channel();
         let (send_tx, sends) = std::sync::mpsc::channel();

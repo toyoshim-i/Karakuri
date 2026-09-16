@@ -245,6 +245,10 @@ impl ApplicationHandler for App {
         let material: Vec<String> =
             std::iter::repeat_n(self.sources.material(), engine.deck.slot_count()).collect();
         mixer(&engine.deck, &material, &mut self.readout.view.mixer);
+        for (i, strip) in self.readout.view.mixer.iter().enumerate() {
+            let in_mix = strip.tally == karakuri_console::view::Tally::Live && strip.opacity > 0.0;
+            self.readout.slot_policies.set_in_mix(i, in_mix);
+        }
         // **The library before the legend too**, and once for the run: the
         // legend says how many Sets the bay lists, and `library` says why
         // where it is none.
@@ -2011,6 +2015,11 @@ impl ApplicationHandler for App {
                     &gfx.material,
                     &mut self.readout.view.mixer,
                 );
+                for (i, strip) in self.readout.view.mixer.iter().enumerate() {
+                    let in_mix =
+                        strip.tally == karakuri_console::view::Tally::Live && strip.opacity > 0.0;
+                    self.readout.slot_policies.set_in_mix(i, in_mix);
+                }
 
                 // **And what the Staging lane lists**, off the same deck and
                 // beside the frame the verdicts belong to. It reads the
