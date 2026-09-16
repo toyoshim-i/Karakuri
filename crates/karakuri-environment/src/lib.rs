@@ -220,6 +220,11 @@ impl SlotPolicies {
             .unwrap_or_default()
     }
 
+    /// Reads the policy configured for a slot.
+    pub fn policy(&self, slot: usize) -> karakuri_operation::SlotPolicy {
+        self.access(slot).policy
+    }
+
     /// Checks if a slot is writable by MCP, returning an error message if refused.
     pub fn check_writable(&self, slot: usize) -> Result<(), String> {
         let access = self.access(slot);

@@ -540,6 +540,27 @@ impl Readout {
             return Some(Acted::Emitted(Some(operation)));
         }
 
+        let slot_mcp = self
+            .view
+            .inspector
+            .iter()
+            .enumerate()
+            .find_map(|(index, pane)| {
+                let at_pane =
+                    inspector_pane(self.panel.layout(), index, pane, self.view.scroll_in(index))?;
+                let policy = self
+                    .view
+                    .slot_policies
+                    .get(pane.deck)
+                    .copied()
+                    .unwrap_or_default();
+                let pill = slot_mcp_pill(ctx, &at_pane, pane, policy)?;
+                pill.hit(at).then_some(pane.deck)
+            });
+        if let Some(deck) = slot_mcp {
+            return Some(self.cycle_slot_policy(deck));
+        }
+
         let chosen = self
             .view
             .inspector
@@ -1423,6 +1444,22 @@ impl Readout {
             },
             pill.class.opened_at()
         );
+        Acted::Opened
+    }
+
+    /// A press on a slot MCP policy pill, cycling Auto -> On -> Off -> Auto.
+    pub(crate) fn cycle_slot_policy(&mut self, deck: usize) -> Acted {
+        if deck < karakuri_console::view::DECKS {
+            let next = self.view.slot_policies[deck].next();
+            self.view.slot_policies[deck] = next;
+            self.slot_policies.set_policy(deck, next);
+            println!(
+                "slot {}: MCP policy set to {:?} (`{}`)",
+                deck + 1,
+                next,
+                next.pill_word()
+            );
+        }
         Acted::Opened
     }
 

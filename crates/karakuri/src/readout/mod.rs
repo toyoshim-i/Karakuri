@@ -9,13 +9,13 @@ pub(crate) use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, bay_grip, class_at,
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
-    outputs, program_bay, program_head, sequencer as sequencer_bay, staging as staging_bay,
-    tracker_group, transition as transition_row, transport as transport_row, Aim, Ask, AudioAsk,
-    AudioIn, Chose, Chosen, Go, Kind, McpPill, Picked, Read, Scope, Taken, View, Wiring, DECKS,
-    DECK_LETTERS, REGIONS,
+    outputs, program_bay, program_head, sequencer as sequencer_bay, slot_mcp_pill,
+    staging as staging_bay, tracker_group, transition as transition_row,
+    transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Chose, Chosen, Go, Kind, McpPill,
+    Picked, Read, Scope, Taken, View, Wiring, DECKS, DECK_LETTERS, REGIONS,
 };
 pub(crate) use karakuri_engine::governor::{Reason, Report};
-use karakuri_environment::Opening;
+use karakuri_environment::{Opening, SlotPolicies};
 use karakuri_layout::{Axis, NodeId, Point};
 use karakuri_operation::Operation;
 
@@ -51,6 +51,8 @@ pub(crate) struct Readout {
     /// one value. Without the flag the pills still write it and only this program
     /// and its tests read it back.
     pub(crate) opening: Opening,
+    /// What MCP access policy is configured per slot, shared with `karakuri_mcp::serve`.
+    pub(crate) slot_policies: SlotPolicies,
     /// What the last write did, which the transport row's health capsule draws —
     /// `view::Transport::health`, kept here because that value is rebuilt whole
     /// every frame by `transport` and a verdict arrives on one frame in a thousand.
@@ -97,6 +99,7 @@ impl Readout {
             view: View::new(Room::Day),
             // Four classes shut, which is what a run starts with (ADR-0235).
             opening: Opening::closed(),
+            slot_policies: SlotPolicies::new(),
             // Nothing has been written yet, so the capsule is not drawn.
             health: None,
             sequencer: demonstration_banks(),

@@ -318,7 +318,7 @@
 use std::time::Duration;
 
 use karakuri_engine::deck::MAX_SLOTS;
-use karakuri_environment::Opening;
+use karakuri_environment::{Opening, SlotPolicies};
 use karakuri_mcp as mcp;
 use karakuri_store::store::Store;
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -720,6 +720,7 @@ fn main() {
     // pill that opens a class the server never sees. All four classes start
     // shut, which is the state ADR-0235 says a run starts in.
     let opening = Opening::closed();
+    let slot_policies = SlotPolicies::new();
     // **Which files each deck is running, and the one handle that answers it**
     // — see [`karakuri_mcp::Slots`], and [`Aiming::pointing`] for
     // what writes it. Made here beside the opening and for the same reason:
@@ -768,6 +769,7 @@ fn main() {
                 // tell a client whether a write will reach the screen.
                 true,
                 opening.clone(),
+                slot_policies.clone(),
             ) {
                 Ok(reporter) => {
                     // The port bound rather than the one asked for: `--mcp 0`
@@ -803,7 +805,15 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop
         .run_app(&mut App::new(
-            launch, running, held, snapshots, mcp, opening, pointing, waker,
+            launch,
+            running,
+            held,
+            snapshots,
+            mcp,
+            opening,
+            pointing,
+            waker,
+            slot_policies,
         ))
         .expect("run");
 }
