@@ -198,7 +198,7 @@ impl ApplicationHandler for App {
         // **Before the first frame and before the first strip is written**, so
         // that the panel's first frame draws the deck as it actually is rather
         // than a settled version of it that the second frame corrects.
-        let governed = engine.ask_to_prime(&gpu);
+        let governed = engine.startup(&gpu);
         // **The four risk badges, from the pass that just decided them.** The
         // dot is as fresh as the last governor pass and no fresher: a Set that
         // swaps in arrives with its own estimate and a resize re-targets it
