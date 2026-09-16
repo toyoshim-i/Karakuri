@@ -880,6 +880,132 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             Err(report_json)
         }));
     }
+    if name == "get_permissions" {
+        let opening = state.opening.read();
+        let slot_accesses = state.slot_policies.all();
+        let slot_count = state.slots.count();
+        let slots: Vec<Value> = (0..slot_count)
+            .map(|slot| {
+                let access = slot_accesses.get(slot).copied().unwrap_or_default();
+                let letter = (b'A' + slot as u8) as char;
+                json!({
+                    "slot": slot,
+                    "name": format!("Deck {letter}"),
+                    "policy": access.policy.name(),
+                    "in_mix": access.in_mix,
+                    "writable": access.is_writable(),
+                    "reason": access.refusal_reason(slot),
+                })
+            })
+            .collect();
+        let resp = json!({
+            "bays": {
+                "program": if opening.holds(karakuri_operation::gate::Class::LiveDeck) { "on" } else { "off" },
+                "mixer": if opening.holds(karakuri_operation::gate::Class::MixFaders) { "on" } else { "off" },
+                "master": if opening.holds(karakuri_operation::gate::Class::MasterEffects) { "on" } else { "off" },
+                "outputs": if opening.holds(karakuri_operation::gate::Class::InputsAndOutputs) { "on" } else { "off" },
+            },
+            "slots": slots,
+        });
+        return Ok(Called::Answered(Ok(
+            serde_json::to_string_pretty(&resp).unwrap_or_default()
+        )));
+    }
+    if name == "read_slot" {
+        let slot = match args
+            .get("slot")
+            .and_then(Value::as_u64)
+            .ok_or("`slot` is required and is a number")
+        {
+            Ok(s) => s as usize,
+            Err(e) => return Ok(Called::Answered(Err(e.into()))),
+        };
+        if let Err(e) = state.slots.holds(slot) {
+            return Ok(Called::Answered(Err(e)));
+        }
+        let nodes = match state.slots.nodes(slot) {
+            Ok(n) => n,
+            Err(e) => return Ok(Called::Answered(Err(e))),
+        };
+        let mut node_entries = Vec::new();
+        for (kind, index, path) in nodes {
+            let source = match std::fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(e) => return Ok(Called::Answered(Err(format!("{}: {e}", path.display())))),
+            };
+            node_entries.push(json!({
+                "layer": layer_name(kind),
+                "index": index,
+                "source": source,
+            }));
+        }
+        let resp = json!({
+            "slot": slot,
+            "nodes": node_entries,
+        });
+        return Ok(Called::Answered(Ok(
+            serde_json::to_string_pretty(&resp).unwrap_or_default()
+        )));
+    }
+    if name == "copy_slot" {
+        let from_slot = match args
+            .get("from_slot")
+            .and_then(Value::as_u64)
+            .ok_or("`from_slot` is required and is a number")
+        {
+            Ok(s) => s as usize,
+            Err(e) => return Ok(Called::Answered(Err(e.into()))),
+        };
+        let to_slot = match args
+            .get("to_slot")
+            .and_then(Value::as_u64)
+            .ok_or("`to_slot` is required and is a number")
+        {
+            Ok(s) => s as usize,
+            Err(e) => return Ok(Called::Answered(Err(e.into()))),
+        };
+        if let Err(e) = state.slots.holds(from_slot) {
+            return Ok(Called::Answered(Err(e)));
+        }
+        if let Err(e) = state.slots.holds(to_slot) {
+            return Ok(Called::Answered(Err(e)));
+        }
+        if let Err(e) = state.slot_policies.check_writable(to_slot) {
+            return Ok(Called::Answered(Err(e)));
+        }
+
+        let from_nodes = match state.slots.nodes(from_slot) {
+            Ok(n) => n,
+            Err(e) => return Ok(Called::Answered(Err(e))),
+        };
+        let to_nodes = match state.slots.nodes(to_slot) {
+            Ok(n) => n,
+            Err(e) => return Ok(Called::Answered(Err(e))),
+        };
+        let mut copied = 0;
+        for (kind, index, from_path) in &from_nodes {
+            if let Some((_, _, to_path)) = to_nodes.iter().find(|(k, i, _)| k == kind && i == index)
+            {
+                let source = match std::fs::read_to_string(from_path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return Ok(Called::Answered(Err(format!(
+                            "{}: {e}",
+                            from_path.display()
+                        ))))
+                    }
+                };
+                if let Err(e) = std::fs::write(to_path, source) {
+                    return Ok(Called::Answered(Err(format!("{}: {e}", to_path.display()))));
+                }
+                copied += 1;
+            }
+        }
+        return Ok(Called::Answered(Ok(format!(
+            "copied {copied} procedure{} from slot {from_slot} to slot {to_slot}",
+            if copied == 1 { "" } else { "s" }
+        ))));
+    }
 
     Ok(match asked(name, &args, &state.slots)? {
         // **The gate, and there is one of it.** Named, then audited, then done

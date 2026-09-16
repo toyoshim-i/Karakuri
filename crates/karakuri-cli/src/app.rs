@@ -243,12 +243,14 @@ impl ApplicationHandler for App {
                 // closed class stays closed for the whole run, and the handle
                 // is what the toggles will hold the other end of.
                 let opening = karakuri_environment::Opening::closed();
+                let slot_policies = karakuri_environment::SlotPolicies::default();
                 match mcp::serve(
                     port,
                     slots,
                     self.args.store.clone(),
                     self.args.watch,
                     opening,
+                    slot_policies,
                 ) {
                     Ok(reporter) => {
                         // The port bound rather than the one asked for: `--mcp 0`

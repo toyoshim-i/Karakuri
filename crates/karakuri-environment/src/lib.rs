@@ -193,6 +193,69 @@ impl Opening {
     }
 }
 
+/// Slot-level MCP modification policies and mix activity.
+#[derive(Debug, Clone)]
+pub struct SlotPolicies(std::sync::Arc<std::sync::RwLock<[karakuri_operation::SlotAccess; 4]>>);
+
+impl Default for SlotPolicies {
+    fn default() -> Self {
+        Self(std::sync::Arc::new(std::sync::RwLock::new(
+            [karakuri_operation::SlotAccess::default(); 4],
+        )))
+    }
+}
+
+impl SlotPolicies {
+    /// Initialized with default access (policy = Auto, in_mix = false).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reads the access status for a slot.
+    pub fn access(&self, slot: usize) -> karakuri_operation::SlotAccess {
+        self.0
+            .read()
+            .ok()
+            .and_then(|guard| guard.get(slot).copied())
+            .unwrap_or_default()
+    }
+
+    /// Checks if a slot is writable by MCP, returning an error message if refused.
+    pub fn check_writable(&self, slot: usize) -> Result<(), String> {
+        let access = self.access(slot);
+        if access.is_writable() {
+            Ok(())
+        } else {
+            Err(access
+                .refusal_reason(slot)
+                .unwrap_or_else(|| format!("slot {slot} is not writable by MCP")))
+        }
+    }
+
+    /// Sets the policy for a slot.
+    pub fn set_policy(&self, slot: usize, policy: karakuri_operation::SlotPolicy) {
+        if let Ok(mut guard) = self.0.write() {
+            if let Some(entry) = guard.get_mut(slot) {
+                entry.policy = policy;
+            }
+        }
+    }
+
+    /// Sets whether a slot is contributing to the mix.
+    pub fn set_in_mix(&self, slot: usize, in_mix: bool) {
+        if let Ok(mut guard) = self.0.write() {
+            if let Some(entry) = guard.get_mut(slot) {
+                entry.in_mix = in_mix;
+            }
+        }
+    }
+
+    /// Reads all 4 slot access states.
+    pub fn all(&self) -> [karakuri_operation::SlotAccess; 4] {
+        self.0.read().map(|guard| *guard).unwrap_or_default()
+    }
+}
+
 /// How long the end of a run waits for saves still being written.
 ///
 /// Long enough that a save of a few dozen lines and a handful of artifacts

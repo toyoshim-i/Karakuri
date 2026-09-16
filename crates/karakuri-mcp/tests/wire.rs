@@ -10,7 +10,7 @@ use karakuri_ir::Kind;
 use karakuri_mcp::{
     serve, OperateRequest, Reporter, SaveRequest, Slots, WireRequest, LISTED, PROTOCOL,
 };
-use karakuri_operation::Operation;
+use karakuri_operation::{Operation, SlotPolicy};
 use karakuri_store::{Hash, Layer, Line, Record, Store};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -39,6 +39,10 @@ fn store_root(dir: &tempfile::TempDir) -> std::path::PathBuf {
 /// seven, this module would be red from end to end.
 fn closed() -> karakuri_environment::Opening {
     karakuri_environment::Opening::closed()
+}
+
+fn policies() -> karakuri_environment::SlotPolicies {
+    karakuri_environment::SlotPolicies::new()
 }
 
 impl Server {
@@ -236,6 +240,7 @@ fn start_chain() -> Server {
         store_root(&dir),
         true,
         closed(),
+        policies(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -265,6 +270,7 @@ fn started(watching: bool) -> (Server, Reporter) {
         store_root(&dir),
         watching,
         closed(),
+        policies(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -443,7 +449,15 @@ fn a_re_point_moves_what_an_address_resolves_to() {
     let launch_l1 = write("l1.kir", PROBE_L1);
     let launch_l4 = write("l4.kir", PROBE_L4);
     let slots = Slots::of(vec![(launch_l1, vec![launch_l4])]);
-    let reporter = serve(0, slots.clone(), store_root(&dir), true, closed()).expect("serve");
+    let reporter = serve(
+        0,
+        slots.clone(),
+        store_root(&dir),
+        true,
+        closed(),
+        policies(),
+    )
+    .expect("serve");
     let port = reporter.port();
     stand_in(reporter, no_loop);
 
@@ -907,7 +921,7 @@ fn a_write_names_the_other_slots_it_reached() {
     std::fs::write(&l1, PROBE_L1).expect("l1");
     std::fs::write(&l4, PROBE_L4).expect("l4");
     let shared = Slots::of(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
-    let reporter = serve(0, shared, store_root(&dir), true, closed()).expect("serve");
+    let reporter = serve(0, shared, store_root(&dir), true, closed(), policies()).expect("serve");
     let port = reporter.port();
     std::mem::forget(reporter);
 
@@ -955,7 +969,7 @@ fn a_write_names_the_other_slots_it_reached_on_any_layer() {
         (l1.clone(), vec![warp.clone(), l4.clone()]),
         (l1, vec![warp, l4]),
     ]);
-    let reporter = serve(0, shared, store_root(&dir), true, closed()).expect("serve");
+    let reporter = serve(0, shared, store_root(&dir), true, closed(), policies()).expect("serve");
     let port = reporter.port();
     std::mem::forget(reporter);
 
@@ -1047,6 +1061,7 @@ fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
         store_root(&dir),
         true,
         closed(),
+        policies(),
     )
     .expect("serve");
     let server = Server {
@@ -2101,6 +2116,7 @@ fn a_write_reaches_the_node_its_address_names_and_not_its_neighbour() {
         store_root(&dir),
         true,
         closed(),
+        policies(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -2227,7 +2243,7 @@ fn a_write_addressed_to_a_geometry_does_not_overwrite_the_head() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (slots, paths) = headed_by_a_camera(&dir);
     let (camera, l1) = (paths[0].clone(), paths[1].clone());
-    let reporter = serve(0, slots, store_root(&dir), true, closed()).expect("serve");
+    let reporter = serve(0, slots, store_root(&dir), true, closed(), policies()).expect("serve");
     let port = reporter.port();
     stand_in(reporter, no_loop);
 
@@ -2284,6 +2300,7 @@ fn a_write_that_needs_an_edge_still_returns_cleanly() {
         store_root(&dir),
         true,
         closed(),
+        policies(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -2395,6 +2412,7 @@ fn wired(
         store_root(&dir),
         watching,
         closed(),
+        policies(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -2769,6 +2787,7 @@ fn the_rows_that_grew_a_performer_reach_the_loop() {
         store_root(&dir),
         true,
         opening,
+        policies(),
     )
     .expect("serve");
     let port = reporter.port();
@@ -2935,4 +2954,131 @@ fn the_seven_tools_still_work_with_every_class_closed() {
     );
     assert!(!said.contains("closed by default"), "{said}");
     assert!(!failed, "`wire_input`: {said}");
+}
+
+#[test]
+fn get_permissions_returns_bay_and_slot_status() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let l1 = dir.path().join("l1.kir");
+    let l4 = dir.path().join("l4.kir");
+    std::fs::write(&l1, PROBE_L1).expect("l1");
+    std::fs::write(&l4, PROBE_L4).expect("l4");
+    let slot_policies = karakuri_environment::SlotPolicies::new();
+    slot_policies.set_policy(0, SlotPolicy::Auto);
+    slot_policies.set_in_mix(0, true);
+    slot_policies.set_policy(1, SlotPolicy::Off);
+    let slots = Slots::of(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
+    let reporter = serve(0, slots, store_root(&dir), true, closed(), slot_policies).expect("serve");
+    let port = reporter.port();
+    stand_in(reporter, no_loop);
+
+    let (failed, text) = call(port, "get_permissions", json!({}));
+    assert!(!failed, "{text}");
+    let v: Value = serde_json::from_str(&text).expect("json");
+    assert_eq!(v["bays"]["program"], "off");
+    assert_eq!(v["bays"]["mixer"], "off");
+    assert_eq!(v["slots"][0]["slot"], 0);
+    assert_eq!(v["slots"][0]["name"], "Deck A");
+    assert_eq!(v["slots"][0]["policy"], "auto");
+    assert_eq!(v["slots"][0]["in_mix"], true);
+    assert_eq!(v["slots"][0]["writable"], false);
+    assert_eq!(v["slots"][1]["slot"], 1);
+    assert_eq!(v["slots"][1]["name"], "Deck B");
+    assert_eq!(v["slots"][1]["policy"], "off");
+    assert_eq!(v["slots"][1]["writable"], false);
+}
+
+#[test]
+fn read_slot_returns_all_procedures_of_a_slot() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let l1 = dir.path().join("l1.kir");
+    let l4 = dir.path().join("l4.kir");
+    std::fs::write(&l1, PROBE_L1).expect("l1");
+    std::fs::write(&l4, PROBE_L4).expect("l4");
+    let slots = Slots::of(vec![(l1, vec![l4])]);
+    let reporter = serve(0, slots, store_root(&dir), true, closed(), policies()).expect("serve");
+    let port = reporter.port();
+    stand_in(reporter, no_loop);
+
+    let (failed, text) = call(port, "read_slot", json!({"slot": 0}));
+    assert!(!failed, "{text}");
+    let v: Value = serde_json::from_str(&text).expect("json");
+    assert_eq!(v["slot"], 0);
+    let nodes = v["nodes"].as_array().expect("nodes array");
+    assert_eq!(nodes.len(), 2);
+    assert_eq!(nodes[0]["layer"], "L1");
+    assert_eq!(nodes[0]["index"], 0);
+    assert!(nodes[0]["source"]
+        .as_str()
+        .unwrap()
+        .contains("proc probe_l1"));
+    assert_eq!(nodes[1]["layer"], "L4");
+    assert_eq!(nodes[1]["index"], 0);
+    assert!(nodes[1]["source"]
+        .as_str()
+        .unwrap()
+        .contains("proc probe_l4"));
+}
+
+#[test]
+fn copy_slot_copies_and_respects_slot_policies() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let l1_0 = dir.path().join("l1_0.kir");
+    let l4_0 = dir.path().join("l4_0.kir");
+    let l1_1 = dir.path().join("l1_1.kir");
+    let l4_1 = dir.path().join("l4_1.kir");
+    std::fs::write(&l1_0, PROBE_L1).expect("l1_0");
+    std::fs::write(&l4_0, PROBE_L4).expect("l4_0");
+    std::fs::write(&l1_1, PROBE_L1_B).expect("l1_1");
+    std::fs::write(&l4_1, PROBE_L4).expect("l4_1");
+    let slot_policies = karakuri_environment::SlotPolicies::new();
+    let slots = Slots::of(vec![
+        (l1_0.clone(), vec![l4_0.clone()]),
+        (l1_1.clone(), vec![l4_1.clone()]),
+    ]);
+    let reporter = serve(
+        0,
+        slots,
+        store_root(&dir),
+        true,
+        closed(),
+        slot_policies.clone(),
+    )
+    .expect("serve");
+    let port = reporter.port();
+    stand_in(reporter, no_loop);
+
+    // 1. Slot 1 is in_mix under Auto -> copy to it is refused
+    slot_policies.set_policy(1, SlotPolicy::Auto);
+    slot_policies.set_in_mix(1, true);
+    let (failed, text) = call(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
+    assert!(failed, "expected refusal when target is active in mix");
+    assert!(text.contains("active in the mix"), "{text}");
+
+    // Also write_procedure to slot 1 is refused
+    let (failed_write, text_write) = call(
+        port,
+        "write_procedure",
+        json!({"slot": 1, "layer": "L1", "source": PROBE_L1}),
+    );
+    assert!(failed_write);
+    assert!(text_write.contains("active in the mix"), "{text_write}");
+
+    // 2. Slot 1 is off-air (in_mix = false) -> copy succeeds
+    slot_policies.set_in_mix(1, false);
+    let (failed, text) = call(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
+    assert!(!failed, "{text}");
+    assert_eq!(std::fs::read_to_string(&l1_1).unwrap(), PROBE_L1);
+
+    // 3. Slot 1 is policy Off -> refused even when off-air
+    slot_policies.set_policy(1, SlotPolicy::Off);
+    let (failed_off, text_off) = call(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
+    assert!(failed_off);
+    assert!(text_off.contains("locked against MCP"), "{text_off}");
+
+    // 4. Slot 1 is policy On -> allowed even when in_mix
+    slot_policies.set_policy(1, SlotPolicy::On);
+    slot_policies.set_in_mix(1, true);
+    let (failed_on, text_on) = call(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));
+    assert!(!failed_on, "{text_on}");
 }

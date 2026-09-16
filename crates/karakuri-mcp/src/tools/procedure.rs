@@ -80,6 +80,7 @@ pub(crate) fn write_procedure(
     state: &State,
 ) -> Result<String, String> {
     let slot = usize::from(deck);
+    state.slot_policies.check_writable(slot)?;
     let layer = kind_of(node.layer);
     let index = node.index as usize;
     let path = state.slots.path(slot, layer, index)?;
