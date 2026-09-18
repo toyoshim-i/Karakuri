@@ -670,9 +670,15 @@ impl Deck {
         }
         self.slots[slot.index()].effective = residency;
         if residency != Residency::Live {
+            self.slots[slot.index()].online = false;
             if let Some(meters) = &mut self.meters {
                 meters.retire(slot.index());
             }
+        } else {
+            self.slots[slot.index()].online = match self.solo {
+                Some(s) => slot.index() == s,
+                None => !self.muted.get(slot.index()).copied().unwrap_or(false),
+            };
         }
     }
 
@@ -1001,10 +1007,10 @@ impl Deck {
 
     /// Evaluates whether a slot contributes to the final composite mix.
     ///
-    /// A slot is in the mix if it is Live, online, and has positive opacity.
+    /// A slot is in the mix if it is online and has positive opacity.
     pub fn is_in_mix(&self, slot: DeckSlot) -> bool {
         if let Some(s) = self.slots.get(slot.index()) {
-            s.effective == Residency::Live && s.online && s.opacity > 0.0
+            s.online && s.opacity > 0.0
         } else {
             false
         }
@@ -1221,13 +1227,14 @@ impl Frame<'_> {
 
         for (i, slot) in self.deck.slots.iter_mut().enumerate() {
             let stopped = slot.swap.overloaded();
-            match slot.effective {
-                Residency::Live if stopped => {
+            let on_air = slot.effective == Residency::Live || slot.online;
+            match on_air {
+                true if stopped => {
                     if let Some(meters) = &mut self.deck.meters {
                         meters.record(i, encoder);
                     }
                 }
-                Residency::Live => {
+                true => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();
                     let steps = match slot.transport.advance(steps, signals.oscillator(), DT) {
@@ -1243,8 +1250,8 @@ impl Frame<'_> {
                         meters.record(i, encoder);
                     }
                 }
-                Residency::Priming | Residency::Allocated if stopped => {}
-                Residency::Priming | Residency::Allocated => {
+                false if stopped => {}
+                false => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();
                     set.prepare_warming(self.queue, steps, &signals);
@@ -1263,7 +1270,7 @@ impl Frame<'_> {
                     edge.mask = c.mask;
                 }
             }
-            let in_mix = slot.effective == Residency::Live && slot.online && edge.opacity > 0.0;
+            let in_mix = slot.online && edge.opacity > 0.0;
             edges.push(Input {
                 live: in_mix,
                 ..edge

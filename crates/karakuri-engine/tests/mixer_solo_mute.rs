@@ -133,7 +133,7 @@ proc soft_points {
     }
 
     #[test]
-    fn opacity_and_residency_govern_in_mix() {
+    fn opacity_and_online_govern_in_mix() {
         let gpu = Gpu::headless().expect("headless gpu");
         let mut deck = test_deck(&gpu, 2);
 
@@ -146,8 +146,12 @@ proc soft_points {
         deck.set_opacity(slot0, 0.5);
         assert!(deck.is_in_mix(slot0));
 
-        // Non-live residency is not in mix
-        deck.set_residency(slot0, Residency::Allocated);
+        // Offline slot is not in mix
+        deck.set_online(slot0, false);
         assert!(!deck.is_in_mix(slot0));
+
+        // Setting online brings it back into mix
+        deck.set_online(slot0, true);
+        assert!(deck.is_in_mix(slot0));
     }
 }
