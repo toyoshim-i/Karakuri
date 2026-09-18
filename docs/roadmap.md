@@ -92,14 +92,14 @@ The remaining open work is structured into three sequential milestones: completi
 1. **Tooltip HUD Visual Overhaul & Copy Cleanup**:
    - Migrate all 39 interactive probe tooltips from stream-of-consciousness literature strings to the concise, structured HUD card format (`eyebrow`, `title`, `state`, `summary`, `body`, `midi`, `mcp`).
    - Implement Dark mode and Fancy/Day mode palette preview and runtime toggling.
-2. **Dedicated MCP Client Documentation**:
-   - Provide an official guide in `docs/manual/` (`mcp.html` / `mcp.md`) detailing agent connection setup, safety conventions, slot policies, and the M7 co-performance tool suite (`get_permissions`, `read_slot`, `copy_slot`).
-   - Update `karakuri-mcp/README.md` and architecture references from the legacy 10-tool to the current 13-tool catalog.
-3. **Mixer Channel Strip Controls (SOLO / MUTE Migration)**:
-   - Transition channel strip primary controls from internal engine pipeline states (`live`, `prim`, `alloc`) to conventional mixer terminology (`SOLO`, `MUTE`), decoupling operator performance intent from residency tallies.
-4. **Console Visual Parity & Focus Redesign**:
-   - Revisit the `.wfocus` active bay indicator: replace the prominent dashed amber outline on the top transport bar with a cleaner, subtle indicator (e.g. subtle glow or header accent).
-   - Restore visual decorations from `console.html`: vertical divider grip decoration (`⋮` on `.divider-v`).
+2. **Dedicated MCP Client Documentation** (Completed):
+   - Provided an official guide in `docs/manual/` (`mcp.html`) detailing agent connection setup, safety conventions, slot policies, and the M7 co-performance tool suite (`get_permissions`, `read_slot`, `copy_slot`).
+   - Updated `karakuri-mcp/README.md` and manual topnav links across all docs.
+3. **Mixer Channel Strip Controls (SOLO / MUTE Migration)** (Completed):
+   - Transitioned channel strip primary controls to conventional mixer terminology (`SOLO`, `MUTE`), decoupling operator performance intent from residency tallies.
+4. **Console Visual Parity & Focus Redesign** (Completed):
+   - Replaced the `.wfocus` dashed amber outline with a clean hairline lavender (`pal.lav`) boundary accent for headless rows and inset card border for bays.
+   - Restored vertical divider grip decoration (`⋮` on `.divider-v`).
 5. **Session Policy Persistence & Programmatic Refusals**:
    - Persist per-slot MCP policies (`Auto`, `On`, `Off`) across sessions/restarts.
    - Standardize agent refusal responses into machine-readable error codes.

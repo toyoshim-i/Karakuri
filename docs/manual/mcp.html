@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent &amp; MCP &middot; Karakuri Manual</title>
+<meta name="description" content="Collaborative visual performance with AI assistants over the Model Context Protocol.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <a class="mark" href="index.html">Karakuri</a>
+    <nav class="topnav">
+      <a href="index.html">How it thinks</a>
+      <a href="concepts.html">What the words mean</a>
+      <a href="console.html">The console</a>
+      <a href="operations.html">Every operation</a>
+      <a href="mcp.html" aria-current="page">Agent &amp; MCP</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Karakuri &middot; the manual</p>
+    <h1>A partner that shares the console</h1>
+    <p class="lede">
+      Karakuri treats AI pair-programmers as co-performers. Over the Model
+      Context Protocol (MCP), an assistant can inspect what each deck is playing,
+      re-wire modulation graphs, edit shader procedures on the fly, and trigger
+      musical operations &mdash; all subject to safety gates and live mixer tracking
+      controlled directly from the performance console.
+    </p>
+  </header>
+
+  <section>
+    <h2>Connection &amp; Protocol Architecture</h2>
+    <p>
+      Karakuri exposes an MCP server over HTTP JSON-RPC on the loopback interface
+      when launched with the <code>--mcp PORT</code> flag:
+    </p>
+    <pre><code>karakuri --mcp 8080</code></pre>
+    <p>
+      Any standard MCP client (Claude Desktop, Cursor, Gemini, or custom scripts)
+      can connect to the endpoint <code>http://127.0.0.1:8080/</code>. Every
+      interaction obeys the core architectural invariant:
+      <em>a surface offers, it never decides</em> (Principle 0090). An agent
+      dispatches standard operations through the same permission gates that
+      govern keyboard and MIDI controls.
+    </p>
+  </section>
+
+  <section>
+    <h2>The Permission Model &amp; Safety Gates</h2>
+    <p>
+      Live visual performances cannot tolerate broken shaders or rogue edits on
+      material currently projected on air. Karakuri provides a two-tier safety
+      mechanism:
+    </p>
+
+    <h3>1. Bay Class Openings</h3>
+    <p>
+      Console bay heads feature dedicated class toggle capsules. An operator
+      opens or closes permissions per functional section:
+    </p>
+    <ul>
+      <li><strong>LiveDeck</strong> (Program bay): Enables or restricts operations that directly swap active deck procedures.</li>
+      <li><strong>MixFaders</strong> (Mixer bay): Authorizes changes to mixer opacity faders, trims, and blends.</li>
+      <li><strong>MasterEffects</strong> (Master bay): Governs global shader effects and color balance.</li>
+      <li><strong>InputsAndOutputs</strong> (Outputs row): Controls projector assignments and audio-in routing.</li>
+    </ul>
+
+    <h3>2. Slot MCP Policies (Auto / On / Off)</h3>
+    <p>
+      Each deck slot wears an explicit MCP policy pill in the Inspector bay head:
+    </p>
+    <ul>
+      <li><strong>Auto (Default)</strong>: The slot is freely editable while parked or rehearsing. The moment the mixer fader rises or the slot goes on air, it becomes automatically write-protected to safeguard the live projection.</li>
+      <li><strong>On</strong>: The operator explicitly grants live live-coding access to this slot, even while contributing to the main screen mix.</li>
+      <li><strong>Off</strong>: The slot is strictly locked against all agent modifications regardless of fader position.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>The M7 Co-Performance Tool Suite</h2>
+    <p>
+      Collaborative live coding requires rapid discovery and atomic staging.
+      Three specialized workflow tools form the core of the agent loop:
+    </p>
+
+    <div class="rule">
+      <span class="n">01</span>
+      <div>
+        <h3><code>get_permissions</code> &mdash; Discover current constraints</h3>
+        <p>
+          Returns the open/closed status of all bay classes, per-slot policies,
+          real-time mixer contribution state (<code>in_mix</code>), and whether
+          each deck slot is currently writable. Agents query this before planning
+          edits to avoid rejected roundtrips.
+        </p>
+      </div>
+    </div>
+
+    <div class="rule">
+      <span class="n">02</span>
+      <div>
+        <h3><code>read_slot</code> &mdash; Full slot procedural inspection</h3>
+        <p>
+          Fetches all active procedural layers (<code>L1</code> material,
+          <code>L2</code> deformation, <code>L3</code> camera, <code>L4</code>
+          renderers, and <code>Field</code> distance functions) for a deck slot
+          in a single call.
+        </p>
+      </div>
+    </div>
+
+    <div class="rule">
+      <span class="n">03</span>
+      <div>
+        <h3><code>copy_slot</code> &mdash; Safe rehearsal &amp; duplication</h3>
+        <p>
+          Copies the complete procedural setup from one slot to another with
+          atomic staging. A common workflow is copying a live slot (e.g. Deck A)
+          to an off-air slot (e.g. Deck B), modifying it safely with the agent,
+          previewing the result, and transitioning it live with the crossfader.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Complete MCP Tool Catalog</h2>
+
+    <h3>Procedure Authoring</h3>
+    <ul>
+      <li><code>read_procedure</code>: Reads the <code>.kir</code> shader source for a specific slot, layer, and index.</li>
+      <li><code>write_procedure</code>: Submits revised source code. Compiles on a background worker thread, swaps at a frame boundary, and monitors GPU render budget for 30 frames. If it exceeds frame time, it automatically reverts.</li>
+      <li><code>check_procedure</code>: Statically validates syntax, types, and execution costs without touching GPU memory or changing state.</li>
+    </ul>
+
+    <h3>Set Management</h3>
+    <ul>
+      <li><code>read_set</code>: Inspects Set configuration, knob mappings, and node assignments.</li>
+      <li><code>list_sets</code>: Catalogs available Sets in the library with optional text or tag filters.</li>
+      <li><code>save_set</code>: Commits active deck parameters to a new or existing Set file.</li>
+      <li><code>check_set</code>: Validates Set configuration and asset availability without activation.</li>
+    </ul>
+
+    <h3>Graph &amp; History</h3>
+    <ul>
+      <li><code>wire_input</code>: Connects modulation sources or audio-in channels to node inputs.</li>
+      <li><code>walk_history</code>: Reads compilation and revision history for a Set, allowing previous versions to be recalled.</li>
+      <li><code>swap_outcome</code>: Checks the compilation and performance measurement verdict of a background shader swap.</li>
+    </ul>
+
+    <h3>Performance Control</h3>
+    <ul>
+      <li><code>operate</code>: Dispatches any of the 64 vocabulary operations from <code>docs/manual/operations.html</code>, fully verified against console permissions.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Atomic Staging &amp; Scratch Directory Safety</h2>
+    <p>
+      When an agent modifies or copies procedures, files are written first to
+      temporary files (<code>.kir.tmp</code>) and swapped via atomic filesystem
+      rename (<code>scratch::write_atomic</code>; ADR-0363). This prevents file
+      watchers and background compilers from reading truncated ASTs or observing
+      torn writes during multi-file interface updates.
+    </p>
+  </section>
+
+</div>
+
+</body>
+</html>
+
