@@ -563,6 +563,10 @@ pub struct Strip {
     /// The one value on a strip that moves without a hand on anything, and it
     /// declares nothing — decided rather than missed, in [`View::mixer_declares`].
     pub level: Option<Level>,
+    /// Whether this channel is currently muted.
+    pub is_muted: bool,
+    /// Whether this channel is currently soloed.
+    pub is_soloed: bool,
 }
 
 impl Strip {
@@ -648,6 +652,26 @@ impl Strip {
         self.opacity_to
             .filter(|to| unit(*to) != unit(self.opacity))
             .map(unit)
+    }
+}
+
+impl Default for Strip {
+    fn default() -> Self {
+        Strip {
+            name: String::new(),
+            tally: Tally::Allocated,
+            requested: Tally::Allocated,
+            gain: 0.0,
+            gain_to: None,
+            opacity: 0.0,
+            opacity_to: None,
+            blend: BlendMode::Add,
+            mask: Mask::None,
+            mask_angle: 0.0,
+            level: None,
+            is_muted: false,
+            is_soloed: false,
+        }
     }
 }
 
@@ -783,6 +807,10 @@ pub struct StripBox {
     /// the shown word's is what the blend chip cannot say: this target stands still
     /// while the deck moves under it and while a word rolls through it.
     pub tally: Rect,
+    /// The SOLO toggle button rect on the left of the tally capsule.
+    pub solo: Rect,
+    /// The MUTE toggle button rect on the right of the tally capsule.
+    pub mute: Rect,
     /// The `g` in `.trim`.
     pub trim_label: Rect,
     /// `.trim`'s `.fader`: the horizontal track, [`size::FADER_H`] tall.
@@ -956,6 +984,13 @@ pub(super) fn strip_box(track: Rect, label_w: f32, tally_w: f32, blend_w: f32) -
     };
     let name = row(size::STRIP_NAME_SIZE * size::LINE);
     let tally = centred_in(row(size::TALLY_H), tally_w + size::TALLY_PAD_X * 2.0);
+    let gap = 4.0;
+    let btn_w = (tally.width() - gap) * 0.5;
+    let solo = Rect::from_min_size(tally.min, egui::vec2(btn_w, tally.height()));
+    let mute = Rect::from_min_size(
+        Pos2::new(tally.max.x - btn_w, tally.min.y),
+        egui::vec2(btn_w, tally.height()),
+    );
     let trim = row(size::TRIM_H);
     let column = centred_in(row(size::FADER_COL_H), column_w);
     let num = row(size::STRIP_NUM_SIZE * size::LINE);
@@ -984,6 +1019,8 @@ pub(super) fn strip_box(track: Rect, label_w: f32, tally_w: f32, blend_w: f32) -
             rect: track,
             name,
             tally,
+            solo,
+            mute,
             trim_label,
             trim: trim_track,
             fader: Rect::from_min_size(column.min, egui::vec2(size::VFADER_W, column.height())),
@@ -1234,7 +1271,8 @@ pub(super) fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox, ph
         centre_galley(&painter, at.name, galley, pal.dim);
     }
 
-    tally_into(&painter, pal, at.tally, strip.tally, strip.pending(), phase);
+    solo_button_into(&painter, pal, at.solo, strip.is_soloed);
+    mute_button_into(&painter, pal, at.mute, strip.is_muted);
 
     let galley = painter.layout_job(span_at(TRIM_LABEL, size::TRIM_LABEL_SIZE, pal.faint));
     painter.galley(
@@ -1343,4 +1381,48 @@ pub fn mask_mark(painter: &egui::Painter, centre: Pos2, colour: Color32, mask: M
         }
     }
     painter.circle_stroke(centre, r, Stroke::new(size::HAIRLINE, colour));
+}
+
+/// Renders the SOLO toggle button on the mixer channel strip.
+fn solo_button_into(painter: &egui::Painter, pal: &Palette, rect: Rect, active: bool) {
+    let radius = CornerRadius::same((rect.height() * 0.5) as u8);
+    let (fill, stroke_col, ink) = match active {
+        true => (
+            super::super::widgets::fader::tint(pal.sun, 25),
+            pal.sun,
+            pal.sun,
+        ),
+        false => (pal.well, pal.line, pal.dim),
+    };
+    painter.rect_filled(rect, radius, fill);
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(size::HAIRLINE, stroke_col),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_job(span_at("S", size::TALLY_SIZE, ink));
+    centre_galley(painter, rect, galley, ink);
+}
+
+/// Renders the MUTE toggle button on the mixer channel strip.
+fn mute_button_into(painter: &egui::Painter, pal: &Palette, rect: Rect, active: bool) {
+    let radius = CornerRadius::same((rect.height() * 0.5) as u8);
+    let (fill, stroke_col, ink) = match active {
+        true => (
+            super::super::widgets::fader::tint(pal.pink, 25),
+            pal.pink,
+            pal.pink,
+        ),
+        false => (pal.well, pal.line, pal.faint),
+    };
+    painter.rect_filled(rect, radius, fill);
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(size::HAIRLINE, stroke_col),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_job(span_at("M", size::TALLY_SIZE, ink));
+    centre_galley(painter, rect, galley, ink);
 }

@@ -1123,7 +1123,7 @@ pub fn flat() -> impl Iterator<Item = &'static Tipped> {
 /// The first row that answers wins, which is why the order inside a slice is
 /// the caller's: the controls inside a container come before the container.
 pub fn resolve(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> Option<usize> {
-    if view.has_modal_overlay() {
+    if ctx.cumulative_pass_nr() == 0 || view.has_modal_overlay() {
         return None;
     }
     flat().position(|tip| (tip.at)(panel, ctx, view, p))
@@ -2265,6 +2265,9 @@ impl Hover {
         p: Point,
         now: Duration,
     ) -> Tip {
+        if ctx.cumulative_pass_nr() == 0 {
+            return Tip::Still;
+        }
         let on = match claim == Claim::Panel && !panel.dragging() {
             true => resolve(panel, ctx, view, p),
             false => None,

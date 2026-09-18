@@ -2203,6 +2203,8 @@ fn strip() -> karakuri_console::view::Strip {
         mask: karakuri_console::view::Mask::None,
         mask_angle: 0.0,
         level: None,
+        is_muted: false,
+        is_soloed: false,
     }
 }
 

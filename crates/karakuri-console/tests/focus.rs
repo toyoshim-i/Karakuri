@@ -80,6 +80,8 @@ fn four_strips(view: &mut View) {
             mask: Mask::None,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         });
     }
 }

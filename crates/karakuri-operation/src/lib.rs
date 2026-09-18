@@ -1455,6 +1455,24 @@ operations! {
     /// layer covers.
     SetOpacity { deck: u8, opacity: f32 } => "Opacity",
 
+    /// Mutes or unmutes a deck, excluding it from or including it in the composite mix.
+    SetMute { deck: u8, mute: bool } => "Mute a deck",
+
+    /// Toggles the mute state of a deck.
+    ToggleMute { deck: u8 } => "Toggle mute",
+
+    /// Solos or un-solos a deck, isolating it in the composite mix.
+    SetSolo { deck: u8, solo: bool } => "Solo a deck",
+
+    /// Toggles the exclusive solo state of a deck.
+    ToggleSolo { deck: u8 } => "Toggle solo",
+
+    /// Clears any active solo across all decks.
+    ClearSolo => "Clear solo",
+
+    /// Sets whether a deck's slot is online in the composite mix.
+    SetOnline { deck: u8, online: bool } => "Set a slot's online state",
+
     /// Names the mode, where `karakuri-midi`'s `Action::CycleBlend` could only
     /// step. A pad that means *over* is a mapping this made writable, and `note 40
     /// -> blend 0 over` is that mapping.

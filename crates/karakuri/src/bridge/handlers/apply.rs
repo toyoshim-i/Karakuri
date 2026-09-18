@@ -815,6 +815,36 @@ pub(crate) fn apply(
                 deck.opacity(slot)
             ))
         }
+        Record::Mute { slot, muted } => {
+            let slot = held(deck, slot.0)?;
+            deck.set_mute(slot, muted);
+            Some(format!(
+                "  mute: deck {} -> SetMute {{ deck: {slot}, mute: {muted} }} \
+                 -> Record::Mute -> deck.is_muted({slot}) = {}",
+                deck_letter(slot.0),
+                deck.is_muted(slot)
+            ))
+        }
+        Record::Solo { slot, soloed } => {
+            let slot = held(deck, slot.0)?;
+            deck.set_solo(slot, soloed);
+            Some(format!(
+                "  solo: deck {} -> SetSolo {{ deck: {slot}, solo: {soloed} }} \
+                 -> Record::Solo -> deck.is_soloed({slot}) = {}",
+                deck_letter(slot.0),
+                deck.is_soloed(slot)
+            ))
+        }
+        Record::Online { slot, online } => {
+            let slot = held(deck, slot.0)?;
+            deck.set_online(slot, online);
+            Some(format!(
+                "  online: deck {} -> SetOnline {{ deck: {slot}, online: {online} }} \
+                 -> Record::Online -> deck.is_online({slot}) = {}",
+                deck_letter(slot.0),
+                deck.is_online(slot)
+            ))
+        }
         // **The mode comes back off the wire name, and an unknown one is
         // refused rather than defaulted.** `Record::Blend` carries a `String`
         // because what a mode is allowed to be is the engine's to say, so this

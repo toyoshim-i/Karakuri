@@ -238,10 +238,26 @@ mod gpu {
             self.no_panic();
         }
 
+        /// Keep polling while asserting the child stays alive and does not panic.
+        ///
+        /// A process that prints the legend can still crash on the first frame or
+        /// initial window/input event dispatch. Keeping it alive and checking it
+        /// over a window ensures startup and event loop entry succeed.
+        fn stays_up_for(&mut self, duration: Duration) {
+            let deadline = Instant::now() + duration;
+            while Instant::now() < deadline {
+                self.is_still_running();
+                std::thread::sleep(POLL);
+            }
+            self.is_still_running();
+        }
+
         fn no_panic(&self) {
             let said = self.err();
             assert!(
-                !said.contains("panicked at"),
+                !said.contains("panicked at")
+                    && !said.contains("panic caught in window_event")
+                    && !said.contains("panic in a function that cannot unwind"),
                 "the panel panicked on the way up.\n{}",
                 self.transcript()
             );
@@ -297,7 +313,7 @@ mod gpu {
     fn the_panel_reaches_a_window_and_prints_its_legend() {
         let mut panel = Panel::launch("bare", &[]);
         panel.wait_for(LEGEND);
-        panel.is_still_running();
+        panel.stays_up_for(Duration::from_millis(500));
 
         let transcript = panel.transcript();
         let status = panel.stop();
@@ -339,7 +355,7 @@ mod gpu {
         );
 
         panel.wait_for(LEGEND);
-        panel.is_still_running();
+        panel.stays_up_for(Duration::from_millis(500));
 
         let transcript = panel.transcript();
         let status = panel.stop();

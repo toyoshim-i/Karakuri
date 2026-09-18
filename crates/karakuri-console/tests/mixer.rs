@@ -65,6 +65,8 @@ fn mock() -> Strip {
             mean: 0.74,
             peak: 0.82,
         }),
+        is_muted: false,
+        is_soloed: false,
     }
 }
 
@@ -88,6 +90,8 @@ fn mock_strips() -> Vec<Strip> {
                 mean: 0.12,
                 peak: 0.12,
             }),
+            is_muted: false,
+            is_soloed: false,
         },
         Strip {
             name: "glass_shell".to_owned(),
@@ -101,6 +105,8 @@ fn mock_strips() -> Vec<Strip> {
             mask: Mask::Radial,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         },
     ]
 }
@@ -822,59 +828,32 @@ fn discs(shapes: &[egui::Shape], rect: egui::Rect) -> Vec<f32> {
         .collect()
 }
 
-/// The tally says the residency it was given, in that residency's own colour —
-/// three states, three words and three washes, and the live one is the only one
-/// with a halo on it.
+/// The solo and mute buttons render "S" and "M" in their respective active/inactive colours.
 #[test]
-fn the_tally_shows_the_residency_it_is_given() {
+fn the_solo_and_mute_buttons_show_state_in_strip() {
     let pal = Room::Day.palette();
-    for (index, tally, word, ink) in [
-        (0, Tally::Live, "LIVE", pal.pink),
-        (1, Tally::Priming, "PRIM", pal.sun),
-        (2, Tally::Allocated, "ALLOC", pal.dim),
-    ] {
-        let (at, shapes) = strip_shapes(mock_strips(), index);
-        let strips = mock_strips();
-        assert_eq!(strips[index].tally, tally);
+    for (soloed, muted) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut strips = mock_strips();
+        strips[0].is_soloed = soloed;
+        strips[0].is_muted = muted;
+        let (at, shapes) = strip_shapes(strips, 0);
 
-        assert_eq!(
-            words(&shapes, at.tally),
-            vec![word.to_owned()],
-            "a {tally:?} tally does not read {word}"
-        );
+        assert_eq!(words(&shapes, at.solo), vec!["S".to_owned()]);
+        assert_eq!(words(&shapes, at.mute), vec!["M".to_owned()]);
 
-        // The ink, read off the galley's own fallback colour — every run in
-        // these jobs carries its colour, so the one the painter was handed is
-        // the one the word is in.
-        let painted = shapes.iter().find_map(|shape| match shape {
-            egui::Shape::Text(text) if at.tally.contains(text.pos) => Some(text.fallback_color),
+        let solo_color = shapes.iter().find_map(|shape| match shape {
+            egui::Shape::Text(text) if at.solo.contains(text.pos) => Some(text.fallback_color),
             _ => None,
         });
-        assert_eq!(
-            painted,
-            Some(ink),
-            "a {tally:?} tally is not in the colour `.tally.{}` gives it",
-            tally.word()
-        );
+        let expected_solo = if soloed { pal.sun } else { pal.dim };
+        assert_eq!(solo_color, Some(expected_solo));
 
-        // The halo: `.tally.live` alone carries `box-shadow: 0 0 10px`, and an
-        // `epaint` shadow is a rectangle with a blur width on it — which is
-        // what tells one from the strip's own well, a rectangle that also
-        // contains the tally and is also wider.
-        let haloes = shapes
-            .iter()
-            .filter(|shape| match shape {
-                egui::Shape::Rect(rect) => {
-                    rect.blur_width > 0.0 && rect.rect.contains_rect(at.tally)
-                }
-                _ => false,
-            })
-            .count();
-        assert_eq!(
-            haloes,
-            usize::from(tally == Tally::Live),
-            "a {tally:?} tally drew {haloes} haloes, and only a live one carries one"
-        );
+        let mute_color = shapes.iter().find_map(|shape| match shape {
+            egui::Shape::Text(text) if at.mute.contains(text.pos) => Some(text.fallback_color),
+            _ => None,
+        });
+        let expected_mute = if muted { pal.pink } else { pal.faint };
+        assert_eq!(mute_color, Some(expected_mute));
     }
 }
 

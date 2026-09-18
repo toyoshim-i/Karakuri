@@ -203,6 +203,9 @@ impl Record {
             Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. } => Vocabulary::Frame,
             Record::Gain { .. }
             | Record::Opacity { .. }
+            | Record::Mute { .. }
+            | Record::Solo { .. }
+            | Record::Online { .. }
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }

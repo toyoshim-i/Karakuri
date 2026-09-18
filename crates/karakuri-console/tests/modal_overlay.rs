@@ -94,6 +94,8 @@ fn loaded() -> View {
         mask: Mask::None,
         mask_angle: 0.25,
         level: None,
+        is_muted: false,
+        is_soloed: false,
     }];
     view.library = vec!["one".to_owned(), "two".to_owned()];
     view.inspector = vec![Pane {

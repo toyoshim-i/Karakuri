@@ -5,6 +5,7 @@ impl View {
     /// Draw the whole console. The `ui` is the root one [`egui::Context::run_ui`]
     /// hands the frame's closure.
     pub fn draw(&mut self, ui: &mut Ui, panel: &mut Panel) {
+        self.mixer_dirty = false;
         let pal = self.room.palette();
         // **The bay arranges itself before anything else this frame reads the
         // layout**, the cursor below included: the boundary between the

@@ -879,7 +879,11 @@ impl Readout {
             .as_ref()
             .and_then(|bay| bay.blend(at))
             .or_else(|| master.as_ref().and_then(|row| row.chip(at)));
-        let tally = bay.as_ref().and_then(|bay| bay.tally(at));
+        let tally = bay.as_ref().and_then(|bay| {
+            bay.solo(at)
+                .or_else(|| bay.mute(at))
+                .or_else(|| bay.tally(at))
+        });
         let mask = bay.as_ref().and_then(|bay| bay.mask(at));
         let chose = master.as_ref().and_then(|row| row.chose(at, &adding));
         if let Some(chose) = chose {

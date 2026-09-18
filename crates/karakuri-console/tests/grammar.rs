@@ -75,6 +75,8 @@ fn strip(at: usize) -> Strip {
         mask: [Mask::None, Mask::Linear, Mask::Radial, Mask::None][at],
         mask_angle: 0.25,
         level: None,
+        is_muted: false,
+        is_soloed: false,
     }
 }
 

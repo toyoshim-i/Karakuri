@@ -365,6 +365,18 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             slot: DeckSlot(*deck),
             value: *opacity,
         }),
+        Operation::SetMute { deck, mute } => one(Record::Mute {
+            slot: DeckSlot(*deck),
+            muted: *mute,
+        }),
+        Operation::SetSolo { deck, solo } => one(Record::Solo {
+            slot: DeckSlot(*deck),
+            soloed: *solo,
+        }),
+        Operation::SetOnline { deck, online } => one(Record::Online {
+            slot: DeckSlot(*deck),
+            online: *online,
+        }),
         Operation::SetBlendMode { deck, blend } => one(Record::Blend {
             slot: DeckSlot(*deck),
             mode: blend.name().to_string(),
@@ -649,7 +661,10 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // and a lane's writes are the lane's own record.
         | Operation::RemoveLane { .. }
         | Operation::SetPatternGrid { .. }
-        | Operation::SelectPattern { .. } => Written::Silent(Silent::Surface),
+        | Operation::SelectPattern { .. }
+        | Operation::ToggleSolo { .. }
+        | Operation::ToggleMute { .. }
+        | Operation::ClearSolo => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------
         Operation::ListSets { .. }
