@@ -275,6 +275,8 @@ struct Slot {
     mask: Mask,
     /// Transport mapping governing clock advancement.
     transport: Transport,
+    /// Slot online state in composite mix (arbitrated by mixer solo/mute or directly set).
+    online: bool,
     target: wgpu::Texture,
     view: wgpu::TextureView,
 }
@@ -314,6 +316,9 @@ pub struct Deck {
     height: u32,
     clock: Option<MeasurementMethod>,
     measure_at: (u32, u32),
+    muted: [bool; MAX_SLOTS],
+    solo: Option<usize>,
+    revision: u64,
 }
 
 impl Deck {
@@ -355,6 +360,7 @@ impl Deck {
                     blend: Blend::default(),
                     mask: Mask::default(),
                     transport: Transport::default(),
+                    online: true,
                     target,
                     view,
                 }
@@ -387,19 +393,10 @@ impl Deck {
             // host clock before anything has asked the adapter would be
             // reporting a verdict nobody took.
             clock: None,
-            // **The output size, until somebody names the other one.** This
-            // application has two resolutions — the output the mix is
-            // composited once at (ADR-0247) and the preview cell each slot is
-            // auditioned in — and a deck that has not been told which one a
-            // measurement is about answers with the one it knows. It is never
-            // a third size, which is what ADR-0303 removed.
-            //
-            // **Told to the slots below rather than written here**, because a
-            // `HotSwap` seeds itself from the viewport of the Set it was
-            // handed and `Deck::new` is what resizes that Set — so a slot left
-            // to its own seed would measure at whatever `Set::build` left,
-            // which is 1x1.
             measure_at: (width, height),
+            muted: [false; MAX_SLOTS],
+            solo: None,
+            revision: 0,
         };
         deck.set_measure_size((width, height));
         deck
@@ -899,6 +896,120 @@ impl Deck {
         self.slots[slot.index()].opacity = clamp_opacity(opacity);
     }
 
+    /// Recomputes online state for each slot based on solo and mute settings.
+    fn arbitrate_mix(&mut self) {
+        let solo = self.solo;
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            slot.online = match solo {
+                Some(s) => i == s,
+                None => !self.muted.get(i).copied().unwrap_or(false),
+            };
+        }
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Returns whether the specified slot is currently online in the composite mix.
+    pub fn is_online(&self, slot: DeckSlot) -> bool {
+        self.slots
+            .get(slot.index())
+            .map(|s| s.online)
+            .unwrap_or(false)
+    }
+
+    /// Directly sets the online state of the specified slot.
+    pub fn set_online(&mut self, slot: DeckSlot, online: bool) {
+        if let Some(s) = self.slots.get_mut(slot.index()) {
+            s.online = online;
+            self.revision = self.revision.wrapping_add(1);
+        }
+    }
+
+    /// Returns whether the specified slot is currently muted.
+    pub fn is_muted(&self, slot: DeckSlot) -> bool {
+        self.muted.get(slot.index()).copied().unwrap_or(false)
+    }
+
+    /// Sets the mute state of the specified slot and re-arbitrates mix.
+    pub fn set_mute(&mut self, slot: DeckSlot, muted: bool) {
+        if slot.index() < self.slots.len() {
+            self.muted[slot.index()] = muted;
+            self.arbitrate_mix();
+        }
+    }
+
+    /// Toggles the mute state of the specified slot, returning the new state.
+    pub fn toggle_mute(&mut self, slot: DeckSlot) -> bool {
+        if slot.index() < self.slots.len() {
+            let next = !self.is_muted(slot);
+            self.set_mute(slot, next);
+            next
+        } else {
+            false
+        }
+    }
+
+    /// Returns the currently soloed slot index, if any.
+    pub fn solo(&self) -> Option<usize> {
+        self.solo
+    }
+
+    /// Returns whether any slot is currently soloed.
+    pub fn any_soloed(&self) -> bool {
+        self.solo.is_some()
+    }
+
+    /// Returns whether the specified slot is currently soloed.
+    pub fn is_soloed(&self, slot: DeckSlot) -> bool {
+        self.solo == Some(slot.index())
+    }
+
+    /// Sets the exclusive solo state of the specified slot and re-arbitrates mix.
+    pub fn set_solo(&mut self, slot: DeckSlot, solo: bool) {
+        if slot.index() < self.slots.len() {
+            if solo {
+                self.solo = Some(slot.index());
+            } else if self.solo == Some(slot.index()) {
+                self.solo = None;
+            }
+            self.arbitrate_mix();
+        }
+    }
+
+    /// Toggles the exclusive solo state of the specified slot, returning the new state.
+    pub fn toggle_solo(&mut self, slot: DeckSlot) -> bool {
+        if slot.index() < self.slots.len() {
+            let is_currently = self.is_soloed(slot);
+            self.set_solo(slot, !is_currently);
+            !is_currently
+        } else {
+            false
+        }
+    }
+
+    /// Clears any active solo and restores each slot according to its mute setting.
+    pub fn clear_solo(&mut self) {
+        if self.solo.is_some() {
+            self.solo = None;
+            self.arbitrate_mix();
+        }
+    }
+
+    /// Current revision counter for mixer state changes (solo/mute/online).
+    pub fn mixer_revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Evaluates whether a slot contributes to the final composite mix.
+    ///
+    /// A slot is in the mix if it is Live, online, and has positive opacity.
+    pub fn is_in_mix(&self, slot: DeckSlot) -> bool {
+        if let Some(s) = self.slots.get(slot.index()) {
+            s.effective == Residency::Live && s.online && s.opacity > 0.0
+        } else {
+            false
+        }
+    }
+
     pub fn out(&self) -> f32 {
         self.out
     }
@@ -1152,8 +1263,9 @@ impl Frame<'_> {
                     edge.mask = c.mask;
                 }
             }
+            let in_mix = slot.effective == Residency::Live && slot.online && edge.opacity > 0.0;
             edges.push(Input {
-                live: slot.effective == Residency::Live,
+                live: in_mix,
                 ..edge
             });
         }

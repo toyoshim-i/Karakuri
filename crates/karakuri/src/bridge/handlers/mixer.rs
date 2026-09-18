@@ -121,6 +121,8 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
             mask: view::Mask::None,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         });
     }
     for (slot, strip) in out.iter_mut().enumerate() {
@@ -141,6 +143,8 @@ pub(crate) fn mixer(deck: &Deck, names: &[String], out: &mut Vec<view::Strip>) {
         strip.requested = tally(deck.requested_residency(slot));
         strip.gain = deck.gain(slot);
         strip.opacity = deck.opacity(slot);
+        strip.is_muted = deck.is_muted(slot);
+        strip.is_soloed = deck.is_soloed(slot);
         // **Where a scheduled move is taking each fader**, which is
         // `Deck::transitions_on` — *"what is moving on this slot, for a status
         // line"* — read for a surface instead. `karakuri-cli`'s line prints

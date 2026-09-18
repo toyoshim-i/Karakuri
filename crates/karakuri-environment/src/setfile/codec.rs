@@ -598,6 +598,9 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Tempo { .. }
             | Record::Gain { .. }
             | Record::Opacity { .. }
+            | Record::Mute { .. }
+            | Record::Solo { .. }
+            | Record::Online { .. }
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }

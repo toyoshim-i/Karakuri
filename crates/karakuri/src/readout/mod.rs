@@ -430,4 +430,7 @@ pub(crate) const KEYS: &[(&str, &str)] = &[
         "keep what the selected deck is playing — a Set filed under the time you saved it. the \
          library bay draws no keep control, so the grammar has nothing to reach here yet",
     ),
+    ("m", "mute the addressed deck in the mixer"),
+    ("s", "solo the addressed deck in the mixer"),
+    ("u", "clear any active solo across all decks in the mixer"),
 ];

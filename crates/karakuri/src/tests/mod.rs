@@ -30,6 +30,7 @@ use winit::event::WindowEvent;
 mod focus_keys;
 mod gpu;
 mod inspector_mcp;
+mod mixer_solo_mute;
 mod outputs_row;
 mod press_handler;
 
@@ -3725,6 +3726,8 @@ fn every_ask_the_load_control_makes_is_acted_on_and_moves_only_this_bays_mark() 
             mask: view::Mask::None,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         })
         .collect();
     assert!(readout.view.select(1), "the keys did not go to deck B");
@@ -5342,6 +5345,8 @@ fn bare_strip() -> view::Strip {
         mask: view::Mask::None,
         mask_angle: 0.0,
         level: None,
+        is_muted: false,
+        is_soloed: false,
     }
 }
 
@@ -6076,6 +6081,8 @@ fn a_press_on_a_strips_ground_selects_that_deck() {
             mask: view::Mask::None,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         })
         .collect();
     assert_eq!(
@@ -6189,6 +6196,8 @@ fn a_drop_on_a_strip_loads_the_strip_it_was_let_go_over() {
             mask: view::Mask::None,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         })
         .collect();
     assert_eq!(
@@ -6330,6 +6339,8 @@ fn a_drop_on_a_preview_cell_loads_the_deck_its_letter_names() {
             mask: view::Mask::None,
             mask_angle: 0.0,
             level: None,
+            is_muted: false,
+            is_soloed: false,
         })
         .collect();
     assert_eq!(

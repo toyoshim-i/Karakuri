@@ -290,15 +290,19 @@ impl LibraryBay {
         let top = row.map_or(0.0, |row| row.min.y + size::LIB_KINDS_PAD_Y);
         let drawn = row.map_or(0, |_| KindChip::ALL.len());
         KindChip::ALL.into_iter().take(drawn).map(move |chip| {
-            let width = ctx.fonts_mut(|f| {
-                f.layout_no_wrap(
-                    chip.word().to_owned(),
-                    FontId::new(size::KIND_SIZE, FontFamily::Proportional),
-                    Color32::PLACEHOLDER,
-                )
-                .size()
-                .x
-            }) + size::KIND_PAD_X * 2.0;
+            let width = if ctx.cumulative_pass_nr() == 0 {
+                size::KIND_PAD_X * 2.0
+            } else {
+                ctx.fonts_mut(|f| {
+                    f.layout_no_wrap(
+                        chip.word().to_owned(),
+                        FontId::new(size::KIND_SIZE, FontFamily::Proportional),
+                        Color32::PLACEHOLDER,
+                    )
+                    .size()
+                    .x
+                }) + size::KIND_PAD_X * 2.0
+            };
             let box_ = Rect::from_min_size(Pos2::new(x, top), egui::vec2(width, size::KIND_H));
             x += width + size::LIB_KINDS_GAP;
             (chip, box_)

@@ -44,8 +44,8 @@ use karakuri_console::panel::{Op, Panel};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
-    mixer, roll_at, Level, Mask, Phase, Strip, StripBox, Tally, View, ROLL_PERIOD, ROLL_REACH,
-    ROLL_STALENESS, ROLL_TRAVEL,
+    mixer, roll_at, tally_into, Level, Mask, Phase, Strip, StripBox, Tally, View, ROLL_PERIOD,
+    ROLL_REACH, ROLL_STALENESS, ROLL_TRAVEL,
 };
 use karakuri_layout::NodeId;
 use karakuri_operation::BlendMode;
@@ -68,6 +68,8 @@ fn settled(tally: Tally) -> Strip {
             mean: 0.12,
             peak: 0.12,
         }),
+        is_muted: false,
+        is_soloed: false,
     }
 }
 
@@ -118,13 +120,21 @@ fn box_of(strips: &[Strip]) -> StripBox {
 /// is looking for.
 fn words_at(strips: Vec<Strip>, phase: Phase) -> (StripBox, Vec<(String, egui::Rect, egui::Rect)>) {
     let at = box_of(&strips);
-    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
-    panel.solve();
-    let mut view = View::new(Room::Day);
-    view.mixer = strips;
-    view.phase = phase;
+    let pal = Room::Day.palette();
     let ctx = drawn_once();
-    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| view.draw(ui, &mut panel));
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let painter = ui.painter();
+        for strip in &strips {
+            tally_into(
+                &painter,
+                &pal,
+                at.tally,
+                strip.tally,
+                strip.pending(),
+                phase,
+            );
+        }
+    });
     out.textures_delta.clear();
     let words = out
         .shapes

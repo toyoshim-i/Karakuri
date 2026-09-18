@@ -370,6 +370,8 @@ fn strip(residency: Tally) -> Strip {
         mask: Mask::Linear,
         mask_angle: 0.0,
         level: None,
+        is_muted: false,
+        is_soloed: false,
     }
 }
 

@@ -196,6 +196,9 @@ pub(crate) const ON_WASH: u8 = 16;
 /// no painter -- the same reason [`mixer`] and [`outputs`] measure their words
 /// off the context.
 pub(crate) fn pill_width(ctx: &egui::Context, text: &str) -> f32 {
+    if ctx.cumulative_pass_nr() == 0 {
+        return size::PILL_PAD_X * 2.0;
+    }
     let run = ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             text.to_owned(),

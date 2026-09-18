@@ -124,7 +124,7 @@ pub(crate) struct KeyBinding {
     /// one key of this table that is not global, `None` for every other one. Read
     /// only by `key_column`'s tests, for `legend`'s reason.
     #[cfg_attr(not(test), allow(dead_code))]
-    bay: Option<&'static str>,
+    pub(crate) bay: Option<&'static str>,
     /// The `<h3>` title this key reaches on the page, or `None` for a view-only
     /// action the page does not specify as an operation — moving focus, abandoning
     /// a name, the room's colours. Read only by `key_column`'s tests, for
@@ -284,6 +284,27 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         title: None,
         action: KeyAction::Handled(key_room),
     },
+    KeyBinding {
+        key: BoundKey::Character("m"),
+        legend: "m",
+        bay: Some("mixer"),
+        title: Some("Toggle mute"),
+        action: KeyAction::Handled(key_toggle_mute),
+    },
+    KeyBinding {
+        key: BoundKey::Character("s"),
+        legend: "s",
+        bay: Some("mixer"),
+        title: Some("Toggle solo"),
+        action: KeyAction::Handled(key_toggle_solo),
+    },
+    KeyBinding {
+        key: BoundKey::Character("u"),
+        legend: "u",
+        bay: Some("mixer"),
+        title: Some("Clear solo"),
+        action: KeyAction::Handled(key_clear_solo),
+    },
 ];
 
 // -- KEY_BINDINGS' actions, one free function per entry ---------------------
@@ -408,6 +429,50 @@ fn key_scale_grid_double(ctx: &mut KeyCtx, gfx: &mut Gfx) {
 fn key_room(ctx: &mut KeyCtx, gfx: &mut Gfx) {
     ctx.readout.room();
     App::wants(gfx, ctx.egui_due, ctx.costs, Change::Room.repaint());
+}
+
+fn key_toggle_mute(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let deck = ctx.readout.view.selection();
+    let acted = Acted::Emitted(Some(Operation::ToggleMute { deck }));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+fn key_toggle_solo(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let deck = ctx.readout.view.selection();
+    let acted = Acted::Emitted(Some(Operation::ToggleSolo { deck }));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+fn key_clear_solo(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let acted = Acted::Emitted(Some(Operation::ClearSolo));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
 }
 
 #[cfg(test)]
@@ -895,6 +960,9 @@ pub(crate) mod key_column {
         // surface, so both rows read `gap` in the panel column and in the key
         // column (ADR-0353).
         (Some("mixer"), "enter", &["Wipe the next deck in"]),
+        (Some("mixer"), "m", &["Mute a deck", "Toggle mute"]),
+        (Some("mixer"), "s", &["Solo a deck", "Toggle solo"]),
+        (Some("mixer"), "u", &["Clear solo"]),
         // ------------------------------------------------------------------
         // The Master chain's grammar
         // ------------------------------------------------------------------

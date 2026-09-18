@@ -474,6 +474,12 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         // available, and it is what the audience is looking at.
         Operation::SetGain { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetOpacity { .. } => Standing::Closed(Class::MixFaders),
+        Operation::SetMute { .. } => Standing::Closed(Class::MixFaders),
+        Operation::ToggleMute { .. } => Standing::Closed(Class::MixFaders),
+        Operation::SetSolo { .. } => Standing::Closed(Class::MixFaders),
+        Operation::ToggleSolo { .. } => Standing::Closed(Class::MixFaders),
+        Operation::ClearSolo => Standing::Closed(Class::MixFaders),
+        Operation::SetOnline { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetBlendMode { .. } => Standing::Closed(Class::MixFaders),
         Operation::FadeDeck { .. } => Standing::Closed(Class::MixFaders),
         Operation::Crossfade { .. } => Standing::Closed(Class::MixFaders),
@@ -664,6 +670,21 @@ mod tests {
             Operation::SetOpacity {
                 deck: 0,
                 opacity: 1.0,
+            },
+            Operation::SetMute {
+                deck: 0,
+                mute: false,
+            },
+            Operation::ToggleMute { deck: 0 },
+            Operation::SetSolo {
+                deck: 0,
+                solo: false,
+            },
+            Operation::ToggleSolo { deck: 0 },
+            Operation::ClearSolo,
+            Operation::SetOnline {
+                deck: 0,
+                online: true,
             },
             Operation::SetBlendMode {
                 deck: 0,
@@ -938,7 +959,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!((closed, open, closed + open), (42, 27, 69));
+        assert_eq!((closed, open, closed + open), (48, 27, 75));
     }
 
     fn members(class: Class) -> Vec<&'static str> {
@@ -985,6 +1006,12 @@ mod tests {
             vec![
                 "Gain",
                 "Opacity",
+                "Mute a deck",
+                "Toggle mute",
+                "Solo a deck",
+                "Toggle solo",
+                "Clear solo",
+                "Set a slot's online state",
                 "Blend mode",
                 "Fade a deck out or in",
                 "Crossfade to the next deck",

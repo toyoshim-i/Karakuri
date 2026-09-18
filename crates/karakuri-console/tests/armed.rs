@@ -70,6 +70,8 @@ fn settled() -> Strip {
             mean: 0.12,
             peak: 0.12,
         }),
+        is_muted: false,
+        is_soloed: false,
     }
 }
 

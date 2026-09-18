@@ -21,6 +21,7 @@ use crate::launch::*;
 use crate::readout::*;
 use crate::session::{Keeping, Sessions};
 use crate::WINDOW;
+use karakuri_engine::DeckSlot as EngineSlot;
 mod audio_midi;
 mod handler;
 mod operations;
@@ -243,6 +244,8 @@ pub(crate) struct App {
     /// compile, the first Sets — is one gap, and a gap is counted whole up to
     /// `MAX_STEPS` (ADR-0006).
     pub(crate) clock: Clock,
+    /// Last seen mixer state revision to detect when mixer bay needs dirtying.
+    pub(crate) last_mixer_revision: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -408,6 +411,7 @@ impl App {
             },
             recording: Sessions::new(),
             clock: Clock::new(Instant::now()),
+            last_mixer_revision: 0,
         }
     }
 
@@ -502,6 +506,7 @@ impl App {
         acted: &Acted,
         otherwise: Repaint,
     ) -> Performed {
+        let prev_mixer_revision = gfx.engine.deck.mixer_revision();
         // **What the conversion answered, filled by the one arm that runs
         // it**, and carried out of this function because the drain that has no
         // terminal has to say it over a socket — see [`Performed`], where why
@@ -755,6 +760,29 @@ impl App {
                     ) {
                         println!("{line}");
                     }
+                    match operation {
+                        Operation::ToggleSolo { deck } => {
+                            let slot = EngineSlot(*deck);
+                            let soloed = gfx.engine.deck.toggle_solo(slot);
+                            println!(
+                                "  solo: deck {} -> ToggleSolo -> deck.is_soloed({slot}) = {soloed}",
+                                deck_letter(*deck)
+                            );
+                        }
+                        Operation::ToggleMute { deck } => {
+                            let slot = EngineSlot(*deck);
+                            let muted = gfx.engine.deck.toggle_mute(slot);
+                            println!(
+                                "  mute: deck {} -> ToggleMute -> deck.is_muted({slot}) = {muted}",
+                                deck_letter(*deck)
+                            );
+                        }
+                        Operation::ClearSolo => {
+                            gfx.engine.deck.clear_solo();
+                            println!("  solo: ClearSolo -> cleared all solo");
+                        }
+                        _ => {}
+                    }
                     // **The reading is taken off the deck and off the console,
                     // and for four of this bay's controls it is *I read
                     // nothing*.** A gain, an
@@ -883,6 +911,14 @@ impl App {
                 Change::Emitted(operation.as_ref()).repaint()
             }
         };
+        if gfx.engine.deck.mixer_revision() != prev_mixer_revision {
+            readout.view.mark_mixer_dirty();
+            for i in 0..gfx.engine.deck.slot_count() {
+                readout
+                    .slot_policies
+                    .set_in_mix(i, gfx.engine.deck.is_in_mix(EngineSlot(i as u8)));
+            }
+        }
         Performed {
             repaint,
             written: converted,

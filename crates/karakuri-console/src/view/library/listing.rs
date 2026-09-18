@@ -1207,6 +1207,9 @@ impl LibraryBay {
     /// padding and the mark — which is what a console that has drawn nothing has.
     pub fn load(&self, ctx: &egui::Context, at: Target) -> Load {
         let run = |text: &str| {
+            if ctx.cumulative_pass_nr() == 0 {
+                return egui::Vec2::ZERO;
+            }
             ctx.fonts_mut(|f| {
                 f.layout_no_wrap(
                     text.to_owned(),
@@ -1695,20 +1698,24 @@ impl LibraryBay {
         words: &'a [&'static str],
     ) -> impl Iterator<Item = (&'static str, Rect)> + 'a {
         let row = self.row(index);
-        let widths: Vec<f32> = words
-            .iter()
-            .map(|word| {
-                ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(
-                        (*word).to_owned(),
-                        FontId::new(size::BADGE_SIZE, FontFamily::Proportional),
-                        Color32::PLACEHOLDER,
-                    )
-                    .size()
-                    .x
-                }) + size::BADGE_PAD_X * 2.0
-            })
-            .collect();
+        let widths: Vec<f32> = if ctx.cumulative_pass_nr() == 0 {
+            words.iter().map(|_| size::BADGE_PAD_X * 2.0).collect()
+        } else {
+            words
+                .iter()
+                .map(|word| {
+                    ctx.fonts_mut(|f| {
+                        f.layout_no_wrap(
+                            (*word).to_owned(),
+                            FontId::new(size::BADGE_SIZE, FontFamily::Proportional),
+                            Color32::PLACEHOLDER,
+                        )
+                        .size()
+                        .x
+                    }) + size::BADGE_PAD_X * 2.0
+                })
+                .collect()
+        };
         let whole: f32 =
             widths.iter().sum::<f32>() + size::BADGE_GAP * widths.len().saturating_sub(1) as f32;
         let mut x = row.max.x - size::LIB_ROW_PAD_X - whole;

@@ -22,7 +22,7 @@ pub use transition::*;
 /// than a strip full of dashes — see [`mixer`].
 ///
 /// The page has since agreed: `39f1e6b` took that strip out under ADR-0178, and
-pub use super::widgets::chip::{centre_galley, tally_into, tally_job, Tally};
+pub use super::widgets::chip::{centre_galley, tally_job, Tally};
 
 // ---------------------------------------------------------------------------
 // The Mixer bay
@@ -169,6 +169,34 @@ impl<'a> Mixer<'a> {
                         deck: index as u8,
                         blend: after(strip.blend),
                     })
+            })
+    }
+
+    /// What a press at `p` asks the deck's solo state to become, or `None` where
+    /// there is no solo button under it.
+    pub fn solo(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        self.strips
+            .iter()
+            .zip(self.boxes)
+            .enumerate()
+            .find_map(|(index, (_, at))| {
+                at.filter(|at| at.solo.contains(p))
+                    .map(|_| Operation::ToggleSolo { deck: index as u8 })
+            })
+    }
+
+    /// What a press at `p` asks the deck's mute state to become, or `None` where
+    /// there is no mute button under it.
+    pub fn mute(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        self.strips
+            .iter()
+            .zip(self.boxes)
+            .enumerate()
+            .find_map(|(index, (_, at))| {
+                at.filter(|at| at.mute.contains(p))
+                    .map(|_| Operation::ToggleMute { deck: index as u8 })
             })
     }
 
@@ -566,6 +594,7 @@ pub(super) fn mixer_into(
     for (strip, at) in mixer.placed() {
         strip_into(ui, pal, strip, at, phase);
     }
+
     // `.strip.drop` — `outline: 2px solid var(--c-text)` at `outline-offset:
     // 0`, the rectangle a Set in hand lands on if it is let go here. Drawn
     // **before** the selection below and outside the strip's own edge where
@@ -694,12 +723,22 @@ impl View {
     /// freezes with nothing saying so.
     pub(super) fn mixer_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
         let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
-        let moving = bay
-            && self.mixer.iter().any(|strip| {
-                strip.pending().is_some()
-                    || strip.gain_pending().is_some()
-                    || strip.opacity_pending().is_some()
+        if !bay {
+            return None;
+        }
+        if self.mixer_dirty {
+            return Some(Declared {
+                region: "mixer",
+                cost: PANEL_PASS,
+                staleness: ROLL_STALENESS,
+                moves_in: Duration::ZERO,
             });
+        }
+        let moving = self.mixer.iter().any(|strip| {
+            strip.pending().is_some()
+                || strip.gain_pending().is_some()
+                || strip.opacity_pending().is_some()
+        });
         moving.then_some(Declared {
             region: "mixer",
             cost: PANEL_PASS,

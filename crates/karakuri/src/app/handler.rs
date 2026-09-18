@@ -245,8 +245,8 @@ impl ApplicationHandler for App {
         let material: Vec<String> =
             std::iter::repeat_n(self.sources.material(), engine.deck.slot_count()).collect();
         mixer(&engine.deck, &material, &mut self.readout.view.mixer);
-        for (i, strip) in self.readout.view.mixer.iter().enumerate() {
-            let in_mix = strip.tally == karakuri_console::view::Tally::Live && strip.opacity > 0.0;
+        for i in 0..engine.deck.slot_count() {
+            let in_mix = engine.deck.is_in_mix(EngineSlot(i as u8));
             self.readout.slot_policies.set_in_mix(i, in_mix);
         }
         // **The library before the legend too**, and once for the run: the
@@ -567,6 +567,24 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.on_window_event(event_loop, id, event);
+        }));
+        if let Err(payload) = res {
+            let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic payload".to_string()
+            };
+            eprintln!("panicked in window_event: {msg}");
+        }
+    }
+}
+
+impl App {
+    fn on_window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let Some(gfx) = self.gfx.as_mut() else {
             return;
         };
@@ -1555,53 +1573,66 @@ impl ApplicationHandler for App {
                     // `docs/manual/operations.html` by `key_column` directly
                     // (see [`KEY_BINDINGS`] for why a table and not arms, and
                     // for the doc comment each arm here used to carry).
-                    other => match KEY_BINDINGS
-                        .iter()
-                        .find(|binding| binding.key.matches(&other))
-                    {
-                        Some(binding) => {
-                            // **Disjoint fields, not `self`.** `gfx` is
-                            // already a live `&mut` borrow out of `self.gfx`
-                            // (see the top of `window_event`), so a bound
-                            // action takes exactly the other fields it
-                            // needs rather than all of `self` — the same
-                            // reason `App::performed` and `App::wants` never
-                            // took `&mut self` either.
-                            let mut ctx = KeyCtx {
-                                readout: &mut self.readout,
-                                egui_due: &mut self.egui_due,
-                                costs: &mut self.costs,
-                                recording: &mut self.recording,
-                                keeping: &mut self.keeping,
-                                store: &self.store,
-                                started: self.started,
-                                shift: self.shift,
-                            };
-                            match binding.action {
-                                KeyAction::Handled(act) => {
-                                    act(&mut ctx, gfx);
-                                    return;
-                                }
-                                KeyAction::Focus(act) => {
-                                    let moved = act(&mut ctx);
-                                    App::wants(
-                                        gfx,
-                                        &mut self.egui_due,
-                                        &mut self.costs,
-                                        Change::Pointed(moved).repaint(),
-                                    );
-                                    return;
-                                }
-                                KeyAction::Panel(act) => match act(&mut ctx) {
-                                    Some(op) => op,
-                                    None => return,
-                                },
+                    other => {
+                        let focused_bay = self
+                            .readout
+                            .view
+                            .focused(&self.readout.panel)
+                            .map(|b| b.name);
+                        match KEY_BINDINGS.iter().find(|binding| {
+                            if !binding.key.matches(&other) {
+                                return false;
                             }
+                            match binding.bay {
+                                None => true,
+                                Some(focus::ANY) => true,
+                                Some(bay) => focused_bay == Some(bay),
+                            }
+                        }) {
+                            Some(binding) => {
+                                // **Disjoint fields, not `self`.** `gfx` is
+                                // already a live `&mut` borrow out of `self.gfx`
+                                // (see the top of `window_event`), so a bound
+                                // action takes exactly the other fields it
+                                // needs rather than all of `self` — the same
+                                // reason `App::performed` and `App::wants` never
+                                // took `&mut self` either.
+                                let mut ctx = KeyCtx {
+                                    readout: &mut self.readout,
+                                    egui_due: &mut self.egui_due,
+                                    costs: &mut self.costs,
+                                    recording: &mut self.recording,
+                                    keeping: &mut self.keeping,
+                                    store: &self.store,
+                                    started: self.started,
+                                    shift: self.shift,
+                                };
+                                match binding.action {
+                                    KeyAction::Handled(act) => {
+                                        act(&mut ctx, gfx);
+                                        return;
+                                    }
+                                    KeyAction::Focus(act) => {
+                                        let moved = act(&mut ctx);
+                                        App::wants(
+                                            gfx,
+                                            &mut self.egui_due,
+                                            &mut self.costs,
+                                            Change::Pointed(moved).repaint(),
+                                        );
+                                        return;
+                                    }
+                                    KeyAction::Panel(act) => match act(&mut ctx) {
+                                        Some(op) => op,
+                                        None => return,
+                                    },
+                                }
+                            }
+                            // Not one of the grammar's four and not in the table
+                            // either — an unbound key, answered with nothing.
+                            None => return,
                         }
-                        // Not one of the grammar's four and not in the table
-                        // either — an unbound key, answered with nothing.
-                        None => return,
-                    },
+                    }
                 };
                 let outcome = self.readout.op(op);
                 App::wants(
@@ -2015,11 +2046,11 @@ impl ApplicationHandler for App {
                     &gfx.material,
                     &mut self.readout.view.mixer,
                 );
-                for (i, strip) in self.readout.view.mixer.iter().enumerate() {
-                    let in_mix =
-                        strip.tally == karakuri_console::view::Tally::Live && strip.opacity > 0.0;
+                for i in 0..gfx.engine.deck.slot_count() {
+                    let in_mix = gfx.engine.deck.is_in_mix(EngineSlot(i as u8));
                     self.readout.slot_policies.set_in_mix(i, in_mix);
                 }
+                self.last_mixer_revision = gfx.engine.deck.mixer_revision();
 
                 // **And what the Staging lane lists**, off the same deck and
                 // beside the frame the verdicts belong to. It reads the

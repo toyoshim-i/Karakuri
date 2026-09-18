@@ -403,6 +403,21 @@ pub enum Record {
         slot: DeckSlot,
         value: f32,
     },
+    /// A deck slot's mute state.
+    Mute {
+        slot: DeckSlot,
+        muted: bool,
+    },
+    /// A deck slot's solo state.
+    Solo {
+        slot: DeckSlot,
+        soloed: bool,
+    },
+    /// A deck slot's online mix state.
+    Online {
+        slot: DeckSlot,
+        online: bool,
+    },
     /// How a deck slot's layer meets the ones under it: `add`, `over` or `max`.
     ///
     /// Slot order is stacking order, so this is the one mix control whose meaning

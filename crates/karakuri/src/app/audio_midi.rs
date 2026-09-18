@@ -308,7 +308,9 @@ pub(crate) fn asked_at(
             return Some(grab.knob().operation(0.0));
         }
         if let Some(operation) = bay
-            .blend(p)
+            .solo(p)
+            .or_else(|| bay.mute(p))
+            .or_else(|| bay.blend(p))
             .or_else(|| bay.tally(p))
             .or_else(|| bay.mask(p))
         {

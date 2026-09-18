@@ -1123,6 +1123,8 @@ fn on_tracker(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool
 fn on_strip(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     mixer(ctx, panel.layout(), &view.mixer).is_some_and(|bay| {
         bay.grab(p).is_some()
+            || bay.solo(p).is_some()
+            || bay.mute(p).is_some()
             || bay.blend(p).is_some()
             || bay.tally(p).is_some()
             || bay.mask(p).is_some()

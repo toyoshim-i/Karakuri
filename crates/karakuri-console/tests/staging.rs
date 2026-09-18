@@ -99,6 +99,8 @@ fn strip(name: &str) -> Strip {
             mean: 0.74,
             peak: 0.82,
         }),
+        is_muted: false,
+        is_soloed: false,
     }
 }
 

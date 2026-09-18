@@ -493,6 +493,8 @@ fn bare_strip() -> view::Strip {
         mask: view::Mask::None,
         mask_angle: 0.0,
         level: None,
+        is_muted: false,
+        is_soloed: false,
     }
 }
 
@@ -968,4 +970,84 @@ fn the_press_handler_dispatches_library_controls() {
         readout.view.menu_open(),
         "secondary press on library row should open context menu"
     );
+}
+
+#[test]
+fn pointer_move_and_hover_across_all_points() {
+    let ctx = egui::Context::default();
+    assert_eq!(ctx.cumulative_pass_nr(), 0);
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+    readout.view.mixer = vec![bare_strip(), bare_strip(), bare_strip(), bare_strip()];
+    let mut hover = karakuri_console::hover::Hover::new();
+
+    for x in (0..1440).step_by(10) {
+        for y in (0..900).step_by(10) {
+            let p = Point::new(x as f32, y as f32);
+            let (claim, acted) = readout.pointer(&ctx, Pointer::Moved(p));
+            assert_eq!(acted, Acted::Nothing);
+            let _tip = hover.moved(
+                claim,
+                &readout.panel,
+                &ctx,
+                &readout.view,
+                p,
+                Duration::from_millis(500),
+            );
+        }
+    }
+}
+
+/// Verifies that initial pointer movements, clicks, and hover events across
+/// the full window layout do not panic even when received immediately at startup
+/// before the first frame has rendered (cumulative_pass_nr == 0).
+#[test]
+fn startup_pointer_and_hover_events_do_not_panic_before_first_frame() {
+    let ctx = egui::Context::default();
+    assert_eq!(ctx.cumulative_pass_nr(), 0);
+
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    // Populate realistic startup state matching App::resumed
+    readout.view.scopes = karakuri_console::view::Scope::ALL.to_vec();
+    readout
+        .view
+        .select_scope(karakuri_console::view::Scope::AllSets);
+    readout.view.mixer = vec![bare_strip(), bare_strip(), bare_strip(), bare_strip()];
+    readout.view.master_out = Some(1.0);
+    readout.view.audio = Some(karakuri_console::view::AudioIn::NONE);
+    readout.view.map = Some(karakuri_console::view::MapPill { name: None });
+
+    let mut hover = karakuri_console::hover::Hover::new();
+
+    // Sweep across the entire console layout
+    for x in (0..1440).step_by(25) {
+        for y in (0..900).step_by(25) {
+            let p = Point::new(x as f32, y as f32);
+
+            // 1. Pointer move event
+            let (claim, acted) = readout.pointer(&ctx, Pointer::Moved(p));
+            assert_eq!(acted, Acted::Nothing);
+
+            // 2. Hover move event
+            let tip = hover.moved(
+                claim,
+                &readout.panel,
+                &ctx,
+                &readout.view,
+                p,
+                Duration::from_millis(100),
+            );
+            // Tip must be Still before first frame
+            assert_eq!(tip, karakuri_console::hover::Tip::Still);
+
+            // 3. Pointer down and up events
+            let (_down_claim, _down_acted) = readout.pointer(&ctx, Pointer::Down);
+            let (_up_claim, _up_acted) = readout.pointer(&ctx, Pointer::Up);
+        }
+    }
+
+    let tip = hover.left();
+    assert_eq!(tip, karakuri_console::hover::Tip::Still);
 }

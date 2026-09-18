@@ -765,6 +765,121 @@ pub(crate) const SPELLED: &[Spelled] = &[
     Spelled {
         sample: || {
             (
+                Operation::SetMute {
+                    deck: 0,
+                    mute: true,
+                },
+                json!({ "deck": 0, "mute": true }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetMute {
+                deck: deck_of(with, "deck", slots)?,
+                mute: bool_of(with, "mute")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "mute": p_bool("whether this deck is excluded from the composite mix"),
+                }),
+                &["deck", "mute"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || (Operation::ToggleMute { deck: 0 }, json!({ "deck": 0 })),
+        make: Some(|with, slots| {
+            Ok(Operation::ToggleMute {
+                deck: deck_of(with, "deck", slots)?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                }),
+                &["deck"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetSolo {
+                    deck: 0,
+                    solo: true,
+                },
+                json!({ "deck": 0, "solo": true }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetSolo {
+                deck: deck_of(with, "deck", slots)?,
+                solo: bool_of(with, "solo")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "solo": p_bool("whether this deck is isolated in the composite mix"),
+                }),
+                &["deck", "solo"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || (Operation::ToggleSolo { deck: 0 }, json!({ "deck": 0 })),
+        make: Some(|with, slots| {
+            Ok(Operation::ToggleSolo {
+                deck: deck_of(with, "deck", slots)?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                }),
+                &["deck"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || (Operation::ClearSolo, json!({})),
+        make: Some(|_, _| Ok(Operation::ClearSolo)),
+        shape: Some(|| shaped(json!({}), &[])),
+    },
+    Spelled {
+        sample: || {
+            (
+                Operation::SetOnline {
+                    deck: 0,
+                    online: true,
+                },
+                json!({ "deck": 0, "online": true }),
+            )
+        },
+        make: Some(|with, slots| {
+            Ok(Operation::SetOnline {
+                deck: deck_of(with, "deck", slots)?,
+                online: bool_of(with, "online")?,
+            })
+        }),
+        shape: Some(|| {
+            shaped(
+                json!({
+                    "deck": p_deck(),
+                    "online": p_bool("whether this deck's slot is online in the composite mix"),
+                }),
+                &["deck", "online"],
+            )
+        }),
+    },
+    Spelled {
+        sample: || {
+            (
                 Operation::SetBlendMode {
                     deck: 0,
                     blend: karakuri_operation::BlendMode::Over,

@@ -120,6 +120,8 @@ fn wearing(slot: usize, mask: Mask, angle: f32) -> Strip {
             mean: 0.5,
             peak: 0.6,
         }),
+        is_muted: false,
+        is_soloed: false,
     }
 }
 

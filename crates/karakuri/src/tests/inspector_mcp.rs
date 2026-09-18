@@ -2,7 +2,6 @@
 
 use karakuri_operation::SlotPolicy;
 
-use super::*;
 use crate::readout::{Acted, Readout};
 
 /// The press handler dispatches pointer events on Inspector slot MCP policy pill.

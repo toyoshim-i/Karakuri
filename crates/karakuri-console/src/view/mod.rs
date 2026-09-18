@@ -824,6 +824,8 @@ pub struct View {
     /// room for [`DECKS`] so the frame path never grows it. See [`Strip`] and
     /// [`mixer`].
     pub mixer: Vec<Strip>,
+    /// Whether the mixer bay needs a redraw due to an operation changing mixer state.
+    pub mixer_dirty: bool,
     /// What the Library bay lists this frame: the name of every Set the store
     /// holds, in the order the store listed them — and empty for a console with no
     /// store behind it, which is every test in this crate and what the bay draws
@@ -1435,6 +1437,7 @@ impl View {
             // As many strips as a deck can ever have, so the frame path never
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
+            mixer_dirty: false,
             // Nothing until somebody lists a store, which is every test in
             // this crate. No capacity is reserved: how many Sets a store holds
             // is not a number this crate has, and the list is written once
@@ -1606,6 +1609,12 @@ impl View {
             .address_mut(focus::MIXER)
             .remember(&[], usize::from(deck) + 1);
         moved
+    }
+
+    /// Mark the mixer bay dirty, notifying the console that mixer state has been arbitrated
+    /// and the mixer bay requires a redraw on the next frame.
+    pub fn mark_mixer_dirty(&mut self) {
+        self.mixer_dirty = true;
     }
 
     /// Where focus is and what every bay remembers, to read — [`View::focus`] the

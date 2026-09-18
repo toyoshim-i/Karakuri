@@ -236,6 +236,9 @@ impl Chosen {
 /// row up: a capsule is as wide as the words in it, and the only thing that
 /// knows how wide a word is is the thing that will paint it.
 fn chip_width(ctx: &egui::Context, name: &str) -> f32 {
+    if ctx.cumulative_pass_nr() == 0 {
+        return size::SCOPE_PAD_X * 2.0;
+    }
     ctx.fonts_mut(|f| {
         f.layout_no_wrap(
             name.to_owned(),
