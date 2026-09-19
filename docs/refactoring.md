@@ -58,6 +58,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P60** | `karakuri-ir/tests/check.rs` (4,835 lines) | Decomposed into `check/` (`canonical.rs`, `layers.rs`, `slots.rs`, `effects.rs`, `common.rs`), reducing `check.rs` to 19 lines | **COMPLETED** |
 | **P61** | `karakuri-engine/tests/deck.rs` (4,571 lines) | Decomposed into `deck/` submodules (`common.rs`, `masks_and_transitions.rs`, `blending_and_master.rs`, `lifecycle_and_swaps.rs`, `measurements_and_edge_cases.rs`), reducing `deck.rs` to 18 lines | **COMPLETED** |
 | **P62** | `karakuri-cli/src/tests.rs` (4,523 lines) | Decomposed into `src/tests/` submodules (`mod.rs`, `parse.rs`, `interactive.rs`, `live_save.rs`, `wire.rs`), reducing `mod.rs` to 6 lines | **COMPLETED** |
+| **P63** | `karakuri-console/tests/library.rs` (4,408 lines) | Decomposed into `tests/library/` submodules (`geometry.rs`, `scope_and_filter.rs`, `params_and_history.rs`, `menus_and_scroll.rs`, `common.rs`), reducing `library.rs` to 18 lines | **COMPLETED** |
 
 ---
 
@@ -68,8 +69,8 @@ Targeting the top 10 largest test files (>2,300 lines down to <2,000 lines, targ
 - `karakuri-ir/tests/check.rs` (4,835 lines) -> **P60 COMPLETED**
 - `karakuri-engine/tests/deck.rs` (4,571 lines) -> **P61 COMPLETED**
 - `karakuri-cli/src/tests.rs` (4,523 lines) -> **P62 COMPLETED**
-- `karakuri-console/tests/library.rs` (4,408 lines) -> **P63 IN PROGRESS**
-- `karakuri::tests::gpu` (3,990 lines) -> **P64**
+- `karakuri-console/tests/library.rs` (4,408 lines) -> **P63 COMPLETED**
+- `karakuri::tests::gpu` (3,990 lines) -> **P64 IN PROGRESS**
 - `karakuri-mcp/tests/wire.rs` (3,123 lines) -> **P65**
 - `karakuri-codegen/tests/naga_test.rs` (2,784 lines) -> **P66**
 - `karakuri-environment::setfile::tests` (2,779 lines) -> **P67**
