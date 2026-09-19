@@ -1,0 +1,773 @@
+#![allow(unused_imports, dead_code)]
+
+//! Feeds generated WGSL through a real front end.
+//!
+//! Everything in `src/lib.rs`'s unit tests asserts on the emitted *text*,
+//! which only proves the generator produced what it meant to produce — not
+//! that a GPU driver would accept it. `naga` is already in the dependency
+//! tree via `wgpu` (`karakuri-engine`); pulling it in directly here lets
+//! these tests parse and validate the output instead of trusting that it
+//! merely looks right. A generator whose output is never fed to a compiler
+//! emits plausible nonsense, and this is the test that would have caught
+//! this crate doing that.
+//!
+//! The two fixtures below are hand-built `Checked` trees shaped like the
+//! ir-spec's own `drift_shell` (L1) and `soft_points` (L4) examples, close
+//! enough to exercise hashing, noise, curl, an `if`/`kill()` branch, `mat4`
+//! multiplication, and `hsv_to_rgb` together — not just the narrow feature
+//! one unit test isolates.
+
+pub use karakuri_ir::builtin::Builtin;
+pub use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
+pub use karakuri_ir::{
+    Ambient, Attr, BinOp, Blend, BlockKind, Kind, Lit, Output, Param, Span, Topology, Ty,
+};
+
+pub fn span() -> Span {
+    Span::EMPTY
+}
+
+pub fn lit_f(f: f32) -> TExpr {
+    TExpr::new(Ty::Float, span(), TExprKind::Lit(Lit::Float(f)))
+}
+
+pub fn lit_u(u: u32) -> TExpr {
+    TExpr::new(Ty::Uint, span(), TExprKind::Lit(Lit::Uint(u)))
+}
+
+pub fn attr(a: Attr) -> TExpr {
+    TExpr::new(a.ty(), span(), TExprKind::Attr(a))
+}
+
+pub fn ambient(a: Ambient, ty: Ty) -> TExpr {
+    TExpr::new(ty, span(), TExprKind::Ambient(a))
+}
+
+pub fn local(name: &str, ty: Ty) -> TExpr {
+    TExpr::new(ty, span(), TExprKind::Local(name.to_string()))
+}
+
+pub fn param(name: &str, ty: Ty) -> TExpr {
+    TExpr::new(ty, span(), TExprKind::Param(name.to_string()))
+}
+
+pub fn bin(op: BinOp, lhs: TExpr, rhs: TExpr, ty: Ty) -> TExpr {
+    TExpr::new(
+        ty,
+        span(),
+        TExprKind::Binary {
+            op,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        },
+    )
+}
+
+pub fn call(func: Builtin, args: Vec<TExpr>, ty: Ty) -> TExpr {
+    TExpr::new(ty, span(), TExprKind::Builtin { func, args })
+}
+
+pub fn construct(ty: Ty, args: Vec<TExpr>) -> TExpr {
+    TExpr::new(ty, span(), TExprKind::Construct { args })
+}
+
+pub fn let_(name: &str, value: TExpr) -> TStmt {
+    TStmt::Let {
+        name: name.to_string(),
+        value,
+        span: span(),
+    }
+}
+
+pub fn assign_attr(a: Attr, value: TExpr) -> TStmt {
+    TStmt::Assign {
+        target: Target::Attr(a),
+        value,
+        span: span(),
+    }
+}
+
+pub fn assign_output(o: Output, value: TExpr) -> TStmt {
+    TStmt::Assign {
+        target: Target::Output(o),
+        value,
+        span: span(),
+    }
+}
+
+pub fn param_decl(name: &str, ty: Ty, min: f32, max: f32) -> Param {
+    Param {
+        name: name.to_string(),
+        ty,
+        min,
+        max,
+        default: dummy_default(),
+        span: span(),
+    }
+}
+
+pub fn dummy_default() -> karakuri_ir::Expr {
+    karakuri_ir::Expr::Lit {
+        value: Lit::Float(0.0),
+        span: span(),
+    }
+}
+
+/// Shaped like the ir-spec's `drift_shell` L1 example.
+pub fn drift_shell() -> Checked {
+    let spawn = TBlock {
+        kind: BlockKind::Spawn,
+        span: span(),
+        stmts: vec![
+            // Named `u` and `v`, verbatim, exactly as the ir-spec's own
+            // `drift_shell` writes them (`let u = hash1(seed); let v =
+            // hash1(seed + 1000u);`). This is the regression: `u` is also
+            // the generated uniform binding's name, and `v` is what the
+            // element block below separately calls its own `let`. Neither
+            // may capture anything this crate emits.
+            let_(
+                "u",
+                call(
+                    Builtin::Hash1,
+                    vec![ambient(Ambient::Seed, Ty::Uint)],
+                    Ty::Float,
+                ),
+            ),
+            let_(
+                "v",
+                call(
+                    Builtin::Hash1,
+                    vec![bin(
+                        BinOp::Add,
+                        ambient(Ambient::Seed, Ty::Uint),
+                        lit_u(1000),
+                        Ty::Uint,
+                    )],
+                    Ty::Float,
+                ),
+            ),
+            assign_attr(
+                Attr::Position,
+                bin(
+                    BinOp::Mul,
+                    call(
+                        Builtin::SpherePoint,
+                        vec![local("u", Ty::Float), local("v", Ty::Float)],
+                        Ty::Vec3,
+                    ),
+                    param("radius", Ty::Float),
+                    Ty::Vec3,
+                ),
+            ),
+            assign_attr(Attr::Velocity, construct(Ty::Vec3, vec![lit_f(0.0)])),
+            assign_attr(Attr::Age, lit_f(0.0)),
+        ],
+    };
+
+    let flow = call(
+        Builtin::Curl,
+        vec![bin(
+            BinOp::Add,
+            bin(BinOp::Mul, attr(Attr::Position), lit_f(0.3), Ty::Vec3),
+            construct(
+                Ty::Vec3,
+                vec![
+                    lit_f(0.0),
+                    bin(
+                        BinOp::Mul,
+                        ambient(Ambient::T, Ty::Float),
+                        lit_f(0.1),
+                        Ty::Float,
+                    ),
+                    lit_f(0.0),
+                ],
+            ),
+            Ty::Vec3,
+        )],
+        Ty::Vec3,
+    );
+    let flow = bin(BinOp::Mul, flow, param("turbulence", Ty::Float), Ty::Vec3);
+    let new_v = bin(
+        BinOp::Add,
+        bin(BinOp::Mul, attr(Attr::Velocity), lit_f(0.96), Ty::Vec3),
+        bin(
+            BinOp::Mul,
+            local("flow", Ty::Vec3),
+            ambient(Ambient::Dt, Ty::Float),
+            Ty::Vec3,
+        ),
+        Ty::Vec3,
+    );
+    let element = TBlock {
+        kind: BlockKind::Element,
+        span: span(),
+        stmts: vec![
+            let_("flow", flow),
+            let_("v", new_v),
+            assign_attr(Attr::Velocity, local("v", Ty::Vec3)),
+            assign_attr(
+                Attr::Position,
+                bin(
+                    BinOp::Add,
+                    attr(Attr::Position),
+                    bin(
+                        BinOp::Mul,
+                        local("v", Ty::Vec3),
+                        ambient(Ambient::Dt, Ty::Float),
+                        Ty::Vec3,
+                    ),
+                    Ty::Vec3,
+                ),
+            ),
+            assign_attr(
+                Attr::Age,
+                bin(
+                    BinOp::Add,
+                    attr(Attr::Age),
+                    ambient(Ambient::Dt, Ty::Float),
+                    Ty::Float,
+                ),
+            ),
+            TStmt::If {
+                cond: bin(
+                    BinOp::Gt,
+                    attr(Attr::Age),
+                    param("lifetime", Ty::Float),
+                    Ty::Bool,
+                ),
+                then: vec![TStmt::Kill { span: span() }],
+                els: vec![],
+                span: span(),
+            },
+        ],
+    };
+
+    Checked {
+        name: "drift_shell".to_string(),
+        kind: Kind::L1,
+        topology: Some(Topology::Points),
+        capacity: None,
+        amplify: None,
+        uses: Vec::new(),
+        retains: false,
+        blend: None,
+        params: vec![
+            param_decl("spawn_rate", Ty::Float, 0.0, 40000.0),
+            param_decl("radius", Ty::Float, 0.1, 8.0),
+            param_decl("turbulence", Ty::Float, 0.0, 3.0),
+            param_decl("lifetime", Ty::Float, 0.5, 20.0),
+        ],
+        emit: vec![Attr::Position, Attr::Velocity, Attr::Age],
+        consumes: vec![],
+        blocks: vec![spawn, element],
+        cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    }
+}
+
+/// Shaped like the ir-spec's `soft_points` L4 example.
+pub fn soft_points() -> Checked {
+    let clip = bin(
+        BinOp::Mul,
+        ambient(Ambient::Camera, Ty::Mat4),
+        construct(Ty::Vec4, vec![attr(Attr::Position), lit_f(1.0)]),
+        Ty::Vec4,
+    );
+    let speed_term = bin(
+        BinOp::Mul,
+        lit_f(0.2),
+        call(Builtin::Length, vec![attr(Attr::Velocity)], Ty::Float),
+        Ty::Float,
+    );
+    let clamped = call(
+        Builtin::Clamp,
+        vec![speed_term, lit_f(0.0), lit_f(1.0)],
+        Ty::Float,
+    );
+    let point_rate = bin(
+        BinOp::Mul,
+        param("point_scale", Ty::Float),
+        bin(
+            BinOp::Add,
+            lit_f(0.3),
+            bin(BinOp::Mul, lit_f(0.7), clamped, Ty::Float),
+            Ty::Float,
+        ),
+        Ty::Float,
+    );
+    let vertex = TBlock {
+        kind: BlockKind::Vertex,
+        span: span(),
+        stmts: vec![
+            assign_output(Output::Clip, clip),
+            assign_output(Output::PointRate, point_rate),
+        ],
+    };
+
+    let d = call(
+        Builtin::Length,
+        vec![bin(
+            BinOp::Sub,
+            bin(
+                BinOp::Mul,
+                ambient(Ambient::PointCoord, Ty::Vec2),
+                lit_f(2.0),
+                Ty::Vec2,
+            ),
+            construct(Ty::Vec2, vec![lit_f(1.0)]),
+            Ty::Vec2,
+        )],
+        Ty::Float,
+    );
+    let a = call(
+        Builtin::Pow,
+        vec![
+            call(
+                Builtin::Max,
+                vec![
+                    lit_f(0.0),
+                    bin(BinOp::Sub, lit_f(1.0), local("d", Ty::Float), Ty::Float),
+                ],
+                Ty::Float,
+            ),
+            param("falloff", Ty::Float),
+        ],
+        Ty::Float,
+    );
+    let hue_jitter = bin(
+        BinOp::Add,
+        param("hue", Ty::Float),
+        bin(
+            BinOp::Mul,
+            call(
+                Builtin::Hash1,
+                vec![ambient(Ambient::Seed, Ty::Uint)],
+                Ty::Float,
+            ),
+            lit_f(0.05),
+            Ty::Float,
+        ),
+        Ty::Float,
+    );
+    let c = call(
+        Builtin::HsvToRgb,
+        vec![construct(
+            Ty::Vec3,
+            vec![hue_jitter, lit_f(0.7), lit_f(1.0)],
+        )],
+        Ty::Vec3,
+    );
+    let color = construct(
+        Ty::Vec4,
+        vec![
+            bin(
+                BinOp::Mul,
+                local("c", Ty::Vec3),
+                param("exposure", Ty::Float),
+                Ty::Vec3,
+            ),
+            local("a", Ty::Float),
+        ],
+    );
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: vec![
+            let_("d", d),
+            let_("a", a),
+            let_("c", c),
+            assign_output(Output::Color, color),
+        ],
+    };
+
+    Checked {
+        name: "soft_points".to_string(),
+        kind: Kind::L4,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
+        capacity: None,
+        amplify: None,
+        uses: Vec::new(),
+        retains: false,
+        blend: Some(Blend::Additive),
+        params: vec![
+            param_decl("point_scale", Ty::Float, 0.5, 40.0),
+            param_decl("hue", Ty::Float, 0.0, 1.0),
+            param_decl("exposure", Ty::Float, 0.0, 8.0),
+            param_decl("falloff", Ty::Float, 0.5, 8.0),
+        ],
+        emit: vec![],
+        consumes: vec![Attr::Position, Attr::Velocity, Attr::Age],
+        blocks: vec![vertex, fragment],
+        cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    }
+}
+
+/// An L1 procedure whose `let`s are named after every bare identifier this
+/// crate's L1 lowering emits: the uniform binding (`u`), the engine-state
+/// bindings (`counts`, `dest`, `step_args`) and their fields (`range`,
+/// `survivors`, `spawn_count`, `seed_base`), entry-point locals (`seed`,
+/// `i`, `out`, `slot`, `gid`, `birth_frac`), ambient-backed uniform fields
+/// (`t`, `dt`, `capacity`), and helper function names (`hash1`,
+/// `sphere_point`, `curl`, `mod_f32`). None of these are contrived: `u` is
+/// the ir-spec's own `drift_shell` (see `drift_shell` above); the rest are
+/// exactly as plausible for an LLM to reach for, since none of them is a
+/// reserved word in the `.kir` grammar. The block still exercises `hash1`,
+/// `sphere_point`, `curl`, and `%` on a float for real afterwards — the
+/// point is that declaring a local of the same name earlier must not have
+/// broken any of them.
+pub fn shadowing_locals_l1() -> Checked {
+    let adversarial_lets = [
+        "u",
+        "hash1",
+        "seed",
+        "prev_position",
+        "next_age",
+        "i",
+        "out",
+        "slot",
+        "gid",
+        "sphere_point",
+        "curl",
+        "birth_frac",
+        "counts",
+        "dest",
+        "step_args",
+    ];
+    let mut spawn_stmts: Vec<TStmt> = adversarial_lets
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
+    spawn_stmts.push(assign_attr(
+        Attr::Position,
+        bin(
+            BinOp::Mul,
+            call(
+                Builtin::SpherePoint,
+                vec![
+                    call(
+                        Builtin::Hash1,
+                        vec![ambient(Ambient::Seed, Ty::Uint)],
+                        Ty::Float,
+                    ),
+                    call(
+                        Builtin::Hash1,
+                        vec![bin(
+                            BinOp::Add,
+                            ambient(Ambient::Seed, Ty::Uint),
+                            lit_u(7),
+                            Ty::Uint,
+                        )],
+                        Ty::Float,
+                    ),
+                ],
+                Ty::Vec3,
+            ),
+            param("radius", Ty::Float),
+            Ty::Vec3,
+        ),
+    ));
+    spawn_stmts.push(assign_attr(Attr::Age, lit_f(0.0)));
+    let spawn = TBlock {
+        kind: BlockKind::Spawn,
+        span: span(),
+        stmts: spawn_stmts,
+    };
+
+    let more_adversarial_lets = [
+        "t",
+        "dt",
+        "capacity",
+        "range",
+        "survivors",
+        "spawn_count",
+        "seed_base",
+        "mod_f32",
+        "alive",
+    ];
+    let mut element_stmts: Vec<TStmt> = more_adversarial_lets
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
+    element_stmts.push(assign_attr(
+        Attr::Age,
+        bin(BinOp::Rem, attr(Attr::Age), lit_f(1.0), Ty::Float),
+    ));
+    element_stmts.push(assign_attr(
+        Attr::Position,
+        bin(
+            BinOp::Add,
+            attr(Attr::Position),
+            call(Builtin::Curl, vec![attr(Attr::Position)], Ty::Vec3),
+            Ty::Vec3,
+        ),
+    ));
+    element_stmts.push(TStmt::If {
+        cond: bin(BinOp::Gt, attr(Attr::Age), lit_f(1.0), Ty::Bool),
+        then: vec![TStmt::Kill { span: span() }],
+        els: vec![],
+        span: span(),
+    });
+    let element = TBlock {
+        kind: BlockKind::Element,
+        span: span(),
+        stmts: element_stmts,
+    };
+
+    Checked {
+        name: "shadowing_locals_l1".to_string(),
+        kind: Kind::L1,
+        topology: Some(Topology::Points),
+        capacity: None,
+        amplify: None,
+        uses: Vec::new(),
+        retains: false,
+        blend: None,
+        params: vec![param_decl("radius", Ty::Float, 0.1, 8.0)],
+        emit: vec![Attr::Position, Attr::Age],
+        consumes: vec![],
+        blocks: vec![spawn, element],
+        cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    }
+}
+
+/// The L4 counterpart: `let`s named after `vertex`/`fragment`'s bare
+/// identifiers — the uniform binding (`u`), the storage bindings
+/// (`elements`, `alive`), the vertex/fragment builtin parameter names
+/// (`elem`, `in`, `out`, `corner`, `corner_idx`), the storage buffer name
+/// for a consumed attribute (`attr_position`), the fragment-only ambient
+/// (`point_coord`), and two helper function names (`hash1`, `hsv_to_rgb`,
+/// `corner_of`).
+pub fn shadowing_locals_l4() -> Checked {
+    let vertex_adversarial = [
+        "u",
+        "seed",
+        "elem",
+        "in",
+        "out",
+        "corner",
+        "corner_idx",
+        "attr_position",
+        "elements",
+        "alive",
+    ];
+    let mut vertex_stmts: Vec<TStmt> = vertex_adversarial
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
+    vertex_stmts.push(assign_output(
+        Output::Clip,
+        bin(
+            BinOp::Mul,
+            ambient(Ambient::Camera, Ty::Mat4),
+            construct(Ty::Vec4, vec![attr(Attr::Position), lit_f(1.0)]),
+            Ty::Vec4,
+        ),
+    ));
+    vertex_stmts.push(assign_output(
+        Output::PointRate,
+        param("point_scale", Ty::Float),
+    ));
+    let vertex = TBlock {
+        kind: BlockKind::Vertex,
+        span: span(),
+        stmts: vertex_stmts,
+    };
+
+    let fragment_adversarial = ["point_coord", "hash1", "hsv_to_rgb", "corner_of"];
+    let mut fragment_stmts: Vec<TStmt> = fragment_adversarial
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
+    fragment_stmts.push(let_(
+        "c",
+        call(
+            Builtin::HsvToRgb,
+            vec![construct(
+                Ty::Vec3,
+                vec![param("hue", Ty::Float), lit_f(0.7), lit_f(1.0)],
+            )],
+            Ty::Vec3,
+        ),
+    ));
+    fragment_stmts.push(let_(
+        "a",
+        call(
+            Builtin::Length,
+            vec![ambient(Ambient::PointCoord, Ty::Vec2)],
+            Ty::Float,
+        ),
+    ));
+    fragment_stmts.push(assign_output(
+        Output::Color,
+        construct(Ty::Vec4, vec![local("c", Ty::Vec3), local("a", Ty::Float)]),
+    ));
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: fragment_stmts,
+    };
+
+    Checked {
+        name: "shadowing_locals_l4".to_string(),
+        kind: Kind::L4,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
+        capacity: None,
+        amplify: None,
+        uses: Vec::new(),
+        retains: false,
+        blend: Some(Blend::Additive),
+        params: vec![
+            param_decl("point_scale", Ty::Float, 0.5, 40.0),
+            param_decl("hue", Ty::Float, 0.0, 1.0),
+        ],
+        emit: vec![],
+        consumes: vec![Attr::Position],
+        blocks: vec![vertex, fragment],
+        cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    }
+}
+
+/// An L1 procedure whose `param`s are named after WGSL reserved words that
+/// are ordinary, unremarkable identifiers in `.kir` — `array` is the one
+/// that was actually caught reaching a real GPU (see the bug report this
+/// test locks in), the rest are here because WGSL reserves a great many
+/// more than IR does and a generator has no reason to avoid any of them.
+/// Every one of these is exactly the kind of word a procedure *about*
+/// something would reach for: a particle `array`, a `loop` count, a `switch`
+/// threshold.
+pub fn reserved_word_params_l1() -> Checked {
+    let names = [
+        "array", "struct", "loop", "switch", "fn", "discard", "const", "override", "ptr", "sampler",
+    ];
+    let params = names
+        .iter()
+        .map(|n| param_decl(n, Ty::Float, 0.0, 1.0))
+        .collect();
+
+    let sum = names
+        .iter()
+        .map(|n| param(n, Ty::Float))
+        .reduce(|acc, p| bin(BinOp::Add, acc, p, Ty::Float))
+        .expect("at least one reserved-word param");
+    let element = TBlock {
+        kind: BlockKind::Element,
+        span: span(),
+        stmts: vec![assign_attr(Attr::Age, sum)],
+    };
+
+    Checked {
+        name: "reserved_word_params".to_string(),
+        kind: Kind::L1,
+        topology: Some(Topology::Points),
+        capacity: None,
+        amplify: None,
+        uses: Vec::new(),
+        retains: false,
+        blend: None,
+        params,
+        emit: vec![Attr::Age],
+        consumes: vec![],
+        blocks: vec![element],
+        cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    }
+}
+
+/// Every field `layout` declares must appear in `source` spelled exactly
+/// `wgsl_name`, and `karakuri-engine`'s uniform packer keys its lookups on
+/// `name` — so this also pins the two names apart: `name` must survive
+/// unmangled (Set records address a param by its declared `.kir` name, and
+/// the packer's lookups have to match that), while `wgsl_name` is what
+/// actually appears in the WGSL text.
+pub fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::UniformLayout) {
+    for f in &layout.fields {
+        let decl = format!("{}: {},", f.wgsl_name, f.wgsl_ty);
+        assert!(
+            source.contains(&decl),
+            "field {:?} (wgsl_name {:?}) is declared in the layout but not found in the emitted struct as {decl:?}:\n{source}",
+            f.name,
+            f.wgsl_name,
+        );
+    }
+}
+
+/// `generate_l4` takes its paired L1's `ElementLayout` rather than deriving
+/// one from `consumes` (see that function's doc) — every fixture below is
+/// built so its `consumes` is a subset of some L1 fixture's `emit`, and this
+/// derives the layout that L1 side would have produced.
+pub fn layout_for(l1: &Checked) -> karakuri_ir::layout::ElementLayout {
+    karakuri_ir::layout::generate_element_layout(
+        &l1.emit,
+        karakuri_ir::layout::Synthetic::NONE,
+        &[],
+    )
+}
+
+pub fn validate(source: &str) {
+    let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
+        panic!(
+            "WGSL failed to parse:\n{}\n\n---- source ----\n{source}",
+            e.emit_to_string(source)
+        )
+    });
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap_or_else(|e| panic!("WGSL failed validation: {e}\n\n---- source ----\n{source}"));
+}
+
+pub fn compiled_l2(
+    src: &str,
+    upstream: &[Attr],
+    synthetic: karakuri_ir::layout::Synthetic,
+) -> karakuri_codegen::L2Shader {
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    let checked = karakuri_ir::check::check(&parsed).expect("checks");
+    karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[], None, &[])
+}
+
+pub const MIRROR: &str = r#"
+proc mirror {
+  kind    L2
+  amplify 4
+  consumes position
+  deform { position = position + vec3(0.0, float(copy), 0.0); }
+}
+"#;
