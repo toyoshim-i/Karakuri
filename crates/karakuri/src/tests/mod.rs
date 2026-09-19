@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use super::*;
 
 pub(crate) use self as tests;
