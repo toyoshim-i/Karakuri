@@ -4,7 +4,7 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases (P1–P55)
+## 1. Completed Phases (P1–P58)
 
 All prior refactoring phases are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
 
@@ -15,7 +15,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 - **Phase 6 (P38–P41)**: Console glyph componentization (`glyph.rs`), popup card row text deduplication (`card_row_text`), root view modularization (`draw.rs`, `regions.rs`), and GUI milestone M5 exit condition verification.
 - **Phase 7 (P42–P46)**: GUI interaction & event dispatch modernization: unified modal overlays (`ModalOverlay`), tooltip suppression under open cards, text input session abstraction (`TextInputSession`), post-event side-effect decoupling (`handle_post_event_side_effects`), and per-bay pointer dispatch decomposition in `readout::dispatch`.
 - **Phase 8 (P47–P51)**: Core subsystem monolith decomposition: `karakuri-ir::check` (P47), `karakuri::bridge::handlers` (P48), `karakuri-store::record` (P49), `karakuri-cli::live` (P50), and `karakuri-console::focus` (P51) bringing all core files comfortably below 2,000 lines.
-- **Phase 9 (P52+)**: Secondary monolith modularization: `karakuri-console::hover` (P52), `karakuri-operation` & `karakuri-operation-record` (P53), `karakuri::app::handler` (P54), `karakuri::bridge::filesystem` (P55), `karakuri-mcp::spelled` (P56), `karakuri-midi::map` (P57).
+- **Phase 9 (P52–P58)**: Secondary monolith modularization: `karakuri-console::hover` (P52), `karakuri-operation` & `karakuri-operation-record` (P53), `karakuri::app::handler` (P54), `karakuri::bridge::filesystem` (P55), `karakuri-mcp::spelled` (P56), `karakuri-midi::map` (P57), and `karakuri::readout::dispatch` (P58). All secondary monoliths (>1,900 lines) across the workspace are now modularized.
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
@@ -53,13 +53,17 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P55** | `karakuri::bridge::filesystem` (2,540 lines) | Decomposed filesystem store bridge into `filesystem/` (`arrangement.rs`, `transfer.rs`, `reading.rs`, `folder.rs`, `listing.rs`, `mod.rs`) | **COMPLETED** |
 | **P56** | `karakuri-mcp::spelled` (2,333 lines) | Decomposed MCP operation spelling into `spelled/` (`schema.rs`, `table.rs`, `dispatch.rs`, `mod.rs`) | **COMPLETED** |
 | **P57** | `karakuri-midi::map` (2,038 lines) | Decomposed MIDI map parsing and controller bindings into `map/` (`tests.rs`, `parse.rs`, `types.rs`, `mod.rs`) | **COMPLETED** |
+| **P58** | `karakuri::readout::dispatch` (1,915 lines) | Decomposed pointer routing and bay event dispatch into `dispatch/` (`types.rs`, `press.rs`, `actions.rs`, `mod.rs`) | **COMPLETED** |
 
 ---
 
 ## 4. Secondary Monolith Candidates (Phase 9 Backlog)
 
-Future candidates for modularization in Phase 9:
-- `karakuri::readout::dispatch` (1,915 lines): Pointer translation and bay event dispatch
+All secondary monolith candidates (>1,900 lines) identified in Phase 9 backlog are now fully decomposed and verified:
+- `karakuri::bridge::filesystem` (2,540 lines) -> **P55 COMPLETED**
+- `karakuri-mcp::spelled` (2,333 lines) -> **P56 COMPLETED**
+- `karakuri-midi::map` (2,038 lines) -> **P57 COMPLETED**
+- `karakuri::readout::dispatch` (1,915 lines) -> **P58 COMPLETED**
 
 ---
 
