@@ -55,6 +55,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P57** | `karakuri-midi::map` (2,038 lines) | Decomposed MIDI map parsing and controller bindings into `map/` (`tests.rs`, `parse.rs`, `types.rs`, `mod.rs`) | **COMPLETED** |
 | **P58** | `karakuri::readout::dispatch` (1,915 lines) | Decomposed pointer routing and bay event dispatch into `dispatch/` (`types.rs`, `press.rs`, `actions.rs`, `mod.rs`) | **COMPLETED** |
 | **P59** | `karakuri::tests` (8,782 lines) | Decomposed into submodules (`keeps.rs`, `history.rs`, `arrangement.rs`, `frames.rs`, `view_interaction.rs`, `operations.rs`, `mod.rs`), reducing `mod.rs` to 56 lines | **COMPLETED** |
+| **P60** | `karakuri-ir/tests/check.rs` (4,835 lines) | Decomposed into `check/` (`canonical.rs`, `layers.rs`, `slots.rs`, `effects.rs`, `common.rs`), reducing `check.rs` to 19 lines | **COMPLETED** |
 
 ---
 
@@ -62,8 +63,8 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 
 Targeting the top 10 largest test files (>2,300 lines down to <2,000 lines, target <1,500 lines):
 - `karakuri::tests` (8,782 lines) -> **P59 COMPLETED**
-- `karakuri-ir/tests/check.rs` (4,835 lines) -> **P60 IN PROGRESS**
-- `karakuri-engine/tests/deck.rs` (4,571 lines) -> **P61**
+- `karakuri-ir/tests/check.rs` (4,835 lines) -> **P60 COMPLETED**
+- `karakuri-engine/tests/deck.rs` (4,571 lines) -> **P61 IN PROGRESS**
 - `karakuri-cli/src/tests.rs` (4,523 lines) -> **P62**
 - `karakuri-console/tests/library.rs` (4,408 lines) -> **P63**
 - `karakuri::tests::gpu` (3,990 lines) -> **P64**
