@@ -175,10 +175,13 @@ use std::collections::HashMap;
 
 use karakuri_operation::{BlendMode, Operation, Residency};
 
+pub(crate) mod parse;
+pub(crate) use parse::*;
+
 /// A continuous control's shape, which is a property of what it moves rather
 /// than of the mapping that reaches it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Shape {
+pub(crate) enum Shape {
     /// Equal steps in value. A fader is one: the same physical move means the
     /// same amount wherever it happens.
     Linear,
@@ -192,7 +195,7 @@ enum Shape {
 ///
 /// Dedicated type isolating deck slot positions from bare integer indices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct DeckSlot(u8);
+pub(crate) struct DeckSlot(pub(crate) u8);
 
 impl std::fmt::Display for DeckSlot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -208,7 +211,7 @@ impl From<u8> for DeckSlot {
 
 /// Destination and configuration mapped to a MIDI control.
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Target {
+pub(crate) enum Target {
     Gain {
         slot: DeckSlot,
         range: [f32; 2],
@@ -268,7 +271,7 @@ impl Target {
     /// Whether this is moved by a fader or hit by a pad. A mapping that puts a
     /// pad on a fader's target is refused at parse time rather than putting a
     /// deck on air every time a knob passes a threshold.
-    fn continuous(self) -> bool {
+    pub(crate) fn continuous(self) -> bool {
         matches!(
             self,
             Target::Gain { .. }
@@ -288,7 +291,7 @@ const MASK_POSITION_RANGE: [f32; 2] = [0.0, 1.0];
 
 /// Which message a mapping is keyed by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Key {
+pub(crate) enum Key {
     /// A control change. `channel` is `None` for "whatever channel it arrives
     /// on", which is the right default: a surface is usually the only thing
     /// plugged in, and an operator who has to discover their controller's
@@ -526,10 +529,10 @@ impl Echo {
 
 /// Single mapping table entry associating a message key with a target and optional 14-bit LSB.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Entry {
-    target: Target,
+pub(crate) struct Entry {
+    pub(crate) target: Target,
     /// Controller index of the LSB half for a 14-bit CC pair.
-    lsb: Option<u8>,
+    pub(crate) lsb: Option<u8>,
 }
 
 /// Mapping table associating incoming MIDI messages with target operations and parameters.
@@ -888,293 +891,6 @@ fn scale(t: f32, range: [f32; 2], shape: Shape) -> f32 {
         // logarithm defined at all.
         Shape::Ratio => lo * (hi / lo).powf(t),
     }
-}
-
-fn parse_line(line: &str) -> Result<(Key, Entry), String> {
-    let (from, to) = line
-        .split_once("->")
-        .ok_or_else(|| "expected `<message> -> <control>`".to_string())?;
-    let (key, lsb) = parse_key(from.trim())?;
-    let target = parse_target(to.trim())?;
-    let is_note = matches!(key, Key::Note { .. });
-    if is_note && target.continuous() {
-        return Err("a note is a press, and this control takes a position; map a `cc`".to_string());
-    }
-    if !is_note && !target.continuous() {
-        return Err(
-            "a control change is a position, and this control takes a press; map a `note`"
-                .to_string(),
-        );
-    }
-    Ok((key, Entry { target, lsb }))
-}
-
-fn parse_key(from: &str) -> Result<(Key, Option<u8>), String> {
-    let mut words = from.split_whitespace();
-    let kind = words
-        .next()
-        .ok_or_else(|| "expected `cc`, `cc14` or `note`".to_string())?;
-    let number: u8 = words
-        .next()
-        .ok_or_else(|| format!("`{kind}` needs a number"))?
-        .parse()
-        .map_err(|_| format!("`{kind}` needs a number in 0-127"))?;
-    if number > 127 {
-        return Err(format!("`{kind} {number}` is past 127"));
-    }
-    // **The LSB half, and both numbers are on the line.** The convention pairs
-    // `n` with `n + 32` and controllers exist that do not honour it, so what a
-    // line means is the two numbers it names rather than a convention plus
-    // arithmetic — and every refusal below can then name both of them, which
-    // is what an operator checks against their device's manual.
-    let mut lsb = None;
-    let mut after = words.next();
-    if kind == "cc14" {
-        let word = after.filter(|word| *word != "ch").ok_or_else(|| {
-            format!(
-                "`cc14 {number}` needs the controller its LSB half arrives on — write \
-                 `cc14 {number} {}`, which is the usual pairing",
-                u16::from(number) + 32
-            )
-        })?;
-        let fine: u8 = word.parse().map_err(|_| {
-            format!("`cc14 {number} {word}`: the LSB half is a controller number in 0-127")
-        })?;
-        if fine > 127 {
-            return Err(format!("`cc14 {number} {fine}`: the LSB half is past 127"));
-        }
-        if fine == number {
-            return Err(format!(
-                "`cc14 {number} {fine}`: the two halves are one controller — an MSB and its LSB \
-                 are two"
-            ));
-        }
-        lsb = Some(fine);
-        after = words.next();
-    }
-    let channel = match (after, words.next()) {
-        (None, _) => None,
-        (Some("ch"), Some(n)) => {
-            // The front panel's spelling, 1-16, because that is what is printed
-            // on the device an operator is reading it off. The wire's 0-15 is
-            // `Message`'s and the translation happens here, once.
-            let n: u8 = n
-                .parse()
-                .map_err(|_| format!("`ch {n}` needs a channel in 1-16"))?;
-            if !(1..=16).contains(&n) {
-                return Err(format!("`ch {n}` is outside 1-16"));
-            }
-            Some(n - 1)
-        }
-        (Some(other), _) => return Err(format!("expected `ch <1-16>`, found `{other}`")),
-    };
-    if words.next().is_some() {
-        return Err("too many words before `->`".to_string());
-    }
-    Ok(match kind {
-        "cc" | "cc14" => (
-            Key::Cc {
-                channel,
-                controller: number,
-            },
-            lsb,
-        ),
-        "note" => (
-            Key::Note {
-                channel,
-                note: number,
-            },
-            None,
-        ),
-        other => return Err(format!("`{other}` is not `cc`, `cc14` or `note`")),
-    })
-}
-
-fn parse_target(to: &str) -> Result<Target, String> {
-    let (words, range) = split_range(to)?;
-    let mut words = words.split_whitespace();
-    let name = words
-        .next()
-        .ok_or_else(|| "expected a control after `->`".to_string())?;
-    let slot = |words: &mut std::str::SplitWhitespace| -> Result<DeckSlot, String> {
-        let n = words
-            .next()
-            .ok_or_else(|| format!("`{name}` needs a slot number"))?;
-        n.parse::<u8>()
-            .map(DeckSlot::from)
-            .map_err(|_| format!("`{name} {n}`: expected a slot number"))
-    };
-    let target = match name {
-        "gain" => Target::Gain {
-            slot: slot(&mut words)?,
-            range: range.unwrap_or(GAIN_RANGE),
-        },
-        "opacity" => Target::Opacity {
-            slot: slot(&mut words)?,
-            range: range.unwrap_or(OPACITY_RANGE),
-        },
-        "exposure" => Target::Exposure {
-            range: range.unwrap_or(EXPOSURE_RANGE),
-        },
-        // **The mask's front, and the mask's front only.** Hyphenated rather
-        // than a bare `mask`, which is the word the shape would want — the two
-        // are halves of one record and a grammar that spent the short word on
-        // one of them would have nothing left for the other. Why the shape has
-        // no line here at all is the module documentation and
-        // `docs/adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md`.
-        "mask-position" => Target::MaskPosition {
-            slot: slot(&mut words)?,
-            range: range.unwrap_or(MASK_POSITION_RANGE),
-        },
-        "residency" => {
-            let slot = slot(&mut words)?;
-            Target::Residency {
-                slot,
-                residency: value_word(
-                    words.next(),
-                    Residency::ALL,
-                    Residency::name,
-                    &format!("residency {slot}"),
-                    "a state",
-                )?,
-            }
-        }
-        "blend" => {
-            let slot = slot(&mut words)?;
-            Target::Blend {
-                slot,
-                blend: value_word(
-                    words.next(),
-                    BlendMode::ALL,
-                    BlendMode::name,
-                    &format!("blend {slot}"),
-                    "a mode",
-                )?,
-            }
-        }
-        "tap" => Target::Tap,
-        // **A deck and a place in its published interface**, which is the one
-        // target whose second number is not a slot: positions count from one
-        // because that is the number the Inspector draws beside the row, and a
-        // learned line an operator cannot check against the pane is a line
-        // they cannot fix by hand.
-        "param" => {
-            let slot = slot(&mut words)?;
-            let n = words
-                .next()
-                .ok_or_else(|| format!("`param {slot}` needs a position in the interface"))?;
-            let position: u16 = n
-                .parse()
-                .map_err(|_| format!("`param {slot} {n}`: expected a position"))?;
-            if position == 0 {
-                return Err(format!(
-                    "`param {slot} 0`: positions count from one, which is the number the \
-                     Inspector draws beside the row"
-                ));
-            }
-            Target::Param {
-                slot,
-                position,
-                range,
-            }
-        }
-        // **The two words that were affordances, refused by name.** A file
-        // holding one is a file written against the old grammar, where
-        // `on-air 0` meant *flip slot 0*; loading it and reading it as *put
-        // slot 0 live* is the same line doing something else mid-set, which
-        // is the one outcome this format must not have. The complaint carries
-        // the line to write instead, because a complaint with a line number is
-        // a line an operator can fix — see the module documentation.
-        "on-air" | "prime" => {
-            let n = words.next().unwrap_or("N");
-            let (flipped, asked) = if name == "on-air" {
-                ("a deck on and off", "live")
-            } else {
-                ("a request on and off", "priming")
-            };
-            return Err(format!(
-                "`{name} {n}` flipped {flipped} rather than naming where it goes; write \
-                 `residency {n} {asked}` or `residency {n} allocated`"
-            ));
-        }
-        other => {
-            return Err(format!(
-                "`{other}` is not a control — expected gain, opacity, exposure, \
-                 mask-position, param, residency, blend or tap"
-            ))
-        }
-    };
-    if words.next().is_some() {
-        return Err(format!("`{name}` takes no more words"));
-    }
-    if range.is_some() && !target.continuous() {
-        return Err(format!("`{name}` is a press and has no range"));
-    }
-    if target.shape() == Shape::Ratio {
-        let [lo, hi] = range.unwrap_or(EXPOSURE_RANGE);
-        if lo <= 0.0 || hi <= 0.0 {
-            return Err(format!(
-                "`{name}` is a ratio control, so its range cannot reach zero"
-            ));
-        }
-    }
-    if let Some([lo, hi]) = range {
-        if !(lo.is_finite() && hi.is_finite()) || lo == hi {
-            return Err(format!("`{name}`: a range needs two different finite ends"));
-        }
-    }
-    Ok(target)
-}
-
-/// Parses a token against a predefined slice of vocabulary values, returning an error naming all alternatives if invalid.
-fn value_word<T: Copy, const N: usize>(
-    word: Option<&str>,
-    all: [T; N],
-    name: fn(T) -> &'static str,
-    line: &str,
-    what: &str,
-) -> Result<T, String> {
-    let listed = || {
-        all.iter()
-            .map(|v| format!("`{line} {}`", name(*v)))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let Some(word) = word else {
-        return Err(format!("`{line}` needs {what} — write one of {}", listed()));
-    };
-    all.iter()
-        .copied()
-        .find(|v| name(*v) == word)
-        .ok_or_else(|| format!("`{line} {word}` is not {what} — write one of {}", listed()))
-}
-
-/// Split a trailing `[lo, hi]` off a control, if there is one.
-fn split_range(to: &str) -> Result<(&str, Option<[f32; 2]>), String> {
-    let Some(open) = to.find('[') else {
-        return Ok((to, None));
-    };
-    let rest = &to[open..];
-    let close = rest
-        .find(']')
-        .ok_or_else(|| "a range opened with `[` and did not close".to_string())?;
-    let inside = &rest[1..close];
-    if !rest[close + 1..].trim().is_empty() {
-        return Err("a range has to be the last thing on the line".to_string());
-    }
-    let mut ends = inside.split(',');
-    let parse = |s: Option<&str>| -> Result<f32, String> {
-        s.ok_or_else(|| "a range is `[lo, hi]`".to_string())?
-            .trim()
-            .parse::<f32>()
-            .map_err(|_| "a range is `[lo, hi]`, with numbers".to_string())
-    };
-    let lo = parse(ends.next())?;
-    let hi = parse(ends.next())?;
-    if ends.next().is_some() {
-        return Err("a range is `[lo, hi]`, and no more".to_string());
-    }
-    Ok((&to[..open], Some([lo, hi])))
 }
 
 #[cfg(test)]
