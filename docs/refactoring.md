@@ -63,22 +63,23 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P65** | `karakuri-mcp/tests/wire.rs` (3,123 lines) | Decomposed into `tests/wire/` submodules (`common.rs`, `protocol_and_http.rs`, `tools_and_save.rs`, `library_and_sets.rs`, `routing_and_operations.rs`), reducing `wire.rs` to 16 lines | **COMPLETED** |
 | **P66** | `karakuri-codegen/tests/naga_test.rs` (2,784 lines) | Decomposed into `tests/naga/` submodules (`common.rs`, `primitives_and_blends.rs`, `camera_and_amplify.rs`, `fields_and_layouts.rs`, `post_and_textures.rs`), reducing `naga_test.rs` to 16 lines | **COMPLETED** |
 | **P67** | `karakuri-environment::setfile::tests` (2,779 lines) | Decomposed into `src/setfile/tests/` submodules (`common.rs`, `edges_and_params.rs`, `chain_and_composition.rs`, `camera_and_noise.rs`, `bundle_and_resolution.rs`), reducing `tests.rs` to 6 lines | **COMPLETED** |
+| **P68** | `karakuri-console/tests/grammar.rs` (2,387 lines) | Decomposed into `tests/grammar/` submodules (`common.rs`, `navigation_and_dispatch.rs`, `space_and_enter.rs`, `cards_and_choosers.rs`, `chain_and_dismissal.rs`), reducing `grammar.rs` to 19 lines | **COMPLETED** |
 
 ---
 
-## 2. Phase 10 Backlog: Test Suite Monolith Decomposition (P59–P68)
+## 2. Phase 10: Test Suite Monolith Decomposition (P59–P68) — COMPLETED
 
-Targeting the top 10 largest test files (>2,300 lines down to <2,000 lines, target <1,500 lines):
-- `karakuri::tests` (8,782 lines) -> **P59 COMPLETED**
-- `karakuri-ir/tests/check.rs` (4,835 lines) -> **P60 COMPLETED**
-- `karakuri-engine/tests/deck.rs` (4,571 lines) -> **P61 COMPLETED**
-- `karakuri-cli/src/tests.rs` (4,523 lines) -> **P62 COMPLETED**
-- `karakuri-console/tests/library.rs` (4,408 lines) -> **P63 COMPLETED**
-- `karakuri::tests::gpu` (3,990 lines) -> **P64 COMPLETED**
-- `karakuri-mcp/tests/wire.rs` (3,123 lines) -> **P65 COMPLETED**
-- `karakuri-codegen/tests/naga_test.rs` (2,784 lines) -> **P66 COMPLETED**
-- `karakuri-environment::setfile::tests` (2,779 lines) -> **P67 COMPLETED**
-- `karakuri-console/tests/grammar.rs` (2,387 lines) -> **P68 IN PROGRESS**
+All top 10 largest test files (>2,300 lines down to <2,000 lines, target <1,500 lines) across the workspace are now fully decomposed into modular, isolated submodules:
+- `karakuri::tests` (8,782 lines -> 56 lines) -> **P59 COMPLETED**
+- `karakuri-ir/tests/check.rs` (4,835 lines -> 19 lines) -> **P60 COMPLETED**
+- `karakuri-engine/tests/deck.rs` (4,571 lines -> 18 lines) -> **P61 COMPLETED**
+- `karakuri-cli/src/tests.rs` (4,523 lines -> 6 lines) -> **P62 COMPLETED**
+- `karakuri-console/tests/library.rs` (4,408 lines -> 18 lines) -> **P63 COMPLETED**
+- `karakuri::tests::gpu` (3,990 lines -> 8 lines) -> **P64 COMPLETED**
+- `karakuri-mcp/tests/wire.rs` (3,123 lines -> 16 lines) -> **P65 COMPLETED**
+- `karakuri-codegen/tests/naga_test.rs` (2,784 lines -> 16 lines) -> **P66 COMPLETED**
+- `karakuri-environment::setfile::tests` (2,779 lines -> 6 lines) -> **P67 COMPLETED**
+- `karakuri-console/tests/grammar.rs` (2,387 lines -> 19 lines) -> **P68 COMPLETED**
 
 ---
 
