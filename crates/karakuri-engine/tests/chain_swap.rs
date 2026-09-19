@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 
 /// The two files that run on a thread that encodes frames.
 const RENDER_PATH: [&str; 2] = [
-    "crates/karakuri/src/app/handler.rs",
+    "crates/karakuri/src/app/handler/redraw.rs",
     "crates/karakuri-cli/src/live/mod.rs",
 ];
 
