@@ -60,6 +60,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P62** | `karakuri-cli/src/tests.rs` (4,523 lines) | Decomposed into `src/tests/` submodules (`mod.rs`, `parse.rs`, `interactive.rs`, `live_save.rs`, `wire.rs`), reducing `mod.rs` to 6 lines | **COMPLETED** |
 | **P63** | `karakuri-console/tests/library.rs` (4,408 lines) | Decomposed into `tests/library/` submodules (`geometry.rs`, `scope_and_filter.rs`, `params_and_history.rs`, `menus_and_scroll.rs`, `common.rs`), reducing `library.rs` to 18 lines | **COMPLETED** |
 | **P64** | `karakuri::tests::gpu` (3,990 lines) | Decomposed into `src/tests/gpu/` submodules (`common.rs`, `mcp_and_storage.rs`, `frame_and_textures.rs`, `decks_and_simulation.rs`, `transitions_and_sinks.rs`), reducing `gpu.rs` to 8 lines | **COMPLETED** |
+| **P65** | `karakuri-mcp/tests/wire.rs` (3,123 lines) | Decomposed into `tests/wire/` submodules (`common.rs`, `protocol_and_http.rs`, `tools_and_save.rs`, `library_and_sets.rs`, `routing_and_operations.rs`), reducing `wire.rs` to 16 lines | **COMPLETED** |
 
 ---
 
@@ -72,8 +73,8 @@ Targeting the top 10 largest test files (>2,300 lines down to <2,000 lines, targ
 - `karakuri-cli/src/tests.rs` (4,523 lines) -> **P62 COMPLETED**
 - `karakuri-console/tests/library.rs` (4,408 lines) -> **P63 COMPLETED**
 - `karakuri::tests::gpu` (3,990 lines) -> **P64 COMPLETED**
-- `karakuri-mcp/tests/wire.rs` (3,123 lines) -> **P65 IN PROGRESS**
-- `karakuri-codegen/tests/naga_test.rs` (2,784 lines) -> **P66**
+- `karakuri-mcp/tests/wire.rs` (3,123 lines) -> **P65 COMPLETED**
+- `karakuri-codegen/tests/naga_test.rs` (2,784 lines) -> **P66 IN PROGRESS**
 - `karakuri-environment::setfile::tests` (2,779 lines) -> **P67**
 - `karakuri-console/tests/grammar.rs` (2,387 lines) -> **P68**
 
