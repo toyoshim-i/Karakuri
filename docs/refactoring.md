@@ -4,7 +4,7 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases (P1–P53)
+## 1. Completed Phases (P1–P54)
 
 All prior refactoring phases are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
 
@@ -15,7 +15,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 - **Phase 6 (P38–P41)**: Console glyph componentization (`glyph.rs`), popup card row text deduplication (`card_row_text`), root view modularization (`draw.rs`, `regions.rs`), and GUI milestone M5 exit condition verification.
 - **Phase 7 (P42–P46)**: GUI interaction & event dispatch modernization: unified modal overlays (`ModalOverlay`), tooltip suppression under open cards, text input session abstraction (`TextInputSession`), post-event side-effect decoupling (`handle_post_event_side_effects`), and per-bay pointer dispatch decomposition in `readout::dispatch`.
 - **Phase 8 (P47–P51)**: Core subsystem monolith decomposition: `karakuri-ir::check` (P47), `karakuri::bridge::handlers` (P48), `karakuri-store::record` (P49), `karakuri-cli::live` (P50), and `karakuri-console::focus` (P51) bringing all core files comfortably below 2,000 lines.
-- **Phase 9 (P52+)**: Secondary monolith modularization: `karakuri-console::hover` (P52), `karakuri-operation` & `karakuri-operation-record` (P53).
+- **Phase 9 (P52+)**: Secondary monolith modularization: `karakuri-console::hover` (P52), `karakuri-operation` & `karakuri-operation-record` (P53), `karakuri::app::handler` (P54).
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
@@ -24,7 +24,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P23** | `karakuri-environment` | Decomposed monoliths (`setfile`, `mix`), resolved couplings, isolated test suites | **COMPLETED** |
 | **P24** | `karakuri` (GUI) | Decomposed `engine_bridge.rs` into `bridge/` (`sinks`, `engine`, `filesystem`, `handlers`) | **COMPLETED** |
 | **P25** | `karakuri-mcp` | Extracted test suites to `tests/`; decomposed `lib.rs` into `protocol`, `server`, `spelled`, `tools/` | **COMPLETED** |
-| **P26** | `karakuri-console` | Extracted 3 bays (`sequencer`, `staging`, `master`), `widgets/`, and `layout.rs` | **COMPLETED** |
+| **P26** | `karakuri-console` | Extracted 3 bays (`sequencer`, `staging`), `widgets/`, and `layout.rs` | **COMPLETED** |
 | **P30** | `karakuri-console::view::widgets` | Componentized reusable widgets: `card.rs`, `chip.rs`, `track.rs`, `field.rs` | **COMPLETED** |
 | **P31** | `karakuri-console::view` | Decomposed bay monoliths into subdirectories (`mixer/`, `transport/`, `library/`, `inspector/`) | **COMPLETED** |
 | **P32** | `karakuri-console::control` | Implemented `ControlDescriptor` registry linking UI probes, hotkeys, and operations | **COMPLETED** |
@@ -49,6 +49,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P51** | `karakuri-console::focus` (3,664 lines) | Decomposed 2D spatial focus navigation and deduplicate card/chooser traversals into `focus/` submodules (`model.rs`, `card.rs`, `chooser.rs`, `ladder.rs`, `mod.rs`) | **COMPLETED** |
 | **P52** | `karakuri-console::hover` (2,710 lines) | Decomposed hover layer into `hover/` submodules (`citation.rs`, `probes.rs`, `view.rs`, `mod.rs`) | **COMPLETED** |
 | **P53** | `karakuri-operation` (2,702 lines) & `karakuri-operation-record` (2,466 lines) | Decomposed operation vocabulary into `types.rs`/`op.rs` and record translator into `state.rs`/`tests.rs` | **COMPLETED** |
+| **P54** | `karakuri::app::handler` (2,591 lines) | Decomposed application event loop & window management into `handler/` (`key.rs`, `pointer.rs`, `projector.rs`, `redraw.rs`, `mod.rs`) | **COMPLETED** |
 
 ---
 
@@ -56,7 +57,6 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 
 Future candidates for modularization in Phase 9:
 - `karakuri::bridge::filesystem` (2,540 lines): Store synchronization, directory watcher event loop, and snapshot pipelines
-- `karakuri::app::handler` (2,590 lines): Console event post-processing and side-effect coordination
 - `karakuri-mcp::spelled` (2,333 lines): Schema definitions and MCP protocol stringification
 - `karakuri-midi::map` (2,038 lines): MIDI device map file parser, encoder, and hardware bindings
 - `karakuri::readout::dispatch` (1,915 lines): Pointer translation and bay event dispatch
