@@ -1,5 +1,12 @@
 use super::*;
 
+/// Every arrangement the store holds, by name, for the pill's menu to list —
+/// [`library`] over the fourth directory rather than the first.
+///
+/// Its two rules are this one's, said again because they are the same two: a
+/// store that is not there is listed as nothing and is not created, since a
+/// program that listed a menu by first making a store would change the
+/// directory it was run in; and a store that could not be read says so, since a
 /// menu that is empty because the directory would not open looks exactly like
 /// one that is empty because nobody has saved.
 ///
