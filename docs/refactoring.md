@@ -4,7 +4,7 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases (P1–P51)
+## 1. Completed Phases (P1–P52)
 
 All prior refactoring phases are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
 
@@ -15,6 +15,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 - **Phase 6 (P38–P41)**: Console glyph componentization (`glyph.rs`), popup card row text deduplication (`card_row_text`), root view modularization (`draw.rs`, `regions.rs`), and GUI milestone M5 exit condition verification.
 - **Phase 7 (P42–P46)**: GUI interaction & event dispatch modernization: unified modal overlays (`ModalOverlay`), tooltip suppression under open cards, text input session abstraction (`TextInputSession`), post-event side-effect decoupling (`handle_post_event_side_effects`), and per-bay pointer dispatch decomposition in `readout::dispatch`.
 - **Phase 8 (P47–P51)**: Core subsystem monolith decomposition: `karakuri-ir::check` (P47), `karakuri::bridge::handlers` (P48), `karakuri-store::record` (P49), `karakuri-cli::live` (P50), and `karakuri-console::focus` (P51) bringing all core files comfortably below 2,000 lines.
+- **Phase 9 (P52+)**: Secondary monolith modularization: `karakuri-console::hover` (P52) decomposed into `hover/` (`citation.rs`, `probes.rs`, `view.rs`, `mod.rs`).
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |---|---|---|:---:|
@@ -46,19 +47,19 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P49** | `karakuri-store::record` (3,222 lines) | Decomposed into `record/` submodules (`types.rs`, `variants.rs`, `helpers.rs`, `tests.rs`, `mod.rs`) | **COMPLETED** |
 | **P50** | `karakuri-cli::live` (3,056 lines) | Decomposed interactive runtime controller into `live/` submodules (`interactive.rs`, `demo.rs`, `audio.rs`, `mod.rs`) | **COMPLETED** |
 | **P51** | `karakuri-console::focus` (3,664 lines) | Decomposed 2D spatial focus navigation and deduplicate card/chooser traversals into `focus/` submodules (`model.rs`, `card.rs`, `chooser.rs`, `ladder.rs`, `mod.rs`) | **COMPLETED** |
+| **P52** | `karakuri-console::hover` (2,710 lines) | Decomposed hover layer into `hover/` submodules (`citation.rs`, `probes.rs`, `view.rs`, `mod.rs`) | **COMPLETED** |
 
 ---
 
 ## 4. Secondary Monolith Candidates (Phase 9 Backlog)
 
-Future candidates for modularization after Phase 8:
-- `karakuri-operation::lib.rs` (2,587 lines) & `karakuri-operation-record::lib.rs` (2,148 lines): Vocabulary and serialized record definitions
+Future candidates for modularization in Phase 9:
+- `karakuri-operation::lib.rs` (2,702 lines) & `karakuri-operation-record::lib.rs` (2,466 lines): Vocabulary and serialized record definitions
 - `karakuri::bridge::filesystem` (2,540 lines): Store synchronization, directory watcher event loop, and snapshot pipelines
-- `karakuri::app::handler` (2,533 lines): Console event post-processing and side-effect coordination
-- `karakuri-console::hover` (2,516 lines): Tooltip manual citation parsing and dynamic probe resolution
-- `karakuri::readout::dispatch` (2,319 lines): Pointer translation and bay event dispatch
-- `karakuri-mcp::spelled` (2,141 lines): Schema definitions and MCP protocol stringification
+- `karakuri::app::handler` (2,590 lines): Console event post-processing and side-effect coordination
+- `karakuri-mcp::spelled` (2,333 lines): Schema definitions and MCP protocol stringification
 - `karakuri-midi::map` (2,038 lines): MIDI device map file parser, encoder, and hardware bindings
+- `karakuri::readout::dispatch` (1,915 lines): Pointer translation and bay event dispatch
 
 ---
 
