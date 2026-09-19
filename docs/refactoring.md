@@ -54,19 +54,27 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P56** | `karakuri-mcp::spelled` (2,333 lines) | Decomposed MCP operation spelling into `spelled/` (`schema.rs`, `table.rs`, `dispatch.rs`, `mod.rs`) | **COMPLETED** |
 | **P57** | `karakuri-midi::map` (2,038 lines) | Decomposed MIDI map parsing and controller bindings into `map/` (`tests.rs`, `parse.rs`, `types.rs`, `mod.rs`) | **COMPLETED** |
 | **P58** | `karakuri::readout::dispatch` (1,915 lines) | Decomposed pointer routing and bay event dispatch into `dispatch/` (`types.rs`, `press.rs`, `actions.rs`, `mod.rs`) | **COMPLETED** |
+| **P59** | `karakuri::tests` (8,782 lines) | Decomposed into submodules (`keeps.rs`, `history.rs`, `arrangement.rs`, `frames.rs`, `view_interaction.rs`, `operations.rs`, `mod.rs`), reducing `mod.rs` to 56 lines | **COMPLETED** |
 
 ---
 
-## 4. Secondary Monolith Candidates (Phase 9 Backlog)
+## 2. Phase 10 Backlog: Test Suite Monolith Decomposition (P59–P68)
 
-All secondary monolith candidates (>1,900 lines) identified in Phase 9 backlog are now fully decomposed and verified:
-- `karakuri::bridge::filesystem` (2,540 lines) -> **P55 COMPLETED**
-- `karakuri-mcp::spelled` (2,333 lines) -> **P56 COMPLETED**
-- `karakuri-midi::map` (2,038 lines) -> **P57 COMPLETED**
-- `karakuri::readout::dispatch` (1,915 lines) -> **P58 COMPLETED**
+Targeting the top 10 largest test files (>2,300 lines down to <2,000 lines, target <1,500 lines):
+- `karakuri::tests` (8,782 lines) -> **P59 COMPLETED**
+- `karakuri-ir/tests/check.rs` (4,835 lines) -> **P60 IN PROGRESS**
+- `karakuri-engine/tests/deck.rs` (4,571 lines) -> **P61**
+- `karakuri-cli/src/tests.rs` (4,523 lines) -> **P62**
+- `karakuri-console/tests/library.rs` (4,408 lines) -> **P63**
+- `karakuri::tests::gpu` (3,990 lines) -> **P64**
+- `karakuri-mcp/tests/wire.rs` (3,123 lines) -> **P65**
+- `karakuri-codegen/tests/naga_test.rs` (2,784 lines) -> **P66**
+- `karakuri-environment::setfile::tests` (2,779 lines) -> **P67**
+- `karakuri-console/tests/grammar.rs` (2,387 lines) -> **P68**
 
 ---
 
-## 5. Future Initiatives
+## 3. Future Initiatives
 
 Future refactoring and architectural enhancements will be recorded here as new requirements emerge.
+
