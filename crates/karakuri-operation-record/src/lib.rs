@@ -340,8 +340,6 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::RemoveLane { .. }
         | Operation::SetPatternGrid { .. }
         | Operation::SelectPattern { .. }
-        | Operation::ToggleSolo { .. }
-        | Operation::ToggleMute { .. }
         | Operation::ClearSolo => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------

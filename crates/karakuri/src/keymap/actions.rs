@@ -117,7 +117,9 @@ pub(super) fn key_room(ctx: &mut KeyCtx, gfx: &mut Gfx) {
 
 pub(super) fn key_toggle_mute(ctx: &mut KeyCtx, gfx: &mut Gfx) {
     let deck = ctx.readout.view.selection();
-    let acted = Acted::Emitted(Some(Operation::ToggleMute { deck }));
+    let slot = karakuri_engine::DeckSlot(deck);
+    let mute = !gfx.engine.deck.is_muted(slot);
+    let acted = Acted::Emitted(Some(Operation::SetMute { deck, mute }));
     let repaint = App::performed(
         gfx,
         ctx.started,
@@ -132,7 +134,9 @@ pub(super) fn key_toggle_mute(ctx: &mut KeyCtx, gfx: &mut Gfx) {
 
 pub(super) fn key_toggle_solo(ctx: &mut KeyCtx, gfx: &mut Gfx) {
     let deck = ctx.readout.view.selection();
-    let acted = Acted::Emitted(Some(Operation::ToggleSolo { deck }));
+    let slot = karakuri_engine::DeckSlot(deck);
+    let solo = !gfx.engine.deck.is_soloed(slot);
+    let acted = Acted::Emitted(Some(Operation::SetSolo { deck, solo }));
     let repaint = App::performed(
         gfx,
         ctx.started,

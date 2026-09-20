@@ -475,9 +475,7 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SetGain { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetOpacity { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetMute { .. } => Standing::Closed(Class::MixFaders),
-        Operation::ToggleMute { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetSolo { .. } => Standing::Closed(Class::MixFaders),
-        Operation::ToggleSolo { .. } => Standing::Closed(Class::MixFaders),
         Operation::ClearSolo => Standing::Closed(Class::MixFaders),
         Operation::SetOnline { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetBlendMode { .. } => Standing::Closed(Class::MixFaders),
@@ -675,12 +673,10 @@ mod tests {
                 deck: 0,
                 mute: false,
             },
-            Operation::ToggleMute { deck: 0 },
             Operation::SetSolo {
                 deck: 0,
                 solo: false,
             },
-            Operation::ToggleSolo { deck: 0 },
             Operation::ClearSolo,
             Operation::SetOnline {
                 deck: 0,
@@ -959,7 +955,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!((closed, open, closed + open), (48, 27, 75));
+        assert_eq!((closed, open, closed + open), (46, 27, 73));
     }
 
     fn members(class: Class) -> Vec<&'static str> {
@@ -1007,9 +1003,7 @@ mod tests {
                 "Gain",
                 "Opacity",
                 "Mute a deck",
-                "Toggle mute",
                 "Solo a deck",
-                "Toggle solo",
                 "Clear solo",
                 "Set a slot's online state",
                 "Blend mode",

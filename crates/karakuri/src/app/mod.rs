@@ -771,28 +771,9 @@ impl App {
                     ) {
                         println!("{line}");
                     }
-                    match operation {
-                        Operation::ToggleSolo { deck } => {
-                            let slot = EngineSlot(*deck);
-                            let soloed = gfx.engine.deck.toggle_solo(slot);
-                            println!(
-                                "  solo: deck {} -> ToggleSolo -> deck.is_soloed({slot}) = {soloed}",
-                                deck_letter(*deck)
-                            );
-                        }
-                        Operation::ToggleMute { deck } => {
-                            let slot = EngineSlot(*deck);
-                            let muted = gfx.engine.deck.toggle_mute(slot);
-                            println!(
-                                "  mute: deck {} -> ToggleMute -> deck.is_muted({slot}) = {muted}",
-                                deck_letter(*deck)
-                            );
-                        }
-                        Operation::ClearSolo => {
-                            gfx.engine.deck.clear_solo();
-                            println!("  solo: ClearSolo -> cleared all solo");
-                        }
-                        _ => {}
+                    if let Operation::ClearSolo = operation {
+                        gfx.engine.deck.clear_solo();
+                        println!("  solo: ClearSolo -> cleared all solo");
                     }
                     // **The reading is taken off the deck and off the console,
                     // and for four of this bay's controls it is *I read
