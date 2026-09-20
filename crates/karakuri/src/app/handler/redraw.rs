@@ -404,6 +404,7 @@ impl App {
             &gfx.engine.present,
             &self.readout.view.chain_add.clone(),
         ));
+        self.readout.view.master_chain_building = gfx.engine.chain_swap.building().is_some();
         // **And which classes are open to a model**, read off the
         // handle rather than remembered from the last press on a pill.
         // Nothing but a pill writes it today; the handle exists because

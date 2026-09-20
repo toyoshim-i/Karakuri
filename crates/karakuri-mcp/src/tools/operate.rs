@@ -46,7 +46,10 @@ pub(crate) fn operate(
     | Operation::RestoreProcedure { deck, .. }
     | Operation::SelectRenderer { deck, .. } = operation
     {
-        state.slot_policies.check_writable(usize::from(*deck))?;
+        state
+            .slot_policies
+            .check_writable_detail(usize::from(*deck))
+            .map_err(|d| refusal_payload(&d))?;
     }
     let (tx, rx) = mpsc::channel();
     state

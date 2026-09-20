@@ -337,7 +337,13 @@ impl View {
                     }
                     Kind::Master => {
                         bay_card(ui, &pal, rect);
-                        head_into(ui, &pal, rect, placed.region, opening);
+                        match head_of(placed.region) {
+                            Some(head) => {
+                                let head = head.with_building(self.master_chain_building);
+                                bay_head(ui, &pal, rect, &head, opening);
+                            }
+                            None => head_into(ui, &pal, rect, placed.region, opening),
+                        }
                         if let Some(row) = master(ui.ctx(), panel.layout(), out, chain, &adding) {
                             master::master_into(ui, &pal, &row);
                             // The third set of rectangles a release can land

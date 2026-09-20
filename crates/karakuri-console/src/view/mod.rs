@@ -599,6 +599,7 @@ impl View {
             // reason: the Master bay draws its head and nothing under it.
             master_out: None,
             master_chain: None,
+            master_chain_building: false,
             // Nothing to add, which is a console whose library has listed no
             // `kind L5` procedure — every test in this crate that does not
             // hand one in.

@@ -140,6 +140,30 @@ fn the_sequencers_head_opens_no_class() {
     );
 }
 
+/// A head with `building = true` draws a "building" pill, which is armed.
+#[test]
+fn a_head_with_building_draws_building_badge() {
+    let master = head_of(region("master").expect("the Master region")).expect("a head");
+    let head = master.with_building(true);
+    let words = head.words(Open::CLOSED);
+    assert_eq!(
+        words.as_slice(),
+        ["building", "mcp · off"],
+        "building badge appears in master head to the left of the class pill"
+    );
+    assert!(words.armed(0), "building badge is lit/armed");
+    assert!(!words.armed(1), "closed class is not lit");
+
+    let words_open = head.words(everything_open());
+    assert_eq!(
+        words_open.as_slice(),
+        ["building", "mcp · on"],
+        "building badge preserved with class open"
+    );
+    assert!(words_open.armed(0), "building badge is armed");
+    assert!(words_open.armed(1), "open class is armed");
+}
+
 /// Every class open at once — the state no run starts in and the one this file
 /// wants, because a head is only interesting under both.
 fn everything_open() -> Open {

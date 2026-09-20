@@ -208,6 +208,7 @@ impl Record {
             | Record::Online { .. }
             | Record::Blend { .. }
             | Record::Residency { .. }
+            | Record::Policy { .. }
             | Record::Look { .. }
             | Record::MasterOut { .. }
             | Record::MasterChain(_)

@@ -242,6 +242,9 @@ pub struct View {
     /// in it. A chain with no slot in it is `Some` with an empty list, which is
     /// the default chain: the bay then draws the out row and `+ add`.
     pub master_chain: Option<Chain>,
+    /// Whether the master chain is currently building on the background worker thread.
+    /// When true, the Master bay draws an in-flight building indicator badge.
+    pub master_chain_building: bool,
     /// What the Master bay's `+ add` offers this frame: one entry per `kind L5`
     /// procedure the library holds, in the order the library lists them.
     ///

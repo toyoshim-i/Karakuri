@@ -545,6 +545,13 @@ impl Readout {
             let next = self.view.slot_policies[deck].next();
             self.view.slot_policies[deck] = next;
             self.slot_policies.set_policy(deck, next);
+            if let Some(root) = &self.store_root {
+                if let Ok(store) = karakuri_store::Store::open(root) {
+                    let names: Vec<&'static str> =
+                        self.view.slot_policies.iter().map(|p| p.name()).collect();
+                    let _ = store.write_policies(&names);
+                }
+            }
             println!(
                 "slot {}: MCP policy set to {:?} (`{}`)",
                 deck + 1,

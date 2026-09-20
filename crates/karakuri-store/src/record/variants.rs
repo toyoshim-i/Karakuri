@@ -452,6 +452,11 @@ pub enum Record {
         slot: DeckSlot,
         level: String,
     },
+    /// A deck slot's MCP modification policy: `auto`, `on` or `off`.
+    Policy {
+        slot: DeckSlot,
+        policy: String,
+    },
     /// The output look: tone map operator, exposure, and the operator's white
     /// point. One record rather than three because it is one value in the engine,
     /// written to one uniform, and a stream that could set the exposure without

@@ -108,7 +108,10 @@ pub(crate) fn wire_input(
     state: &State,
 ) -> Result<(mpsc::Receiver<News>, String), String> {
     let slot = usize::from(deck);
-    state.slot_policies.check_writable(slot)?;
+    state
+        .slot_policies
+        .check_writable_detail(slot)
+        .map_err(|d| refusal_payload(&d))?;
     let (tx, rx) = mpsc::channel();
     state
         .wiring

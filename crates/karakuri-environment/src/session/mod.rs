@@ -456,6 +456,8 @@ pub struct SlotHeld {
     /// [`Record::Residency`] records the request, so a session recorded on a fast
     /// machine and replayed on a slow one re-derives the rest.
     pub residency: Residency,
+    /// What the slot's MCP policy was set to (`auto`, `on`, `off`).
+    pub policy: karakuri_operation::SlotPolicy,
     pub mask: Mask,
     pub transport: Transport,
 }
@@ -538,6 +540,10 @@ pub fn head(material: Vec<Line>, held: &Held) -> Vec<Line> {
         lines.push(Line::new(Record::Residency {
             slot: DeckSlot(slot as u8),
             level: crate::mix::residency_wire_name(state.residency).to_string(),
+        }));
+        lines.push(Line::new(Record::Policy {
+            slot: DeckSlot(slot as u8),
+            policy: state.policy.name().to_string(),
         }));
         lines.push(Line::new(Record::Mask {
             slot: DeckSlot(slot as u8),

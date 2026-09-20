@@ -8,7 +8,7 @@ use std::sync::mpsc;
 
 use karakuri_ir::Kind;
 use karakuri_operation::gate::{self, Allowed};
-use karakuri_operation::{NodeAddress, Operation};
+use karakuri_operation::{NodeAddress, Operation, RefusalCode, RefusalDetail};
 use serde_json::{json, Value};
 
 pub use operate::OperateRequest;
@@ -497,8 +497,25 @@ pub(crate) enum Asked {
 /// slot, so that a call with two mistakes in it is still told about the same
 /// one it was told about before.
 pub(crate) fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
-    slots.holds(slot)?;
-    u8::try_from(slot).map_err(|_| karakuri_environment::no_such_slot(slot, slots.count()))
+    slots.holds(slot).map_err(|e| {
+        refusal_payload(&RefusalDetail {
+            code: RefusalCode::SlotUnallocated,
+            message: e,
+            slot: Some(slot),
+            policy: None,
+            in_mix: None,
+        })
+    })?;
+    u8::try_from(slot).map_err(|_| {
+        let msg = karakuri_environment::no_such_slot(slot, slots.count());
+        refusal_payload(&RefusalDetail {
+            code: RefusalCode::SlotUnallocated,
+            message: msg,
+            slot: Some(slot),
+            policy: None,
+            in_mix: None,
+        })
+    })
 }
 
 /// `read_procedure`'s arguments as the deck and node they name.
@@ -927,7 +944,14 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             Err(e) => return Ok(Called::Answered(Err(e.into()))),
         };
         if let Err(e) = state.slots.holds(slot) {
-            return Ok(Called::Answered(Err(e)));
+            let detail = RefusalDetail {
+                code: RefusalCode::SlotUnallocated,
+                message: e,
+                slot: Some(slot),
+                policy: None,
+                in_mix: None,
+            };
+            return Ok(Called::Answered(Err(refusal_payload(&detail))));
         }
         let nodes = match state.slots.nodes(slot) {
             Ok(n) => n,
@@ -971,13 +995,27 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             Err(e) => return Ok(Called::Answered(Err(e.into()))),
         };
         if let Err(e) = state.slots.holds(from_slot) {
-            return Ok(Called::Answered(Err(e)));
+            let detail = RefusalDetail {
+                code: RefusalCode::SlotUnallocated,
+                message: e,
+                slot: Some(from_slot),
+                policy: None,
+                in_mix: None,
+            };
+            return Ok(Called::Answered(Err(refusal_payload(&detail))));
         }
         if let Err(e) = state.slots.holds(to_slot) {
-            return Ok(Called::Answered(Err(e)));
+            let detail = RefusalDetail {
+                code: RefusalCode::SlotUnallocated,
+                message: e,
+                slot: Some(to_slot),
+                policy: None,
+                in_mix: None,
+            };
+            return Ok(Called::Answered(Err(refusal_payload(&detail))));
         }
-        if let Err(e) = state.slot_policies.check_writable(to_slot) {
-            return Ok(Called::Answered(Err(e)));
+        if let Err(d) = state.slot_policies.check_writable_detail(to_slot) {
+            return Ok(Called::Answered(Err(refusal_payload(&d))));
         }
         let layer_filter = args.get("layer").and_then(Value::as_str);
         if let Some(filter_name) = layer_filter {
@@ -1057,7 +1095,16 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
         // [`audited`] returns and nothing else can make one.
         Asked::Named(operation) => match audited(&operation, state) {
             Ok(allowed) => perform(&allowed, state),
-            Err(refused) => Called::Answered(Err(refused)),
+            Err(refused) => {
+                let detail = RefusalDetail {
+                    code: RefusalCode::BayClosed,
+                    message: refused,
+                    slot: None,
+                    policy: None,
+                    in_mix: None,
+                };
+                Called::Answered(Err(refusal_payload(&detail)))
+            }
         },
         Asked::Refused(refusal) => Called::Answered(Err(refusal)),
     })
@@ -1088,6 +1135,18 @@ pub(crate) fn audited<'a>(operation: &'a Operation, state: &State) -> Result<All
     gate::audit(operation, state.opening.read(), gate::Running::unread())
 }
 
+/// Serialise a [`RefusalDetail`] into a JSON string for structured envelope reporting.
+pub(crate) fn refusal_payload(detail: &RefusalDetail) -> String {
+    json!({
+        "code": detail.code.as_str(),
+        "message": detail.message,
+        "slot": detail.slot,
+        "policy": detail.policy.map(|p| p.name()),
+        "in_mix": detail.in_mix,
+    })
+    .to_string()
+}
+
 /// One tool call's answer, in the shape the protocol gives a tool.
 ///
 /// A tool failure is a result, not a protocol error. A model that is told "the
@@ -1109,6 +1168,27 @@ pub(crate) fn tool_result(outcome: Result<String, String>) -> Value {
         Err(text) => {
             if let Ok(report) = serde_json::from_str::<DiagnosticReport>(&text) {
                 json!({ "content": [{ "type": "text", "text": text }], "isError": true, "report": report })
+            } else if let Ok(val) = serde_json::from_str::<Value>(&text) {
+                if let Some(refusal) = val.get("refusal") {
+                    let msg = refusal
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .unwrap_or(&text);
+                    json!({
+                        "content": [{ "type": "text", "text": msg }],
+                        "isError": true,
+                        "refusal": refusal
+                    })
+                } else if val.get("code").is_some() && val.get("message").is_some() {
+                    let msg = val.get("message").and_then(Value::as_str).unwrap_or(&text);
+                    json!({
+                        "content": [{ "type": "text", "text": msg }],
+                        "isError": true,
+                        "refusal": val
+                    })
+                } else {
+                    json!({ "content": [{ "type": "text", "text": text }], "isError": true })
+                }
             } else {
                 json!({ "content": [{ "type": "text", "text": text }], "isError": true })
             }

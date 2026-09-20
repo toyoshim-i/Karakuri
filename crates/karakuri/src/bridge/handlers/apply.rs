@@ -889,6 +889,13 @@ pub(crate) fn apply(
                 deck.residency(slot)
             ))
         }
+        Record::Policy { slot, ref policy } => {
+            let slot = held(deck, slot.0)?;
+            Some(format!(
+                "  policy: deck {} -> Record::Policy {{ policy: {policy} }}",
+                deck_letter(slot.0)
+            ))
+        }
         // **The whole mask, because the record is a state and not an ask.**
         // `Record::Mask` carries a shape, an angle, a position and a softness,
         // and `Deck::set_mask` is what it decodes to — the engine says so at

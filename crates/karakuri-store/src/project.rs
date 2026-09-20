@@ -157,6 +157,7 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Online { .. }
         | Record::Blend { .. }
         | Record::Residency { .. }
+        | Record::Policy { .. }
         | Record::Look { .. }
         // **Nothing to fold it onto, and it is not the deck's absence that
         // says so.** A master out describes the whole fold rather than a

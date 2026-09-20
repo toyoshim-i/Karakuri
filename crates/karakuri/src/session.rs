@@ -829,6 +829,8 @@ pub(crate) struct Keeping {
     /// terminal rather than a panic inside a `winit` callback, where it aborts with
     /// no message at all.
     pub(crate) mcp: Option<mcp::Reporter>,
+    /// Thread-safe slot MCP modification policies.
+    pub(crate) slot_policies: karakuri_environment::SlotPolicies,
     /// What each deck is playing, seeded before the first frame and moved by every
     /// build that lands — see [`Playing`].
     pub(crate) playing: Playing,
@@ -1294,6 +1296,7 @@ impl Keeping {
                         // do; the governor re-derives the rest on whatever
                         // machine replays it.
                         residency: engine.deck.requested_residency(at),
+                        policy: self.slot_policies.policy(slot),
                         mask: engine.deck.mask(at),
                         transport: *engine.deck.transport(at),
                     }

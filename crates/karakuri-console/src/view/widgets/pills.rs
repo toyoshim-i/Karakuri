@@ -266,10 +266,40 @@ pub(crate) fn head_pills(
 /// armed, and makes that argument in its own terms. Both the word and the
 /// treatment are the page's.
 pub(crate) fn pill_into(ui: &Ui, pal: &Palette, rect: Rect, text: &str, armed: bool) {
-    match armed {
-        true => armed_pill_at(ui, pal, rect, text),
-        false => pill_at(ui, pal, rect, text),
+    if text == "building" {
+        building_pill_at(ui, pal, rect);
+    } else {
+        match armed {
+            true => armed_pill_at(ui, pal, rect, text),
+            false => pill_at(ui, pal, rect, text),
+        }
     }
+}
+
+/// A distinct in-flight build pill drawn in `pal.sun` to indicate background compilation.
+pub(crate) fn building_pill_at(ui: &Ui, pal: &Palette, rect: Rect) {
+    let painter = ui.painter();
+    let radius = CornerRadius::same((rect.height() * 0.5) as u8);
+    painter.rect_filled(rect, radius, tint(pal.sun, ARMED_WASH));
+    painter.rect_stroke(
+        rect,
+        radius,
+        Stroke::new(size::HAIRLINE, tint(pal.sun, 128)),
+        StrokeKind::Inside,
+    );
+    let galley = painter.layout_no_wrap(
+        "building".to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        pal.sun,
+    );
+    painter.galley(
+        Pos2::new(
+            rect.min.x + size::PILL_PAD_X,
+            rect.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.sun,
+    );
 }
 
 /// `.pill.armed`: no border, a `--c-mint` word over a wash of the same, and the

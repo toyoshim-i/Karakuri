@@ -340,6 +340,16 @@ impl App {
         slot_policies: SlotPolicies,
     ) -> App {
         let mut readout = Readout::new(WINDOW.0 as f32, WINDOW.1 as f32);
+        readout.store_root = Some(launch.store.clone());
+        if let Ok(store) = karakuri_store::Store::open(&launch.store) {
+            if let Ok(saved_policies) = store.policies() {
+                for (slot, name) in saved_policies.iter().enumerate().take(4) {
+                    if let Ok(policy) = name.parse::<karakuri_operation::SlotPolicy>() {
+                        slot_policies.set_policy(slot, policy);
+                    }
+                }
+            }
+        }
         // **The one handle, and it lives on the readout because that is where
         // the pills reach it.** A copy kept on [`App`] as well would be a second
         // answer to what is open the day one of them was written and the other
@@ -392,6 +402,7 @@ impl App {
             pointing,
             keeping: Keeping {
                 mcp,
+                slot_policies: slot_policies.clone(),
                 // **Empty until there is a deck**, because the launch nodes are
                 // what the engine's compile produced and there is no engine
                 // before `resumed`. It is seeded there, off [`Engine::placed`],

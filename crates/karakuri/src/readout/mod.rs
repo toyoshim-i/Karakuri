@@ -53,6 +53,8 @@ pub(crate) struct Readout {
     pub(crate) opening: Opening,
     /// What MCP access policy is configured per slot, shared with `karakuri_mcp::serve`.
     pub(crate) slot_policies: SlotPolicies,
+    /// Store root for saving arrangements and persistent state, if opened.
+    pub(crate) store_root: Option<std::path::PathBuf>,
     /// What the last write did, which the transport row's health capsule draws —
     /// `view::Transport::health`, kept here because that value is rebuilt whole
     /// every frame by `transport` and a verdict arrives on one frame in a thousand.
@@ -100,6 +102,7 @@ impl Readout {
             // Four classes shut, which is what a run starts with (ADR-0235).
             opening: Opening::closed(),
             slot_policies: SlotPolicies::new(),
+            store_root: None,
             // Nothing has been written yet, so the capsule is not drawn.
             health: None,
             sequencer: demonstration_banks(),
