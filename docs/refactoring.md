@@ -4,9 +4,9 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases (P1–P58)
+## 1. Summary Roadmap & Completed Phases (P1–P71)
 
-All prior refactoring phases are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
+All prior refactoring phases through Phase 11 are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
 
 - **Phases 1 & 2 (P1–P20)**: Transient render graph DAG, WGSL AST & pass fusion, machine-readable AI diagnostics, zero-allocation stream replay, and keymap convergence.
 - **Phase 3 (P21–P26)**: Subsystem decomposition, monolith extraction, layer type centralization, full crate-level `README.md` documentation, and Google Style comment standardization across all 16 crates.
@@ -67,6 +67,17 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P69** | `karakuri-engine/tests/hot_swap.rs` (2,195 lines) | Decomposed into `tests/hot_swap/` submodules (`common.rs`, `lifecycle_and_swaps.rs`, `budgets_and_estimates.rs`, `workers_and_performance.rs`, `rewind_and_macros.rs`), reducing `hot_swap.rs` to 19 lines | **COMPLETED** |
 | **P70** | `karakuri-console/src/view/library/listing.rs` (2,167 lines) | Decomposed into `listing/` submodules (`reading.rs`, `menu.rs`, `rows.rs`, `layout.rs`, `render.rs`, `mod.rs`) | **COMPLETED** |
 | **P71** | `karakuri-console/src/view/mod.rs` (2,073 lines) | Decomposed root view into submodules (`types.rs`, `nav.rs`, `budget.rs`, `choices.rs`, `mod.rs`) | **COMPLETED** |
+| **P72** | Clippy Warnings & Lints | Eliminate all 255 `clippy::doc_lazy_continuation` errors, resolve `too_many_arguments` with Parameter Objects, and resolve `type_complexity` | **PLANNED** |
+| **P73** | CI & Git Hooks | Move workspace Clippy enforcement (`cargo clippy --workspace --all-targets -- -D warnings`) into `.githooks/pre-commit` | **PLANNED** |
+| **P74** | `karakuri-ir::check::eval` (1,923 lines) | Decompose IR type-checking & evaluation monolith into `check/eval/` (`stmt.rs`, `expr.rs`, `call.rs`, `mod.rs`) | **PLANNED** |
+| **P75** | `karakuri-console::input` (1,903 lines) | Decompose console input handling into `input/` (`probes.rs`, `claim.rs`, `wheel.rs`, `mod.rs`) | **PLANNED** |
+| **P76** | `karakuri-console::view::inspector` (1,892 lines) | Decompose inspector bay view monolith into modular subcomponents | **PLANNED** |
+| **P77** | `karakuri-cli::args` (1,765 lines) | Decompose CLI argument parsing, validation, and usage help into `args/` submodules | **PLANNED** |
+| **P78** | `karakuri::keymap` (1,714 lines) | Decompose keybinding dispatch and action routines into `keymap/` submodules | **PLANNED** |
+| **P79** | `karakuri::tests::operations` (1,893 lines) | Subdivide integration operations test suite by domain categories | **PLANNED** |
+| **P80** | `karakuri-store::tests::store` (1,789 lines) | Decompose store integration tests into CAS, journal, and concurrency submodules | **PLANNED** |
+| **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **PLANNED** |
+| **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **PLANNED** |
 
 ---
 
@@ -92,12 +103,75 @@ Decompose the final three files across the entire workspace exceeding 2,000 line
 - `karakuri-engine/tests/hot_swap.rs` (2,195 lines -> 19 lines) -> **P69 COMPLETED**
 - `karakuri-console/src/view/library/listing.rs` (2,167 lines -> decomposed into 6 submodules: `layout.rs` 771 lines, `render.rs` 441 lines, `menu.rs` 230 lines, `reading.rs` 149 lines, `rows.rs` 106 lines, `mod.rs` 48 lines) -> **P70 COMPLETED**
 - `karakuri-console/src/view/mod.rs` (2,073 lines -> decomposed into `types.rs` 839 lines, `mod.rs` 726 lines, `nav.rs` 205 lines, `budget.rs` 212 lines, `choices.rs` 138 lines) -> **P71 COMPLETED**
+- Enforcement: Pre-commit hook (`.githooks/pre-commit`) strictly prohibits committing any Rust file exceeding 2,000 lines.
 
 ---
 
-## 4. Future Initiatives
+## 4. Phase 12: CI / Git Hook Modernization & Clippy Quality Gate (P72–P73) — PLANNED
 
-Future refactoring and architectural enhancements will be recorded here as new requirements emerge.
+Clean up existing linter warnings and shift quality enforcement earlier in the developer workflow by moving Clippy from `pre-push` into `pre-commit`:
+
+- **P72: Clippy Warnings Elimination & Doc Formatting Standardization**:
+  - Fix 255 instances of `clippy::doc_lazy_continuation` (markdown list indentation in doc comments) across `karakuri-ir`, `karakuri-store`, `karakuri-mcp`, `karakuri`, and `karakuri-environment`.
+  - Introduce Parameter Objects / Context structs for functions triggering `clippy::too_many_arguments`:
+    - `karakuri-engine::set::schedule::plan_sources` (8 arguments)
+    - `karakuri-console::view::inspector::header::pane_target` (8 arguments)
+    - `karakuri-console::view::inspector::inspector_into` (8 arguments)
+  - Refactor `clippy::type_complexity` complex return tuple in `karakuri-engine::set::schedule`.
+  - Fix idiom warnings: `clippy::needless_borrow` in `listing/render.rs`, `clippy::manual_map` in `modal.rs`, `clippy::single_match` in `app/handler/key.rs`, and unused imports in tests.
+- **P73: Pre-Commit Clippy Integration**:
+  - Update `.githooks/pre-commit` to execute `cargo clippy --quiet --workspace --all-targets -- -D warnings`.
+  - Update `docs/contributing.md` to document that `pre-commit` verifies formatting, 2,000-line limit, and strict Clippy cleanliness.
+
+---
+
+## 5. Phase 13: Proactive Decomposition of Near-Monoliths (1,500–1,950 Lines) (P74–P78) — PLANNED
+
+Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental pre-commit gate rejections and maintain high cognitive readability:
+
+- **P74: `karakuri-ir::check::eval.rs` (1,923 lines)**:
+  - Decompose into `crates/karakuri-ir/src/check/eval/`:
+    - `stmt.rs`: statement type checking (`check_stmt`, `check_stmts`, `check_let`, `check_assign`, `check_if`)
+    - `expr.rs`: expression evaluation, binary/unary operators, literal coercion
+    - `call.rs`: builtin and constructor invocations, domain validations
+    - `mod.rs`: entry point and shared evaluation context
+- **P75: `karakuri-console::src/input.rs` (1,903 lines)**:
+  - Decompose into `crates/karakuri-console/src/input/`:
+    - `probes.rs`: ~800 lines of `on_*` UI control hit-test derivations (`on_step`, `on_strip`, `on_mcp`, etc.)
+    - `claim.rs`: pointer event ownership arbitration and Rule 1-4 enforcement
+    - `wheel.rs`: scroll wheel interaction logic
+    - `mod.rs`: re-exports, constants (`PROBES`, `CONTROLS`), and interface definitions
+- **P76: `karakuri-console::src/view/inspector/mod.rs` (1,892 lines)**:
+  - Decompose pane layout rendering and inspector body dispatch into focused submodules alongside existing `header.rs`, `params.rs`, and `wiring.rs`.
+- **P77: `karakuri-cli::src/args.rs` (1,765 lines)**:
+  - Decompose manual argument parsing into `crates/karakuri-cli/src/args/`:
+    - `parser.rs`: command-line token consumption and flag parsing
+    - `validate.rs`: argument semantic constraints and consistency checks
+    - `help.rs`: usage strings and manual generation
+    - `mod.rs`: `Args` struct definition and public API
+- **P78: `karakuri::src/keymap.rs` (1,714 lines)**:
+  - Decompose into `crates/karakuri/src/keymap/`:
+    - `table.rs`: `KEY_BINDINGS` table definition and documentation cross-checks
+    - `actions.rs`: individual `KeyAction` execution implementations
+    - `mod.rs`: `KeyCtx` and dispatch entry point
+
+---
+
+## 6. Phase 14: Secondary Test Monolith Decomposition (P79–P82) — PLANNED
+
+Decompose test suites that have accumulated beyond 1,700 lines:
+
+- **P79: `karakuri::tests::operations` (1,893 lines)**: Decompose into operations category submodules (`transport.rs`, `mixer.rs`, `mcp.rs`, `surfaces.rs`).
+- **P80: `karakuri-store::tests::store` (1,789 lines)**: Decompose into `store/` submodules (`cas.rs`, `journal.rs`, `concurrency.rs`, `compaction.rs`).
+- **P81: `karakuri::tests::arrangement` (1,781 lines)**: Decompose arrangement lifecycle and session serialization tests.
+- **P82: `karakuri-cli::src::tests::live_save` (1,773 lines)**: Decompose interactive runtime state recording and replay test cases.
+
+---
+
+## 7. Future Initiatives
+
+- **Parameter Object Standardization**: Systematically introduce Options/Context patterns for functions with growing parameter lists.
+- **Error Type Ergonomics**: Standardize error reporting across CLI and bridge boundaries using structured error enums.
 
 
 
