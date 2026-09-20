@@ -65,7 +65,7 @@ All prior refactoring phases are complete, verified with full workspace tests, a
 | **P67** | `karakuri-environment::setfile::tests` (2,779 lines) | Decomposed into `src/setfile/tests/` submodules (`common.rs`, `edges_and_params.rs`, `chain_and_composition.rs`, `camera_and_noise.rs`, `bundle_and_resolution.rs`), reducing `tests.rs` to 6 lines | **COMPLETED** |
 | **P68** | `karakuri-console/tests/grammar.rs` (2,387 lines) | Decomposed into `tests/grammar/` submodules (`common.rs`, `navigation_and_dispatch.rs`, `space_and_enter.rs`, `cards_and_choosers.rs`, `chain_and_dismissal.rs`), reducing `grammar.rs` to 19 lines | **COMPLETED** |
 | **P69** | `karakuri-engine/tests/hot_swap.rs` (2,195 lines) | Decomposed into `tests/hot_swap/` submodules (`common.rs`, `lifecycle_and_swaps.rs`, `budgets_and_estimates.rs`, `workers_and_performance.rs`, `rewind_and_macros.rs`), reducing `hot_swap.rs` to 19 lines | **COMPLETED** |
-| **P70** | `karakuri-console/src/view/library/listing.rs` (2,167 lines) | Decompose into `src/view/library/listing/` submodules (`reading.rs`, `menu.rs`, `rows.rs`, `mod.rs`) | **PLANNED** |
+| **P70** | `karakuri-console/src/view/library/listing.rs` (2,167 lines) | Decomposed into `listing/` submodules (`reading.rs`, `menu.rs`, `rows.rs`, `layout.rs`, `render.rs`, `mod.rs`) | **COMPLETED** |
 | **P71** | `karakuri-console/src/view/mod.rs` (2,073 lines) | Decompose root view into submodules (`types.rs`, `nav.rs`, `budget.rs`, `choices.rs`) | **PLANNED** |
 
 ---
@@ -90,7 +90,7 @@ All top 10 largest test files (>2,300 lines down to <2,000 lines, target <1,500 
 
 Decompose the final three files across the entire workspace exceeding 2,000 lines to ensure every file is under 1,000 lines (or comfortably below 1,500 lines):
 - `karakuri-engine/tests/hot_swap.rs` (2,195 lines -> 19 lines) -> **P69 COMPLETED**
-- `karakuri-console/src/view/library/listing.rs` (2,167 lines) -> **P70 IN PROGRESS**
+- `karakuri-console/src/view/library/listing.rs` (2,167 lines -> decomposed into 6 submodules: `layout.rs` 771 lines, `render.rs` 441 lines, `menu.rs` 230 lines, `reading.rs` 149 lines, `rows.rs` 106 lines, `mod.rs` 48 lines) -> **P70 COMPLETED**
 - `karakuri-console/src/view/mod.rs` (2,073 lines) -> **P71 PLANNED**
 
 ---
