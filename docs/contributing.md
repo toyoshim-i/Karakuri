@@ -54,7 +54,7 @@ Standing invariants are maintained in [docs/principles/](principles/) — **one 
 - **Vertical slices over horizontal speculation**: Deliver working, end-to-end functionality (e.g., getting a primitive on screen reliably) rather than building ungrounded abstraction layers.
 - **Keep code continuously buildable**: Never commit changes that break the build or fail automated checks.
 - **Validate abstractions**: Do not introduce a shared abstraction without at least two distinct concrete call sites.
-- **1,000-line file limit**: When a Rust source file exceeds 1,000 lines, git hooks issue a reminder ([ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md)). Modularize large files into focused submodules (see [docs/refactoring.md](refactoring.md)).
+- **File length limits**: Source files exceeding 2,000 lines are strictly prohibited and rejected by git pre-commit hooks. When a Rust source file exceeds 1,000 lines, git hooks issue a reminder ([ADR-0345](adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md)). Modularize large files into focused submodules (see [docs/refactoring.md](refactoring.md)).
 - **Performance Benchmarking Standards**:
   - GPU timestamp queries can be unreliable or unsupported depending on OS and driver backends ([ADR-0169](adr/0169-the-timestamp-verdict-is-the-backends-not-the-machines.md)). Probes calibrate against known workloads and fall back to host-side timers where needed.
   - Performance comparisons must use the standardized reference workload: [`examples/drift_cloud.kset`](../examples/drift_cloud.kset) (262,144 elements, rendered at 1280x720; [ADR-0270](adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md)).
@@ -84,7 +84,7 @@ Enable repository hooks located in `.githooks/`:
 git config core.hooksPath .githooks
 ```
 
-- **`pre-commit`**: Runs `cargo fmt --check` against staged Rust files to enforce workspace formatting standards. Warns if a modified file exceeds 1,000 lines for the first time.
+- **`pre-commit`**: Runs `cargo fmt --check` against staged Rust files to enforce workspace formatting standards. Rejects any file exceeding 2,000 lines, and warns if a modified file exceeds 1,000 lines for the first time.
 - **`pre-push`**: Runs full workspace formatting, lints (`cargo clippy --workspace --all-targets -- -D warnings`), and test suites on tag pushes.
 
 ---
