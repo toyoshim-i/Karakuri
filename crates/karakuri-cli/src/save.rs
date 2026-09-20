@@ -163,6 +163,7 @@ pub(crate) fn held_deck(
                     // `Record::Residency`'s own rule: the governor re-derives
                     // the effective level on the machine that replays.
                     residency: deck.requested_residency(at),
+                    policy: karakuri_operation::SlotPolicy::Auto,
                     mask: deck.mask(at),
                     transport: *deck.transport(at),
                 }

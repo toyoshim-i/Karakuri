@@ -225,16 +225,30 @@ impl SlotPolicies {
         self.access(slot).policy
     }
 
-    /// Checks if a slot is writable by MCP, returning an error message if refused.
-    pub fn check_writable(&self, slot: usize) -> Result<(), String> {
+    /// Checks if a slot is writable by MCP, returning structured refusal details if rejected.
+    pub fn check_writable_detail(
+        &self,
+        slot: usize,
+    ) -> Result<(), karakuri_operation::RefusalDetail> {
         let access = self.access(slot);
         if access.is_writable() {
             Ok(())
         } else {
             Err(access
-                .refusal_reason(slot)
-                .unwrap_or_else(|| format!("slot {slot} is not writable by MCP")))
+                .refusal_detail(slot)
+                .unwrap_or_else(|| karakuri_operation::RefusalDetail {
+                    code: karakuri_operation::RefusalCode::SlotPolicyOff,
+                    message: format!("slot {slot} is not writable by MCP"),
+                    slot: Some(slot),
+                    policy: Some(access.policy),
+                    in_mix: Some(access.in_mix),
+                }))
         }
+    }
+
+    /// Checks if a slot is writable by MCP, returning an error message if refused.
+    pub fn check_writable(&self, slot: usize) -> Result<(), String> {
+        self.check_writable_detail(slot).map_err(|d| d.message)
     }
 
     /// Sets the policy for a slot.

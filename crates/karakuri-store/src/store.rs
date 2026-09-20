@@ -167,6 +167,12 @@ pub enum StoreError {
         #[source]
         source: serde_json::Error,
     },
+    /// The slot policies file is on disk and is not valid.
+    #[error("`{}` is not valid slot policies: {source}", Store::POLICIES_FILE)]
+    Policies {
+        #[source]
+        source: serde_json::Error,
+    },
     /// A Set file carries no time — see `docs/ir-spec.md`, Set file format. `tick`
     /// was the only such record when this was named; `audio` and `tempo` are the
     /// same kind of thing, so the check is `Record::is_set_state` and the message
@@ -941,6 +947,35 @@ impl Store {
         let bytes = serde_json::to_vec(&ids).expect("a list of strings serialises");
         ndjson::write_atomic(&self.favourites_path(), &bytes)?;
         Ok(true)
+    }
+
+    /// The name of the file under the store root where per-slot MCP policies are kept.
+    pub const POLICIES_FILE: &str = "policies.json";
+
+    fn policies_path(&self) -> PathBuf {
+        self.root.join(Store::POLICIES_FILE)
+    }
+
+    /// The per-slot MCP policies stored on disk.
+    ///
+    /// A missing file answers with an empty list.
+    pub fn policies(&self) -> Result<Vec<String>, StoreError> {
+        let bytes = match fs::read(self.policies_path()) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(StoreError::Io(e)),
+        };
+        let names: Vec<String> =
+            serde_json::from_slice(&bytes).map_err(|source| StoreError::Policies { source })?;
+        Ok(names)
+    }
+
+    /// Write the per-slot MCP policies to `<store>/policies.json`.
+    pub fn write_policies<S: AsRef<str>>(&self, policies: &[S]) -> Result<(), StoreError> {
+        let names: Vec<&str> = policies.iter().map(|s| s.as_ref()).collect();
+        let bytes = serde_json::to_vec_pretty(&names).expect("a list of strings serialises");
+        ndjson::write_atomic(&self.policies_path(), &bytes)?;
+        Ok(())
     }
 
     /// List the artifacts the store holds, and say which of them have a metadata

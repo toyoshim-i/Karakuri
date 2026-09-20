@@ -1070,6 +1070,83 @@ impl SlotPolicy {
     }
 }
 
+/// An error returned when parsing a [`SlotPolicy`] from a string fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseSlotPolicyError(String);
+
+impl std::fmt::Display for ParseSlotPolicyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unknown slot policy: `{}`; expected one of auto, on, off",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ParseSlotPolicyError {}
+
+impl std::str::FromStr for SlotPolicy {
+    type Err = ParseSlotPolicyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(SlotPolicy::Auto),
+            "on" => Ok(SlotPolicy::On),
+            "off" => Ok(SlotPolicy::Off),
+            _ => Err(ParseSlotPolicyError(s.to_string())),
+        }
+    }
+}
+
+/// Machine-readable refusal code for agent operation rejections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefusalCode {
+    /// Slot is currently active in the live mix under Auto policy.
+    SlotInMix,
+    /// Slot policy is set to Off (locked against MCP modifications).
+    SlotPolicyOff,
+    /// Slot is unallocated or does not exist.
+    SlotUnallocated,
+    /// Bay is closed to MCP operations.
+    BayClosed,
+}
+
+impl RefusalCode {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            RefusalCode::SlotInMix => "SLOT_IN_MIX",
+            RefusalCode::SlotPolicyOff => "SLOT_POLICY_OFF",
+            RefusalCode::SlotUnallocated => "SLOT_UNALLOCATED",
+            RefusalCode::BayClosed => "BAY_CLOSED",
+        }
+    }
+}
+
+impl std::fmt::Display for RefusalCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Structured refusal details describing why an agent operation was rejected.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefusalDetail {
+    pub code: RefusalCode,
+    pub message: String,
+    pub slot: Option<usize>,
+    pub policy: Option<SlotPolicy>,
+    pub in_mix: Option<bool>,
+}
+
+impl std::fmt::Display for RefusalDetail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for RefusalDetail {}
+
 /// Slot-level MCP access status and write-ability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SlotAccess {
@@ -1090,16 +1167,32 @@ impl SlotAccess {
         }
     }
 
-    pub fn refusal_reason(&self, slot: usize) -> Option<String> {
+    pub fn refusal_detail(&self, slot: usize) -> Option<RefusalDetail> {
         match self.policy {
-            SlotPolicy::Auto if self.in_mix => Some(format!(
-                "slot {slot} is currently active in the mix and protected under `auto` policy"
-            )),
-            SlotPolicy::Off => Some(format!(
-                "slot {slot} is locked against MCP modifications under `off` policy"
-            )),
+            SlotPolicy::Auto if self.in_mix => Some(RefusalDetail {
+                code: RefusalCode::SlotInMix,
+                message: format!(
+                    "slot {slot} is currently active in the mix and protected under `auto` policy"
+                ),
+                slot: Some(slot),
+                policy: Some(self.policy),
+                in_mix: Some(self.in_mix),
+            }),
+            SlotPolicy::Off => Some(RefusalDetail {
+                code: RefusalCode::SlotPolicyOff,
+                message: format!(
+                    "slot {slot} is locked against MCP modifications under `off` policy"
+                ),
+                slot: Some(slot),
+                policy: Some(self.policy),
+                in_mix: Some(self.in_mix),
+            }),
             _ => None,
         }
+    }
+
+    pub fn refusal_reason(&self, slot: usize) -> Option<String> {
+        self.refusal_detail(slot).map(|d| d.message)
     }
 }
 

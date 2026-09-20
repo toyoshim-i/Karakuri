@@ -367,13 +367,7 @@ pub fn raw(port: u16, request: &str) -> (u16, String) {
 }
 
 pub fn call(port: u16, name: &str, args: Value) -> (bool, String) {
-    let (_, body) = post(
-        port,
-        &json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
-                "params":{"name":name,"arguments":args}})
-        .to_string(),
-    );
-    let reply: Value = serde_json::from_str(&body).expect("json");
+    let reply = call_raw(port, name, args);
     let result = &reply["result"];
     (
         result["isError"].as_bool().unwrap_or(true),
@@ -382,6 +376,16 @@ pub fn call(port: u16, name: &str, args: Value) -> (bool, String) {
             .unwrap_or("")
             .to_string(),
     )
+}
+
+pub fn call_raw(port: u16, name: &str, args: Value) -> Value {
+    let (_, body) = post(
+        port,
+        &json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":name,"arguments":args}})
+        .to_string(),
+    );
+    serde_json::from_str(&body).expect("json")
 }
 
 // -- the listing -----------------------------------------------------

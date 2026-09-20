@@ -62,6 +62,7 @@ pub(super) fn keeping() -> Keeping {
     let (keep_tx, keeps) = std::sync::mpsc::channel();
     Keeping {
         mcp: None,
+        slot_policies: karakuri_environment::SlotPolicies::new(),
         playing: Playing {
             playing: Vec::new(),
         },

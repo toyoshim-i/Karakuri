@@ -368,6 +368,7 @@ fn held(slots: usize) -> Held {
                 opacity: 0.5,
                 blend: Blend::Over,
                 residency: Residency::Priming,
+                policy: karakuri_operation::SlotPolicy::Auto,
                 mask: Mask::default(),
                 transport: Transport::default(),
             })
@@ -410,6 +411,7 @@ fn the_head_names_every_slot_and_the_chain() {
                 | Record::Opacity { slot: s, .. }
                 | Record::Blend { slot: s, .. }
                 | Record::Residency { slot: s, .. }
+                | Record::Policy { slot: s, .. }
                 | Record::Mask { slot: s, .. }
                 | Record::Transport { slot: s, .. } => s.index() == slot,
                 _ => false,
@@ -417,8 +419,8 @@ fn the_head_names_every_slot_and_the_chain() {
             .collect();
         assert_eq!(
             about.len(),
-            6,
-            "slot {slot}: the six the deck holds per slot, always and not only \
+            7,
+            "slot {slot}: the seven the deck holds per slot, always and not only \
              where they differ from a fresh deck"
         );
     }

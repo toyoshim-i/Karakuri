@@ -50,6 +50,8 @@ pub struct Head {
     /// and to the bit; `tests/head_words.rs` renders every region's head before and
     /// after and compares.
     pub banks: Option<usize>,
+    /// Whether the head indicates an in-flight background build.
+    pub building: bool,
 }
 
 /// The head a region draws, or `None` where it has none.
@@ -79,6 +81,7 @@ pub fn head_of(region: &Region) -> Option<Head> {
         // table: the armed bank is a value the host writes per frame, so the
         // one head that draws them asks for them — [`Head::with_banks`].
         banks: None,
+        building: false,
     })
 }
 
@@ -142,17 +145,17 @@ const fn grips() -> usize {
 /// a class, and a bound that assumed otherwise would drop a capsule off the end
 /// of [`HeadWords`] in silence the day one did — which is exactly what the
 /// `const` assertion below exists to stop.
-const HEAD_PILLS: usize = 2 + karakuri_pattern::BANKS;
+const HEAD_PILLS: usize = 3 + karakuri_pattern::BANKS;
 
 /// And every entry fits with everything a head can be handed beside it — the
-/// class pill and the four bank pills. A head listing one more control than
+/// class pill, the building indicator, and the four bank pills. A head listing one more control than
 /// that would lose a capsule off the end of [`HeadWords`] silently, which is a
 /// control that stops existing rather than a build that stops.
 const _: () = {
     let mut at = 0;
     while at < REGIONS.len() {
         if let Kind::Bay { pills, .. } = REGIONS[at].kind {
-            assert!(pills.len() + 1 + karakuri_pattern::BANKS <= HEAD_PILLS)
+            assert!(pills.len() + 2 + karakuri_pattern::BANKS <= HEAD_PILLS)
         }
         at += 1;
     }
@@ -210,6 +213,11 @@ impl Head {
         }
     }
 
+    /// This head with the building indicator badge enabled or disabled.
+    pub fn with_building(self, building: bool) -> Head {
+        Head { building, ..self }
+    }
+
     /// This head's capsules under `open` — see [`HeadWords`].
     pub fn words(&self, open: Open) -> HeadWords {
         let mut words = [""; HEAD_PILLS];
@@ -228,6 +236,11 @@ impl Head {
                 armed[len] = bank == at;
                 len += 1;
             }
+        }
+        if self.building {
+            words[len] = "building";
+            armed[len] = true;
+            len += 1;
         }
         if let Some(class) = self.class {
             words[len] = mcp_word(open.holds(class));

@@ -649,7 +649,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // A `save` is here for a second reason as well as that one: it
             // names a Set file, and this *is* the Set file reader. Obeying it
             // would be a load that goes looking for another file.
-            | Record::Save { .. } => notes.push(
+            | Record::Save { .. }
+            | Record::Policy { .. } => notes.push(
                 "a record that belongs to a session rather than to a Set was skipped".to_string(),
             ),
             // **An artifact's card, in a Set file.** `Store::write_set`
