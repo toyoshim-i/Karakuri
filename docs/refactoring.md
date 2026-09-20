@@ -28,12 +28,12 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 | **P72** | Clippy Warnings & Lints | Eliminate all `clippy::doc_lazy_continuation` errors, resolve `too_many_arguments` with Parameter Objects, and resolve `type_complexity` | **COMPLETED** |
 | **P73** | CI & Git Hooks | Move workspace Clippy enforcement (`cargo clippy --workspace --all-targets -- -D warnings`) into `.githooks/pre-commit` | **COMPLETED** |
 | **P74** | `karakuri-ir::check::eval` (1,923 lines) | Decompose IR type-checking & evaluation monolith into `check/eval/` (`stmt.rs`, `expr.rs`, `call.rs`, `mod.rs`) | **COMPLETED** |
-| **P75** | `karakuri-console::input` (1,903 lines) | Decompose console input handling into `input/` (`probes.rs`, `claim.rs`, `wheel.rs`, `mod.rs`) | **PLANNED** |
-| **P76** | `karakuri-console::view::inspector` (1,892 lines) | Decompose inspector bay view monolith into modular subcomponents | **PLANNED** |
-| **P77** | `karakuri-cli::args` (1,765 lines) | Decompose CLI argument parsing, validation, and usage help into `args/` submodules | **PLANNED** |
-| **P78** | `karakuri::keymap` (1,714 lines) | Decompose keybinding dispatch and action routines into `keymap/` submodules | **PLANNED** |
-| **P79** | `karakuri::tests::operations` (1,893 lines) | Subdivide integration operations test suite by domain categories | **PLANNED** |
-| **P80** | `karakuri-store::tests::store` (1,789 lines) | Decompose store integration tests into CAS, journal, and concurrency submodules | **PLANNED** |
+| **P75** | `karakuri-console::input` (1,903 lines) | Decompose console input handling into `input/` (`probes.rs`, `claim.rs`, `wheel.rs`, `mod.rs`) | **COMPLETED** |
+| **P76** | `karakuri-console::view::inspector` (1,892 lines) | Decompose inspector bay view monolith into modular subcomponents | **COMPLETED** |
+| **P77** | `karakuri-cli::args` (1,765 lines) | Decompose CLI argument parsing, validation, and usage help into `args/` submodules | **COMPLETED** |
+| **P78** | `karakuri::keymap` (1,714 lines) | Decompose keybinding dispatch and action routines into `keymap/` submodules | **COMPLETED** |
+| **P79** | `karakuri::tests::operations` (1,893 lines) | Subdivide integration operations test suite by domain categories | **COMPLETED** |
+| **P80** | `karakuri-store::tests::store` (1,789 lines) | Decompose store integration tests into CAS, journal, and concurrency submodules | **COMPLETED** |
 | **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **PLANNED** |
 | **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **PLANNED** |
 | **P83** | Vocabulary Destination Purity | Purge toggle/step operations (`ToggleSolo`, `ToggleMute`) in favor of destination operations (`SetSolo`, `SetMute`) across all surfaces (P-0090, ADR-0180) | **PLANNED** |
@@ -144,7 +144,13 @@ Decompose test suites that have accumulated beyond 1,700 lines:
     - `mcp.rs` (347 lines): MCP port handling, wire request propagation, and refusal message assertions
     - `surfaces.rs` (404 lines): CLI flags, capacity constraints, surface lifetimes, and texture format verification
     - `mod.rs` (10 lines): submodule declarations and re-exports
-- **P80: `karakuri-store::tests::store` (1,789 lines)**: Decompose into `store/` submodules (`cas.rs`, `journal.rs`, `concurrency.rs`, `compaction.rs`).
+- **P80: `karakuri-store::tests::store` (1,789 lines -> `tests/store/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri-store/tests/store/`:
+    - `main.rs` (15 lines): integration test entry point and shared fixture re-exports
+    - `artifacts.rs` (229 lines): CAS put/get round trips, content-addressing, and artifact listing tests
+    - `procedures.rs` (235 lines): procedure listing, keeping, sandbox procedures, and empty directory tests
+    - `sets.rs` (837 lines): set file round trips, session stream, projections, write_set validations, and `list_sets`
+    - `arrangements.rs` (450 lines): arrangement layout round-trips, sandbox sets, and favourites
 - **P81: `karakuri::tests::arrangement` (1,781 lines)**: Decompose arrangement lifecycle and session serialization tests.
 - **P82: `karakuri-cli::src::tests::live_save` (1,773 lines)**: Decompose interactive runtime state recording and replay test cases.
 
