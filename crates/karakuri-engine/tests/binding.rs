@@ -409,6 +409,53 @@ fn measuring_something_does_not_disturb_a_signal_nobody_measures() {
     }
 }
 
+/// Audio signals in `audio.` namespace and semantic band names (`sub`, `bass`, `mid`, `air`, `onset`, etc.)
+/// resolve and drive parameters through the binding path.
+#[test]
+fn audio_signals_and_semantic_bands_drive_parameters() {
+    let mut signals = Signals::new(BPM, u64::from(SEED));
+    signals.advance(7, 1.0 / 60.0);
+
+    let frame = AudioFrame {
+        energy: 0.8,
+        onset: 0.95,
+        bands: [0.9, 0.7, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15],
+        band_count: 8,
+        confidence: 1.0,
+    };
+    signals.set_audio(Some(frame));
+
+    let cases = [
+        ("audio.energy", 0.8),
+        ("energy", 0.8),
+        ("audio.onset", 0.95),
+        ("onset", 0.95),
+        ("audio.sub", 0.9),
+        ("sub", 0.9),
+        ("audio.bass", 0.7),
+        ("bass", 0.7),
+        ("audio.mid", 0.4),
+        ("mid", 0.4),
+        ("audio.air", 0.15),
+        ("air", 0.15),
+        ("audio.band0", 0.9),
+        ("band0", 0.9),
+        ("audio.band7", 0.15),
+        ("band7", 0.15),
+    ];
+
+    let manual = 0.0;
+    let range = [0.0, 1.0];
+    for (signal_name, expected_val) in cases {
+        let mut binding = Binding::new(Kind::L1, "turbulence", signal_name, Curve::Lin, range);
+        let resolved = binding.resolve(&signals, manual);
+        assert!(
+            (resolved - expected_val).abs() < 1e-5,
+            "signal `{signal_name}` resolved to {resolved}, expected {expected_val}"
+        );
+    }
+}
+
 // Eleven of the sixteen tests here take a device; the five above do not, because
 // what they check is the binding table before anything is bound to a uniform.
 // Keeping the split means `cargo test -p karakuri-engine -- --skip gpu::` still

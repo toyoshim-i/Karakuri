@@ -1,0 +1,63 @@
+// An audio-reactive renderer demonstrating multi-band spectral modulation.
+//
+// In Karakuri, procedural shaders declare parameters through `param`, and external
+// signal bindings attach measured audio signals (e.g. `audio.sub`, `audio.bass`,
+// `audio.mid`, `audio.air`, `audio.onset`, `audio.energy`) to these knobs
+// (P-0086, ADR-0251).
+//
+// This procedure is crafted to respond to distinct spectral regions:
+// - `sub_kick`   : low-frequency kicks and sub-bass drive element expansion
+// - `mid_glow`   : melodic/harmonic energy in the mid-range drives luminance and saturation
+// - `air_scatter`: high-frequency transients and air shimmer scatter vertex positions
+// - `onset_burst`: sudden transient attacks ignite an intense additive bloom flash
+
+proc audio_bloom {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  // Audio-reactive modulation parameters:
+  // Designed to bind to `audio.sub`, `audio.mid`, `audio.air`, and `audio.onset`.
+  param sub_kick    : float [0.0, 2.0] = 0.5
+  param mid_glow    : float [0.0, 3.0] = 1.0
+  param air_scatter : float [0.0, 1.0] = 0.2
+  param onset_burst : float [0.0, 4.0] = 0.0
+
+  // Standard visual aesthetics parameters
+  param base_width  : float [0.001, 0.05] = 0.015
+  param falloff     : float [0.5, 8.0]    = 1.5
+  param base_hue    : float [0.0, 1.0]    = 0.65
+  param exposure    : float [0.0, 4.0]    = 1.0
+
+  vertex {
+    // Air/high band scatters particles with high-frequency dither
+    let jitter = hash1(seed + 42u) * air_scatter * 0.1;
+    let kick_scale = 1.0 + sub_kick * 0.35;
+    let p = (position + velocity * jitter) * kick_scale;
+
+    clip   = camera * vec4(p, 1.0);
+    clip_b = camera * vec4(p - velocity, 1.0);
+
+    // Expand halo width on sub-bass kicks and transient attacks
+    let w = base_width * (1.0 + sub_kick * 0.8 + onset_burst * 0.5);
+    point_rate = clamp(w, 0.001, 0.06);
+  }
+
+  fragment {
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let edge   = pow(max(0.0, 1.0 - across), falloff);
+
+    // Mid energy shifts hue towards warm highlights and boosts vibrancy
+    let h = fract(base_hue + mid_glow * 0.15 + age * 0.05);
+    let s = clamp(0.8 + mid_glow * 0.2, 0.0, 1.0);
+    let v = clamp(0.7 + mid_glow * 0.3 + onset_burst * 0.5, 0.0, 1.5);
+
+    let rgb = hsv_to_rgb(vec3(h, s, v));
+    let burst_light = vec3(onset_burst, onset_burst, onset_burst) * 0.8;
+    let final_rgb = (rgb + burst_light) * exposure;
+
+    color = vec4(final_rgb, edge);
+  }
+}
+

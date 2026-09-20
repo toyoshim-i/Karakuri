@@ -32,21 +32,38 @@ impl SignalId {
     /// - `"bpm"` -> [`SignalId::Bpm`]
     /// - `"beat"` -> [`SignalId::Beat`]
     /// - `"bar"` -> [`SignalId::Bar`]
-    /// - `"energy"` -> [`SignalId::Energy`]
-    /// - `"onset"` -> [`SignalId::Onset`]
-    /// - `"band"` -> [`SignalId::Band(0)`]
-    /// - `"band0"`..`"band15"` (and any decimal `u8`) -> [`SignalId::Band(i)`]
+    /// - `"energy"` or `"audio.energy"` -> [`SignalId::Energy`]
+    /// - `"onset"` or `"audio.onset"` -> [`SignalId::Onset`]
+    /// - `"sub"` or `"audio.sub"` -> [`SignalId::Band(0)`]
+    /// - `"bass"` or `"audio.bass"` -> [`SignalId::Band(1)`]
+    /// - `"low_mid"` / `"lowmid"` / `"audio.low_mid"` / `"audio.lowmid"` -> [`SignalId::Band(2)`]
+    /// - `"mid"` or `"audio.mid"` -> [`SignalId::Band(3)`]
+    /// - `"high_mid"` / `"highmid"` / `"audio.high_mid"` / `"audio.highmid"` -> [`SignalId::Band(4)`]
+    /// - `"presence"` or `"audio.presence"` -> [`SignalId::Band(5)`]
+    /// - `"brilliance"` or `"audio.brilliance"` -> [`SignalId::Band(6)`]
+    /// - `"air"` / `"high"` / `"audio.air"` / `"audio.high"` -> [`SignalId::Band(7)`]
+    /// - `"band"` or `"audio.band"` -> [`SignalId::Band(0)`]
+    /// - `"band0"`..`"band15"` (or with `"audio."` prefix) -> [`SignalId::Band(i)`]
     /// - Unknown names -> [`SignalId::Custom(hash)`]
     pub fn resolve(name: &str) -> SignalId {
-        match name {
-            "bpm" => SignalId::Bpm,
-            "beat" => SignalId::Beat,
-            "bar" => SignalId::Bar,
+        let stripped = name.strip_prefix("audio.").unwrap_or(name);
+        match stripped {
+            "bpm" if name == "bpm" => SignalId::Bpm,
+            "beat" if name == "beat" => SignalId::Beat,
+            "bar" if name == "bar" => SignalId::Bar,
             "energy" => SignalId::Energy,
             "onset" => SignalId::Onset,
+            "sub" => SignalId::Band(0),
+            "bass" => SignalId::Band(1),
+            "low_mid" | "lowmid" => SignalId::Band(2),
+            "mid" => SignalId::Band(3),
+            "high_mid" | "highmid" => SignalId::Band(4),
+            "presence" => SignalId::Band(5),
+            "brilliance" => SignalId::Band(6),
+            "air" | "high" => SignalId::Band(7),
             "band" => SignalId::Band(0),
             _ => {
-                if let Some(rest) = name.strip_prefix("band") {
+                if let Some(rest) = stripped.strip_prefix("band") {
                     if let Ok(i) = rest.parse::<u8>() {
                         return SignalId::Band(i);
                     }
@@ -197,6 +214,37 @@ mod tests {
         assert_eq!(SignalId::resolve("band0"), SignalId::Band(0));
         assert_eq!(SignalId::resolve("band3"), SignalId::Band(3));
         assert_eq!(SignalId::resolve("band15"), SignalId::Band(15));
+
+        // Audio namespace aliases
+        assert_eq!(SignalId::resolve("audio.energy"), SignalId::Energy);
+        assert_eq!(SignalId::resolve("audio.onset"), SignalId::Onset);
+        assert_eq!(SignalId::resolve("audio.band"), SignalId::Band(0));
+        assert_eq!(SignalId::resolve("audio.band0"), SignalId::Band(0));
+        assert_eq!(SignalId::resolve("audio.band7"), SignalId::Band(7));
+
+        // Semantic spectral band names (both bare and audio-prefixed)
+        assert_eq!(SignalId::resolve("sub"), SignalId::Band(0));
+        assert_eq!(SignalId::resolve("audio.sub"), SignalId::Band(0));
+        assert_eq!(SignalId::resolve("bass"), SignalId::Band(1));
+        assert_eq!(SignalId::resolve("audio.bass"), SignalId::Band(1));
+        assert_eq!(SignalId::resolve("low_mid"), SignalId::Band(2));
+        assert_eq!(SignalId::resolve("lowmid"), SignalId::Band(2));
+        assert_eq!(SignalId::resolve("audio.low_mid"), SignalId::Band(2));
+        assert_eq!(SignalId::resolve("audio.lowmid"), SignalId::Band(2));
+        assert_eq!(SignalId::resolve("mid"), SignalId::Band(3));
+        assert_eq!(SignalId::resolve("audio.mid"), SignalId::Band(3));
+        assert_eq!(SignalId::resolve("high_mid"), SignalId::Band(4));
+        assert_eq!(SignalId::resolve("highmid"), SignalId::Band(4));
+        assert_eq!(SignalId::resolve("audio.high_mid"), SignalId::Band(4));
+        assert_eq!(SignalId::resolve("audio.highmid"), SignalId::Band(4));
+        assert_eq!(SignalId::resolve("presence"), SignalId::Band(5));
+        assert_eq!(SignalId::resolve("audio.presence"), SignalId::Band(5));
+        assert_eq!(SignalId::resolve("brilliance"), SignalId::Band(6));
+        assert_eq!(SignalId::resolve("audio.brilliance"), SignalId::Band(6));
+        assert_eq!(SignalId::resolve("air"), SignalId::Band(7));
+        assert_eq!(SignalId::resolve("high"), SignalId::Band(7));
+        assert_eq!(SignalId::resolve("audio.air"), SignalId::Band(7));
+        assert_eq!(SignalId::resolve("audio.high"), SignalId::Band(7));
     }
 
     #[test]

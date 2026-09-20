@@ -729,6 +729,8 @@ mod corpus {
             ("beat_strokes", u32::MAX, u32::MAX),
             // A rate that genuinely reaches zero, either way.
             ("beat_bloom", u32::MAX, u32::MAX),
+            // Constant low end of clamp(w, 0.001, 0.06) over declared; 48 at defaults.
+            ("audio_bloom", 1000, 48),
         ];
 
         let renderers = renderers();
@@ -809,15 +811,15 @@ mod corpus {
                 }
             }
         }
-        assert_eq!(renderers.len(), 15, "examples/ no longer ships fifteen L4s");
+        assert_eq!(renderers.len(), 16, "examples/ no longer ships sixteen L4s");
         assert_eq!(
             declared,
-            (3, 12, 0),
+            (3, 13, 0),
             "clear/floored/refused over the declared range"
         );
         assert_eq!(
             stands,
-            (7, 8, 0),
+            (8, 8, 0),
             "clear/floored/refused over the state as it stands"
         );
     }

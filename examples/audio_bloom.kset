@@ -1,0 +1,8 @@
+{"t":"set","id":"audio_bloom","v":1}
+{"t":"part","layer":"L1","path":"beat_shell.kir"}
+{"t":"part","layer":"L4","path":"audio_bloom.kir"}
+{"t":"bind","layer":"L4","key":"sub_kick","signal":"sub","curve":"pow2","range":[0.0,2.0]}
+{"t":"bind","layer":"L4","key":"mid_glow","signal":"audio.mid","curve":"lin","range":[0.5,2.5]}
+{"t":"bind","layer":"L4","key":"air_scatter","signal":"air","curve":"lin","range":[0.0,0.8]}
+{"t":"bind","layer":"L4","key":"onset_burst","signal":"audio.onset","curve":"pow2","range":[0.0,3.0]}
+
