@@ -190,13 +190,13 @@ Ground system design in Karakuri's standing principles (`docs/principles/`) and 
     - `karakuri-console::view::inspector::header::pane_target` -> `PaneTargetCtx<'a>`
     - `karakuri-console::view::inspector::inspector_into` -> `InspectorIntoCtx<'a>` / `InspectorRenderCtx<'a>`
   - Encapsulated declared costs, theme palettes, and layout caches to insulate signatures against future feature additions.
-- **P86: ADR-0017 & Sandbox-Safe Test Suite Partitioning**:
+- **P86: ADR-0017 & Sandbox-Safe Test Suite Partitioning — COMPLETED**:
   - *ADR-0017 (An invariant that can be tested is a test)* & *ADR-0242 (Command line is test tooling)*:
-  - Formally partition the test suite into:
-    1. *Offline unit & IR tests*: CPU-only AST/type-check, formatting, layout, store CAS.
-    2. *Headless GPU render tests*: Dedicated `mod gpu` suites verifying bit-exact shader execution.
-    3. *Socket-dependent integration tests*: Loopback MCP tests requiring external socket privileges.
-  - Ensure local container CI and restricted sandboxes execute 100% of offline and GPU suites deterministically without failing on socket permissions.
+  - Formally partitioned the test suite into three isolated tiers:
+    1. *Offline CPU Unit & IR Suite*: `cargo test --workspace --exclude karakuri-mcp -- --skip gpu` (runs CPU-only AST/type-check, formatting, layout, store CAS, and console view models with zero external network or hardware requirements).
+    2. *Headless GPU Render Suite*: `cargo test -p karakuri-engine --test camera --test derive --test field --test generated --test overdraw --test sources --test storage` and `cargo test -p karakuri-cli tests::live_save::gpu` (verifies compute shaders and multi-renderer pipelines via `Gpu::headless()`).
+    3. *Socket-Dependent Integration Suite*: `cargo test -p karakuri-mcp --test wire` (isolated suite binding loopback TCP sockets to test JSON-RPC and HTTP protocol layers).
+  - Verified local container CI and restricted sandboxes can execute 100% of offline and GPU suites deterministically without socket permission failures.
 
 ---
 
