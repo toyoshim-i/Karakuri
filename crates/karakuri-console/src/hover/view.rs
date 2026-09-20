@@ -73,7 +73,30 @@ pub fn build_tooltip_job(
     let tipped = flat().nth(on);
     let hotkey = hotkey_for_tip(on);
 
-    // 1. Header: Operation Title / Control Name + Hotkey Badge
+    // 1. Eyebrow: Subsystem domain tag (e.g. "TRANSPORT", "MIXER")
+    if let Some(d) = desc {
+        job.append(
+            d.eyebrow,
+            0.0,
+            TextFormat {
+                font_id: FontId::new(TIP_SIZE - 2.5, FontFamily::Monospace),
+                color: pal.lav,
+                line_height: Some((TIP_SIZE - 2.5) * 1.3),
+                ..Default::default()
+            },
+        );
+        job.append(
+            "\n",
+            0.0,
+            TextFormat {
+                font_id: FontId::new(2.0, FontFamily::Proportional),
+                line_height: Some(2.0),
+                ..Default::default()
+            },
+        );
+    }
+
+    // 2. Header: Operation Title / Control Name + Hotkey Badge
     let title = desc.and_then(|d| d.operation_title).unwrap_or_else(|| {
         desc.map(|d| d.label)
             .unwrap_or_else(|| tipped.map(|t| t.control).unwrap_or("Control"))
