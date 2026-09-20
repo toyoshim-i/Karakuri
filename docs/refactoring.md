@@ -35,7 +35,7 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 | **P79** | `karakuri::tests::operations` (1,893 lines) | Subdivide integration operations test suite by domain categories | **COMPLETED** |
 | **P80** | `karakuri-store::tests::store` (1,789 lines) | Decompose store integration tests into CAS, journal, and concurrency submodules | **COMPLETED** |
 | **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **COMPLETED** |
-| **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **PLANNED** |
+| **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **COMPLETED** |
 | **P83** | Vocabulary Destination Purity | Purge toggle/step operations (`ToggleSolo`, `ToggleMute`) in favor of destination operations (`SetSolo`, `SetMute`) across all surfaces (P-0090, ADR-0180) | **PLANNED** |
 | **P84** | Structured Refusal Unification | Standardize `RefusalDetail` structured type and guarantee bit-exact error wording across GUI, CLI, and MCP (P-0083, ADR-0131) | **PLANNED** |
 | **P85** | Context & Parameter Objects | Replace 8-argument cascades with dedicated Context structs (`PlanSourcesCtx`, `InspectorRenderCtx`) (P-0091, ADR-0210) | **PLANNED** |
@@ -132,7 +132,7 @@ Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental p
 
 ---
 
-## 7. Phase 14: Secondary Test Monolith Decomposition (P79–P82) — PLANNED
+## 7. Phase 14: Secondary Test Monolith Decomposition (P79–P82) — COMPLETED
 
 Decompose test suites that have accumulated beyond 1,700 lines:
 
@@ -158,7 +158,13 @@ Decompose test suites that have accumulated beyond 1,700 lines:
     - `persistence.rs` (550 lines): arrangement storage paths, round trips, name verification, pills, and menu listings
     - `sequencer.rs` (381 lines): pattern sequencer controls, lane mute/level adjustments, and lane step mutations
     - `mod.rs` (10 lines): submodule declarations and test environment imports
-- **P82: `karakuri-cli::src::tests::live_save` (1,773 lines)**: Decompose interactive runtime state recording and replay test cases.
+- **P82: `karakuri-cli::src::tests::live_save` (1,773 lines -> `tests/live_save/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri-cli/src/tests/live_save/`:
+    - `common.rs` (147 lines): test fixtures, geometry synthesizers (`signed_l1`), artifact put helpers, and CLI interactive source loader
+    - `artifacts.rs` (536 lines): artifact cards, store lifecycle, launch sources, round trips, and save pre-condition/refusal checks
+    - `consistency.rs` (635 lines): AST scanners for keybinding coverage, unhandled record conversion audits, and save thread lifecycles
+    - `gpu.rs` (443 lines): live save replay, material reload, parameter mutation, camera persistence, and watcher rewrite verification
+    - `mod.rs` (8 lines): submodule declarations and internal fixture re-exports
 
 ---
 
