@@ -4,13 +4,14 @@
 //! serve three files:
 //!
 //! - a Set file (`.kbset`) is a state projection — what is loaded and what
-//! every value currently is. It carries no time, so it never contains
-//! [`Record::Tick`]. - a session stream is a timeline — a Set file followed by
-//! ticks and the edits between them. Every edit lands at an exact frame
-//! position because it sits between two known ticks. - an artifact's metadata
-//! (`<hash>.meta.ndjson`) is what one procedure *declares*, regenerated from
-//! its `.kir` plus a compile pass. It is neither of the other two and is read
-//! by a decoder of its own — see [`Record::is_metadata`].
+//!   every value currently is. It carries no time, so it never contains
+//!   [`Record::Tick`].
+//! - a session stream is a timeline — a Set file followed by
+//!   ticks and the edits between them. Every edit lands at an exact frame
+//!   position because it sits between two known ticks.
+//! - an artifact's metadata (`<hash>.meta.ndjson`) is what one procedure *declares*,
+//!   regenerated from its `.kir` plus a compile pass. It is neither of the other
+//!   two and is read by a decoder of its own — see [`Record::is_metadata`].
 //!
 //! A Set file is the session stream with the ticks dropped and the state folded
 //! down. See the Set file, session stream and metadata file sections of

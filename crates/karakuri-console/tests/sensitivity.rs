@@ -5,24 +5,29 @@
 //! Eight things:
 //!
 //! 1. That a bound row grows a row under it, and that every row below moves
-//! down by exactly a `.sens` — the arithmetic `group_h`, `param_rect` and
-//! `sens_rect` all have to agree about, and the one a stride instead of a walk
-//! gets wrong. 2. That the chips are laid out where `.sens`'s own two tracks
-//! put them, each as wide as the word in it, and that the boxes a press is
-//! resolved against are the boxes a frame painted. 3. That the curve chip
-//! restates the attachment: the same signal, the same range, the same address,
-//! and the *next* of the four shapes — so a press for a different curve cannot
-//! re-map the signal. 4. That `take back` names the attachment's own address,
-//! which is the binding's `(layer, index, key)` and not the group the row was
-//! drawn in. 5. That the source and the range are drawn and claimed by nothing
-//! — two of the four chips are readouts, and a press on one asks for nothing
-//! rather than falling through to the row behind it. 6. That a bound row's knob
-//! is not taken hold of, which is *Take a parameter back*'s answer to the
-//! question ADR-0286 left open, and that the row is still drawn. 7. That every
-//! one of the three authority chips is claimed and names the level it lands on
-//! — a destination and never a step (P-0090) — the lit one included. 8. That a
-//! head standing over more than one node claims nothing, which is authority
-//! being per node rather than per group.
+//!    down by exactly a `.sens` — the arithmetic `group_h`, `param_rect`
+//!    and `sens_rect` all have to agree about, and the one a stride instead
+//!    of a walk gets wrong.
+//! 2. That the chips are laid out where `.sens`'s own two tracks put them,
+//!    each as wide as the word in it, and that the boxes a press is
+//!    resolved against are the boxes a frame painted.
+//! 3. That the curve chip restates the attachment: the same signal, the
+//!    same range, the same address, and the *next* of the four shapes — so
+//!    a press for a different curve cannot re-map the signal.
+//! 4. That `take back` names the attachment's own address, which is the
+//!    binding's `(layer, index, key)` and not the group the row was drawn
+//!    in.
+//! 5. That the source and the range are drawn and claimed by nothing — two
+//!    of the four chips are readouts, and a press on one asks for nothing
+//!    rather than falling through to the row behind it.
+//! 6. That a bound row's knob is not taken hold of, which is *Take a
+//!    parameter back*'s answer to the question ADR-0286 left open, and that
+//!    the row is still drawn.
+//! 7. That every one of the three authority chips is claimed and names the
+//!    level it lands on — a destination and never a step (P-0090) — the lit
+//!    one included.
+//! 8. That a head standing over more than one node claims nothing, which is
+//!    authority being per node rather than per group.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a chip is as wide as the word in it — see `common::drawn_once`.

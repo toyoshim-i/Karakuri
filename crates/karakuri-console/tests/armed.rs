@@ -13,24 +13,27 @@
 //!
 //! Six claims, and each one is a thing that could quietly not be true:
 //!
-//! 1. An armed move draws its destination and a settled fader draws nothing —
-//! the mark is where the knob would be if the move had landed, and a fader
-//! nothing is moving costs what it always cost. 2. The value drawn is still the
-//! deck's own. The first of P-0087's three: a pending move never overwrites the
-//! truth with a wish, and here the truth does not so much as shift — the knob,
-//! the fill and the number are identical to the same strip with nothing armed,
-//! at every phase. 3. The destination is identifiable from the surface, off the
-//! track and in the same reading the knob's own position is, rather than from a
-//! word or a tooltip. This console draws no tooltips at all, and this asserts
-//! it did not grow one here: an armed strip paints exactly the type a settled
-//! one paints. 4. The reach never covers the gap, in either direction, and
-//! rests at nothing. Covering it is what arrival looks like. 5. Both faders and
-//! the chip above them move off one phase. ADR-0190 asks for that outright, and
-//! it is what stops a strip with two fades on it reading as two things going
-//! wrong. 6. The panel declares a staleness while something is armed and none
-//! when nothing is — including for the one move this track cannot draw, a gain
-//! between 1.5 and 2.0, where declaring would buy 30 Hz for a picture that does
-//! not change.
+//! 1. An armed move draws its destination and a settled fader draws nothing
+//!    — the mark is where the knob would be if the move had landed, and a
+//!    fader nothing is moving costs what it always cost.
+//! 2. The value drawn is still the deck's own. The first of P-0087's three:
+//!    a pending move never overwrites the truth with a wish, and here the
+//!    truth does not so much as shift — the knob, the fill and the number
+//!    are identical to the same strip with nothing armed, at every phase.
+//! 3. The destination is identifiable from the surface, off the track and
+//!    in the same reading the knob's own position is, rather than from a
+//!    word or a tooltip. This console draws no tooltips at all, and this
+//!    asserts it did not grow one here: an armed strip paints exactly the
+//!    type a settled one paints.
+//! 4. The reach never covers the gap, in either direction, and rests at
+//!    nothing. Covering it is what arrival looks like.
+//! 5. Both faders and the chip above them move off one phase. ADR-0190 asks
+//!    for that outright, and it is what stops a strip with two fades on it
+//!    reading as two things going wrong.
+//! 6. The panel declares a staleness while something is armed and none when
+//!    nothing is — including for the one move this track cannot draw, a
+//!    gain between 1.5 and 2.0, where declaring would buy 30 Hz for a
+//!    picture that does not change.
 //!
 //! None of it needs a window, a device or a clock: the displacement is a
 //! function of a [`Phase`] this file chooses, exactly as `parked.rs`'s is.

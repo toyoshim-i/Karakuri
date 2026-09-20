@@ -7,23 +7,26 @@
 //! [ADR-0332](../../../docs/adr/0332-focus-is-a-pointer-the-console-owns-and-the-three-pointers-are-instances-of-it.md)
 //! is the first slice, and this is what holds it. Five claims:
 //!
-//! 1. The ring is the arrangement's own walk — down a column, then across — and
-//! it holds every bay and only the bays. `view::REGIONS` is what it is checked
-//! against rather than what it is derived from, which is the record's own
-//! instruction, so this file is where the constant does the checking. 2. `Tab`
-//! walks it forward and wraps; `shift-Tab` is that walk run backwards and
-//! nothing else. The two have to agree about where they are, which is what a
-//! round trip asserts and what a *second rule* for the backward direction would
-//! have cost. 3. A folded bay is visited. It is in the ring so that there is
-//! something to press to open it, not so that it can be operated — the narrow
-//! reason, and the one that decides this test. 4. `esc` leaves a level and
-//! stops at the bay. There is no unfocused state to fall out into, so the key
-//! acts on nothing there and says so. That it does not quit is the window
-//! loop's half and is `karakuri/src/main.rs`'s `focus_keys`. 5. The deck
-//! selection, the library cursor and the marked scope are three readings of one
-//! field. The test that says so moves one of them through the shared path —
-//! `Focus`, not `View::select` — and reads it back off the method that is
-//! supposed to be a reading of it.
+//! 1. The ring is the arrangement's own walk — down a column, then across —
+//!    and it holds every bay and only the bays. `view::REGIONS` is what it
+//!    is checked against rather than what it is derived from, which is the
+//!    record's own instruction, so this file is where the constant does the
+//!    checking.
+//! 2. `Tab` walks it forward and wraps; `shift-Tab` is that walk run
+//!    backwards and nothing else. The two have to agree about where they
+//!    are, which is what a round trip asserts and what a *second rule* for
+//!    the backward direction would have cost.
+//! 3. A folded bay is visited. It is in the ring so that there is something
+//!    to press to open it, not so that it can be operated — the narrow
+//!    reason, and the one that decides this test.
+//! 4. `esc` leaves a level and stops at the bay. There is no unfocused
+//!    state to fall out into, so the key acts on nothing there and says so.
+//!    That it does not quit is the window loop's half and is
+//!    `karakuri/src/main.rs`'s `focus_keys`.
+//! 5. The deck selection, the library cursor and the marked scope are three
+//!    readings of one field. The test that says so moves one of them
+//!    through the shared path — `Focus`, not `View::select` — and reads it
+//!    back off the method that is supposed to be a reading of it.
 //!
 //! No device and no `egui` pass, which is the whole of this crate: the ring is
 //! a walk of a tree and the mark is a rectangle.

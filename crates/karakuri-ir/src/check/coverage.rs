@@ -20,38 +20,38 @@ use crate::typed::{TBlock, TExpr, TExprKind, TStmt, Target};
 /// the name suggests:
 ///
 /// 1. It reads an attribute it emits. `age = age + dt` reads one; `position =
-/// f(seed, t)` does not. Every read counts, wherever it is — inside an `if`,
-/// inside a `for`, or bound to a `let` and used later — so this walks every
-/// expression in every block rather than trying to decide which reads "reach" a
-/// write. A read that reaches an emitted attribute's value through a local is
-/// still a read of that attribute, and it is the read this looks at, not the
-/// local.
+///    f(seed, t)` does not. Every read counts, wherever it is — inside an `if`,
+///    inside a `for`, or bound to a `let` and used later — so this walks every
+///    expression in every block rather than trying to decide which reads "reach" a
+///    write. A read that reaches an emitted attribute's value through a local is
+///    still a read of that attribute, and it is the read this looks at, not the
+///    local.
 ///
-/// The set tested against is what the procedure *carries*, not what it emits,
-/// and the difference arrived with attribute derivation: an L1 may consume
-/// `age` or `velocity` without emitting either, and both are per-element state
-/// carried across frames. Reading one is reading where the element has been,
-/// which is exactly what this property is about. This paragraph used to say
-/// `consumes ⊆ emit` held inside an L1 and that the membership test was
-/// therefore belt-and-braces; it no longer holds, and a permissive answer here
-/// is the one the block below calls far worse — a scrub that produces garbage,
-/// and material put on air unwarmed.
+///    The set tested against is what the procedure *carries*, not what it emits,
+///    and the difference arrived with attribute derivation: an L1 may consume
+///    `age` or `velocity` without emitting either, and both are per-element state
+///    carried across frames. Reading one is reading where the element has been,
+///    which is exactly what this property is about. This paragraph used to say
+///    `consumes ⊆ emit` held inside an L1 and that the membership test was
+///    therefore belt-and-braces; it no longer holds, and a permissive answer here
+///    is the one the block below calls far worse — a scrub that produces garbage,
+///    and material put on air unwarmed.
 ///
 /// 2. It has a `spawn` block. Spawning and closed form cannot coexist, and the
-/// reason is not about attributes at all: an element that does not exist yet
-/// cannot be stepped, and *whether it exists* is engine state — the spawn
-/// accumulator, the seed counter, the live range — accumulated from every frame
-/// since the Set started. Jumping to `t = 30` on a Set that spawns 8000
-/// elements a second does not produce 240,000 elements; it produces the handful
-/// of them one frame's accumulator emits, at their spawn state. The population
-/// is the state that had to be warmed, and it is not reachable from `seed` and
-/// `t`. So a `spawn` block disqualifies, however pure the `element` block is.
+///    reason is not about attributes at all: an element that does not exist yet
+///    cannot be stepped, and *whether it exists* is engine state — the spawn
+///    accumulator, the seed counter, the live range — accumulated from every frame
+///    since the Set started. Jumping to `t = 30` on a Set that spawns 8000
+///    elements a second does not produce 240,000 elements; it produces the handful
+///    of them one frame's accumulator emits, at their spawn state. The population
+///    is the state that had to be warmed, and it is not reachable from `seed` and
+///    `t`. So a `spawn` block disqualifies, however pure the `element` block is.
 ///
 /// 3. It can `kill()`. A killed element stays killed, so the live set at `t` is
-/// a function of every step taken to get there and not of `t`. Even a kill
-/// condition written purely in `seed` and `t` is history-dependent in the
-/// direction that matters: `if t > 5.0 && t < 5.1 { kill() }` removes nothing
-/// at all if `t = 6.0` is arrived at in one step.
+///    a function of every step taken to get there and not of `t`. Even a kill
+///    condition written purely in `seed` and `t` is history-dependent in the
+///    direction that matters: `if t > 5.0 && t < 5.1 { kill() }` removes nothing
+///    at all if `t = 6.0` is arrived at in one step.
 ///
 /// The conservative direction is the safe one, and this errs into it
 /// deliberately. There is no diagnostic attached to this decision — nothing is

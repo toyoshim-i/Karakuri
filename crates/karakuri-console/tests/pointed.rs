@@ -5,21 +5,24 @@
 //! assertions in `library.rs`:
 //!
 //! 1. That the row is drawn only once a folder has been chosen, and that
-//! everything under it moves down by exactly its own height when it is. Until a
-//! folder has been dropped the bay is a line shorter, which is `console.html`'s
-//! own answer to an empty state — *"a row saying there is no folder would be a
-//! sentence about an absence"* — and it is the reason the derivation takes the
-//! row as a value rather than a constant. 2. That a folder over the window
-//! replaces the line and comes up out of its faint, in `--c-text` rather than
-//! `--c-faint`, which is the whole of the mark this gesture gets: a drop
-//! carries no pointer position and there is no rectangle to ring
-//! (`docs/adr/0275-a-folder-is-chosen-by-dropping-one-on-the-window-and-the-drop-is-the-windows.md`).
-//! 3. That the row is a readout: every point of it goes to `egui`, so no press
-//! lands on it and re-pointing the bay is another drop. 4. That the row is the
-//! bay's and not the scope row's condition — a console handed no chips at all
-//! still draws where it is pointed, because that is also where a send's save
-//! dialog opens (ADR-0311, which supersedes ADR-0267's reading of the row as
-//! the destination itself).
+//!    everything under it moves down by exactly its own height when it is.
+//!    Until a folder has been dropped the bay is a line shorter, which is
+//!    `console.html`'s own answer to an empty state — *"a row saying there
+//!    is no folder would be a sentence about an absence"* — and it is the
+//!    reason the derivation takes the row as a value rather than a
+//!    constant.
+//! 2. That a folder over the window replaces the line and comes up out of
+//!    its faint, in `--c-text` rather than `--c-faint`, which is the whole
+//!    of the mark this gesture gets: a drop carries no pointer position and
+//!    there is no rectangle to ring (`docs/adr/0275-a-folder-is-chosen-by-
+//!    dropping-one-on-the-window-and-the-drop-is-the-windows.md`).
+//! 3. That the row is a readout: every point of it goes to `egui`, so no
+//!    press lands on it and re-pointing the bay is another drop.
+//! 4. That the row is the bay's and not the scope row's condition — a
+//!    console handed no chips at all still draws where it is pointed,
+//!    because that is also where a send's save dialog opens (ADR-0311,
+//!    which supersedes ADR-0267's reading of the row as the destination
+//!    itself).
 //!
 //! Only the ink test needs `egui`'s fonts. Every rectangle in this bay is the
 //! full width of the list, so the rest is arithmetic.

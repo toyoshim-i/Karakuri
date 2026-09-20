@@ -9,22 +9,26 @@
 //! Seven things, and the first two are why this is its own file rather than
 //! more assertions in `tests/transport.rs`:
 //!
-//! 1. Where it is: last in the row, against the row's right padding, with the
-//! health capsule and the frame readout laid out backwards from it. That end of
-//! the row belonged to the capsule until this pill existed, and the two
-//! readings have to be one derivation. 2. That a console nobody told draws no
-//! pill at all, and that the row is then exactly the row it was — which is what
-//! keeps `tests/transport.rs` describing a console with no program behind it.
+//! 1. Where it is: last in the row, against the row's right padding, with
+//!    the health capsule and the frame readout laid out backwards from it.
+//!    That end of the row belonged to the capsule until this pill existed,
+//!    and the two readings have to be one derivation.
+//! 2. That a console nobody told draws no pill at all, and that the row is
+//!    then exactly the row it was — which is what keeps
+//!    `tests/transport.rs` describing a console with no program behind it.
 //! 3. That it clears every boundary's grab, which is every control on this
-//! console's own debt and is never inherited from the control beside it. 4.
-//! What a press on it asks for, at both ends of the toggle — and that the
-//! payload is read off the state the pill was drawn from, so the capsule an
-//! operator is looking at and the operation the press names cannot come apart.
+//!    console's own debt and is never inherited from the control beside it.
+//! 4. What a press on it asks for, at both ends of the toggle — and that
+//!    the payload is read off the state the pill was drawn from, so the
+//!    capsule an operator is looking at and the operation the press names
+//!    cannot come apart.
 //! 5. That it is drawn, in the mock's two treatments and in no third one: a
-//! rectangle is not a drawing, so the mark and the word are read off the frame.
+//!    rectangle is not a drawing, so the mark and the word are read off the
+//!    frame.
 //! 6. That a start files under no id, which is what makes each one a fresh
-//! recording (ADR-0289). 7. The route a window loop actually takes — `claim`,
-//! then the derivation that drew the control, then the operation.
+//!    recording (ADR-0289).
+//! 7. The route a window loop actually takes — `claim`, then the derivation
+//!    that drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the pill is as wide as the word in it — see `common::drawn_once`.

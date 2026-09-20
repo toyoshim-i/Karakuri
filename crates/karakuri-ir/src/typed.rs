@@ -9,12 +9,13 @@
 //! Three things are resolved here that the parser deliberately left open:
 //!
 //! - Names. A bare identifier becomes a local, a param, an attribute, or an
-//! ambient. The parser could not know which — a procedure may declare `param
-//! energy`, so whether `energy` resolves depends on declarations. - Calls.
-//! `Expr::Call` splits into a builtin with its overload chosen and a type
-//! constructor. - Compound assignment. `x += e` is desugared to `x = x + e`
-//! here, so code generation has one case instead of two and the "compound
-//! assignment is for locals only" rule is enforced in exactly one place.
+//!   ambient. The parser could not know which — a procedure may declare `param
+//!   energy`, so whether `energy` resolves depends on declarations.
+//! - Calls. `Expr::Call` splits into a builtin with its overload chosen and a
+//!   type constructor.
+//! - Compound assignment. `x += e` is desugared to `x = x + e` here, so code
+//!   generation has one case instead of two and the "compound assignment is for
+//!   locals only" rule is enforced in exactly one place.
 
 use crate::ast::{
     Ambient, Attr, BinOp, Blend, BlockKind, CapacityDecl, Kind, Lit, Output, Param, SlotTy,
@@ -189,10 +190,10 @@ pub struct Checked {
     /// one:
     ///
     /// - No priming. Cold to Live with no warm-up, because there is no accumulated
-    /// state to warm. - It can be scrubbed. Forward at any rate, held, or
-    /// *backwards* — tape-style transport. An accumulating procedure can only go
-    /// forward one step at a time, and reversing it is not slow but impossible:
-    /// there is no un-integrating a sum.
+    ///   state to warm.
+    /// - It can be scrubbed. Forward at any rate, held, or *backwards* — tape-style
+    ///   transport. An accumulating procedure can only go forward one step at a time,
+    ///   and reversing it is not slow but impossible: there is no un-integrating a sum.
     ///
     /// Necessary for a seek, not sufficient for one. Priming only ever runs forward
     /// from a state the engine already has, so the procedure is all it needs.

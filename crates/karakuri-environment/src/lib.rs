@@ -532,15 +532,15 @@ pub fn accepted_save(
 /// as `<stamp>_<name>`. Two reasons, and the second is the one that decides it.
 ///
 /// 1. Nothing in the sandbox is overwritten. What lands there is an edit
-/// history — the thing an operator goes looking for after a show when a model
-/// has been editing live — and a snapshot a later snapshot can replace is not a
-/// snapshot. ADR-0128's argument does not reach here because its premise does
-/// not: there is no id an operator typed. 2. A directory of snapshots is read
-/// by time. `history.rs` files every kept version under the moment it was
-/// written and the operator's name for it second, and this is the same
-/// directory read the same way. The separator is `_` for that reason: it is the
-/// one a snapshot's own name already uses, and `-` is what
-/// [`history::stamped_id`] appends when it breaks a tie.
+///    history — the thing an operator goes looking for after a show when a model
+///    has been editing live — and a snapshot a later snapshot can replace is not a
+///    snapshot. ADR-0128's argument does not reach here because its premise does
+///    not: there is no id an operator typed.
+/// 2. A directory of snapshots is read by time. `history.rs` files every kept
+///    version under the moment it was written and the operator's name for it second,
+///    and this is the same directory read the same way. The separator is `_` for
+///    that reason: it is the one a snapshot's own name already uses, and `-` is what
+///    [`history::stamped_id`] appends when it breaks a tie.
 ///
 /// The cost is that a model is answered with an id it did not ask for, which
 /// `mcp::checked_id` calls the worse answer where the library is concerned and

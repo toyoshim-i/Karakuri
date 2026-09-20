@@ -16,10 +16,10 @@ use super::super::*;
 /// What the loop owes a request it takes, written where the sender is:
 ///
 /// 1. Perform it where a press of the same operation is performed, and nowhere
-/// else. Not a second route into the deck. 2. Answer once, at the frame it was
-/// performed on — [`Reply::settled`]. Not at the swap: what a *rebuild* made of
-/// an operation that starts one is `swap_outcome`'s answer, as it is for a
-/// written procedure.
+///    else. Not a second route into the deck.
+/// 2. Answer once, at the frame it was performed on — [`Reply::settled`]. Not at
+///    the swap: what a *rebuild* made of an operation that starts one is
+///    `swap_outcome`'s answer, as it is for a written procedure.
 pub struct OperateRequest {
     /// The operation, already through the audit — see [`audited`]. The loop
     /// performs it and does not judge it again.

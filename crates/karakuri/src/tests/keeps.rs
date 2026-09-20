@@ -215,14 +215,15 @@ fn the_feedback_ceiling_and_the_cut_list_are_one_answer_in_two_crates() {
 /// to a record.
 ///
 /// 1. The port is named, because *which surface answered* is the one thing an
-/// operator cannot see from the panel: this program takes the first input there
-/// is (ADR-0220's reason one column along — the instrument has no `--midi-in`),
-/// and a run that took the wrong one of two would look exactly like a run whose
-/// controller is asleep. 2. The map is named, and by its path as well as its
-/// name. `default` under the store and `surface` in the preset library are two
-/// files, and an operator who has just learned one wants to know which is
-/// loaded. 3. No map is a state, with the sentence that tells them what to do
-/// next, and nothing plugged in is not a fault.
+///    operator cannot see from the panel: this program takes the first input there
+///    is (ADR-0220's reason one column along — the instrument has no `--midi-in`),
+///    and a run that took the wrong one of two would look exactly like a run whose
+///    controller is asleep.
+/// 2. The map is named, and by its path as well as its name. `default` under the
+///    store and `surface` in the preset library are two files, and an operator
+///    who has just learned one wants to know which is loaded.
+/// 3. No map is a state, with the sentence that tells them what to do next,
+///    and nothing plugged in is not a fault.
 #[test]
 fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
     let line = surface_line(
@@ -295,12 +296,13 @@ fn the_legend_names_the_port_and_the_map_and_nothing_plugged_in_is_a_state() {
 /// could stand in for it.
 ///
 /// 1. No device at all is not a fault (P-0084): the sentence says `none` is a
-/// state, and says what goes on answering. 2. A device that was named and is
-/// not there is loud (P-0094): the sentence carries the list, so an operator
-/// who picked a cable that has gone is holding the right names rather than an
-/// invitation to go and look. 3. And a refused pick does not take the room
-/// away. Nothing is open in this test, so what is asserted is the half that can
-/// be: the answer says so rather than going quiet.
+///    state, and says what goes on answering.
+/// 2. A device that was named and is not there is loud (P-0094): the sentence
+///    carries the list, so an operator who picked a cable that has gone is holding
+///    the right names rather than an invitation to go and look.
+/// 3. And a refused pick does not take the room away. Nothing is open in this
+///    test, so what is asserted is the half that can be: the answer says so rather
+///    than going quiet.
 #[test]
 fn a_room_with_no_microphone_is_a_state_and_a_named_one_that_is_gone_is_a_refusal() {
     let quiet = unopened(

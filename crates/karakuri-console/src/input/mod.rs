@@ -32,11 +32,12 @@
 //! The boundary gets first refusal.
 //!
 //! 1. A drag in hand keeps its claim, wherever the pointer has wandered to. A
-//! drag is a gesture and not a position: a boundary held against a stop while
-//! the pointer runs on across three bays is the ordinary case, not the odd one,
-//! and a claim re-decided from the pointer each event would hand the middle of
-//! that gesture to `egui`. 2. An open menu keeps the pointer until it is shut —
-//! every point of the console, not only the menu's own card.
+//!    drag is a gesture and not a position: a boundary held against a stop while
+//!    the pointer runs on across three bays is the ordinary case, not the odd one,
+//!    and a claim re-decided from the pointer each event would hand the middle of
+//!    that gesture to `egui`.
+//! 2. An open menu keeps the pointer until it is shut — every point of the
+//!    console, not only the menu's own card.
 //!
 //! This is rule 1 again rather than a second exception to rule 4, and it was
 //! added with the arrangement pill because that is the first control here whose

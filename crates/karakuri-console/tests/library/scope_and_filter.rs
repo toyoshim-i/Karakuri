@@ -341,13 +341,14 @@ fn the_foot_says_which_deck_a_press_would_land_on() {
 ///
 /// # What it asserts
 ///
-/// 1. Nothing painted in the foot carries U+2192, which is the defect itself
-/// and is asserted over every galley rather than over the constant: a character
-/// typed back into the word would fail here. 2. A triangle is painted in the
-/// arrow's box, so the mark did not simply go away — a pill reading `load A`
-/// says nothing about where the letter stands to the word. 3. The box is
-/// between the word and the letter, which is what makes the three one reading
-/// rather than a mark parked at one end.
+/// 1. Nothing painted in the foot carries U+2192, which is the defect
+///    itself and is asserted over every galley rather than over the
+///    constant: a character typed back into the word would fail here.
+/// 2. A triangle is painted in the arrow's box, so the mark did not simply
+///    go away — a pill reading `load A` says nothing about where the letter
+///    stands to the word.
+/// 3. The box is between the word and the letter, which is what makes the
+///    three one reading rather than a mark parked at one end.
 #[test]
 fn the_foots_arrow_is_drawn_rather_than_typed() {
     let (mut view, mut panel) = showing_mock();

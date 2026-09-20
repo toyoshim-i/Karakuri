@@ -19,26 +19,31 @@
 //!
 //! Eight things:
 //!
-//! 1. Where the grip's target is, as the head's own units put it — the strip
-//! `head_pills` reserves for the mark, `GRIP_W + PILL_GAP` wide and hard
-//! against `HEAD_PAD_X`, grown to `PILL_H` about the head's mid-line. 2. That
-//! exactly the heads the mock draws a grip in have one, counted off the
-//! console's own table rather than listed here. 3. That it abuts the capsule
-//! beside it in the same head and never overlaps it, so a press on `solo` is
-//! `solo`'s and a press on the grip is the fold's. 4. What it costs against a
-//! boundary's grab, measured by asking `Layout::hit` at the target's own
-//! corners and stepping down its top edge — never by doing `view::bay_grip`'s
-//! arithmetic a second time. The answer is `program_head`'s 0.75 of a pixel,
-//! which is the same capsule box in the same head. 5. Which regions fold to
-//! their edge, read off the arrangement — the two panes the page names and
-//! nothing else, the centre included: *"folding it is not a thing anybody
-//! wants, and solo is."* 6. That a closed pane keeps a boundary at the window's
-//! edge, and that while it is open there is none — which is the whole of why
-//! this control can exist where ADR-0295's band could not. 7. That a drag
-//! closes the pane and a drag brings it back, through `Panel::press`, `moved`
-//! and `released`, with the reopened pane at its declared minimum and `z` still
-//! holding the width it had. 8. That a press on the grip performs the fold it
-//! names, read back off the layout rather than off the operation.
+//! 1. Where the grip's target is, as the head's own units put it — the
+//!    strip `head_pills` reserves for the mark, `GRIP_W + PILL_GAP` wide
+//!    and hard against `HEAD_PAD_X`, grown to `PILL_H` about the head's
+//!    mid-line.
+//! 2. That exactly the heads the mock draws a grip in have one, counted off
+//!    the console's own table rather than listed here.
+//! 3. That it abuts the capsule beside it in the same head and never
+//!    overlaps it, so a press on `solo` is `solo`'s and a press on the grip
+//!    is the fold's.
+//! 4. What it costs against a boundary's grab, measured by asking
+//!    `Layout::hit` at the target's own corners and stepping down its top
+//!    edge — never by doing `view::bay_grip`'s arithmetic a second time.
+//!    The answer is `program_head`'s 0.75 of a pixel, which is the same
+//!    capsule box in the same head.
+//! 5. Which regions fold to their edge, read off the arrangement — the two
+//!    panes the page names and nothing else, the centre included: *"folding
+//!    it is not a thing anybody wants, and solo is."*
+//! 6. That a closed pane keeps a boundary at the window's edge, and that
+//!    while it is open there is none — which is the whole of why this
+//!    control can exist where ADR-0295's band could not.
+//! 7. That a drag closes the pane and a drag brings it back, through
+//!    `Panel::press`, `moved` and `released`, with the reopened pane at its
+//!    declared minimum and `z` still holding the width it had.
+//! 8. That a press on the grip performs the fold it names, read back off
+//!    the layout rather than off the operation.
 //!
 //! None of it needs a window, a device, a disk or `egui`: neither route is as
 //! wide as a word, which is the one thing that separates these from every other

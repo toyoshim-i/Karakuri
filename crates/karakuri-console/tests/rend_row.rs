@@ -3,19 +3,23 @@
 //!
 //! Seven things:
 //!
-//! 1. Where the row is inside its group — under `.node-head`, and exactly as
-//! tall as `group_h` counted it, so the parameter rows under it start where the
-//! row ends. 2. Where the chips are in it, as `.rend-row`'s own padding and gap
-//! lay them out, each as wide as the name in it. 3. That the chips clear every
-//! boundary's grab, which is the deck head's arithmetic two rows up:
-//! `.rend-row`'s left padding is 12 against a `GRAB` of 6. 4. That a press on a
-//! chip asks for that renderer, by its index in draw order — the numbering a
-//! `select` record uses. 5. That an overdrawn deck's chips are drawn and
-//! claimed by nothing, which is the manual's *"Only where the deck composites"*
-//! answered by a state rather than by a missing row. 6. That a lone renderer is
-//! drawn and not claimed — *"and holds two or more"*, the other half of the
-//! same sentence. 7. That a group the pane had no room to draw is not
-//! pressable, which is `InspectorPane::shown` reaching a control.
+//! 1. Where the row is inside its group — under `.node-head`, and exactly
+//!    as tall as `group_h` counted it, so the parameter rows under it start
+//!    where the row ends.
+//! 2. Where the chips are in it, as `.rend-row`'s own padding and gap lay
+//!    them out, each as wide as the name in it.
+//! 3. That the chips clear every boundary's grab, which is the deck head's
+//!    arithmetic two rows up: `.rend-row`'s left padding is 12 against a
+//!    `GRAB` of 6.
+//! 4. That a press on a chip asks for that renderer, by its index in draw
+//!    order — the numbering a `select` record uses.
+//! 5. That an overdrawn deck's chips are drawn and claimed by nothing,
+//!    which is the manual's *"Only where the deck composites"* answered by
+//!    a state rather than by a missing row.
+//! 6. That a lone renderer is drawn and not claimed — *"and holds two or
+//!    more"*, the other half of the same sentence.
+//! 7. That a group the pane had no room to draw is not pressable, which is
+//!    `InspectorPane::shown` reaching a control.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a chip is as wide as the name in it — see `common::drawn_once`.

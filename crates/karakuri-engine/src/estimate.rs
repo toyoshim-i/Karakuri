@@ -616,8 +616,8 @@ mod tests {
 
     /// A rung far enough under ADR-0245's floor is still refused. The pair here is
     /// the *cheap* one — half and a quarter of the target's height — against
-    /// `speed_lines`' 720-row floor, so the upper rung is at half the target and `1
-    /// - 1/q²` is 3/4: three quarters of the target's fragment cost could be
+    /// `speed_lines`' 720-row floor, so the upper rung is at half the target and
+    /// `1 - 1/q²` is 3/4: three quarters of the target's fragment cost could be
     /// hidden, against an allowance of a quarter.
     ///
     /// This is what [`Unfit::RungBelowFloor`] used to be, and the difference is the

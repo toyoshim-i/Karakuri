@@ -12,16 +12,20 @@
 //! Nine things:
 //!
 //! 1. Where the mark is: one `.half-head` gap after the run, at the same
-//! measure every other `▾` on this console is drawn at — and that the run now
-//! stops short of it rather than over it. 2. That the card offers the decks the
-//! mixer is drawing strips for and no others, which is `View::select`'s refusal
-//! read a fourth time rather than a fourth rule. 3. That a pick emits
-//! `PointPane` naming that pane and the deck the row was on. 4. That the pick
-//! moves that pane and no other pointer — not the deck selection, not the pane
-//! next door, not the Library bay's load target. That is the whole of what this
-//! mark is for. 5. That a deck the mixer draws no strip for is refused rather
-//! than clamped. 6. That one card is down at a time, and that a pick puts it
-//! away. 7. That a console which has not drawn has no mark.
+//!    measure every other `▾` on this console is drawn at — and that the
+//!    run now stops short of it rather than over it.
+//! 2. That the card offers the decks the mixer is drawing strips for and no
+//!    others, which is `View::select`'s refusal read a fourth time rather
+//!    than a fourth rule.
+//! 3. That a pick emits `PointPane` naming that pane and the deck the row
+//!    was on.
+//! 4. That the pick moves that pane and no other pointer — not the deck
+//!    selection, not the pane next door, not the Library bay's load target.
+//!    That is the whole of what this mark is for.
+//! 5. That a deck the mixer draws no strip for is refused rather than
+//!    clamped.
+//! 6. That one card is down at a time, and that a pick puts it away.
+//! 7. That a console which has not drawn has no mark.
 //!
 //! What is not here and cannot be: that `input::claim` gives the panel a press
 //! on the mark and every press while the card is down, and that the window

@@ -260,9 +260,10 @@ fn only_the_two_knobs_in_a_strip_answer_a_grab() {
 ///
 /// Two assertions, and they are not the same one:
 ///
-/// 1. A move to the point the press was made at emits nothing — the value is
-/// where it was. 2. A move of `n` pixels asks for the value `n` pixels away
-/// from where the knob was, not from where the pointer is.
+/// 1. A move to the point the press was made at emits nothing — the value
+///    is where it was.
+/// 2. A move of `n` pixels asks for the value `n` pixels away from where
+///    the knob was, not from where the pointer is.
 #[test]
 fn the_grab_keeps_its_offset_so_the_value_does_not_jump() {
     let (mut panel, ctx) = console();

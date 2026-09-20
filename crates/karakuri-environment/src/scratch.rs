@@ -58,29 +58,30 @@
 //! somebody will re-propose it:
 //!
 //! > Two slots naming one file share it — `watch` documents that as supported,
-//! > and a write through MCP reports the other slots it reached. Copying >
-//! per-slot would quietly end that.
+//! > and a write through MCP reports the other slots it reached. Copying per-slot
+//! > would quietly end that.
 //!
 //! Three things are wrong with it.
 //!
 //! 1. It is circular. The report it defends — *this file is also slot 1* —
-//! exists only to describe the sharing. End the sharing and that sentence is
-//! not made untrue, it is made empty, which is what it should say. What is lost
-//! is a warning about an accident, not something an operator asked for. 2. It
-//! contradicts the naming rule in the same directory. [`place`] has written
-//! `A0-drift.kir` since ADR-0228, whose argument is that
-//! `<store>/scratch/<name>.kir` overwrites what is there, so two decks whose
-//! material shares a name *"would silently become one file — the second load
-//! moving the first deck on its watcher's next poll, with nothing to say why"*.
-//! A copy named after its source alone put that exact failure back into the one
-//! module written to stop it, and a run with `--load-set --watch` used both
-//! rules at once, in one directory. 3. It costs the thing the slots are for.
-//! Four decks opened on one preset are four simulations to be driven apart; one
-//! shared file means the first edit moves all four and no one of them can be
-//! moved alone. In `crates/karakuri` it also meant one save rebuilt four slots,
-//! four candidates entered the Staging lane, and the three that are parked
-//! never reach a verdict — a lane that fills on the first save and stays full
-//! for the rest of the run.
+//!    exists only to describe the sharing. End the sharing and that sentence is
+//!    not made untrue, it is made empty, which is what it should say. What is lost
+//!    is a warning about an accident, not something an operator asked for.
+//! 2. It contradicts the naming rule in the same directory. [`place`] has written
+//!    `A0-drift.kir` since ADR-0228, whose argument is that
+//!    `<store>/scratch/<name>.kir` overwrites what is there, so two decks whose
+//!    material shares a name *"would silently become one file — the second load
+//!    moving the first deck on its watcher's next poll, with nothing to say why"*.
+//!    A copy named after its source alone put that exact failure back into the one
+//!    module written to stop it, and a run with `--load-set --watch` used both
+//!    rules at once, in one directory.
+//! 3. It costs the thing the slots are for.
+//!    Four decks opened on one preset are four simulations to be driven apart; one
+//!    shared file means the first edit moves all four and no one of them can be
+//!    moved alone. In `crates/karakuri` it also meant one save rebuilt four slots,
+//!    four candidates entered the Staging lane, and the three that are parked
+//!    never reach a verdict — a lane that fills on the first save and stays full
+//!    for the rest of the run.
 //!
 //! What survives is the obligation to speak, not the shared file. An operator
 //! who gave one preset to four decks had an edit reach all four, and will

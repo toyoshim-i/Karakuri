@@ -38,32 +38,32 @@ pub(crate) const DT: f32 = karakuri_engine::set::DT;
 /// principles point in different directions across them:
 ///
 /// 1. No device at all.
-/// [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
-/// — *a quiet room is not a missing microphone* — and neither is a missing
-/// microphone a fault. Nobody asked for one here: this program opens the
-/// default because that is what an instrument does, and a machine with no input
-/// is a machine where every name goes on answering what it answered before
-/// audio existed and the oscillator free-runs. It is said out loud, once, and
-/// the run continues. Exiting would mean a laptop with its microphone switched
-/// off cannot open the panel at all. 2. A device that was named and is not
-/// there. A different case, and
-/// [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-/// is why: somebody said *that one*, and going quietly on with a different one
-/// — or with none — is the silently wrong picture. It cannot happen *here*,
-/// because nothing names an input at launch; it happens at the pill, where the
-/// list an operator picked from was read at the press and a device can have
-/// gone away since. [`attached`] is that case and it is loud there. Loud and
-/// not fatal, which is where this program parts from `karakuri-cli`: a window
-/// with a set on it must not close because an interface was unplugged, and the
-/// operator is standing in front of the refusal. 3. A device that goes away
-/// mid-set. Nothing here notices, deliberately, and that *is* the answer:
-/// `karakuri-audio`'s `staleness` takes the confidence of both the signals and
-/// the tempo estimate to zero over half a second, every bound parameter is
-/// handed back to the value it had, and the grid free-runs from wherever it
-/// was. A watchdog that re-opened the stream would be a second answer to a
-/// question that already has one, and it would re-lock the grid to a room in
-/// the middle of a set. What an operator does about it is pick again on the
-/// pill.
+///    [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
+///    — *a quiet room is not a missing microphone* — and neither is a missing
+///    microphone a fault. Nobody asked for one here: this program opens the
+///    default because that is what an instrument does, and a machine with no input
+///    is a machine where every name goes on answering what it answered before
+///    audio existed and the oscillator free-runs. It is said out loud, once, and
+///    the run continues. Exiting would mean a laptop with its microphone switched
+///    off cannot open the panel at all.
+/// 2. A device that was named and is not there. A different case, and
+///    [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
+///    is why: somebody said *that one*, and going quietly on with a different one
+///    — or with none — is the silently wrong picture. It cannot happen *here*,
+///    because nothing names an input at launch; it happens at the pill, where the
+///    list an operator picked from was read at the press and a device can have
+///    gone away since. [`attached`] is that case and it is loud there. Loud and
+///    not fatal, which is where this program parts from `karakuri-cli`: a window
+///    with a set on it must not close because an interface was unplugged, and the
+///    operator is standing in front of the refusal.
+/// 3. A device that goes away mid-set. Nothing here notices, deliberately, and
+///    that *is* the answer: `karakuri-audio`'s `staleness` takes the confidence of
+///    both the signals and the tempo estimate to zero over half a second, every
+///    bound parameter is handed back to the value it had, and the grid free-runs
+///    from wherever it was. A watchdog that re-opened the stream would be a second
+///    answer to a question that already has one, and it would re-lock the grid to a
+///    room in the middle of a set. What an operator does about it is pick again on
+///    the pill.
 ///
 /// A free function rather than a step of `resumed`, for the reason
 /// [`sources_from`] is one: `resumed` cannot be called from a test, and a
@@ -142,19 +142,20 @@ pub(crate) fn unopened(selector: &str, why: &audio::AudioError) -> String {
 /// microphone's three:
 ///
 /// 1. Nothing plugged in, which is most machines and is a state rather than a
-/// fault. Nobody named a port: this program takes whatever is there because
-/// that is what an instrument does, and a run with no surface is a run played
-/// with the pointer and the keyboard, which is every run this program has had
-/// until now. Said out loud, once. 2. A port that is there and will not open —
-/// taken by another program, usually. Said in the port's own words, and the run
-/// continues: a window with a set on it must not fail to start because
-/// something else has the controller. 3. A port that goes away mid-set. Nothing
-/// here notices, deliberately. `midir` holds the connection and a device
-/// unplugged stops sending; every control on this panel is still under the
-/// pointer and under a key, and nothing on the deck moves on its own. What an
-/// operator does about it is plug it back in and restart, which is what the
-/// legend says — there is no pill to re-open one, because the transport row's
-/// `map` is one of the two controls the mock draws and this console does not.
+///    fault. Nobody named a port: this program takes whatever is there because
+///    that is what an instrument does, and a run with no surface is a run played
+///    with the pointer and the keyboard, which is every run this program has had
+///    until now. Said out loud, once.
+/// 2. A port that is there and will not open — taken by another program, usually.
+///    Said in the port's own words, and the run continues: a window with a set on
+///    it must not fail to start because something else has the controller.
+/// 3. A port that goes away mid-set. Nothing here notices, deliberately. `midir`
+///    holds the connection and a device unplugged stops sending; every control
+///    on this panel is still under the pointer and under a key, and nothing on
+///    the deck moves on its own. What an operator does about it is plug it back in
+///    and restart, which is what the legend says — there is no pill to re-open one,
+///    because the transport row's `map` is one of the two controls the mock
+///    draws and this console does not.
 ///
 /// Which port is the first one there is, and it is not a flag. `karakuri-cli`
 /// is told with `--midi-in` and refuses the run without the one it was told;

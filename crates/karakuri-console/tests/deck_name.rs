@@ -9,25 +9,30 @@
 //!
 //! Nine things:
 //!
-//! 1. Where the run sits, as `.half-head`'s flex row lays it out — after the
-//! label, one gap along, aligned with the capsule at the other end. 2. That it
-//! clears every boundary's grab, which is `keep_pill.rs`' arithmetic at the
-//! other end of the same row: the capsule's nearest boundary is the pane
-//! divider on its right, and this one's is the divider on its left. 3. Where
-//! the `▾` boundary is. The mock's chevron means *point this pane at another
-//! deck* and is not a control this console has. The name target stops at the
-//! run's own ink and the chevron's rectangle is reserved beside it, so the day
-//! the chooser lands it takes that place rather than taking it back. 4. That
-//! the run never reaches the `keep` capsule. 5. That a press opens the field in
-//! that head and in no other, and that one head asks at a time. 6. That the
-//! commit is `SaveSet { deck, id: Some(typed) }` for the deck that head is
-//! showing — and that the capsule beside it still files under a stamp, which is
-//! ADR-0287 surviving as the unnamed route. 7. That escape leaves the deck
-//! alone, and that a half-typed name is not kept for next time. 8. That a head
-//! with no room for the run draws none, and that a console that has not drawn
-//! has none — `keep_pill.rs`' two guards, on a readout instead of on a capsule.
-//! 9. That the field is *painted*: the label reads `keep as` and the run reads
-//! what was typed with the caret after it.
+//! 1. Where the run sits, as `.half-head`'s flex row lays it out — after
+//!    the label, one gap along, aligned with the capsule at the other end.
+//! 2. That it clears every boundary's grab, which is `keep_pill.rs`'
+//!    arithmetic at the other end of the same row: the capsule's nearest
+//!    boundary is the pane divider on its right, and this one's is the
+//!    divider on its left.
+//! 3. Where the `▾` boundary is. The mock's chevron means *point this pane
+//!    at another deck* and is not a control this console has. The name
+//!    target stops at the run's own ink and the chevron's rectangle is
+//!    reserved beside it, so the day the chooser lands it takes that place
+//!    rather than taking it back.
+//! 4. That the run never reaches the `keep` capsule.
+//! 5. That a press opens the field in that head and in no other, and that
+//!    one head asks at a time.
+//! 6. That the commit is `SaveSet { deck, id: Some(typed) }` for the deck
+//!    that head is showing — and that the capsule beside it still files
+//!    under a stamp, which is ADR-0287 surviving as the unnamed route.
+//! 7. That escape leaves the deck alone, and that a half-typed name is not
+//!    kept for next time.
+//! 8. That a head with no room for the run draws none, and that a console
+//!    that has not drawn has none — `keep_pill.rs`' two guards, on a
+//!    readout instead of on a capsule.
+//! 9. That the field is *painted*: the label reads `keep as` and the run
+//!    reads what was typed with the caret after it.
 //!
 //! What is not here and cannot be: that `input::claim` gives the panel a press
 //! on the run, and that the keyboard reaches `View::type_into_name` while a

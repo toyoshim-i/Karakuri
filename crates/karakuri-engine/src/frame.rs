@@ -950,18 +950,19 @@ proc clock_probe {
         /// sinks. Three things have to hold for that to be worth anything, and each
         /// fails a different way.
         ///
-        /// - It runs, or the panel is never drawn. - It runs after every sink was drawn
-        /// into. A panel recorded before the present pass samples a picture nothing has
-        /// written yet, and that is not an error anywhere — an unwritten texture is
-        /// transparent and `egui` blends premultiplied, so what an operator gets is the
-        /// bay's card showing through. So the order is read off the texels the closure
-        /// copies out rather than off a call count: the canvas is already there when it
-        /// records. - It is handed the frame's own encoder. An encoder of `compose`'s
-        /// own would be a second command buffer over a texture the first one is still
-        /// writing, whose order is the queue's business rather than the caller's —
-        /// which is ADR-0166's whole subject and is the failure that would look correct
-        /// here. The address is what says so; pixels cannot, because two submissions in
-        /// the right order produce the right pixels.
+        /// - It runs, or the panel is never drawn.
+        /// - It runs after every sink was drawn into. A panel recorded before the
+        ///   present pass samples a picture nothing has written yet, and that is not
+        ///   an error anywhere — an unwritten texture is transparent and `egui`
+        ///   blends premultiplied, so what an operator gets is the bay's card showing
+        ///   through. So the order is read off the texels the closure copies out
+        ///   rather than off a call count: the canvas is already there when it records.
+        /// - It is handed the frame's own encoder. An encoder of `compose`'s own would
+        ///   be a second command buffer over a texture the first one is still writing,
+        ///   whose order is the queue's business rather than the caller's — which is
+        ///   ADR-0166's whole subject and is the failure that would look correct here.
+        ///   The address is what says so; pixels cannot, because two submissions in
+        ///   the right order produce the right pixels.
         #[test]
         fn finally_is_recorded_after_every_sink_into_the_frames_own_encoder() {
             let gpu = Gpu::headless().expect("no GPU");

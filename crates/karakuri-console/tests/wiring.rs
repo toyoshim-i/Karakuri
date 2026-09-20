@@ -5,19 +5,25 @@
 //! Eight things:
 //!
 //! 1. Where a `uses` line sits — under the node head and above that node's
-//! rows, which is the offset every row below it has to carry. 2. That the
-//! capsule is claimed and the card is not down until it is pressed. 3. That a
-//! pick names the deck, the node, the procedure's own word for the input, and
-//! the node that was picked. 4. That a line with nothing to offer opens no
-//! card, which is the inert scrub's arrangement two rows up: a deck holding one
-//! node of the kind an input takes has no candidate, because the node already
-//! wired is not in its own list. 5. That the publish mark is the row's leftmost
-//! cell in both of its states. 6. That a press on a published row asks for the
-//! interface less that control, in interface order — the order being the point,
-//! since a wildcard row is drawn in one group and numbered somewhere else
-//! entirely. 7. That a press on an unpublished row asks for the interface with
-//! it on the end. 8. That an unpublished row draws no fader, which is what
-//! publishing decides: the row is a mark and a name.
+//!    rows, which is the offset every row below it has to carry.
+//! 2. That the capsule is claimed and the card is not down until it is
+//!    pressed.
+//! 3. That a pick names the deck, the node, the procedure's own word for
+//!    the input, and the node that was picked.
+//! 4. That a line with nothing to offer opens no card, which is the inert
+//!    scrub's arrangement two rows up: a deck holding one node of the kind
+//!    an input takes has no candidate, because the node already wired is
+//!    not in its own list.
+//! 5. That the publish mark is the row's leftmost cell in both of its
+//!    states.
+//! 6. That a press on a published row asks for the interface less that
+//!    control, in interface order — the order being the point, since a
+//!    wildcard row is drawn in one group and numbered somewhere else
+//!    entirely.
+//! 7. That a press on an unpublished row asks for the interface with it on
+//!    the end.
+//! 8. That an unpublished row draws no fader, which is what publishing
+//!    decides: the row is a mark and a name.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a `uses` capsule is as wide as the node name in it.

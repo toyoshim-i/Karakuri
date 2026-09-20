@@ -215,21 +215,21 @@ pub(crate) fn save_set(
 /// `layer`, `index`), a Set id, and a content hash:
 ///
 /// - A hash is what the card is filed under and it is the one to reject,
-/// easiest though it is. Nothing in this protocol has ever handed a model a
-/// hash, so the first call could not be made — a tool whose argument only this
-/// tool's own output can supply is a tool nobody can start using. It is also
-/// the *only* one of the three that needs no validation, being hex and 64
-/// characters, and choosing an argument for the convenience of its validation
-/// is choosing the wrong argument. - `(slot, layer, index)` names what is on
-/// screen, whose source a model can already fetch with `read_procedure` and
-/// read the declarations off directly. It would answer a question that is
-/// already answerable. - A Set id names material this surface is otherwise
-/// blind to. A saved Set that has not been loaded has no file behind it that
-/// `read_procedure` can reach — its sources are bytes in the store under hashes
-/// nothing shows — so *"which of these saved things should I use"* is
-/// unanswerable without this. `save_set` comes back naming the id it wrote, and
-/// `--load-set ID` is spelled with one, so a model that has kept anything has
-/// one in hand.
+///   easiest though it is. Nothing in this protocol has ever handed a model a
+///   hash, so the first call could not be made — a tool whose argument only this
+///   tool's own output can supply is a tool nobody can start using. It is also
+///   the *only* one of the three that needs no validation, being hex and 64
+///   characters, and choosing an argument for the convenience of its validation
+///   is choosing the wrong argument.
+/// - `(slot, layer, index)` names what is on screen, whose source a model can
+///   already fetch with `read_procedure` and read the declarations off directly.
+///   It would answer a question that is already answerable.
+/// - A Set id names material this surface is otherwise blind to. A saved Set
+///   that has not been loaded has no file behind it that `read_procedure` can
+///   reach — its sources are bytes in the store under hashes nothing shows — so
+///   *"which of these saved things should I use"* is unanswerable without this.
+///   `save_set` comes back naming the id it wrote, and `--load-set ID` is spelled
+///   with one, so a model that has kept anything has one in hand.
 ///
 /// What this does not say is what the Set has those knobs turned to. The file
 /// read here carries `param` and `capacity` records beside the `slot`s and they

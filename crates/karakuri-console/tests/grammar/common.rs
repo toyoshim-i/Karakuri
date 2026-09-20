@@ -16,24 +16,28 @@
 //!
 //! Eight claims:
 //!
-//! 1. A digit names the nth thing one level below the address and `0` the head,
-//! counting what the bay drew from one. 2. Naming a strip is the deck
-//! selection, which is why that row keeps a key badge rather than losing one —
-//! and it goes through `View::select`, so a deck the mixer draws no strip for
-//! is refused and the address does not descend. 3. The arrows take the
-//! neighbour along the axis the bay draws its items on, and the next value of a
-//! level along the other. The Sequencer is where both axes are used at once —
-//! its lanes are a column and a lane's cells are a row — and that is the axis
-//! check ADR-0333 left with nothing holding it. 4. `space` is the addressed
-//! thing's next state, and it is the same cycle the chip walks — asked of the
-//! same functions rather than restated. 5. `space` on a bay is the fold, in
-//! every one of the nine, and a folded bay answers it and nothing else. 6.
-//! `enter` is the act the addressed thing is for, and it declines in a bay
-//! whose items perform nothing. 7. The address is a path, which the Inspector
-//! is what proves: three rungs, and the third is reached by a digit through a
-//! rung that is not a control. 8. A refusal says why. A key that declines and a
-//! key that is not bound are the same experience, so every `Nothing` carries a
-//! sentence.
+//! 1. A digit names the nth thing one level below the address and `0` the
+//!    head, counting what the bay drew from one.
+//! 2. Naming a strip is the deck selection, which is why that row keeps a
+//!    key badge rather than losing one — and it goes through
+//!    `View::select`, so a deck the mixer draws no strip for is refused and
+//!    the address does not descend.
+//! 3. The arrows take the neighbour along the axis the bay draws its items
+//!    on, and the next value of a level along the other. The Sequencer is
+//!    where both axes are used at once — its lanes are a column and a
+//!    lane's cells are a row — and that is the axis check ADR-0333 left
+//!    with nothing holding it.
+//! 4. `space` is the addressed thing's next state, and it is the same cycle
+//!    the chip walks — asked of the same functions rather than restated.
+//! 5. `space` on a bay is the fold, in every one of the nine, and a folded
+//!    bay answers it and nothing else.
+//! 6. `enter` is the act the addressed thing is for, and it declines in a
+//!    bay whose items perform nothing.
+//! 7. The address is a path, which the Inspector is what proves: three
+//!    rungs, and the third is reached by a digit through a rung that is not
+//!    a control.
+//! 8. A refusal says why. A key that declines and a key that is not bound
+//!    are the same experience, so every `Nothing` carries a sentence.
 //!
 //! No device and no `egui` pass. A press is a walk of a path.
 

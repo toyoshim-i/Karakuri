@@ -17,14 +17,15 @@
 //! and what it may not take away:
 //!
 //! 1. The count. What a parked panel asks for over one period, before and
-//! after, counted rather than described. 2. What was dropped. Every frame that
-//! is no longer asked for would have drawn the chip in the position it was
-//! already in — asserted off the curve, so it is a claim about the picture and
-//! not about the schedule. 3. What may not be dropped. The beat keeps its rate
-//! at every phase of the roll, which is
-//! [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
-//! a panel that stopped moving because nothing had *changed* is exactly the
-//! console that has gone quiet.
+//!    after, counted rather than described.
+//! 2. What was dropped. Every frame that is no longer asked for would have
+//!    drawn the chip in the position it was already in — asserted off the
+//!    curve, so it is a claim about the picture and not about the schedule.
+//! 3. What may not be dropped. The beat keeps its rate at every phase of
+//!    the roll, which is
+//!    [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md):
+//!    a panel that stopped moving because nothing had *changed* is exactly the
+//!    console that has gone quiet.
 //!
 //! Nothing here needs a window, a device or a clock. The phase is a value the
 //! test chooses, which is what ADR-0190 made it for.

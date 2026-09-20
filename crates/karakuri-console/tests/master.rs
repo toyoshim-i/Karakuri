@@ -5,19 +5,23 @@
 //! few more assertions in `fader.rs`:
 //!
 //! 1. Where the row is, measured off the bay's own rectangle — the mock's
-//! `.master-body` padding under the bay head, and `.master-row`'s three items
-//! across it. 2. That the knob clears every boundary's grab at both ends of its
-//! travel, which is `tests/outputs.rs`'s arithmetic over a control that
-//! *moves*: a knob at 0.00 and a knob at 1.00 are two rectangles, and the one
-//! nearest a boundary is not the same one at both. 3. That the figure's box
-//! holds every reading and does not move, which is what stops the knob walking
-//! away from the hand dragging it — and that the knob itself does move, which
-//! is the only thing here that should. 4. That the knob is the target and the
-//! track is not — `Mixer::grab`'s rule, and deliberately not the exposure
-//! track's. 5. What a drag asks for: `SetMasterOut`, exactly at both ends, and
-//! naming no deck. 6. That a console with no engine behind it draws no row and
-//! claims no press. 7. The route a window loop actually takes — `claim`, then
-//! the derivation that drew the control, then the operation, then the release.
+//!    `.master-body` padding under the bay head, and `.master-row`'s three
+//!    items across it.
+//! 2. That the knob clears every boundary's grab at both ends of its
+//!    travel, which is `tests/outputs.rs`'s arithmetic over a control that
+//!    *moves*: a knob at 0.00 and a knob at 1.00 are two rectangles, and
+//!    the one nearest a boundary is not the same one at both.
+//! 3. That the figure's box holds every reading and does not move, which is
+//!    what stops the knob walking away from the hand dragging it — and that
+//!    the knob itself does move, which is the only thing here that should.
+//! 4. That the knob is the target and the track is not — `Mixer::grab`'s
+//!    rule, and deliberately not the exposure track's.
+//! 5. What a drag asks for: `SetMasterOut`, exactly at both ends, and
+//!    naming no deck.
+//! 6. That a console with no engine behind it draws no row and claims no
+//!    press.
+//! 7. The route a window loop actually takes — `claim`, then the derivation
+//!    that drew the control, then the operation, then the release.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the figure's box is as wide as the widest reading it can hold — see

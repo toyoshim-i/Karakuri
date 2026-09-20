@@ -568,24 +568,25 @@ pub(crate) fn drawn_once() -> egui::Context {
 /// # What it asserts, in the order an operator's afternoon goes
 ///
 /// 1. `SetGain` is in the mix-fader class, which is the classification ADR-0235
-/// drew — asserted against `standing` rather than assumed, so that a row moved
-/// out of the class fails here rather than making this test quietly vacuous. 2.
-/// On a run nobody has touched it is refused, and the sentence is
-/// `gate::refusal`'s own by equality — P-0090, *a refusal a person can reach
-/// from two surfaces is one sentence*, asserted against the function rather
-/// than with a `contains`. It names the Mixer bay, because a model that is told
-/// only *no* reports the instrument as incapable instead of as closed. 3. A
-/// press on the Mixer bay's pill — through `Readout::pointer`, which is the
-/// same routing a hand goes through, and not by calling `set` here — opens the
-/// class. 4. The same call, the same audit, now allowed. Nothing about the
-/// operation changed and nothing about the vocabulary changed; the list a model
-/// reads never shortened at any point. 5. And exactly that class. The other
-/// three are still shut and an operation in one of them is still refused, which
-/// is the property the console's own
-/// `a_press_opens_exactly_one_class_and_leaves_the_other_three_shut` makes
-/// about the value and this one makes about the run. 6. A second press shuts
-/// it, and the call is refused again — the other half of the page's *"click
-/// again to shut it"*, seen from the gate.
+///    drew — asserted against `standing` rather than assumed, so that a row moved
+///    out of the class fails here rather than making this test quietly vacuous.
+/// 2. On a run nobody has touched it is refused, and the sentence is
+///    `gate::refusal`'s own by equality — P-0090, *a refusal a person can reach
+///    from two surfaces is one sentence*, asserted against the function rather
+///    than with a `contains`. It names the Mixer bay, because a model that is told
+///    only *no* reports the instrument as incapable instead of as closed.
+/// 3. A press on the Mixer bay's pill — through `Readout::pointer`, which is the
+///    same routing a hand goes through, and not by calling `set` here — opens the
+///    class.
+/// 4. The same call, the same audit, now allowed. Nothing about the
+///    operation changed and nothing about the vocabulary changed; the list a model
+///    reads never shortened at any point.
+/// 5. And exactly that class. The other three are still shut and an operation in
+///    one of them is still refused, which is the property the console's own
+///    `a_press_opens_exactly_one_class_and_leaves_the_other_three_shut` makes
+///    about the value and this one makes about the run.
+/// 6. A second press shuts it, and the call is refused again — the other half of
+///    the page's *"click again to shut it"*, seen from the gate.
 #[test]
 fn the_gate_lets_a_refused_operation_through_once_the_class_is_open() {
     use karakuri_operation::gate::{audit, refusal, standing, Running, Standing};
@@ -724,15 +725,16 @@ fn each_of_the_four_pills_opens_its_own_class_through_a_press() {
 /// a plainer reading would get wrong:
 ///
 /// 1. One control per key. `exposure` is declared by two nodes here, exactly as
-/// it is in the mock's own reading, and it is one row. 2. Over the part of the
-/// range both of them accept, which is `Set::published`'s intersection done off
-/// the cards: `[0, 1]` and `[0.2, 0.8]` is one control over `[0.2, 0.8]`. 3. A
-/// node with no card is counted and not skipped in silence, which is the foot's
-/// `n without a card` and the one thing that keeps a knob missing for want of a
-/// card from being a knob missing. 4. Nothing was compiled. The artifacts here
-/// are not `.kir` at all — they are three bytes each — so a reading that
-/// fetched and checked a source could not have answered at all, which is the
-/// strongest form this claim can be put in.
+///    it is in the mock's own reading, and it is one row.
+/// 2. Over the part of the range both of them accept, which is
+///    `Set::published`'s intersection done off the cards: `[0, 1]` and `[0.2, 0.8]`
+///    is one control over `[0.2, 0.8]`.
+/// 3. A node with no card is counted and not skipped in silence, which is the
+///    foot's `n without a card` and the one thing that keeps a knob missing for
+///    want of a card from being a knob missing.
+/// 4. Nothing was compiled. The artifacts here are not `.kir` at all — they are
+///    three bytes each — so a reading that fetched and checked a source could
+///    not have answered at all, which is the strongest form this claim can be put in.
 ///
 /// A CPU test: a store is a directory and no adapter is opened.
 #[test]
