@@ -159,6 +159,8 @@ fn tooltip_card_layout_job_builds_structured_sections() {
     let job = build_tooltip_job(tempo_idx, words, Some("cc 14"), &pal);
 
     let text = &job.text;
+    // Eyebrow should contain domain tag
+    assert!(text.contains("TRANSPORT"));
     // Header should contain operation title
     assert!(text.contains("Set the free-run tempo"));
     // Body should contain the prose specification

@@ -7,8 +7,12 @@ pub struct ControlDescriptor {
     pub id: ControlId,
     /// The name of the probe in `PROBES` that hit-tests this control.
     pub probe_name: &'static str,
+    /// Eyebrow category tag (e.g. "TRANSPORT", "MIXER", "INSPECTOR").
+    pub eyebrow: &'static str,
     /// Human-readable label / description.
     pub label: &'static str,
+    /// Optional crisp one-line summary of control function.
+    pub summary: Option<&'static str>,
     /// Optional default keyboard shortcut (e.g. "g", "z", "r", "k", "b", "tab", "esc").
     pub hotkey: Option<&'static str>,
     /// Bound operation name if applicable.

@@ -6,7 +6,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::OutputsSink,
         probe_name: ControlId::OutputsSink.probe_name(),
+        eyebrow: "OUTPUTS",
         label: "Outputs row sinks",
+        summary: Some("Switch active video output destinations"),
         hotkey: None,
         operation_title: Some("Route outputs"),
         action: Some("Click to toggle"),
@@ -15,7 +17,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::AudioIn,
         probe_name: ControlId::AudioIn.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Audio-in pill",
+        summary: Some("Select audio input device for tempo tracking"),
         hotkey: None,
         operation_title: Some("Attach a beat source"),
         action: Some("Click to select"),
@@ -24,7 +28,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::Tracker,
         probe_name: ControlId::Tracker.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Tracker group",
+        summary: Some("Tap tempo and clock phase adjustments"),
         hotkey: Some("b"),
         operation_title: Some("Tap the beat"),
         action: Some("Click / Tap"),
@@ -33,7 +39,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::TransportLearn,
         probe_name: ControlId::TransportLearn.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Transport learn pill",
+        summary: Some("Arm MIDI learn mode for live parameter mapping"),
         hotkey: None,
         operation_title: None,
         action: Some("Click to arm"),
@@ -42,7 +50,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::TransportMap,
         probe_name: ControlId::TransportMap.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Transport map pill",
+        summary: Some("Active hardware MIDI controller mapping profile"),
         hotkey: None,
         operation_title: None,
         action: Some("Click to open"),
@@ -51,7 +61,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::Arrangement,
         probe_name: ControlId::Arrangement.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Arrangement pill",
+        summary: Some("Console panel layout and arrangement preset"),
         hotkey: Some("r"),
         operation_title: Some("Reset the arrangement"),
         action: Some("Click to reset"),
@@ -60,7 +72,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::Look,
         probe_name: ControlId::Look.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Look group",
+        summary: Some("Master tone mapping operator and exposure trim"),
         hotkey: None,
         operation_title: Some("Tone map"),
         action: Some("Click to cycle"),
@@ -69,7 +83,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::TransportRec,
         probe_name: ControlId::TransportRec.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Transport rec pill",
+        summary: Some("Live session journal recording toggle"),
         hotkey: None,
         operation_title: Some("Record session"),
         action: Some("Click to record"),
@@ -78,7 +94,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::TransportTempo,
         probe_name: ControlId::TransportTempo.probe_name(),
+        eyebrow: "TRANSPORT",
         label: "Transport tempo figure",
+        summary: Some("Master beat clock tempo and tracking grid"),
         hotkey: None,
         operation_title: Some("Set the free-run tempo"),
         action: Some("Click or Drag"),
@@ -87,7 +105,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::MixerStrip,
         probe_name: ControlId::MixerStrip.probe_name(),
+        eyebrow: "MIXER",
         label: "Mixer strip",
+        summary: Some("Channel strip fader, solo, mute, and deck selection"),
         hotkey: None,
         operation_title: Some("Select a deck"),
         action: Some("Click to select"),
@@ -96,7 +116,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::Transition,
         probe_name: ControlId::Transition.probe_name(),
+        eyebrow: "MIXER",
         label: "Transition row",
+        summary: Some("Crossfader, transition geometry, and auto-wipe trigger"),
         hotkey: Some("space"),
         operation_title: Some("Wipe the next deck in"),
         action: Some("Click to wipe"),
@@ -105,7 +127,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::Master,
         probe_name: ControlId::Master.probe_name(),
+        eyebrow: "MASTER",
         label: "Master bay",
+        summary: Some("Master output attenuation and master FX chain slots"),
         hotkey: None,
         operation_title: Some("Master out"),
         action: Some("Drag fader"),
@@ -114,7 +138,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorPaneName,
         probe_name: ControlId::InspectorPaneName.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Inspector pane name",
+        summary: Some("Rename active Set in the selected deck"),
         hotkey: None,
         operation_title: None,
         action: Some("Click to rename"),
@@ -123,7 +149,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorPaneKeep,
         probe_name: ControlId::InspectorPaneKeep.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Inspector pane keep capsule",
+        summary: Some("Snapshot and save active deck Set to store"),
         hotkey: Some("k"),
         operation_title: Some("Keep what a deck is playing"),
         action: Some("Click to save"),
@@ -132,7 +160,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorSlotMcp,
         probe_name: ControlId::InspectorSlotMcp.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Inspector pane slot MCP policy",
+        summary: Some("Agent mutation policy for this deck slot"),
         hotkey: None,
         operation_title: None,
         action: Some("Click to toggle"),
@@ -141,7 +171,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorPaneTarget,
         probe_name: ControlId::InspectorPaneTarget.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Inspector pane deck pulldown",
+        summary: Some("Select which deck this Inspector pane displays"),
         hotkey: None,
         operation_title: Some("Point an Inspector pane at a deck"),
         action: Some("Click to switch"),
@@ -150,7 +182,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorDeckHead,
         probe_name: ControlId::InspectorDeckHead.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Deck head controls",
+        summary: Some("Deck sync mode and transport phase alignment"),
         hotkey: None,
         operation_title: Some("Set a deck's sync mode"),
         action: Some("Click to cycle"),
@@ -159,7 +193,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorRenderers,
         probe_name: ControlId::InspectorRenderers.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Renderer chips",
+        summary: Some("Select active base renderer procedure"),
         hotkey: None,
         operation_title: Some("Choose which renderer of a deck is live"),
         action: Some("Click to choose"),
@@ -168,7 +204,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorParam,
         probe_name: ControlId::InspectorParam.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Parameter row fader",
+        summary: Some("Adjust published procedural parameter value"),
         hotkey: None,
         operation_title: Some("Write a parameter"),
         action: Some("Drag fader"),
@@ -177,7 +215,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorPublish,
         probe_name: ControlId::InspectorPublish.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Parameter row publish mark",
+        summary: Some("Toggle publication mark on mixer interface"),
         hotkey: None,
         operation_title: Some("Narrow the published interface"),
         action: Some("Click to toggle"),
@@ -186,7 +226,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorUses,
         probe_name: ControlId::InspectorUses.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Node uses capsule and card",
+        summary: Some("Inspect procedure input dependency wiring"),
         hotkey: None,
         operation_title: Some("Wire a procedure's input to a node"),
         action: Some("Click to wire"),
@@ -195,7 +237,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorAuthority,
         probe_name: ControlId::InspectorAuthority.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Node authority chips",
+        summary: Some("Control arbitration authority for this node"),
         hotkey: None,
         operation_title: Some("Set a node's authority"),
         action: Some("Click to set"),
@@ -204,7 +248,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorNodeKeep,
         probe_name: ControlId::InspectorNodeKeep.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Node keep capsule",
+        summary: Some("Save individual node procedure to library"),
         hotkey: None,
         operation_title: Some("Keep a node's procedure"),
         action: Some("Click to save"),
@@ -213,7 +259,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::InspectorSensitivity,
         probe_name: ControlId::InspectorSensitivity.probe_name(),
+        eyebrow: "INSPECTOR",
         label: "Sensitivity curve and take back",
+        summary: Some("Input sensitivity curve and parameter take-back"),
         hotkey: None,
         operation_title: Some("Take a parameter back"),
         action: Some("Click or Drag"),
@@ -222,7 +270,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::ProgramSolo,
         probe_name: ControlId::ProgramSolo.probe_name(),
+        eyebrow: "PROGRAM",
         label: "Program bay solo capsule",
+        summary: Some("Toggle borderless fullscreen program view"),
         hotkey: None,
         operation_title: Some("Solo the program view"),
         action: Some("Click to solo"),
@@ -231,7 +281,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::BayGrip,
         probe_name: ControlId::BayGrip.probe_name(),
+        eyebrow: "CONSOLE",
         label: "Bay head fold grip",
+        summary: Some("Fold or expand console workspace bay"),
         hotkey: Some("g"),
         operation_title: Some("Fold a pane away"),
         action: Some("Click to fold"),
@@ -240,7 +292,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::DeckPreview,
         probe_name: ControlId::DeckPreview.probe_name(),
+        eyebrow: "PROGRAM",
         label: "Deck preview cells",
+        summary: Some("Select deck and monitor pre-fader video signal"),
         hotkey: None,
         operation_title: Some("Select a deck"),
         action: Some("Click to select"),
@@ -249,7 +303,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryScope,
         probe_name: ControlId::LibraryScope.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library scope chips",
+        summary: Some("Filter library items by scope and directory"),
         hotkey: None,
         operation_title: Some("Choose which scope the library shows"),
         action: Some("Click to choose"),
@@ -258,7 +314,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryFilter,
         probe_name: ControlId::LibraryFilter.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library filter fields",
+        summary: Some("Filter library items by node name or text query"),
         hotkey: None,
         operation_title: Some("Filter the library"),
         action: Some("Type to filter"),
@@ -267,7 +325,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryKinds,
         probe_name: ControlId::LibraryKinds.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library kind chips",
+        summary: Some("Filter library items by procedure kind"),
         hotkey: None,
         operation_title: Some("Filter the library by kind"),
         action: Some("Click to filter"),
@@ -276,7 +336,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryBadges,
         probe_name: ControlId::LibraryBadges.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library row badges",
+        summary: Some("Display procedure kind badges for library item"),
         hotkey: None,
         operation_title: None,
         action: Some("Click to view"),
@@ -285,7 +347,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryParams,
         probe_name: ControlId::LibraryParams.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library params chip",
+        summary: Some("Toggle display of declared Set parameters"),
         hotkey: None,
         operation_title: Some("Read what one Set holds and declares"),
         action: Some("Click to inspect"),
@@ -294,7 +358,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryLoad,
         probe_name: ControlId::LibraryLoad.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library load button and deck pulldown",
+        summary: Some("Load selected Set into target deck"),
         hotkey: Some("enter"),
         operation_title: Some("Load material into a deck"),
         action: Some("Click or Drop"),
@@ -303,7 +369,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryStars,
         probe_name: ControlId::LibraryStars.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library row stars",
+        summary: Some("Toggle favourite star marker on library Set"),
         hotkey: None,
         operation_title: Some("Star a Set, or take the star off"),
         action: Some("Click to star"),
@@ -312,7 +380,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::LibraryList,
         probe_name: ControlId::LibraryList.probe_name(),
+        eyebrow: "LIBRARY",
         label: "Library list rows",
+        summary: Some("Browse available Sets and procedures in store"),
         hotkey: None,
         operation_title: Some("List what the store holds"),
         action: Some("Click or Drag"),
@@ -321,7 +391,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::ClassPills,
         probe_name: ControlId::ClassPills.probe_name(),
+        eyebrow: "SECURITY",
         label: "MCP safety class pills",
+        summary: Some("Configure agent safety class execution gates"),
         hotkey: None,
         operation_title: None,
         action: Some("Click to cycle"),
@@ -330,7 +402,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::Sequencer,
         probe_name: ControlId::Sequencer.probe_name(),
+        eyebrow: "SEQUENCER",
         label: "Sequencer bay controls, including a lane's minus",
+        summary: Some("Pattern step grid triggering parameter automation"),
         hotkey: None,
         operation_title: Some("Toggle a step"),
         action: Some("Click to toggle"),
@@ -339,7 +413,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::StagingBack,
         probe_name: ControlId::StagingBack.probe_name(),
+        eyebrow: "STAGING",
         label: "Staging lane back capsules",
+        summary: Some("Discard unpromoted shader candidate"),
         hotkey: None,
         operation_title: Some("Take a candidate back"),
         action: Some("Click to return"),
@@ -348,7 +424,9 @@ pub const DESCRIPTORS: [ControlDescriptor; 39] = [
     ControlDescriptor {
         id: ControlId::StagingCandidate,
         probe_name: ControlId::StagingCandidate.probe_name(),
+        eyebrow: "STAGING",
         label: "Staging lane candidate rows",
+        summary: Some("Promote candidate shader build into live deck"),
         hotkey: None,
         operation_title: Some("Promote a candidate"),
         action: Some("Click to promote"),
