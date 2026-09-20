@@ -119,11 +119,16 @@ Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental p
     - `validate.rs` (517 lines): semantic consistency checks (`validate_args`) and store/session runtime preparation helpers
     - `help.rs` (295 lines): usage strings (`USAGE`), key bindings reference (`BINDINGS`), and exit failure helper (`fail`)
     - `mod.rs` (245 lines): `Args`, `FromSet`, `ParseOutcome` definitions and public API re-exports
-- **P78: `karakuri::src/keymap.rs` (1,714 lines)**:
-  - Decompose into `crates/karakuri/src/keymap/`:
-    - `table.rs`: `KEY_BINDINGS` table definition and documentation cross-checks
-    - `actions.rs`: individual `KeyAction` execution implementations
-    - `mod.rs`: `KeyCtx` and dispatch entry point
+- **P78: `karakuri::src/keymap.rs` (1,714 lines -> `keymap/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri/src/keymap/`:
+    - `table.rs` (177 lines): `KEY_BINDINGS` static binding definitions and action mapping
+    - `actions.rs` (161 lines): individual `KeyAction` execution implementations
+    - `key_column/` (submodule suite, 899 lines total across 4 files under 475 lines each):
+      - `data.rs` (474 lines): operations documentation constants (`PAGE`, `ROWS`, `BAYS`, etc.)
+      - `scanner.rs` (198 lines): HTML specification parser and key badge extractor
+      - `tests.rs` (452 lines): bidirectional consistency test suite between manual and implementation
+      - `mod.rs` (125 lines): module documentation and internal re-exports
+    - `mod.rs` (151 lines): `KeyCtx`, `BoundKey`, `KeyAction`, `KeyBinding` and public dispatch interface
 
 ---
 
