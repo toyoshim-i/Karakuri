@@ -98,12 +98,13 @@ Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental p
     - `expr.rs` (719 lines): expression evaluation, binary/unary operators, literal coercion, swizzling
     - `call.rs` (654 lines): builtin and constructor invocations, texture sampling, slot access
     - `mod.rs` (79 lines): entry point and shared evaluation context, constants, and recovery helpers
-- **P75: `karakuri-console::src/input.rs` (1,903 lines)**:
-  - Decompose into `crates/karakuri-console/src/input/`:
-    - `probes.rs`: ~800 lines of `on_*` UI control hit-test derivations (`on_step`, `on_strip`, `on_mcp`, etc.)
-    - `claim.rs`: pointer event ownership arbitration and Rule 1-4 enforcement
-    - `wheel.rs`: scroll wheel interaction logic
-    - `mod.rs`: re-exports, constants (`PROBES`, `CONTROLS`), and interface definitions
+- **P75: `karakuri-console::src/input.rs` (1,903 lines -> `input/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri-console/src/input/`:
+    - `handlers.rs` (760 lines): all 39 `on_*` UI control hit-test derivation functions
+    - `probes.rs` (421 lines): `Probe` struct, `PROBES` table, `CONTROLS` count and summation
+    - `claim.rs` (104 lines): `Claim` enum and pointer event claim arbitration (`claim`)
+    - `wheel.rs` (81 lines): scroll wheel interaction logic and `Turned` enum (`wheeled`)
+    - `mod.rs` (561 lines): module documentation, submodules, and public API re-exports
 - **P76: `karakuri-console::src/view/inspector/mod.rs` (1,892 lines)**:
   - Decompose pane layout rendering and inspector body dispatch into focused submodules alongside existing `header.rs`, `params.rs`, and `wiring.rs`.
 - **P77: `karakuri-cli::src/args.rs` (1,765 lines)**:
