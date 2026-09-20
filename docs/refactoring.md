@@ -105,8 +105,14 @@ Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental p
     - `claim.rs` (104 lines): `Claim` enum and pointer event claim arbitration (`claim`)
     - `wheel.rs` (81 lines): scroll wheel interaction logic and `Turned` enum (`wheeled`)
     - `mod.rs` (561 lines): module documentation, submodules, and public API re-exports
-- **P76: `karakuri-console::src/view/inspector/mod.rs` (1,892 lines)**:
-  - Decompose pane layout rendering and inspector body dispatch into focused submodules alongside existing `header.rs`, `params.rs`, and `wiring.rs`.
+- **P76: `karakuri-console::src/view/inspector/mod.rs` (1,899 lines -> submodules) — COMPLETED**:
+  - Decomposed `crates/karakuri-console/src/view/inspector/` into focused submodules:
+    - `pane.rs` (712 lines): `InspectorPane` struct and spatial hit-test/geometry methods
+    - `layout.rs` (149 lines): `inspector` layout calculation and `pane_box` arithmetic
+    - `render.rs` (231 lines): `inspector_into` UI rendering and `InspectorIntoCtx`
+    - `dispatch.rs` (322 lines): `View` inspector methods (naming, wiring, scrolling, deck targeting)
+    - `tests.rs` (342 lines): inspector pane layout and authority unit tests
+    - `mod.rs` (165 lines): module definitions, constants (`PANES`, `PANE_NAMES`, `PANE_DECKS`), and re-exports
 - **P77: `karakuri-cli::src/args.rs` (1,765 lines)**:
   - Decompose manual argument parsing into `crates/karakuri-cli/src/args/`:
     - `parser.rs`: command-line token consumption and flag parsing
