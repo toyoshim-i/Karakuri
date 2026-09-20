@@ -113,12 +113,12 @@ Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental p
     - `dispatch.rs` (322 lines): `View` inspector methods (naming, wiring, scrolling, deck targeting)
     - `tests.rs` (342 lines): inspector pane layout and authority unit tests
     - `mod.rs` (165 lines): module definitions, constants (`PANES`, `PANE_NAMES`, `PANE_DECKS`), and re-exports
-- **P77: `karakuri-cli::src/args.rs` (1,765 lines)**:
-  - Decompose manual argument parsing into `crates/karakuri-cli/src/args/`:
-    - `parser.rs`: command-line token consumption and flag parsing
-    - `validate.rs`: argument semantic constraints and consistency checks
-    - `help.rs`: usage strings and manual generation
-    - `mod.rs`: `Args` struct definition and public API
+- **P77: `karakuri-cli::src/args.rs` (1,765 lines -> `args/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri-cli/src/args/`:
+    - `parser.rs` (717 lines): token parsing, flag extraction, value parsers, and command loop
+    - `validate.rs` (517 lines): semantic consistency checks (`validate_args`) and store/session runtime preparation helpers
+    - `help.rs` (295 lines): usage strings (`USAGE`), key bindings reference (`BINDINGS`), and exit failure helper (`fail`)
+    - `mod.rs` (245 lines): `Args`, `FromSet`, `ParseOutcome` definitions and public API re-exports
 - **P78: `karakuri::src/keymap.rs` (1,714 lines)**:
   - Decompose into `crates/karakuri/src/keymap/`:
     - `table.rs`: `KEY_BINDINGS` table definition and documentation cross-checks
