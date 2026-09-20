@@ -27,7 +27,7 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 |:---:|---|---|:---:|
 | **P72** | Clippy Warnings & Lints | Eliminate all `clippy::doc_lazy_continuation` errors, resolve `too_many_arguments` with Parameter Objects, and resolve `type_complexity` | **COMPLETED** |
 | **P73** | CI & Git Hooks | Move workspace Clippy enforcement (`cargo clippy --workspace --all-targets -- -D warnings`) into `.githooks/pre-commit` | **COMPLETED** |
-| **P74** | `karakuri-ir::check::eval` (1,923 lines) | Decompose IR type-checking & evaluation monolith into `check/eval/` (`stmt.rs`, `expr.rs`, `call.rs`, `mod.rs`) | **PLANNED** |
+| **P74** | `karakuri-ir::check::eval` (1,923 lines) | Decompose IR type-checking & evaluation monolith into `check/eval/` (`stmt.rs`, `expr.rs`, `call.rs`, `mod.rs`) | **COMPLETED** |
 | **P75** | `karakuri-console::input` (1,903 lines) | Decompose console input handling into `input/` (`probes.rs`, `claim.rs`, `wheel.rs`, `mod.rs`) | **PLANNED** |
 | **P76** | `karakuri-console::view::inspector` (1,892 lines) | Decompose inspector bay view monolith into modular subcomponents | **PLANNED** |
 | **P77** | `karakuri-cli::args` (1,765 lines) | Decompose CLI argument parsing, validation, and usage help into `args/` submodules | **PLANNED** |
@@ -92,12 +92,12 @@ Clean up existing linter warnings and shift quality enforcement earlier in the d
 
 Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental pre-commit gate rejections and maintain high cognitive readability:
 
-- **P74: `karakuri-ir::check::eval.rs` (1,923 lines)**:
-  - Decompose into `crates/karakuri-ir/src/check/eval/`:
-    - `stmt.rs`: statement type checking (`check_stmt`, `check_stmts`, `check_let`, `check_assign`, `check_if`)
-    - `expr.rs`: expression evaluation, binary/unary operators, literal coercion
-    - `call.rs`: builtin and constructor invocations, domain validations
-    - `mod.rs`: entry point and shared evaluation context
+- **P74: `karakuri-ir::check::eval.rs` (1,923 lines -> `check/eval/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri-ir/src/check/eval/`:
+    - `stmt.rs` (495 lines): statement type checking (`check_stmt`, `check_stmts`, `check_let`, `check_assign`, `check_if`, `check_for`, `check_kill`)
+    - `expr.rs` (719 lines): expression evaluation, binary/unary operators, literal coercion, swizzling
+    - `call.rs` (654 lines): builtin and constructor invocations, texture sampling, slot access
+    - `mod.rs` (79 lines): entry point and shared evaluation context, constants, and recovery helpers
 - **P75: `karakuri-console::src/input.rs` (1,903 lines)**:
   - Decompose into `crates/karakuri-console/src/input/`:
     - `probes.rs`: ~800 lines of `on_*` UI control hit-test derivations (`on_step`, `on_strip`, `on_mcp`, etc.)
