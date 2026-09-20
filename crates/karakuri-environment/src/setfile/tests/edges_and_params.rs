@@ -686,3 +686,60 @@ fn an_unusable_binding_is_named_and_the_rest_of_the_set_still_loads() {
     assert!(notes.contains("bpm"), "{notes}");
     assert!(notes.contains("skipped"), "{notes}");
 }
+
+/// Bindings to `audio.energy`, `sub`, `audio.bass`, `mid`, and `air` round-trip through Set files.
+#[test]
+fn audio_and_named_spectral_band_bindings_survive_set_file() {
+    let (_dir, store, l1, l4) = fixture();
+    let audio_bindings = vec![
+        Binding::new(Kind::L1, "radius", "audio.energy", Curve::Lin, [0.1, 5.0]),
+        Binding::new(Kind::L1, "spin", "sub", Curve::Pow2, [0.0, 2.0]),
+        Binding::new(Kind::L4, "hue", "audio.bass", Curve::Smooth, [0.2, 0.8]),
+        Binding::new(Kind::L4, "point_scale", "mid", Curve::Sqrt, [0.01, 0.2]),
+        Binding::new(Kind::L4, "falloff", "air", Curve::Lin, [0.5, 4.0]),
+    ];
+
+    save(
+        &store,
+        Asked::Operator,
+        "audio_set",
+        plain(
+            &ordinary(&store, &l1, std::slice::from_ref(&l4)),
+            &audio_bindings,
+        ),
+    )
+    .expect("save");
+
+    let loaded = load(&store, "audio_set").expect("load");
+    assert_eq!(loaded.bindings.len(), 5);
+    assert_eq!(loaded.bindings[0].signal, "audio.energy");
+    assert_eq!(
+        loaded.bindings[0].signal_id,
+        karakuri_signal::SignalId::Energy
+    );
+    assert_eq!(loaded.bindings[1].signal, "sub");
+    assert_eq!(
+        loaded.bindings[1].signal_id,
+        karakuri_signal::SignalId::Band(0)
+    );
+    assert_eq!(loaded.bindings[2].signal, "audio.bass");
+    assert_eq!(
+        loaded.bindings[2].signal_id,
+        karakuri_signal::SignalId::Band(1)
+    );
+    assert_eq!(loaded.bindings[3].signal, "mid");
+    assert_eq!(
+        loaded.bindings[3].signal_id,
+        karakuri_signal::SignalId::Band(3)
+    );
+    assert_eq!(loaded.bindings[4].signal, "air");
+    assert_eq!(
+        loaded.bindings[4].signal_id,
+        karakuri_signal::SignalId::Band(7)
+    );
+    assert!(
+        loaded.notes.is_empty(),
+        "all audio bindings should be honoured: {:?}",
+        loaded.notes
+    );
+}

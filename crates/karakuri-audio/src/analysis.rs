@@ -279,6 +279,16 @@ pub fn level(rms: f32) -> f32 {
 
 /// Log-spaced band edges as `[low, high)` bin ranges.
 ///
+/// Log-spaced across 8 bands spanning 40 Hz to 16 kHz:
+/// - Band 0: `sub` (~40–85 Hz, kick fundamental, sub-bass)
+/// - Band 1: `bass` (~85–180 Hz, bass line, snare body)
+/// - Band 2: `low_mid` (~180–380 Hz, vocal warmth, rhythm guitar)
+/// - Band 3: `mid` (~380–800 Hz, lead instruments, snare crack)
+/// - Band 4: `high_mid` (~800–1700 Hz, vocal definition, synth attack)
+/// - Band 5: `presence` (~1700–3600 Hz, clarity, vocal consonants)
+/// - Band 6: `brilliance` (~3600–7500 Hz, cymbals, snare sizzle)
+/// - Band 7: `air` (~7500–16000 Hz, hi-hat shimmer, acoustic sparkle)
+///
 /// Log-spaced to reflect auditory octaves. If high band edges exceed the Nyquist
 /// frequency for low sample rates (e.g. 8–16 kHz), upper bands collapse to single
 /// bins at the top of the spectrum rather than producing empty ranges.
@@ -391,6 +401,43 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Verifies that named acoustic frequency bands (sub, bass, mid, air) correspond
+    /// to the expected spectral regions and typed AudioFrame accessors.
+    #[test]
+    fn semantic_spectral_bands_capture_target_frequencies() {
+        let targets = [
+            (60.0_f32, 0, "sub"),
+            (120.0_f32, 1, "bass"),
+            (260.0_f32, 2, "low_mid"),
+            (550.0_f32, 3, "mid"),
+            (1150.0_f32, 4, "high_mid"),
+            (2500.0_f32, 5, "presence"),
+            (5200.0_f32, 6, "brilliance"),
+            (11000.0_f32, 7, "air"),
+        ];
+
+        for (hz, expected_band, name) in targets {
+            let mut analyzer = Analyzer::new(RATE);
+            let frame = run(&mut analyzer, &tone(hz, 0.5, 0, BLOCK * 4)).frame;
+            assert_eq!(
+                loudest_band(&frame),
+                expected_band,
+                "{hz} Hz ({name}) was expected in band {expected_band}, but loudest was {}",
+                loudest_band(&frame)
+            );
+
+            // Accessors match band array
+            assert_eq!(frame.sub(), frame.bands[0]);
+            assert_eq!(frame.bass(), frame.bands[1]);
+            assert_eq!(frame.low_mid(), frame.bands[2]);
+            assert_eq!(frame.mid(), frame.bands[3]);
+            assert_eq!(frame.high_mid(), frame.bands[4]);
+            assert_eq!(frame.presence(), frame.bands[5]);
+            assert_eq!(frame.brilliance(), frame.bands[6]);
+            assert_eq!(frame.air(), frame.bands[7]);
         }
     }
 

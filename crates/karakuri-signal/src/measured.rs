@@ -62,6 +62,15 @@ pub const ENERGY: &str = "energy";
 /// decays with a fixed half-life, ensuring transient visibility across frame boundaries.
 pub const ONSET: &str = "onset";
 
+/// The signal name for sub-bass energy band (band 0, ~40-85 Hz).
+pub const SUB: &str = "sub";
+/// The signal name for bass energy band (band 1, ~85-180 Hz).
+pub const BASS: &str = "bass";
+/// The signal name for mid energy band (band 3, ~380-800 Hz).
+pub const MID: &str = "mid";
+/// The signal name for high/air energy band (band 7, ~7.6-16 kHz).
+pub const AIR: &str = "air";
+
 /// How many spectrum bands a frame can carry.
 ///
 /// Eight, log-spaced: enough that a kick, a snare and a hi-hat land in
@@ -95,6 +104,63 @@ pub struct AudioFrame {
 }
 
 impl AudioFrame {
+    /// Band index for sub-bass (~40–85 Hz).
+    pub const SUB: usize = 0;
+    /// Band index for bass (~85–180 Hz).
+    pub const BASS: usize = 1;
+    /// Band index for low-mid (~180–380 Hz).
+    pub const LOW_MID: usize = 2;
+    /// Band index for mid (~380–800 Hz).
+    pub const MID: usize = 3;
+    /// Band index for high-mid (~800–1700 Hz).
+    pub const HIGH_MID: usize = 4;
+    /// Band index for presence (~1700–3600 Hz).
+    pub const PRESENCE: usize = 5;
+    /// Band index for brilliance (~3600–7500 Hz).
+    pub const BRILLIANCE: usize = 6;
+    /// Band index for air / high (~7500–16000 Hz).
+    pub const AIR: usize = 7;
+
+    /// Sub-bass level (`bands[0]`, ~40–85 Hz).
+    pub fn sub(&self) -> f32 {
+        self.bands[Self::SUB]
+    }
+
+    /// Bass level (`bands[1]`, ~85–180 Hz).
+    pub fn bass(&self) -> f32 {
+        self.bands[Self::BASS]
+    }
+
+    /// Low-mid level (`bands[2]`, ~180–380 Hz).
+    pub fn low_mid(&self) -> f32 {
+        self.bands[Self::LOW_MID]
+    }
+
+    /// Mid-range level (`bands[3]`, ~380–800 Hz).
+    pub fn mid(&self) -> f32 {
+        self.bands[Self::MID]
+    }
+
+    /// High-mid level (`bands[4]`, ~800–1700 Hz).
+    pub fn high_mid(&self) -> f32 {
+        self.bands[Self::HIGH_MID]
+    }
+
+    /// Presence level (`bands[5]`, ~1700–3600 Hz).
+    pub fn presence(&self) -> f32 {
+        self.bands[Self::PRESENCE]
+    }
+
+    /// Brilliance level (`bands[6]`, ~3600–7500 Hz).
+    pub fn brilliance(&self) -> f32 {
+        self.bands[Self::BRILLIANCE]
+    }
+
+    /// Air / high level (`bands[7]`, ~7500–16000 Hz).
+    pub fn air(&self) -> f32 {
+        self.bands[Self::AIR]
+    }
+
     /// A frame that measured silence, at full confidence.
     ///
     /// This is what a live analyser produces from a block of zeroes, and it is
@@ -234,6 +300,27 @@ mod tests {
         // uses — one name, one meaning, whichever layer answers it.
         assert_eq!(bus.sample("band"), Sample::certain(0.1));
         assert_eq!(bus.sample("band3"), Sample::certain(0.4));
+        // Semantic band names
+        assert_eq!(bus.sample("sub"), Sample::certain(0.1));
+        assert_eq!(bus.sample("audio.sub"), Sample::certain(0.1));
+        assert_eq!(bus.sample("bass"), Sample::certain(0.2));
+        assert_eq!(bus.sample("audio.bass"), Sample::certain(0.2));
+        assert_eq!(bus.sample("low_mid"), Sample::certain(0.3));
+        assert_eq!(bus.sample("mid"), Sample::certain(0.4));
+        assert_eq!(bus.sample("audio.mid"), Sample::certain(0.4));
+    }
+
+    #[test]
+    fn audio_frame_named_band_accessors_match_bands() {
+        let f = frame();
+        assert_eq!(f.sub(), 0.1);
+        assert_eq!(f.bass(), 0.2);
+        assert_eq!(f.low_mid(), 0.3);
+        assert_eq!(f.mid(), 0.4);
+        assert_eq!(f.high_mid(), 0.5);
+        assert_eq!(f.presence(), 0.6);
+        assert_eq!(f.brilliance(), 0.7);
+        assert_eq!(f.air(), 0.8);
     }
 
     /// The property the whole layering exists for: adding a provider must not

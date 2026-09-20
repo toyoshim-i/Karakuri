@@ -56,10 +56,11 @@ The remaining open work is structured into two sequential milestones: anchoring 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ M8: Musical Synchronization & Hardware Integration (Active / In Prog)  │
-│ - Ableton Link Out-of-Process Synchronization                           │
+│ - Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation (Done)│
+│ - External Output Plugin Sinks (Syphon, Spout, NDI)                     │
 │ - Live MIDI Surface Mapping & Profile Persistence                       │
-│ - Low-Latency Audio FFT & Onset Signal Pipeline                         │
 │ - Bar- and Beat-Quantized Transition Scheduling                         │
+│ - Wipe Mask Geometry & Edge Softness Control                            │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
@@ -79,21 +80,21 @@ The remaining open work is structured into two sequential milestones: anchoring 
 **Objective**: Anchor Karakuri's procedural animation and transitions to live musical structure and professional DJ/VJ hardware.
 
 #### Key Deliverables:
-1. **Ableton Link Integration**:
-   - Connect the out-of-process `--tempo-source` plugin interface to Ableton Link, synchronizing tempo, beat phase, and quantum downbeats with external DJ software (Traktor, Serato, Ableton Live).
-2. **Quantized Transition Engine**:
+1. **Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation** *(Completed — M8-4)*:
+   - Low-latency real-time FFT processing with multi-band energy extraction (8 log-spaced semantic bands: `sub`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `air`) and transient `onset` detection feeding `.kir` shader parameter bindings.
+2. **Output Plugin Sinks**:
+   - Syphon on macOS, Spout on Windows, and NDI as out-of-process sinks beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md)).
+3. **Quantized Transition Engine**:
    - Implement precise bar- and phrase-quantized execution for wipes, fades, and deck swaps, ensuring visual changes lock to musical drops and phrase boundaries.
-3. **Live MIDI Surface Mapping & Profile Management**:
+4. **Live MIDI Surface Mapping & Profile Management**:
    - Provide an in-app interface to load, edit, and persist MIDI controller maps (`.map` files) dynamically during performance.
    - Support 14-bit high-resolution MIDI CC mappings for ultra-smooth parameter sweeps.
-4. **Low-Latency Audio Signal Bus**:
-   - Low-latency real-time FFT processing with multi-band energy extraction (sub, bass, mid, air) and onset detection feeding the internal signal oscillator.
-5. **Output Plugin Sinks**:
-   - Syphon on macOS, Spout on Windows and NDI as out-of-process sinks beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md)).
-6. **Wipe Mask Geometry Control**:
+5. **Wipe Mask Geometry Control**:
    - Expose explicit wipe front position and edge softness parameters on mixer strips.
+6. *(Cancelled)* **Ableton Link Out-of-Process Synchronization**:
+   - Cancelled for MVP: Live DJ testing confirmed Pioneer rekordbox does not publish deck BPM over Ableton Link (link fader is independent and does not follow the playing track; see [manual.md](manual.md#with-rekordbox-this-is-much-less-useful-than-it-sounds-and-the-reason-is-rekordboxs)), making Link ineffective for unattended DJ tempo tracking without manual intervention. Real-time audio spectral/beat tracking is already operational and serves as the primary live tempo follower.
 
-**Exit Condition**: The console locks beat grids to an external Ableton Link peer, responds to hot-plugged MIDI hardware, and triggers bar-quantized transitions synchronized to incoming audio beats.
+**Exit Condition**: The console responds to hot-plugged MIDI hardware, modulates visuals via live audio spectral bus, outputs video to external sinks (Syphon/Spout), and triggers bar-quantized transitions synchronized to incoming audio beats.
 
 ---
 

@@ -73,6 +73,8 @@ fn every_shipped_renderer_is_bounded_or_named_as_refused() {
         ("glass_shell", 0.000_241_5, 4141),
         // The same shape on `width`.
         ("drift_streaks", 0.000_241_5, 4141),
+        // Constant low end of clamp(w, 0.001, 0.06).
+        ("audio_bloom", 0.001, 1000),
     ];
 
     /// A renderer with no `vertex` block, which emits no rate at all.
@@ -165,7 +167,7 @@ fn every_shipped_renderer_is_bounded_or_named_as_refused() {
 /// answer for* is the question this analysis was built to answer and a reader
 /// should not have to count the list above.
 #[test]
-fn eight_of_the_twelve_renderers_that_draw_a_primitive_state_a_floor() {
+fn nine_of_the_thirteen_renderers_that_draw_a_primitive_state_a_floor() {
     let renderers = renderers();
     let mut fullscreen = 0;
     let mut bounded = 0;
@@ -179,7 +181,7 @@ fn eight_of_the_twelve_renderers_that_draw_a_primitive_state_a_floor() {
     }
     assert_eq!(
         (fullscreen, bounded, refused),
-        (3, 8, 4),
+        (3, 9, 4),
         "the shipped corpus's coverage moved; the lists in this file say which way"
     );
 }
