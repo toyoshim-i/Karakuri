@@ -105,20 +105,33 @@ pub type WiringBindings = (
     Option<usize>,
 );
 
+/// Arguments for validating slot wirings and dependencies between nodes.
+#[derive(Clone)]
+pub struct ValidateWiringCtx<'a> {
+    pub nodes: &'a [Option<&'a Checked>],
+    pub names: &'a [String],
+    pub edges: &'a [Edge],
+    pub l1s: &'a [(&'a Checked, u32)],
+    pub l2s: &'a [&'a Checked],
+    pub fields: &'a [&'a Checked],
+    pub camera_range: std::ops::Range<usize>,
+    pub field_range: std::ops::Range<usize>,
+}
+
 /// Validates slot wirings and dependencies between nodes.
 ///
 /// Returns `(field_bound, camera_bound, source_bound, far_at)`.
-#[allow(clippy::too_many_arguments)]
-pub fn validate_wiring<'a>(
-    nodes: &[Option<&'a Checked>],
-    names: &[String],
-    edges: &[Edge],
-    l1s: &[(&'a Checked, u32)],
-    l2s: &[&'a Checked],
-    fields: &[&'a Checked],
-    camera_range: std::ops::Range<usize>,
-    field_range: std::ops::Range<usize>,
-) -> Result<WiringBindings, SetError> {
+pub fn validate_wiring<'a>(ctx: ValidateWiringCtx<'a>) -> Result<WiringBindings, SetError> {
+    let ValidateWiringCtx {
+        nodes,
+        names,
+        edges,
+        l1s,
+        l2s,
+        fields,
+        camera_range,
+        field_range,
+    } = ctx;
     let node_at = |name: &str| names.iter().position(|n| n == name);
     let geometry_at = |name: &str| node_at(name).filter(|at| *at < l1s.len());
     let holds = || names.join(", ");
@@ -698,16 +711,17 @@ impl Set {
         let field_range = names.len() - fields.len()..names.len();
         let camera_range = l1s.len() + l2s.len()..l1s.len() + l2s.len() + cameras.len();
 
-        let (field_bound, camera_bound, source_bound, far_at) = validate_wiring(
-            &nodes,
-            &names,
-            wiring.edges,
-            l1s,
-            l2s,
-            fields,
-            camera_range.clone(),
-            field_range,
-        )?;
+        let (field_bound, camera_bound, source_bound, far_at) =
+            validate_wiring(ValidateWiringCtx {
+                nodes: &nodes,
+                names: &names,
+                edges: wiring.edges,
+                l1s,
+                l2s,
+                fields,
+                camera_range: camera_range.clone(),
+                field_range,
+            })?;
 
         for (l1, _) in l1s {
             if l1.kind != Kind::L1 {
