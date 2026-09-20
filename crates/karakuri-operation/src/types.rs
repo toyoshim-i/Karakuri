@@ -1110,6 +1110,8 @@ pub enum RefusalCode {
     SlotUnallocated,
     /// Bay is closed to MCP operations.
     BayClosed,
+    /// Control is currently held by an active sequencer lane.
+    LaneHeld,
 }
 
 impl RefusalCode {
@@ -1119,6 +1121,7 @@ impl RefusalCode {
             RefusalCode::SlotPolicyOff => "SLOT_POLICY_OFF",
             RefusalCode::SlotUnallocated => "SLOT_UNALLOCATED",
             RefusalCode::BayClosed => "BAY_CLOSED",
+            RefusalCode::LaneHeld => "LANE_HELD",
         }
     }
 }
@@ -1135,8 +1138,43 @@ pub struct RefusalDetail {
     pub code: RefusalCode,
     pub message: String,
     pub slot: Option<usize>,
+    pub deck: Option<u8>,
+    pub lane: Option<usize>,
+    pub class: Option<crate::gate::Class>,
     pub policy: Option<SlotPolicy>,
     pub in_mix: Option<bool>,
+}
+
+impl RefusalDetail {
+    /// Constructs a refusal representing a control currently held by a sequencer lane.
+    pub fn lane_held(deck: u8, lane: usize) -> Self {
+        Self {
+            code: RefusalCode::LaneHeld,
+            message: format!(
+                "deck {deck}'s fader is held by lane {lane} of the armed pattern: mute that lane and ask again"
+            ),
+            slot: Some(deck as usize),
+            deck: Some(deck),
+            lane: Some(lane),
+            class: None,
+            policy: None,
+            in_mix: None,
+        }
+    }
+
+    /// Constructs a refusal representing an unallocated or invalid slot.
+    pub fn slot_unallocated(slot: usize, message: String) -> Self {
+        Self {
+            code: RefusalCode::SlotUnallocated,
+            message,
+            slot: Some(slot),
+            deck: u8::try_from(slot).ok(),
+            lane: None,
+            class: None,
+            policy: None,
+            in_mix: None,
+        }
+    }
 }
 
 impl std::fmt::Display for RefusalDetail {
@@ -1175,6 +1213,9 @@ impl SlotAccess {
                     "slot {slot} is currently active in the mix and protected under `auto` policy"
                 ),
                 slot: Some(slot),
+                deck: u8::try_from(slot).ok(),
+                lane: None,
+                class: None,
                 policy: Some(self.policy),
                 in_mix: Some(self.in_mix),
             }),
@@ -1184,6 +1225,9 @@ impl SlotAccess {
                     "slot {slot} is locked against MCP modifications under `off` policy"
                 ),
                 slot: Some(slot),
+                deck: u8::try_from(slot).ok(),
+                lane: None,
+                class: None,
                 policy: Some(self.policy),
                 in_mix: Some(self.in_mix),
             }),

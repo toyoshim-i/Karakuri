@@ -291,6 +291,11 @@ impl Refusal {
              and ask again"
         )
     }
+
+    /// Structured representation of this refusal adhering to Principle P-0083 and ADR-0131.
+    pub fn detail(&self) -> karakuri_operation::RefusalDetail {
+        karakuri_operation::RefusalDetail::lane_held(self.deck, self.lane)
+    }
 }
 
 /// Translation outcome of converting an [`Operation`] into journal records.

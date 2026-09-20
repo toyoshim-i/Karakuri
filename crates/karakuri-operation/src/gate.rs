@@ -52,6 +52,7 @@
 //! would let it."* A sixty-fifth operation does not compile until somebody says
 //! which class it is in.
 
+use crate::types::{RefusalCode, RefusalDetail};
 use crate::Operation;
 
 /// A class of operations the operator can open, and the bay whose head opens
@@ -316,6 +317,21 @@ impl<'a> Allowed<'a> {
 /// read of what is running — a yes, or the one sentence it is refused in.
 ///
 /// Called once, over the operation, after the call is named and before it acts.
+/// Strongly-typed structured audit verifying whether an operation is allowed by active gate policy.
+pub fn audit_detail<'a>(
+    operation: &'a Operation,
+    open: Open,
+    running: Running<'_>,
+) -> Result<Allowed<'a>, RefusalDetail> {
+    let standing = standing(operation, running);
+    match standing {
+        Standing::Open => Ok(Allowed(operation)),
+        Standing::Closed(class) if open.holds(class) => Ok(Allowed(operation)),
+        _ => Err(refusal_detail(operation, standing)
+            .expect("a standing that is not `Open` and not an opened class has a refusal")),
+    }
+}
+
 /// In `karakuri_environment::mcp` that is between `asked` and `perform`, which
 /// is the only seam every tool crosses.
 pub fn audit<'a>(
@@ -323,12 +339,72 @@ pub fn audit<'a>(
     open: Open,
     running: Running<'_>,
 ) -> Result<Allowed<'a>, String> {
-    let standing = standing(operation, running);
+    audit_detail(operation, open, running).map_err(|detail| detail.message)
+}
+
+/// Detailed structured refusal for an operation rejected by the audit gate.
+pub fn refusal_detail(operation: &Operation, standing: Standing) -> Option<RefusalDetail> {
+    let title = operation.title();
     match standing {
-        Standing::Open => Ok(Allowed(operation)),
-        Standing::Closed(class) if open.holds(class) => Ok(Allowed(operation)),
-        _ => Err(refusal(operation, standing)
-            .expect("a standing that is not `Open` and not an opened class has a sentence")),
+        Standing::Open => None,
+        Standing::Closed(class) => {
+            let because_clause = because(operation, class);
+            let deck = match operation {
+                Operation::LoadSet { deck, .. } | Operation::LoadProcedure { deck, .. } => {
+                    Some(*deck)
+                }
+                _ => None,
+            };
+            let message = format!(
+                "`{title}`{because_clause} is in the class {}, which is closed by default — the operator opens \
+                 it at {}.",
+                class.title(),
+                class.opened_at()
+            );
+            Some(RefusalDetail {
+                code: RefusalCode::BayClosed,
+                message,
+                slot: deck.map(|d| d as usize),
+                deck,
+                lane: None,
+                class: Some(class),
+                policy: None,
+                in_mix: None,
+            })
+        }
+        Standing::ClosedUnclassed(group) => {
+            let message = format!(
+                "`{title}` is closed by default with {}, and no bay opens that yet — which class \
+                 it belongs to is not settled.",
+                group.title()
+            );
+            Some(RefusalDetail {
+                code: RefusalCode::BayClosed,
+                message,
+                slot: None,
+                deck: None,
+                lane: None,
+                class: None,
+                policy: None,
+                in_mix: None,
+            })
+        }
+        Standing::Unread(Reading::Live) => {
+            let message = format!(
+                "`{title}` is closed by default where the deck it names is live, and which decks \
+                 are live was not read."
+            );
+            Some(RefusalDetail {
+                code: RefusalCode::BayClosed,
+                message,
+                slot: None,
+                deck: None,
+                lane: None,
+                class: None,
+                policy: None,
+                in_mix: None,
+            })
+        }
     }
 }
 
@@ -355,26 +431,7 @@ pub fn audit<'a>(
 /// it. [`Operation::LoadProcedure`] is the same class and names its deck for
 /// the same reason.
 pub fn refusal(operation: &Operation, standing: Standing) -> Option<String> {
-    let title = operation.title();
-    Some(match standing {
-        Standing::Open => return None,
-        Standing::Closed(class) => format!(
-            "`{title}`{} is in the class {}, which is closed by default — the operator opens \
-             it at {}.",
-            because(operation, class),
-            class.title(),
-            class.opened_at()
-        ),
-        Standing::ClosedUnclassed(group) => format!(
-            "`{title}` is closed by default with {}, and no bay opens that yet — which class \
-             it belongs to is not settled.",
-            group.title()
-        ),
-        Standing::Unread(Reading::Live) => format!(
-            "`{title}` is closed by default where the deck it names is live, and which decks \
-             are live was not read."
-        ),
-    })
+    refusal_detail(operation, standing).map(|d| d.message)
 }
 
 /// The clause a refusal owes where the class turned on more than the
