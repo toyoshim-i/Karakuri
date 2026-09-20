@@ -136,7 +136,14 @@ Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental p
 
 Decompose test suites that have accumulated beyond 1,700 lines:
 
-- **P79: `karakuri::tests::operations` (1,893 lines)**: Decompose into operations category submodules (`transport.rs`, `mixer.rs`, `mcp.rs`, `surfaces.rs`).
+- **P79: `karakuri::tests::operations` (1,894 lines -> `tests/operations/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri/src/tests/operations/`:
+    - `common.rs` (158 lines): test environment fixtures, record extractors (`only_record`), and preset sources
+    - `transport.rs` (331 lines): transport controls, tempo/clock operations, and wakefulness tests
+    - `mixer.rs` (669 lines): mixer deck aiming, fader moves, compositing, and reload/wipe operations
+    - `mcp.rs` (347 lines): MCP port handling, wire request propagation, and refusal message assertions
+    - `surfaces.rs` (404 lines): CLI flags, capacity constraints, surface lifetimes, and texture format verification
+    - `mod.rs` (10 lines): submodule declarations and re-exports
 - **P80: `karakuri-store::tests::store` (1,789 lines)**: Decompose into `store/` submodules (`cas.rs`, `journal.rs`, `concurrency.rs`, `compaction.rs`).
 - **P81: `karakuri::tests::arrangement` (1,781 lines)**: Decompose arrangement lifecycle and session serialization tests.
 - **P82: `karakuri-cli::src::tests::live_save` (1,773 lines)**: Decompose interactive runtime state recording and replay test cases.
