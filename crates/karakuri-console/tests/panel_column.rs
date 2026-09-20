@@ -751,8 +751,14 @@ fn sample(variant: &str) -> Operation {
             pane: karakuri_console::view::PANE_NAMES[0].to_owned(),
             deck: 0,
         },
-        "ToggleSolo" => Operation::ToggleSolo { deck: 0 },
-        "ToggleMute" => Operation::ToggleMute { deck: 0 },
+        "SetSolo" => Operation::SetSolo {
+            deck: 0,
+            solo: true,
+        },
+        "SetMute" => Operation::SetMute {
+            deck: 0,
+            mute: true,
+        },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \
              control started emitting an operation nobody accounted for. Add an arm here, and \

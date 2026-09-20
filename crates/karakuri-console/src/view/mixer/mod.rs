@@ -180,9 +180,12 @@ impl<'a> Mixer<'a> {
             .iter()
             .zip(self.boxes)
             .enumerate()
-            .find_map(|(index, (_, at))| {
+            .find_map(|(index, (strip, at))| {
                 at.filter(|at| at.solo.contains(p))
-                    .map(|_| Operation::ToggleSolo { deck: index as u8 })
+                    .map(|_| Operation::SetSolo {
+                        deck: index as u8,
+                        solo: !strip.is_soloed,
+                    })
             })
     }
 
@@ -194,9 +197,12 @@ impl<'a> Mixer<'a> {
             .iter()
             .zip(self.boxes)
             .enumerate()
-            .find_map(|(index, (_, at))| {
+            .find_map(|(index, (strip, at))| {
                 at.filter(|at| at.mute.contains(p))
-                    .map(|_| Operation::ToggleMute { deck: index as u8 })
+                    .map(|_| Operation::SetMute {
+                        deck: index as u8,
+                        mute: !strip.is_muted,
+                    })
             })
     }
 
