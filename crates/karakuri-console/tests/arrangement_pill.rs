@@ -4,19 +4,22 @@
 //! Six things, and the first two are why this file exists rather than a few
 //! more assertions in `transport.rs`:
 //!
-//! 1. Where the control is, derived from the row's own geometry. 2. That it
-//! clears every boundary's grab, which is `tests/outputs.rs`'s arithmetic over
-//! a different control and is never inherited from it: the row is 48 and a
-//! `.pill` is 16.5, so the clearance is 15.75 against a `GRAB` of 6 — and that
-//! is measured here rather than reasoned from the Outputs row's 7.75. 3. That
-//! an open menu keeps the pointer, which is the rule `karakuri_console::input`
-//! gained with this control: the card is drawn across the boundary under the
-//! row, so a rule that gave the boundary first refusal would leave rows of the
-//! menu dead. 4. That the pill says what it was handed, and that the default
-//! arrangement is not called `default`. 5. What each item of the menu asks for:
-//! the reset, a restore by name, and the one item that asks for letters. 6.
-//! That the name being typed is the console's own state and moves only through
-//! the methods that move it.
+//! 1. Where the control is, derived from the row's own geometry.
+//! 2. That it clears every boundary's grab, which is `tests/outputs.rs`'s
+//!    arithmetic over a different control and is never inherited from it:
+//!    the row is 48 and a `.pill` is 16.5, so the clearance is 15.75
+//!    against a `GRAB` of 6 — and that is measured here rather than
+//!    reasoned from the Outputs row's 7.75.
+//! 3. That an open menu keeps the pointer, which is the rule
+//!    `karakuri_console::input` gained with this control: the card is drawn
+//!    across the boundary under the row, so a rule that gave the boundary
+//!    first refusal would leave rows of the menu dead.
+//! 4. That the pill says what it was handed, and that the default
+//!    arrangement is not called `default`.
+//! 5. What each item of the menu asks for: the reset, a restore by name,
+//!    and the one item that asks for letters.
+//! 6. That the name being typed is the console's own state and moves only
+//!    through the methods that move it.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the capsule is as wide as the name in it — see `common::drawn_once`

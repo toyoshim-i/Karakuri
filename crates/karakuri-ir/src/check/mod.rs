@@ -15,72 +15,77 @@
 //! summary:
 //!
 //! - `consumes` ⊆ `emit` is, read literally, a cross-proc rule: `emit` is
-//! declared by the L1 procedure and `consumes` by the L4 procedure that will be
-//! paired with it in a Set, and `check` only ever sees one procedure. Applying
-//! it within a single proc would reject the spec's own `soft_points` example
-//! (it consumes `position`, which `soft_points` never declares in `emit`). This
-//! pass therefore runs the subset check only when a procedure declares *both*
-//! lists itself (which only an L1 procedure can meaningfully do, since only L1
-//! has persistent per-element state to emit); an L4 procedure's `consumes` is
-//! recorded as-is and left for Set-composition time, outside this crate's
-//! scope. - Attribute derivation splits the `consumes ⊆ emit` check in two, and
-//! this pass keeps only the half one file can answer. `age` and `velocity` are
-//! synthesised where nothing emits them: the engine gives `age` a `birth_t`
-//! slot and `velocity` a slot the L1 writes, so an L1 consuming either without
-//! emitting it is asking for something the Set will provide rather than making
-//! a contradiction. What stays here is the part that is genuinely local —
-//! `velocity` is derived *from* `position`, and whether this procedure emits
-//! `position` is a one-file question. See [`check_consumes_emitted`]. Whether
-//! anybody at all emits a consumed attribute is `Set::build_many`'s check, at
-//! the first point that holds every procedure at once. - Signal-bus names are
-//! not enumerable here. `karakuri-signal`'s bus accepts *any* name (falling
-//! back to a zero-confidence synthesized sample), so there is no closed
-//! vocabulary to match against. Consequently every bare identifier that fails
-//! to resolve to a local, a param, an attribute, or an ambient is reported as
-//! an attempted signal-bus read with the `bind` hint — that is the only
-//! diagnosis available once the closed categories are exhausted, and it is also
-//! what the spec asks for. - `point_rate` is required unconditionally in an L4
-//! `vertex` block. The rule as stated ("required when the source topology is
-//! points") is a property of the *paired* L1 procedure's `topology`, which an
-//! L4 file never declares and this pass never sees. It stays unconditional now
-//! that `lines` exists, because it means something under both: a sprite's
-//! extent and a stroke's width are the same number in the same units. - What an
-//! L4 draws is inferred here, not declared. Assigning
-//! [`Output::ClipB`](crate::ast::Output::ClipB) — a segment's far end — is the
-//! only thing that could make a procedure a line renderer, so this pass reads
-//! it off the `vertex` block and records it in
-//! [`Checked::topology`](crate::typed::Checked::topology), which is otherwise
-//! an L1 field. Whether it agrees with the L1 it is paired with is not checked
-//! anywhere, and deliberately: a segment gets both of its ends from attributes
-//! the L4 consumes, so a renderer needs nothing of the geometry beyond what the
-//! `emit`/`consumes` check at Set composition already covers. Requiring
-//! agreement would forbid one L1 being drawn as sprites by one L4 and as
-//! strokes by another. - Attribute names are only readable/writable when
-//! declared. The spec states this explicitly for L4 ("Consumed attributes and
-//! seed are readable in both blocks"); it does not restate it for L1, but the
-//! parallel is structural, not stylistic — only attributes in `emit` get a
-//! buffer pair at all ("Each emitted attribute gets a pair of storage
-//! buffers"), so referencing one that is not emitted has nothing behind it.
-//! This pass applies the same rule symmetrically to L1. - Shadowing also covers
-//! stage outputs. The spec's shadowing rule lists params, attributes, and
-//! ambients; it does not mention `clip`/ `point_rate`/`color`. Leaving them
-//! unprotected would let a param or local named `color` silently steal
-//! precedence over the output in an assignment target, which is exactly the
-//! class of bug the documented shadowing rule exists to prevent, so this pass
-//! extends it to outputs too. - `capacity` and `topology` are required on every
-//! L1 procedure, and `blend` on every L4 procedure. The spec doesn't say so in
-//! as many words, but `capacity`'s range-plus-default is the only source of a
-//! value the Set format can fall back to ("`capacity` is optional [in the Set
-//! file]; without it the `.kir` default applies"), so the `.kir` has to declare
-//! one; `topology` and `blend` are load-bearing for lowering in the same way. -
-//! `let`/`var` may shadow neither a param nor another local, per the literal
-//! sentence in "Statements and expressions" ("`let`, `var`, and the loop
-//! variable may not shadow a param, an attribute, or an ambient value") and per
-//! `typed.rs`'s doc on `TStmt::Let` ("Locals do not shadow anything — not a
-//! param, not an attribute, not an ambient, and not another local"). This is
-//! stricter than the task checklist's paraphrase, which drops params from the
-//! protected set; the spec text and the seam type's own doc comment agree with
-//! each other and this pass follows them, not the paraphrase.
+//!   declared by the L1 procedure and `consumes` by the L4 procedure that will be
+//!   paired with it in a Set, and `check` only ever sees one procedure. Applying
+//!   it within a single proc would reject the spec's own `soft_points` example
+//!   (it consumes `position`, which `soft_points` never declares in `emit`). This
+//!   pass therefore runs the subset check only when a procedure declares *both*
+//!   lists itself (which only an L1 procedure can meaningfully do, since only L1
+//!   has persistent per-element state to emit); an L4 procedure's `consumes` is
+//!   recorded as-is and left for Set-composition time, outside this crate's
+//!   scope.
+//! - Attribute derivation splits the `consumes ⊆ emit` check in two, and
+//!   this pass keeps only the half one file can answer. `age` and `velocity` are
+//!   synthesised where nothing emits them: the engine gives `age` a `birth_t`
+//!   slot and `velocity` a slot the L1 writes, so an L1 consuming either without
+//!   emitting it is asking for something the Set will provide rather than making
+//!   a contradiction. What stays here is the part that is genuinely local —
+//!   `velocity` is derived *from* `position`, and whether this procedure emits
+//!   `position` is a one-file question. See [`check_consumes_emitted`]. Whether
+//!   anybody at all emits a consumed attribute is `Set::build_many`'s check, at
+//!   the first point that holds every procedure at once.
+//! - Signal-bus names are not enumerable here. `karakuri-signal`'s bus accepts
+//!   *any* name (falling back to a zero-confidence synthesized sample), so there
+//!   is no closed vocabulary to match against. Consequently every bare identifier
+//!   that fails to resolve to a local, a param, an attribute, or an ambient is
+//!   reported as an attempted signal-bus read with the `bind` hint — that is the
+//!   only diagnosis available once the closed categories are exhausted, and it is
+//!   also what the spec asks for.
+//! - `point_rate` is required unconditionally in an L4 `vertex` block. The rule
+//!   as stated ("required when the source topology is points") is a property of
+//!   the *paired* L1 procedure's `topology`, which an L4 file never declares and
+//!   this pass never sees. It stays unconditional now that `lines` exists, because
+//!   it means something under both: a sprite's extent and a stroke's width are the
+//!   same number in the same units.
+//! - What an L4 draws is inferred here, not declared. Assigning
+//!   [`Output::ClipB`](crate::ast::Output::ClipB) — a segment's far end — is the
+//!   only thing that could make a procedure a line renderer, so this pass reads
+//!   it off the `vertex` block and records it in
+//!   [`Checked::topology`](crate::typed::Checked::topology), which is otherwise
+//!   an L1 field. Whether it agrees with the L1 it is paired with is not checked
+//!   anywhere, and deliberately: a segment gets both of its ends from attributes
+//!   the L4 consumes, so a renderer needs nothing of the geometry beyond what the
+//!   `emit`/`consumes` check at Set composition already covers. Requiring
+//!   agreement would forbid one L1 being drawn as sprites by one L4 and as
+//!   strokes by another.
+//! - Attribute names are only readable/writable when declared. The spec states
+//!   this explicitly for L4 ("Consumed attributes and seed are readable in both
+//!   blocks"); it does not restate it for L1, but the parallel is structural, not
+//!   stylistic — only attributes in `emit` get a buffer pair at all ("Each emitted
+//!   attribute gets a pair of storage buffers"), so referencing one that is not
+//!   emitted has nothing behind it. This pass applies the same rule symmetrically
+//!   to L1.
+//! - Shadowing also covers stage outputs. The spec's shadowing rule lists params,
+//!   attributes, and ambients; it does not mention `clip`/ `point_rate`/`color`.
+//!   Leaving them unprotected would let a param or local named `color` silently
+//!   steal precedence over the output in an assignment target, which is exactly
+//!   the class of bug the documented shadowing rule exists to prevent, so this
+//!   pass extends it to outputs too.
+//! - `capacity` and `topology` are required on every L1 procedure, and `blend`
+//!   on every L4 procedure. The spec doesn't say so in as many words, but
+//!   `capacity`'s range-plus-default is the only source of a value the Set format
+//!   can fall back to ("`capacity` is optional [in the Set file]; without it the
+//!   `.kir` default applies"), so the `.kir` has to declare one; `topology` and
+//!   `blend` are load-bearing for lowering in the same way.
+//! - `let`/`var` may shadow neither a param nor another local, per the literal
+//!   sentence in "Statements and expressions" ("`let`, `var`, and the loop
+//!   variable may not shadow a param, an attribute, or an ambient value") and per
+//!   `typed.rs`'s doc on `TStmt::Let` ("Locals do not shadow anything — not a
+//!   param, not an attribute, not an ambient, and not another local"). This is
+//!   stricter than the task checklist's paraphrase, which drops params from the
+//!   protected set; the spec text and the seam type's own doc comment agree with
+//!   each other and this pass follows them, not the paraphrase.
+//!
 //!
 //! ## One thing this pass decides that is not a diagnostic
 //!

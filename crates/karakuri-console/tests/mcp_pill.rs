@@ -11,15 +11,18 @@
 //! than a few more assertions in `solo_pill.rs` and `outputs.rs`:
 //!
 //! 1. That each of the four is drawn where the page puts it, and that the
-//! region it is in is the bay a refusal names. 2. That each is hit-tested where
-//! it is painted, and that nothing beside one is. 3. That a press opens exactly
-//! one class and leaves the other three shut — the property, over all four,
-//! because an opening that took its neighbours with it is a permission nobody
-//! granted. 4. That a second press shuts it, which is the half of the page's
-//! sentence a control could silently not have. 5. That the word says which
-//! state the class is in, and that the capsule is measured for the word it
-//! holds. 6. That a bay carrying no class draws nothing at all, and that a pill
-//! nobody has drawn is not one a press can be on.
+//!    region it is in is the bay a refusal names.
+//! 2. That each is hit-tested where it is painted, and that nothing beside
+//!    one is.
+//! 3. That a press opens exactly one class and leaves the other three shut
+//!    — the property, over all four, because an opening that took its
+//!    neighbours with it is a permission nobody granted.
+//! 4. That a second press shuts it, which is the half of the page's
+//!    sentence a control could silently not have.
+//! 5. That the word says which state the class is in, and that the capsule
+//!    is measured for the word it holds.
+//! 6. That a bay carrying no class draws nothing at all, and that a pill
+//!    nobody has drawn is not one a press can be on.
 //!
 //! What is not here is the press reaching a run's `Opening`, and the audit
 //! answering differently afterwards. That crosses two crates this one cannot

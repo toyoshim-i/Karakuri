@@ -3,16 +3,17 @@
 //! Four things, and the middle two are the reason this file exists rather than
 //! a few more assertions in `view.rs`:
 //!
-//! 1. Where the control is, derived from the row's own geometry. 2. That it
-//! clears every boundary's grab. `karakuri_console::input` has said since it
-//! was written that its rule holds *"only while the gaps stay empty"* —
-//! [`GRAB`] widens every boundary by six pixels either side, and those twelve
-//! pixels are inside the bays, over whatever a bay draws at its edge. This is
-//! the first control drawn near one, and this is the guard that documentation
-//! has been asking for. 3. That the dot's state is read from the arrangement
-//! and not kept beside it. 4. That a press on it is the same fold the keyboard
-//! performs, and that the round trip restores the arrangement exactly —
-//! ADR-0174's own claim, reached from the control instead of from the layout.
+//! 1. Where the control is, derived from the row's own geometry.
+//! 2. That it clears every boundary's grab. `karakuri_console::input` has
+//!    said since it was written that its rule holds *"only while the gaps
+//!    stay empty"* — [`GRAB`] widens every boundary by six pixels either side,
+//!    and those twelve pixels are inside the bays, over whatever a bay draws at
+//!    its edge. This is the first control drawn near one, and this is the guard
+//!    that documentation has been asking for.
+//! 3. That the dot's state is read from the arrangement and not kept beside it.
+//! 4. That a press on it is the same fold the keyboard performs, and that the
+//!    round trip restores the arrangement exactly — ADR-0174's own claim,
+//!    reached from the control instead of from the layout.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the chip is as wide as the name in it — see `common::drawn_once`.

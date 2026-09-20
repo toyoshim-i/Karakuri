@@ -22,32 +22,37 @@
 //!
 //! Seven things:
 //!
-//! 1. With nothing outstanding the bay draws the shapes of a bay with no body,
-//! asserted against the Sequencer bay — the lane's twin in this console's
-//! furniture: a title, no pill, no grip, and nothing in its body at all. It is
-//! a claim about the paint pass, so it is made by drawing a frame and counting.
+//! 1. With nothing outstanding the bay draws the shapes of a bay with no
+//!    body, asserted against the Sequencer bay — the lane's twin in this
+//!    console's furniture: a title, no pill, no grip, and nothing in its
+//!    body at all. It is a claim about the paint pass, so it is made by
+//!    drawing a frame and counting.
 //! 2. Nothing else the console is handed puts anything there. The Library's
-//! names, the mixer's strips, the Inspector's panes and a picture are all
-//! written onto the `View` and the lane is the same two shapes after, which is
-//! what says the bay reads none of them: the one field it reads is
-//! `View::staging`. 3. A candidate draws a row, and the rows are where the
-//! arithmetic says — the list box off `.stage-list`'s three paddings, a stride
-//! of a `.cand` and `.stage-list`'s gap, every row inside the list. 4. The lane
-//! holds the mock's three and no more, which is the one piece of boundary
-//! arithmetic in this bay: `lib.rs` pins it at 125 because the mock draws three
-//! rows and two gaps, and a fourth candidate is counted and not drawn. 5. The
-//! head is untouched by any of it, asserted with the lane full as well as
-//! empty: the mock's `2 waiting` is a readout and a bay head's pills are its
-//! controls. 6. What in it is a control and what is not, asked of a full lane
-//! as well as an empty one: the bay's own ground is `egui`'s, a row that offers
-//! a keep is the panel's, and the `back` capsule inside it is asked first
-//! because it is the smaller box. 7. A row the checker turned down carries what
-//! it said, which is the one row that draws a sentence: nothing was built for
-//! it, so the word alone says a save did not take and nothing about why
-//! (ADR-0310). 8. Each press asks for the operation its row is addressed by,
-//! and the rows that offer neither say so: an overloaded row has nothing to
-//! keep and a row that names no node has nothing to keep and nothing to step
-//! back.
+//!    names, the mixer's strips, the Inspector's panes and a picture are
+//!    all written onto the `View` and the lane is the same two shapes
+//!    after, which is what says the bay reads none of them: the one field
+//!    it reads is `View::staging`.
+//! 3. A candidate draws a row, and the rows are where the arithmetic says —
+//!    the list box off `.stage-list`'s three paddings, a stride of a
+//!    `.cand` and `.stage-list`'s gap, every row inside the list.
+//! 4. The lane holds the mock's three and no more, which is the one piece
+//!    of boundary arithmetic in this bay: `lib.rs` pins it at 125 because
+//!    the mock draws three rows and two gaps, and a fourth candidate is
+//!    counted and not drawn.
+//! 5. The head is untouched by any of it, asserted with the lane full as
+//!    well as empty: the mock's `2 waiting` is a readout and a bay head's
+//!    pills are its controls.
+//! 6. What in it is a control and what is not, asked of a full lane as well
+//!    as an empty one: the bay's own ground is `egui`'s, a row that offers
+//!    a keep is the panel's, and the `back` capsule inside it is asked
+//!    first because it is the smaller box.
+//! 7. A row the checker turned down carries what it said, which is the one
+//!    row that draws a sentence: nothing was built for it, so the word
+//!    alone says a save did not take and nothing about why (ADR-0310).
+//! 8. Each press asks for the operation its row is addressed by, and the
+//!    rows that offer neither say so: an overloaded row has nothing to keep
+//!    and a row that names no node has nothing to keep and nothing to step
+//!    back.
 //!
 //! And the four words a row can end in are the manual's own, which is ADR-0159
 //! asked of this bay: *"whether it is on screen: landed, overloaded for costing

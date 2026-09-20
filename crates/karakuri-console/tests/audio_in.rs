@@ -5,20 +5,23 @@
 //! can check:
 //!
 //! 1. That a console nobody has told draws no pill at all, and that the
-//! arrangement pill therefore sits exactly where it sat before this control
-//! existed. `View::audio` is an `Option` for that reason and no other, and the
-//! two halves of it are two different consoles: told and found nothing, against
-//! never told. 2. Where the control is, derived from the row's own geometry,
-//! and that the arrangement pill moves along by exactly this pill and one gap.
+//!    arrangement pill therefore sits exactly where it sat before this
+//!    control existed. `View::audio` is an `Option` for that reason and no
+//!    other, and the two halves of it are two different consoles: told and
+//!    found nothing, against never told.
+//! 2. Where the control is, derived from the row's own geometry, and that
+//!    the arrangement pill moves along by exactly this pill and one gap.
 //! 3. That it clears every boundary's grab, which is
-//! `tests/arrangement_pill.rs`'s arithmetic over a second capsule in the same
-//! row and is measured here rather than inherited. 4. That an open card keeps
-//! the pointer, which is `input`'s rule 2 — now written over two cards rather
-//! than one. 5. That the pill says which input is open, and that no input reads
-//! `none` rather than being drawn blank. 6. What a press on a row asks for:
-//! `AttachBeatSource` naming the input the row was drawn with, and nothing
-//! refused here. 7. That a machine with no inputs gets a card that says so
-//! rather than an empty one, and that no row rectangle is handed out for it.
+//!    `tests/arrangement_pill.rs`'s arithmetic over a second capsule in the
+//!    same row and is measured here rather than inherited.
+//! 4. That an open card keeps the pointer, which is `input`'s rule 2 — now
+//!    written over two cards rather than one.
+//! 5. That the pill says which input is open, and that no input reads
+//!    `none` rather than being drawn blank.
+//! 6. What a press on a row asks for: `AttachBeatSource` naming the input
+//!    the row was drawn with, and nothing refused here.
+//! 7. That a machine with no inputs gets a card that says so rather than an
+//!    empty one, and that no row rectangle is handed out for it.
 //!
 //! None of it opens a device, and that is not a gap in the checking. What a
 //! device could add is that a name in this list opens — which is
@@ -194,10 +197,10 @@ fn the_pill_names_the_input_it_is_listening_to() {
 /// The capsule clears every boundary's grab, measured here rather than reasoned
 /// from the arrangement pill's 15.75 one capsule along.
 ///
-/// The transport row is 48 and a `.pill` is 16.5 centred in it, so there is (48
-/// - 16.5) / 2 = 15.75 above and below, against a `GRAB` of 6. A press in the
-/// capsule is therefore never inside the band of the boundary under the row,
-/// and rule 3 never gets to refuse it.
+/// The transport row is 48 and a `.pill` is 16.5 centred in it, so there is
+/// `(48 - 16.5) / 2 = 15.75` above and below, against a `GRAB` of 6. A press in
+/// the capsule is therefore never inside the band of the boundary under the
+/// row, and rule 3 never gets to refuse it.
 #[test]
 fn the_capsule_clears_every_boundarys_grab() {
     let (mut panel, ctx) = console(SMALLEST);

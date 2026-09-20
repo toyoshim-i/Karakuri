@@ -4,20 +4,23 @@
 //! Seven things, and the first three are what the four records of 2026-09-09
 //! decided:
 //!
-//! 1. Where the bay's parts are, measured off its own rectangle — the mock's
-//! `.seq` padding under the bay head, the head, the ruler and a row per lane.
-//! 2. That a cell press is a state and never a flip, which is the mock's own
-//! sentence and the reason `Operation::SetStep` carries `on: bool`: a surface
-//! that could only flip has no way to arrive. 3. That a cell sends a stored
-//! slot and not a drawn step — the identity at a sixteenth and `2k` at an
-//! eighth, so a step press and a mode press cannot race into an address that
-//! means two things (ADR-0320). 4. That the label mutes the lane and the mode
-//! pill names the other mode. 5. That every press names the bank it landed on
-//! rather than implying the armed one. 6. What the bay declares (ADR-0283,
-//! ADR-0322): the step's staleness while there is a lane to move a playhead
-//! over, `moves_in` from where the beat has got to, and the invariant between
-//! them. 7. That a console with no pattern behind it draws nothing and claims
-//! no press.
+//! 1. Where the bay's parts are, measured off its own rectangle — the
+//!    mock's `.seq` padding under the bay head, the head, the ruler and a
+//!    row per lane.
+//! 2. That a cell press is a state and never a flip, which is the mock's
+//!    own sentence and the reason `Operation::SetStep` carries `on: bool`:
+//!    a surface that could only flip has no way to arrive.
+//! 3. That a cell sends a stored slot and not a drawn step — the identity
+//!    at a sixteenth and `2k` at an eighth, so a step press and a mode
+//!    press cannot race into an address that means two things (ADR-0320).
+//! 4. That the label mutes the lane and the mode pill names the other mode.
+//! 5. That every press names the bank it landed on rather than implying the
+//!    armed one.
+//! 6. What the bay declares (ADR-0283, ADR-0322): the step's staleness
+//!    while there is a lane to move a playhead over, `moves_in` from where
+//!    the beat has got to, and the invariant between them.
+//! 7. That a console with no pattern behind it draws nothing and claims no
+//!    press.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the head's readout is as wide as the words in it — see

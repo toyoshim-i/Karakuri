@@ -5,19 +5,22 @@
 //!
 //! Eight things:
 //!
-//! 1. Where the capsule goes: hard against the head's right-hand padding, at
-//! `.mini`'s own box, which is the mock's `<span class="mini">keep</span>`
-//! after the `.auth` chips. 2. That the three authority chips are laid out
-//! inside what it leaves, so neither control is drawn where the other is
-//! pressed. That is the one thing about this row that could go wrong silently:
-//! the chips were right-aligned on the head before the capsule existed. 3. That
-//! a press on it emits `KeepProcedure` naming that node, with `id: None` — the
-//! press that types nothing takes a stamp (ADR-0128). 4. That the two heads
-//! which carry no capsule are not targets: a head standing over several nodes,
-//! and the built-in camera. Both are `Node::keep` being `None`, and the mock
-//! draws both absences. 5. That a press on the chips is still the chips' and a
-//! press on the capsule is not a chip's. 6. That a console which has not drawn
-//! has no capsule — every measured control's guard.
+//! 1. Where the capsule goes: hard against the head's right-hand padding,
+//!    at `.mini`'s own box, which is the mock's `<span
+//!    class="mini">keep</span>` after the `.auth` chips.
+//! 2. That the three authority chips are laid out inside what it leaves, so
+//!    neither control is drawn where the other is pressed. That is the one
+//!    thing about this row that could go wrong silently: the chips were
+//!    right-aligned on the head before the capsule existed.
+//! 3. That a press on it emits `KeepProcedure` naming that node, with `id:
+//!    None` — the press that types nothing takes a stamp (ADR-0128).
+//! 4. That the two heads which carry no capsule are not targets: a head
+//!    standing over several nodes, and the built-in camera. Both are
+//!    `Node::keep` being `None`, and the mock draws both absences.
+//! 5. That a press on the chips is still the chips' and a press on the
+//!    capsule is not a chip's.
+//! 6. That a console which has not drawn has no capsule — every measured
+//!    control's guard.
 //!
 //! What is not here and cannot be: that `input::claim` gives the panel a press
 //! on the capsule, and that the window writes the file. Those are

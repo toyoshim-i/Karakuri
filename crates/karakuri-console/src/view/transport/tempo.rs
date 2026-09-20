@@ -786,8 +786,8 @@ pub const BEAT_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / BEAT_ST
 ///
 /// # Two dots at once, and the row's total light is constant
 ///
-/// The falloff is exactly one pitch wide, so at most two dots are lit and `f(d)
-/// + f(1 - d) = 1` for every `d` — the raised cosine's own identity, and
+/// The falloff is exactly one pitch wide, so at most two dots are lit and
+/// `f(d) + f(1 - d) = 1` for every `d` — the raised cosine's own identity, and
 /// therefore the grid's dots always sum to exactly one dot's worth of light
 /// (every grid but the degenerate one below, which is one dot and holds all of
 /// it). The light moves along the grid rather than the grid brightening and

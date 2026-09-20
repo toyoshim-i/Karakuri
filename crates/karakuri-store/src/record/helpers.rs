@@ -59,20 +59,20 @@ impl Record {
     /// drift the same way — see [`Vocabulary`].)
     ///
     /// - [`Record::Tick`], [`Record::Audio`] and [`Record::Tempo`] are not state at
-    /// all: they are what a *frame* saw or decided. A Set file carries no time, and
-    /// one holding an audio frame would be claiming a particular moment's
-    /// microphone reading is part of what a Set is. - [`Record::Gain`],
-    /// [`Record::Opacity`], [`Record::Blend`], [`Record::Residency`],
-    /// [`Record::Look`], [`Record::Canvas`], [`Record::Procedure`],
-    /// [`Record::Authority`], [`Record::Source`], [`Record::Transport`],
-    /// [`Record::Mask`], [`Record::Transition`] and [`Record::Select`] are the
-    /// session's rather than any Set's. The last two are the ones that are not
-    /// durable state at all but *events* — a move and a choice, each scheduled at
-    /// an instant — and they are here rather than beside `tick` because what they
-    /// move is the deck. Folding a session down to a Set file drops them for both
-    /// reasons at once. A Set does not know what fader it is under; one that
-    /// carried its gain would restore that gain wherever it was next loaded, which
-    /// is a Set file reaching outside the Set.
+    ///   all: they are what a *frame* saw or decided. A Set file carries no time, and
+    ///   one holding an audio frame would be claiming a particular moment's
+    ///   microphone reading is part of what a Set is.
+    /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`], [`Record::Residency`],
+    ///   [`Record::Look`], [`Record::Canvas`], [`Record::Procedure`],
+    ///   [`Record::Authority`], [`Record::Source`], [`Record::Transport`],
+    ///   [`Record::Mask`], [`Record::Transition`] and [`Record::Select`] are the
+    ///   session's rather than any Set's. The last two are the ones that are not
+    ///   durable state at all but *events* — a move and a choice, each scheduled at
+    ///   an instant — and they are here rather than beside `tick` because what they
+    ///   move is the deck. Folding a session down to a Set file drops them for both
+    ///   reasons at once. A Set does not know what fader it is under; one that
+    ///   carried its gain would restore that gain wherever it was next loaded, which
+    ///   is a Set file reaching outside the Set.
     ///
     /// [`Record::Canvas`] is in this group for a reason worth stating apart: a Set
     /// renders at whatever size it is given, and one that carried a canvas would
@@ -93,19 +93,18 @@ impl Record {
     /// which deck slot a folded Set was played in.
     ///
     /// - [`Record::Meta`], [`Record::ParamDecl`], [`Record::CapacityDecl`] and
-    /// [`Record::Emit`] are a third file's vocabulary: what an artifact *declares*,
-    /// before anything has instantiated it. Not the session's and not any Set's,
-    /// which is why they are a third reason rather than a longer second one.
-    ///
+    ///   [`Record::Emit`] are a third file's vocabulary: what an artifact *declares*,
+    ///   before anything has instantiated it. Not the session's and not any Set's,
+    ///   which is why they are a third reason rather than a longer second one.
     /// - [`Record::Part`] is a fourth reason and the only one that is not about
-    /// what the record says. It is this Set's own state, in the vocabulary of the
-    /// *authoring* form: a node named by relative path rather than by content
-    /// address. Nothing is wrong with what it says — it says what a
-    /// [`Record::Slot`] says — and everything is wrong with where it is, because
-    /// `<store>/sets/` holds `.kbset` and only `.kbset` so that a swap has nothing
-    /// left to resolve. Refused through [`Record::is_authoring`], for the reason a
-    /// `param_decl` is refused through [`Record::is_metadata`]: a third sentence is
-    /// owed, and it is about which of a Set's two forms the file is.
+    ///   what the record says. It is this Set's own state, in the vocabulary of the
+    ///   *authoring* form: a node named by relative path rather than by content
+    ///   address. Nothing is wrong with what it says — it says what a
+    ///   [`Record::Slot`] says — and everything is wrong with where it is, because
+    ///   `<store>/sets/` holds `.kbset` and only `.kbset` so that a swap has nothing
+    ///   left to resolve. Refused through [`Record::is_authoring`], for the reason a
+    ///   `param_decl` is refused through [`Record::is_metadata`]: a third sentence is
+    ///   owed, and it is about which of a Set's two forms the file is.
     ///
     /// Four reasons for one answer, and `Record::Save` still does not add another.
     /// The question here is *may this line go in a Set file*, and it has one answer

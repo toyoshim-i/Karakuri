@@ -7,20 +7,21 @@
 //! scrolls*, and this file is the five things that has to mean
 //! ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)):
 //!
-//! 1. A pane taller than what it holds draws it unscrolled, and has nothing to
-//! scroll through however far the wheel was spun. 2. A short pane scrolled to
-//! the end draws the last group against its bottom edge and does not draw the
-//! first. 3. A press lands on the row that is under it now, and a row scrolled
-//! up under the two heads takes no press at all — which is the one of the five
-//! that fails silently, because the control is still drawn where the hand is
-//! and the paint is what has moved. 4. A position survives the pane growing and
-//! shrinking, and is not rewritten by either: the pane is solved twice at one
-//! size with a taller one in between, and the stored number is compared with
-//! itself
-//! ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md),
-//! [ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)).
+//! 1. A pane taller than what it holds draws it unscrolled, and has nothing
+//!    to scroll through however far the wheel was spun.
+//! 2. A short pane scrolled to the end draws the last group against its
+//!    bottom edge and does not draw the first.
+//! 3. A press lands on the row that is under it now, and a row scrolled up
+//!    under the two heads takes no press at all — which is the one of the
+//!    five that fails silently, because the control is still drawn where
+//!    the hand is and the paint is what has moved.
+//! 4. A position survives the pane growing and shrinking, and is not
+//!    rewritten by either: the pane is solved twice at one size with a
+//!    taller one in between, and the stored number is compared with itself
+//!    ([P-0082](../../../docs/principles/0082-looking-never-writes-back.md),
+//!    [ADR-0250](../../../docs/adr/0250-below-the-minima-the-arrangement-scales-rather-than-being-rewritten.md)).
 //! 5. The head says how much is not shown, which is rule 04 of [the
-//! manual](../../../docs/manual/index.html).
+//!    manual](../../../docs/manual/index.html).
 //!
 //! None of it needs a window, a device or a disk. `pane_count` asks `egui` for
 //! the width of the run it draws, so the tests that reach it run a pass first —

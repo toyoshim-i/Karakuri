@@ -103,17 +103,18 @@
 //!
 //! 1. It presses every boundary the arrangement has, at the middle of that
 //!    boundary's own gap, and drags it — that is *Move a boundary*,
-//!    demonstrated, and the extent of the region beside it is read back either
-//!    side.
-//! 2. It presses, drags and releases at every point of a [`STEP`]-pixel grid
-//!    over the whole console, and compares what is folded and what is soloed
-//!    against what they were.
+//!    demonstrated, and the extent of the region beside it is read back
+//!    either side.
+//! 2. It presses, drags and releases at every point of a [`STEP`]-pixel
+//!    grid over the whole console, and compares what is folded and what is
+//!    soloed against what they were.
 //! 3. It drives the console's own painted control the way the window loop
 //!    drives one — [`claim`], then the derivation that drew it, then the
-//!    caller performing the answer — over the transport row's arrangement pill
-//!    and every row of its menu. See [`reached_through_a_painted_control`].
-//! 4. It drives the second such control the same way: the `solo` pill in the
-//!    Program bay's head, pressed twice, because it answers with two
+//!    caller performing the answer — over the transport row's arrangement
+//!    pill and every row of its menu. See
+//!    [`reached_through_a_painted_control`].
+//! 4. It drives the second such control the same way: the `solo` pill in
+//!    the Program bay's head, pressed twice, because it answers with two
 //!    operations and the second is the one nothing else can reach. See
 //!    [`reached_through_the_program_bays_head`].
 //!

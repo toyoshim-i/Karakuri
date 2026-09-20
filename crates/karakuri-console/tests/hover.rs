@@ -5,25 +5,29 @@
 //! copy of the manual:
 //!
 //! 1. The table is the console's own rows, at the granularity they claim.
-//! `hover::TIPS` is one entry per row of `input::PROBES`, in that order, so a
-//! control registered there and never given a tip is a compile error and an
-//! entry cannot answer for its neighbour — and a row that claims five controls
-//! carries five entries unless `UNEVEN` says why it does not, which is the half
-//! of *every compact control explains itself* that the array's length cannot
-//! hold. 2. Every citation resolves to the one element it names, in
-//! `docs/manual/console.html`. This is the half that goes stale in silence:
-//! nothing about editing the page tells you a `Cite` was reading it, so the
-//! check is *does the element this comment names still exist* rather than *is
-//! this text plausible* — `tests/transcribed_constants_cite_the_mock.rs`'s
-//! argument, over the page rather than over the stylesheet. 3. No tip arrives
-//! with an entity still in it. The mock writes `&#8853;` and `&mdash;`, and a
-//! panel drawing those five characters is drawing markup at an operator. The
-//! scan refuses what it cannot read rather than reading it wrongly. 4. The box
-//! is the mock's own rule, term for term out of `[data-tip]::after`. 5. The
-//! dwell is a dwell: nothing before it, the page's words after it, and nothing
-//! at all once the pointer leaves. 6. A tip is inside the window at every
-//! corner, and it asks for a frame when it appears or goes and never while it
-//! is up.
+//!    `hover::TIPS` is one entry per row of `input::PROBES`, in that order,
+//!    so a control registered there and never given a tip is a compile
+//!    error and an entry cannot answer for its neighbour — and a row that
+//!    claims five controls carries five entries unless `UNEVEN` says why it
+//!    does not, which is the half of *every compact control explains
+//!    itself* that the array's length cannot hold.
+//! 2. Every citation resolves to the one element it names, in
+//!    `docs/manual/console.html`. This is the half that goes stale in
+//!    silence: nothing about editing the page tells you a `Cite` was
+//!    reading it, so the check is *does the element this comment names
+//!    still exist* rather than *is this text plausible* —
+//!    `tests/transcribed_constants_cite_the_mock.rs`'s argument, over the
+//!    page rather than over the stylesheet.
+//! 3. No tip arrives with an entity still in it. The mock writes `&#8853;`
+//!    and `&mdash;`, and a panel drawing those five characters is drawing
+//!    markup at an operator. The scan refuses what it cannot read rather
+//!    than reading it wrongly.
+//! 4. The box is the mock's own rule, term for term out of `[data-
+//!    tip]::after`.
+//! 5. The dwell is a dwell: nothing before it, the page's words after it,
+//!    and nothing at all once the pointer leaves.
+//! 6. A tip is inside the window at every corner, and it asks for a frame
+//!    when it appears or goes and never while it is up.
 //!
 //! None of it needs a window, a device or a disk — the page is compiled in.
 

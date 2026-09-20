@@ -4,32 +4,38 @@
 //! Thirteen things, and the first two are why this is its own file rather than
 //! a few more assertions in `view.rs`'s module tests:
 //!
-//! 1. Where they sit, as `.deck-head`'s flex row lays them out — the three on
-//! the left measured from the left and the three after the `.sep` measured
-//! leftwards from the fold. 2. That the controls clear every boundary's grab,
-//! which is `tests/look.rs`'s arithmetic over a row that is not a row of the
-//! arrangement: a pane's deck head is measured against the pane divider, and
-//! the number that binds is `.deck-head`'s own 10 pixels of left padding
-//! against a `GRAB` of 6. 3. That the sync chip cycles all three modes and
-//! comes back, once each. 4. That the cycle skips a mode the material cannot
-//! honour, which is the one thing this cycle has that the mixer's two do not.
-//! 5. That the anchor asks for the mode the deck is already in, which is the
-//! one thing the chip beside it structurally cannot ask for. 6. That an arrow
-//! asks for a quarter beat, signed by which arrow it was. 7. That an inert
-//! scrub is drawn and not claimed, which is *a control claims what it acts on
-//! and no more* answered by a state. 8. That the fold names the layering the
-//! deck is not in, which is the chip that was drawn and claimed nothing until
-//! 2026-09-09 — see `docs/adr/0314-…`. 9. That the capacity chip steps every
-//! rung of its ladder once and wraps, and that a slot running off the ladder
-//! steps *up* rather than back to the bottom — `docs/adr/0328-…`. 10. That a
-//! capacity with nowhere to step is drawn and claims nothing, which is the
-//! inert scrub's arrangement one control along. 11. That `re-salt` asks for the
-//! salt it was handed, which is the whole of what keeps a re-seed reproducible.
-//! 12. That a pane too narrow for the two build chips keeps the five that were
-//! here before them, which is the one place this row drops part of itself
-//! rather than all of it — and the reason is a measurement, at the test. 13.
-//! The route a window loop actually takes — `claim`, then the derivation that
-//! drew the control, then the operation.
+//! 1. Where they sit, as `.deck-head`'s flex row lays them out — the three
+//!    on the left measured from the left and the three after the `.sep`
+//!    measured leftwards from the fold.
+//! 2. That the controls clear every boundary's grab, which is
+//!    `tests/look.rs`'s arithmetic over a row that is not a row of the
+//!    arrangement: a pane's deck head is measured against the pane divider,
+//!    and the number that binds is `.deck-head`'s own 10 pixels of left
+//!    padding against a `GRAB` of 6.
+//! 3. That the sync chip cycles all three modes and comes back, once each.
+//! 4. That the cycle skips a mode the material cannot honour, which is the
+//!    one thing this cycle has that the mixer's two do not.
+//! 5. That the anchor asks for the mode the deck is already in, which is
+//!    the one thing the chip beside it structurally cannot ask for.
+//! 6. That an arrow asks for a quarter beat, signed by which arrow it was.
+//! 7. That an inert scrub is drawn and not claimed, which is *a control
+//!    claims what it acts on and no more* answered by a state.
+//! 8. That the fold names the layering the deck is not in, which is the
+//!    chip that was drawn and claimed nothing until 2026-09-09 — see
+//!    `docs/adr/0314-…`.
+//! 9. That the capacity chip steps every rung of its ladder once and wraps,
+//!    and that a slot running off the ladder steps *up* rather than back to
+//!    the bottom — `docs/adr/0328-…`.
+//! 10. That a capacity with nowhere to step is drawn and claims nothing,
+//!     which is the inert scrub's arrangement one control along.
+//! 11. That `re-salt` asks for the salt it was handed, which is the whole
+//!     of what keeps a re-seed reproducible.
+//! 12. That a pane too narrow for the two build chips keeps the five that
+//!     were here before them, which is the one place this row drops part of
+//!     itself rather than all of it — and the reason is a measurement, at
+//!     the test.
+//! 13. The route a window loop actually takes — `claim`, then the
+//!     derivation that drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because a chip is as wide as the word in it — see `common::drawn_once` — and

@@ -200,16 +200,16 @@ Ground system design in Karakuri's standing principles (`docs/principles/`) and 
 
 ---
 
-## 9. Phase 16: Documentation Modernization & Technical Clarity (P87) — PLANNED
+## 9. Phase 16: Documentation Modernization & Technical Clarity (P87) — COMPLETED
 
 **Goal**:
 Eliminate verbose, speculative, and philosophical prose comments left behind by prior model self-talk (e.g. Opus prose). Replace them with concise, factual, engineering-oriented RustDoc (documenting *What*, *Why*, preconditions, and invariants). Restore strict CommonMark markdown indentation across all doc comments and re-enable `clippy::doc_lazy_continuation` enforcement.
 
 **Key Actions**:
-- **P87: Prose Comment Pruning & Clippy Doc Lint Re-enforcement**:
-  - *Prune Philosophical Ramblings*: Replace stream-of-consciousness, metaphor-heavy commentary (e.g., philosophical musings on keys, focus, and state transitions) with clean, factual descriptions of mechanics, invariants, and side-effects.
-  - *Normalize CommonMark Indentation*: Re-indent all multi-line lists, blockquotes, and nested items according to CommonMark / rustdoc guidelines to eliminate lazy continuation ambiguity.
-  - *Re-enable Clippy Enforcement*: Remove `doc_lazy_continuation = "allow"` from root `Cargo.toml` (restoring it to `warn`/`deny`) so that future documentation style regressions are prevented at pre-commit time.
+- **P87: Prose Comment Pruning & Clippy Doc Lint Re-enforcement — COMPLETED**:
+  - *Pruned Philosophical Ramblings & Stream-of-Consciousness Commentary*: Cleaned up run-on commentary across 59 files in `karakuri`, `karakuri-console`, `karakuri-engine`, `karakuri-environment`, `karakuri-ir`, `karakuri-mcp`, and `karakuri-store`. Replaced fragmented prose poems with structured, factual descriptions of mechanics, preconditions, and invariants.
+  - *Normalized CommonMark Indentation*: Restored proper CommonMark indentation on all multi-line lists (ordered and unordered), blockquotes, and wrapped math formulas, eliminating lazy continuation warnings.
+  - *Re-enabled Strict Clippy Enforcement*: Removed `doc_lazy_continuation = "allow"` and restored `doc_lazy_continuation = "warn"` in root `Cargo.toml`. Verified that `cargo clippy --workspace --all-targets -- -D warnings` runs cleanly with zero warnings across all crates and targets.
 
 ---
 

@@ -4,28 +4,31 @@
 //! Six things, and the first two are why this file exists rather than a few
 //! more assertions in `view.rs`:
 //!
-//! 1. That the strips are the deck's count and not four. A page has four tracks
-//! whatever the deck holds, and a track with no strip in it draws nothing — not
-//! the empty strip the mock drew until `39f1e6b`, which would be six readings
-//! nobody took. This file held the panel to ADR-0178 against the mock for as
-//! long as both existed, and the claim is the record's rather than the page's,
-//! so it outlives the strip. 2. That a console with no deck behind it draws
-//! nothing in the bay's body — asserted by drawing a frame and counting what
-//! landed in the strips' own rectangle, because *nothing is drawn* is a claim
-//! about the paint pass and not about a rectangle. 3. Where everything in a
-//! strip is, from the mock's own boxes — and the boxes themselves against the
-//! stylesheet's literals, which is a different claim from the relations stated
-//! in terms of them (ADR-0177). 4. That the faders and the meter follow their
-//! values, at zero, at one and in between, and that the peak mark never leaves
-//! the well. 5. That the tally, the blend and the mask show the state they were
-//! given. What the tally does when the residency it was given and the one that
-//! was asked for disagree is `parked.rs`, not here: the strips in this file are
-//! all settled, so nothing in it moves. 6. Which of these are controls and
-//! which are readouts — five controls inside the column and the column itself,
-//! both directions stated rather than inferred from the presence or absence of
-//! a hit test: a press anywhere in a strip is the panel's, and the alley
-//! between two strips is `egui`'s. What a drag on a knob *does* is
-//! `tests/fader.rs`.
+//! 1. That the strips are the deck's count and not four. A page has four
+//!    tracks whatever the deck holds, and a track with no strip in it draws
+//!    nothing — not the empty strip the mock drew until `39f1e6b`, which
+//!    would be six readings nobody took. This file held the panel to
+//!    ADR-0178 against the mock for as long as both existed, and the claim
+//!    is the record's rather than the page's, so it outlives the strip.
+//! 2. That a console with no deck behind it draws nothing in the bay's body
+//!    — asserted by drawing a frame and counting what landed in the strips'
+//!    own rectangle, because *nothing is drawn* is a claim about the paint
+//!    pass and not about a rectangle.
+//! 3. Where everything in a strip is, from the mock's own boxes — and the
+//!    boxes themselves against the stylesheet's literals, which is a
+//!    different claim from the relations stated in terms of them
+//!    (ADR-0177).
+//! 4. That the faders and the meter follow their values, at zero, at one
+//!    and in between, and that the peak mark never leaves the well.
+//! 5. That the tally, the blend and the mask show the state they were
+//!    given. What the tally does when the residency it was given and the
+//!    one that was asked for disagree is `parked.rs`, not here: the strips
+//!    in this file are all settled, so nothing in it moves.
+//! 6. Which of these are controls and which are readouts — five controls
+//!    inside the column and the column itself, both directions stated
+//!    rather than inferred from the presence or absence of a hit test: a
+//!    press anywhere in a strip is the panel's, and the alley between two
+//!    strips is `egui`'s. What a drag on a knob *does* is `tests/fader.rs`.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the tally's capsule and the blend's mini are as wide as the words in them.

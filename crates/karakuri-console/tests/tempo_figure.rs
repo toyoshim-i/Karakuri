@@ -12,19 +12,21 @@
 //! Four things, and the second and the third are why this file exists rather
 //! than a few more assertions in `tests/transport.rs`:
 //!
-//! 1. That the figure is a track and its middle is the number it draws — the
-//! one property that makes *the number under your finger* true rather than a
-//! phrase, and the reason no track is painted under it. 2. That a press names
-//! the tempo it landed on, outright and not by a step, which is what
-//! `Operation::SetFreeRunTempo` carries and what separates this control from
-//! the octave beside it. 3. That a press outside the band is ignored — no
-//! operation, nothing clamped to the edge of the band, and the point left to
-//! `egui`. It is asserted at a point *on the figure*, because a guard that
-//! could only be missed by missing the number is not a guard at all. 4. That
-//! the band is the tempo at the press and moves with the grid, so the figure is
-//! a percentage of whatever is running rather than a range written down
-//! anywhere — and that it bounds a press and not a tempo: 240 is out of reach
-//! in one press from the mock's 128 and reached by walking the band five times.
+//! 1. That the figure is a track and its middle is the number it draws —
+//!    the one property that makes *the number under your finger* true
+//!    rather than a phrase, and the reason no track is painted under it.
+//! 2. That a press names the tempo it landed on, outright and not by a
+//!    step, which is what `Operation::SetFreeRunTempo` carries and what
+//!    separates this control from the octave beside it.
+//! 3. That a press outside the band is ignored — no operation, nothing
+//!    clamped to the edge of the band, and the point left to `egui`. It is
+//!    asserted at a point *on the figure*, because a guard that could only
+//!    be missed by missing the number is not a guard at all.
+//! 4. That the band is the tempo at the press and moves with the grid, so
+//!    the figure is a percentage of whatever is running rather than a range
+//!    written down anywhere — and that it bounds a press and not a tempo:
+//!    240 is out of reach in one press from the mock's 128 and reached by
+//!    walking the band five times.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the figure's width is the width of the number in it — see

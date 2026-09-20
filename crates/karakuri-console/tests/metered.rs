@@ -18,19 +18,21 @@
 //! would fail:
 //!
 //! 1. A metered console with nothing pending is still. The bay is laid out,
-//! four readings are moving in it, and it asks for no frame at any phase of the
-//! roll. That is ADR-0164's still-panel clause holding on a console that meters
-//! — which is every console this program ships, because
-//! `crates/karakuri/src/main.rs` calls `Deck::enable_meters` for the whole deck
-//! at startup. 2. The reading is not in the declaration. A metered bay and an
-//! unmetered one declare the same three numbers at every millisecond of a
-//! period, so ADR-0283's fourteen frames are a *metered* panel's fourteen and a
-//! meter declaration would be putting thirty-one back. 3. The meter is drawn
-//! from the reading and not from the clock, which is the premise under the
-//! other two: the roll's curve reaches the tally and both faders and does not
-//! reach the meter. A meter with ballistics — a held peak, a fall time — would
-//! be a function of the phase exactly as the roll is, and would have to
-//! declare; this is what fails on the day one grows.
+//!    four readings are moving in it, and it asks for no frame at any phase
+//!    of the roll. That is ADR-0164's still-panel clause holding on a
+//!    console that meters — which is every console this program ships,
+//!    because `crates/karakuri/src/main.rs` calls `Deck::enable_meters` for
+//!    the whole deck at startup.
+//! 2. The reading is not in the declaration. A metered bay and an unmetered
+//!    one declare the same three numbers at every millisecond of a period,
+//!    so ADR-0283's fourteen frames are a *metered* panel's fourteen and a
+//!    meter declaration would be putting thirty-one back.
+//! 3. The meter is drawn from the reading and not from the clock, which is
+//!    the premise under the other two: the roll's curve reaches the tally
+//!    and both faders and does not reach the meter. A meter with ballistics
+//!    — a held peak, a fall time — would be a function of the phase exactly
+//!    as the roll is, and would have to declare; this is what fails on the
+//!    day one grows.
 //!
 //! Nothing here needs a window, a device or a clock. The phase is a value the
 //! test chooses, which is what ADR-0190 made it for.

@@ -4,24 +4,27 @@
 //! Five things, and the first two are why this file exists rather than a few
 //! more assertions in `view.rs`:
 //!
-//! 1. That a console with no engine behind it draws nothing there — not a row
-//! of zeroes and not a row of dashes, either of which is a reading invented for
-//! a panel that has none. It is asserted by drawing a frame and counting what
-//! landed in the row, because *nothing is drawn* is a claim about the paint
-//! pass and not about a rectangle. 2. That the beat grid draws the position it
-//! is handed, across a bar boundary, at beat zero, and at the two edges
-//! arithmetic on an `f64` gets wrong — and that what it draws between two beats
-//! is a light on its way from one dot to the next rather than a dot switching
-//! ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
-//! 3. Where everything in the row is, derived from the row's own geometry and
-//! the mock's boxes. 4. That the readouts are not controls, which is the answer
-//! stated rather than inferred from the absence of a hit test: `claim` gives
-//! every point of this row to `egui` unless a boundary has it — or unless it is
-//! on one of the row's controls, which have files of their own:
-//! `tests/arrangement_pill.rs` for the pill, and `tests/tempo_figure.rs` for
-//! the tempo, which was in the list here until the figure became the track a
-//! press names a tempo along. 5. That the values are the harness's and the
-//! console keeps no copy.
+//! 1. That a console with no engine behind it draws nothing there — not a
+//!    row of zeroes and not a row of dashes, either of which is a reading
+//!    invented for a panel that has none. It is asserted by drawing a frame
+//!    and counting what landed in the row, because *nothing is drawn* is a
+//!    claim about the paint pass and not about a rectangle.
+//! 2. That the beat grid draws the position it is handed, across a bar
+//!    boundary, at beat zero, and at the two edges arithmetic on an `f64`
+//!    gets wrong — and that what it draws between two beats is a light on
+//!    its way from one dot to the next rather than a dot switching
+//!    ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-
+//!    and-it-declares-for-itself.md)).
+//! 3. Where everything in the row is, derived from the row's own geometry
+//!    and the mock's boxes.
+//! 4. That the readouts are not controls, which is the answer stated rather
+//!    than inferred from the absence of a hit test: `claim` gives every
+//!    point of this row to `egui` unless a boundary has it — or unless it
+//!    is on one of the row's controls, which have files of their own:
+//!    `tests/arrangement_pill.rs` for the pill, and `tests/tempo_figure.rs`
+//!    for the tempo, which was in the list here until the figure became the
+//!    track a press names a tempo along.
+//! 5. That the values are the harness's and the console keeps no copy.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! where each readout ends is where the next one starts — see

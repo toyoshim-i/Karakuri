@@ -899,14 +899,15 @@ impl Param {
     /// What folds:
     ///
     /// - a float literal, or a negated one — one value, which is
-    /// [`Param::default_scalar`]'s answer in a one-element vector; - `vecN(a, b,
-    /// …)` with `N` arguments, each a literal or a negated literal — `N` values, in
-    /// the order they are written; - `vecN(a)` with one such argument — the
-    /// broadcast, `N` copies of it. `docs/ir-spec.md`, "Types": *"Vector
-    /// constructors follow GLSL: any mix of scalars and shorter vectors whose
-    /// component counts sum to the target width, or a single scalar to broadcast.
-    /// `vec3(1.0, 0.0, 0.0)`, `vec3(0.0)`, and `vec4(position, 1.0)` are all well
-    /// formed"*.
+    ///   [`Param::default_scalar`]'s answer in a one-element vector;
+    /// - `vecN(a, b, …)` with `N` arguments, each a literal or a negated literal —
+    ///   `N` values, in the order they are written;
+    /// - `vecN(a)` with one such argument — the broadcast, `N` copies of it.
+    ///
+    /// `docs/ir-spec.md`, "Types": *"Vector constructors follow GLSL: any mix of scalars
+    /// and shorter vectors whose component counts sum to the target width, or a single scalar
+    /// to broadcast. `vec3(1.0, 0.0, 0.0)`, `vec3(0.0)`, and `vec4(position, 1.0)` are all
+    /// well formed"*.
     ///
     /// A nested constructor answers `None`, and it is said here rather than left to
     /// be discovered. `vec3(vec2(0.1, 0.2), 0.3)` is legal by that same passage and

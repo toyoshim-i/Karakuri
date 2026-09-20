@@ -49,8 +49,8 @@ const SQUARISH: (u32, u32) = (1024, 768);
 const NARROWEST: (f32, f32) = (466.0, 350.0);
 
 /// The same body in a 1920 window. The two side tracks and the four dividers do
-/// not move, so the centre track takes the whole of the extra width: 1920 - 340
-/// - 400 - 20 = 1160, less the same 18 of padding = 1142 (ADR-0239). The bay is
+/// not move, so the centre track takes the whole of the extra width:
+/// `1920 - 340 - 400 - 20 = 1160`, less the same 18 of padding = 1142 (ADR-0239). The bay is
 /// `Sizing::Fixed` along its column, so the height is still 350.
 const WIDE: (f32, f32) = (1142.0, 350.0);
 

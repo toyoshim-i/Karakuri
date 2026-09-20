@@ -12,24 +12,28 @@
 //! Eight things, and the first three are why this is its own file rather than
 //! more assertions in `tests/look.rs`:
 //!
-//! 1. Where the three are, laid end to end from the audio-in pill's right edge
-//! at the group's own gap — and that the arrangement pill has moved along by
-//! exactly this group and one `.transport` gap, which is what a flex row is. 2.
-//! That all three clear every boundary's grab, which is `tests/look.rs`'s
-//! arithmetic over three more controls and is never inherited from it. The
-//! octave's chips are the shortest targets in this row — `OCTAVE_H` is 15.5
-//! where a pill is 16.5 — so the clearance is measured against them rather than
-//! against the tap. 3. That the refused half of the octave is drawn and not
-//! claimed, which is `DeckHead::arrow`'s rule one bay over: *"the arrows keep
-//! their shape when they are refused"*, and a chip that vanished would move the
-//! row under the hand every time the grid crossed 100 or 120 BPM. 4. What a
-//! press on each of them asks for. 5. That one pixel of the offset track is one
-//! press of `o` or `p`, which is the whole of why it is 80 wide. 6. That the
-//! ends are exactly ∓200 ms and the middle exactly zero. 7. That a console with
-//! nothing open draws no offset at all, and that the tap closes up behind it —
-//! the page's own answer to a track with no value to point at. 8. The route a
-//! window loop actually takes — `claim`, then the derivation that drew the
-//! control, then the operation.
+//! 1. Where the three are, laid end to end from the audio-in pill's right
+//!    edge at the group's own gap — and that the arrangement pill has moved
+//!    along by exactly this group and one `.transport` gap, which is what a
+//!    flex row is.
+//! 2. That all three clear every boundary's grab, which is
+//!    `tests/look.rs`'s arithmetic over three more controls and is never
+//!    inherited from it. The octave's chips are the shortest targets in
+//!    this row — `OCTAVE_H` is 15.5 where a pill is 16.5 — so the clearance
+//!    is measured against them rather than against the tap.
+//! 3. That the refused half of the octave is drawn and not claimed, which
+//!    is `DeckHead::arrow`'s rule one bay over: *"the arrows keep their
+//!    shape when they are refused"*, and a chip that vanished would move
+//!    the row under the hand every time the grid crossed 100 or 120 BPM.
+//! 4. What a press on each of them asks for.
+//! 5. That one pixel of the offset track is one press of `o` or `p`, which
+//!    is the whole of why it is 80 wide.
+//! 6. That the ends are exactly ∓200 ms and the middle exactly zero.
+//! 7. That a console with nothing open draws no offset at all, and that the
+//!    tap closes up behind it — the page's own answer to a track with no
+//!    value to point at.
+//! 8. The route a window loop actually takes — `claim`, then the derivation
+//!    that drew the control, then the operation.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the tap capsule is as wide as the word in it and the offset's figure

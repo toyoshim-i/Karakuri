@@ -97,22 +97,24 @@ impl karakuri_environment::SaveReply for Reply {
 /// the sender is rather than in whoever drains it:
 ///
 /// 1. Replace, keyed on `(node, slot)`, in the run's own wiring for that deck —
-/// the list a rebuild restates (`Watch::edges`) and a save records
-/// (`Live::edges`), which are one list and not two — and touch no other edge.
-/// That is what `--edge` beside `--load-set` already does — the file's edges,
-/// minus the slots the flags name, plus the flags' — and it is forced rather
-/// than chosen: `SetError::SlotBoundTwice` refuses two edges on one slot, so an
-/// append would make the *second* call on a slot a refusal and leave a model
-/// unable to change its mind. 2. Rebuild the slot the deck names, on the path
-/// an edit takes: compiled on a worker, swapped at a frame boundary, judged
-/// against the budget and left in the slot with the slot stopped if it costs
-/// too much. An edge is priced by the same validation as everything else
-/// between nodes, which is the whole of why this is inside MCP's scope — see
-/// the description of [`tools`]'s `wire_input`. 3. Answer once, at the frame it
-/// was applied on — [`Reply::settled`], with what the loop would have printed.
-/// Not at the swap: what the *build* made of it is `swap_outcome`'s answer, as
-/// it is for every other rebuild, and a tool that waited for a verdict would be
-/// a tool that holds a connection open across a transition.
+///    the list a rebuild restates (`Watch::edges`) and a save records
+///    (`Live::edges`), which are one list and not two — and touch no other edge.
+///    That is what `--edge` beside `--load-set` already does — the file's edges,
+///    minus the slots the flags name, plus the flags' — and it is forced rather
+///    than chosen: `SetError::SlotBoundTwice` refuses two edges on one slot, so an
+///    append would make the *second* call on a slot a refusal and leave a model
+///    unable to change its mind.
+/// 2. Rebuild the slot the deck names, on the path an edit takes: compiled on a
+///    worker, swapped at a frame boundary, judged against the budget and left in
+///    the slot with the slot stopped if it costs too much. An edge is priced by
+///    the same validation as everything else between nodes, which is the whole of
+///    why this is inside MCP's scope — see the description of [`tools`]'s
+///    `wire_input`.
+/// 3. Answer once, at the frame it was applied on — [`Reply::settled`], with what
+///    the loop would have printed. Not at the swap: what the *build* made of it is
+///    `swap_outcome`'s answer, as it is for every other rebuild, and a tool that
+///    waited for a verdict would be a tool that holds a connection open across a
+///    transition.
 pub struct WireRequest {
     /// Which deck slot the edge is about. Checked against [`Slots`] before it is
     /// sent, in the sentence every other surface refuses an absent slot in.

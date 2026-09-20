@@ -1030,20 +1030,22 @@ fn a_press_on_a_strips_ground_selects_that_deck() {
 /// # What it asserts, in the order a hand does it
 ///
 /// 1. A press on the third row is the panel's, and it emits nothing: half a
-/// gesture names one operand. 2. The cursor mark follows the hand, and
-/// `Acted::Pointed` is the press saying so. It is no longer the whole of what
-/// this console draws for a carry — the rectangle under the pointer is ringed
-/// and the pointer is a grab, which is `View::draw`'s and is held by
-/// `karakuri-console/tests/carry.rs`; the mock still draws no ghost. What is
-/// owed on that answer when a reading is open is
-/// [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`]; here it is
-/// the mark alone, and `Acted::Nothing` in its place would be a press that
-/// moved the cursor and told nobody. 3. Every move on the way is
-/// `Acted::Nothing`, over two strips that are not the one it lands on. 4. The
-/// release over strip C asks for `LoadSet` naming deck C and the Set from row 2
-/// — not the selection, which is deck A throughout, and not the row the cursor
-/// started on. 5. A second carry let go over nothing asks for nothing, which is
-/// the outcome no other drag on this panel has.
+///    gesture names one operand.
+/// 2. The cursor mark follows the hand, and `Acted::Pointed` is the press saying
+///    so. It is no longer the whole of what this console draws for a carry — the
+///    rectangle under the pointer is ringed and the pointer is a grab, which is
+///    `View::draw`'s and is held by `karakuri-console/tests/carry.rs`; the mock
+///    still draws no ghost. What is owed on that answer when a reading is open is
+///    [`a_carry_that_moves_the_cursor_re_reads_the_row_it_arrived_at`]; here it is
+///    the mark alone, and `Acted::Nothing` in its place would be a press that
+///    moved the cursor and told nobody.
+/// 3. Every move on the way is `Acted::Nothing`, over two strips that are not
+///    the one it lands on.
+/// 4. The release over strip C asks for `LoadSet` naming deck C and the Set from
+///    row 2 — not the selection, which is deck A throughout, and not the row the
+///    cursor started on.
+/// 5. A second carry let go over nothing asks for nothing, which is the outcome
+///    no other drag on this panel has.
 ///
 /// A CPU test: a `Readout` takes no device.
 #[test]
@@ -1301,14 +1303,15 @@ fn a_drop_on_a_preview_cell_loads_the_deck_its_letter_names() {
 /// # What it asserts, and what each one fails against
 ///
 /// 1. The press answers `Acted::Pointed`, which is the whole of what
-/// `Readout::took` can do about it: the readout holds no store, so the press
-/// says *the cursor moved* and the caller reads the file. A `took` that drops
-/// the `bool` again answers `Acted::Nothing` here. 2. The block is gone until
-/// it is re-read, which is the defect itself, asserted so that step 3 cannot
-/// pass by the reading never having moved. 3. `read_reading` — the call the
-/// window loop makes on that answer — puts the reading under the row the hand
-/// took, naming that row's Set. 4. A press on the row the cursor is already on
-/// answers `Acted::Nothing`, so a carry that moved nothing costs no file read.
+///    `Readout::took` can do about it: the readout holds no store, so the press
+///    says *the cursor moved* and the caller reads the file. A `took` that drops
+///    the `bool` again answers `Acted::Nothing` here.
+/// 2. The block is gone until it is re-read, which is the defect itself,
+///    asserted so that step 3 cannot pass by the reading never having moved.
+/// 3. `read_reading` — the call the window loop makes on that answer — puts the
+///    reading under the row the hand took, naming that row's Set.
+/// 4. A press on the row the cursor is already on answers `Acted::Nothing`, so
+///    a carry that moved nothing costs no file read.
 ///
 /// What it cannot see is that the window loop makes the call, because `winit`
 /// cannot be asked for an `ActiveEventLoop` outside its own loop and an event

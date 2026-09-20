@@ -977,16 +977,16 @@ pub enum Record {
     /// that record, and its shape follows from what a frame is:
     ///
     /// - One line per frame, so it interleaves with `tick` and every edit lands at
-    /// an exact frame position, the way the session stream format already promises.
+    ///   an exact frame position, the way the session stream format already promises.
     /// - Named fields for named signals and a positional array for the bands,
-    /// because `band0`…`bandN` *are* positions — an array is the naming scheme
-    /// rather than a second one. A map of name to value would also encode which
-    /// names it carries, at the cost of repeating those names 200,000 times an hour
-    /// and of letting a stream invent a name the bus has rules about (`noise` is
-    /// not a bus name, and a generic map is where that rule would be broken). - One
-    /// confidence for the frame, not one per signal: these values all came out of
-    /// the same block of samples at the same instant, so their staleness is one
-    /// number. A per-signal confidence would be four copies of it.
+    ///   because `band0`…`bandN` *are* positions — an array is the naming scheme
+    ///   rather than a second one. A map of name to value would also encode which
+    ///   names it carries, at the cost of repeating those names 200,000 times an hour
+    ///   and of letting a stream invent a name the bus has rules about (`noise` is
+    ///   not a bus name, and a generic map is where that rule would be broken).
+    /// - One confidence for the frame, not one per signal: these values all came out of
+    ///   the same block of samples at the same instant, so their staleness is one
+    ///   number. A per-signal confidence would be four copies of it.
     ///
     /// The array's length is the band count, so a stream carrying more bands than a
     /// reader knows about still decodes — a fixed-length array would make a band

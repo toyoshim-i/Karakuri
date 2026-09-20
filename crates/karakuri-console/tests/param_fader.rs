@@ -5,25 +5,29 @@
 //! Nine things, and the first three are why this is its own file rather than a
 //! few more assertions in `deck_head.rs`:
 //!
-//! 1. Where a row is — `.node-group`'s head, the renderer row where there is
-//! one, and `.param`'s own height from there — measured off the group rectangle
-//! `InspectorPane::group` answers rather than off the derivation that draws it.
-//! 2. Where the fader is across that row: `.param`'s `grid-template-columns:
-//! 15px 88px 1fr 58px`, and the fader is the `1fr`. 3. That the knob a hand
-//! takes hold of is the knob a frame painted, which is the whole reason the
-//! row's arithmetic was lifted out of `node_into`: two copies of where a knob
-//! is is a knob drawn where nothing can grab it. 4. That the knob is the target
-//! and the track is not — `Mixer::grab`'s rule, met one bay along on a row the
-//! mock gives no tooltip to. 5. That every row is its own control, and that a
-//! press names the row it landed on rather than the first one drawn. 6. That a
-//! wildcard row writes the wildcard, and not the node whose group it was drawn
-//! in —
-//! [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+//! 1. Where a row is — `.node-group`'s head, the renderer row where there
+//!    is one, and `.param`'s own height from there — measured off the group
+//!    rectangle `InspectorPane::group` answers rather than off the
+//!    derivation that draws it.
+//! 2. Where the fader is across that row: `.param`'s `grid-template-
+//!    columns: 15px 88px 1fr 58px`, and the fader is the `1fr`.
+//! 3. That the knob a hand takes hold of is the knob a frame painted, which
+//!    is the whole reason the row's arithmetic was lifted out of
+//!    `node_into`: two copies of where a knob is is a knob drawn where
+//!    nothing can grab it.
+//! 4. That the knob is the target and the track is not — `Mixer::grab`'s
+//!    rule, met one bay along on a row the mock gives no tooltip to.
+//! 5. That every row is its own control, and that a press names the row it
+//!    landed on rather than the first one drawn.
+//! 6. That a wildcard row writes the wildcard, and not the node whose group
+//!    it was drawn in —
+//!    [ADR-0286](../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
 //! 7. That the position and the value are one map read both ways, over a
-//! published range that is not `[0, 1]`. 8. That a range of no width is drawn
-//! and not taken hold of, which is `Grab::new`'s refusal read on the value
-//! axis. 9. That a group the pane had no room for is not reachable by a press
-//! either, and that each pane names its own deck.
+//!    published range that is not `[0, 1]`.
+//! 8. That a range of no width is drawn and not taken hold of, which is
+//!    `Grab::new`'s refusal read on the value axis.
+//! 9. That a group the pane had no room for is not reachable by a press
+//!    either, and that each pane names its own deck.
 //!
 //! None of it needs a window, a device or a disk. It needs `egui`'s fonts only
 //! where a whole frame is painted — `common::drawn_once` — because the pane

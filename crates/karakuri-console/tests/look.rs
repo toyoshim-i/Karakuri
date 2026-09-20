@@ -4,21 +4,23 @@
 //! Seven things, and the first two are why this is its own file rather than a
 //! few more assertions in `arrangement_pill.rs`:
 //!
-//! 1. Where the two controls are, derived from the pill's own right edge. 2.
-//! That both clear every boundary's grab, which is
-//! `tests/arrangement_pill.rs`'s arithmetic over two more controls and is never
-//! inherited from it: the row is 48, both targets are 16.5, so the clearance is
-//! 15.75 against a `GRAB` of 6 — measured here, and the exposure control's
-//! target is the *track grown to a line's height* rather than the 5px track,
-//! which is the number that matters. 3. That the capsule does not move under
-//! the word it names, which is what stops the exposure track walking away as
-//! the tone map is cycled. 4. That the capsule cycles all four operators and
-//! comes back, once each. 5. What a press on the track asks for: the value at
-//! the point it landed, exactly at both ends and exactly 1.00 in the middle. 6.
-//! That one pixel of that track is one press of an exposure key, which is the
-//! whole of why it is 48 wide. 7. The route a window loop actually takes —
-//! `claim`, then the derivation that drew the control, then the operation —
-//! which is `tests/vocabulary.rs`'s third pass over these two controls.
+//! 1. Where the two controls are, derived from the pill's own right edge.
+//! 2. That both clear every boundary's grab, which is
+//!    `tests/arrangement_pill.rs`'s arithmetic over two more controls and
+//!    is never inherited from it: the row is 48, both targets are 16.5, so
+//!    the clearance is 15.75 against a `GRAB` of 6 — measured here, and the
+//!    exposure control's target is the *track grown to a line's height*
+//!    rather than the 5px track, which is the number that matters.
+//! 3. That the capsule does not move under the word it names, which is what
+//!    stops the exposure track walking away as the tone map is cycled.
+//! 4. That the capsule cycles all four operators and comes back, once each.
+//! 5. What a press on the track asks for: the value at the point it landed,
+//!    exactly at both ends and exactly 1.00 in the middle.
+//! 6. That one pixel of that track is one press of an exposure key, which
+//!    is the whole of why it is 48 wide.
+//! 7. The route a window loop actually takes — `claim`, then the derivation
+//!    that drew the control, then the operation — which is
+//!    `tests/vocabulary.rs`'s third pass over these two controls.
 //!
 //! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
 //! because the capsule is as wide as the widest name it can hold — see

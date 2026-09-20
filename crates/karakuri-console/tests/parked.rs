@@ -13,25 +13,28 @@
 //!
 //! Seven claims, and each one is a thing that could quietly not be true:
 //!
-//! 1. The chip is as wide as the widest residency word, whichever it is showing
-//! — a capsule sized to the current word resizes when the deck moves, and would
-//! resize under a word rolling through it. *This one failed before the change
-//! that added the rest of this file.* 2. A strip whose two halves agree is
-//! still, draws one word, and asks for no repaint at all. ADR-0164's
-//! still-panel clause is the one thing an animation is most likely to cost by
-//! accident. 3. The roll is a function of the phase it was handed — asserted at
-//! phases this file chose, which is the whole reason the phase is a value
-//! written by the harness rather than a clock read in `src/`. 4. The rolling
-//! word never leaves the chip. The clip is new here; nothing called
-//! `with_clip_rect` on a tally before. 5. The two words never meet, whatever
-//! the displacement: a blank band of the chip's own slack separates them, and
-//! at 9px two words with nothing between them are mud. 6. The panel asks for a
-//! deadline while a slot is parked and for `Never` when none is — the
-//! declaration end of P-0091, from the view, which is what knows the rate. 7.
-//! And for `Never` while the bay the chip is in is out of the layout, however
-//! parked the slot behind it is. A declaration answered off the deck alone
-//! bought a 30 Hz deadline for a chip nobody could see, which is P-0091's *what
-//! must be live* read as *what is pending*.
+//! 1. The chip is as wide as the widest residency word, whichever it is
+//!    showing — a capsule sized to the current word resizes when the deck
+//!    moves, and would resize under a word rolling through it. *This one
+//!    failed before the change that added the rest of this file.*
+//! 2. A strip whose two halves agree is still, draws one word, and asks for
+//!    no repaint at all. ADR-0164's still-panel clause is the one thing an
+//!    animation is most likely to cost by accident.
+//! 3. The roll is a function of the phase it was handed — asserted at
+//!    phases this file chose, which is the whole reason the phase is a
+//!    value written by the harness rather than a clock read in `src/`.
+//! 4. The rolling word never leaves the chip. The clip is new here; nothing
+//!    called `with_clip_rect` on a tally before.
+//! 5. The two words never meet, whatever the displacement: a blank band of
+//!    the chip's own slack separates them, and at 9px two words with
+//!    nothing between them are mud.
+//! 6. The panel asks for a deadline while a slot is parked and for `Never`
+//!    when none is — the declaration end of P-0091, from the view, which is
+//!    what knows the rate.
+//! 7. And for `Never` while the bay the chip is in is out of the layout,
+//!    however parked the slot behind it is. A declaration answered off the
+//!    deck alone bought a 30 Hz deadline for a chip nobody could see, which
+//!    is P-0091's *what must be live* read as *what is pending*.
 //!
 //! None of it needs a window, a device or a clock.
 

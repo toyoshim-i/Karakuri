@@ -4,16 +4,18 @@
 //! Four things, and the first two are the ones that could only go wrong here:
 //!
 //! 1. A console nobody has told about a surface draws neither, and the
-//! arrangement pill lands exactly where it did before they existed. That is
-//! `View::map`'s `Option` doing the work `View::audio`'s does one pill along —
-//! a program with no port has nothing to learn onto, and a pill drawn for it
-//! would be this crate answering a question about a device. 2. They are in the
-//! mock's order and the arrangement pill moves for them — `learn`, `map ·
-//! <name>`, `arr · <name>` — because the three are laid out one from the next.
+//!    arrangement pill lands exactly where it did before they existed. That
+//!    is `View::map`'s `Option` doing the work `View::audio`'s does one
+//!    pill along — a program with no port has nothing to learn onto, and a
+//!    pill drawn for it would be this crate answering a question about a
+//!    device.
+//! 2. They are in the mock's order and the arrangement pill moves for them
+//!    — `learn`, `map · <name>`, `arr · <name>` — because the three are
+//!    laid out one from the next.
 //! 3. That the `learn` pill is a press and names a state rather than a
-//! direction, and that the `map` pill is a readout. 4. That the `map` pill says
-//! what it was handed, and that a surface with no map reads `none` rather than
-//! a name.
+//!    direction, and that the `map` pill is a readout.
+//! 4. That the `map` pill says what it was handed, and that a surface with
+//!    no map reads `none` rather than a name.
 //!
 //! No window, no device and no disk. It does need `egui`'s fonts, because every
 //! capsule in this row is as wide as the words in it.
