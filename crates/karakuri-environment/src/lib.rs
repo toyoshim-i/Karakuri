@@ -240,6 +240,9 @@ impl SlotPolicies {
                     code: karakuri_operation::RefusalCode::SlotPolicyOff,
                     message: format!("slot {slot} is not writable by MCP"),
                     slot: Some(slot),
+                    deck: u8::try_from(slot).ok(),
+                    lane: None,
+                    class: None,
                     policy: Some(access.policy),
                     in_mix: Some(access.in_mix),
                 }))

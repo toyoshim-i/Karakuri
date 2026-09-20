@@ -177,10 +177,11 @@ Ground system design in Karakuri's standing principles (`docs/principles/`) and 
   - Fully purged toggle operations (`ToggleSolo`, `ToggleMute`) from `karakuri-operation::Operation`, `karakuri-operation-record`, `karakuri-mcp`, and `docs/manual/operations.html`.
   - Migrated keymap actions (`key_toggle_mute`, `key_toggle_solo`) to query engine deck state and emit explicit destination operations (`SetMute { deck, mute }`, `SetSolo { deck, solo }`).
   - Guaranteed surfaces maintain their own local destination state and submit deterministic destination values, preventing state drift across GUI, MIDI, and MCP.
-- **P84: Principle P-0083 & ADR-0131 Structured Refusal Unification**:
+- **P84: Principle P-0083 & ADR-0131 Structured Refusal Unification — COMPLETED**:
   - *Principle P-0083 (A refusal carries what the next attempt needs)* & *ADR-0131 (One refusal sentence per mistake across all surfaces)*: Refusals must carry explicit numbers and constraint bounds without guessing fixes.
-  - Replace ad-hoc string formatting in `karakuri::bridge::handlers::apply::unwritten` and `karakuri-operation::gate` with a strongly-typed `RefusalDetail` struct (capturing constraint identifier, active value, requested value, and gating class).
-  - Guarantee bit-exact identical refusal messages across GUI status lines, CLI stderr, and MCP JSON-RPC error responses.
+  - Introduced unified `RefusalDetail` and `RefusalCode` in `karakuri-operation::types`, capturing code, message, deck, lane, and gating standing/class.
+  - Implemented `gate::refusal_detail` and `gate::audit_detail` in `karakuri-operation::gate`, returning strongly typed `RefusalDetail` while preserving backward-compatible `audit` string output.
+  - Integrated `RefusalDetail` into `karakuri_operation_record::state::Refusal` via `.detail()`, and updated `karakuri-mcp` tools and error payloads to serialize structured JSON refusals with bit-exact message parity across GUI status lines, CLI stderr, and MCP JSON-RPC error responses.
 - **P85: Principle P-0091 Context & Parameter Object Standardization**:
   - *Principle P-0091 (Cost is known before it is paid)* & *ADR-0210 (Declared cost is one panel pass)*: UI repaint schedules and layout measurements must remain decoupled from deep function call hierarchies.
   - Replace 8-argument parameter cascades with cohesive Context structures:

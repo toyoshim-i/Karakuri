@@ -8,7 +8,7 @@ use std::sync::mpsc;
 
 use karakuri_ir::Kind;
 use karakuri_operation::gate::{self, Allowed};
-use karakuri_operation::{NodeAddress, Operation, RefusalCode, RefusalDetail};
+use karakuri_operation::{NodeAddress, Operation, RefusalDetail};
 use serde_json::{json, Value};
 
 pub use operate::OperateRequest;
@@ -497,24 +497,12 @@ pub(crate) enum Asked {
 /// slot, so that a call with two mistakes in it is still told about the same
 /// one it was told about before.
 pub(crate) fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
-    slots.holds(slot).map_err(|e| {
-        refusal_payload(&RefusalDetail {
-            code: RefusalCode::SlotUnallocated,
-            message: e,
-            slot: Some(slot),
-            policy: None,
-            in_mix: None,
-        })
-    })?;
+    slots
+        .holds(slot)
+        .map_err(|e| refusal_payload(&RefusalDetail::slot_unallocated(slot, e)))?;
     u8::try_from(slot).map_err(|_| {
         let msg = karakuri_environment::no_such_slot(slot, slots.count());
-        refusal_payload(&RefusalDetail {
-            code: RefusalCode::SlotUnallocated,
-            message: msg,
-            slot: Some(slot),
-            policy: None,
-            in_mix: None,
-        })
+        refusal_payload(&RefusalDetail::slot_unallocated(slot, msg))
     })
 }
 
@@ -942,13 +930,7 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             Err(e) => return Ok(Called::Answered(Err(e.into()))),
         };
         if let Err(e) = state.slots.holds(slot) {
-            let detail = RefusalDetail {
-                code: RefusalCode::SlotUnallocated,
-                message: e,
-                slot: Some(slot),
-                policy: None,
-                in_mix: None,
-            };
+            let detail = RefusalDetail::slot_unallocated(slot, e);
             return Ok(Called::Answered(Err(refusal_payload(&detail))));
         }
         let nodes = match state.slots.nodes(slot) {
@@ -993,23 +975,11 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
             Err(e) => return Ok(Called::Answered(Err(e.into()))),
         };
         if let Err(e) = state.slots.holds(from_slot) {
-            let detail = RefusalDetail {
-                code: RefusalCode::SlotUnallocated,
-                message: e,
-                slot: Some(from_slot),
-                policy: None,
-                in_mix: None,
-            };
+            let detail = RefusalDetail::slot_unallocated(from_slot, e);
             return Ok(Called::Answered(Err(refusal_payload(&detail))));
         }
         if let Err(e) = state.slots.holds(to_slot) {
-            let detail = RefusalDetail {
-                code: RefusalCode::SlotUnallocated,
-                message: e,
-                slot: Some(to_slot),
-                policy: None,
-                in_mix: None,
-            };
+            let detail = RefusalDetail::slot_unallocated(to_slot, e);
             return Ok(Called::Answered(Err(refusal_payload(&detail))));
         }
         if let Err(d) = state.slot_policies.check_writable_detail(to_slot) {
@@ -1093,16 +1063,7 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
         // [`audited`] returns and nothing else can make one.
         Asked::Named(operation) => match audited(&operation, state) {
             Ok(allowed) => perform(&allowed, state),
-            Err(refused) => {
-                let detail = RefusalDetail {
-                    code: RefusalCode::BayClosed,
-                    message: refused,
-                    slot: None,
-                    policy: None,
-                    in_mix: None,
-                };
-                Called::Answered(Err(refusal_payload(&detail)))
-            }
+            Err(detail) => Called::Answered(Err(refusal_payload(&detail))),
         },
         Asked::Refused(refusal) => Called::Answered(Err(refusal)),
     })
@@ -1129,8 +1090,11 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
 /// which is
 /// `docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`'s
 /// answer rather than a guess that the deck is idle.
-pub(crate) fn audited<'a>(operation: &'a Operation, state: &State) -> Result<Allowed<'a>, String> {
-    gate::audit(operation, state.opening.read(), gate::Running::unread())
+pub(crate) fn audited<'a>(
+    operation: &'a Operation,
+    state: &State,
+) -> Result<Allowed<'a>, RefusalDetail> {
+    gate::audit_detail(operation, state.opening.read(), gate::Running::unread())
 }
 
 /// Serialise a [`RefusalDetail`] into a JSON string for structured envelope reporting.

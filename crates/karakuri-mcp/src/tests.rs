@@ -795,7 +795,7 @@ fn a_closed_operation_is_refused_at_the_seam_every_tool_crosses() {
     };
     assert_eq!(
         audited(&operation, &state).expect_err("the mix faders are closed by default"),
-        gate::refusal(&operation, Standing::Closed(Class::MixFaders)).expect("a refusal"),
+        gate::refusal_detail(&operation, Standing::Closed(Class::MixFaders)).expect("a refusal"),
     );
 }
 
