@@ -331,22 +331,6 @@ pub(crate) const SPELLED: &[Spelled] = &[
         }),
     },
     Spelled {
-        sample: || (Operation::ToggleMute { deck: 0 }, json!({ "deck": 0 })),
-        make: Some(|with, slots| {
-            Ok(Operation::ToggleMute {
-                deck: deck_of(with, "deck", slots)?,
-            })
-        }),
-        shape: Some(|| {
-            shaped(
-                json!({
-                    "deck": p_deck(),
-                }),
-                &["deck"],
-            )
-        }),
-    },
-    Spelled {
         sample: || {
             (
                 Operation::SetSolo {
@@ -369,22 +353,6 @@ pub(crate) const SPELLED: &[Spelled] = &[
                     "solo": p_bool("whether this deck is isolated in the composite mix"),
                 }),
                 &["deck", "solo"],
-            )
-        }),
-    },
-    Spelled {
-        sample: || (Operation::ToggleSolo { deck: 0 }, json!({ "deck": 0 })),
-        make: Some(|with, slots| {
-            Ok(Operation::ToggleSolo {
-                deck: deck_of(with, "deck", slots)?,
-            })
-        }),
-        shape: Some(|| {
-            shaped(
-                json!({
-                    "deck": p_deck(),
-                }),
-                &["deck"],
             )
         }),
     },

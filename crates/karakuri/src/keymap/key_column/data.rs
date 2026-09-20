@@ -357,8 +357,8 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // surface, so both rows read `gap` in the panel column and in the key
     // column (ADR-0353).
     (Some("mixer"), "enter", &["Wipe the next deck in"]),
-    (Some("mixer"), "m", &["Mute a deck", "Toggle mute"]),
-    (Some("mixer"), "s", &["Solo a deck", "Toggle solo"]),
+    (Some("mixer"), "m", &["Mute a deck"]),
+    (Some("mixer"), "s", &["Solo a deck"]),
     (Some("mixer"), "u", &["Clear solo"]),
     // ------------------------------------------------------------------
     // The Master chain's grammar

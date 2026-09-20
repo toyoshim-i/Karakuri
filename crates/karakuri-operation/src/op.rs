@@ -154,14 +154,8 @@ operations! {
     /// Mutes or unmutes a deck, excluding it from or including it in the composite mix.
     SetMute { deck: u8, mute: bool } => "Mute a deck",
 
-    /// Toggles the mute state of a deck.
-    ToggleMute { deck: u8 } => "Toggle mute",
-
     /// Solos or un-solos a deck, isolating it in the composite mix.
     SetSolo { deck: u8, solo: bool } => "Solo a deck",
-
-    /// Toggles the exclusive solo state of a deck.
-    ToggleSolo { deck: u8 } => "Toggle solo",
 
     /// Clears any active solo across all decks.
     ClearSolo => "Clear solo",

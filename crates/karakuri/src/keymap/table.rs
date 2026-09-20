@@ -147,14 +147,14 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         key: BoundKey::Character("m"),
         legend: "m",
         bay: Some("mixer"),
-        title: Some("Toggle mute"),
+        title: Some("Mute a deck"),
         action: KeyAction::Handled(key_toggle_mute),
     },
     KeyBinding {
         key: BoundKey::Character("s"),
         legend: "s",
         bay: Some("mixer"),
-        title: Some("Toggle solo"),
+        title: Some("Solo a deck"),
         action: KeyAction::Handled(key_toggle_solo),
     },
     KeyBinding {

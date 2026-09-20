@@ -603,9 +603,7 @@ pub(crate) fn sayable(operation: &Operation) -> Sayable {
         | Operation::SetGain { .. }
         | Operation::SetOpacity { .. }
         | Operation::SetMute { .. }
-        | Operation::ToggleMute { .. }
         | Operation::SetSolo { .. }
-        | Operation::ToggleSolo { .. }
         | Operation::ClearSolo
         | Operation::SetOnline { .. }
         | Operation::SetBlendMode { .. }

@@ -36,7 +36,7 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 | **P80** | `karakuri-store::tests::store` (1,789 lines) | Decompose store integration tests into CAS, journal, and concurrency submodules | **COMPLETED** |
 | **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **COMPLETED** |
 | **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **COMPLETED** |
-| **P83** | Vocabulary Destination Purity | Purge toggle/step operations (`ToggleSolo`, `ToggleMute`) in favor of destination operations (`SetSolo`, `SetMute`) across all surfaces (P-0090, ADR-0180) | **PLANNED** |
+| **P83** | Vocabulary Destination Purity | Purge toggle/step operations (`ToggleSolo`, `ToggleMute`) in favor of destination operations (`SetSolo`, `SetMute`) across all surfaces (P-0090, ADR-0180) | **COMPLETED** |
 | **P84** | Structured Refusal Unification | Standardize `RefusalDetail` structured type and guarantee bit-exact error wording across GUI, CLI, and MCP (P-0083, ADR-0131) | **PLANNED** |
 | **P85** | Context & Parameter Objects | Replace 8-argument cascades with dedicated Context structs (`PlanSourcesCtx`, `InspectorRenderCtx`) (P-0091, ADR-0210) | **PLANNED** |
 | **P86** | Sandbox-Safe Test Partitioning | Partition socket-dependent MCP integration tests from offline CPU/GPU tests to guarantee 100% deterministic test execution in sandboxes (ADR-0017, ADR-0242) | **PLANNED** |
@@ -172,11 +172,11 @@ Decompose test suites that have accumulated beyond 1,700 lines:
 
 Ground system design in Karakuri's standing principles (`docs/principles/`) and Architectural Decision Records (`docs/adr/`), turning implicit design conventions into enforceable compiler contracts:
 
-- **P83: Principle P-0090 Vocabulary Convergence & Destination Purity**:
+- **P83: Principle P-0090 Vocabulary Convergence & Destination Purity — COMPLETED**:
   - *Principle P-0090 (A surface offers; it never decides)* & *ADR-0180 (Vocabulary crate with no dependencies)*: Every operation variant must name an absolute destination rather than an affordance or relative motion.
-  - Fully purge remaining toggle operations (`ToggleSolo`, `ToggleMute`) from `karakuri-operation::Operation`.
-  - Migrate all UI, keymap, and MIDI handlers to explicit destination operations (`SetSolo { deck, solo }`, `SetMute { deck, mute }`).
-  - Ensure surfaces maintain their own local toggle/cycle state and submit destination values, preventing state drift across GUI, MIDI, and MCP.
+  - Fully purged toggle operations (`ToggleSolo`, `ToggleMute`) from `karakuri-operation::Operation`, `karakuri-operation-record`, `karakuri-mcp`, and `docs/manual/operations.html`.
+  - Migrated keymap actions (`key_toggle_mute`, `key_toggle_solo`) to query engine deck state and emit explicit destination operations (`SetMute { deck, mute }`, `SetSolo { deck, solo }`).
+  - Guaranteed surfaces maintain their own local destination state and submit deterministic destination values, preventing state drift across GUI, MIDI, and MCP.
 - **P84: Principle P-0083 & ADR-0131 Structured Refusal Unification**:
   - *Principle P-0083 (A refusal carries what the next attempt needs)* & *ADR-0131 (One refusal sentence per mistake across all surfaces)*: Refusals must carry explicit numbers and constraint bounds without guessing fixes.
   - Replace ad-hoc string formatting in `karakuri::bridge::handlers::apply::unwritten` and `karakuri-operation::gate` with a strongly-typed `RefusalDetail` struct (capturing constraint identifier, active value, requested value, and gating class).
