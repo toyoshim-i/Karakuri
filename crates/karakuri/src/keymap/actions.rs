@@ -1,0 +1,160 @@
+use super::*;
+
+pub(crate) fn key_tab(ctx: &mut KeyCtx) -> bool {
+    let step = match ctx.shift {
+        true => -1,
+        false => 1,
+    };
+    ctx.readout.view.tab(&ctx.readout.panel, step)
+}
+
+pub(crate) fn key_escape(ctx: &mut KeyCtx) -> bool {
+    let moved = ctx.readout.view.focus_up(&ctx.readout.panel);
+    if !moved {
+        println!(
+            "  esc: the address is already at the {} bay and there is no \
+             level above it — press tab to move focus to another bay, or \
+             close the window to quit",
+            ctx.readout
+                .view
+                .focused(&ctx.readout.panel)
+                .map_or("focused", |bay| bay.name)
+        );
+    }
+    moved
+}
+
+pub(super) fn key_fold_enclosing(ctx: &mut KeyCtx) -> Option<Op> {
+    ctx.readout
+        .view
+        .focused(&ctx.readout.panel)
+        .and_then(|bay| ctx.readout.panel.layout().find(bay.name))
+        .map(Op::FoldEnclosing)
+}
+
+pub(super) fn key_unfold_all(_ctx: &mut KeyCtx) -> Option<Op> {
+    Some(Op::UnfoldAll)
+}
+
+pub(super) fn key_reset(_ctx: &mut KeyCtx) -> Option<Op> {
+    Some(Op::Reset)
+}
+
+pub(super) fn key_save(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let deck = ctx.readout.view.selection();
+    // **`None`, and it is the payload saying so rather than this function
+    // inventing a stamp.** A caller that can type a name is not made to
+    // take a timestamp, and a key press is not one of them.
+    let acted = Acted::Emitted(Some(Operation::SaveSet { deck, id: None }));
+    // **Named through `performed` and performed beside it**, which is
+    // `e`'s shape: the emission is what records the press as
+    // `Silent(OnLanding)` rather than as nothing at all, and the save
+    // itself is this function's because `Operation::SaveSet` writes no
+    // record here — the `save` record is written where the work lands,
+    // and this program records no session to write it into.
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    ctx.keeping.save_set(
+        &gfx.engine,
+        ctx.store,
+        Asked::Operator,
+        usize::from(deck),
+        None,
+        None,
+    );
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+pub(super) fn key_tap_beat(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let acted = Acted::Emitted(Some(Operation::TapBeat));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+/// The shared half of [`key_scale_grid_halve`] and [`key_scale_grid_double`] —
+/// the two keys' one difference is `by`.
+pub(super) fn key_scale_grid(ctx: &mut KeyCtx, gfx: &mut Gfx, by: GridScale) {
+    let acted = Acted::Emitted(Some(Operation::ScaleGrid { by }));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+pub(super) fn key_scale_grid_halve(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    key_scale_grid(ctx, gfx, GridScale::Halve);
+}
+
+pub(super) fn key_scale_grid_double(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    key_scale_grid(ctx, gfx, GridScale::Double);
+}
+
+pub(super) fn key_room(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    ctx.readout.room();
+    App::wants(gfx, ctx.egui_due, ctx.costs, Change::Room.repaint());
+}
+
+pub(super) fn key_toggle_mute(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let deck = ctx.readout.view.selection();
+    let acted = Acted::Emitted(Some(Operation::ToggleMute { deck }));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+pub(super) fn key_toggle_solo(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let deck = ctx.readout.view.selection();
+    let acted = Acted::Emitted(Some(Operation::ToggleSolo { deck }));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
+
+pub(super) fn key_clear_solo(ctx: &mut KeyCtx, gfx: &mut Gfx) {
+    let acted = Acted::Emitted(Some(Operation::ClearSolo));
+    let repaint = App::performed(
+        gfx,
+        ctx.started,
+        ctx.readout,
+        ctx.recording.recorder(),
+        &acted,
+        Repaint::Never,
+    )
+    .repaint;
+    App::wants(gfx, ctx.egui_due, ctx.costs, repaint);
+}
