@@ -17,3 +17,6 @@ license.workspace = true
 # one, and this crate gains `serde` on the same day (ADR-0320).
 [dependencies]
 karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+
+[lints]
+workspace = true

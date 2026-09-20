@@ -1327,8 +1327,6 @@ pub(super) fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox, ph
     });
 }
 
-/// A galley centred in a box, both ways — which is `align-items: center` on a
-
 /// The meter: the well, the mean's column and the peak's mark — and nothing
 /// in the well where there is no reading, which is the mock's own `alloc`
 /// strip.

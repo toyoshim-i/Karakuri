@@ -18,6 +18,9 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[workspace.lints.clippy]
+doc_lazy_continuation = "allow"
+
 [profile.dev]
 # The render thread has a frame budget even in debug builds. Optimising
 # dependencies keeps wgpu and naga out of the way while leaving our own

@@ -448,6 +448,14 @@ pub fn at(said: &str, id: &str) -> usize {
         .unwrap_or_else(|| panic!("`{id}` is not in the listing at all: {said}"))
 }
 
+/// **A stored artifact, its card, and one Set naming it** — the fixture the
+/// card tests share.
+///
+/// It puts the source and writes the card through [`karakuri_environment::meta::card`]
+/// rather than by hand, because what these tests are about is that the
+/// numbers a model reads are the numbers the *source* declared: a card
+/// assembled in the test would only prove this module can render a record
+/// it was handed.
 pub fn kept(server: &Server, id: &str, source: &str, card: bool) -> Hash {
     let store = server.store();
     let hash = store.put_artifact(source.as_bytes()).expect("put");

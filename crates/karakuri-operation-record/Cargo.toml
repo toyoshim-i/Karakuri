@@ -13,3 +13,6 @@ license.workspace = true
 [dependencies]
 karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
+
+[lints]
+workspace = true

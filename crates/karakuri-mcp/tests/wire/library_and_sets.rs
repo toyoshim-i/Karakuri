@@ -414,15 +414,6 @@ fn a_store_that_cannot_be_opened_is_an_error_naming_the_path() {
     );
 }
 
-/// **A stored artifact, its card, and one Set naming it** — the fixture the
-/// card tests share.
-///
-/// It puts the source and writes the card through [`crate::meta::card`]
-/// rather than by hand, because what these tests are about is that the
-/// numbers a model reads are the numbers the *source* declared: a card
-/// assembled in the test would only prove this module can render a record
-/// it was handed.
-
 /// **The tool is offered, and what comes back is what the source
 /// declared.**
 ///

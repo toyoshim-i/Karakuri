@@ -354,9 +354,9 @@ mod inspector;
 pub use inspector::{
     auth_chips, count_text, deck_head, deck_name, inspector, keep_pill, node_keep, pane_count,
     pane_target, rend_chips, sens_chips, slot_mcp_pill, AimChips, Aimed, DeckHead, DeckName,
-    InspectorPane, KeepPill, Naming, Node, NodeAuthority, Pane, PaneTarget, Param, ParamGrip,
-    Renderer, SensChip, SlotMcpPill, Source, Uses, UsesLine, AUTHORITIES, PANES, PANE_DECKS,
-    PANE_NAMES, RE_SALT_LABEL, SCRUB_BEATS, SENS_LABEL, SYNCS, TAKE_BACK,
+    InspectorPane, KeepPill, Naming, Node, NodeAuthority, Pane, PaneTarget, PaneTargetCtx, Param,
+    ParamGrip, Renderer, SensChip, SlotMcpPill, Source, Uses, UsesLine, AUTHORITIES, PANES,
+    PANE_DECKS, PANE_NAMES, RE_SALT_LABEL, SCRUB_BEATS, SENS_LABEL, SYNCS, TAKE_BACK,
 };
 // **The symbol Inspector keeps crate-internal rather than exporting**:
 // `next_sync` backs [`crate::focus`]'s own cycling of the deck head's sync

@@ -125,14 +125,7 @@ fn words_at(strips: Vec<Strip>, phase: Phase) -> (StripBox, Vec<(String, egui::R
     let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
         let painter = ui.painter();
         for strip in &strips {
-            tally_into(
-                &painter,
-                &pal,
-                at.tally,
-                strip.tally,
-                strip.pending(),
-                phase,
-            );
+            tally_into(painter, &pal, at.tally, strip.tally, strip.pending(), phase);
         }
     });
     out.textures_delta.clear();

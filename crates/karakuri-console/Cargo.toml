@@ -67,3 +67,6 @@ serde_json.workspace = true
 # its example", and it is `karakuri` now. This sentence stayed behind saying the
 # document was stale for two days after it stopped being — which is the same
 # drift one step down, a note about a fix outliving the fix.
+
+[lints]
+workspace = true

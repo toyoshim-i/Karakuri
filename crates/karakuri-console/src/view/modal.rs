@@ -118,10 +118,9 @@ impl View {
     pub fn active_text_input(&self) -> Option<TextInputKind> {
         if self.arrangement.naming().is_some() {
             Some(TextInputKind::Arrangement)
-        } else if let Some(naming) = self.naming_set() {
-            Some(TextInputKind::DeckName(naming.pane))
         } else {
-            None
+            self.naming_set()
+                .map(|naming| TextInputKind::DeckName(naming.pane))
         }
     }
 

@@ -12,3 +12,6 @@ license.workspace = true
 # no device, no engine, no toolkit, no serialiser. See the crate documentation
 # for what that forces, which is real and is stated rather than hidden.
 [dependencies]
+
+[lints]
+workspace = true

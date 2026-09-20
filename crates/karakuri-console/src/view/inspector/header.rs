@@ -1312,19 +1312,31 @@ impl PaneTarget {
 /// division along the same row.
 ///
 /// `None` is a head with no run drawn in it, which is [`deck_name`]'s own
+/// Arguments for resolving a pane load target and its pulldown chevron.
+#[derive(Clone, Copy)]
+pub struct PaneTargetCtx<'a> {
+    pub at: &'a InspectorPane,
+    pub pane: &'a Pane,
+    pub index: usize,
+    pub naming: Option<&'a str>,
+    pub decks: usize,
+    pub open: bool,
+    pub mcp: Option<Rect>,
+}
+
 /// refusal: the mark sits one gap after the run, so a head too narrow to paint
 /// any of the name has nowhere to put it. The run is clipped short of this mark
 /// rather than over it — see [`deck_name`], where that is one line.
-pub fn pane_target(
-    ctx: &egui::Context,
-    at: &InspectorPane,
-    pane: &Pane,
-    index: usize,
-    naming: Option<&str>,
-    decks: usize,
-    open: bool,
-    mcp: Option<Rect>,
-) -> Option<PaneTarget> {
+pub fn pane_target(ctx: &egui::Context, target_ctx: PaneTargetCtx<'_>) -> Option<PaneTarget> {
+    let PaneTargetCtx {
+        at,
+        pane,
+        index,
+        naming,
+        decks,
+        open,
+        mcp,
+    } = target_ctx;
     let named = deck_name(ctx, at, pane, naming, mcp)?;
     Some(PaneTarget {
         chevron: named.chevron,

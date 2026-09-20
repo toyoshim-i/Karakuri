@@ -1,7 +1,7 @@
 //! Tests for Deck channel strip SOLO, MUTE, and mix contribution logic.
 
 mod gpu {
-    use karakuri_engine::deck::{Deck, DeckSlot, Residency};
+    use karakuri_engine::deck::{Deck, DeckSlot};
     use karakuri_engine::swap::HotSwap;
     use karakuri_engine::{Gpu, Set};
     use karakuri_ir::typed::Checked;

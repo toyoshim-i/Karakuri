@@ -512,25 +512,29 @@ impl View {
                     inspector::inspector_into(
                         ui,
                         &pal,
-                        &at,
-                        pane,
-                        inspector::on_air(strips, pane.deck),
-                        policy,
-                        typed,
-                        // **The same derivation `claim` hit-tests**, asked
-                        // here rather than inside the paint because the rows
-                        // it offers are the mixer's, and this loop already
-                        // borrows what a reading of them would come off.
-                        pane_target(
-                            ui.ctx(),
-                            &at,
+                        inspector::InspectorIntoCtx {
+                            at: &at,
                             pane,
-                            index,
-                            typed,
-                            load.decks,
-                            pane_open == Some(index),
-                            mcp,
-                        ),
+                            on_air: inspector::on_air(strips, pane.deck),
+                            policy,
+                            naming: typed,
+                            // **The same derivation `claim` hit-tests**, asked
+                            // here rather than inside the paint because the rows
+                            // it offers are the mixer's, and this loop already
+                            // borrows what a reading of them would come off.
+                            target: pane_target(
+                                ui.ctx(),
+                                inspector::PaneTargetCtx {
+                                    at: &at,
+                                    pane,
+                                    index,
+                                    naming: typed,
+                                    decks: load.decks,
+                                    open: pane_open == Some(index),
+                                    mcp,
+                                },
+                            ),
+                        },
                     );
                 }
             }
@@ -625,9 +629,18 @@ impl View {
                             .unwrap_or_default();
                         let mcp =
                             inspector::slot_mcp_pill(ui.ctx(), &at, pane, policy).map(|p| p.pill);
-                        if let Some(target) =
-                            pane_target(ui.ctx(), &at, pane, pane_at, typed, load.decks, true, mcp)
-                        {
+                        if let Some(target) = pane_target(
+                            ui.ctx(),
+                            inspector::PaneTargetCtx {
+                                at: &at,
+                                pane,
+                                index: pane_at,
+                                naming: typed,
+                                decks: load.decks,
+                                open: true,
+                                mcp,
+                            },
+                        ) {
                             if let Some(card) = target.list(room) {
                                 inspector::pane_list_into(ui, &pal, &target, pane.deck, card);
                             }

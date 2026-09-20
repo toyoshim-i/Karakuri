@@ -52,3 +52,6 @@ serde_json.workspace = true
 # The scratch, the history, a session stream and a Set file are directories on
 # a disk, and the round trip is only worth checking against a real one.
 tempfile = "3"
+
+[lints]
+workspace = true
