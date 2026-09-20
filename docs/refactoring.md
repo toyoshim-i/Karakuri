@@ -34,7 +34,7 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 | **P78** | `karakuri::keymap` (1,714 lines) | Decompose keybinding dispatch and action routines into `keymap/` submodules | **COMPLETED** |
 | **P79** | `karakuri::tests::operations` (1,893 lines) | Subdivide integration operations test suite by domain categories | **COMPLETED** |
 | **P80** | `karakuri-store::tests::store` (1,789 lines) | Decompose store integration tests into CAS, journal, and concurrency submodules | **COMPLETED** |
-| **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **PLANNED** |
+| **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **COMPLETED** |
 | **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **PLANNED** |
 | **P83** | Vocabulary Destination Purity | Purge toggle/step operations (`ToggleSolo`, `ToggleMute`) in favor of destination operations (`SetSolo`, `SetMute`) across all surfaces (P-0090, ADR-0180) | **PLANNED** |
 | **P84** | Structured Refusal Unification | Standardize `RefusalDetail` structured type and guarantee bit-exact error wording across GUI, CLI, and MCP (P-0083, ADR-0131) | **PLANNED** |
@@ -151,7 +151,13 @@ Decompose test suites that have accumulated beyond 1,700 lines:
     - `procedures.rs` (235 lines): procedure listing, keeping, sandbox procedures, and empty directory tests
     - `sets.rs` (837 lines): set file round trips, session stream, projections, write_set validations, and `list_sets`
     - `arrangements.rs` (450 lines): arrangement layout round-trips, sandbox sets, and favourites
-- **P81: `karakuri::tests::arrangement` (1,781 lines)**: Decompose arrangement lifecycle and session serialization tests.
+- **P81: `karakuri::tests::arrangement` (1,781 lines -> `tests/arrangement/`) — COMPLETED**:
+  - Decomposed into `crates/karakuri/src/tests/arrangement/`:
+    - `folder_drop.rs` (237 lines): folder drop navigation, path bar display, and refusal handling
+    - `session.rs` (612 lines): Set loading, scratch procedure persistence, MCP server resolution, and multi-deck isolation
+    - `persistence.rs` (550 lines): arrangement storage paths, round trips, name verification, pills, and menu listings
+    - `sequencer.rs` (381 lines): pattern sequencer controls, lane mute/level adjustments, and lane step mutations
+    - `mod.rs` (10 lines): submodule declarations and test environment imports
 - **P82: `karakuri-cli::src::tests::live_save` (1,773 lines)**: Decompose interactive runtime state recording and replay test cases.
 
 ---
