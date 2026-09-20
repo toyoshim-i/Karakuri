@@ -1,16 +1,16 @@
 #!/bin/sh
-# Refuse a commit whose Rust is not what `cargo fmt` would write, and warn —
-# without refusing anything — the commit that pushes a file's staged content
-# past 1000 lines for the first time. See ADR-0345 for why the second check
-# never fails a commit.
+# Refuse a commit whose Rust is not what `cargo fmt` would write, or contains
+# any file exceeding 2000 lines. Warn — without refusing anything — the commit
+# that pushes a file's staged content past 1000 lines for the first time
+# (ADR-0345).
 #
 # **It checks the staged content, not the working tree.** Those differ whenever
 # something is half-finished on disk, and a hook that reads the disk either
 # blocks a good commit for an unrelated edit or passes a bad one that was fixed
 # after staging. What is being committed is what has to be right.
 #
-# Why formatting is the only thing that can fail this hook, and where the
-# tests went, is at the bottom of this file.
+# Why formatting and the 2000-line limit are the only things that can fail this
+# hook, and where the tests went, is at the bottom of this file.
 set -e
 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
@@ -76,16 +76,26 @@ if [ -n "$bad" ]; then
     exit 1
 fi
 
+# **Files exceeding 2000 lines are strictly prohibited.**
+# Following Phase 11 refactoring, all remaining 2000+ line monoliths have
+# been eliminated. Any new or modified file crossing 2000 lines is rejected.
+#
 # **A file crossing 1000 lines is worth one printout, on the commit that does
 # it, and nothing on every commit after** (ADR-0345). Comparing against `HEAD`
 # rather than just checking the staged size is what makes this fire once: a
 # file already over the line stays quiet on every later touch, because the
 # fact was already said the day it became true. `2>/dev/null` on the `HEAD`
 # read is a new file, which counts as crossing from zero.
+hard_limit=2000
 threshold=1000
+too_large=""
 crossed=""
 for f in $files; do
     after=$(git show ":$f" | wc -l | tr -d ' ')
+    if [ "$after" -gt "$hard_limit" ]; then
+        too_large="$too_large  $f ($after lines)
+"
+    fi
     before=$(git show "HEAD:$f" 2>/dev/null | wc -l | tr -d ' ')
     [ -n "$before" ] || before=0
     if [ "$after" -gt "$threshold" ] && [ "$before" -le "$threshold" ]; then
@@ -93,6 +103,15 @@ for f in $files; do
 "
     fi
 done
+
+if [ -n "$too_large" ]; then
+    echo "files exceeding $hard_limit lines are prohibited:"
+    printf '%s' "$too_large"
+    echo
+    echo "decompose large files into submodules before committing."
+    echo "see docs/refactoring.md for guidelines."
+    exit 1
+fi
 
 if [ -n "$crossed" ]; then
     echo "just crossed $threshold lines:"
