@@ -97,6 +97,14 @@ pub fn resolve_node_names(
     Ok(names)
 }
 
+/// The validated wiring bindings: `(field_bound, camera_bound, source_bound, far_at)`.
+pub type WiringBindings = (
+    Vec<(usize, String, usize)>,
+    Vec<(usize, usize)>,
+    Vec<(usize, String, usize)>,
+    Option<usize>,
+);
+
 /// Validates slot wirings and dependencies between nodes.
 ///
 /// Returns `(field_bound, camera_bound, source_bound, far_at)`.
@@ -110,15 +118,7 @@ pub fn validate_wiring<'a>(
     fields: &[&'a Checked],
     camera_range: std::ops::Range<usize>,
     field_range: std::ops::Range<usize>,
-) -> Result<
-    (
-        Vec<(usize, String, usize)>,
-        Vec<(usize, usize)>,
-        Vec<(usize, String, usize)>,
-        Option<usize>,
-    ),
-    SetError,
-> {
+) -> Result<WiringBindings, SetError> {
     let node_at = |name: &str| names.iter().position(|n| n == name);
     let geometry_at = |name: &str| node_at(name).filter(|at| *at < l1s.len());
     let holds = || names.join(", ");
@@ -460,19 +460,35 @@ pub fn validate_wiring<'a>(
     Ok((field_bound, camera_bound, source_bound, far_at))
 }
 
+/// Arguments for planning geometry sources and deriving attributes.
+#[derive(Clone, Copy)]
+pub struct PlanSourcesCtx<'a> {
+    pub l1s: &'a [(&'a Checked, u32)],
+    pub l2s: &'a [&'a Checked],
+    pub l4s: &'a [&'a Checked],
+    pub heads: &'a [usize],
+    pub far_at: Option<usize>,
+    pub pairing: Option<usize>,
+    pub salts: &'a [Option<u32>],
+    pub seed_salt: u32,
+}
+
 /// Plans geometry sources, checks attribute derivations and compositions, and assigns salts.
 ///
 /// Returns `(source_salts, derived_per_head)`.
 pub fn plan_sources<'a>(
-    l1s: &[(&'a Checked, u32)],
-    l2s: &[&'a Checked],
-    l4s: &[&'a Checked],
-    heads: &[usize],
-    far_at: Option<usize>,
-    pairing: Option<usize>,
-    salts: &[Option<u32>],
-    seed_salt: u32,
+    ctx: PlanSourcesCtx<'a>,
 ) -> Result<(Vec<u32>, Vec<Vec<karakuri_ir::Attr>>), SetError> {
+    let PlanSourcesCtx {
+        l1s,
+        l2s,
+        l4s,
+        heads,
+        far_at,
+        pairing,
+        salts,
+        seed_salt,
+    } = ctx;
     let salt_of = |at: usize| -> u32 {
         salts
             .get(at)
@@ -724,8 +740,16 @@ impl Set {
         let heads: Vec<usize> = (0..l1s.len()).filter(|at| Some(*at) != far_at).collect();
         let pairing = l2s.iter().position(|n| n.geometry_slot().is_some());
 
-        let (source_salts, derived) =
-            plan_sources(l1s, l2s, l4s, &heads, far_at, pairing, salts, seed_salt)?;
+        let (source_salts, derived) = plan_sources(PlanSourcesCtx {
+            l1s,
+            l2s,
+            l4s,
+            heads: &heads,
+            far_at,
+            pairing,
+            salts,
+            seed_salt,
+        })?;
 
         Ok(Plan {
             names,

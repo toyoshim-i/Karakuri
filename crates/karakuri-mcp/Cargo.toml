@@ -45,3 +45,6 @@ karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-r
 # The wire-protocol and slot-resolution tests round-trip a Set through a real
 # store and a real history directory.
 tempfile = "3"
+
+[lints]
+workspace = true

@@ -14,3 +14,6 @@ karakuri-ir.workspace = true
 # tests feed generated text through a real WGSL front end instead of trusting
 # that it merely looks right.
 naga = { version = "30", features = ["wgsl-in"] }
+
+[lints]
+workspace = true

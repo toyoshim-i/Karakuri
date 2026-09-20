@@ -84,8 +84,8 @@ Enable repository hooks located in `.githooks/`:
 git config core.hooksPath .githooks
 ```
 
-- **`pre-commit`**: Runs `cargo fmt --check` against staged Rust files to enforce workspace formatting standards. Rejects any file exceeding 2,000 lines, and warns if a modified file exceeds 1,000 lines for the first time.
-- **`pre-push`**: Runs full workspace formatting, lints (`cargo clippy --workspace --all-targets -- -D warnings`), and test suites on tag pushes.
+- **`pre-commit`**: Runs `cargo fmt --check` against staged Rust files to enforce workspace formatting standards, strictly rejects any file exceeding 2,000 lines, enforces workspace-wide Clippy cleanliness (`cargo clippy --workspace --all-targets -- -D warnings`), and warns if a modified file exceeds 1,000 lines for the first time.
+- **`pre-push`**: Runs full workspace formatting, lints, and test suites on tag pushes.
 
 ---
 

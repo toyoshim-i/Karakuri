@@ -23,3 +23,6 @@ tempfile = "3"
 # `Layout` goes through a real file rather than a fixture that only looks like
 # one — see ADR-0221 and `tests/store.rs`.
 karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
+
+[lints]
+workspace = true

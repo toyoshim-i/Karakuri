@@ -24,3 +24,6 @@ winit = "0.30.13"
 # preview of the real output path rather than a second one that might
 # disagree with it.
 png = "0.18.1"
+
+[lints]
+workspace = true

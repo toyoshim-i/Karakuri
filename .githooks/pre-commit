@@ -1,16 +1,16 @@
 #!/bin/sh
-# Refuse a commit whose Rust is not what `cargo fmt` would write, or contains
-# any file exceeding 2000 lines. Warn — without refusing anything — the commit
-# that pushes a file's staged content past 1000 lines for the first time
-# (ADR-0345).
+# Refuse a commit whose Rust is not what `cargo fmt` would write, contains
+# any file exceeding 2000 lines, or introduces Clippy warnings.
+# Warn — without refusing anything — the commit that pushes a file's staged
+# content past 1000 lines for the first time (ADR-0345).
 #
 # **It checks the staged content, not the working tree.** Those differ whenever
 # something is half-finished on disk, and a hook that reads the disk either
 # blocks a good commit for an unrelated edit or passes a bad one that was fixed
 # after staging. What is being committed is what has to be right.
 #
-# Why formatting and the 2000-line limit are the only things that can fail this
-# hook, and where the tests went, is at the bottom of this file.
+# Why formatting, the 2000-line limit, and clippy are the only things that can
+# fail this hook, and where the tests went, is at the bottom of this file.
 set -e
 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
@@ -119,6 +119,19 @@ if [ -n "$crossed" ]; then
     echo "not a reason to stop — see docs/adr/0345-a-file-that-crosses-1000-lines-gets-a-nudge-not-a-gate.md"
     echo "for why this is a nudge and not a gate. Worth a look before it grows further."
 fi
+
+# **Clippy checks the workspace for lints and warnings.**
+# Kept clean across the entire workspace (Phase 14 / P72-P73).
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "cargo is not on this hook's PATH, so clippy was not checked."
+    echo
+    echo "this is not a claim about your code. if \`cargo --version\` works in"
+    echo "a terminal, the PATH is what differs."
+    exit 1
+fi
+
+echo "pre-commit: cargo clippy"
+cargo clippy --quiet --workspace --all-targets -- -D warnings
 
 # **No tests here, and that is a decision rather than an omission.** This
 # workspace has nearly nine hundred of them and most want a GPU, so running any

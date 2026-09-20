@@ -13,3 +13,6 @@ thiserror.workspace = true
 # Only the tests need a concrete format. The crate itself is format-agnostic:
 # it derives `Serialize`/`Deserialize` and lets the caller pick.
 serde_json.workspace = true
+
+[lints]
+workspace = true

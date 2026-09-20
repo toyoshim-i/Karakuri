@@ -274,7 +274,7 @@ pub(crate) fn load_into(ui: &Ui, pal: &Palette, load: &Load, at: Target) {
     // and the colour the count at the other end of the row is in: it is the
     // foot's furniture rather than either control's, and a mark in the lav
     // would put this bay's accent on a thing nobody can press.
-    arrow_mark(&painter, load.arrow.center(), LOAD_ARROW, pal.faint, false);
+    arrow_mark(painter, load.arrow.center(), LOAD_ARROW, pal.faint, false);
 
     // **The pulldown, drawn as the `params` chip is and not as the button is.**
     // `console.html`: *"It is deliberately not lavender. Lavender here is the
@@ -283,7 +283,7 @@ pub(crate) fn load_into(ui: &Ui, pal: &Palette, load: &Load, at: Target) {
     // [`pill_at`]'s hairline round `--c-dim` with the chevron the two menu
     // pills in the transport row already carry.
     pill_at(ui, pal, load.deck, at.letter());
-    chevron_down(&painter, load.chevron, pal.dim);
+    chevron_down(painter, load.chevron, pal.dim);
 }
 
 /// The foot of the Library bay, painted: the count, the params chip, and the load controls.

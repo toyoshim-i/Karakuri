@@ -41,3 +41,6 @@ tempfile = "3"
 # is those files, and a reader sharing the program's vocabulary would move with
 # it and never fail. So it needs a JSON parser of its own.
 serde_json.workspace = true
+
+[lints]
+workspace = true

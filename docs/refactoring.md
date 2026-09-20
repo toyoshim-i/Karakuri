@@ -25,8 +25,8 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |:---:|---|---|:---:|
-| **P72** | Clippy Warnings & Lints | Eliminate all 255 `clippy::doc_lazy_continuation` errors, resolve `too_many_arguments` with Parameter Objects, and resolve `type_complexity` | **PLANNED** |
-| **P73** | CI & Git Hooks | Move workspace Clippy enforcement (`cargo clippy --workspace --all-targets -- -D warnings`) into `.githooks/pre-commit` | **PLANNED** |
+| **P72** | Clippy Warnings & Lints | Eliminate all `clippy::doc_lazy_continuation` errors, resolve `too_many_arguments` with Parameter Objects, and resolve `type_complexity` | **COMPLETED** |
+| **P73** | CI & Git Hooks | Move workspace Clippy enforcement (`cargo clippy --workspace --all-targets -- -D warnings`) into `.githooks/pre-commit` | **COMPLETED** |
 | **P74** | `karakuri-ir::check::eval` (1,923 lines) | Decompose IR type-checking & evaluation monolith into `check/eval/` (`stmt.rs`, `expr.rs`, `call.rs`, `mod.rs`) | **PLANNED** |
 | **P75** | `karakuri-console::input` (1,903 lines) | Decompose console input handling into `input/` (`probes.rs`, `claim.rs`, `wheel.rs`, `mod.rs`) | **PLANNED** |
 | **P76** | `karakuri-console::view::inspector` (1,892 lines) | Decompose inspector bay view monolith into modular subcomponents | **PLANNED** |

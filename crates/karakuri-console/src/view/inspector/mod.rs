@@ -1042,25 +1042,30 @@ pub(super) fn on_air(strips: &[Strip], deck: usize) -> bool {
 /// - `.param` — the mock's four tracks, with the fader taking what the other
 ///   three leave.
 ///
+/// Context for rendering an inspector pane into a UI layout.
+#[derive(Clone, Copy)]
+pub(super) struct InspectorIntoCtx<'a> {
+    pub at: &'a InspectorPane,
+    pub pane: &'a Pane,
+    pub on_air: bool,
+    pub policy: SlotPolicy,
+    pub naming: Option<&'a str>,
+    pub target: Option<PaneTarget>,
+}
+
 /// Everything is clipped to the pane, which is what makes the overflow
 /// safe: a group that fits and a name that does not are the same clip, and it
 /// is the same `with_clip_rect` the picture, a preview cell and the library's
 /// list are each drawn inside.
-pub(super) fn inspector_into(
-    ui: &Ui,
-    pal: &Palette,
-    at: &InspectorPane,
-    pane: &Pane,
-    on_air: bool,
-    policy: SlotPolicy,
-    naming: Option<&str>,
-    // **The pulldown's mark**, derived by the caller off the same reading the
-    // press is hit-tested against — `View::pane_pulldown`. It is handed in
-    // rather than asked here because the card's rows are read off the mixer,
-    // which `draw` has already borrowed. The card itself is painted after
-    // every bay, for the `uses` line's card's reason.
-    target: Option<PaneTarget>,
-) {
+pub(super) fn inspector_into(ui: &Ui, pal: &Palette, ctx: InspectorIntoCtx<'_>) {
+    let InspectorIntoCtx {
+        at,
+        pane,
+        on_air,
+        policy,
+        naming,
+        target,
+    } = ctx;
     // **Derived here and hit-tested by `claim` off the same call**, and asked
     // before the words are painted rather than after: `.half-head` is a flex
     // row with `.sep` between them, so the readout is what gives way when the
@@ -1534,13 +1539,15 @@ impl View {
         let mcp = slot_mcp_pill(ctx, at, pane, policy).map(|p| p.pill);
         pane_target(
             ctx,
-            at,
-            pane,
-            index,
-            self.naming_set_in(index),
-            self.mixer.len(),
-            self.pane_open == Some(index),
-            mcp,
+            PaneTargetCtx {
+                at,
+                pane,
+                index,
+                naming: self.naming_set_in(index),
+                decks: self.mixer.len(),
+                open: self.pane_open == Some(index),
+                mcp,
+            },
         )
     }
 }
