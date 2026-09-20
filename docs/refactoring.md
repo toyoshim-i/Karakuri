@@ -182,13 +182,14 @@ Ground system design in Karakuri's standing principles (`docs/principles/`) and 
   - Introduced unified `RefusalDetail` and `RefusalCode` in `karakuri-operation::types`, capturing code, message, deck, lane, and gating standing/class.
   - Implemented `gate::refusal_detail` and `gate::audit_detail` in `karakuri-operation::gate`, returning strongly typed `RefusalDetail` while preserving backward-compatible `audit` string output.
   - Integrated `RefusalDetail` into `karakuri_operation_record::state::Refusal` via `.detail()`, and updated `karakuri-mcp` tools and error payloads to serialize structured JSON refusals with bit-exact message parity across GUI status lines, CLI stderr, and MCP JSON-RPC error responses.
-- **P85: Principle P-0091 Context & Parameter Object Standardization**:
+- **P85: Principle P-0091 Context & Parameter Object Standardization — COMPLETED**:
   - *Principle P-0091 (Cost is known before it is paid)* & *ADR-0210 (Declared cost is one panel pass)*: UI repaint schedules and layout measurements must remain decoupled from deep function call hierarchies.
-  - Replace 8-argument parameter cascades with cohesive Context structures:
+  - Replaced 8-argument parameter cascades with cohesive Context structures:
     - `karakuri-engine::set::schedule::plan_sources` -> `PlanSourcesCtx<'a>`
+    - `karakuri-engine::set::schedule::validate_wiring` -> `ValidateWiringCtx<'a>`
     - `karakuri-console::view::inspector::header::pane_target` -> `PaneTargetCtx<'a>`
-    - `karakuri-console::view::inspector::inspector_into` -> `InspectorRenderCtx<'a>`
-  - Encapsulate declared costs, theme palettes, and layout caches to insulate signatures against future feature additions.
+    - `karakuri-console::view::inspector::inspector_into` -> `InspectorIntoCtx<'a>` / `InspectorRenderCtx<'a>`
+  - Encapsulated declared costs, theme palettes, and layout caches to insulate signatures against future feature additions.
 - **P86: ADR-0017 & Sandbox-Safe Test Suite Partitioning**:
   - *ADR-0017 (An invariant that can be tested is a test)* & *ADR-0242 (Command line is test tooling)*:
   - Formally partition the test suite into:

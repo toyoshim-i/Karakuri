@@ -50,6 +50,10 @@ pub(crate) struct InspectorIntoCtx<'a> {
     pub target: Option<PaneTarget>,
 }
 
+/// Type alias for [`InspectorIntoCtx`] conforming to ADR-0210 naming standards.
+#[allow(dead_code)]
+pub(crate) type InspectorRenderCtx<'a> = InspectorIntoCtx<'a>;
+
 /// Everything is clipped to the pane, which is what makes the overflow
 /// safe: a group that fits and a name that does not are the same clip, and it
 /// is the same `with_clip_rect` the picture, a preview cell and the library's
