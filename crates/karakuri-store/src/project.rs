@@ -55,53 +55,9 @@ enum Key {
     Passthrough(usize),
 }
 
-/// The fold key for a record, or `None` for one that does not belong in a Set
-/// file. Five kinds of `None`, and the second is the one that is easy to get
-/// wrong.
-///
-/// The first is a record that carries no state at all: `Record::Tick`, which
-/// the spec guarantees never appears in a Set file, and `Record::Audio`, which
-/// is the same kind of thing — what one frame measured, not what anything *is*.
-/// Folding a session's audio down to its last frame would put one arbitrary
-/// moment's microphone reading into a Set file and call it state. `Tempo` is a
-/// correction, so an event, and the tempo it corrects is the session's.
-///
-/// The second is a record that is state and is not this Set's: `Gain`,
-/// `Opacity`, `Blend`, `Residency`, `Look`, `Canvas`, `Transport`, `Preview`,
-/// `Mask` and `Transition` describe the deck the Sets are playing on. Dropping
-/// them is not "there is nothing to fold", it is "there is something to fold
-/// and this is not the projection it folds into" — a Set file that restored a
-/// gain would apply it to whatever deck slot it was next loaded into, one that
-/// restored a residency would put a Set on air by being opened, and one that
-/// restored a canvas would resize every *other* Set in the deck. The projection
-/// that would fold them — a session down to the deck state it ends at — does
-/// not exist, and nothing needs it: a session is replayed from the top rather
-/// than resumed from its end.
-///
-/// The third is `Save`, which is neither: it is not state at all and it is not
-/// the deck's, it is a fact about something *outside* the stream — a Set file
-/// that already exists under an id of its own. There is nothing here to fold
-/// into, because what it names is a whole file this function's output is one
-/// of. See the arm itself, and "Records with an effect outside the stream" in
-/// `docs/ir-spec.md`.
-///
-/// The fourth is a third file's vocabulary: `Meta`, `ParamDecl`, `CapacityDecl`
-/// and `Emit` say what an *artifact* declares, which is neither this Set's
-/// state nor the deck's nor a fact about a file this one writes. A session
-/// stream is a performance and nothing here puts one in one, so meeting one
-/// means a hand-edited stream — see the arm, and `Record::is_metadata`.
-///
-/// The fifth is `Part`, and it is the only one of the five with something to
-/// fold: it is a node of this very Set, named by relative path rather than by
-/// content address. What it is not is a line the *resolved* form may carry, and
-/// the resolved form is what this function produces — see the arm.
-///
-/// This count is prose and nothing checks it, which is how it went on saying
-/// three after the fourth arm was written below — the same drift `Record`'s own
-/// group comment confesses to for its "seven" and "twelve". What cannot drift
-/// that way is the classification: this match carries no wildcard, so a new
-/// record stops this function compiling until somebody gives it an arm, and
-/// `Record::vocabulary` is exhaustive for the same reason.
+/// Returns the projection fold key for a record, or `None` if the record does
+/// not belong to persistent Set state (e.g. transient ticks, deck-level controls,
+/// metadata declarations, or unresolved relative part paths).
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Header { .. } => Some(Key::Header),

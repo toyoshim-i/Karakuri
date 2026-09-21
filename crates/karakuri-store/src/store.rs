@@ -575,19 +575,10 @@ impl Store {
         ndjson::write_atomic(&self.arrangement_path(name), arrangement)
     }
 
-    /// Read a saved arrangement back, as the bytes that were written.
+    /// Reads raw bytes of a saved console arrangement by name.
     ///
-    /// `StoreError::NoArrangement` where nothing is filed under that name, which is
-    /// an ordinary answer rather than a damaged store: an operator asking for an
-    /// arrangement they have not saved is a person to tell, and the name they asked
-    /// for is what the sentence carries.
-    ///
-    /// This never returns the built-in. Resetting the console is a different
-    /// operation reaching different code — the default arrangement is what ships,
-    /// and what ships is not a file anything here can write
-    /// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)).
-    /// A fallback here would make an operator who mistyped a name watch their
-    /// console reset instead of being told the name is wrong.
+    /// Returns [`StoreError::NoArrangement`] if the file does not exist.
+    /// Does not fall back to built-in presets (Principle 0096).
     pub fn read_arrangement(&self, name: &str) -> Result<Vec<u8>, StoreError> {
         fs::read(self.arrangement_path(name)).map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => StoreError::NoArrangement(name.to_string()),
@@ -771,53 +762,10 @@ impl Store {
         Ok(path)
     }
 
-    /// List the Sets the store holds, in ascending id order, each with the time its
-    /// file was last written.
+    /// Lists stored Sets sorted in ascending order by ID with filesystem modification timestamps.
     ///
-    /// The time comes from the filesystem because the file has none. A Set file is
-    /// a state projection and carries no time at all — that is what
-    /// [`StoreError::TickInSet`] exists to enforce — so there is nothing inside one
-    /// to sort by, and the mtime is not a second-best here but the only record that
-    /// exists of when a Set was saved. [`Store::write_set`] renames a complete file
-    /// into place, so what that mtime marks is the moment the Set became readable
-    /// rather than the moment some writer opened a file.
-    ///
-    /// Ordered by id and not by recency, though "the one I saved last" is the
-    /// question this method is mostly asked. Two Sets written within one tick of a
-    /// coarse filesystem clock carry the same mtime, and a sort whose keys tie
-    /// falls back to whatever `read_dir` handed us — which is not an order, and
-    /// would differ between two calls on an unchanged store. Ids are unique by
-    /// construction, so ordering on them is total and repeatable; recency is a
-    /// `sort_by_key(|e| e.written)` away, and the field to do it with is on every
-    /// entry.
-    ///
-    /// A name the layout does not claim is skipped, not repaired. The directory
-    /// holds `<id>`[`SET_FILE_SUFFIX`](Store::SET_FILE_SUFFIX); an editor's backup,
-    /// a `.tmp` left by a write that died, a subdirectory someone made — those
-    /// belong to whoever put them there, and reporting one as a Set under a
-    /// truncated id would invent a library entry [`Store::read_set`] cannot open.
-    ///
-    /// So a file under `sets/` that does not carry that suffix has no id at all,
-    /// and an id is the only route a Set has to a deck: nothing can ask for what
-    /// cannot be named. That is what keeps a swap atomic
-    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`)
-    /// — the authoring form of a Set names its parts by relative path, so loading
-    /// one would resolve against the filesystem mid-swap, and a swap that can
-    /// partially fail is not a swap. The listing is where that wall stands, and it
-    /// stands by naming rather than by opening anything.
-    ///
-    /// The concrete cost, because it is paid silently. A Set written by a build
-    /// that spelled the suffix `.set.ndjson` is still on disk, still readable text,
-    /// and simply stops appearing here — no error, no warning, nothing to notice
-    /// but an id that used to be in the list and is not. Nothing repairs it and
-    /// nothing should: renaming a file this store did not write would be guessing
-    /// that its contents are already resolved, which is the one thing the extension
-    /// exists to stop being a guess.
-    ///
-    /// An empty store lists nothing, and that is not an error. A `sets/` directory
-    /// removed under the store *is* one: the caller asked what is there and we have
-    /// no answer, and an empty `Vec` would say "nothing is kept" to a question we
-    /// could not read.
+    /// Only files ending in [`SET_FILE_SUFFIX`](Store::SET_FILE_SUFFIX) are included;
+    /// non-matching entries and temporary files are ignored.
     pub fn list_sets(&self) -> Result<Vec<SetEntry>, StoreError> {
         let mut out = Vec::new();
         for entry in fs::read_dir(self.root.join("sets"))? {
@@ -1064,19 +1012,7 @@ pub struct SetEntry {
     pub written: SystemTime,
 }
 
-/// An arrangement the store holds, as [`Store::list_arrangements`] found it:
-/// what to hand [`Store::read_arrangement`], and when that file was last
-/// written.
-///
-/// `name` rather than `id`, where [`SetEntry`] says `id`. A Set is ordinarily
-/// filed under a stamp nobody chose — `history::stamped_id`, because a key
-/// press cannot type a name — and an arrangement never is: it is saved by an
-/// operator who is telling the console what to call this shape. The two words
-/// are the difference, and carrying `id` here would say a stamp is the expected
-/// case when it is the fallback.
-///
-/// The time is a field for the reason it is one on [`SetEntry`]: a name an
-/// operator typed sorts nowhere near when they typed it.
+/// Metadata for an arrangement stored on disk, including its name and last-modified timestamp.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrangementEntry {
     pub name: String,

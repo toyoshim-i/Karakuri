@@ -247,18 +247,8 @@ fn a_merge_line_keeps_a_key_this_build_does_not_know() {
     assert_eq!(fs::read_to_string(&path).unwrap(), original);
 }
 
-/// **A projection keeps the layering and still drops the selection.**
-///
-/// The end-to-end half of `project`'s own test. A `merge` is what the Set
-/// *is*, so it folds and is written; a `select` is addressed to a **deck
-/// slot**, and nothing in a session says which slots composite nor which deck
-/// slot the Set at the head of the stream was played in — so a projection
-/// cannot tell whether a selection it meets is about the Set it is writing,
-/// and folding one in would be guessing.
-///
-/// It matters here rather than only in the unit test because a `select` that
-/// reached this far would not merely be wrong, it would fail the save:
-/// `write_set` refuses a record that is not Set state.
+/// Verifies that project session fold operations preserve merge layering while dropping
+/// deck-level selection records that do not belong to Set state (ADR-0280).
 #[test]
 fn save_session_as_set_keeps_a_merge_and_drops_a_selection() {
     let dir = tempdir().unwrap();

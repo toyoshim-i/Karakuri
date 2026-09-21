@@ -707,15 +707,7 @@ fn an_authority_round_trips_and_an_absent_index_stays_absent() {
     );
 }
 
-/// The same for `slot`, which gained the same field for the same reason — and
-/// needs it for one more: the projection folds a Set file's records by key, so
-/// several renderers keyed by layer alone would fold to the last.
-///
-/// And a slot may say what the Set calls the node, which is what a mask points
-/// at once a Set holds more than one source. A name is a cost paid only where
-/// something points, so an unnamed node is the ordinary case and has to leave
-/// the line it was absent from untouched: `"name":null` on every slot record
-/// ever written is what the second assertion refuses.
+/// Verifies that multiple `slot` records with distinct node indices serialize and fold independently.
 #[test]
 fn a_slot_round_trips_and_an_absent_index_or_name_stays_absent() {
     let hash = "sha256:9c1b04000000000000000000000000000000000000000000000000000000abcd";
@@ -788,15 +780,7 @@ fn a_capacity_addresses_a_geometry_and_an_absent_index_stays_absent() {
     );
 }
 
-/// A seed names the node it salts.
-///
-/// The salt used to be derived from `--set` order, which `docs/ir-spec.md`
-/// called provisional for exactly one reason: reordering the command line
-/// changed which geometry got which randomness. A derived value has nothing
-/// stable to be recorded against — this is the address that lets it be assigned
-/// instead, and `--save-set` now writes one of these per geometry. The line the
-/// spec prints has to survive that unchanged, which is what the absent index
-/// below is for.
+/// Verifies that seed derivation salts are assigned per node rather than by order in `--set` flags.
 #[test]
 fn a_seed_addresses_a_source_and_an_absent_index_stays_absent() {
     assert_eq!(
