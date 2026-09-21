@@ -62,11 +62,7 @@ pub(crate) fn next_sync(at: Sync, allows: [bool; SYNCS.len()]) -> Sync {
         .unwrap_or(at)
 }
 
-/// The letter the anchor readout leads with: the mock's `T128` under tempo sync
-/// and `B128 +0.25` under beat, and nothing at all under free — *"a free deck
-/// shows neither, because free is the absence of a transport rather than a
-/// setting, and a column reading free on every deck would be four words of
-/// nothing."*
+/// The letter the anchor readout leads with (`T` for tempo sync, `B` for beat sync, none for free).
 fn anchor_letter(sync: Sync) -> Option<&'static str> {
     match sync {
         Sync::Free => None,
@@ -166,17 +162,7 @@ pub struct DeckHead {
     /// The sync chip, which is what a press has to land in to move the mode on.
     /// `.mini`'s box round [`sync_word`], at the left of the row.
     pub mode: Rect,
-    /// The anchor, or `None` under [`Sync::Free`], where there is nothing to read
-    /// and nothing to re-anchor — see [`anchor_text`].
-    ///
-    /// The text run grown to a chip's height, which is [`LookRow::grip`]'s
-    /// treatment of a 5px track and its argument: `.anchor` is a bare span at
-    /// [`size::ANCHOR_SIZE`] with no padding of its own, and 13.5 pixels of type is
-    /// not a target a hand finds. It is grown to [`size::MINI_H`], so it is the
-    /// same 15.5 as the chips either side of it and sits in the same
-    /// [`size::DECK_HEAD_PAD_Y`] the row gives them. No wider than the words,
-    /// because the row is a flex row and a target that reached past its own text
-    /// would take the arrows' places with it.
+    /// The anchor, or `None` under [`Sync::Free`]. Sized to [`size::MINI_H`].
     pub anchor: Option<Rect>,
     /// A quarter beat back. One `.scrub i`.
     pub back: Rect,
@@ -1087,34 +1073,10 @@ pub fn pane_count(
     })
 }
 
-/// The pane head's name, derived — [`inspector`] answers where the head is and
-/// this answers where the run in it is, which is [`keep_pill`]'s division along
-/// the same row.
+/// Layout derivation for the deck name text run in the pane head.
 ///
-/// `naming` is what the head is taking letters into, or `None` for a head that
-/// is reading — and it is a parameter rather than a field of [`Pane`] because a
-/// pane is rewritten whenever a Set lands ([`View::inspector`]) and a buffer
-/// kept there would be a name that vanished mid-word. It lives in
-/// [`View::naming_set`], which is [`Arrangement::menu`]'s argument on a second
-/// control: what a *control* is doing is this crate's, and it is not part of
-/// anything a host hands in.
-///
-/// # What it costs to ask
-///
-/// Three galley lookups per pane — the label, the run, and [`keep_pill`]'s
-/// word, because where the run may be painted to is where the capsule starts.
-/// The capsule is derived here rather than passed in for [`crate::input`]'s own
-/// reason one bay along, where [`on_pill`](crate::input) derives the tracker
-/// group as well: one derivation asked twice cannot come apart, and two
-/// arguments that a caller could fill from two frames can.
-///
-/// # `None` is a head with no ink to press
-///
-/// [`keep_pill`]'s rule read on a readout instead of on a capsule. The run is
-/// clipped where the words are clipped — one `.half-head` gap short of the
-/// capsule — so a head narrow enough that the label alone fills it leaves no
-/// name on screen, and a target over ink nobody can see is a press that lands
-/// on nothing an operator could have aimed at.
+/// Clips the text run before trailing controls (`▾` chevron, MCP pill, count, and keep capsule).
+/// Returns `None` if the head has no positive size or if the name is clipped completely.
 pub fn deck_name(
     ctx: &egui::Context,
     at: &InspectorPane,
@@ -1143,11 +1105,7 @@ pub fn deck_name(
             .x
         })
     };
-    // **The same clip [`inspector_into`] paints the words inside**, written
-    // once here and read there: everything up to whatever is next along the
-    // row, one `.half-head` gap short of it. That is the count where the head
-    // has room for one ([`pane_count`]), the mcp pill where it has one, the
-    // capsule where it has not, and the head's own edge where it has neither.
+    // Determine the right bound based on trailing head elements.
     let limit = match pane_count(ctx, at, pane, naming, mcp) {
         Some(count) => count.min.x - size::HALF_HEAD_GAP,
         None => match mcp {
@@ -1158,16 +1116,7 @@ pub fn deck_name(
             },
         },
     };
-    // **And the chooser's own room comes off it**, which is the half of
-    // ADR-0292's *the chooser is boxed in* that the chooser landing makes
-    // real: `.half-head` is `showing`, the run, `▾`, `.sep`, the count and the
-    // capsule, so the `▾` sits **between** the run and everything else in the
-    // row. The run is the one thing here that is clipped rather than dropped
-    // (`pane_count`'s own note), so it is the run that gives way and never the
-    // control. Before this the chevron was reserved and unpainted, and its
-    // rectangle could sit on top of the count in a narrow head — which cost
-    // nothing while nobody drew it and would be a target over another
-    // control's ink now that somebody does.
+    // Reserve space for the chevron chooser (ADR-0292).
     let limit = limit - (CHEVRON_W + size::HALF_HEAD_GAP);
     let left = head.min.x + size::HALF_HEAD_PAD_X + run(head_label(naming)) + size::HALF_HEAD_GAP;
     let text = match naming {
@@ -1181,14 +1130,6 @@ pub fn deck_name(
     let top = head.min.y + size::HALF_HEAD_PAD_Y;
     let name = Rect::from_min_max(Pos2::new(left, top), Pos2::new(right, top + size::PILL_H));
     Some(DeckName {
-        // **The chooser**, one gap after the run and at the glyph's own
-        // measure — [`CHEVRON_W`], which is the arrangement pill's `▾` three
-        // bays along. It was reserved and drawn by nobody until 2026-09-10
-        // (ADR-0292's *the chooser is boxed in*), and it is a control now:
-        // [`pane_target`] is what paints and hit-tests it, off this
-        // rectangle. What has not changed is that [`DeckName::name`] stops
-        // before it — the run is one target and the mark beside it is
-        // another.
         chevron: Rect::from_min_size(
             Pos2::new(
                 name.max.x + size::HALF_HEAD_GAP,
@@ -1201,37 +1142,7 @@ pub fn deck_name(
     })
 }
 
-/// The pulldown on a pane head, and the card it brings down — *point this pane
-/// at another deck*.
-///
-/// # It is the pane's own pointer and it is not the deck selection
-///
-/// A pick moves this pane and nothing else: not the deck the keys are addressed
-/// to ([`View::selection`]), not the pane next door, and not the Library bay's
-/// load target ([`View::target_deck`]). That is the whole of why the mark
-/// exists — a pane can show a deck the keys are not on — and it is [`Load`]'s
-/// argument one bay along (`docs/adr/0305-…`, `docs/adr/0338-…`, decision 5).
-///
-/// # A pulldown and not a flip
-///
-/// The maintainer's choice, and
-/// [P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-/// underneath it: a flip is a *step*, so two panes stepping cannot both be
-/// aimed without knowing where they started, and a key, a map line or a model
-/// would have to count presses to say *deck C*. Every row of this card names a
-/// destination.
-///
-/// # What it offers is what the mixer is drawing
-///
-/// [`Target::decks`]' count read a second time and not a second rule: a deck
-/// the mixer draws no strip for is not in the list, which is [`View::select`]'s
-/// own refusal met from one more direction.
-///
-/// # The card hangs down, as the `uses` line's does
-///
-/// It is inside a pane's body's own bay rather than in a foot, so what is under
-/// the head is the pane — [`UsesLine::list`]'s division, and it is held inside
-/// the viewport for that method's reason.
+/// The pulldown on a pane head for aiming the pane at another deck (P-0090).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaneTarget {
     /// The `▾` after the run — [`DeckName::chevron`], made live. A press on it puts

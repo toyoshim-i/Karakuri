@@ -49,22 +49,9 @@ use super::*;
 /// what says which — in the words at its own key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    /// `all`: everything this store holds, which is
-    /// `karakuri_store::Store::list_sets` and is the listing every other row of
-    /// this bay is a question about.
-    ///
-    /// It is the chip [`Scope::MySets`] stopped being. ADR-0299 made *my sets* the
-    /// starred subset, and *"what lists everything the store holds still needs a
-    /// chip"* — this is it. The word is the maintainer's pending one: one string,
-    /// here and in the page.
+    /// `all`: everything this store holds (`karakuri_store::Store::list_sets`).
     AllSets,
-    /// `my sets`: the starred subset of [`Scope::AllSets`], and never the listing
-    /// of what `<store>/sets/` holds (ADR-0299).
-    ///
-    /// A preset packaged on load and a recording's head both land in the library
-    /// and neither appears here until somebody presses the star on its row — which
-    /// is what the roadmap's *"a `my sets` filling up with things the operator did
-    /// not make"* was the symptom of.
+    /// `my sets`: the starred subset of [`Scope::AllSets`] (ADR-0299).
     MySets,
     /// What ships with the program: the `.kset` files in the presets root, which is
     /// a directory the program is told (ADR-0230) rather than one it works out.
@@ -406,35 +393,7 @@ pub(crate) fn scopes_into(
     );
 }
 
-/// The path row, painted: the directory this library is pointed at, and
-/// the rule under it.
-///
-/// Where the row goes is [`library`]'s, so this paints and derives nothing —
-/// [`scopes_into`]'s rule one row up.
-///
-/// Term for term from `style.css`:
-///
-/// - `.path { padding: 4px 10px; color: var(--c-faint); border-bottom: 1px
-///   solid var(--c-hair); font-size: 10px }` — the path at
-///   [`size::PATH_SIZE`], one [`size::PATH_PAD_X`] in from the left and
-///   centred across the row's own height, over a rule the row's bottom pixel.
-/// - `.path.incoming { color: var(--c-text) }` — the same row in the panel's
-///   text ink while a folder is over the window, which is the whole of the
-///   mark that gesture gets: a folder dragged in from outside tells this
-///   window a path and never a position, so nothing can be ringed the way
-///   `.strip.drop` rings the rectangle a carried Set would land on (ADR-0275).
-///   It says nothing about whether the release will be allowed — the text ink
-///   is what a word is drawn in when nothing is being said about it.
-///
-/// A path too long for the row is clipped rather than elided, which is
-/// `.lib-row`'s answer one box down and is a departure from this row's own
-/// declaration: `.path` sets `text-overflow: ellipsis` where `.lib-row` sets
-/// none, and `egui` has no ellipsis to draw here — [`room`](crate::room)'s own
-/// sentence about a mock declaration this console cannot honour. What is cut
-/// is the end of the path, which is the half that says where you have got
-/// to; the alternative is a second layout pass measuring the string against
-/// the row, and a readout is not worth a measurement the rest of this bay does
-/// not make.
+/// Renders the path row showing directory breadcrumbs, highlighted when incoming (ADR-0275).
 pub(crate) fn path_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, at: Pointed<'_>) {
     let Some(row) = bay.path else {
         return;

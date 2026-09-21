@@ -23,262 +23,7 @@ pub(super) use scopes::{path_into, scopes_into};
 /// paint time so the word a reader searches for is the word in the source.
 pub(super) const LIBRARY_TITLE: &str = "Library";
 
-/// The Library bay, laid out: where the rows go, how many of them there is
-/// room for, and where the count under them goes.
-///
-/// # What the bay is standing on: a scope, and the listing that scope answers
-///
-/// The manual: *"A scope and a walk, not one flat list: favourites, my sets,
-/// app presets, a folder."* The scopes are drawn, and all four are answered
-/// now — `all`, which is
-/// [`karakuri_store::Store::list_sets`](../../../../crates/karakuri-store/src/store.rs)
-/// and is a directory of Set files; `my sets`, which is the starred subset of
-/// it and is `<store>/favourites.json` intersected with that listing
-/// (ADR-0299); `presets`, which is the `.kset` files in the root the program
-/// was told about (ADR-0230); and `folder`, which is the Set files in a
-/// directory somebody dropped on this window during the run (ADR-0275).
-///
-/// The chips answer a press, which is `console.html`'s own affordance on
-/// each of them — *"Click to show it; click another scope to leave it"* — and
-/// it is the row `docs/manual/operations.html` names as this operation's home.
-/// What a press asks for is [`LibraryBay::chip`], and it is asked of the same
-/// derivation that paints the capsule. A scope can still answer with
-/// nothing, and that is a question asked and answered rather than a chip
-/// gone quiet: a store nobody has starred in, and a folder nobody has pointed
-/// anywhere. The host says which of them it is, in the words at its own key.
-///
-/// Both halves are handed in. The scopes are a slice and the rows are a
-/// slice, and which rows go with which scope is the host's answer rather than
-/// this bay's: a listing is a directory read, a frame path does not do those
-/// (P-0091), and this crate could not do it anyway (ADR-0156). So the bay
-/// draws the row of questions it was given and the answer to the one that is
-/// marked.
-///
-/// # The `.path` row, and it is where this library is pointed
-///
-/// `~/sets/tour-2026/night-b › opening` in the mock, between the scope row and
-/// the filters, and it is drawn whichever scope is marked — because it is
-/// two things at once (`console.html`): the walk inside a folder scope, and
-/// the place a send's save dialog opens on, so a Set handed to somebody starts
-/// where the listing is
-/// ([ADR-0311](../../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)).
-/// It said *the place a send lands* until 2026-09-09, which was ADR-0267
-/// and is superseded: the file is named in the system's own dialog now, and
-/// where it lands is the operator's answer rather than this row's.
-///
-/// Until a folder has been dropped the row is not drawn at all, so the bay
-/// is one line shorter and the scopes sit straight on the filters. That is the
-/// staging lane's own answer to an empty lane read one bay up: a row saying
-/// there is no folder would be a sentence about an absence. It is why
-/// [`LibraryBay::path`] is an `Option` and why every rectangle under it moves
-/// with it.
-///
-/// While a folder is over the window it reads the path a release would
-/// set, in `--c-text` where the row is otherwise `--c-faint` — `.path`
-/// against `.path.incoming`, and the whole of the mark this gesture gets. The
-/// drop-mark idiom one bay over does not transfer and the page says so
-/// plainly: that mark says *where*, and a folder coming in from the desktop
-/// carries no pointer position at all (ADR-0275). See [`Pointed`], which is
-/// the row's value, and `path_into`, which paints it.
-///
-/// It is a readout and takes no press. Nothing in [`crate::input::claim`]
-/// hit-tests it, and the reason is its own rather than the foot's: re-pointing
-/// the bay is another drop, and the gesture that points it is not one this
-/// panel can offer as a capsule. The foot's own readout stopped being one on
-/// 2026-09-08 — `load &rarr; A` is a button and a pulldown now (ADR-0305) —
-/// which is why this row no longer cites it.
-///
-/// [P-0090]: ../../../docs/principles/0090-a-surface-offers-it-never-decides.md
-///
-/// # What is in the mock's bay and is deliberately not here
-///
-/// - The `+` at the end of the scope row. Adding a scope is the arena's
-///   own gap drawn a fifth time, which [`outputs`] already names, and what it
-///   would add is a folder — which is the chip already drawn, and what that
-///   chip waits on is a directory rather than a fifth chip ([`Scope`]).
-/// - `.lib-row .dim`, the time beside each name. This one is different
-///   from the others and is worth the sentence: the *value* exists —
-///   `SetEntry::written` is the Set file's own mtime — and what does not exist
-///   is a spelling for it. The one answer in this workspace is
-///   `karakuri_environment::setfile::written_at`, local time to the second
-///   where the mock's column is `16:09`. It is reachable now — ADR-0214
-///   moved it out of a package with no library target, which is the reason
-///   this comment used to give — but not from here: `karakuri-console` takes
-///   no engine, no store and no environment by design, so the host formats it
-///   and hands it in, the way every other derived value in this module
-///   arrives. Writing a second spelling here would be the kind of second
-///   answer this repository deletes rather than adds.
-/// # `.lib-row`'s `.star` is here, and it is the row's first control
-///
-/// A hollow star at the left of every row, filled on the rows the store has
-/// starred — the mock's `.star` and `.star.off`, `--c-sun` against
-/// `--c-faint`. It was the last of the six things this bay drew nothing for,
-/// and what it was short of was somewhere for the value to be: ADR-0299 put it
-/// in `<store>/favourites.json`, beside the Sets, so a star does not travel
-/// with a Set file and the file stays byte for byte what it was.
-///
-/// The mark is drawn rather than typed, for [`LOAD_ARROW`]'s reason one
-/// row down: whether `☆` is in `egui`'s default face is a question with no
-/// good answer, and a control whose one job is saying *starred or not* must
-/// not do it through a tofu. See [`star_mark`], and [`STAR_SIZE`] for the box
-/// it stands in — which is the box the glyph would have had, so the name
-/// beside it starts where `.lib-row`'s `gap: 7px` puts it either way.
-///
-/// A press names the state and does not flip one
-/// ([`LibraryBay::starred`]): `Operation::SetFavourite { id, favourite }` is
-/// what leaves, carrying the state the row is being put *in*, because a map
-/// with a button per direction and a model that says which one it wants both
-/// have to be able to say *star this* and mean it.
-///
-/// Which rows are starred is handed in, like the listing above it and for
-/// the same reason: the marks are a file beside the Sets and this crate reads
-/// no store (ADR-0156). See [`View::starred`].
-///
-/// # The `.lib-filters` fields are here, and the passage that said they could
-/// not be was wrong rather than stale
-///
-/// It read: *"nothing in the store answers it: `list_sets` reads names off a
-/// directory and no index anywhere says what a Set holds"*. The first half is
-/// true of `karakuri_store::Store::list_sets` and the second was already false
-/// when it was written — `karakuri_environment::setfile::summarise` reads what
-/// each Set holds, node by node, off the Set file and the cards behind it, and
-/// `karakuri-environment`'s MCP `list_sets` has been applying both filters
-/// against it. What was missing was that this bay's host asked the *store* for
-/// a list of names instead of asking that. It does not any more, and the two
-/// fields are [`LibraryBay::field`] and [`LibraryBay::filter`] — drawn, hit
-/// tested, and stepping rather than taking letters, which is that method's
-/// argument and the one thing about them a maintainer may want back.
-///
-/// # What is in the mock's bay and is here, which is the load route
-///
-/// `.lib-row.cursor`, and the three things the foot's readout became.
-/// `console.html`'s *How a Set reaches a deck* is what settles their shape:
-/// *"what was missing was never the operation but the route"*, and there are
-/// three routes now. The key is the cursor and the deck *selection* — *"a
-/// cursor and a key with no pointer anywhere in it"* — the drag names both
-/// operands in one gesture, and the button in the foot takes the Set from
-/// the cursor and the deck from the pulldown beside it.
-///
-/// The cursor is moved by a pointer as well as by the keys, and that is
-/// the drag below arriving rather than a second control: a press on a row
-/// takes that Set in hand ([`LibraryBay::take`]) and the mark follows the
-/// hand, because the mark on a row is what this bay already draws for *which
-/// row* and the mock draws nothing else a carry could use.
-///
-/// # The foot was a readout until 2026-09-08, and what it is now
-///
-/// `load → A` said where a *key* press would land before it was made and
-/// answered no pointer at all: nothing in [`crate::input::claim`] hit-tested
-/// it, and this section used to end *what this bay owes is the drag; what it
-/// must not grow is a button*. It grew one, and the argument that was
-/// against it is in
-/// [ADR-0305](../../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)
-/// rather than deleted, because it is a good argument that lost to one fact:
-/// a readout reading the selection cannot aim a load at a deck without taking
-/// the keys off the deck being played.
-///
-/// So the foot is three things and two of them are controls.
-/// [`LibraryBay::load`] lays out all three; [`LibraryBay::aim`] is what a
-/// press on either capsule asks for, and the `→` between them is a label on
-/// the foot's own ground that answers no pointer — which is the sentence this
-/// section used to make about the whole pill, kept where it is still true.
-///
-/// The deck is [`View::target`] and never [`View::selection`], and that is
-/// the whole of the record: the ring on a strip and the letter in this foot
-/// are free to name two different decks, `l` goes on loading onto the ring's,
-/// and a press on the pulldown emits nothing at all.
-///
-/// This row's badge names three panel routes now. A chip is the control
-/// the page names for its row; when the drag landed, a press on a row and a
-/// release over a strip are what made this badge true, and `operations.html`
-/// read `library → deck`. It gained the button with ADR-0305 and a row menu's
-/// four load items with ADR-0311, reading
-/// `load button, row menu → load to slot, or library → deck`, and all three
-/// arrive at one `Operation::LoadSet`.
-///
-/// # A Set is written out from a row's own menu, and the file is named outside
-/// # this program
-///
-/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*
-/// names two directions and this bay is the home of both. Both are reached
-/// from here now. The taking-in half is *"Taking one in is not a second row —
-/// opening a preset is this row"*, and a row of a `folder` the bay has been
-/// pointed at is that same row again: a press packages the file into the store
-/// and then loads it, which the host performs and this bay's list is the
-/// picker for. The sending half is [`RowMenu`]'s `Save as a kbset`, under the
-/// separator, and what this bay emits for it is
-/// `Operation::TransferSet { transfer: SetTransfer::Send { id } }` and nothing
-/// else.
-///
-/// The asymmetry this section was written about is what decided the
-/// control. Taking in names a file that exists and sending names one that
-/// does not yet — and no listing can point at a file nobody has written. That
-/// is why the destination is the platform's ask rather than a row of anything
-/// drawn here.
-///
-/// The operation carries no destination and never will. ADR-0260 refused
-/// the premise that it owes one — sending is a *read*, and a read's answer goes
-/// where the surface that asked puts answers, so `SetTransfer::Send { id }`
-/// gains no field. What *this* surface asks with is the system's own save
-/// dialog, opened by the host on the file the operator names
-/// ([ADR-0311](../../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)),
-/// and no path crosses this crate at all: nothing here reads a disk
-/// (ADR-0156) and nothing here spells a place.
-///
-/// It was the `.path` row's folder until 2026-09-09, which is
-/// [ADR-0267](../../../../docs/adr/0267-the-panel-sends-into-the-folder-the-library-bay-is-pointed-at-and-the-destination-is-drawn-before-the-press.md),
-/// superseded by ADR-0311. That row is still drawn and is still this library's
-/// readout — [`Pointed`], and ADR-0275's — and what it is for a send now is
-/// where the dialog opens rather than where the file lands.
-///
-/// And the one control here that asks for letters could not spell a path
-/// anyway. [`Menu::Naming`] is it, and what it takes is a name —
-/// ADR-0221's *one path component of letters, digits, `-` and `_`*. ADR-0229
-/// says in as many words why that rule does not stretch: *"an include is a
-/// relative path and has separators in it by construction, so the rule cannot
-/// be copied."* Nothing needs it to: the file is named in a window this program
-/// does not own, which takes no rule from ADR-0221 because it is the operator's
-/// own file system asked by the operator's own tool.
-///
-/// The pulldown's letter is [`View::target`], which this console keeps —
-/// ADR-0219 recorded a deck mark as living *"in the specification and not in
-/// `karakuri-console`'s code"*, and that is the sentence this bay's letter
-/// waited on. It read [`View::selection`] until ADR-0305 split the readout,
-/// and the paragraph above is where the two marks are held apart. Either way it
-/// is refused past the strips the mixer is drawing, so the letter never names a
-/// deck the press would be turned down on — and a row menu's items are cut to
-/// the same count for the same reason.
-///
-/// The key is `l`, chosen by `docs/manual/operations.html` because which
-/// keys exist is that page's to say (ADR-0198, ADR-0220) — this module reads
-/// the choice and does not make it, and nothing here presses anything: the
-/// press is the host's, and what it re-points is the slot's *source*, so the
-/// worker builds the Set and the watchdog judges it exactly as it does an
-/// edit.
-///
-/// # The foot's number is the mock's own, read the mock's way
-///
-/// `5 of 27` is how many rows are drawn whole against how many the scope
-/// holds, and both halves are here: the total is what the harness handed over,
-/// and the count is [`LibraryBay::rows`]. So a library taller than its list
-/// says so in the one place the mock puts it.
-///
-/// And what is out of sight is reachable, which it was not. This paragraph
-/// said this bay does not scroll — *"which is honest, because it has no
-/// scroll position and inventing one here would be a control"* — and then, once
-/// an Inspector pane had one
-/// ([ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)),
-/// that the reason this list had none was unchanged. Both are gone: the bay
-/// scrolls, the position is [`View::library_scroll`], and the wheel over the
-/// bay is the way in
-/// ([ADR-0312](../../../../docs/adr/0312-the-params-pill-is-a-toggle-and-the-library-bay-scrolls.md)).
-///
-/// What the old argument got right is what the count still does. A row out
-/// of reach *was* a row a press would name and a hand could not see, and that
-/// is exactly the failure the pair [`rows`](Self::rows) and
-/// [`drawn`](Self::drawn) is arranged against: the cursor is held inside the
-/// rows the bay is drawing ([`View::walk`]), a press outside the list reaches
-/// no row at all, and the foot counts the whole ones.
+/// The Library bay, laid out: chip selectors, path breadcrumbs, rows listing, and footer count.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LibraryBay {
     /// `.scopes`: the row of chips between the bay head and the list, one
@@ -886,30 +631,10 @@ impl View {
         self.library_scroll
     }
 
-    /// Turn the Library bay's wheel by `by` pixels, positive down the listing, and
-    /// answer whether the stored position moved.
+    /// Turn the Library bay's wheel by `by` pixels (positive down the listing).
     ///
-    /// # Two clamps, and only one of them is here
-    ///
-    /// This one is against the content — how tall the listing and the reading under
-    /// it come to ([`library_content_h`]) — and it is a reading of what the store
-    /// answered rather than of a viewport, so a stored position bounded by it is
-    /// not a position any resize can rewrite. Without it a wheel spun over a
-    /// listing of three would put the number in the thousands and an operator would
-    /// have to spin it all the way back before anything moved.
-    ///
-    /// The other clamp is against the list's own height and belongs where the bay
-    /// is laid out — `library_box`, which is
-    /// [P-0082](../../../../docs/principles/0082-looking-never-writes-back.md): a
-    /// shorter bay draws less of the same position and stores nothing, so dragging
-    /// it back reproduces the picture exactly rather than nearly.
-    ///
-    /// [`View::scroll_by`]'s shape one bay over, and the difference is what the two
-    /// are told: a pane is named by index and this bay is the only one of itself.
-    ///
-    /// A console with nothing listed refuses the wheel rather than storing a
-    /// position for it, which is [`View::point_at`]'s rule: what a pointer can be
-    /// at is something drawn.
+    /// Clamps scroll offset between zero and total content height ([`library_content_h`]).
+    /// Returns true if scroll position changed (P-0082, ADR-0312).
     pub fn scroll_library_by(&mut self, by: f32) -> bool {
         if self.library.is_empty() {
             return false;
@@ -1087,13 +812,7 @@ impl View {
         self.reading = Some(reading);
     }
 
-    /// Whether a reading is open at all, whatever row it was read of.
-    ///
-    /// [`View::opened`] is what the bay is drawn from and answers `None` where the
-    /// row it belongs to is gone; this is the flatter question a host asks after
-    /// moving the cursor, because the reading follows the cursor: a move with one
-    /// open is a read of the row it arrived at, and a move with nothing open is a
-    /// pointer moving.
+    /// Whether a reading is open at all, regardless of the row it was read from.
     pub fn reading_open(&self) -> bool {
         self.reading.is_some()
     }
@@ -1106,19 +825,7 @@ impl View {
         self.reading.take().is_some()
     }
 
-    /// Which library the bay is listing, or `None` for a console nobody has told
-    /// what libraries there are.
-    ///
-    /// Answered against [`View::scopes`] rather than read back bare, which is
-    /// [`View::cursor_row`]'s rule: a host that offered four chips and then three
-    /// leaves a position past the end, and the scope that is marked is then the
-    /// last one there is.
-    ///
-    /// This is what the host answers with. It says which listing belongs in
-    /// [`View::library`] and what a load off a row means — a row of
-    /// [`Scope::MySets`] is a Set the store already holds and a row of
-    /// [`Scope::Presets`] is a file that has to be taken in first (`console.html`'s
-    /// *A Set has two forms, and loading one is packaging it*).
+    /// The active library scope, or `None` if no scopes are configured.
     pub fn scope(&self) -> Option<Scope> {
         self.scopes.get(self.marked()).copied()
     }

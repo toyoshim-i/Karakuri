@@ -1,94 +1,7 @@
-//! The panel column of the manual, against the operations this crate's
-//! controls emit.
+//! Verification of console control emissions against the manual's operations table (ADR-0213).
 //!
-//! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
-//! made the panel column of `docs/manual/operations.html` the Interface
-//! milestone's meter and defined what a badge in it means: `has` means an
-//! operator running the instrument reaches the operation. It also said what
-//! the first flip owes — *"a test asserts that each `has` row's operation is
-//! actually emitted by a console control, and fails in both directions"* — and
-//! this file is that test, owed by the five badges `cargo run -p karakuri`
-//! made true.
-//!
-//! It is shaped like `karakuri-environment/src/mcp.rs`'s pair,
-//! `every_tool_this_server_publishes_has_a_route_on_the_page` and
-//! `every_mcp_route_the_page_claims_is_a_tool_this_server_publishes`, and it
-//! sits beside [`vocabulary.rs`](../tests/vocabulary.rs), which reads the same
-//! page for the *Arranging the console* section. It is a separate file from
-//! that one because it asks a different question of a different type:
-//! `vocabulary.rs` checks `panel::Op` against one section's rows, and this
-//! checks `karakuri_operation::Operation` against one column's badges.
-//!
-//! # The whole problem is deciding what "a control emits it" means
-//!
-//! There is no list in this crate of the operations its controls emit, and a
-//! list written here would be the second copy of one
-//! (`docs/contributing.md` §4).
-//! So the set is read out of this crate's own source, and the criterion is
-//! stated here rather than left for a reader to infer from a regex.
-//!
-//! The criterion. Over every `.rs` file in `crates/karakuri-console/src`,
-//! a line is taken as code after two cuts: a line whose first non-space
-//! characters are `//` is dropped whole — which is every `///`, `//!` and `//`
-//! — and what is left is truncated at its first `//`. In what survives, every
-//! `Operation::` followed by an identifier is an emission, and the
-//! identifier is the variant. That is what separates
-//! `Knob::Trim => Operation::SetGain { .. }` from the fifteen `[`Operation::…`]`
-//! links in the doc comments around it, which `grep 'Operation::'` cannot.
-//!
-//! # What the criterion cannot see, and which way each one fails
-//!
-//! Every one of these is a way the scan is wrong; what matters is that all but
-//! the last of them fails loudly rather than passing quietly, and that is
-//! why the two cuts are made in the narrowing direction.
-//!
-//! - A block comment. `/* … Operation::SetSync … */` is not a line comment
-//!   and is read as an emission. It is a *false positive*: the phantom variant
-//!   has no `sample` arm, so [`emissions`] panics naming it.
-//! - `//` inside a string on an emitting line. The truncation would cut
-//!   the emission away with it. That is a *false negative*, and a false
-//!   negative cannot fail the direction that says every emission is on the
-//!   page — it fails
-//!   [`every_panel_route_the_page_marks_built_is_emitted_by_a_console_control`]
-//!   instead, which reports it as the page claiming a control that does not
-//!   exist. Wrong reason, right failure.
-//! - An emission that never says `Operation::`. A `use
-//!   karakuri_operation::Operation::SetGain;` and a bare `SetGain { .. }`, a
-//!   type alias, a variant handed back from a helper in another crate. Invisible
-//!   here, and a *false negative* again — so it surfaces the same way, from the
-//!   other direction, the moment the page claims it.
-//! - A false positive on a row already marked `has`. The one combination
-//!   that passes in silence: text that is not an emission, naming an operation
-//!   the page already claims. Nothing here catches that, and what does is that
-//!   the `has` rows each have a test that presses the control —
-//!   `fader.rs` for the trim and the fader, `blend.rs`, `tally.rs` and
-//!   `mask.rs` for the three chips, and `arrangement_pill.rs` for the save and
-//!   the restore. This file does not press anything; it is an inventory, and
-//!   those five are the proof each item in it is real.
-//! - Construction is not reachability, and reachability is the definition.
-//!   The largest one by far. A `pub fn` in `src/` that builds an `Operation`
-//!   and that nothing on the drawn panel calls reads exactly like one a hand
-//!   can reach, because ADR-0213's *the operator reaches it* is a property of
-//!   `crates/karakuri/src/main.rs` — where a claimed press becomes
-//!   `Mixer::blend`, `tally`, `mask` and a drag becomes `Dragged::Fader` — and
-//!   this crate takes no device and cannot depend on that binary (ADR-0156).
-//!   So this file checks the necessary half and not the sufficient one.
-//!   A control written here and never wired there would pass, and the badge
-//!   would be a lie the page tells on its own authority.
-//! - Only the panel column, and only through `Operation`. The six rows of
-//!   *Arranging the console* reach the operator through `panel::Op` and
-//!   through a drag that is no operation at all, not through `Operation`, so
-//!   no scan for `Operation::` can see them and this file says nothing about
-//!   their badges. `vocabulary.rs` is where that type meets this page, and it
-//!   asks a running `Panel` what a hand reaches rather than reading source.
-//!
-//!   It is an exemption in the code and not only a sentence here, which is
-//!   [`ELSEWHERE`]: the second assertion below reads every `has` badge in the
-//!   column and demands an emission for it, so the day *Move a boundary* was
-//!   marked built this file failed saying the page claimed a control that does
-//!   not exist — for a drag that no control will ever emit, because the
-//!   vocabulary carries it as `Undecided`. The sentence was true of the first
-//!   assertion and false of the second.
+//! Scans `crates/karakuri-console/src` for constructed `Operation` variants and validates
+//! bidirectional correspondence with `has` badges in `docs/manual/operations.html`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -136,61 +49,7 @@ const ELSEWHERE: &str = "<h2>Arranging the console</h2>";
 /// from where.
 const NOWHERE: &str = "&mdash;";
 
-/// The rows a control on this panel emits and an operator still cannot reach,
-/// which is the one gap between *emitted* and ADR-0213's *reached* that this
-/// file has ever had to carry. It is empty, and the entry it held is what the
-/// mechanism was built for.
-///
-/// # What the one entry was, and how it left
-///
-/// Every emission on this list ends in a record and a movement: `written`
-/// converts it, `crates/karakuri` applies it, and the deck is somewhere else
-/// afterwards. *Set a deck's sync mode* did not, for one release: `SetSync`
-/// converted to `Owed(NotSettled)`, which was `karakuri-operation-record`
-/// saying that *what* its record carried was undecided — the anchor goes
-/// through the engine's clamp, so whether the record carried what was asked for
-/// or what was clamped read as *"a decision about the bytes on disk"*, and
-/// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
-/// left it open by name. So the deck head's sync chip and its anchor were
-/// reachable *affordances* over an unwritable record: a press was claimed, the
-/// operation was emitted, the window printed the question, and the deck did not
-/// move.
-///
-/// There were never two answers. The clamp holds the anchor inside the range
-/// every tempo in the system is held in, and a session's tempo is already
-/// inside it, so the anchor asked for and the anchor clamped are the same
-/// number. What was missing was a reading, `Current::tempo` is it, and the
-/// conversion writes `Record::Transport` from the policy
-/// `karakuri_engine::transport::Transport::engaged` had already fixed.
-///
-/// `has` would have been a lie in exactly the way ADR-0213 was written to
-/// prevent — *"the row is claimed the day a person who launched the instrument
-/// can perform that operation from the panel in front of them"* — and drawing
-/// no control would have been a worse one, because the panel is the only
-/// surface that can offer re-anchoring at all. So the badge stayed `plan` while
-/// that was true and the exemption was written here with its reason, which is
-/// what the first assertion's own failure message invites: *"Flip the badge, or
-/// say here why the control is not reachable"*.
-///
-/// # It was written to delete itself, and it did
-///
-/// A list here is a second copy of something (`docs/contributing.md` §4), so it
-/// was held against both of its halves by
-/// [`the_unreachable_exemption_is_still_the_state_of_the_page`]: the operation
-/// had to still be emitted, and its badge had to still not be `has`. The day
-/// the record was settled the badge flipped, that test failed, and it named the
-/// line to remove. That is the whole of what happened here, and it is why the
-/// array stays: the mechanism cost one line to keep and it is what the next
-/// control to reach past the page will be caught by.
-///
-/// Not derived from `karakuri-operation-record`, which is where the answer
-/// lives, because this package deliberately holds no dependency on it —
-/// `Cargo.toml` says so at length, and reaching for one to spell a one-line
-/// exemption would undo the closing of ADR-0156 that manifest records.
-///
-/// # It holds nothing
-///
-/// No operation on the page is exempt.
+/// Operations emitted by console controls but not yet operator-reachable (ADR-0213).
 const UNREACHABLE: [&str; 0] = [];
 
 fn workspace() -> PathBuf {
@@ -397,17 +256,7 @@ fn sample(variant: &str) -> Operation {
             id: "night01".to_owned(),
             favourite: true,
         },
-        // **The `read` chip in the Library bay's foot**, and the one emission
-        // in this list whose operand is a *pointer of this console's own*: the
-        // id is the Set under the cursor, which is where the `load` button
-        // beside it reads its Set too. The value is any id, because what the
-        // badge claims is that an operator reaches the row.
-        //
-        // **One of its two presses emits nothing**, and that is not a gap in
-        // this inventory: opening asks for a reading and closing puts one
-        // away, which changes what this bay is drawing and nothing else —
-        // `view::Read`. What this file sees is the asking, which is the half
-        // the page's badge is about.
+        // Library bay `read` chip (ADR-0312).
         "ReadSet" => Operation::ReadSet {
             id: "night01".to_owned(),
         },
@@ -483,17 +332,7 @@ fn sample(variant: &str) -> Operation {
         // file, not only the one about its own row. The value is any tempo,
         // because what the badge claims is that an operator reaches the row.
         "SetFreeRunTempo" => Operation::SetFreeRunTempo { bpm: 128.0 },
-        // **The `rec` pill at the end of the transport row**, and the one
-        // emission in this list whose payload is what the *control* is showing
-        // rather than an arbitrary value: the pill is a toggle, so a press
-        // asks to start where nothing is running and to stop where something
-        // is. Either payload names the row, and the badge claims an operator
-        // reaches it — so this is a `Stop`, which is the gesture the mock's
-        // tip already named.
-        //
-        // **`Start` carries `None`**, and it would if this were the arm: each
-        // start files under a fresh stamp, because a second head under one id
-        // is read back as edits (ADR-0289).
+        // Transport row `rec` pill toggle (ADR-0289).
         "RecordSession" => Operation::RecordSession {
             recording: karakuri_operation::Recording::Stop,
         },
@@ -657,26 +496,7 @@ fn sample(variant: &str) -> Operation {
             output: karakuri_operation::Output::Projector(0),
             on: true,
         },
-        // **The two chips before the fold on an Inspector pane's deck head**,
-        // and one operation is one row however many chips name it — the
-        // arrangement `SetSync` is already in with its anchor. Each is a field
-        // of the aim the slot's watcher is pointed at, so the press is a
-        // rebuild off the render thread exactly as the fold beside them is
-        // (ADR-0328).
-        //
-        // **The capacity arm and not the seed one**, and the choice is
-        // arbitrary in the way this file's values are: what the badge claims is
-        // that an operator reaches the *row*, and the row is one heading over
-        // two operations. Neither carries a node — an aim holds one capacity
-        // and one seed for the whole slot, which is what the deck this payload
-        // names already says.
-        // **A pick out of a `uses` line's card in an Inspector pane**, and the
-        // one emission in this list addressed **by name at both ends**: an edge
-        // survives a reorder and a position does not, which is `Record::Edge`'s
-        // own decision. The capsule that opens the card emits nothing and owes
-        // this page no row, which is the Library bay's deck pulldown's rule
-        // (ADR-0305, ADR-0329). The value is any wiring, because what the badge
-        // claims is that an operator reaches the row.
+        // Inspector pane deck head capacity/seed chips (ADR-0328) and wiring cards (ADR-0305, ADR-0329).
         "WireInput" => Operation::WireInput {
             deck: 0,
             node: "swirl_warp".to_owned(),

@@ -412,14 +412,7 @@ fn the_mark_is_the_cell_and_nothing_beside_it() {
     assert_eq!(laid.publishing(&pane, at(beside)), None);
 }
 
-/// An unpublished row draws no fader, which is what publishing decides: the row
-/// is a mark and a name, and there is nothing on it to take hold of.
-///
-/// It carries its own negative control, which is the half that makes it a test
-/// rather than a sweep that finds nothing: the *published* row beside it is
-/// swept first and a knob is found, so a run where nothing is found anywhere
-/// fails on the published row and says the probe stopped working rather than
-/// passing on a row that has no handle for the wrong reason.
+/// Verifies that an unpublished row renders no fader handle, while a published row does.
 #[test]
 fn an_unpublished_row_has_no_fader() {
     let pane = mock();

@@ -454,12 +454,7 @@ impl Control {
     }
 }
 
-/// What `enter` on an addressed thing performs.
-///
-/// One variant per act the nine bays draw, which is what keeps `enter` a rule
-/// about a kind rather than a per-bay verb: where an item has two acts they are
-/// two controls and a digit chooses between them, which is the Staging lane's
-/// `n 1` and `n 2`.
+/// Action performed when activating an addressed control with `enter`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Act {
     /// The Set under the Library's cursor, loaded onto the selected deck — with
@@ -696,14 +691,7 @@ impl Built {
     }
 }
 
-/// The nine bays' grammar, and what each is made of.
-///
-/// ADR-0259 walks all nine and this is the whole of that walk: ADR-0333 built
-/// the Mixer and the Library, and ADR-0343 the seven that were left. A bay with
-/// nothing of a kind is recorded as a finding rather than smoothed over, which
-/// is the record's own instruction — the Staging lane holds no state at all,
-/// the Outputs row holds nothing but states, and the Program bay's four cells
-/// answer neither of the two keys that act on a thing.
+/// The nine bays' focus ladder specifications (ADR-0259, ADR-0333, ADR-0343).
 pub const BUILT: &[Built] = &[
     // -- Transport ---------------------------------------------------------
     //
@@ -800,16 +788,6 @@ pub const BUILT: &[Built] = &[
         across: false,
     },
     // -- Program -----------------------------------------------------------
-    //
-    // **`0` is the head, whose controls are `solo` and the class pill.**
-    // `space` on `solo` is the state *soloed* and *not*, which is `s` and `u`
-    // collapsed into the one control they always described.
-    //
-    // **Items are the picture and the four preview cells**, and neither the
-    // picture nor a cell answers a key: a cell is a monitor (ADR-0243,
-    // ADR-0240) and the picture's on and off is the Outputs row's one control.
-    // It is the clearest case in the walk of items with neither a state nor an
-    // act, and it is correct.
     Built {
         bay: PROGRAM,
         head: &[Control::Solo, Control::Class],
@@ -999,11 +977,6 @@ pub const BUILT: &[Built] = &[
         across: false,
     },
     // -- Outputs -----------------------------------------------------------
-    //
-    // **Headless again, so `0` names the row itself.** Items are the sinks and
-    // each has exactly one state, so `space` is the whole of this bay: no item
-    // here has an act and none has a level. It is the simplest of the nine and
-    // it is what the grammar looks like with one kind in it.
     Built {
         bay: OUTPUTS,
         head: &[],

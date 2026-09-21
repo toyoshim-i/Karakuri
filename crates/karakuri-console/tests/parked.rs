@@ -528,29 +528,8 @@ fn the_panel_asks_for_a_deadline_only_while_something_is_parked() {
     );
 }
 
-/// A parked slot in a bay that is folded away declares nothing, and unfolding
-/// it declares again.
-///
-/// The strips are rewritten every frame from the `Deck`, so *is anything
-/// pending* is a fact about the deck and not about the panel. Answering off
-/// that alone bought a 30 Hz deadline forever for a chip nobody could see:
-/// measured with the picture and the preview row folded, the window sat at 28.7
-/// to 29.0 frames a second, and folding the mixer bay on top of that moved the
-/// price of a frame — 432 allocations to 260 — and not the rate at all. That is
-/// P-0091 read backwards: the rule is *what must be live declares a cost and a
-/// staleness*, and a bay the operator has folded away is not live.
-///
-/// Both folds, because they are one question with two ways in. `f` over the bay
-/// folds the mixer itself; `g` over it folds the split that encloses it, and
-/// the whole right pane goes with it. `Layout::visible` walks the ancestors and
-/// answers both — asking `is_collapsed` on the bay alone would pass the first
-/// of these and fail the second, silently, at the moment an operator folded a
-/// pane rather than a bay.
-///
-/// The fold is not a latch, which is the half that a `bool` written once would
-/// get wrong: the declaration is re-derived every frame from the arrangement as
-/// it now is, so putting the bay back puts the deadline back while the slot is
-/// still parked.
+/// Verifies that a parked slot in a folded mixer bay declares no animation frames,
+/// and re-declares them upon unfolding (P-0091).
 #[test]
 fn a_folded_mixer_bay_declares_nothing_and_unfolding_declares_again() {
     for enclosing in [false, true] {

@@ -54,46 +54,13 @@ const NO_INPUT: &str = "none";
 /// of the card.
 const NO_INPUTS: &str = "no inputs on this machine";
 
-/// What the audio-in pill reads this frame, and whether its menu is down.
-///
-/// # The input and the list are handed in, for [`Arrangement`]'s reason
-///
-/// Which input is open is a device and what inputs there are is an enumeration
-/// of the host. `src/` takes no device (ADR-0156) and this crate's manifest
-/// holds nothing that could reach one, so whoever opened the input reads both
-/// and writes them here — the arrangement pill's seam with a microphone in
-/// place of a directory.
-///
-/// # The menu is not handed in, and that is the other half of the same seam
-///
-/// Whether the card is down is what the *control* is doing rather than what the
-/// instrument is doing, so it lives here and moves only through
-/// [`AudioIn::opened`] and [`AudioIn::shut`] — ADR-0225 §d, one pill along. A
-/// menu open in the program's memory would be this console drawing a state it
-/// could not answer questions about.
-///
-/// Two states and not [`Menu`]'s three. That enum's third state is a name being
-/// typed, and nothing here asks for letters: an input is picked from the list
-/// of the ones that exist, and a device is not named into being. The
-/// *mechanism* is ADR-0225's and is shared — the card hangs from the pill, it
-/// is `.lib-row` inside `.lib-list` padding, it counts itself in the Library
-/// bay's foot, and `input.rs`'s rule 2 is modal over it — and it is the
-/// mechanism that record is about, not the shape of the flag.
+/// Audio input state for the transport pill, including device selection and menu state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AudioIn {
     /// The input in use, by the description the device answers to, or `None` for an
     /// instrument with nothing open. See [`NO_INPUT`].
     pub device: Option<String>,
-    /// Every input the machine has, in the order the host listed them.
-    ///
-    /// Read when the menu opens rather than per frame, which is
-    /// [`Arrangement::filed`]'s rule for its reason: enumerating a host is a device
-    /// read and a frame path does not do one (P-0091). It changes when somebody
-    /// plugs something in, and the press that opens the menu is the moment that
-    /// matters — so the list a hand is about to read is the list as of the press.
-    ///
-    /// Empty is a machine with no inputs, and the card says so in as many words
-    /// ([`NO_INPUTS`]).
+    /// Host audio inputs enumerated when opening the menu.
     pub inputs: Vec<String>,
     /// Whether the card is down. Private for [`Arrangement::menu`]'s reason.
     down: bool,
@@ -163,14 +130,7 @@ pub enum AudioAsk {
     /// Take it away — a press on the pill again, or anywhere on the card that is
     /// not a row.
     Shut,
-    /// Listen to this input, named. [`Operation::AttachBeatSource`] with a
-    /// [`BeatSource::AudioInput`] carrying the name the row was drawn with — which
-    /// is the name the device answered to when the list was read, and the name
-    /// `AudioInput::open` matches a selector against.
-    ///
-    /// Nothing is refused here. A device that has gone away since the list was read
-    /// is refused where it is opened, out loud, with the list as it is then
-    /// (P-0094, P-0090): this control cannot see a device and must not pretend to.
+    /// Listen to this input, issuing an [`Operation::AttachBeatSource`].
     Operation(Operation),
 }
 

@@ -216,16 +216,7 @@ pub fn sequencer(
     }
     let mut y = region.min.y + size::HEAD_H + size::SEQ_PAD_TOP;
 
-    // -- the bay head's bank pills, laid out where they are painted ---------
-    // **The same head [`bay_head`] paints**, asked a second time rather than
-    // copied ([`head_capsule`]'s arrangement), so the capsule an operator
-    // presses is the capsule that was drawn.
-    //
-    // **`Open::CLOSED` and no opening threaded here**: this head opens no class
-    // — `class_at("sequencer")` is `None`, which
-    // `docs/manual/console.html` states of this bay in as many words — so
-    // nothing in it moves with an opening. `a_sequencer_head_opens_no_class`
-    // is what holds that rather than this comment.
+    // Bay header bank pills matching header render geometry.
     let banks = crate::view::region("sequencer")
         .and_then(head_of)
         .map(|head| head.with_banks(reading.bank))
@@ -752,31 +743,7 @@ impl Sequencer {
     }
 }
 
-/// The Sequencer bay, painted.
-///
-/// Where everything goes is [`sequencer`]'s, so this paints and derives
-/// nothing. Term for term from `style.css`:
-///
-/// - the mode pill — `.pill.armed`, because *"it is armed because it is what
-///   the pattern is rather than a preference the head is holding"*.
-/// - the step readout — `.seq-head`'s own `color: var(--c-faint)` with the
-///   figure in `.val`'s ink, which is what the mock draws.
-/// - the ruler — `.seq-ruler`, four numbers centred over the cells they start,
-///   at [`size::SEQ_RULER_SIZE`] in the faint ink. Four numbers whatever the
-///   mode, because the ruler counts *beats* and a bar has four of them: at
-///   an eighth they group two cells rather than four, which is the same bar
-///   read at the other width.
-/// - the playhead — `.seq-play .lane i.at`, a wash of the lavender with its
-///   own hairline, painted under the rows so a lit cell stays the colour
-///   its lane is.
-/// - a lane's label — `.seq-label`, right-aligned, with the mark in the
-///   lavender; and `.seq-row.mute`'s faint ink where the lane is muted.
-/// - a lane's minus — `.minus`, the Master bay's own glyph and ink at the far
-///   end of the row, which takes that lane out of the pattern.
-/// - a cell — `.seq-lane i`, the well with its hairline; `.on` in the mint;
-///   `.on.hot` in the pink where the lane drives the deck on air, which this
-///   console cannot know here and so does not draw; and `.seq-row.mute`'s
-///   `opacity: 0.3` over the whole row.
+/// Paints the sequencer bay, including mode pill, ruler, playhead, and lane cells.
 pub(super) fn sequencer_into(ui: &Ui, pal: &Palette, bay: &Sequencer) {
     let painter = ui.painter();
     // **The playhead first**, which is what `.seq-play` sitting before the
@@ -987,21 +954,7 @@ const MUTED_LANE: u8 = 30;
 /// ADR-0283).
 pub const STEP_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / 4);
 
-/// How long until the playhead next stands over a different cell, from the beat
-/// count and the tempo the transport row is drawing.
-///
-/// The step index is `floor(beats × steps_per_beat)`, so the next boundary is
-/// the next whole multiple of the subdivision and this is the distance to it in
-/// seconds — the same arithmetic the producer polls with
-/// (`karakuri_pattern::Pattern::step_at`), read forwards.
-///
-/// It never answers finer than the rate it declared, which is
-/// [`roll_moves_in`]'s rule and [`crate::budget::Declared`]'s invariant: a
-/// frame taken a hair before a boundary would otherwise ask for a deadline
-/// tending to zero, which is the spin [`crate::repaint`] exists to refuse.
-///
-/// A pure function of its two arguments, so a test chooses the beat it asserts
-/// at and nothing here reads a clock.
+/// Computes duration until the playhead advances to the next step at current tempo.
 pub fn step_moves_in(mode: StepMode, beats: f64, bpm: f32) -> Duration {
     // A grid at no tempo has no next boundary, and the rate this declared is
     // the only honest answer — the same shape as a rest longer than the period

@@ -236,32 +236,7 @@ fn a_parked_panel_asks_for_frames_only_while_the_word_is_travelling() {
 // 2. What the frames that stopped being drawn would have drawn
 // ---------------------------------------------------------------------------
 
-/// Every frame that is no longer asked for would have drawn the chip exactly
-/// where it already was.
-///
-/// This is the claim the whole record rests on, and it is a claim about the
-/// *picture* rather than about the schedule — so it is asserted off
-/// [`roll_at`], which is what the tally and both faders are drawn from, and not
-/// off the deadline. The curve is flat at zero for the whole of the rest, so
-/// the displacement at the moment the rest begins and the displacement at every
-/// 33.333 ms step the old schedule would have taken through it are the same
-/// number.
-///
-/// Run against its defect: `roll_moves_in` reduced to `ROLL_STALENESS` at every
-/// phase — a region that goes on declaring a rate it is not using — fails with
-/// *"the rest began at 400ms and the region asked to be woken in 33.333ms,
-/// which is inside its own rest"*.
-///
-/// A drawn frame that changes nothing is not free and it is not harmless.
-/// ADR-0164 measured a panel pass at 184 allocations and 226.2 kB; the panel as
-/// it now stands reads 525 and 694.3 kB. Seventeen of those a second, for as
-/// long as a slot is parked, is the cost that was being paid to redraw a still
-/// chip.
-///
-/// Eighteen steps and seventeen frames, and the difference is one frame that is
-/// still drawn. Eighteen steps of the declared staleness fall inside the rest;
-/// the schedule above keeps the first of them, because that is the frame on
-/// which the panel discovers there is a rest to sleep through.
+/// Verifies that frame rate reductions during roll rest do not miss visual state updates.
 #[test]
 fn the_frames_the_rest_no_longer_asks_for_would_have_drawn_the_same_chip() {
     let began = ROLL_TRAVEL;

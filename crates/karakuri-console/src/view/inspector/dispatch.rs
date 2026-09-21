@@ -18,21 +18,7 @@ impl View {
             .map(Naming::typed)
     }
 
-    /// What is being typed into the head of whichever pane is showing `deck`, or
-    /// `None` where no head is asking for a name over that deck.
-    ///
-    /// What it is for is a node's keep (ADR-0338, decision 4): the capsule on a
-    /// node group's head types nothing and takes a stamp, and a head that *is*
-    /// taking letters is what a keep from that pane files under — which is
-    /// ADR-0128's two routes drawn on one capsule, exactly as the deck's own `keep`
-    /// draws them.
-    ///
-    /// The pane is found by the deck rather than carried, which is
-    /// [`View::named_set`]'s own rule: the gesture spans frames, so what is filed
-    /// is what the head says it is filing *now*. An empty buffer answers
-    /// `Some("")`, and that is the field's rule and not this method's — the console
-    /// emits what was typed, including nothing, and the wall is where the file is
-    /// written (P-0090).
+    /// Returns the text being typed into the head of the pane displaying `deck`, or `None`.
     pub fn naming_over(&self, deck: u8) -> Option<String> {
         let naming = self.naming.as_ref()?;
         let pane = self.inspector.get(naming.pane)?;
@@ -84,29 +70,7 @@ impl View {
         }
     }
 
-    /// The name is finished, and this is what it asks for: the deck that head is
-    /// showing, filed under what was typed.
-    ///
-    /// # The deck is read at the commit and not at the press
-    ///
-    /// [`KeepPill`] carries the deck it was measured for because its press is one
-    /// instant; this gesture spans frames, and what is filed has to be the deck the
-    /// head says it is filing *now*. So the pane is looked up again and `None` is a
-    /// pane that has gone — a console handed a shorter [`View::inspector`] while
-    /// somebody was typing — where the field is taken away and nothing is emitted,
-    /// rather than a keep landing on a deck whose head is no longer on screen.
-    ///
-    /// # It refuses nothing else
-    ///
-    /// An empty name arrives here as an empty name and leaves as one, which is
-    /// [`Arrangement`]'s rule at the same seam: `id` is one path component and the
-    /// wall is where the bytes are written. A name typed twice overwrites, which is
-    /// ADR-0128 and is not this control's to soften.
-    ///
-    /// The field is taken away whether or not the name is any good, for
-    /// `Readout::named`'s reason one bay along: a refusal is said out loud by
-    /// whoever refuses it, and a field left standing over the refusal would be the
-    /// panel asking the question again without saying the answer.
+    /// Commits the typed name and returns a [`Operation::SaveSet`] operation.
     pub fn named_set(&mut self) -> Option<Operation> {
         let naming = self.naming.take()?;
         let deck = self.inspector.get(naming.pane)?.deck as u8;
@@ -191,18 +155,7 @@ impl View {
         moved
     }
 
-    /// Which deck one Inspector pane is pointed at — see [`View::pane_deck`] the
-    /// field, which is where the argument is.
-    ///
-    /// This is what the host reads to fill the pane, which is
-    /// [`View::target_deck`]'s arrangement one bay along: the pointer is the
-    /// console's and what is under it is the host's answer to *what is that deck
-    /// playing*.
-    ///
-    /// Deck A for a pane index past [`PANES`], which is a caller's error and not a
-    /// state — [`View::scroll_in`]'s own rule.
-    ///
-    /// [`View::pane_deck`]: Self::pane_deck
+    /// Returns which deck the specified Inspector pane is pointed at.
     pub fn pane_deck(&self, pane: usize) -> u8 {
         self.pane_deck.get(pane).copied().unwrap_or(0)
     }

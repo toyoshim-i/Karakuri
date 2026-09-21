@@ -591,15 +591,7 @@ fn well_height(params: usize) -> f32 {
     size::FX_PAD_Y * 2.0 + size::MASTER_ROW_H * lines as f32 + size::FX_PAD_Y * params as f32
 }
 
-/// One slot, laid out inside `well`.
-///
-/// The head line is the dot, the name, the cut chip where the procedure
-/// declares `retains`, and the `−` at the far end. Under it, one parameter row
-/// per declared parameter: the key, the track taking what is left, and the
-/// figure in a box that does not move. `widest` is the out row's own
-/// measurement of the widest `d.dd`, passed in rather than taken again — the
-/// figures are the same shape and one measurement is what keeps the boxes the
-/// same width.
+/// Lays out a single effects chain slot within `well`.
 fn slot_row(
     ctx: &egui::Context,
     at: u32,

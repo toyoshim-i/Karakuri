@@ -150,77 +150,9 @@ impl FoldGrip {
     }
 }
 
-/// The grip in a bay head, derived — the mark `docs/manual/console.html` draws
-/// in four of the seven heads this console has, and the panel's route into
-/// *Fold a bay away*.
+/// Returns the hit-test bounding box for the fold grip in a bay's header, if present.
 ///
-/// `None` where there is nothing to press: a region this console draws no head
-/// for, a head with no grip in it, a bay that is folded or off a solo somewhere
-/// else, or a bay clipped shorter or narrower than the target.
-///
-/// # The mark is the control, and it is not given a second shape
-///
-/// The page's lede says what the mark means — *"The grip in a bay's head says
-/// whose size you are setting: a bay with one is yours to size, and a bay
-/// without one is the height of what is in it"* — and the operations page puts
-/// *Fold a bay away* at the bay head. A fold is the far end of setting that
-/// height, so the reading a press takes is the reading the mark already
-/// carries. A *reading* which is a control does not get a second shape invented
-/// for it
-/// ([ADR-0291](../../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)),
-/// so nothing new is drawn here: [`bay_head`] paints the same six dots it
-/// painted before this function existed.
-///
-/// What that costs is the three heads the mock draws no grip in — the Mixer,
-/// the Staging lane and the Sequencer, and the two headless rows beside them —
-/// which have no pointer route into this row and keep `f`. Drawing a grip in
-/// every head would buy them one and would be an edit to the page rather than
-/// to this function: the mark would stop saying which side of a divider the
-/// number belongs to, which is the whole of what the lede says it is for.
-/// [ADR-0295](../../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
-/// is where that is taken.
-///
-/// # Where the rectangle is, and the 0.75 of a pixel it shares with `solo`
-///
-/// The mark is [`GRIP_W`] = 5.5 wide and 9 tall, which is not a target a hand
-/// finds — the same sentence [`GRAB`] is written under, and the same one
-/// [`LookRow::grip`] answers with a band. So the target is the head's own
-/// reservation for the mark, grown to a line's height: [`head_pills`] steps
-/// `GRIP_W + PILL_GAP` back from [`size::HEAD_PAD_X`] before it places a
-/// capsule, so that 10.5 is the strip of head no other control can ever be
-/// drawn in, and this is it — 10.5 x [`size::PILL_H`], hard against the head's
-/// right-hand padding and centred on the head's mid-line, which is the box
-/// every other capsule in this head is placed in.
-///
-/// The reservation rather than a pill's padding, and the capsule beside it is
-/// what settles it: a `.pill` is its content inside `padding: 0 8px`, and 5.5 +
-/// 16 = 21.5 would reach 6 pixels into the capsule [`head_pills`] places one
-/// [`size::PILL_GAP`] to the left of the mark. The reservation ends exactly
-/// where that capsule ends, so the two abut and never overlap — two rectangles
-/// sharing an edge, which is what two rows of the Library bay's list already
-/// are, and the capsule is asked first in both the claim and the caller.
-///
-/// What it takes that is not the mark is the gap, and the gap is what the head
-/// keeps between the mark and the capsule so that a hand aiming at one does not
-/// land on the other. Giving it to the fold is what makes the mark findable at
-/// all; giving it to nobody would be a control 5.5 wide, which is the thing
-/// this paragraph starts by refusing.
-///
-/// Sideways it clears every boundary: [`size::HEAD_PAD_X`] is 10 against a
-/// [`GRAB`] of 6, and that padding is the page's. Down the head it is
-/// `program_head`'s own 0.75 of a pixel, arrived at the same way and for the
-/// same reason: a head is [`size::HEAD_H`] = 27 and the target is 16.5,
-/// centred, so 5.25 of head sits above it against a `GRAB` of 6, and a bay
-/// whose top edge is a boundary lends that boundary the top 0.75 of the target.
-/// Rule 3 gives the boundary first refusal and there is no case where both
-/// think they are dragging; `tests/fold_grip.rs` measures it by asking
-/// [`karakuri_layout::Layout::hit`] at the target's own corners rather than by
-/// doing the arithmetic again.
-///
-/// No `egui` and no first frame. The grip is six dots at a fixed width, so
-/// nothing here is as wide as a word — this is the one control in a bay head
-/// that costs no galley and exists on the frame before anything has been laid
-/// out. `layout` must be solved.
+/// See ADR-0295 for details on grip hit regions and folding mechanics.
 pub fn bay_grip(layout: &karakuri_layout::Layout, name: &str) -> Option<FoldGrip> {
     if !head_grip(region(name)?.kind) {
         return None;

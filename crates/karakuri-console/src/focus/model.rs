@@ -45,18 +45,7 @@ pub const fn is_bay(kind: Kind) -> bool {
     }
 }
 
-/// The tab ring: every bay of `layout`, in the order the walk reaches them —
-/// down a column first and only then across to the next one.
-///
-/// The order is the arrangement's own geometry rather than a list anybody
-/// maintains, which is what keeps it right after a divider is dragged: a
-/// column's children are taken top to bottom, a row's left to right, and the
-/// walk stops at a bay instead of descending into it.
-///
-/// A folded bay is in it — see the module documentation. A node the arrangement
-/// names and [`REGIONS`](crate::view::REGIONS) does not is structure, so
-/// `left-pane`, `centre` and `right-pane` are walked through and not into the
-/// ring, which is the same reading `View::draw` makes of them.
+/// The tab ring: all bay regions of `layout` in column-major visual order.
 pub fn ring(layout: &Layout) -> Vec<&'static Region> {
     let mut bays = Vec::new();
     descend(layout, layout.root(), &mut bays);
@@ -256,14 +245,7 @@ impl Address {
         self.at.push(nth);
     }
 
-    /// Up one level, and answer whether there was one to leave.
-    ///
-    /// `false` at the bay, which is what `esc` says out loud: there is no unfocused
-    /// state to fall out into, so the key acts on nothing and the caller is the one
-    /// that says so
-    /// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
-    /// What it does not do is quit, which is the whole of ADR-0259's change to that
-    /// key.
+    /// Ascends one level in the focus address hierarchy, returning true if not already at bay level.
     pub fn up(&mut self) -> bool {
         self.at.pop().is_some()
     }

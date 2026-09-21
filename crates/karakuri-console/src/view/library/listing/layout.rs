@@ -326,26 +326,7 @@ impl LibraryBay {
     /// What a press at `p` on the `params` chip asks for, or `None` where there is
     /// no chip under it.
     ///
-    /// # The operand is the cursor, which is the load button's operand
-    ///
-    /// `console.html`'s note: *"Its operand is the cursor, which is the same
-    /// operand the pill beside it already uses — so the route costs one chip in the
-    /// foot and nothing else"*. So `set` is the Set under the cursor, handed in the
-    /// way every other reading of the listing is (ADR-0156), and what comes back
-    /// names it.
-    ///
-    /// # The two answers, and why closing is not an operation
-    ///
-    /// See [`Read`]. Whether the press opens or closes is read off
-    /// [`LibraryBay::reading`] — the block this bay is *drawing* — and not off
-    /// anything this method is told, so the chip cannot answer *shut* for a reading
-    /// nobody can see.
-    ///
-    /// A press with no row under the cursor asks nothing, which is a library that
-    /// lists nothing: there is no Set to read and the chip is still drawn, because
-    /// the foot is what the count is in. It is [`Mixer::grab`]'s answer for a press
-    /// on a fader's track — a control claims what it acts on, and claiming a press
-    /// to throw it away would put the rule and the act out of step.
+    /// Evaluates open/closed state against [`LibraryBay::reading`] to toggle reading display (ADR-0156).
     pub fn read(
         &self,
         ctx: &egui::Context,
@@ -596,13 +577,7 @@ impl LibraryBay {
                     set: name.to_owned(),
                 },
             }),
-            // **The send is a Set's and a procedure row has none.** What is
-            // written out is that Set with every source it names inlined after
-            // it, checked against the address each `slot` record carries — and
-            // a loose `.kir` names nothing, which is ADR-0338's own reason a
-            // `folder` lists no procedure. So the item is not drawn on such a
-            // row (see [`Menued::sends`]) and a press where it would have been
-            // dismisses.
+            // Procedure rows cannot be saved directly; dismisses on click (ADR-0338).
             Some(RowItem::Save) => match rows.set(row) {
                 Some(id) => Picked::Send(Operation::TransferSet {
                     transfer: karakuri_operation::SetTransfer::Send { id: id.to_owned() },
@@ -613,90 +588,20 @@ impl LibraryBay {
         })
     }
 
-    /// What a press at `p` on the list takes in hand, or `None` where there is no
-    /// drawn row under it.
+    /// What a press at `p` on the list takes in hand, or `None` if outside drawn rows.
     ///
-    /// # It answers a payload where every other control here answers an operation
-    ///
-    /// A press on a row asks for nothing yet. `console.html`'s *How a Set reaches a
-    /// deck* has the gesture as a drag — *"Dragging a row onto a strip is a second
-    /// route to the same command, and never the first … it names both operands in
-    /// the one gesture"* — and half a gesture names one operand. So what comes back
-    /// is the Set, on its way to [`crate::panel::Panel::carry`], and the operation
-    /// is built at the drop where the second operand is
-    /// ([`crate::panel::Released::Dropped`]).
-    ///
-    /// A press that is never dragged anywhere asks for nothing either, and that is
-    /// the same sentence rather than a second rule: the row is picked up, carried
-    /// nowhere, and let go over nothing.
-    ///
-    /// # The listing goes in with the point
-    ///
-    /// [`LibraryBay::read`]'s arrangement one row up, and for the reason that
-    /// method states: the operand is a name this crate reads no store for
-    /// (ADR-0156), so the rows the host handed in are what a row index means.
-    /// Handing them in is also what makes this refuse rather than clamp — a listing
-    /// shorter than the rows drawn takes nothing in hand, where an index answered
-    /// bare would name a Set nobody can see.
-    ///
-    /// The rows are walked rather than divided. A row's stride is
-    /// [`size::LIB_ROW_H`] and a reading pushes the rows under it down by a whole
-    /// block, so *which row is at `y`* is not one division — [`LibraryBay::row`]
-    /// already holds that arithmetic, and asking it per row is what keeps the row a
-    /// press lands on the row the paint drew. Never more than [`LibraryBay::rows`]
-    /// of them, so a press below the last row is on the list's own ground and
-    /// belongs to nobody.
+    /// Identifies the selected row Set or procedure for drag-and-drop operations (ADR-0338).
     pub fn take(&self, rows: Rows<'_>, p: karakuri_layout::Point) -> Option<Taken> {
         self.at_row(Pos2::new(p.x, p.y)).and_then(|row| {
             Some(Taken {
                 row,
                 set: rows.name(row)?.to_owned(),
-                // **What is in hand says which load a drop names**, which is
-                // the drag's half of [`LibraryBay::aim`]'s division: the
-                // gesture names both operands and the second arrives at the
-                // release, so the first has to carry what kind of row it was
-                // (ADR-0338).
                 procedure: rows.procedure(row),
             })
         })
     }
 
-    /// What a press at `p` on a row of the `history` listing asks for, or `None`
-    /// where there is no drawn row under it.
-    ///
-    /// # It is a load, and it is not [`Operation::LoadSet`]
-    ///
-    /// A row here is a version of one node rather than a Set, so what a press on it
-    /// asks for is `Operation::RestoreProcedure` carrying that version — *put a
-    /// node's previous version back*, which is the row
-    /// `docs/manual/operations.html` names for landing and says so at the walk
-    /// beside it: *"landing is not this row"*. Nothing else in this bay changes:
-    /// the version is written over that node's working copy and the watcher builds
-    /// it, so the load is the path an edit already takes (ADR-0228).
-    ///
-    /// # Both operands are marks this console keeps
-    ///
-    /// The deck is [`Target::deck`] — the pulldown in the foot, which is what
-    /// narrowed the listing to a Set in the first place, so the rows a hand is
-    /// looking at and the deck a press lands on cannot come apart. The version is
-    /// the row, by the word the host handed in: this crate reads no store
-    /// (ADR-0156), and the name is matched back against the listing that produced
-    /// it, which is `SetTransfer::Take`'s arrangement and the rule that keeps a
-    /// path out of a payload.
-    ///
-    /// # It takes the versions and [`LibraryBay::take`] takes the Sets
-    ///
-    /// The two are one press on one rectangle and they are told apart by which
-    /// listing is handed in: [`View::sets`] is empty under `history` and
-    /// [`View::versions`] is empty everywhere else, so exactly one of them can
-    /// answer and neither has to be told what the scope is. A carry of a version
-    /// would be a Set named by a word no store holds, and a landing on a Set would
-    /// be a node named by a word that addresses none.
-    ///
-    /// The rows are walked rather than divided, which is `take`'s rule and for its
-    /// reason: a reading pushes the rows under it down by a whole block, so
-    /// [`LibraryBay::row`] is the arithmetic and asking it per row is what keeps
-    /// the row a press lands on the row the paint drew.
+    /// Resolves a click on a history listing row to an [`Operation::RestoreProcedure`].
     pub fn land(
         &self,
         versions: &[String],

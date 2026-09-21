@@ -217,29 +217,9 @@ struct Fading {
     said: Option<f32>,
 }
 
-/// A Set in hand, on its way from a Library row to a mixer strip.
+/// A Set in hand, carried from a Library row to a mixer strip or master chain.
 ///
-/// # It is a payload, where the other two are a control
-///
-/// [`Boundary`] and [`Fading`] each name which control the hand took hold of,
-/// resolved at the press, and every later event asks that control what the
-/// pointer now means. This names neither a control nor a place: what a carry
-/// holds is *the thing being carried*, and the control it is going to is not
-/// known until the button comes up.
-///
-/// So the payload is a `String` and this is the one drag that is not `Copy`. A
-/// Set is named by whatever the store called it — the row the host handed
-/// [`crate::view::View::library`] — and `karakuri-operation` names one the same
-/// way, because it is a leaf crate that cannot say anything narrower
-/// (`Operation::LoadSet`). That is what takes [`Released`] out of `Copy` with
-/// it, and it stops there: nothing else in this module gains a payload, and
-/// [`Pressed`] never sees a carry at all — [`Panel::carry`] is
-/// [`Panel::grab`]'s door and reports nothing back.
-///
-/// Nothing is remembered about where it came from. The row it was taken off is
-/// [`crate::view::View`]'s cursor, which the press moves and which outlives the
-/// gesture; a copy of it here would be a second answer to *which row is the
-/// cursor on* for as long as the button is down.
+/// Holds the payload identifier (`set`) and procedure flag until released over a target.
 struct Carrying {
     /// Which Set, by the name the listing carried.
     set: String,
@@ -1047,22 +1027,8 @@ impl Panel {
         self.layout.solve();
     }
 
-    /// Take a region out of the layout, or put it back, for a reason that is not
-    /// the operator's — [`Layout::set_aside`], and returning whether the bit
-    /// changed.
-    ///
-    /// The bit is the drawer's and never the operator's
-    /// ([ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)),
-    /// so this is not an [`Op`]: nothing an operator presses reaches it, it is not
-    /// what a saved arrangement carries, and [`Outcome`] has no word for it. What
-    /// is here rather than in `crate::view` is the `&mut Layout` this panel keeps
-    /// to itself.
-    ///
-    /// The answer is what the write did and not what the caller asked, which is
-    /// [`crate::repaint`]'s rule about an operation arm: the value is re-derived
-    /// and re-written every frame, and a frame that wrote the value the node
-    /// already carried changed nothing and is owed nothing. See
-    /// [`crate::view::rearrange`], which is the one caller.
+    /// Take a region out of the layout or restore it for drawer visibility ([`Layout::set_aside`]).
+    /// Returns true if the visibility state changed (ADR-0183).
     pub fn set_aside(&mut self, id: NodeId, aside: bool) -> bool {
         let moved = self.layout.is_set_aside(id) != aside;
         self.layout.set_aside(id, aside);
@@ -1126,53 +1092,14 @@ impl Panel {
         }
     }
 
-    /// Take a mixer strip's fader in hand. [`press`](Panel::press)'s other door,
-    /// and it is a second one because a fader's geometry is not the layout's — see
-    /// [`Grab`], which is what the view resolves a press into.
-    ///
-    /// A press on the knob and on nothing else. A press on the *track*, off the
-    /// knob, never reaches this: [`crate::view::Mixer::grab`] answers `None` for
-    /// it, and that is a decision rather than a gap in the hit test. A fader at 0.3
-    /// whose top is clicked would jump to 1.0 — a change to the mix nobody asked
-    /// for, made on stage, on a control whose whole job is that it does what a hand
-    /// did. The knob is where the hand is.
-    ///
-    /// The press itself moves nothing. The value this drag starts from is the value
-    /// the knob is already at — which is [`Grab::value`] at the press, by
-    /// construction of the offset — so a press and a release with no motion between
-    /// them emits nothing at all. That is worth the line it costs: `Deck::set_gain`
-    /// cancels whatever was moving the control ("the operator wins"), so an
-    /// operation emitted for a press that moved nothing would stop a running
-    /// transition by being touched.
-    ///
-    /// It reports nothing back. What a press found is what the caller just resolved
-    /// for itself, and [`Pressed`] answering it a second time would be the model
-    /// repeating the view.
+    /// Take a mixer strip's fader in hand using its resolved [`Grab`].
     pub fn grab(&mut self, p: Point, grab: Grab) {
         self.cursor = p;
         let said = Some(grab.value(grab.axis.coord(p)));
         self.drag = Some(Drag::Fader(Fading { grab, said }));
     }
 
-    /// Take a Set out of the Library bay. [`grab`](Panel::grab)'s door with a
-    /// payload instead of a control — see [`Carrying`].
-    ///
-    /// The view resolves which Set and this holds it, which is [`Grab`]'s seam over
-    /// a listing instead of over a track: where the rows are is
-    /// [`crate::view::LibraryBay`]'s answer and depends on what the store said this
-    /// frame, and this module has no listing and takes none.
-    /// [`crate::view::LibraryBay::take`] is what a press resolves to.
-    ///
-    /// The press itself asks for nothing at all, which is [`grab`](Panel::grab)'s
-    /// rule read one bay along and is a stronger statement here: a fader's press
-    /// emits nothing because the value has not moved, and a carry's emits nothing
-    /// because *there is no operation yet* — a Set names a load only once a deck is
-    /// named too, and no deck is named until the button comes up. So a press and a
-    /// release with no motion between them is a row picked up and put down, and the
-    /// deck under it at the release is the whole of what decides otherwise.
-    ///
-    /// It reports nothing back, for [`grab`](Panel::grab)'s reason: what the press
-    /// found is what the caller just resolved for itself.
+    /// Take a Set or procedure out of the Library bay for dragging.
     pub fn carry(&mut self, p: Point, set: String, procedure: bool) {
         self.cursor = p;
         self.drag = Some(Drag::Carry(Carrying { set, procedure }));
@@ -1325,31 +1252,14 @@ impl Panel {
         self.solve();
     }
 
-    /// What a drag at `asked` is asking of the pair either side of this boundary,
-    /// where what it is asking is a fold, or `None` for the ordinary case of a
-    /// boundary that is simply being moved.
+    /// Evaluates whether a drag past the stop boundary constitutes a fold/unfold operation (ADR-0300).
     ///
-    /// Reads, and writes nothing: the caller performs the [`Op`] so that a fold is
-    /// a fold wherever it comes from.
-    ///
-    /// `by` is what the stop kept — `landed - asked`, after the drag has been made.
-    /// Asked against the boundary's position *before* the move would answer a
-    /// different question on the first event of a gesture: a drag that runs from a
-    /// pane's full width to well past its minimum in one pointer event would find
-    /// the pane not yet at its stop and decline the fold it plainly asked for.
-    /// After the drag, the pane is at whatever the clamp allowed and the overshoot
-    /// is exactly what the clamp kept.
-    ///
-    /// A closed pane's boundary never moves — [`Layout::set_divider`] refuses it,
-    /// because a closed pane's extent is not the boundary's to give away — so for
-    /// the opening case `landed` is the boundary where it stands and `by` is how
-    /// far in from it the pointer has gone.
+    /// `by` is `landed - asked`. Returns `Some(Op::Fold)` or `Some(Op::Unfold)` when
+    /// threshold `PULLED_THROUGH` is exceeded and node constraints are met.
     fn pane_pulled(&mut self, split: NodeId, index: usize, axis: Axis, by: f32) -> Option<Op> {
         let (a, b) = self.pair(split, index)?;
 
-        // **Opening comes first**, because a boundary with a closed pane beside
-        // it is not a boundary anybody can be pushing against: there is nothing
-        // on that side to run out of room.
+        // Opening takes precedence when dragging outward from a closed pane.
         if self.layout.is_closed(a) && by <= -PULLED_THROUGH {
             return Some(Op::Unfold(a));
         }
@@ -1363,11 +1273,6 @@ impl Panel {
         if pulled < PULLED_THROUGH || !self.layout.keeps_its_edge(into) {
             return None;
         }
-        // At its own minimum, and not merely stopped: `set_divider` clamps
-        // against the pair's *combined* bounds, so a boundary can be held by
-        // the far side's maximum with this side nowhere near its floor. The
-        // extent is read after the drag, which is what makes the whole of a
-        // one-event drag count towards it.
         let (min, _) = self.layout.bounds(into);
         let extent = axis.extent(self.layout.rect(into));
         (extent <= min + STOPPED).then_some(Op::Fold(into))
@@ -1501,15 +1406,7 @@ impl Panel {
                 self.folded(id)
             }
             Op::Unfold(id) => {
-                // **The solo first, because it is what the expanding would
-                // otherwise be undone by.** A solo collapses everything it did
-                // not name and keeps the flags it replaced; `unsolo` puts
-                // exactly those back — so expanding under a live solo leaves
-                // `Layout::soloed` naming a region that is no longer the only
-                // one on screen, and the next unsolo quietly throws the expand
-                // away. Dropped only when the solo is what is hiding `id`: a
-                // solo that already has it on screen is not this operation's
-                // business.
+                // Drop active solo if it hides `id` so unfolding is not masked.
                 if self.layout.is_soloed() && !self.layout.visible(id) {
                     self.layout.unsolo();
                 }

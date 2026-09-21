@@ -522,21 +522,7 @@ fn a_folded_transport_row_declares_nothing_and_unfolding_puts_it_back() {
 // What a declaration is allowed to say
 // ---------------------------------------------------------------------------
 
-/// Every declared cost is one whole panel pass, which is the half of *keeping a
-/// declared cost honest* that can be asserted with no window, no device and no
-/// clock.
-///
-/// `egui` is immediate mode: there is no retained tree, so *redraw the mixer
-/// bay* is not an operation this console has, and what repaints is the panel
-/// and not the chip (ADR-0188, ADR-0190). A region declaring a smaller,
-/// per-region figure would be describing work this console cannot do — and it
-/// is the kind of number that gets written because it looks more precise. The
-/// day a region can be drawn once into a texture and composited after, this
-/// test is what has to be changed on purpose.
-///
-/// The other half of honest is a measurement, it needs a window and three
-/// seconds of nobody touching it, and it is in `crates/karakuri/src/main.rs`,
-/// which holds `PANEL_PASS` against the run it has just taken.
+/// Verifies that every declared cost is exactly one whole panel pass (ADR-0188, ADR-0190).
 #[test]
 fn every_declared_cost_is_one_whole_panel_pass() {
     let panel = arrangement();

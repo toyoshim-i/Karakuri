@@ -118,45 +118,9 @@ impl<'a> Mixer<'a> {
             })
     }
 
-    /// What a press at `p` asks the blend to become, or `None` where there is no
-    /// blend chip under it.
+    /// Returns the [`Operation::SetBlendMode`] to cycle the blend mode under point `p`, or `None`.
     ///
-    /// # The chip cycles, and the operation names where it arrived
-    ///
-    /// Click it and the deck's blend moves to the next of [`BlendMode::ALL`],
-    /// wrapping from the last back to the first. What comes out is
-    /// [`Operation::SetBlendMode`] naming the destination — never a step, because
-    /// there is no step in the vocabulary to name.
-    ///
-    /// That is the affordance P-0090 leaves to whoever draws the control rather
-    /// than an exception to it: a toggle is built over operations by whoever draws
-    /// them, and a mini that cycles the blend is one control emitting three — the
-    /// operator sees a toggle and the vocabulary never does. The cycle is
-    /// [`after`], which is four lines in this file and nothing at all in
-    /// `karakuri-operation`.
-    ///
-    /// What a MIDI map is offered is the three values, not the cycle —
-    /// [ADR-0187](../../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
-    /// which is the decision this affordance forces and the reason it is recorded
-    /// at all.
-    ///
-    /// # One derivation, asked twice, and the whole chip is the target
-    ///
-    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that acts
-    /// on the press — the arrangement [`Outputs::op`] and [`Mixer::grab`] both
-    /// have, where the derivation that claims a press is asked again rather than
-    /// copied. [`StripBox::blend`] is the chip's own rectangle, the one the word is
-    /// painted into, so a chip a hand sees and a chip it clicks are the same one.
-    ///
-    /// The whole chip is the target and not the glyphs in it, which is
-    /// [`Outputs::sink`]'s rule one bay along: a 15px word is not something a hand
-    /// finds, and `.mini`'s padding is what makes it one.
-    ///
-    /// # It names the strip's own deck
-    ///
-    /// The slot index, cast the way [`Mixer::grab`] casts it — the manual's *deck*
-    /// is the code's *slot* (ADR-0180), and a deck holds `MAX_SLOTS` of them, so
-    /// the index is a `u8` with room to spare.
+    /// See ADR-0187 for blend cycling details.
     pub fn blend(&self, p: karakuri_layout::Point) -> Option<Operation> {
         let p = Pos2::new(p.x, p.y);
         self.strips

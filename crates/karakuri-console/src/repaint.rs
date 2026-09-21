@@ -217,34 +217,12 @@ pub enum Change<'a> {
     /// else happened to move. This is the key that changes what is drawn without
     /// touching the pointer.
     Room,
-    /// The Program bay rearranged itself, with `moved` saying whether it actually
-    /// did.
+    /// Program bay layout rearrangement between vertical and horizontal preview positions.
     ///
-    /// The four deck previews go under the picture on a narrow bay and down the
-    /// sides of a wide one, whichever leaves the picture larger
-    /// ([ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)),
-    /// and `crate::view::rearrange` is what decides it and writes the one bit that
-    /// follows — the row is set aside beside the picture and put back under it.
-    ///
-    /// Its own variant because nothing else on this list is it. It is not an
-    /// [`Outcome`]: no operator asked for it, nothing is saved, and the model was
-    /// not operated on. It is not [`Change::Viewport`] either, even though a resize
-    /// is what usually causes one — the bay rearranges itself off *its own*
-    /// rectangle, so a drag on a boundary, a fold that gives it the height, a solo,
-    /// and a canvas of a different shape all reach it without the window changing
-    /// size at all. The window is the wrong thing to name it after, and naming a
-    /// change after its usual cause is how a path with an unusual cause reaches no
-    /// repaint.
-    ///
-    /// `moved` is what the model returned and not what the caller asked, which is
-    /// exactly the operation arm's rule — `z` with nothing folded earns no frame.
-    /// It matters more here than there: this is the one [`Change`] a caller raises
-    /// every frame rather than on a gesture, because the bit is re-derived from the
-    /// geometry every frame, so an arm that answered [`Repaint::Now`] regardless
-    /// would ask for a frame on every frame and would cost the still panel the
-    /// whole of ADR-0164's still-panel clause.
+    /// `moved` indicates whether the internal layout configuration actually changed.
+    /// See ADR-0182 and ADR-0164.
     Rearranged {
-        /// Whether the bit actually changed — `crate::view::rearrange`'s answer.
+        /// Whether the layout configuration changed.
         moved: bool,
     },
     /// A control the panel draws translated a gesture into an operation, with

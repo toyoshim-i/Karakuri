@@ -256,33 +256,7 @@ fn the_reading_is_not_in_what_the_mixer_bay_declares() {
 // 3. The meter is drawn from the reading and not from the clock
 // ---------------------------------------------------------------------------
 
-/// The roll's curve reaches a fader's band and does not reach the meter, which
-/// is the premise the two claims above rest on.
-///
-/// The two presentations are asked in the same strip, at two phases where
-/// [`roll_at`] is a different number: the reach moves, because it is measured
-/// from the curve, and the meter cannot, because
-/// [`StripBox::meter_at`](karakuri_console::view::StripBox::meter_at) is a
-/// function of the reading and there is nowhere for a phase to enter it. What
-/// moves the meter is a new reading, and only a new reading — asserted in both
-/// directions so that neither half is vacuous.
-///
-/// What the meter's rectangles are worth against the mock's own percentages is
-/// `tests/mixer.rs`; this is about what does and does not move them.
-///
-/// This is the test that fails when a meter grows ballistics. A held peak or a
-/// fall time is a function of the clock exactly as the roll is: it would move
-/// between two frames, it would go stale through the roll's 566 ms rest, and it
-/// would have to declare — which is ADR-0290's decision turned over, and it
-/// should not be turned over quietly. It fails at the compiler rather than in
-/// an assertion, because a meter on the clock takes the phase the way
-/// `StripBox::trim_reach` takes the curve, and this file calls `meter_at` with
-/// a reading and nothing else.
-///
-/// Run against its defect: `meter_at` painting a fill that does not follow the
-/// reading — `filled(self.meter, Axis::Column, 0.5)` — fails with *"the fill
-/// did not follow the mean, so this strip is not drawing what it was given"*,
-/// which is what keeps the two assertions below from being vacuous.
+/// Verifies that meter presentation depends on reading data rather than clock phase.
 #[test]
 fn the_meter_is_drawn_from_the_reading_and_not_from_the_clock() {
     let ctx = drawn_once();

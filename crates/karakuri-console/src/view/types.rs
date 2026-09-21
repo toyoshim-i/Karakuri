@@ -6,21 +6,7 @@ use super::*;
 
 pub struct View {
     pub room: Room,
-    /// Whether the projector window is open, which is the one output this crate
-    /// cannot read for itself.
-    ///
-    /// The picture's on and off is [`Layout::visible`] on its own node and the
-    /// Outputs row reads it there; a projector is a second window, a second surface
-    /// and a second [`karakuri_engine::frame::Sink`], and this crate takes no
-    /// device
-    /// ([ADR-0156](../../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
-    /// So it arrives the way [`View::picture`] does: written per frame by whoever
-    /// owns the window. `false` for every test in this crate, which is a console
-    /// with no engine behind it.
-    ///
-    /// The two plugin chips have no field, and that is not an omission: there is no
-    /// manifest to read them out of, so *not installed* is what they are rather
-    /// than something somebody could tell this crate.
+    /// Whether the external projector window is open (ADR-0156).
     pub projector: bool,
     /// What to draw in the Program bay's picture this frame, or `None` for a
     /// console with no engine behind it — which is every test in this crate and the
@@ -185,34 +171,16 @@ pub struct View {
     /// the beat tracker, which is every test in this crate that does not say
     /// otherwise and draws none of the three.
     ///
-    /// The same seam as [`View::audio`], over the beat lock instead of over the
-    /// device it listens through: the range the tracker searches is
-    /// `karakuri-audio`'s and the offset is a value
-    /// `karakuri_environment::audio::Audio` holds, and `src/` has neither
-    /// (ADR-0156) — so whoever opened one writes them here per frame.
+    /// What the audio-in tracker in the Transport bay reads this frame, or `None`
+    /// for a console where no input is open or with no engine behind it.
     ///
-    /// A field of its own rather than three more on [`View::audio`], which is
     /// [`View::look`]'s argument beside [`View::transport`]: the pill is *which
     /// room is being heard*, and this is *what the tracker is doing with it*. The
     /// two are `Some` together in every program that draws this row, and a type
     /// that could only say them together would be answering one question with two.
     /// See [`Tracker`] and [`tracker_group`].
     pub tracker: Option<Tracker>,
-    /// What the two look controls in that row read this frame, or `None` for a
-    /// console with no engine behind it — which is every test in this crate that
-    /// does not hand one in, and what the row draws there is nothing at all.
-    ///
-    /// The same seam as [`View::transport`], two items along the same row: the
-    /// operator and the level are `karakuri_engine::frame::Look`, `src/` has no
-    /// engine (ADR-0156), so whoever owns one reads it and writes this per frame
-    /// beside the frame it was drawn under.
-    ///
-    /// It is a second field rather than two more fields on [`Transport`] because it
-    /// is a different reading of a different thing: a tempo and a frame cost are
-    /// what the *session* is doing, and a look is what the picture is being put
-    /// through. `transport` answering `None` and this answering `None` are two
-    /// facts, and a console driving one and not the other is a state the type
-    /// should be able to say. See [`Look`] and [`look`].
+    /// Active look parameters (`karakuri_engine::frame::Look`) for this frame, or `None` (ADR-0156).
     pub look: Option<Look>,
     /// What the Master bay's out row reads this frame, or `None` for a console with
     /// no engine behind it — which is every test in this crate that does not hand
@@ -479,20 +447,7 @@ pub struct View {
     /// auto` chip still waits on is a writer for the authority, which is a
     /// different gap. See [`Pane`] and [`inspector`].
     pub inspector: Vec<Pane>,
-    /// The shape of what is being rendered, which is what the Program bay arranges
-    /// its body for — [`program_bay`], and [`picture_rect`] for why it is two
-    /// numbers rather than a ratio.
-    ///
-    /// The same seam as [`View::picture`], and it belongs beside it: the picture's
-    /// rectangle is handed in by whoever built the `Present`, and this is the
-    /// number that rectangle was derived from. Written per frame by that same
-    /// caller and in the same breath, so that the canvas the texture was sized for
-    /// and the canvas the bay arranged itself for cannot be two different numbers —
-    /// which would put the cells in one arrangement and the picture in the other.
-    ///
-    /// [`MOCK_CANVAS`] until somebody says otherwise, which is every test in this
-    /// crate and is a console with no engine behind it: there is no picture to
-    /// draw, and the four cells still have to go somewhere.
+    /// Program bay rendering dimensions `(width, height)` used for layout arrangement (ADR-0156).
     pub canvas: (u32, u32),
     /// Which classes the operator has opened to a model, written per frame by
     /// whoever holds the run's opening.
@@ -554,33 +509,7 @@ pub struct View {
     /// well, and there is no crossfader. What still fills its `deck` in from there
     /// is every deck-addressed *key*, `l` included.
     pub(crate) focus: Focus,
-    /// Which deck the Library bay's load is aimed at, and the third pointer this
-    /// console owns.
-    ///
-    /// It is not [`View::selection`] and that is the point. The selection is what a
-    /// *key* press is addressed to; this is what the *button* in the Library bay's
-    /// foot lands on, and the two are free to name two different decks — which is
-    /// the one thing the selection cannot do, and the whole of what the pulldown
-    /// bought
-    /// ([ADR-0305](../../../../docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)).
-    /// `l` goes on reading the selection.
-    ///
-    /// It writes no record and no operation names it, which is
-    /// [`View::cursor_row`]'s argument one mark along: picking a deck in the
-    /// pulldown changes what the *next* press will ask for and nothing about what
-    /// any deck is playing, so nothing downstream can be the model of record for it
-    /// and a host that kept a copy would be keeping the console's state on its
-    /// behalf. `Operation::SelectDeck` is emphatically not what a pick emits: that
-    /// operation moves the selection, and this one must not.
-    ///
-    /// Private, with [`View::aim_at`] the only way in, which is
-    /// [`View::selection`]'s rule and for its reason: the console is what refuses a
-    /// deck there is no strip for.
-    ///
-    /// Zero until somebody says otherwise — deck A, which is the letter the mock's
-    /// pulldown reads. Kept across everything that is not a deck: changing the
-    /// scope, narrowing the listing and walking the cursor all leave it alone,
-    /// because none of them is about a deck.
+    /// Deck targeted by Library bay load controls (ADR-0305).
     pub(crate) target: u8,
     /// Whether the pulldown's list is down, and it is the console's own state
     /// rather than a reading — [`Arrangement::menu`]'s argument on a third control:
@@ -664,26 +593,7 @@ pub struct View {
     /// Private, with [`View::library_scroll`] and [`View::scroll_library_by`] the
     /// only ways in.
     pub(crate) library_scroll: f32,
-    /// What the Set under the cursor declares, opened — or `None` for a bay with
-    /// nothing open, which is where every run starts.
-    ///
-    /// The reading is the host's and the opening is this console's, which is the
-    /// seam every other value in this bay crosses: what a Set declares is read off
-    /// the cards the store keeps (ADR-0156, and P-0091 — it is a file read, done on
-    /// the press and never on a frame), and *whether the block is down* is the
-    /// console's own state, exactly as which row the cursor is on is. So a host
-    /// answers [`Operation::ReadSet`] by writing this, and puts the reading away by
-    /// clearing it.
-    ///
-    /// One row is open at a time, which is the mock's own rule and is what keeps
-    /// this a mode of the list rather than a second list — so this is one reading
-    /// and not a set of them. It carries the id it is of, and [`View::opened`]
-    /// draws it only under the row of that name: a listing rewritten under an open
-    /// reading closes it rather than filing it under whatever has taken that
-    /// position.
-    ///
-    /// Private, with [`View::read`] and [`View::shut_reading`] the only ways in,
-    /// which is [`View::selection`]'s rule one pointer up.
+    /// Active Set reading under inspection in Library bay (ADR-0156, P-0091).
     pub(crate) reading: Option<Reading>,
     /// Which of [`View::holds`] the `holds` field is set to, or `None` for a field
     /// nobody has set — the fifth of this console's pointers.
@@ -719,22 +629,7 @@ pub struct View {
     /// and the other says what came back, and two fields called `kinds` would be a
     /// name meaning two things.
     pub(crate) showing: LibraryKinds,
-    /// Which pane head is taking letters, and what has been typed into it — or
-    /// `None` for a console where nothing is being named, which is where every run
-    /// starts.
-    ///
-    /// The console's own state and not a reading, which is [`Arrangement::menu`]'s
-    /// argument on a second control: what a *control* is doing is this crate's,
-    /// nothing about a half-typed name is saved, restored or reset, and a host that
-    /// kept a copy would be keeping the console's gesture on its behalf.
-    ///
-    /// It cannot live in [`View::inspector`], which is the reason it is a field
-    /// here at all: a pane is rewritten whenever a Set lands, so a buffer kept in
-    /// one would be a name that vanished mid-word.
-    ///
-    /// Private, with [`View::name_set`] and the four methods beside it the only
-    /// ways in — [`View::selection`]'s rule, and see [`Naming`] for why there is
-    /// one of these and not one per pane.
+    /// Active text naming session for a pane head, or `None`.
     pub(crate) naming: Option<Naming>,
     /// How far each Inspector pane is scrolled, one position per pane, and the
     /// console's eighth pointer.
@@ -767,28 +662,7 @@ pub struct View {
     /// which is every test in this crate and is a pane at the top of what its deck
     /// holds.
     pub(crate) scroll: [f32; PANES],
-    /// Which deck each Inspector pane is pointed at, one per pane, and the
-    /// console's ninth pointer — the pulldown on the pane head (`docs/adr/0338-…`,
-    /// decision 5).
-    ///
-    /// Beside [`View::scroll`] because it is the same kind of thing: a pane's own
-    /// answer, two panes are two of them, and neither is the console's. It is not
-    /// [`View::selection`] — that is *the* deck, one value, what a key press is
-    /// addressed to — and it is not [`View::target`] either, which is the Library
-    /// bay's load mark. Three pointers naming a deck, and the whole reason there
-    /// are three is that each answers a different question.
-    ///
-    /// It cannot live in [`View::inspector`], which is [`View::naming`]'s and
-    /// [`View::scroll`]'s reason: a pane is rewritten whenever a Set lands, so a
-    /// target kept in one would be the host's answer read back as the console's
-    /// question. [`Pane::deck`] is what the host *filled from this*, and the two
-    /// are a pointer and a reading rather than two copies.
-    ///
-    /// Private, with [`View::point_pane`] the only way in — [`View::selection`]'s
-    /// rule, and that method is what refuses a deck the mixer draws no strip for.
-    ///
-    /// Deck A and deck B, which is where a run opens and is the mock's own two
-    /// heads.
+    /// Target deck slot displayed in each Inspector pane (ADR-0338).
     pub(crate) pane_deck: [u8; PANES],
     /// Which pane head's pulldown is down, or `None` — the console's own state,
     /// like [`View::target_open`] and [`Arrangement::menu`].

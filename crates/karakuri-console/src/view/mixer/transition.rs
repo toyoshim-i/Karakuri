@@ -639,31 +639,7 @@ pub fn transition(
 /// every word it draws.
 const GO: &str = "go";
 
-/// The Mixer bay's transition row, painted, term for term from
-/// `style.css`:
-///
-/// - `.xfade` — `border-top: 1px solid var(--c-hair)`, the rule that separates
-///   the row from the strips above it, drawn inside the block's own top edge
-///   the way `.scopes`' is drawn inside its bottom one.
-/// - `.xrow` — three `.pill`s laid from the left, one `.xrow` gap apart, and
-///   the `go` capsule at the right end with `.sep`'s `flex: 1` between. The
-///   separator has no background and no border, so honouring it is placing the
-///   capsule and painting nothing.
-/// - `.pill.armed` on the shape while a shape is chosen, and the plain
-///   `.pill` on it while it reads `no shape` — see
-///   [`TransitionSettings::armed`].
-///   The two settings between them are always plain, which is what the mock
-///   draws.
-/// - `.pill.on` on `go` while a press on it would run a wipe, and the plain
-///   `.pill` otherwise — see [`TransitionRow::runs`], which is the same pair
-///   of conditions [`TransitionRow::go`] refuses on. The mock draws it lit
-///   because the row it draws is armed with two decks under it.
-///
-/// Where everything goes is [`transition`]'s, so this paints and derives
-/// nothing — [`mixer_into`]'s own sentence, one row up. `decks` is the one
-/// thing it is told rather than measured: whether the capsule is lit is a
-/// fact about the mixer above it, and it is the same count
-/// [`TransitionRow::go`] is asked with.
+/// Paints the mixer transition row controls and status indicators.
 pub fn transition_into(ui: &Ui, pal: &Palette, row: &TransitionRow, decks: usize) {
     // The rule is inside the block rather than above it, which is what keeps
     // the pills where `transition` put them: `size::XFADE_H` counts the

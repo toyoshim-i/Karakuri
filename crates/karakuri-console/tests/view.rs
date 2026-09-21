@@ -461,15 +461,7 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     let region = rect_of(panel.layout(), "program-view");
     assert!(region.w - wide.width() > 500.0);
 
-    // **A height drag is what does still grow it**, which is the half of the
-    // manual's "sized by height" that survives: the region is much wider than
-    // the canvas at this window, so the height is what limits and the picture
-    // follows it.
-    // **A bay dragged this tall is below's country and the layout needs no
-    // rearranging**: two columns of a body 835 tall are 1488 wide and the body
-    // is 1396, so beside cannot be drawn at all and the bit stays false. That
-    // is ADR-0182's *"a tall bay widens both columns until below wins again"*,
-    // reached from the other end.
+    // Height drag expands the picture until aspect-ratio bounds favor below-layout (ADR-0182).
     let mut layout = solved(PLAUSIBLE);
     let centre = id_of(&layout, "centre");
     layout.set_divider(centre, 0, 4000.0);
@@ -702,35 +694,8 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
     );
 }
 
-/// The cells never overlap, never leave the region, and never stop being 16:9 —
-/// at any width, and especially at one much wider than the mock's.
-///
-/// This is the test the gap arithmetic is checked by, and the wrong version it
-/// exists for is a plausible one: divide the row by four and take a gap off
-/// each cell, which loses a gap's worth of width and leaves the last cell short
-/// of the region's padding — four tracks have three gaps between them and not
-/// four.
-///
-/// The wide end is the other half. `deck-previews` is pinned at 72 tall, so a
-/// wider window widens the track and not the row, and a cell that filled its
-/// track would stop being 16:9 the moment the window left `SMALLEST`. It is
-/// 16:9 and centred instead, which is what these assertions say.
-///
-/// # Why the widths stop at 1500, and it is not a threshold nudged to pass
-///
-/// This is the row, and past a 1588-wide window there is no row: the cells go
-/// down the sides of the picture and `deck-previews` is set aside, so every
-/// assertion here about the region they tile is an assertion about a rectangle
-/// with nothing in it. The four widths are the four of the old five that are
-/// below the crossover, and the fifth is asserted at the bottom to be past it —
-/// so a crossover that moved fails here rather than quietly leaving this test
-/// asserting the row's arithmetic at one width. The cells' arrangement beside
-/// the picture is `tests/rearrange.rs`, and the arithmetic of both is
-/// `tests/program_body.rs`.
-///
-/// A body 706 wide is where the flip is, and the body is the window less 778 —
-/// the two side tracks, the four dividers and `.program-body`'s padding — so
-/// the last window with a row in it is 1483 (ADR-0239).
+/// Verifies that preview cells maintain 16:9 aspect ratios without overlapping across
+/// supported viewport widths below the crossover threshold (ADR-0239).
 #[test]
 fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
     for width in [1280.0, 1350.0, 1400.0, 1450.0] {
@@ -957,17 +922,7 @@ fn on_a_boundary(panel: &mut Panel) -> Point {
     Point::new(gap.x + gap.w * 0.5, gap.y + gap.h * 0.5)
 }
 
-/// The `solo` pill in the Program bay's head, near the right end of it. The
-/// place a boundary and a control are closest, and so the place the rule is
-/// worth stating.
-///
-/// It was *the one control the panel draws* and it is a control that acts now,
-/// which is what these two tests had to be re-read against: a press here used
-/// to be `egui`'s because nothing on the panel answered it, and it is the
-/// panel's under rule 4 because `view::program_head` answers it. The point is
-/// kept exactly where it was — 24 in from the right of the bay and 14 down,
-/// which is inside the capsule — because what it is here for is the nearness to
-/// the boundary rather than the pill.
+/// Returns coordinates within the program bay's solo pill near the boundary.
 fn on_the_solo_pill(panel: &mut Panel) -> Point {
     panel.solve();
     let program = rect_of(panel.layout(), "program");

@@ -565,20 +565,8 @@ fn the_boundary_above_the_row_is_still_the_panels() {
 // A press is never a press that does nothing
 // ---------------------------------------------------------------------------
 
-/// A press on a lit dot darkens it and a press on a dark dot lights it, always.
-/// The property, over every way the picture can be off screen.
-///
-/// This is the assertion that makes *the control never appears not to respond*
-/// checkable rather than argued. `docs/manual/console.html`'s note on this row
-/// is the standing position it comes from — *"Nothing is refused here, so
-/// nothing has to be explained: a control that quietly declines the last of
-/// something is a rule an operator can only find by experiment"* — and a
-/// control that lights nothing when pressed is worse than one that declines,
-/// because it does not even decline out loud.
-///
-/// The three folds are three different distances from the picture: itself, the
-/// bay around it, and the whole centre column two levels up. An `Unfold` that
-/// expanded its node alone passes none of them but the first.
+/// Verifies that pressing a lit dot darkens it and pressing a dark dot lights it,
+/// across all fold levels enclosing the program view.
 #[test]
 fn a_press_darkens_a_lit_dot_and_lights_a_dark_one_always() {
     for hidden_by in ["program-view", "program", "centre"] {

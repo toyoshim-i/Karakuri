@@ -1,33 +1,4 @@
-//! The `keep` capsule in an Inspector pane's head: the one control this bay has
-//! that performs rather than sets.
-//!
-//! Six things, and the first two are why this is its own file rather than a few
-//! more assertions in `deck_head.rs`:
-//!
-//! 1. Where the capsule sits, as `.half-head`'s flex row lays it out — hard
-//!    against the right-hand padding, one padding down from the top rather
-//!    than centred in a row whose rule is inside it.
-//! 2. That it clears every boundary's grab, which is the deck head's
-//!    arithmetic one row up, measured here against the pane divider and the
-//!    bay's own edges.
-//! 3. That a press asks to keep this pane's deck — not the selection, which
-//!    is what the key `k` keeps.
-//! 4. That it files under no name, which is
-//!    [ADR-0287](../../../docs/adr/0287-the-keep-pill-files-under-a-stamp-because-the-consoles-one-letter-taking-flow-is-an-arrangements-name.md).
-//! 5. That a head with no room for the capsule draws none rather than half of
-//!    one — `deck_head`'s rule, on a control that is one capsule.
-//! 6. That a press off the capsule asks for nothing at all.
-//! 7. That the wash says the deck this pane is showing is on air, which is what
-//!    `docs/manual/console.html` now says the mock's lit capsule is reading,
-//!    and is asserted off the paint pass rather than off a flag.
-//!
-//! None of it needs a window, a device or a disk. It does need `egui`'s fonts,
-//! because a capsule is as wide as the word in it — see `common::drawn_once`.
-//!
-//! What is not here and cannot be: that `input::claim` gives the panel a press
-//! on this capsule. That is a row in `input::PROBES` and it is the registration
-//! half of this control, which lives in files this test's author does not own;
-//! until it lands a press here reaches `egui`.
+//! Integration tests for the keep capsule in Inspector pane headers.
 
 mod common;
 

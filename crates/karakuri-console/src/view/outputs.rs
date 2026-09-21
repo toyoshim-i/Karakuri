@@ -120,25 +120,7 @@ pub struct Outputs {
     /// Where the word OUTPUTS is painted: its top-left, and the box the galley
     /// fills.
     pub label: Rect,
-    /// The class pill, beside the word that stands in for a head.
-    ///
-    /// This row is the one placement the console had no precedent for. The other
-    /// three openings sit in a bay head, where [`head_pills`] has laid capsules out
-    /// since the `solo` pill landed; this row is headless (ADR-0159,
-    /// [`Kind::Outputs`]) — no hairline, no pills and no grip — so there was
-    /// nothing to add a capsule to. `docs/manual/console.html` says where it goes
-    /// and why in as many words: *"This row has no bay head to put an indicator in
-    /// — it is headless, like the transport — so the pill sits beside the word that
-    /// stands in for one."*
-    ///
-    /// So it is laid out here, in `.outputs`'s own flex row, between the word and
-    /// the first sink: one [`size::OUTPUTS_GAP`] after the label, one before the
-    /// chip, [`size::PILL_H`] tall and centred in the row like everything else in
-    /// it. Which is why [`outputs`] takes an opening: the two words are not the
-    /// same width, so where the sink starts depends on what the pill says.
-    ///
-    /// [`mcp_pill`] is what reads it back out, so that the four openings are one
-    /// type and one probe however differently the two placements are arrived at.
+    /// Bounding box for the MCP class pill beside the label.
     pub mcp: Rect,
     /// Whether the class this row's pill opens is open — read out of the opening
     /// handed in, and kept nowhere here.
@@ -354,34 +336,7 @@ pub fn outputs(
     })
 }
 
-/// The arithmetic of the row, away from the type it measures and the layout it
-/// reads — the two rectangles [`outputs`] hands out and the dot inside the
-/// second.
-///
-/// Term for term from `.outputs` and `.sink` in `style.css`:
-///
-/// - `.outputs { display: flex; align-items: center; gap: 8px;
-///   padding: 8px 11px }` — the word and the chip laid left to right from
-///   [`size::OUTPUTS_PAD_X`], one [`size::OUTPUTS_GAP`] between them, and both
-///   centred in the row rather than sat on its padding.
-/// - `.sink { padding: 1px 10px; gap: 6px; border-radius: 999px }` — a
-///   [`size::SINK_H`] capsule holding a [`size::SINK_DOT`] dot, a
-///   [`size::SINK_GAP`], and the name.
-///
-/// The centring is where the 34 comes back. The row is 34 and a sink is
-/// 18.5, so there is (34 - 18.5) / 2 = 7.75 of row above the chip and 7.75
-/// below — more than the six pixels [`GRAB`] widens the boundary above it by,
-/// which is the whole reason this control can be clicked at all. `.outputs`'s
-/// own padding is 8 and the arrangement rounded 8 + 18.5 + 8 down to 34, so
-/// the quarter pixel the CSS and the row disagree by is spent here rather than
-/// argued about: `align-items: center` is what the CSS says, and it is what
-/// leaves the two clearances equal.
-/// What [`outputs_row`] hands back: the word, the class pill and the four
-/// chips, each with the dot inside it.
-///
-/// A named type rather than a tuple because the tuple grew a term per chip and
-/// stopped being readable at the call site — which is the same reason
-/// [`Outputs`] itself is a struct.
+/// Layout results for the outputs row: label, MCP class pill, and sink chips with indicator dots.
 struct OutputsRow {
     label: Rect,
     mcp: Rect,

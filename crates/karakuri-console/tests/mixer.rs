@@ -552,19 +552,7 @@ fn wells(shapes: &[egui::Shape], width: f32) -> usize {
         .count()
 }
 
-/// With no deck behind the console the bay's body is empty, and that is
-/// asserted by drawing it.
-///
-/// `View::mixer` is empty in every test in this crate and in the whole of
-/// `cargo test -p karakuri-console`, which is a console with nothing running
-/// behind it. What it draws then is the card and the head and nothing in the
-/// body — not four empty strips, which is what the mock's own fourth strip was
-/// until `39f1e6b` and which would be six readings nobody took.
-///
-/// So this counts what lands inside the strips' own rectangle on a frame drawn
-/// with nothing, with one strip and with four. One well per strip and not one
-/// per track is the whole claim, and it fails in both directions: a bay that
-/// always drew four, and a bay that drew none.
+/// Verifies that with no active decks configured, the mixer bay body renders empty.
 #[test]
 fn a_console_with_no_deck_draws_nothing_in_the_bay() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -906,12 +894,7 @@ fn the_blend_mini_shows_the_mode_it_is_given() {
     );
 }
 
-/// The mask mini shows the mask it was given, and the three marks are three
-/// different marks.
-///
-/// The outline is drawn for all three — it is the circle the mock's `◯` is —
-/// and what tells them apart is what is filled inside it: nothing, a half at
-/// the mark's own radius, or a disc at half of it.
+/// Verifies that the mask icon displays distinct filled glyphs for each mask type.
 #[test]
 fn the_mask_mini_shows_the_mask_it_is_given() {
     let r = size::MINI_SIZE * 0.5;
@@ -1341,14 +1324,7 @@ fn the_selection_is_one_ring_and_it_is_round_the_strip_it_names() {
     }
 }
 
-/// A deck the bay has no strip for cannot be selected, which is what keeps
-/// every deck-addressed key honest — and the Library bay's deck pulldown is
-/// refused on the same count, one mark along (`View::aim_at`, ADR-0305): a mark
-/// naming a deck the press would be refused on is worse than no mark at all.
-///
-/// It refuses rather than clamping: `3` on a two-slot deck means *deck D*, and
-/// answering *deck B* would move the mix under a hand that asked for nothing of
-/// the sort.
+/// Verifies that deck indices without strips cannot be selected (refuses instead of clamping; ADR-0305).
 #[test]
 fn a_deck_with_no_strip_cannot_be_selected() {
     let mut view = View::new(Room::Day);

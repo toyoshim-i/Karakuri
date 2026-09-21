@@ -1,113 +1,7 @@
-//! Every constant this crate transcribes out of the mock says where it came
-//! from, and this file checks that it came from there. It reads the sources
-//! in [`SOURCES`] and `docs/manual/style.css` and holds each constant against
-//! the source its own doc comment cites.
+//! Verification that transcribed UI constants match their source declarations in the mock (ADR-0177).
 //!
-//! # Why a transcription needs a guard of its own
-//!
-//! `room::size` is 156 numbers copied out of a stylesheet by hand — 72 of them
-//! when this file landed, and the count carries its date because it only grows
-//! (2026-09-05) — and a wrong
-//! copy is invisible to every other test in the crate. Those tests state a
-//! region's arithmetic *in terms of* these constants — `head.height() ==
-//! size::HEAD_H`, and so on — so a test of the arithmetic compares the layout
-//! against the same wrong number and passes. ADR-0177 records the case that
-//! found it: `.transport`'s `gap: 14px` was transcribed as 10 and its test
-//! stayed green. When this file landed, 23 of the 72 were named by no test at
-//! all.
-//!
-//! `lib.rs`'s arrangement dividers are the same transcription and are more
-//! exposed, not less: they are private consts, so no test can name even one of
-//! them. They are read here for that reason. Nothing else in the workspace is
-//! — `karakuri-layout` and the engine have numbers of their own and none of
-//! them is a copy of a stylesheet.
-//!
-//! The direction that matters most is the other one. The stylesheet is the
-//! specification and it is the one that moves: nothing about editing
-//! `style.css` tells you that a Rust constant was reading it. So the check is
-//! not "is this number plausible" but "does the rule this comment names still
-//! say this", and a change on either side breaks it.
-//!
-//! # Three kinds of constant, told apart rather than forced into one mould
-//!
-//! - transcribed — a literal that appears in the mock. Its doc comment
-//!   cites a selector and a declaration, and the guard resolves both.
-//! - derived — computed from other constants in the module: `HEAD_H` is
-//!   `6 + 10 * 1.5 + 6`, `PILL_H` is `BASE * LINE`. The arithmetic is the
-//!   claim and the compiler already holds it; no stylesheet carries such a
-//!   sum, so none is demanded. A derived constant is recognised from its
-//!   *initializer* — it names another constant — and not from its prose,
-//!   because that is the half that cannot be got wrong.
-//! - the console's own — a number with no single source in the mock.
-//!   [`HAIRLINE`] is the one here: one pixel is what the mock draws every rule
-//!   at, and no one selector is its source. `panel::GRAB` is the same shape and
-//!   lives outside this module.
-//!
-//! A constant that declares none of the three fails, which is the half
-//! that makes this a convention rather than a lint: the next literal written
-//! here has to say where it came from before it can compile a green suite.
-//!
-//! # The citation form
-//!
-//! The doc comments were prose before this file existed and they are prose
-//! still — 69 of the 72 needed no change at all. What is read out of them is:
-//!
-//! - a source, in backticks: a selector (anything starting with `.`) or a
-//!   file under `docs/manual/`;
-//! - a declaration, in backticks and containing a colon: `gap: 14px`, or
-//!   several at once, `width: 15px; height: 6px`.
-//!
-//! A declaration binds to the nearest source named *before* it in the same doc
-//! comment, so `` `.trim`'s `gap: 5px` `` and `` `.sink`'s own `gap: 6px` ``
-//! and "`.vfader s`'s `height: 9px`, and its `left: -2px; right: -2px`" all
-//! read the same way without anyone having to write to a format. Intra-doc
-//! links — ``[`BASE`]`` — are stripped before the scan, so a cross-reference
-//! is never mistaken for a source.
-//!
-//! A source that is a selector is resolved in the stylesheet: the rule must
-//! exist, it must set that property, and its value must be the value the
-//! comment quotes. A source that is a file is resolved by looking the
-//! declaration up in that file verbatim — weaker, and used by exactly one
-//! constant ([`PILL_GAP`]), because the mock sets that one inline in the
-//! markup and the stylesheet genuinely does not carry it.
-//!
-//! A declaration with no source before it is prose, not a citation:
-//! `TALLY_H`'s aside about `border-radius: 999px` names no selector because it
-//! is talking about every capsule in the mock. Those are still checked to
-//! exist somewhere in `docs/manual/`, so a property that has been renamed away
-//! fails wherever it is mentioned — but they do not satisfy the requirement to
-//! cite, and they do not feed the number check below.
-//!
-//! # What the numbers are checked against
-//!
-//! The stylesheet's value, not the comment's copy of it — the comment has
-//! already been held against the stylesheet by then. A transcribed
-//! constant's value must be one of the numbers in the declarations it cites,
-//! which is what makes a shared comment work: `padding: 6px 10px` cited by
-//! both `HEAD_PAD_X` and `HEAD_PAD_Y` offers 6 and 10 and each takes one.
-//! Signs are dropped — `.vfader s`'s `left: -2px` is `VFADER_KNOB_OUT =
-//! 2.0`, two pixels *proud*; this module is about sizes and a direction is not
-//! one.
-//!
-//! A derived constant that cites something has its citation resolved like
-//! any other, and then the literal factors in its own expression are checked
-//! against the cited numbers: `HEAD_TRACKING` is `HEAD_SIZE * 0.16` against
-//! `letter-spacing: 0.16em`, so the 0.16 is held to the stylesheet even though
-//! 1.6 never appears there.
-//!
-//! # How the doc comments are grouped
-//!
-//! One doc comment can cover several constants — `padding: 6px 10px` is
-//! written once above `HEAD_PAD_X` and `HEAD_PAD_Y`, and only the first of the
-//! two carries the comment as far as `rustdoc` is concerned. This file reads
-//! them the way a person does: a doc comment covers every constant that
-//! follows it until the next doc comment or the next section rule. That is
-//! load-bearing — read strictly, ten constants here would have no citation at
-//! all and the guard would demand ten comments nobody wants.
-//!
-//! The shape is `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`: scan
-//! the checked-in source, and carry floors so the scan cannot silently pass by
-//! finding nothing.
+//! Scans Rust source files in [`SOURCES`] and validates cited CSS declarations against
+//! `docs/manual/style.css` and related manual pages.
 
 use karakuri_console::room::Palette;
 use karakuri_console::view::{Band, BAND_BLUE_MS, BAND_PURPLE_MS, BAND_RED_MS, BAND_YELLOW_MS};
@@ -772,21 +666,7 @@ fn the_band_boundaries_are_the_ones_the_console_page_states() {
     assert!(page.contains("16.7 ms at 60 Hz is about 4 ms each"));
 }
 
-/// The five band colours are the room's own five, and neither room wears the
-/// other's.
-///
-/// `--c-band-green` and its four siblings are stated twice in the stylesheet
-/// like every other `--c-*`: once for the page under `@media
-/// (prefers-color-scheme: …)` and once on `.console.day` and `.console.night`,
-/// which is what the room switch toggles. The `.console.*` pair is what `room`
-/// transcribes, so it is the pair this reads — the page's are the surrounding
-/// document's and only happen to agree.
-///
-/// This is the check the twelve moods above it do not have. `Palette` sits
-/// outside the scan at the top of this file — `SOURCES` starts at `pub mod size
-/// {`, so no colour in `room.rs` is held against the stylesheet by anything.
-/// These five are held because they are new; the other twelve are named in the
-/// report that added them.
+/// Verifies that band colors match `.console.day` and `.console.night` stylesheet declarations.
 #[test]
 fn the_band_colours_are_the_rooms_own_five() {
     let root = workspace();

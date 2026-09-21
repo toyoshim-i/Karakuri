@@ -6,133 +6,10 @@ use crate::view::{Field, KindChip, Scope, View, BAY_GRIPS, DECKS};
 
 use super::handlers::*;
 
-/// What each of rule 4's derivations answers for, one row per probe and in the
-/// order [`claim`] asks them: the Outputs sink, the audio-in pill, the tracker
-/// group's three, the arrangement pill, the look group's two, the transport
-/// row's `rec` pill, a strip's five, the transition row's four, the Master
-/// bay's one, the Inspector pane heads' `keep`, a deck head's seven, the
-/// renderer chips, a parameter row's fader, the Program bay head's `solo`, the
-/// four deck preview cells, the Library bay's scope chips, its two filter
-/// fields, the `params` chip in its foot, the `load` button and deck pulldown
-/// beside it, the list above them, the four class pills, the Sequencer bay's
-/// cells, labels, mode pill, bank pills and `+ lane`, and the Staging lane's
-/// `back` capsules and its rows.
+/// Table of input hit-test probes executed by [`claim`].
 ///
-/// One probe per derivation, cheapest answer first, and [`on_mcp`] is last
-/// because it is the dearest probe here — each class lays out its bay's whole
-/// head to find one capsule in it, and the Outputs one lays out the row's word
-/// and its sink's name as well.
-///
-/// That is a cost ordering and not a correctness one. [`claim`] answers a
-/// `bool` and the walk short-circuits, so no order over these rows can change
-/// what it says: a press is on one of these controls or it is not, and which
-/// probe noticed first is nobody's business outside this array. So the rows may
-/// be reordered freely, and the only thing the order buys is that the common
-/// press — which is on nothing — pays every cheap answer before it pays the
-/// dear one. Which control a press then acts on is asked again by the caller,
-/// in the caller's own order (`karakuri/src/main.rs`).
-///
-/// It is a table and not a sentence because it is what [`claim`] walks. A
-/// derivation that is not a row here is never asked, so it is not a control at
-/// all; and [`CONTROLS`] is summed over the same rows, so the number this crate
-/// exports and the questions it is a count of cannot come apart. It was two
-/// parallel arrays until 2026-09-07 — a hand-summed `[usize; N]` beside a
-/// `[&dyn Fn; N]` inside [`claim`] — and one value carrying both is
-/// [ADR-0274](../../../docs/adr/0274-a-control-is-a-row-in-the-consoles-own-table.md).
-///
-/// A control added inside a derivation already here is still a number to raise:
-/// a sixth chip on a strip is one more thing a press reaches, and [`on_strip`]
-/// would go on asking five questions while its row went on saying five. What
-/// has changed is that the probe and the count are now one line apart instead
-/// of two arrays apart, and that three of these rows no longer carry a number
-/// at all — the class pills, the preview cells and the scope chips each count
-/// the list their probe walks, so a fifth of any of the three raises
-/// [`CONTROLS`] on its own. The rest are caught where every other fact about a
-/// control is: the clearance test the rule above says each one owes,
-/// `tests/mask.rs` being the most recent of them, and this row is what has to
-/// be raised beside it.
-///
-/// The tracker group's row is the first one added under this table, and it is
-/// what the table is for: the count moved from 36 to 39 and
-/// `karakuri/src/main.rs`'s own array stopped compiling until the window said
-/// how it asks the three. Nothing was scanned and nothing was summed by hand.
-///
-/// That is not a hypothetical, and the strip's row is the case it happened to.
-/// [`crate::view::Mixer::select`] landed with the deck selection,
-/// `karakuri/src/main.rs`'s press arm asked it, both manual pages described it,
-/// and [`on_strip`] went on asking four questions — so no press on a strip's
-/// ground ever reached [`Claim::Panel`] and the arm that would have acted on it
-/// never ran. Nothing here could have caught it: the array's length was right
-/// the whole time. What catches it now is `tests/mixer.rs`, which asks
-/// [`claim`] at the points a strip has no chip on.
-///
-/// The scope row's count is [`Scope::ALL`]'s length and not a typed four. The
-/// row is as long as the slice the host handed the bay, and what a host can
-/// hand it is values of [`Scope`] — so the number of chips a pointer can reach
-/// is the number of scopes that exist, and the day a fifth is added this rises
-/// with it rather than being a four somebody has to remember. The class pills'
-/// count is [`Class::ALL`]'s for the same reason, one crate out, and the
-/// preview cells' is [`DECKS`].
-///
-/// The `params` chip's count is one, and it is one for a reason worth
-/// separating from those: the chip is a *toggle over the cursor* rather than
-/// one of a row, so however long the listing is there is one capsule to press.
-/// What a press on it means depends on whether a reading is open, and that is
-/// inside `LibraryBay::read` where the block is.
-///
-/// The `load` button and the deck pulldown are two on one row, and it is the
-/// newest row here (ADR-0305). They were one *readout* until 2026-09-08 — `load
-/// → A`, which said where the key would land and answered no pointer at all —
-/// and the split is what made them controls. One row because they are one
-/// derivation, and `claims: 2` because a pointer reaches two capsules through
-/// it: the tracker group's three is the same shape, and so is a strip's five.
-///
-/// The pulldown counts one and not [`DECKS`], which is the `params` chip's
-/// argument rather than the preview cells': the capsule is one press whatever
-/// the mixer is drawing, and how many decks its list then offers is
-/// `Load::picked`'s answer inside the card. The card itself is not counted at
-/// all — rule 2 above claims every press while it is down, exactly as it does
-/// for the two cards in the transport row. And the `→` between the two capsules
-/// is not counted because it is not a control: it is a label, and
-/// `tests/library.rs` sweeps it with the foot's ground.
-///
-/// The filter row's count is two and is a constant, unlike the scope row above
-/// it: the row is `holds` and `layer` because
-/// [`karakuri_operation::Operation::ListSets`] carries two things to narrow by,
-/// and a third would be a change to the vocabulary rather than a longer slice
-/// the host handed in. [`Field::ALL`] is the same two, and it is what the probe
-/// walks.
-///
-/// The stars' count is one for the list's reason below, and it is the same
-/// number for the same argument: a press lands on one of however many rows the
-/// bay drew, and how many that is moves when a divider moves. The star is a
-/// control of its own rather than a second reading of the row — it emits
-/// `Operation::SetFavourite` where a row press emits nothing at all — so it is
-/// a row of this table and not a sentence in the one under it.
-///
-/// The list's count is two, and neither of them is how many rows there are. One
-/// rectangle, two controls: a press takes the Set in hand and a *secondary*
-/// press puts that row's menu down (ADR-0311). They are two because a pointer
-/// genuinely reaches two things there — which is the load button and the
-/// pulldown's argument on one rectangle instead of two — and not two because
-/// the row means two things under two scopes, which is [`on_row`]'s other pair
-/// and is still one control. The card the menu puts down is not counted at all,
-/// exactly as the other three cards are not: rule 2 claims every press while it
-/// is there.
-///
-/// How many rows there are is the one number here that could have been a count
-/// and must not be. A press lands on one of however many rows the bay drew,
-/// exactly as it lands on one of however many chips it drew — and the chips are
-/// counted while these are not, because the difference is what each number is
-/// *about*. [`Scope::ALL`] is a closed list this crate owns, so the chip count
-/// is a fact about the console; how many rows are drawn is `LibraryBay::rows`,
-/// which is how many fit in a bay an operator can resize against a listing a
-/// store answered — a number that changes while nobody presses anything.
-/// [`CONTROLS`] is printed to an operator as *what the pointer reaches here*,
-/// and a figure that moved when a divider moved would be answering a different
-/// question. So the list is the control and which row is inside
-/// [`crate::view::LibraryBay::take`], which is the `params` chip's row read the
-/// other way round.
+/// Ordered roughly from cheapest hit-tests to more expensive layout derivations.
+/// See ADR-0274 for table-driven probe architecture.
 pub const PROBES: [Probe; 39] = [
     Probe {
         name: "the Outputs row's sinks",
@@ -214,16 +91,7 @@ pub const PROBES: [Probe; 39] = [
         claims: 1,
         ask: on_slot_mcp,
     },
-    // **The mark between the run and the count, and the card it puts down.**
-    // Two controls and one row, which is the Library bay's `load` button and
-    // deck pulldown's arrangement: one derivation, one ask.
-    //
-    // **Its place in this table is a cost ordering and nothing else** — the
-    // header says so of every row — and the mark cannot be confused with the
-    // run beside it either way: `deck_name` clips the run one gap short of
-    // this rectangle, so the two are disjoint by construction rather than by
-    // which probe answers first. While the card is down `claim`'s rule 2 has
-    // already taken the press.
+    // Inspector pane header deck pulldown pill and menu trigger.
     Probe {
         name: "the Inspector pane heads' deck pulldown",
         claims: 2,
@@ -379,25 +247,7 @@ pub struct Probe {
     pub ask: fn(&Panel, &egui::Context, &View, Point) -> bool,
 }
 
-/// How many controls the Sequencer bay claims: a cell per drawn step of every
-/// lane, a label and a minus per lane, the mode pill, the four bank pills in
-/// the bay head and the foot's `+ lane`.
-///
-/// The chooser's card is not counted, exactly as the Library's two are not: a
-/// card that is down claims every press on the console under rule 2, which is
-/// answered before this table is walked.
-///
-/// A count of what a *full* pattern draws rather than of what is on screen,
-/// which is [`BAY_GRIPS`]' shape asked of a bay whose rows are data: this is a
-/// `const` and a pattern arrives at run time, so the number registered is the
-/// most a pointer could reach — four lanes, sixteen cells and two glyphs apiece
-/// — and a console drawing one lane claims one lane's worth. That is the honest
-/// direction for a registration: [`CONTROLS`] is what the pointer *may* have to
-/// hit-test, and a number that followed the pattern would make the console's
-/// own legend move when an operator added a lane.
-///
-/// `karakuri_console::view::Sequencer::controls` is what a drawn bay answers,
-/// and it is the number this bounds.
+/// Upper bound on the number of controls the Sequencer bay can claim across all lanes.
 const SEQ_CONTROLS: usize = DECKS * (karakuri_pattern::SLOTS + 2) + 1 + karakuri_pattern::BANKS + 1;
 
 /// How many controls rule 4 hit-tests, summed over [`PROBES`].

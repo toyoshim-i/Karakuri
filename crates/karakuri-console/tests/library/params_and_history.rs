@@ -519,24 +519,8 @@ fn a_reading_with_nothing_to_declare_says_so_rather_than_drawing_blanks() {
     );
 }
 
-/// The chip reads `params`, and it lights while a reading is open.
-///
-/// Two things, and both of them moved on 2026-09-09.
-///
-/// The word. It said `read`, which the maintainer called unclear: `read` names
-/// what the press does to the file and `params` names the block, which is what
-/// nine of its ten rows are. The word is asserted here rather than against a
-/// constant this crate exports, because a chip reading something else is a
-/// control the note does not describe.
-///
-/// The light. It carried no lit state at all, and the argument was that the
-/// block below it is louder than a chip changing colour — which was an argument
-/// for the block being enough and not for the chip being wrong. Rule 03 asks a
-/// symbol what state it is in, so it is drawn as every other two-state capsule
-/// on this panel is, and this asserts the pair rather than one end: filled
-/// while a reading is open and not filled while none is. A test of the lit end
-/// alone would pass against a chip that was always lit, which is the same
-/// control with the toggle taken out (ADR-0312).
+/// Verifies that the parameters chip displays `params` and indicates lit state
+/// while a reading is open (ADR-0312).
 #[test]
 fn the_params_chip_says_params_and_lights_while_a_reading_is_open() {
     let (mut view, mut panel) = showing_mock();

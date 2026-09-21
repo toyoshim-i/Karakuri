@@ -125,33 +125,9 @@ pub struct InspectorPane {
     /// [`View::scroll_by`] is clamped against, derived in one place so the two
     /// cannot disagree.
     pub content: f32,
-    /// How many node groups this pane is showing whole, which is the `n` of the `n
-    /// of m` its head reads — [`pane_count`], and rule 04 of [the
-    /// manual](../../../../docs/manual/index.html): *"A list that showed you part
-    /// of itself says so and says how much."*
+    /// Number of node groups fully visible in this pane (the `n` in `n of m`).
     ///
-    /// # It is the readout's number and not the walk's
-    ///
-    /// [`InspectorPane::drawn`] is what is painted and what a press is hit-tested
-    /// against, and it is the wider of the two: a group cut by the top edge or the
-    /// bottom one is drawn as far as the pane goes and can be pressed where it is
-    /// drawn. This counts the ones that are whole, so that `m of m` means *nothing
-    /// is out of sight* and can never be read off a pane with a group hanging over
-    /// an edge.
-    ///
-    /// It used to be how many were drawn, and the two were one number. A pane drew
-    /// a group whole or not at all, because there was no position to scroll to — so
-    /// below roughly 534px of Inspector bay not one parameter row was drawn, in the
-    /// bay whose whole content is parameter rows. The maintainer's answer to that
-    /// was *the pane scrolls*, and this is the half of the old rule that survives
-    /// it: a part-drawn group is no longer a lie about what a node has, because the
-    /// count says how many are whole and the rest is one notch of the wheel away
-    /// ([ADR-0307](../../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
-    ///
-    /// Zero is a state and not a `None`. A pane too short to hold one group whole
-    /// still says which deck it is showing and what that deck's clock is doing, and
-    /// still draws as much of the group as it has room for; it is [`inspector`]'s
-    /// `None` that means *there is no pane here to draw*.
+    /// See ADR-0307 for pane scrolling and visible count rules.
     pub shown: usize,
 }
 
@@ -432,50 +408,9 @@ impl InspectorPane {
         })
     }
 
-    /// What a press at `p` takes hold of in this pane, or `None` where there is
-    /// nothing under it a hand can move.
+    /// Hit-tests a press at point `p` against draggable parameter fader handles.
     ///
-    /// # It is the knob, and the track is deliberately not a target
-    ///
-    /// [`Mixer::grab`]'s rule and [`MasterRow::grab`]'s, and it is this bay's for
-    /// the same reason read one bay along: a parameter at 0.2 whose track was
-    /// clicked would put the value at the far end of its published range, on stage,
-    /// because a hand landed three pixels off a knob. The mock draws a `.fader s`
-    /// on every `.param` and deliberately draws none on the transport's exposure
-    /// track, which is what tells a control with a handle from one that is set
-    /// outright — *"a handle that jumped to the pointer would be a lie about what a
-    /// handle is"*.
-    ///
-    /// The `.param` rows carry no tooltip in the mock, which is where the mixer's
-    /// version of this rule is written down (*"a press on the track off the knob
-    /// does nothing, which is every fader in this bay's rule"*), so the page does
-    /// not yet say it for this bay. The console's answer is the mixer's;
-    /// `docs/manual/console.html` is where it has to be said.
-    ///
-    /// # A row with nowhere to go is not taken hold of
-    ///
-    /// [`Param::movable`]: a published range of no width is a control with one
-    /// position. The row is drawn — a fill at the start and a figure — and it is
-    /// not a handle, which is `Grab::new`'s own refusal read on the value axis
-    /// instead of on the track.
-    ///
-    /// # Only what is drawn, and only where it is drawn
-    ///
-    /// Two conditions, and they are two because the pane scrolls.
-    /// [`drawn`](Self::drawn) is the groups that reach the picture, which is what a
-    /// press may land in; `body.contains` is what keeps a row that has gone under a
-    /// head from taking the press anyway. A group scrolled off the top still has a
-    /// rectangle — [`group`](Self::group) answers one for every index — and that
-    /// rectangle overlaps the deck head and the pane head above it, where the paint
-    /// is clipped away and a knob is therefore not on screen. Without this check
-    /// the pane would claim a press on a knob nobody can see, under a control that
-    /// is drawn there; with it, a press outside the body reaches this bay's other
-    /// derivations and no other, exactly as `select_renderer` beside it already
-    /// asked.
-    ///
-    /// The clip is the authority and this is the same rectangle, which is
-    /// [`inspector_into`]'s `with_clip_rect(at.body)` asked as a question rather
-    /// than applied as a paint.
+    /// Returns `Some(ParamGrip)` if a handle was hit within the visible body, or `None`.
     pub fn grip<'a>(&self, pane: &'a Pane, p: karakuri_layout::Point) -> Option<ParamGrip<'a>> {
         let p = Pos2::new(p.x, p.y);
         if !self.body.contains(p) {
@@ -510,35 +445,9 @@ impl InspectorPane {
         self.grip(pane, p).is_some()
     }
 
-    /// What a press at `p` on a parameter row's leftmost cell asks for:
-    /// [`Operation::Publish`](karakuri_operation::Operation::Publish) carrying the
-    /// interface this deck would have with that one control's membership changed —
-    /// or `None` off every mark.
+    /// Hit-tests a press at point `p` on a parameter publish toggle mark.
     ///
-    /// # The whole list, because that is what the operation is about
-    ///
-    /// The vocabulary says it at the variant: *"the whole ordered list, not one
-    /// entry. A MIDI control is bound to a position in the published interface, so
-    /// adding one entry at a time would renumber every binding after it; and an
-    /// interface that publishes nothing publishes everything, which is a statement
-    /// about the list and not about an entry."* So this builds the list the press
-    /// is asking for — every published row in interface order, less the one
-    /// pressed, or with it appended where it was not on the list — and names it.
-    /// Nothing here says *drop this one*, which is what keeps two hands on one deck
-    /// from disagreeing about what is published
-    /// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-    ///
-    /// Sorted by [`Param::ord`] and not by where the rows are drawn. A wildcard
-    /// control is *placed* in whichever group it resolves to and is *numbered* by
-    /// its position in the interface, and the two orders are not the same walk — so
-    /// building the list off the pane's own order would renumber every knob on a
-    /// deck with a wildcard in it, on a press that was about a different row
-    /// entirely.
-    ///
-    /// A row that goes back on lands at the end, which is a decision and not an
-    /// accident: nothing in the pane says where it *was*, the position it left is
-    /// now somebody else's, and inventing a place for it would move knobs nobody
-    /// pressed anything about. The page says so.
+    /// Returns `Some(Operation::Publish)` with the updated ordered interface list, or `None`.
     pub fn publishing(&self, pane: &Pane, p: karakuri_layout::Point) -> Option<Operation> {
         let at = Pos2::new(p.x, p.y);
         if !self.body.contains(at) {

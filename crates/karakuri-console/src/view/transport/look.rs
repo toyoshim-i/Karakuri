@@ -67,19 +67,7 @@ pub const EXPOSURE_MAX: f32 = 64.0;
 /// [`EXPOSURE_STOPS`] stops is forty-eight.
 const EXPOSURE_PRESSES: f32 = EXPOSURE_STOPS * 4.0;
 
-/// The track, in pixels: one pixel a press.
-///
-/// This is the number that makes the two surfaces agree instead of nearly
-/// agreeing. A pointer on this track can ask for any of the 48 positions along
-/// it and a keyboard stepping a quarter stop at a time can ask for any of the
-/// 48 values between the ends, so neither surface can reach a value the other
-/// cannot — and one pixel is the coarsest step that still reads as a movement
-/// rather than as a sequence of positions, which is [`BEAT_STALENESS`]' own
-/// rule about the beat's travel
-/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-///
-/// A width picked for looks would have been a number with nothing behind it,
-/// which is what the mock's `width: 48px` says here as well.
+/// The track width in pixels (one pixel per exposure press, 48px total per P-0094).
 pub const EXPOSURE_TRACK_W: f32 = EXPOSURE_PRESSES;
 
 /// What the look controls read this frame: the operator that is running, and

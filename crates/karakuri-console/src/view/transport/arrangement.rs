@@ -229,36 +229,10 @@ const NO_ARRANGEMENT: &str = "the default";
 const SAVE_ITEM: &str = "save";
 const SAVE_ITEM_ASKING: &str = "save as…";
 
-/// What the reset is called in the menu, in the manual's own words rather than
-/// in the vocabulary's. *Reset the arrangement* is the row and [`Op::Reset`] is
-/// the operation; *start a new one* is what the family reads as from inside
-/// this control, where the default is *"one arrangement among the ones you
-/// could name"* and not a fourth thing beside the three.
+/// Label for resetting to a default arrangement in the arrangement menu.
 const NEW_ITEM: &str = "start a new one";
 
-/// What the arrangement pill reads this frame, and what its menu is doing.
-///
-/// # The name and the list are handed in, for [`View::picture`]'s reason
-///
-/// Which arrangement is in use is *which file was last written or read*, and
-/// which names exist is a directory. `src/` takes no device, no window and no
-/// clock (ADR-0156) and it takes no disk either — `karakuri-console`'s manifest
-/// has no entry that could reach one — so whoever owns the store reads both and
-/// writes them here, exactly as whoever owns the engine writes
-/// [`View::transport`]. What crosses the seam is a name and a list of names.
-///
-/// # The menu is not handed in, and that is the other half of the same seam
-///
-/// [`Menu`] is this crate's: it is what the *control* is doing, not what the
-/// instrument is doing, and it moves only through the methods below. A menu
-/// open in the program's memory would be the arrangement living in the
-/// toolkit's memory one level along (ADR-0156's own argument), and the console
-/// would then be drawing a state it could not answer questions about.
-///
-/// It is held here rather than in [`Panel`] because it is not part of the
-/// arrangement: nothing about an open menu is saved, restored or reset, and a
-/// [`Panel::restore`] that put somebody else's open menu back would be
-/// restoring a gesture.
+/// Current arrangement state and dropdown menu presentation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Arrangement {
     /// The arrangement in use, or `None` for the default — which is not a name and
@@ -846,31 +820,7 @@ fn naming_text(typed: &str) -> String {
     format!("{typed}{CARET}")
 }
 
-/// The arrangement pill, painted, and the menu under it.
-///
-/// Where everything goes is [`arrangement`]'s, so this paints and derives
-/// nothing. Term for term from `.pill` in `style.css`:
-///
-/// - `border: 1px solid var(--c-line); border-radius: 999px; padding: 0 8px;
-///   color: var(--c-dim)` — a capsule with a hairline round it, which is
-///   [`pill_at`]'s treatment and this is the same pill in another row.
-/// - the `▾` — `--c-dim` with the words, since it is part of the same run in
-///   the mock's markup.
-///
-/// The menu has no term in the stylesheet, because the mock draws no menu: it
-/// is the Library bay's list, which is the one list this console already
-/// draws, at the same `.lib-row` box and inside the same `.lib-list` padding
-/// (P-0085). It sits on a card with the panel's own shadow under it, which is
-/// what says it is above the bays rather than inside one.
-/// The `learn` pill, painted — lavender while armed, the row's own outline
-/// while it is not.
-///
-/// `.pill.lav` is the mock's class on this control and the palette's `lav` is
-/// that colour, so *armed* is drawn in the ink the page already gave it rather
-/// than in one this file chose. The word never changes: *learn* is what the
-/// control is, and what a press will do is said by the lamp — which is the
-/// distinction the `rec` capsule draws the other way, being one control with
-/// two ends.
+/// Paints the learn pill button, highlighting in lavender when armed.
 pub(crate) fn learn_into(ui: &Ui, pal: &Palette, pill: &LearnPill) {
     let painter = ui.painter();
     let radius = CornerRadius::same((size::PILL_H * 0.5) as u8);
@@ -933,6 +883,7 @@ pub(crate) fn map_into(ui: &Ui, pal: &Palette, pill: &MapRow, map: &MapPill) {
     );
 }
 
+/// Paints the arrangement pill.
 pub(crate) fn arrangement_into(ui: &Ui, pal: &Palette, pill: &ArrangementPill, arr: &Arrangement) {
     let painter = ui.painter();
     painter.rect_stroke(

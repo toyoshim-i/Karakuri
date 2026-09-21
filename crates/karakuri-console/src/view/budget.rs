@@ -152,59 +152,9 @@ impl View {
         })
     }
 
-    /// The soonest any live region on this panel will next look different from what
-    /// is on screen, and `None` when nothing on it is moving.
+    /// Returns the duration until the soonest visual change across all live regions, or `None` if static.
     ///
-    /// # It is `moves_in` and not `staleness`, and that is the whole of ADR-0283
-    ///
-    /// A staleness says how finely a region has to be drawn *while it moves*; it
-    /// does not say whether the region is moving now. The mixer bay's roll rests
-    /// for 600 ms of every second and its curve is exactly zero throughout, so a
-    /// deadline taken from the staleness alone woke this window seventeen times a
-    /// second to draw a chip in the position it was already in.
-    /// [`crate::budget::Declared::moves_in`] is what a region answers instead,
-    /// `staleness` stays the constant `tests/schedulable.rs` sums, and the
-    /// invariant between them — `moves_in >= staleness` — is why this can only take
-    /// a frame away and never bring one forward
-    /// ([ADR-0283](../../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-    ///
-    /// Nothing about the beat changes, and P-0094 is why it must not: the light
-    /// travels the grid on every frame the session advances, so its two numbers are
-    /// one number and this goes on answering [`BEAT_STALENESS`] for as long as the
-    /// row is drawn.
-    ///
-    /// # The view is what knows the rate, so the harness is told rather than
-    /// guessing
-    ///
-    /// [`View::declares`] is where the regions and their two numbers are, and this
-    /// is the one of the two numbers a window can act on today:
-    /// `crate::repaint::Change::Animating` turns it into a deadline. A rate written
-    /// into the harness instead would be a presentation's number kept where the
-    /// presentation is not — change the roll and the window goes on servicing the
-    /// old one, with nothing failing to compile and nothing to assert against.
-    ///
-    /// The soonest, not the sum, and that is the whole of what is decided here: a
-    /// deadline is met by drawing, and one frame drawn in time for the soonest is
-    /// in time for every other. Choosing which region a frame is *for* is a
-    /// scheduler's, and there is not one.
-    ///
-    /// # `None` is the panel saying it is still, and that is now a narrower state
-    /// than *nothing pending*
-    ///
-    /// `None` is not an absence of information: it is the panel saying it is still,
-    /// and the window then sleeps. A console with no parked slot and no scheduled
-    /// move on a fader costs exactly what it cost before either existed, which is a
-    /// claim `tests/parked.rs` and `tests/armed.rs` make rather than a hope — and
-    /// both of them ask it of a console with no engine behind it, which is what
-    /// every test in this crate is.
-    ///
-    /// With an engine behind it and the transport row on screen this never answers
-    /// `None`, because the beat is moving and says so
-    /// ([`View::transport_declares`],
-    /// [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-    /// That is ADR-0164's still-panel clause narrowing rather than failing: a panel
-    /// with something moving on it is a panel with something changing on it, and
-    /// the reason it is moving is a declaration rather than an accident.
+    /// See ADR-0164 and ADR-0283 for frame pacing and animation declarations.
     pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
         self.declares(layout).map(|live| live.moves_in).min()
     }

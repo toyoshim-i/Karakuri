@@ -1,225 +1,7 @@
-//! `panel::Op` against the manual's *Arranging the console* rows.
+//! Verification that `panel::Op` operations align with *Arranging the console* in `docs/manual/operations.html`.
 //!
-//! `karakuri-operation`'s own
-//! `tests/the_manual_and_the_vocabulary_agree.rs` reads
-//! `docs/manual/operations.html` and checks it against `Operation` in both
-//! directions. This is that check one level out: the page is still the
-//! specification, and what is checked against it is the type the console
-//! actually performs — [`karakuri_console::panel::Op`].
-//!
-//! # Why it is a separate check rather than the same one
-//!
-//! The vocabulary is a leaf crate with no dependencies at all, so it names a
-//! region by `String` — `FoldBay { bay }`, `FoldPane { pane }`,
-//! `Unfold { region }`, `Solo { region }` — and `karakuri_layout::Layout::find`
-//! resolves one, because `Layout::new` refuses an arrangement that uses a name
-//! twice. `Op` names a [`karakuri_layout::NodeId`], which is a handle with a
-//! private field that only a `Layout` can hand out. So the two types cannot be
-//! the same type, and the question *do they name the same operations* is not
-//! answered by either crate's own suite.
-//!
-//! # The three things it pins, and every one of them is a gap
-//!
-//! - One `Op` variant has no row: [`Op::Report`], and that one is
-//!   permanent (ADR-0205) — its reply is a list of pixel rectangles keyed by a
-//!   handle, and three of the four surfaces could not carry it. The page is
-//!   the specification for *which operations exist*, so an operation the
-//!   console performs and the page does not name is an operation nobody
-//!   specified — and giving it a row is an edit to the specification rather
-//!   than a rename. [`Op::Reset`] was the second of the two until that edit
-//!   was made: *Reset the arrangement* is its row now (ADR-0208), and the
-//!   mapping to it is what [`rows_of`] pins.
-//! - Three rows have no `Op`: *Move a boundary*, which is
-//!   [`karakuri_console::panel::Panel::press`], `moved` and `released` — a
-//!   gesture rather than an operation, and the vocabulary carries it as
-//!   `Undecided` for the same reason — and the two that carry a name, *Save
-//!   the arrangement* and *Put a saved arrangement back*, whose payload is a
-//!   file under a store this crate cannot reach. [`NO_OP`] holds all three
-//!   with the two reasons written out.
-//! - Two splits in the console's arrangement have no name, so nothing but
-//!   the pointer can reach them: the root column and the body row. `Layout`
-//!   hands both to a caller as `Hit::Divider { split, .. }`, the program's `g`
-//!   turns that into [`Op::Fold`] of the split, and
-//!   `Outcome::Folded { root: true }` exists to report one of the two. A
-//!   `String` cannot say either — `Layout::name` answers `None` — so an `Op`
-//!   replaced by an `Operation` would lose them.
-//!
-//! The third of those is decided now, and the decision is that they stay
-//! unnamed (ADR-0204): folding the root produces a blank window, which is
-//! not the outcome the manual reaches for — *Solo a region* is, and its row
-//! says so — and the body row has no word on the page at all. So the count
-//! below is no longer a decision waiting to be taken; it is what the
-//! migration costs, held at two. The first is decided too, and in both
-//! directions: [`Op::Report`] keeps no row for good and [`Op::Reset`] gained
-//! one. *Move a boundary* is the one still open, and this file is what stops
-//! any of the three being closed by accident.
-//!
-//! # [`Op::FoldEnclosing`] is not a fourth, and the rule is what settles it
-//!
-//! It reads like one. It names its target *by relation* — the split around
-//! whatever the pointer is over — where every row on the page names one
-//! outright, so an inventory taken by eye counts it as an operation the page
-//! has no word for. But naming a target by relation is the caller's and
-//! never the operation's, and that is settled three times over.
-//! `karakuri_operation::Operation::Crossfade` states it as a rule at the
-//! variant — *"Both decks named. *The next deck* is the keyboard's
-//! translation of this, not the operation."* ADR-0175 applied it to this
-//! variant already: *under the pointer* stopped being part of what an
-//! operation means and became one way of naming which region, so the two
-//! arms live in `crates/karakuri/src/main.rs` and a divider arrives as
-//! [`Op::Fold`] of the split it already names. And [`Op`]'s own doc says it
-//! outright — *"Resolving the pointer is the caller's"*.
-//!
-//! What is left on the model's side of that seam is one step up the tree:
-//! `FoldEnclosing(id)` is `Fold(layout.parent(id))`, and `Panel::op` is where
-//! the parent is read. So it performs the fold the page already specifies, on
-//! a node the model works out, and the page owes it no row — which is why
-//! [`rows_of`] gives it the same two rows as [`Op::Fold`] rather than a row of
-//! its own. A row appearing on the page *for* it would be the specification
-//! gaining an operation this rule says it does not need, and
-//! [`every_row_on_the_page_has_an_operation`] is the assertion that fails
-//! then: a row no `Op` reaches is a row somebody has to account for.
-//!
-//! # The panel column of this section, and what the pointer actually reaches
-//!
-//! Everything above is about *which operations exist*. The second half of this
-//! file is about a different question on the same six rows —
-//! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
-//! made the panel column of this page the Interface milestone's meter and
-//! defined its badge: *`has` means an operator running the instrument reaches
-//! the operation*. [`panel_column.rs`](../tests/panel_column.rs) is the pair
-//! that flip owed, and the last thing its header says is what it cannot see:
-//! these rows reach an operator through [`Op`] and never through
-//! `karakuri_operation::Operation`, so a scan for `Operation::` finds none of
-//! them. This is where that column meets this type, and it names the
-//! variants outright where that file has to read its own crate as text.
-//!
-//! What the pointer reaches is demonstrated rather than declared. A list
-//! here of which rows have a control would be a second copy of one
-//! (`docs/contributing.md` §4),
-//! and a copy of something nothing states. So [`reached_by_the_pointer`] asks
-//! a running panel, in four passes, because the pointer has two routes
-//! into this section and not one:
-//!
-//! 1. It presses every boundary the arrangement has, at the middle of that
-//!    boundary's own gap, and drags it — that is *Move a boundary*,
-//!    demonstrated, and the extent of the region beside it is read back
-//!    either side.
-//! 2. It presses, drags and releases at every point of a [`STEP`]-pixel
-//!    grid over the whole console, and compares what is folded and what is
-//!    soloed against what they were.
-//! 3. It drives the console's own painted control the way the window loop
-//!    drives one — [`claim`], then the derivation that drew it, then the
-//!    caller performing the answer — over the transport row's arrangement
-//!    pill and every row of its menu. See
-//!    [`reached_through_a_painted_control`].
-//! 4. It drives the second such control the same way: the `solo` pill in
-//!    the Program bay's head, pressed twice, because it answers with two
-//!    operations and the second is the one nothing else can reach. See
-//!    [`reached_through_the_program_bays_head`].
-//!
-//! The first two routes are `Panel::press`, `moved` and `released`, and the
-//! last two are none of them. That sentence used to read *the pointer's whole
-//! route into this section is `Panel::press`, `moved` and `released`*, and it
-//! stopped being true the day the arrangement pill was drawn: a press on a
-//! painted control never enters `Panel` at all until the caller has already
-//! decided what it asks for. The two are kept apart rather than merged,
-//! because a grid sweep and a control are answered by different machinery and
-//! fail in different directions.
-//!
-//! Five rows of this section an operator reaches, and two of them are rows
-//! an [`Op`] names. *Move a boundary* is in [`NO_OP`] because a drag is a
-//! gesture rather than an operation; *Save the arrangement* and *Put a saved
-//! arrangement back* are in it because their payload is a file under a store
-//! this crate cannot reach; *Reset the arrangement* is [`Op::Reset`] and is the
-//! one the third pass performs rather than only names; *Solo a region* is
-//! [`Op::Solo`] and [`Op::Unsolo`], and the fourth pass performs both. Which operations the
-//! console can be *asked* for and what a hand on the panel can *do* are
-//! different questions, and this file pins both.
-//!
-//! # There is no fifth pass yet, and the two folds owe different things
-//!
-//! `karakuri_console::view::bay_grip` is the grip in a bay head, it answers
-//! a `view::FoldGrip` asking for [`Op::Fold`], and
-//! [ADR-0295](../../../docs/adr/0295-the-grip-is-the-fold-and-a-panes-outer-edge-is-the-other-one.md)
-//! is where it was decided. It is the panel home
-//! `docs/manual/operations.html` names for *Fold a bay away* — bay head —
-//! and `tests/fold_grip.rs` measures the rectangle, the clearances and the
-//! press.
-//!
-//! What it does not have is step one. A press reaches a painted control
-//! through [`claim`], a row in `karakuri_console::input::PROBES`, and an arm in
-//! `crates/karakuri/src/main.rs`'s press handler; the derivation landed without
-//! either, so a press on a grip still goes to `egui` and reaches nothing at
-//! all. So that row is not reached and its badge stays `plan`, which is
-//! what [`every_arrangement_operation_the_pointer_reaches_is_marked_built`]
-//! would otherwise fail on, in the direction that says the page is behind the
-//! panel. A fifth pass belongs here the day the registration lands — driven
-//! exactly as the fourth is, [`claim`] first — and flipping the badge before
-//! then would be the page claiming a control an operator cannot find.
-//!
-//! The pane's half is a different shape and owes nothing at all. ADR-0295
-//! gave *Fold a pane away* a band on the pane's outer edge; that band lay over
-//! the outer three pixels of every Library row, so it was never registered and
-//! [ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)
-//! replaced it with a drag: a pane's boundary pulled past the pane's own
-//! minimum closes it, and the divider the closed pane keeps at the window's
-//! edge brings it back. A boundary is claimed by `input`'s rule 3 before any
-//! control is asked and the window loop already routes a boundary drag into
-//! `Panel`, so there is no `PROBES` row and no press arm to write — the row
-//! is reachable today. What it is waiting on is the badge on
-//! `docs/manual/operations.html` and the demonstration here, which move
-//! together; the grid does not find the fold on its own, and why is on
-//! [`reached_by_the_pointer`].
-//!
-//! # What the sweep cannot see, and which way each one fails
-//!
-//! - Reachability is `crates/karakuri/src/main.rs`'s, and this crate cannot
-//!   depend on it (ADR-0156). The window loop is what turns a `winit` press
-//!   into [`Panel::press`] and draws the panel in front of somebody, and
-//!   ADR-0213's definition is P-0094's sentence — *a window that opens and
-//!   cannot be touched is a demo, not a tool*. So this file checks the
-//!   necessary half and not the sufficient one, exactly as `panel_column.rs`
-//!   does one column along. The sufficient half for the one `has` row is a
-//!   test in that binary rather than a claim here:
-//!   `a_drag_through_the_window_loops_own_routing_never_reaches_egui` grabs a
-//!   boundary, drags it and lets go through `Readout::pointer` — the window
-//!   loop's own routing — and reads the left pane's width back either side.
-//!   A gesture this file demonstrates and that binary never wires would pass
-//!   here, and the badge would be a lie the page tells on its own authority.
-//! - A control this crate draws and a caller applies is invisible to the
-//!   sweep, because the press never goes through [`Panel::press`]. There
-//!   are three of them, and the third and fourth passes are what two of them
-//!   cost. The
-//!   Outputs row's sink chip (`view::Outputs::op`) answers [`Op::Fold`] or
-//!   [`Op::Unfold`] for the picture; the transport row's arrangement pill
-//!   (`view::ArrangementPill::ask`) answers an [`Op`], one of two
-//!   `karakuri_operation::Operation`s, or a move of its own menu; and the
-//!   Program bay head's `solo` (`view::ProgramHead::op`) answers [`Op::Solo`]
-//!   of the picture or [`Op::Unsolo`].
-//!
-//!   The sink is not this section's — the page gives that control its own
-//!   row, *Choose where the frame goes*, in *Output and recording* — and
-//!   nothing in this workspace checks that row's badge. This file is not
-//!   it, and says so rather than being read as covering the column. The pill
-//!   is this section's, on three rows, which is why it is demonstrated
-//!   here instead of being written off as something the sweep cannot see: the
-//!   sweep still cannot, and [`reached_through_a_painted_control`] is the
-//!   answer to that rather than a widening of the grid.
-//! - A control smaller than [`STEP`] in both directions could sit between
-//!   two presses. Nothing on the console is: a divider is [`Panel::press`]'s
-//!   grab width either side of a gap, and a bay head is 27 tall. It is a
-//!   *false negative* — a fold nobody demonstrated — and it fails the
-//!   direction that says a `has` badge is reached, from the other side, the
-//!   moment somebody flips the badge for the control they just drew.
-//! - Which row a new fold lands on. The sweep can say that something
-//!   folded and not whether what folded was a bay or a pane, so it panics
-//!   naming the point and the node rather than guessing a row — the shape
-//!   `panel_column.rs`'s `sample` uses for the same reason.
-//! - A badge whose home is wrong. A `has` badge has to name a home and the
-//!   home is checked for being *something*, as `mcp.rs` and `panel_column.rs`
-//!   both check it; that the region it names is where the control actually is
-//!   is a claim about `docs/manual/console.html` and is nobody's test here.
+//! Validates mapping of manual operations to internal `Op` variants (ADR-0204, ADR-0205, ADR-0208),
+//! reachability by pointer gestures, and arrangement state transitions.
 
 mod common;
 
@@ -1060,14 +842,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
             Some(Ask::Panel(op)) => {
                 let outcome = p.op(op);
                 p.solve();
-                // **The outcome first, because it is the discriminating
-                // claim.** `Op::UnfoldAll` on a console this pass folded and
-                // did not solo puts `shape` back to exactly the default too,
-                // so a row that started asking for the unfold would satisfy
-                // the comparison below and be recorded as the reset. What
-                // separates them is what the operation *said* it did, which is
-                // also what the program prints and what `repaint::Change`
-                // reads.
+                // Verify that the outcome explicitly reports Reset.
                 assert_eq!(
                     outcome,
                     Outcome::Reset,
@@ -1099,40 +874,7 @@ fn reached_through_a_painted_control() -> BTreeSet<&'static str> {
     reached
 }
 
-/// The fourth pass: the `solo` pill in the Program bay's head, driven the way
-/// the window loop drives one.
-///
-/// It is a painted control like the arrangement pill, so the grid is blind to
-/// it for the reason [`reached_through_a_painted_control`] gives at length, and
-/// it is a pass of its own rather than an arm of that one because the two
-/// controls are answered by different machinery and fail in different
-/// directions: the pill hangs a menu over the console and this is one capsule
-/// with two answers.
-///
-/// Both answers are performed and read back, which is what makes this a
-/// demonstration rather than a naming. `ProgramHead::op` is
-/// [`Outputs::op`](karakuri_console::view::Outputs::op)'s shape — two
-/// operations chosen from the layout, never a toggle — so the pass presses it
-/// twice: once on a console with nothing soloed, which has to come back
-/// [`Outcome::Soloed`] and leave [`shape`] changed, and once on the console
-/// that left, which has to come back [`Outcome::Unsoloed`] and put `shape` back
-/// to exactly what a fresh panel's was. A pill that soloed and could not undo
-/// it would be half a row demonstrated, and the undo is the half a pointer has
-/// no other way to reach: a solo takes every other region off the screen, so
-/// nothing else is left to press.
-///
-/// The second press is asked of a freshly derived head, not of the one the
-/// first press came from. The solo moves every rectangle on the console, the
-/// bay is the window afterwards, and a capsule remembered across it would be a
-/// press somewhere the pill no longer is — which is [`claim`]'s own rule about
-/// asking the derivation again rather than storing its answer.
-///
-/// What panics and what does not is [`reached_through_a_painted_control`]'s
-/// division exactly: everything that would mean the demonstration is not
-/// running says so out loud — no head laid out, a press [`claim`] does not give
-/// the panel, an operation that said it soloed and did not — and the answer
-/// itself is left to
-/// [`every_arrangement_row_marked_built_is_reached_by_the_pointer`].
+/// Evaluates operations reached through the program bay solo pill.
 fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
     let mut reached = BTreeSet::new();
 
@@ -1141,11 +883,7 @@ fn reached_through_the_program_bays_head() -> BTreeSet<&'static str> {
     let mut p = panel();
     let default = shape(&mut p);
 
-    // **Step one of the real route.** `claim` is what the window loop asks
-    // before anything acts, and a press it hands to `egui` never reaches the
-    // control at all. The pill's centre, because the capsule's top 0.75 is
-    // inside the grab of the boundary above the bay — `view::program_head` is
-    // where that is measured, and rule 3 is what decides it.
+    // Verify that pointer claim routes to panel and hits the solo pill.
     let head = program_head(&ctx, p.layout(), Open::CLOSED).unwrap_or_else(|| {
         panic!(
             "the Program bay draws no `solo` pill on a solved console, so nothing here can \
@@ -1240,28 +978,7 @@ fn the_sweep_finds_the_section_and_the_panel() {
     );
 }
 
-/// The page claiming a control that does not exist.
-///
-/// A row this section marks built in the panel column that no gesture on a
-/// running panel performs — ADR-0213's failure mode from the side where the
-/// page moved first, which for this section is still the likelier of the two:
-/// most of its rows name a home on a console that draws the furniture and
-/// hit-tests none of it.
-///
-/// Four of them no longer do, and that is what the third and fourth passes are.
-/// *Solo a region* is the newest: `docs/manual/console.html` draws a `solo`
-/// pill in the Program bay's head and says it solos the picture, and the panel
-/// reaches both halves of the row through it — the solo and its undo, performed
-/// rather than named. The three before it are the arrangement family. The
-/// arrangement family names the transport row, `docs/manual/console.html` draws
-/// `arr · night ▾` there, and the panel reaches all three rows through it — the
-/// reset performed, the save and the restore named
-/// ([ADR-0225](../../../docs/adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)).
-/// This sentence used to read *"three of the seven name the transport row,
-/// where `docs/manual/console.html` draws no arrangement control at all yet"*,
-/// and it is corrected rather than deleted because it is the reason this
-/// assertion exists: it was the failure being guarded against, and it is now
-/// the one that was fixed.
+/// Verifies that every arrangement operation marked built on the manual page is reachable by pointers (ADR-0213, ADR-0225).
 #[test]
 fn every_arrangement_row_marked_built_is_reached_by_the_pointer() {
     let reached = reached_by_the_pointer();
