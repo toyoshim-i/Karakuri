@@ -182,42 +182,10 @@ pub struct Checked {
     /// checked procedure ought to carry what it costs — but until something fills
     /// it, ask `cost::estimate` instead of reading this.
     pub cost: Option<Cost>,
-    /// Whether this procedure can be evaluated at any `t` directly —
-    /// `docs/ir-spec.md`, "Closed form versus accumulating".
+    /// Whether this procedure can be evaluated at arbitrary `t` directly.
     ///
-    /// True means the procedure's state at time `t` is a pure function of `seed`,
-    /// `t`, and its parameters. It buys two things and the second is the larger
-    /// one:
-    ///
-    /// - No priming. Cold to Live with no warm-up, because there is no accumulated
-    ///   state to warm.
-    /// - It can be scrubbed. Forward at any rate, held, or *backwards* — tape-style
-    ///   transport. An accumulating procedure can only go forward one step at a time,
-    ///   and reversing it is not slow but impossible: there is no un-integrating a sum.
-    ///
-    /// Necessary for a seek, not sufficient for one. Priming only ever runs forward
-    /// from a state the engine already has, so the procedure is all it needs.
-    /// Seeking to an arbitrary `t` also needs everything *else* that is a function
-    /// of time at that instant to be evaluable there, and
-    /// [`Ambient::Beats`](crate::ast::Ambient::Beats) has made that concrete: a
-    /// procedure reading it is a function of the tempo grid as well as of `t`, and
-    /// the grid at a past `t` depends on the correction history rather than on `t`.
-    ///
-    /// It is still not a disqualifier. The grid can be evaluated anywhere as it
-    /// stands, which is a pure function of `t` given the current tempo and anchor —
-    /// and for a scrub that is the wanted answer, since seeking to bar 32 means bar
-    /// 32 of the grid the room is on now. For an exact re-run of a past moment it
-    /// is not, and nothing keeps the history that would be. Whatever builds the
-    /// transport owes that half and owes this distinction with it; this flag covers
-    /// neither.
-    ///
-    /// Decided by [`check`](crate::check::check) and deliberately conservative: see
-    /// `is_closed_form` there for exactly what it refuses to claim and why
-    /// under-claiming is the safe direction.
-    ///
-    /// Vacuously true for an L4 procedure, which emits nothing and holds no
-    /// per-element state at all. A *Set* is closed form when both of its procedures
-    /// are, which in practice means when its L1 is.
+    /// True when state at time `t` is a pure function of `seed`, `t`, and parameters
+    /// (no historical state accumulation or priming needed). See `docs/ir-spec.md`.
     pub closed_form: bool,
     /// Whether the procedure reads [`Ambient::Beats`](crate::ast::Ambient::Beats).
     ///
@@ -586,35 +554,16 @@ pub enum TExprKind {
         func: Builtin,
         args: Vec<TExpr>,
     },
-    /// The distance a field gives at a point — `<slot>(p)`, where the slot is
-    /// whatever this procedure's `uses` called it.
+    /// Evaluation of a field at a given point: `<slot>(p)`.
     ///
-    /// Its own variant rather than a builtin, because there is no body for it here:
-    /// it lowers to a call of the function another file was spliced in as, so a Set
-    /// that binds the slot to nothing cannot satisfy it. That was true of
-    /// `Builtin::Field` too, and the difference is the name — which is carried,
-    /// unlike [`TExprKind::Far`]'s. A geometry read has nowhere else to point,
-    /// because a node takes one second geometry; a field call does, because a
-    /// procedure may declare several, and the slot is what the lowering addresses
-    /// the function and the params under.
+    /// Lowers to a call of the bound field function identified by slot name.
     Field {
         slot: String,
         point: Box<TExpr>,
     },
-    /// The identity of the geometry bound to a declared Source slot — `only`,
-    /// alone, where the header said `uses only : Source`.
+    /// Identity of the geometry bound to a declared Source slot.
     ///
-    /// A value rather than a member or a call, which is what separates it from the
-    /// three slot reads beside it: a geometry has no type, a field has no value
-    /// until it is evaluated somewhere, and a camera is six numbers — this is a
-    /// `uint`, and the language has one of those.
-    ///
-    /// Its own variant rather than an [`Ambient`], because the answer is per
-    /// *slot*: `Ambient::Source` is the instance this chain runs over and there is
-    /// one of it, while a procedure may declare several of these and each resolves
-    /// to whichever L1 its own edge named. The name is carried for the reason
-    /// [`TExprKind::Field`]'s is — it is what the lowering addresses the uniform
-    /// field under, and what the engine writes the salt into.
+    /// Resolves to the source instance index (uint) bound to the named slot.
     Source {
         slot: String,
     },

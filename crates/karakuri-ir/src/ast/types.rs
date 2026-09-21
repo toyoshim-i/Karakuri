@@ -299,94 +299,24 @@ impl Ty {
     }
 }
 
-/// What a `uses` slot takes — the type in `uses far : Geometry`.
+/// Type of input dependency bound to a `uses` slot.
 ///
-/// The value is what the rules are about. "An L3 produces a viewpoint, not
-/// geometry" is a sentence about a *geometry* slot rather than about `uses`,
-/// and a checker matching on this says so — which is why the second variant
-/// cost each such refusal one arm rather than a rewrite around a distinction
-/// nothing had drawn.
-///
-/// The four differ in every rule that mentions them, which is the argument for
-/// the type being written down at all: a geometry slot is L2's alone and there
-/// is at most one, because a second bound element buffer is not built; a Field
-/// slot is legal on the four kinds that can evaluate one and there may be
-/// several, because a marcher wanting a shape and a cutter is the ordinary
-/// case; a Camera slot is L4's alone and there is at most one, because a
-/// renderer draws one picture and a picture is seen from one place; a Source
-/// slot is legal wherever a chain instance runs and there may be several,
-/// because `source == a || source == b` is an ordinary thing to want.
+/// Enforces layer compatibility and cardinality constraints:
+/// - `Geometry`: L2 only, at most one per node.
+/// - `Field`: L1-L4, multiple allowed.
+/// - `Camera`: L4 only, at most one per node.
+/// - `Source`: multiple allowed across supported chain layers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotTy {
     /// The elements of an L1, read beside the ones this node runs over.
     Geometry,
-    /// A `kind Field` procedure, evaluated at a point.
-    ///
-    /// Read as a *call* — `shape(p)` — because a field has no members and does have
-    /// an argument. That reuses `Expr::Call` the way a geometry slot's read reuses
-    /// `expr . ident`: one existing shape given a second meaning, resolved against
-    /// what the header declared rather than against a word the language reserved.
-    /// Reserving one is what capped a procedure at one field, and there is no
-    /// reserved word left to cap it.
+    /// A `kind Field` procedure, evaluated at a point via function call syntax (`<slot>(p)`).
     Field,
-    /// A viewpoint this renderer draws from — a `kind L3` procedure, or the
-    /// built-in orbit, which is a node like any other so that an edge can name it.
-    ///
-    /// Read as a *member* — `view.clip`, `view.eye`, `view.ray` — because a camera
-    /// is neither elements nor a function: it is one value with parts, and the
-    /// parts are the three derivations a renderer is handed. That reuses `expr .
-    /// ident` the way a geometry slot's read does, with one difference that is the
-    /// whole of what this variant cost the checker: the members are resolved
-    /// against the slot's *type*, where `far.position` resolves against the
-    /// attribute table.
-    ///
-    /// The ambients it stands in for stay. `camera`, `eye` and `ray` are the Set's
-    /// camera for a renderer that declares no slot — which is every renderer
-    /// written before this notation existed — and a renderer that declares one is
-    /// saying *which* camera, which is the question a Set with several has no other
-    /// way to be asked.
+    /// A viewpoint this renderer draws from (L3 procedure or built-in orbit).
     Camera,
-    /// The identity of one geometry, for comparing [`Ambient::Source`] against —
-    /// the L1 an edge names, reduced to the assigned value that identifies it.
-    ///
-    /// It is not `Geometry`, and the difference is what it binds. A `Geometry` slot
-    /// binds an element *buffer* — a bind-group entry on every node that has one —
-    /// and is capped at one because a second bound buffer is not built. This binds
-    /// a `u32` in a uniform the module already has. A mask wants the identity and
-    /// reads no elements, so declaring it `Geometry` would both allocate a buffer
-    /// nothing reads and collide with that cap on a node which already declares a
-    /// `far`.
-    ///
-    /// Read as a value, alone, which no other slot type is: `only` is the bound
-    /// source's identity. `docs/ir-spec.md` says a geometry is not a value because
-    /// "the language has no type for a whole source and no way to pass one" — that
-    /// sentence is about `Geometry` and stays true. This is a `uint`, which the
-    /// language does have.
-    ///
-    /// Several are legal, unlike `Geometry` and `Camera`: a mask that says `source
-    /// == a || source == b` is the ordinary case, and each slot costs one `u32` in
-    /// a uniform block rather than a buffer or a bind group.
+    /// Identity (u32) of one geometry for comparison against [`Ambient::Source`].
     Source,
-    /// A picture this node folds in — one input of a nested [`Kind::L5`], bound by
-    /// an `edge` like every other slot.
-    ///
-    /// Legal on an L5 and nowhere else, any number of them: this is the nested
-    /// role's fan-in, and it is the fan-in `docs/architecture.md` says is already
-    /// solved — `uses` plus `edge`, with no new mechanism. Every other kind is
-    /// handed elements or a position, and a texture is neither.
-    ///
-    /// Read through the two texture builtins, `texel(<slot>)` and `tap(<slot>,
-    /// uv)`, which is what separates it from every slot type beside it: a geometry
-    /// is read as a member, a field as a call, a source as a bare value, and a
-    /// texture only ever as a fetch. There is no [`Ty`] for one, deliberately — a
-    /// texture is not a value this language can hold, so `let x = tex;` has nothing
-    /// to bind and is refused where it is written.
-    ///
-    /// A chain slot's L5 declares none. The master chain is an ordered list and its
-    /// only fan-in is that order; there is no Set for an `edge` to be written in,
-    /// so a procedure with a Texture slot is refused *from a chain slot* rather
-    /// than from the language — a refusal that belongs where the chain is built,
-    /// beside the one that refuses an unbound slot.
+    /// A texture input folded into an L5 procedure.
     Texture,
 }
 

@@ -848,12 +848,7 @@ proc laundered_read {
     );
 }
 
-/// **Spawning and closed form cannot coexist**, and not because of attributes:
-/// this procedure's `element` block is a pure function of `seed` and `t`. What
-/// is accumulated is the *population* — the spawn accumulator and the live
-/// range are engine state built up over every frame since the Set started — and
-/// jumping to `t` does not conjure the elements that would have been born
-/// getting there.
+/// Asserts that declaring a `spawn` block disqualifies closed-form determination.
 #[test]
 fn a_spawn_block_disqualifies_even_a_pure_element_block() {
     let src = r#"

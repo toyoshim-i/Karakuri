@@ -1,64 +1,12 @@
 //! Stage 4: cost estimation.
 //!
-//! Produces a per-element figure, never a total. `capacity` belongs to the Set,
-//! so an artifact has no total cost to be judged on; rejection here is against
-//! a per-element ceiling only, and the frame-budget decision belongs to the
-//! probe in stage 7 where the real capacity and the real parameters are known.
+//! Produces per-element static cost estimations (`ops_per_element`, `ops_per_spawn`,
+//! `ops_per_fragment`). Rejects procedures that exceed predefined computational
+//! budget ceilings.
 //!
-//! ## Method
-//!
-//! `ops_per_element` is a static instruction count, multiplied out through loop
-//! bounds (constant, per the grammar, so this terminates and needs no actual
-//! iteration — a loop's cost is its body's cost times its trip count, computed
-//! once and multiplied, never executed `n` times by this pass). Nested loops
-//! multiply into the running multiplier, so nesting multiplies the estimate
-//! rather than adding to it, per the spec. An `if` charges the condition, one
-//! unit for the test itself, and the *more expensive* of its two arms — not
-//! both — because both are usually executed on a GPU control-flow-divergent
-//! lane anyway, so the arm that is skipped in scalar code is not free here.
-//!
-//! Every leaf read (a literal, a local, a param, an attribute, an ambient) and
-//! every operator or statement costs one unit — a stand-in for "one scalar ALU
-//! instruction, roughly." Builtins are weighted relative to that baseline in
-//! [`builtin_weight`]; see the comment there for where the numbers come from.
-//! All of this is ordinal, not measured. Nothing here has been run through a
-//! profiler or a WGSL compiler; the numbers encode "this is roughly N times
-//! more expensive than a multiply," not a nanosecond figure. Replacing them
-//! with real numbers needs GPU timing of each builtin in isolation (a
-//! microbenchmark shader per function, on representative hardware) — exactly
-//! the kind of measurement stage 7's probe does for a whole procedure, just
-//! decomposed per builtin instead.
-//!
-//! There is no per-element byte figure here, and no version of this pass could
-//! have owned one. Three of the inputs to the layout the engine actually
-//! allocates are settled after stage 4, and none of them is a rounding error:
-//! an L2's element struct is built from `upstream ∪ emit` rather than from its
-//! own `emit`, the `copy` slot is contributed by whichever amplifier sits
-//! *above* it in the chain, and a derivation's stored slot exists only because
-//! something *downstream* named the attribute. All three are properties of the
-//! Set, which is assembled two stages later — so a figure computed from one
-//! procedure is a floor for every kind rather than a measurement of any.
-//! `kaleidoscope` reported 96 bytes an element where its chain allocates 312,
-//! and `swirl_warp` 8 where it allocates 48.
-//!
-//! The figure belongs to whatever does the allocating, and that is
-//! `karakuri-engine`. A node there reports the size of the buffers it created,
-//! not a second expression that happens to agree with them, and a Set totals
-//! those over the capacities it was instantiated at — which is the question the
-//! number was always for, since `capacity` differs per node and an amplifier
-//! multiplies it downstream.
-//!
-//! What it totals is element storage and not device memory, which is worth
-//! saying here because "the memory a Set needs" is what the figure reads as and
-//! is not what it is: render targets, uniform blocks, the counts block and the
-//! compaction scan's own buffers are all outside it, on the grounds that they
-//! are not indexed by element. `karakuri_engine::set::ElementStorage` lists
-//! them. Nothing here would have counted them either, so this is a limit the
-//! figure always had rather than one it acquired by moving.
-//!
-//! Nothing is lost by its leaving: this pass rejects on `ops_per_element`,
-//! `ops_per_spawn` and `ops_per_fragment`, and there has never been a byte
-//! ceiling for such a figure to feed.
+//! Evaluates static instruction counts multiplied through constant loop bounds and
+//! weighted builtin costs. Cross-procedure costs (such as field evaluations) are
+//! counted as call sites scaled by loop multipliers and resolved during Set composition.
 
 use crate::ast::{BlockKind, Kind, Lit};
 use crate::builtin::Builtin;
@@ -428,17 +376,8 @@ fn expr_cost(
             });
             weight.saturating_add(args_cost)
         }
-        // **Counted, and weighed at nothing.** What one evaluation costs is the
-        // bound field's own figure, which lives in another file and is not in
-        // hand until the Set is built. A stand-in weight would be a number
-        // wrong for every field, and the largest plausible one would refuse
-        // callers that are fine — so this pass counts call sites and the Set
-        // does the multiplication.
-        //
-        // **`mult`, not one, and under the slot's own name.** A `shape(p)`
-        // inside `for i in 0..48` is forty-eight evaluations of `shape`, and
-        // both halves of that matter: the number is what the Set multiplies,
-        // and the name is which field it multiplies by.
+        // Field calls are counted scaled by the loop multiplier rather than
+        // weighted statically; actual costs are multiplied during Set composition.
         TExprKind::Field { slot, point } => {
             match calls.iter_mut().find(|(name, _)| name == slot) {
                 Some((_, n)) => *n = n.saturating_add(mult),

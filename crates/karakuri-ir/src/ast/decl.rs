@@ -179,29 +179,9 @@ fn fold_literal(expr: &Expr) -> Option<f32> {
 /// that would name the same number.
 pub const COMPONENTS: [&str; 3] = ["x", "y", "z"];
 
-/// The key one component of a vector parameter is addressed by: `glow`
-/// component 1 is `glow.y`.
+/// Returns the parameter key for a vector component (e.g. `glow.y` for component 1 of `glow`).
 ///
-/// `.` is the separator for three reasons, and each is checkable. No `.kir`
-/// identifier can contain one — `lexer.rs`'s `lex_ident` takes
-/// `is_alphanumeric() || c == '_'` and nothing else — so a component key
-/// collides with no declared name however it is spelled. It is the language's
-/// own spelling for *this component of that vector*, which is the swizzle
-/// (`docs/ir-spec.md`, "Types": *"Swizzles allowed (`v.xy`, `v.zyx`)"*). And
-/// the command line already spells *member of* this way: `--edge
-/// <node>.<slot>=<node>`, whose parser splits on the last `.` for the same
-/// reason this needs no escaping — *"the slot is a `.kir` identifier, which
-/// cannot"* hold one.
-///
-/// Nothing in `karakuri-codegen` produces or consumes a `.`: the four manglings
-/// are `param_{name}`, `field_{slot}_{name}`, `source_{slot}` and `usr_{name}`,
-/// and the two *semantic* keys separate with `\u{1}`. So a component key never
-/// reaches a uniform layout field name, which is what keeps
-/// `node::write_params` walking the declaration names while the interface walks
-/// these.
-///
-/// Panics on a component past `COMPONENTS`, which is unreachable through
-/// [`Param::keys`]: the widest `param` a procedure may declare is a `vec3`.
+/// Component index maps to `COMPONENTS` (`x`, `y`, `z`). Panics if component >= 3.
 pub fn component_key(name: &str, component: usize) -> String {
     let mut out = String::with_capacity(name.len() + 2);
     push_component_key(&mut out, name, component);
@@ -272,23 +252,9 @@ pub struct AmplifyDecl {
     pub span: Span,
 }
 
-/// `uses <name> : Geometry`, `: Field`, `: Camera`, `: Source`
+/// Declaration of a named input slot: `uses <name> : <SlotTy>`.
 ///
-/// One input this node takes, named by the procedure and bound by the Set.
-///
-/// The name is the *procedure's own*, exactly as `consumes position` names an
-/// attribute without naming which L1 supplies it. That is what keeps a `.kir` a
-/// library part: a file that named a node would be coupled to one Set and could
-/// not be used in another. What fills the slot is written where the use is
-/// recorded — an `edge` in the Set file, `--edge <node>.<slot>=<node>` on the
-/// command line — and an unbound slot is refused rather than filled in from
-/// whatever happened to be lying around.
-///
-/// The type decides every rule about it, which is why it is written and carried
-/// rather than checked and dropped — see [`SlotTy`]. Which kinds may declare
-/// one, how many are legal, what an `edge` may bind it to and how it is read
-/// all differ between the four, and each of those refusals is a sentence about
-/// a type rather than about `uses`.
+/// Defines an input dependency bound at Set composition time (ADR-0283).
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub name: String,
@@ -335,20 +301,9 @@ pub struct Proc {
     pub amplify: Option<AmplifyDecl>,
     /// L5 only — see [`RetainsDecl`].
     pub retains: Option<RetainsDecl>,
-    /// The named inputs this procedure declares, of whichever types its kind
-    /// allows.
+    /// Named input slots declared by this procedure.
     ///
-    /// A geometry slot is L2's alone and breaks `L2 : Geometry -> Geometry` on the
-    /// *arity* axis, two geometries in and one out, as `amplify` breaks it on the
-    /// count axis. A Field slot is legal on the four kinds that can evaluate one
-    /// and changes no signature at all: a field has no node, so naming one adds an
-    /// input to the file and nothing to the chain.
-    ///
-    /// A list here and whatever the check pass allows after it. The parser collects
-    /// every `uses` and decides nothing, so a declaration too many is refused with
-    /// a sentence about the type it was written with rather than silently
-    /// overwriting the first — see `check_header`. This is the system's named
-    /// fan-in, and the notation is what the rest of it will be spelled with.
+    /// Slot type constraints are validated during contract checking ([`check_header`]).
     pub uses: Vec<UsesDecl>,
     /// L4 only.
     pub blend: Option<Blend>,

@@ -163,14 +163,7 @@ proc blob {
     );
 }
 
-/// **Refused in a procedure that declares a geometry slot**, because there the
-/// reading would be silently one of two.
-///
-/// A pairing Set is one source made of two simulations: the far one feeds the
-/// slot and shares the near one's uniform, so there is one salt for two
-/// geometries and `source` would answer for the near one without saying so.
-/// The refusal names the slot, which is the half that helps — a hint saying
-/// *which* reading was ambiguous beats a rule the author has to infer.
+/// Asserts that `source` is rejected in a procedure declaring a geometry slot.
 #[test]
 fn source_is_refused_beside_a_geometry_slot() {
     let src = r#"

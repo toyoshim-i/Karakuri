@@ -220,15 +220,7 @@ proc wrong {
     );
 }
 
-/// **A geometry slot is refused on a field too**, which is the one geometry
-/// declaration this arm used to let past.
-///
-/// A field is a function of space: it is handed `point` and returns a
-/// distance, and there is no element for a far one to be paired with. Nothing
-/// downstream could have honoured it either — a Set's edges resolve against
-/// what an L2 declares, so the slot was invisible where it would have been
-/// bound and the `edge` naming it came back as an unknown slot, a page away
-/// from the line that caused it.
+/// Asserts that a Field procedure rejects a Geometry slot declaration.
 #[test]
 fn a_field_refuses_a_geometry_slot() {
     let errs = check_err(
@@ -327,13 +319,7 @@ proc morph {
 }
 "#;
 
-/// The declaration lands on `Checked` **as a name and a type**, and
-/// `far.<attr>` resolves to a read of the far element.
-///
-/// The name is what the whole change is: it is the procedure's own, so nothing
-/// couples to a Set, and it is what an `edge` is written against. The type is
-/// what says which sort of thing may fill it — one today, and asked for by
-/// type rather than by position.
+/// Asserts that a used Geometry slot is checked and recorded on `Checked`.
 #[test]
 fn a_used_geometry_checks_clean_and_carries_its_name() {
     let checked = check_ok(MORPH);
@@ -700,13 +686,7 @@ proc twice {
     );
 }
 
-/// **A Field slot is legal on L1, L2, L3 and L4** — the four kinds that can
-/// evaluate one — and a geometry slot is still L2's alone.
-///
-/// The two are told apart by the type on the declaration, which is what the
-/// type was written down for: every refusal about `uses` is a sentence about
-/// one of them, and this is the commit where each of them grew the arm beside
-/// the one it had.
+/// Asserts that Field slots are permitted on L1, L2, L3, and L4 procedures.
 #[test]
 fn a_field_slot_is_legal_on_every_kind_that_can_evaluate_one() {
     for src in [
