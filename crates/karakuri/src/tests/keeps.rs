@@ -1200,24 +1200,8 @@ fn every_verdict_says_what_it_does_to_the_lane() {
     );
 }
 
-/// One build that changed two nodes draws two rows, and one that changed one
-/// draws one — the maintainer's decision on 2026-09-09, and [`settle`] is where
-/// it is carried out.
-///
-/// > one row per changed node
-///
-/// The verdict is repeated on each row rather than standing over them, which is
-/// the half of that decision a nested shape would have spent: a row is a row,
-/// and both of these carry the same word. What tells them apart is the address,
-/// which is why it is asserted here beside the count — two rows drawn from one
-/// build with one address between them would be two lines saying one thing.
-///
-/// And a slot's rows are replaced whole. A build that changed two and then a
-/// build that changed one leaves one row, not the first build's second row
-/// standing under a verdict that has been superseded. That is the property
-/// `settle` was rewritten for and the one a `find`-and-write would have missed.
-///
-/// A CPU test: a `Changed` is a value and nothing here takes a device.
+/// Verifies that [`settle`] produces exactly one staging row per changed node
+/// with its distinct node address, and replaces previous staging rows completely (ADR-0326).
 #[test]
 fn a_build_that_changed_two_nodes_draws_a_row_each() {
     let node = |layer: karakuri_operation::Layer, index: u32, name: &str| Changed {

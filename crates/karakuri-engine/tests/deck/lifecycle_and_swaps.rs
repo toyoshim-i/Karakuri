@@ -1020,23 +1020,11 @@ mod gpu {
         );
     }
 
-    /// **The same candidate gets the same verdict whether the other slots are
-    /// idle or loaded.**
+    /// Verifies that candidate budget evaluation is independent of neighbor slot loads (ADR-0313).
     ///
-    /// The maintainer, 2026-09-09: *"candidate evaluation must be independent of
-    /// other slot loads"* — the verdict on a candidate must be independent of what the
-    /// other slots are carrying. This is that sentence as an assertion. A budget
-    /// divided by the live slot count, or a share taken beside what the
-    /// neighbours are committed to, would both pass the test above and fail this
-    /// one, which is why it is a second test and not a second assertion.
-    ///
-    /// Two runs of one candidate against one budget. The second run's neighbours
-    /// hold sixteen times the elements, three of them are Live rather than one,
-    /// and its frames are slowed so that the deck is certainly over its period on
-    /// any machine — every quantity the old gate could see is different, and the
-    /// only thing that is not is the candidate. The deck-level alarm differing
-    /// between the runs is what keeps this from being vacuous: it says the two
-    /// decks really were in different states.
+    /// The same candidate receives the identical verdict regardless of whether
+    /// neighboring slots are idle or carrying heavy workloads that exceed the
+    /// deck-level frame period.
     #[test]
     fn a_candidates_verdict_does_not_move_with_what_the_other_slots_carry() {
         /// Sixteen times [`CAPACITY`], so the loaded run's neighbours are a real

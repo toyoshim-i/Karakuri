@@ -55,21 +55,8 @@ fn a_parked_slot_does_not_read_as_one_nobody_asked_about() {
     }
 }
 
-/// A stopped slot says so on the status line, and no other slot does.
-///
-/// A version over the frame budget stays in the slot and the slot stops
-/// updating (ADR-0316), so the line an operator reads in the dark shows `LIVE`
-/// beside a simulation clock that is not moving. The word is the only thing
-/// that separates that from a bug, and it is the maintainer's: *"rolled
-/// back is confusing"*.
-///
-/// Three things, and each is a way of getting it wrong. It is the engine's own
-/// word rather than a fourth spelling of the same state, which is what the
-/// lane, the health capsule and `swap_outcome` all say. It is separated from
-/// what follows it, or the fader beside it runs into it. And a slot that is not
-/// stopped adds nothing at all, because the default status line is what a run
-/// that is behaving prints and a column reading `running` four times is four
-/// columns of nothing to read.
+/// Verifies that only a stopped slot displays a stopped tag on the status line,
+/// while non-stopped slots emit an empty string (ADR-0316).
 #[test]
 fn a_stopped_slot_is_the_only_one_the_status_line_says_anything_about() {
     assert_eq!(stopped_tag(false), "");
