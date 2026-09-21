@@ -190,14 +190,7 @@ fn listing_a_removed_directory_is_an_error() {
     }
 }
 
-/// **Listing reads names, never contents.**
-///
-/// A library of two thousand Sets should cost one directory read, and the way
-/// that claim is checked without timing anything is to make the contents
-/// unreadable: every file here fails to parse, and the listing has to come back
-/// whole anyway. The `read_set` at the end is what keeps the test honest — it
-/// proves the bytes really are unparsable, so the listing's success means it
-/// never looked.
+/// Verifies that directory listings read filenames without opening or parsing file contents.
 #[test]
 fn listing_reads_names_and_not_contents() {
     let dir = tempdir().unwrap();

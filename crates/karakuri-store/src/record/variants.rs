@@ -17,17 +17,7 @@ pub enum Record {
         v: u32,
     },
     Slot {
-        /// Which node of a Set this record is about, on the same terms
-        /// [`Record::Procedure`] uses it: a Set draws with one L1 and however many L4s,
-        /// so a layer alone no longer names a procedure.
-        ///
-        /// `index` absent means 0 and 0 is not written, so a file from before stacks
-        /// existed round-trips byte for byte. It is what the *projection* folds on —
-        /// several `slot` records at one `layer` are several nodes rather than one node
-        /// corrected several times, and a fold keyed by layer alone would keep the last
-        /// of them. Reading order would have been enough for the file format and is not
-        /// enough for the fold, because a fold has no order to appeal to. See
-        /// [`NodeAddress`] for why the two are one field.
+        /// Target node address within the Set. Default index 0 is omitted when serialized.
         #[serde(flatten)]
         at: NodeAddress,
         /// What this Set calls the node, for whatever wants to point at it.
@@ -109,19 +99,7 @@ pub enum Record {
         /// resolution: the `slot` written in its place carries it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        /// The `.kir`'s path, relative to the authoring file's own directory.
-        ///
-        /// A `String` and not a `PathBuf` because it is a wire field: what is kept here
-        /// is what the file said, byte for byte, and a path repaired on the way in is
-        /// the one thing that must not happen — the reader that quietly fixed it would
-        /// be the reader that opened something nobody named.
-        ///
-        /// Whether it is a path this machine may open is not this vocabulary's
-        /// question, on the terms every other check here is left to the place that has
-        /// what it needs: the answer depends on where the file itself is, which a
-        /// record does not know. It is `setfile`'s wall, it refuses rather than
-        /// repairs, and it names what it refused — an absolute path, a `..` that
-        /// escapes, and a symlink pointing out are three spellings of one escape.
+        /// Procedure source path relative to the containing setfile directory.
         path: String,
     },
     /// Overrides the `.kir` default. Outside the range the artifact declares, the
@@ -471,101 +449,11 @@ pub enum Record {
         exposure: f32,
         white_point: f32,
     },
-    /// One level on the composited frame, at the entry to the master chain.
-    ///
-    /// No `slot`, and it is the second record in this group that has none. A gain,
-    /// an opacity, a blend and a residency each describe one member of the deck;
-    /// this describes what the fold *produced*, after every one of them has been
-    /// applied — `karakuri_engine::deck::Deck::set_out` is what it decodes to and
-    /// says *"Not per slot"* at the setter. [`Record::Look`] is the other one, and
-    /// the two are session-wide for two different reasons: tone mapping happens
-    /// once because it happens *after* the mix, and this happens once because it is
-    /// what the mix wrote.
-    ///
-    /// Not a field on [`Record::Look`], which is the shape it would fit and the one
-    /// it must not have. The look is one value in the engine written to one
-    /// uniform; this is a different multiplication in a different pass, and the
-    /// master effects go between the two. Folding it in would make an exposure
-    /// change rewrite the master out and a master out change rewrite the operator,
-    /// and it would have to be pulled back out the day the chain is not empty — the
-    /// whole argument of
-    /// `docs/adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md`,
-    /// which is also where the cost of saying so today is written down: with
-    /// nothing in the chain, no frame tells the two levels apart.
-    ///
-    /// One value and no operator beside it. When this was written there was nothing
-    /// else about the master chain a stream could say, so a record that carried
-    /// more would have been recording defaults nobody chose.
-    ///
-    /// The chain landed on 2026-09-09 and this record did not grow — a second one
-    /// did. [`Record::MasterChain`] carries the chain's slots and what each is set
-    /// to, and the two are apart for the reason this record is not a field of
-    /// [`Record::Look`], one paragraph up: they are different values in different
-    /// passes, and folding them would make a fader ride rewrite four settings sixty
-    /// times a second and a settings change rewrite the level a hand is holding.
-    /// This one is a level, rode continuously by a fader and classed with the mix
-    /// faders in `gate.rs`; that one is a setting, moved by a press and classed
-    /// with the master effects.
-    ///
-    /// `value` is floored at zero and deliberately open above 1.0, on
-    /// [`Record::Gain`]'s terms and through the engine's same `clamp_gain`: the mix
-    /// is HDR and this level is applied to values a tone mapper has not seen.
+    /// Master composite output gain applied before master post-processing effects (ADR-0224).
     MasterOut {
         value: f32,
     },
-    /// What the master chain is, whole: the ordered list of its slots.
-    ///
-    /// The chain sits between [`Record::MasterOut`]'s level at its entry and
-    /// [`Record::Look`]'s exposure at the tone mapper's input —
-    /// `karakuri_engine::master` is the implementation and
-    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`
-    /// is the decision. The order is here because it is no longer a constant: a
-    /// slot holds one `kind L5` procedure, named by a content address, and a chain
-    /// is whichever of them an operator put in it.
-    ///
-    /// One record and not three, which is [`Record::Look`]'s shape and its
-    /// argument: `feedback` without `cut` beside it is not a picture anybody can
-    /// reconstruct — the same 0.5 is a one-frame echo under `mix` and a compounding
-    /// trail under `exit` — and a stream that could move one pass without saying
-    /// where the others were would be describing a chain a replay could not put
-    /// back. The place that turns an operation into this already knows the chain
-    /// that is running and fills the rest in, exactly as `karakuri-cli`'s
-    /// `set_exposure` fills in the operator.
-    ///
-    /// Session-wide and not per slot, [`Record::MasterOut`]'s reason: the chain
-    /// reads what the fold produced, after every deck's edge has been applied.
-    ///
-    /// A performance's state and not a library's. What a chain is set to *while it
-    /// is being played* is stream state, the way a Set's gain is; what a chain is
-    /// set to *saved under a name and put back tomorrow* is library data in two
-    /// tiers, and
-    /// `docs/adr/0227-a-pattern-and-a-master-chain-setting-are-library-data-in-two-tiers.md`
-    /// is where that was decided and left to the record that has something to
-    /// serialise. This is the first half only; no store directory is added here.
-    ///
-    /// Every value is brought into the range its procedure declared, by the engine
-    /// — `karakuri_engine::master::Slot::resolved` — which is the same division of
-    /// labour [`Record::Gain`] has: the record carries what was asked for, the
-    /// engine holds the range.
-    ///
-    /// The four-field form is refused rather than read, which is
-    /// `#[serde(deny_unknown_fields)]` on this one variant and on no other. Between
-    /// 2026-09-09 and M5.16 this record was `{feedback, cut, bloom, rgb_shift}`;
-    /// the shape changed under the same `t`, so an unrecognised key here is not a
-    /// field from the future, it is the old form — and dropping it silently, which
-    /// is what this format does everywhere else, would play an empty chain where
-    /// the session had three passes. A refusal that names the key it found is what
-    /// `docs/adr/0340-…` asks for in place of that default, and the bill for
-    /// reading both shapes is a decoder carrying two of them for the length of the
-    /// project
-    /// (`docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md`).
-    ///
-    /// A newtype variant and not a struct one, which is the whole of how that
-    /// refusal is spelled: `deny_unknown_fields` is a *struct* attribute and serde
-    /// has no variant form of it, so the payload is a struct and the variant wraps
-    /// it. On the wire it is the same object it would have been —
-    /// `{"t":"master_chain","slots":[…]}` — because an internally tagged enum folds
-    /// a newtype variant's struct into the tag's own object.
+    /// Configuration of ordered L5 post-processing slots in the master chain (ADR-0340).
     MasterChain(Chain),
     /// The procedure a deck slot is playing, from this moment on.
     ///
@@ -660,49 +548,7 @@ pub enum Record {
         /// `level` is `residency`'s.
         authority: String,
     },
-    /// A parameter an operator moved on a deck slot that is playing — one knob
-    /// turn, at the frame it happened.
-    ///
-    /// The session's twin of [`Record::Param`], and the third record in this
-    /// vocabulary to name a node of the Set a deck slot is playing.
-    /// [`Record::Procedure`] was the first and [`Record::Authority`] the second,
-    /// and the reason is the same one all three times: a `param` says what a Set
-    /// *is* and carries no `slot`, because what a Set is does not depend on which
-    /// deck slot it is playing in. This says what an operator *did*, to one deck
-    /// slot, at one instant — a fact about a performance, which is what a session
-    /// stream is made of. A `param` in a stream can only mean the Set at the head
-    /// of it, and a deck holds four.
-    ///
-    /// Two spellings of one act is the cost, and it is the cost `slot` and
-    /// `procedure` already charge — both say *this node runs this procedure*, in a
-    /// Set file and in a session, and the format keeps them apart rather than
-    /// growing one a `slot` field. What makes it two facts rather than one fact
-    /// written twice is the projection: folding a session down to a Set file drops
-    /// this, on `select`'s terms, because nothing in a stream says which deck slot
-    /// the Set at its head was played in. See `karakuri_store::project::key_for`.
-    ///
-    /// `at` absent is every node declaring `key`, which is [`Record::Param`]'s
-    /// wildcard and the useful default: one knob moving every renderer that has an
-    /// `exposure`. It is refused where the nodes it lands on are not under one
-    /// authority — `karakuri_engine::set::Set::write_param` is where that is
-    /// decided and the only place it is decided, so this record reaches it by the
-    /// road a `--param` and a `param` reach it by.
-    ///
-    /// `key` is a component key where the parameter is a vector — `glow.x` and
-    /// never `glow` — because a parameter is driven one component at a time
-    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
-    /// A wide [`Value`] is still legal here for the reason it is legal on a
-    /// `param`: it is one line a person or a model writes, and the reader expands
-    /// it into one write per component.
-    ///
-    /// What a replay does with it, and this is the whole reason it exists: a knob
-    /// turn used to write nothing at all, so a session recorded an operator riding
-    /// a parameter for a minute and replayed it at the value the Set was loaded
-    /// with —
-    /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)'s
-    /// *"mutating a live Set in place, which opens a hole in the record stream"*,
-    /// exactly. Decided in
-    /// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`.
+    /// Real-time parameter automation recorded during live performance (ADR-0280).
     Ride {
         /// The deck slot whose Set is being written — *a deck slot*, on
         /// [`Record::Procedure`]'s and [`Record::Authority`]'s terms.
