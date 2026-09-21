@@ -46,7 +46,7 @@ The question this record answers is whether the master chain is the something.
 
 The maintainer's, on 2026-09-10, asked exactly that:
 
-> 進める（M5.15 の後）
+> Proceed (after M5.15).
 
 **Proceed — after M5.15.**
 

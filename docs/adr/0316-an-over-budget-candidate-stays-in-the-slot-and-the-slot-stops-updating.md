@@ -15,9 +15,10 @@ tags: [engine, live, console, cli, environment, manual, m5]
 
 The maintainer, on 2026-09-09:
 
-> rolled backが分かりにくい。事情を知らないとバグってるようにしか見えないんだよね。バジェット越えてた
-> 時、スロットには入れたままで更新を停止、勝手にデフォルトにフォールバックしない方が異常事態を分かり
-> やすく伝えられると思う。なのでrolled backという名前も変えたほうが良いのかな、overloadedとか？
+> "Rolled back" is confusing. Without knowing internal details, it just looks like a bug.
+> When exceeding the budget, keeping the candidate in the slot while halting updates—rather than automatically
+> falling back to defaults—communicates the issue much better. We should probably rename "rolled back" as well,
+> perhaps to "overloaded".
 
 *A rollback is hard to read; without knowing the machinery it looks like nothing but a bug. When the
 budget is exceeded, leaving it in the slot and stopping the updates — rather than falling back to the
@@ -35,7 +36,7 @@ say the disagreement it left behind.
 
 **The freeze was already the maintainer's option (b) and was already deferred once.**
 [ADR-0313](0313-a-candidate-is-judged-on-its-own-cost-and-the-decks-period-is-a-deck-level-alarm.md)
-records the sequencing — *"ゲート (a) だけ先に"*, the gate first and only the gate — and says why the
+records the sequencing — *"fix gate (a) first"*, the gate first and only the gate — and says why the
 order was not negotiable: under the old gate a candidate was judged against **the deck's whole frame
 interval**, so a freeze would have stopped slots for their neighbours' cost, and *"a frozen slot is a
 hole in the picture where a rollback at least leaves the previous material running"*. That objection

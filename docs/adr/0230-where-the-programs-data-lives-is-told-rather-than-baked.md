@@ -64,8 +64,8 @@ anything but a source checkout.
 
 On 2026-08-30:
 
-> posixでは自分のいる絶対パスは知ることができないのでは？引数でプリセットパスを渡せるようにするのかな。
-> インストールされる時にはプラットフォーム固有の方法でインストール場所からの相対で決めるんだと思うけど。
+> Under POSIX, a process cannot reliably determine its own absolute path, can it? Perhaps preset paths should be passed as arguments.
+> Upon installation, they would likely be resolved relative to the installation directory using platform-specific conventions.
 
 Three things in two sentences: the program cannot simply *know* where it is; an argument is how it
 is told; and an install decides by platform convention relative to where it was installed. The
@@ -254,7 +254,7 @@ would then look in a directory that has nothing to do with where its data was in
 nothing, and report *no preset library* on a machine where the library is right there.
 
 The maintainer's own first sentence is the argument in its general form —
-*posixでは自分のいる絶対パスは知ることができないのでは* — a process cannot reliably know where it
+*a process cannot reliably know where it lives under POSIX* — a process cannot reliably know where it
 is. **So the flag is the authority and the search is only the default**: the search is what makes
 the common installs work with nothing typed, and the flag is what makes every other install *possible*, which is the half
 that cannot be recovered afterwards.

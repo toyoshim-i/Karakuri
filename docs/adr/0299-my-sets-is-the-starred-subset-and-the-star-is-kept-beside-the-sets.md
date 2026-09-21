@@ -31,8 +31,7 @@ because there is nowhere for a star to be rather than because nothing is starred
 **What was not settled is what `my sets` is.** The console reads it as *what this store holds*,
 which is `Store::list_sets`, and the maintainer has said it is not:
 
-> `my sets` はお気に入りなので、例えば通常の一覧表示の左に☆を付けといて、クリックすると★になって
-> `my sets` にも表示されるのが良いと思う。
+> Since "my sets" represents favorites, having a star icon (☆/★) to the left of each item in the standard listing that toggles its inclusion in "my sets" would be ideal.
 
 ## Decision
 

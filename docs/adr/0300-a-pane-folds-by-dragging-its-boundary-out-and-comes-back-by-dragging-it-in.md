@@ -31,8 +31,7 @@ spending, and no row in `input::PROBES` and no arm in the window loop's press ha
 So the row had no pointer route, and the operator's only way to fold a pane was `g`.
 
 **The maintainer proposed a different shape**, and it dissolves the conflict rather than paying for
-it: *ペインは畳んでもサイズゼロにはならず、そのまま外縁を持ち続けるんじゃだめ？も一度それを内側に引っ
-張ろうとすると最小サイズで出現、とか* — a folded pane does not leave the layout; it keeps its outer
+it: *"Why not keep the pane's outer border even when folded instead of zeroing its size? Dragging it inward again could then restore it at minimum size."* — a folded pane does not leave the layout; it keeps its outer
 edge, and dragging that edge inward brings it back at its minimum size.
 
 Three things make it better than the band, and each of them is a thing the band could not have:

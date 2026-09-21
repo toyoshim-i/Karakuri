@@ -55,7 +55,7 @@ All six are built.
 lower and a `kind L5` file would have had nothing to contain. What that paragraph named as the
 thing that would end it was **somebody writing the compositing down**, and
 [ADR-0340](adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
-wrote it: the maintainer answered *進める（M5.15 の後）* on 2026-09-10, and
+wrote it: the maintainer answered *"proceed (after M5.15)"* on 2026-09-10, and
 [roadmap.md](roadmap.md)'s M5.16 built the kind, its three builtins and its cost. So the layer
 algebra gains a line rather than an exception, and `L5 : [Texture] -> Texture` is the signature
 `crates/karakuri-engine/src/node/merge.rs` already stated: **a frame effect is that signature
@@ -3518,7 +3518,7 @@ would predict from the layer algebra.
 **An L3 may read geometry, and the algebra's `L3 : () -> Camera` is wrong about that.** This
 section said the opposite for a day — "no geometry input and no GPU pass … the first node
 whose evaluation is host-side" — and what falsified it was one sentence of what an author
-expects a camera to do: *「1つ目の頂点を追いかける」*. A camera that follows an element takes
+expects a camera to do: *"follow the first vertex"*. A camera that follows an element takes
 geometry as an input, and the value it needs is in a GPU buffer.
 
 Which settles where a camera lives, because it cannot be read back. `Set::read_elements` and
@@ -3561,7 +3561,7 @@ conjunction rather than read off one named layer.
 
 What makes the asymmetry worth paying for is that **a camera's craft is mostly smoothing**. A
 rigid follow is unwatchable; a damped one lags, and lag is state. The second expectation on
-record — *「ビートに合わせてランダムに移動しつつ中央を向き続ける」* — happens to be
+record — *"jump on the beat at random while continuously facing the center"* — happens to be
 expressible without any, since a jump chosen by `hash(floor(beats))` is a pure function of
 the clock, and that is worth knowing: **the dynamism an author asks for first is often closed
 form, and the smoothing they ask for next is not.**

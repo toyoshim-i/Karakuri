@@ -59,7 +59,7 @@ The maintainer's, on 2026-09-09, in two parts.
 
 ### 1. The chain is fixed built-in presets
 
-> 固定プリセット
+> Fixed presets.
 
 **Fixed presets.** Three hand-written passes in the engine, between the composite's write and the
 present pass, in the order the console draws them — **feedback, then bloom, then rgb shift** — each
@@ -73,7 +73,7 @@ the chain's passes* checkable by reading one file.
 
 ### 2. Feedback reads either cut, and the parameter chooses
 
-> 両方持って選択できるように
+> Support both and make them selectable.
 
 **Both, and selectable.** The two cuts are:
 

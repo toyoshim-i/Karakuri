@@ -73,7 +73,7 @@ changes here*, the row is a control nobody had drawn.
 source* and *Check and write one node's source* both carried a `plan` badge over a panel cell
 reading `inspector`. On 2026-09-09, asked whether the panel owes them:
 
-> モデル専用のまま (panel は gap)
+> Keep it model-only (panel remains gap).
 
 ## Decision
 

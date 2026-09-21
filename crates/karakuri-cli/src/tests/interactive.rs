@@ -61,7 +61,7 @@ fn a_parked_slot_does_not_read_as_one_nobody_asked_about() {
 /// updating (ADR-0316), so the line an operator reads in the dark shows `LIVE`
 /// beside a simulation clock that is not moving. The word is the only thing
 /// that separates that from a bug, and it is the maintainer's: *"rolled
-/// backが分かりにくい"*.
+/// back is confusing"*.
 ///
 /// Three things, and each is a way of getting it wrong. It is the engine's own
 /// word rather than a fourth spelling of the same state, which is what the

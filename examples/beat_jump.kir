@@ -3,7 +3,7 @@
 //
 // **This is the expectation that decided the layer's shape.** Asked what a
 // camera should do, the two answers on record were "follow the first vertex"
-// and 「ビートに合わせてランダムに移動しつつ中央を向き続ける」 — jump on the
+// and "jump on the beat at random while continuously facing the center" — jump on the
 // beat, at random, while continuing to look at the centre. The first takes
 // geometry as an input and is why the camera edge is a GPU buffer; this one is
 // the half that can be written today, and it is worth noticing that it needs no

@@ -48,7 +48,7 @@ already says a minimum is a preference and not a guarantee.
 
 **The maintainer answered it on 2026-09-08**, on the fourth of the questions put to him:
 
-> 4はスクロール
+> For item 4, make it scroll.
 
 ## Decision
 

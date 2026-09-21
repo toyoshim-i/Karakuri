@@ -1023,8 +1023,8 @@ mod gpu {
     /// **The same candidate gets the same verdict whether the other slots are
     /// idle or loaded.**
     ///
-    /// The maintainer, 2026-09-09: *"判定は他のスロットのロードとは独立にあるべ
-    /// きだね"* — the verdict on a candidate must be independent of what the
+    /// The maintainer, 2026-09-09: *"candidate evaluation must be independent of
+    /// other slot loads"* — the verdict on a candidate must be independent of what the
     /// other slots are carrying. This is that sentence as an assertion. A budget
     /// divided by the live slot count, or a share taken beside what the
     /// neighbours are committed to, would both pass the test above and fail this

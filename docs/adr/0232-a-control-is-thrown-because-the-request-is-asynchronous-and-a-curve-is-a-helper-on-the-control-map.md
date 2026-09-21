@@ -100,17 +100,13 @@ compute."* Both bodies are three lines and the same three lines — read `beats`
 Reading the three rows as a missing envelope feature — *the panel needs fade curves and the engine
 does not have them* — is the obvious reconstruction and it is wrong. On 2026-08-31:
 
-> そもそもそういったエンベロープ制御みたいなのは想定してないよ。
+> Envelope control of that kind was never the intention.
 >
-> 投げるものってなってるのは、そこが非同期だから。レンダリングエンジンの制約で同期処理は禁止して
-> るから、基本的にはASAPを前提に非同期で投げてるだけ。
+> Controls are described as "thrown" because they are asynchronous. Synchronous processing is forbidden due to rendering engine constraints, so calls are simply dispatched asynchronously assuming ASAP execution.
 >
-> そういうの、入れるとしたらオートメーションとして今の制御マップの位置にヘルパーとして入れるのか
-> な。
+> If we introduce curve control, it would belong as automation helpers at the control map layer.
 >
-> あとその手のカーブ制御を入れるってのは、逆にタイミング保証をするなら同期になるって意味でもある。
-> 一方で、その制御自体をレンダリングのクリティカルパスから外す、つまりマップの中のヘルパーにして
-> あげることで、それは自然と実現できるようになるね。
+> Furthermore, introducing curve control implies synchronous execution if strict timing guarantees are required. Removing that control from the rendering critical path by making it a helper within the map naturally achieves the desired outcome.
 
 — *envelope control of that kind was never the intention. The reason a control is described as
 something you **throw** is that it is asynchronous there: the render engine's constraint forbids

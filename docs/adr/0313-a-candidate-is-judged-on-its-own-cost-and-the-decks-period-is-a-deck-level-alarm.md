@@ -39,8 +39,7 @@ tags: [engine, live, governor, m5]
 
 ## Context
 
-The maintainer, on 2026-09-09: *"今現在でほとんどの素材がrolled backされちゃう。ちょっとゲートが厳
-しすぎる？"* — nearly everything gets rolled back; is the gate too strict? The answer is no. The gate
+The maintainer, on 2026-09-09: *"Nearly all materials are getting rolled back right now. Is the gate too strict?"* — nearly everything gets rolled back; is the gate too strict? The answer is no. The gate
 is not strict; **it is measuring the wrong quantity**, and making it looser would have hidden that.
 
 `HotSwap::record` compared the interval between two `Deck::begin_frame` calls — the whole deck's
@@ -83,10 +82,10 @@ standing case — the judgement was confident, automatic, and about something el
 draw that is not in the budget, inside the window the swap watchdog judges candidates in, so watching
 a heavy slot can roll back an unrelated slot's build."*
 
-**The maintainer chose to fix the gate first, and only the gate**: *"ゲート (a) だけ先に"*. Turning a
+**The maintainer chose to fix the gate first, and only the gate**: *"Fix the gate (a) first"*. Turning a
 rollback into a freeze is a separate record and is deliberately not decided here.
 
-**And he narrowed what the fix may read:** *"判定は他のスロットのロードとは独立にあるべきだね"* — the
+**And he narrowed what the fix may read:** *"Candidate evaluation must be independent of other slot loads"* — the
 verdict on a candidate must be independent of what the other slots are carrying.
 
 ## Decision

@@ -32,7 +32,7 @@ ADR-0285 named the thing that was gating and left it:
 **The maintainer's answer is to loosen it**, and his reason is
 [ADR-0110](0110-this-machine-is-not-the-reference.md) reaching a second place:
 
-> 床は緩くしろと言って気が。このマシンの100倍速いマシンでパフォーマンスするユーザーもいる
+> Keep the floor flexible. Some users will perform on machines a hundred times faster than this one.
 
 ADR-0110 is about reading this machine as evidence about every machine. *4 GiB of dedicated VRAM is
 the figure a design is checked against, not a ceiling. Beyond that the performer's machine decides.*

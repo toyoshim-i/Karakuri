@@ -108,8 +108,7 @@ It is in `karakuri-console`, on the laid-out row, and it is **not** in `karakuri
 `karakuri-environment`, or any path an estimate travels. The tracker folds every candidate into a
 window centred on the grid and the beat lock re-acquires on evidence; a ±15% bound anywhere in that
 path is a grid that cannot follow a song, which is a far worse failure than a hand that can ask for
-anything. The maintainer's words: *人手の時の操作ミスのゲート。自動判定に入れられたら曲に追従できなく
-なるのでやめて*.
+anything. The maintainer's words: *"A guard against manual operator error. Do not place it in the automated detector, or it won't follow the track."*
 
 ### 5. A set while a room is tracked is accepted, and the lock is told two things
 
@@ -184,7 +183,7 @@ the failure it is guarding against into the largest move the control can make.
 
 **Refusing the operation while a room is being tracked.** It is the shape the roadmap expected —
 *"a control that undoes itself two seconds later is worse than one that says no"* — and the
-maintainer decided against it: *ロック中でもターゲットは動くので受け入れて再計算*. A refusal would also
+maintainer decided against it: *"The target moves even while locked, so accept it and recalculate."* A refusal would also
 have to be taken by a surface that cannot see a device (ADR-0156), or by the lock, where it would be
 the second half of a band that must not be there.
 
