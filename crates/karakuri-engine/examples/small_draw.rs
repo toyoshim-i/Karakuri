@@ -1,42 +1,10 @@
-//! **Measurement scaffolding, not a shipped example.** How a slot's measured
-//! cost moves when the target it is drawn into gets smaller — which is the
-//! question `docs/roadmap.md`'s *The preparation slot is the measurement*
-//! leaves open, and the one
-//! [`karakuri_engine::estimate`](../src/estimate.rs) has to answer with a
-//! number.
+//! Benchmarks slot cost scaling across decreasing render target resolutions.
 //!
-//! Three things are asked here, and the third is the one that decides the
-//! constant:
+//! Evaluates sub-pixel rendering floors, `Lines` area tracking, and extrapolation
+//! overhead constants.
 //!
-//! - **Where the floor is.** ADR-0245 draws a sub-pixel primitive at one pixel
-//!   rather than dropping it, so below the size at which a sprite (or a stroke)
-//!   reaches a pixel the fragment count stops falling and the draw stops
-//!   getting cheaper. The ladder shows that as a knee, and the knee's position
-//!   is `1 / rate` rows because `point_rate` is a fraction of the target's
-//!   height.
-//! - **Whether `Lines` tracks area.** Decided by the maintainer rather than
-//!   discovered here, so this is a check and not a search: three sizes, a
-//!   stroke wide enough to stay off the floor at the smallest of them, and the
-//!   ratios read against the spread.
-//! - **What an extrapolation multiplies.** A measurement is a number plus a
-//!   floor of submission and synchronization overhead that does not shrink with
-//!   the target, and an area extrapolation multiplies the floor along with the
-//!   signal. The `floor` rung is that constant, and it is why the small size is
-//!   chosen by the factor rather than by how small a target can be drawn.
-//!
-//! **The ladder is interleaved and the first pass is discarded**, for the
-//! reason `ceiling_ladder.rs` states beside the same machinery: run as blocks,
-//! the first block measures a cold GPU and the last a hot one, and the drift
-//! reads as curvature in exactly the axis being measured.
-//!
-//! **One `Probe` for the process.** [`Probe::run`] demotes itself to a host
-//! clock for life on the first implausible sample, so two probes can land on
-//! different [`MeasurementMethod`]s and produce figures that are not
-//! comparable. The size ladder walks [`Probe::resize`] instead, which replaces
-//! the render attachment and leaves the verdict alone.
-//!
-//! `cargo run -p karakuri-engine --example small_draw --release`
-//! Run from the repository root: the `.kir` paths are relative to it.
+//! Usage: `cargo run -p karakuri-engine --example small_draw --release`
+//! (Run from repository root; `.kir` paths are relative to root).
 
 use karakuri_engine::probe::{Measurement, MeasurementMethod};
 use karakuri_engine::set::{Edge, Layering, Wiring};
@@ -248,14 +216,7 @@ fn exponent(reference: &Row, row: &Row) -> f64 {
     ratio_ms.ln() / ratio_area.ln()
 }
 
-/// **A rung whose passes disagree is not a measurement of the rung.** The
-/// heaviest configuration here — `speed_lines` at its declared maximum width
-/// over a quarter of a million segments — is 87 ms a frame, and sixteen samples
-/// of it per pass will heat this machine enough that the next pass measures the
-/// heat. One run of this file produced 87.092 to 266.480 ms on that rung and
-/// its neighbours were as wide; every figure in it was discarded. So the spread
-/// is not decoration in the tables below, and this says out loud when it has
-/// stopped being decoration.
+/// Maximum acceptable ratio between high and low pass measurements to detect thermal throttling.
 const SPREAD_LIMIT: f32 = 1.25;
 
 fn print_material(m: &Material, rows: &[Row], method: MeasurementMethod) {
@@ -300,25 +261,7 @@ fn print_material(m: &Material, rows: &[Row], method: MeasurementMethod) {
     }
 }
 
-/// The `Lines` check, and the constant every extrapolation multiplies.
-///
-/// **Three sizes, not eight**, because the scaling rule for `Lines` is the
-/// maintainer's decision and not this file's to search for: what is asked here
-/// is whether the machine agrees, and the answer is a ratio against the spread
-/// the interleaved passes are already showing.
-///
-/// The rungs are chosen to give the area term the best chance there is:
-///
-/// - `floor` is a fullscreen L4 that does nothing, so its whole figure is
-///   submit, wait and a cleared attachment. **An area extrapolation multiplies
-///   this along with the signal**, so it is the number that decides how small
-///   the small draw may be — not how small a target can be drawn.
-/// - the `Lines` rungs run the stroke to the top of its declared range and the
-///   streak with it, which is the widest a shipped procedure may be asked to
-///   draw, and one of them drops the capacity so the simulation stops being
-///   most of the frame.
-/// - the `Points` rung is there so the same fill-bound limit can be read for
-///   the topology the rule says does *not* track area.
+/// Resolution rungs evaluated for small-target draw cost extrapolation.
 const SMALL_SIZES: [(u32, u32); 5] = [(1280, 720), (905, 509), (640, 360), (452, 254), (320, 180)];
 
 /// A fullscreen L4 with no march and no field: the cheapest thing that can be
@@ -395,12 +338,7 @@ Every figure `{method:?}`. Read the `ms vs 720p` column against the          `ar
     for (m, r) in materials.iter().zip(&rows) {
         print_material(m, r, method);
     }
-    // **The affine fit, from the two smallest rungs only** — which is what the
-    // shipped estimator has in hand, since the full size is the thing being
-    // predicted rather than something it may measure. The ratio column is the
-    // whole verdict: below 1.0 the estimator would have told a governor a slot
-    // is cheaper than it is, which is the direction *round toward refusing*
-    // exists to prevent.
+    // Affine fit derived from the two smallest rungs to evaluate governor prediction accuracy.
     let floor = rows[0][rows[0].len() - 1].ms;
     println!("\nThe floor — `flat_fill` at its smallest — is {floor:.3} ms.");
     let last = SMALL_SIZES.len() - 1;

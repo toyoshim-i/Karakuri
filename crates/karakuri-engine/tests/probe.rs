@@ -24,16 +24,7 @@ mod gpu {
 
     const RESOLUTION: (u32, u32) = (256, 256);
 
-    /// A device, or a failure that says so.
-    ///
-    /// **This used to skip.** No adapter at all is an environment fact rather
-    /// than a defect in the probe, and printing and returning let a sandboxed
-    /// machine get a run out of the rest of the file. What made that a bad
-    /// trade is that the three tests below then reported *success* for having
-    /// measured nothing — on the one machine where the answer mattered most.
-    /// The whole file is now `mod gpu`, so a machine without an adapter says
-    /// `--skip gpu::` and skips it out loud, at the runner, once; a test that
-    /// does its own skipping says it into a log nobody reads.
+    /// Returns a headless GPU instance or panics if unavailable.
     fn gpu() -> Gpu {
         Gpu::headless().expect("no GPU available")
     }

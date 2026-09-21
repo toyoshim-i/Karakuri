@@ -755,18 +755,8 @@ proc plain {
         (sx / weight) as f32
     }
 
-    /// **Two cameras in one Set, and two renderers drawing from different ones.**
-    ///
-    /// The whole point of the slot: a Set could hold one viewpoint because a
-    /// renderer had no way to say which of two it meant, and `camera` meant "the
-    /// Set's" because there was only ever one. Two mirror-image cameras put the
-    /// same element on opposite sides of the frame, so the two channels of one
-    /// picture are the proof — a Set that drew both from one camera puts them in
-    /// the same place whichever one it picked.
-    ///
-    /// **And swapping the edges swaps the picture**, which is the half a static
-    /// frame cannot show: without it, "each renderer read a different camera" and
-    /// "each renderer read the camera at its own index" are the same measurement.
+    /// Asserts that multiple renderers draw from their specifically wired camera nodes
+    /// and correctly respond to edge swaps.
     #[test]
     fn two_renderers_draw_from_the_cameras_their_edges_name() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -1088,13 +1078,8 @@ proc plain {
         assert_eq!(set.orbit().radius, 5.0, "the camera moved on a bare name");
     }
 
-    /// **A rebuild keeps a radius somebody rode**, which is ADR-0132 met by
-    /// ADR-0282's rule rather than by anything written for the camera: the
-    /// ridden value is marked, the rebuild restates the aim, and the mark is
-    /// carried back over the top of it.
-    ///
-    /// **The lens three come from the restatement and not from the ride**,
-    /// which is the half that says the two are different kinds of fact.
+    /// Asserts that a Set rebuild retains operator-ridden camera parameters (ADR-0132, ADR-0282)
+    /// while restating unchanged declarative settings.
     #[test]
     fn a_rebuild_keeps_a_ridden_camera_and_restates_the_rest() {
         let gpu = Gpu::headless().expect("no GPU available");

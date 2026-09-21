@@ -601,11 +601,7 @@ proc cool {
             "{all:#?}"
         );
         assert_eq!(all[5], every("exposure", "exposure", [0.0, 4.0]));
-        // **And two controls may share a name now**, which is what the camera's
-        // three being addressed costs: one `radius` is the L1's, over what the
-        // L1 declared, and the other is the camera's, over what the engine
-        // declares for an orbit. A surface reads a control's value by the
-        // address it carries rather than by its name — `Set::value_at`.
+        // Controls may share parameter names when scoped to different node addresses.
         assert_eq!(all[0], every("radius", "radius", [0.5, 8.0]));
         assert_eq!(
             all[2],

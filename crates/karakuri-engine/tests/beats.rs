@@ -31,14 +31,7 @@ mod gpu {
     const SEED: u32 = 19274;
     const DT: f32 = 1.0 / 60.0;
 
-    /// Points on a ring whose angle is `beats`, so one whole turn is one beat and
-    /// the frame says directly where on the grid the session is.
-    ///
-    /// No `spawn` block, so every element is live from frame zero and nothing here
-    /// depends on compaction. `position` is written outright rather than
-    /// accumulated: this is the closed-form shape, which is what the transport will
-    /// want and what makes a difference between two runs a difference in `beats`
-    /// and not in their histories.
+    /// Ring geometry with angular position driven by `beats` for grid tracking tests.
     const RING: &str = r#"
 proc beat_ring {
   kind     L1
@@ -56,15 +49,7 @@ proc beat_ring {
 }
 "#;
 
-    /// Neither a ring nor anything to look at: two readings of the clock, in the
-    /// two shapes that pin different things. `position.x` is written outright, so it
-    /// keeps only the last substep's instant; `age` accumulates, so it keeps the sum
-    /// over every substep that has ever run. See
-    /// `the_instants_a_substep_reads_are_the_sets_own_clock`.
-    ///
-    /// No `spawn` block and no `kill()`, so every slot is live from frame zero and
-    /// stays in it — the values can be read back by index with no compaction between
-    /// this and them.
+    /// Probe geometry recording instantaneous clock (`position.x`) and accumulated time (`age`).
     const CLOCK_PROBE: &str = r#"
 proc clock_probe {
   kind     L1

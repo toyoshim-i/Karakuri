@@ -283,26 +283,8 @@ proc flat_sprite {{
         );
     }
 
-    /// **One layer per texel is where the two modes agree exactly**, and this is the
-    /// claim `SetError::WeightedFullscreen` rests on: for a single fragment the
-    /// resolve gives back `c * a`, which is what additive blending into a cleared
-    /// target leaves. Outside the overlap, this fixture is that case.
-    ///
-    /// **Swept across three orders of magnitude of opacity**, because the agreement
-    /// is not scale-free and the first version of this test — at alpha 0.5 alone —
-    /// missed that. The resolve divides the accumulated colour by the accumulated
-    /// weight and guards that divide against zero; a guard set too high is a floor
-    /// under `a * w`, and since `w` is itself proportional to `a`, the alpha it
-    /// starts eating is the *square root* of it. Thin material is what this mode is
-    /// for, so a floor there is a floor on the mode.
-    ///
-    /// **The colour and the coverage are asserted separately, and they have to be**,
-    /// because only one of them is the resolve's arithmetic. `weighted.rgb / alpha`
-    /// is what the divide produced and it must match additive's colour outright.
-    /// The coverage is a read of the `R16Float` revealage, whose spacing just below
-    /// 1.0 is one part in 2048 — so at an opacity of 0.005 the coverage is quantised
-    /// to a tenth of itself no matter what the resolve does. Folding the two
-    /// together would make a tolerance loose enough to hide the divide.
+    /// Asserts that a single fragment under weighted blended resolve matches additive blending
+    /// across varying opacity levels, testing color and revealage precision independently.
     #[test]
     fn a_lone_sprite_resolves_to_what_additive_accumulates_at_every_opacity() {
         let gpu = Gpu::headless().expect("no GPU available");

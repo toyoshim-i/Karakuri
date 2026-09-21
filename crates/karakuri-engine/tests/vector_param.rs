@@ -46,13 +46,7 @@ proc dots {
 }
 "#;
 
-    /// **A fullscreen L4 whose colour *is* the parameter**, so the readback is
-    /// the three numbers and not a function of them. `blend additive` over a
-    /// cleared target and one draw means the texel is what the fragment wrote.
-    ///
-    /// The default is `docs/ir-spec.md`'s own `param` example, which is the
-    /// declaration this whole change is about: the spec advertised it while
-    /// every reader discarded it.
+    /// Fullscreen L4 whose color directly outputs the `glow` vec3 parameter.
     const GLOW: &str = r#"
 proc glowing {
   kind  L4

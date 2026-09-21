@@ -322,15 +322,10 @@ pub struct Deck {
 }
 
 impl Deck {
-    /// A deck over `swaps`, in that order. Every slot comes up [`Live`] at
-    /// unity gain and full opacity, and the master out comes up at 1.0, so a
-    /// deck of one is a bare Set with two multiplies by 1.0 in front of it —
-    /// both exact, which is what keeps that a bit-for-bit claim rather than a
-    /// close one.
+    /// Creates a new Deck over `swaps`.
     ///
-    /// Allocates: one HDR target per slot, a pipeline, a bind group. None of
-    /// that may happen on the render thread, which is why it happens here and
-    /// in [`Deck::resize`] and nowhere else.
+    /// Initializes all slots as [`Live`] at unity gain and full opacity with master out at 1.0.
+    /// Allocates per-slot HDR targets, pipeline, and bind groups.
     ///
     /// [`Live`]: Residency::Live
     pub fn new(device: &wgpu::Device, swaps: Vec<HotSwap>, width: u32, height: u32) -> Deck {

@@ -388,26 +388,8 @@ proc plain {
         );
     }
 
-    /// **The spawn accumulator's fractional carry, asserted as a rate rather than
-    /// as a comparison between two runs.**
-    ///
-    /// `spawn_rate * dt` is rarely a whole number of elements, so the remainder has
-    /// to carry into the next substep — within a frame and across frames alike — for
-    /// the long-run rate to come out right. Everything else in this file that
-    /// touches spawning compares one run against another (same ticks, same frame;
-    /// two frames of one step against one frame of two), and every such comparison
-    /// is blind to the carry being dropped, because both sides drop it. Deleting
-    /// `spawn_carry -= whole` in favour of `spawn_carry = 0.0` passed all 43 suites.
-    ///
-    /// The sharpest case is a rate **below one element per substep**, where the
-    /// absence of a carry is not an inaccuracy but a total failure: `floor(0.5)` is
-    /// zero, every substep, forever, so a Set asked for thirty elements a second
-    /// emits none at all and does so silently. `1.667` is the other regime, where
-    /// the loss is a fifth of the material rather than all of it.
-    ///
-    /// The tolerance is one element, which is the carry still in flight at the
-    /// moment the count is read — that is what "exact in the long run" means here,
-    /// and it is not slack for a rate that is merely close.
+    /// Asserts that fractional spawn remainders carry across substeps and frames,
+    /// ensuring long-term spawn count accuracy within 1 element tolerance.
     #[test]
     fn the_spawn_rate_is_exact_over_many_substeps_because_the_fraction_carries() {
         let gpu = Gpu::headless().expect("no GPU available");

@@ -233,28 +233,8 @@ mod gpu {
         }
     }
 
-    /// **An alpha that is not a coverage cannot invert the mix or NaN it.**
-    ///
-    /// `over` is `A*(1 - covered)`, so a coverage of 1.5 turns hiding into
-    /// *subtracting*, a coverage of 2 or more turns it into amplifying with the
-    /// sign flipped, and a NaN takes every channel of the frame. Nothing in the
-    /// pipeline bounds what an L4 writes to alpha — see [`OVERDRAWN_ALPHA`] — and
-    /// before blend modes existed that did not matter, because the channel was
-    /// written by nothing and read by nothing. It is load-bearing now, which is why
-    /// the mix saturates on the way in rather than trusting the material.
-    ///
-    /// **All four spellings of "not a coverage", not only the one that motivated
-    /// the fix.** Above one is the case that reads as a hiding layer subtracting;
-    /// negative and infinite are the same arithmetic further along; and NaN is the
-    /// one the saturation catches only because it is written as a comparison rather
-    /// than as `clamp`, whose behaviour on a NaN operand WGSL leaves to the
-    /// backend. A test that ran only the finite case would pass on a backend where
-    /// the NaN case renders a blank frame.
-    ///
-    /// Three claims per spelling. No colour channel of the mix is a NaN, none is
-    /// negative, and the mix's own coverage stays in range — the last one being
-    /// what says the saturation is where it belongs, since that value is what the
-    /// slot above this one is composited against.
+    /// Asserts that out-of-range alpha values (greater than 1, negative, infinity, or NaN)
+    /// are saturated on input and cannot invert the mix or produce NaNs in composite output.
     #[test]
     fn an_alpha_that_is_not_a_coverage_cannot_invert_the_mix_or_nan_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -657,14 +637,7 @@ mod gpu {
         );
     }
 
-    /// A resize reallocates every slot target and rebinds the mix, and the result
-    /// is the deck it would have been at that size all along.
-    ///
-    /// The failure this catches is a bind group left pointing at the old,
-    /// differently sized textures: `textureLoad` out of range is defined to return
-    /// zero rather than to fault, so the symptom would be a mix that is correct in
-    /// one corner and black everywhere else. Silent, and only visible on a window
-    /// that has been dragged.
+    /// Asserts that resizing the deck reallocates targets and updates bind groups correctly.
     #[test]
     fn resizing_the_deck_reallocates_and_rebinds() {
         // 512 * 8 bytes is a 256-byte-aligned row, which the readback needs, and a
@@ -1024,26 +997,8 @@ mod gpu {
         );
     }
 
-    /// **The cost this separation was taken at, held against the code.**
-    ///
-    /// With nothing between the two multiplications, a master out of 0.5 and an
-    /// exposure of 0.5 produce the same picture: the master chain the two
-    /// levels are the ends of is empty, so `out` then `exposure` is one product
-    /// and the order of it is not observable. The maintainer chose that cost
-    /// over the other one — a single value costs nothing today and costs the
-    /// separation the day a master effect lands between them.
-    ///
-    /// **This test is deleted the day the chain has an effect in it**, not
-    /// weakened: it asserts today's cost rather than a property worth keeping,
-    /// and a feedback pass between the two ends makes it false on purpose. That
-    /// is what makes it the tripwire — the ADR's undone work fails a test
-    /// instead of going quiet.
-    ///
-    /// **A byte rather than nothing**, because the two paths round differently
-    /// in principle: the master out is stored to `f16` before the exposure
-    /// reads it, so a texel already in the subnormal range can round on the way
-    /// through. On this machine (Metal, 2026-08-30) the two pictures are
-    /// **byte-identical** — the difference is 0 and the allowance is unused.
+    /// Asserts that with an empty master chain, master output level and exposure
+    /// scaling commute and yield equivalent rendered output.
     #[test]
     fn with_nothing_in_the_master_chain_the_two_levels_are_the_same_picture() {
         let gpu = Gpu::headless().expect("no GPU available");

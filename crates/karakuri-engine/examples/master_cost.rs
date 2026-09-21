@@ -1,34 +1,7 @@
-//! **What the master chain costs, per slot and all together** — the
-//! measurement `docs/contributing.md` §1 asks of a change that touches the
-//! frame path, for
-//! [ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
-//! and beside
-//! [ADR-0317](../../../docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md)'s
-//! figures for the three hand-written passes these replace.
+//! Measures frame cost of master chain slots individually and combined (ADR-0340).
 //!
-//! `examples/frame_cost.rs`'s harness, narrowed to one question: the same deck,
-//! the same frame, at the same 1280x720, with the chain empty and then with
-//! each shipped procedure in it alone and then with all three. The interesting
-//! number is the **difference** — what a slot adds to a frame that was already
-//! being drawn — and the interesting claim is that the first row and a build
-//! with no chain in it are the same frame, which is `tests/master.rs`'s job and
-//! not this file's.
-//!
-//! **Bloom is the row ADR-0340 owes a number for.** The 0.80 ms on record was
-//! taken on the two-pass separable form; the shipped procedure is one 9x9
-//! kernel, 81 fetches per texel against the pair's 19, because a chain slot's
-//! output replaces the frame and the pair's second half needs both. This is
-//! what that costs.
-//!
-//! **Host clock throughout, and it says so** — `frame_cost.rs`'s reasoning
-//! verbatim: GPU timestamps do not survive `Probe::new`'s calibration on this
-//! crate's development adapter (P-0095, ADR-0169), so the GPU figure is
-//! `Device::poll` to a drained queue, biased high by the poll's own round trip.
-//! There is no swapchain and no panel here, so what is printed is what the
-//! frame would cost a loop that never waits.
-//!
-//! `cargo run -p karakuri-engine --example master_cost --release`
-//! Run from the repository root: the `.kir` paths are relative to it.
+//! Usage: `cargo run -p karakuri-engine --example master_cost --release`
+//! (Run from repository root; `.kir` paths are relative to root).
 
 use std::time::{Duration, Instant};
 

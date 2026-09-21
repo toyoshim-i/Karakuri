@@ -1,33 +1,7 @@
-//! The master chain: an ordered list of L5 slots between the mix's write and
-//! the tone map.
+//! Verification of the master chain: an ordered sequence of L5 post-processing slots.
 //!
-//! Uses `Points` — the hand-written vertical slice — for the same reason
-//! `tests/tonemap.rs` does: it produces strongly saturated additive content
-//! well past 1.0, which is the only material bloom has anything to do and the
-//! material a feedback trail is actually played on.
-//!
-//! **Every readback here is the linear HDR target and not the surface**, so
-//! nothing in these numbers has been through a tone mapper or an sRGB encode.
-//! The chain runs upstream of both, and a test that read the encoded frame
-//! would be asserting about the tone mapper as much as about the chain.
-//!
-//! # The hand-written passes are in this file, and that is what they are for
-//!
-//! `shaders/master.wgsl` held four fragment entry points until 2026-09-10 —
-//! feedback, bloom's two halves, and rgb shift — and
-//! [ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)
-//! replaced them with `examples/feedback.kir`, `examples/bloom.kir` and
-//! `examples/rgb_shift.kir`. **A replacement nothing compared is a claim**
-//! (`docs/adr/0031-…`), so the bodies they replaced are kept here, compiled
-//! against the chain's own bind group layout, and every shipped procedure is
-//! run against the pass it replaced on a real GPU. Two of the three are
-//! bit-identical; the third is not and this file is where the difference is
-//! measured rather than asserted away.
-//!
-//! **The frame is not square on purpose.** Every length in this chain is a
-//! fraction of the frame's *height*, converted per axis, so a 128x64 frame is
-//! what tells `frame_step` apart from a step in uv — which a square frame
-//! cannot.
+//! Asserts parity between shipped L5 procedures (`feedback.kir`, `bloom.kir`, `rgb_shift.kir`)
+//! and legacy hand-written shader passes on real GPU readbacks (ADR-0340).
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test

@@ -1,30 +1,7 @@
-//! An L2 whose output count differs from its input's.
+//! Verification of L2 amplification stages (`amplify <factor>`).
 //!
-//! `L2 : Geometry -> Geometry` is an endomorphism, which is what makes a
-//! modulator freely stackable and also what makes kaleidoscopes, instancing,
-//! trails and subdivision inexpressible: nothing in the layer model could
-//! change the element count. `amplify <factor>` is the second kind of L2 that
-//! fills that gap — `docs/ir-spec.md`, "L2 amplification".
-//!
-//! **Everything here is counted rather than measured.** The claim of the
-//! feature is that one element becomes several, so what a test has to see is
-//! *how many separate things are on screen*, and a mean position — which is
-//! what `deform.rs` measures — cannot tell one element from four stacked at the
-//! same point. Each fixture below therefore spreads its copies along the
-//! screen's vertical by the copy index and counts the bands of lit rows.
-//!
-//! Four claims, and the last two are the ones that would fail silently:
-//!
-//! - **A copy is a real element.** It has a position of its own, is drawn on
-//!   its own, and the count of them is the declared factor.
-//! - **`copy` is what tells them apart**, and it composes down a chain rather
-//!   than being overwritten by the next amplifier.
-//! - **Liveness follows the parent.** An amplifier owns its own alive flags —
-//!   its buffer is `factor` times as long and cannot share its input's — and
-//!   what it writes there is each parent's flag repeated. A dead parent
-//!   contributes no live copies.
-//! - **The chain below an amplifier runs on the amplifier's buffers**, not on
-//!   the simulation's, however many endomorphic stages sit between.
+//! Asserts element multiplication, `copy` index progression, parent liveness propagation,
+//! and buffer chaining across amplifier stages.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -556,14 +533,8 @@ proc dots {
         );
     }
 
-    /// **A Set that has never been stepped still draws.**
-    ///
-    /// A deck draws an `Allocated` slot without stepping it — that is what an
-    /// audition is, and both `Set::draw` and `Deck` say in as many words that it
-    /// shows the still the Set stopped at. An amplifier's counts are written by a
-    /// pass of its own, and left to the step alone that pass had never run: the
-    /// buffer was freshly allocated, therefore zeroed, therefore no vertices and no
-    /// instances. A working Set auditioned as black.
+    /// Asserts that an amplified Set can be drawn before its first step without
+    /// rendering empty instances.
     #[test]
     fn an_amplified_set_draws_without_having_been_stepped() {
         let gpu = Gpu::headless().expect("a GPU");
