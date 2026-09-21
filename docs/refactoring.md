@@ -32,35 +32,35 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 1: Current Hard Gate — 1,800 Lines (Enforced in .githooks)       │
-│ - Zero existing violations (max file: 1,768 lines). Regressions barred.│
+│ Stage 1: Initial Hard Gate — 1,800 Lines (COMPLETED)                    │
+│ - Zero existing violations. Baseline established.                       │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 2: Target <1,500 Lines (Phase 17)                                 │
-│ - 16 files currently in 1,500–1,800 range to be modularized.           │
-│ - Once complete, lower hard gate in pre-commit to 1,500 lines.          │
+│ Stage 2: Target <1,500 Lines (Phase 17) (COMPLETED)                     │
+│ - All files brought under 1,500 lines (P88–P98).                        │
+│ - Hard gate lowered to 1,500 lines in .githooks/pre-commit.             │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 3: Target <1,300 Lines (Phase 18)                                 │
-│ - 23 files currently in 1,300–1,500 range to be modularized.           │
+│ Stage 3: Target <1,300 Lines (Phase 18) (ACTIVE)                        │
+│ - 18 files currently in 1,300–1,500 range to be modularized (P99–P116). │
 │ - Once complete, lower hard gate in pre-commit to 1,300 lines.          │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Stage 4: Ultimate Architectural Target <1,000 Lines (Phase 19)          │
-│ - 41 files in 1,000–1,300 range to be modularized.                      │
+│ - Files in 1,000–1,300 range to be modularized.                         │
 │ - Aligns fully with ADR-0345 (1,000 lines as single-file ceiling).     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 17: Near-Monolith Modularization (1,500–1,800 Lines Target) — PLANNED
+### Phase 17: Near-Monolith Modularization (1,500–1,800 Lines Target) — COMPLETED
 
-Modularize the 16 remaining files exceeding 1,500 lines:
+All 11 initiatives targeting files exceeding 1,500 lines are complete:
 
 | Initiative | Subsystem / File | Lines | Scope & Approach | Status |
 |:---:|---|:---:|---|:---:|
@@ -75,11 +75,31 @@ Modularize the 16 remaining files exceeding 1,500 lines:
 | **P96** | `karakuri-console::panel` | 1,541 | Separate panel layout geometry arithmetic and types into `panel/` submodules | **COMPLETED** |
 | **P97** | `karakuri-engine::tests::sources` | 1,540 | Decompose multiple geometry sources and deformation tests into `sources/` submodules | **COMPLETED** |
 | **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **COMPLETED** |
+
+### Phase 18: Intermediate Reduction (1,300–1,500 Lines Target) — ACTIVE
+
+Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
+
+| Initiative | Subsystem / File | Lines | Scope & Approach | Status |
+|:---:|---|:---:|---|:---:|
 | **P99** | `karakuri-environment::mix::tests` | 1,485 | Partition mixer state persistence and audio synchronization test cases | **PLANNED** |
 | **P100** | `karakuri-cli::live::interactive` | 1,472 | Modularize CLI interactive terminal event handling and render loop | **PLANNED** |
 | **P101** | `karakuri-engine::tests::binding` | 1,452 | Split pipeline resource binding and bind group layout integration tests | **PLANNED** |
 | **P102** | `karakuri-console::tests::mixer` | 1,449 | Partition mixer bay fader, balance, and solo/mute test suites | **PLANNED** |
 | **P103** | `karakuri-console::view::inspector::header` | 1,429 | Separate inspector header title rendering from chip buttons and target badges | **PLANNED** |
+| **P104** | `karakuri-engine::set::layers` | 1,412 | Separate layer binding management from uniform buffer assignment | **PLANNED** |
+| **P105** | `karakuri-engine::tests::master` | 1,402 | Partition master chain GPU pipeline and pass fusion tests | **PLANNED** |
+| **P106** | `karakuri-console::view::program` | 1,397 | Decompose program bay monitor rendering and aspect ratio calculations | **PLANNED** |
+| **P107** | `karakuri::bridge::handlers::apply` | 1,387 | Extract operation execution match arms into focused handler functions | **PLANNED** |
+| **P108** | `karakuri-layout::layout` | 1,373 | Decompose layout constraint solver and rect partitioning utilities | **PLANNED** |
+| **P109** | `karakuri-mcp::tools::mod` | 1,371 | Extract tool dispatch registry and argument schemas into submodules | **PLANNED** |
+| **P110** | `karakuri::session` | 1,370 | Separate session state persistence from event log playback | **PLANNED** |
+| **P111** | `karakuri-engine::deck` | 1,364 | Partition deck slot execution and texture lifecycle management | **PLANNED** |
+| **P112** | `karakuri::readout::costs` | 1,354 | Separate frame cost tracking from telemetry aggregation | **PLANNED** |
+| **P113** | `karakuri-console::tests::library::geometry` | 1,334 | Partition library geometry browser and card loading tests | **PLANNED** |
+| **P114** | `karakuri-ir::tests::check::layers` | 1,333 | Partition IR layer type checking and diagnostic emission tests | **PLANNED** |
+| **P115** | `karakuri-operation::gate` | 1,330 | Modularize operation validation gating rules and authority checks | **PLANNED** |
+| **P116** | `karakuri-engine::frame` | 1,308 | Decompose frame synchronization and render target binding lifecycle | **PLANNED** |
 
 ---
 
