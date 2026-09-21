@@ -102,20 +102,9 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              is nothing for a second one to be blended with",
                         ))
                     }
-                    // **A Field slot is legal here, and on L2, L3 and L4** —
-                    // the four kinds the engine already walks when it decides
-                    // who evaluates a field. A field has no node and no
-                    // elements, so naming one adds an input to the file and
-                    // nothing to the chain: what an L1 may not take is
-                    // *geometry*, and that is what the arm above says.
+                    // Field slots are permitted on L1, L2, L3, and L4.
                     SlotTy::Field => {}
-                    // **A camera is for drawing with, and an L1 draws
-                    // nothing.** It makes the elements; where they are looked
-                    // at from is settled two layers down, by the renderer that
-                    // draws them — and a Set may draw one geometry from two
-                    // cameras at once, so a viewpoint baked into the geometry
-                    // would be a viewpoint one of those two renderers has to
-                    // disagree with.
+                    // Cameras are permitted on L4 renderers only.
                     SlotTy::Camera => errors.push(
                         IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
                             "remove it: an L1 makes geometry and draws nothing, so there is \
@@ -259,24 +248,8 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                 );
             }
-            // **A second slot is refused with a sentence, not overwritten.**
-            // One name would silently win and the other's reads would resolve
-            // against the wrong geometry — the shape this whole notation
-            // exists to end. What a second one needs is a second bound buffer
-            // on the node and a second `edge` per Set, neither of which is
-            // built; refusing here is what keeps a file that asks for it a
-            // refusal rather than a picture that is quietly wrong.
-            // **The count is a rule about geometry, not about `uses`**, which
-            // is why it asks the type. A second *Field* slot is the ordinary
-            // case — a marcher wanting a shape and a cutter — and costs
-            // nothing, because a field has no node and no buffer: it is a body
-            // spliced in once more under a second name.
-            // **A deformation moves elements and does not project them.**
-            // Where an element ends up on screen is the renderer's arithmetic,
-            // and it is settled *after* this node has run — so a deformation
-            // that read a camera would be deciding the picture from a layer
-            // that does not know how many renderers there are, let alone which
-            // camera each of them draws with.
+            // L2 accepts at most one Geometry slot; multiple Geometry slots are prohibited.
+            // Camera slots are L4 only; deformation nodes operate in world space.
             for u in proc.uses.iter().filter(|u| u.ty == SlotTy::Camera) {
                 errors.push(
                     IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
@@ -504,17 +477,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     );
                 }
             }
-            // **A field takes no geometry either**, which is the one geometry
-            // declaration this arm used to let past. It is refused for the
-            // reason the four above are refused: a field is a function of
-            // space, and a slot is a second set of *elements* to read beside
-            // the ones a node runs over.
-            //
-            // Nothing below would have honoured it. A Set resolves an `edge`
-            // against what an L2 declares, so the slot was invisible exactly
-            // where it would have been bound, and the edge naming it came back
-            // as an unknown slot — a refusal a page away from the line that
-            // caused it.
+            // Field procedures evaluate spatial functions and cannot bind geometry slots.
             for u in &proc.uses {
                 match u.ty {
                     SlotTy::Geometry => {
@@ -524,20 +487,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              second geometry to be read beside",
                         ))
                     }
-                    // **A field is the one kind that may not take one**, and
-                    // the reason is the one the recursion refusal here used to
-                    // carry: a field bound to itself is a function calling
-                    // itself, which WGSL forbids outright and which reached the
-                    // driver as a shader-module panic from a `.kir` that
-                    // checked clean.
-                    //
-                    // Two fields naming each other is the same failure at one
-                    // remove, and telling that apart from a legal chain of
-                    // shapes is a walk over every edge in the Set — a graph
-                    // question, answerable where the Set is built and nowhere
-                    // in this file. Refused whole rather than half-checked,
-                    // because the half a single file can check is the half
-                    // nobody writes by accident.
+                    // Fields cannot bind other fields to prevent recursive calls.
                     SlotTy::Field => errors.push(
                         IrError::contract(u.span, "a field cannot take a field").with_hint(
                             "inline what you wanted from it — a field is the one procedure \

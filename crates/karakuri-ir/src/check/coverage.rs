@@ -9,65 +9,14 @@ use crate::typed::{TBlock, TExpr, TExprKind, TStmt, Target};
 // Closed form versus accumulating.
 // ---------------------------------------------------------------------------
 
-/// Whether this procedure is a pure function of `seed`, `t`, and its params —
-/// so any `t` can be evaluated directly. See
-/// [`Checked::closed_form`](crate::typed::Checked::closed_form) for what that
-/// buys (no priming, and — the larger half — the material can be scrubbed
-/// forwards, held, or run backwards) and `docs/ir-spec.md`, "Closed form versus
-/// accumulating", for the whole of it.
+/// Determines whether a procedure is closed-form (evaluable at arbitrary `t` without simulation priming).
 ///
-/// Three things make a procedure accumulating, and only the first is the one
-/// the name suggests:
+/// Returns `false` (accumulating) if the procedure:
+/// 1. Reads any carried/emitted element attributes across frames.
+/// 2. Declares a `spawn` block (population depends on simulation history).
+/// 3. Invokes `kill()` (alive set depends on historical execution).
 ///
-/// 1. It reads an attribute it emits. `age = age + dt` reads one; `position =
-///    f(seed, t)` does not. Every read counts, wherever it is — inside an `if`,
-///    inside a `for`, or bound to a `let` and used later — so this walks every
-///    expression in every block rather than trying to decide which reads "reach" a
-///    write. A read that reaches an emitted attribute's value through a local is
-///    still a read of that attribute, and it is the read this looks at, not the
-///    local.
-///
-///    The set tested against is what the procedure *carries*, not what it emits,
-///    and the difference arrived with attribute derivation: an L1 may consume
-///    `age` or `velocity` without emitting either, and both are per-element state
-///    carried across frames. Reading one is reading where the element has been,
-///    which is exactly what this property is about. This paragraph used to say
-///    `consumes ⊆ emit` held inside an L1 and that the membership test was
-///    therefore belt-and-braces; it no longer holds, and a permissive answer here
-///    is the one the block below calls far worse — a scrub that produces garbage,
-///    and material put on air unwarmed.
-///
-/// 2. It has a `spawn` block. Spawning and closed form cannot coexist, and the
-///    reason is not about attributes at all: an element that does not exist yet
-///    cannot be stepped, and *whether it exists* is engine state — the spawn
-///    accumulator, the seed counter, the live range — accumulated from every frame
-///    since the Set started. Jumping to `t = 30` on a Set that spawns 8000
-///    elements a second does not produce 240,000 elements; it produces the handful
-///    of them one frame's accumulator emits, at their spawn state. The population
-///    is the state that had to be warmed, and it is not reachable from `seed` and
-///    `t`. So a `spawn` block disqualifies, however pure the `element` block is.
-///
-/// 3. It can `kill()`. A killed element stays killed, so the live set at `t` is
-///    a function of every step taken to get there and not of `t`. Even a kill
-///    condition written purely in `seed` and `t` is history-dependent in the
-///    direction that matters: `if t > 5.0 && t < 5.1 { kill() }` removes nothing
-///    at all if `t = 6.0` is arrived at in one step.
-///
-/// The conservative direction is the safe one, and this errs into it
-/// deliberately. There is no diagnostic attached to this decision — nothing is
-/// rejected either way — so the only way it can be wrong is silently. Wrong in
-/// the strict direction costs a warm-up that was not needed: a slot primes for
-/// a few seconds it could have skipped, and cannot be scrubbed when it could
-/// have been. Wrong in the permissive direction is far worse, and gets worse
-/// the more the property is used for. It puts a slot on air showing an unwarmed
-/// image — particles being born, an integrator at its initial condition — while
-/// telling the governor it needed no warming, so nothing anywhere is looking
-/// for the problem. And once transport is built on this, a wrongly-claimed
-/// closed form is a scrub that produces garbage rather than merely a bad first
-/// second: seeking an accumulating procedure to an arbitrary `t` evaluates it
-/// once from wherever it happened to be. That is the failure this whole pass
-/// exists to refuse — checking clean and then coming up short at runtime.
-/// Under-claim.
+/// See `docs/ir-spec.md`.
 pub(crate) fn is_closed_form(
     kind: Kind,
     retains: bool,
@@ -77,26 +26,11 @@ pub(crate) fn is_closed_form(
     // **An L5 is the stateless layers' shape with one exception, and the
     // exception is the whole of what `retains` declares.** A frame effect with
     // no `retains` is a function of the picture it is handed, the clock and its
-    // params — nothing to warm, on an L4's terms. One that reads `held` is
-    // reading its own output from the previous frame, which is accumulation
-    // whatever it is spelled with: the trail at `t` is every frame that led to
-    // it, and there is no un-integrating one. Under-claim.
+    // L5 with `retains` reads previous frame output (accumulating); otherwise stateless.
     if kind == Kind::L5 {
         return !retains;
     }
-    // Vacuously true for L4, and said here rather than left to fall out of an
-    // empty `emit`. An L4 procedure holds no per-element state: it reads what
-    // L1 wrote and throws the result at a target, so there is nothing about it
-    // to warm at any `t`. Nothing rejects a stray `emit` on an L4 — it has no
-    // meaning there and no buffer behind it — and without this line such a
-    // procedure reads its own `emit` list in `vertex`, is called accumulating,
-    // and drags a Set that needs no priming into needing it.
-    // **Vacuously true for the stateless layers.** An L4 draws what it is given
-    // and an L2 is stateless by rule — `docs/ir-spec.md`, "L2 and L3" — so
-    // neither can be the reason a Set has to be run forward to reach an instant.
-    // That rule is what keeps `closed_form` an L1 question however long a chain
-    // gets, and it is enforced below rather than assumed: a `deform` that
-    // accumulated would be refused by `check_header`.
+    // L2 and L4 layers are stateless by definition.
     if kind == Kind::L4 || kind == Kind::L2 {
         return true;
     }

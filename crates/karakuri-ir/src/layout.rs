@@ -107,15 +107,8 @@ impl StorageElemTy {
         StorageElemTy::Vec3F32,
     ];
 
-    /// The variant a WGSL spelling names, or `None` for a type no element ever
-    /// holds and this enum therefore has no variant for.
-    ///
-    /// The inverse of [`StorageElemTy::wgsl_name`], computed and not written, which
-    /// is what keeps it from becoming the third copy of the same correspondence. It
-    /// exists because `karakuri-codegen` reaches this table through a `&str`: a
-    /// uniform field's type arrives already spelled, from `karakuri_ir::Ty` or from
-    /// a literal that crate chose, and asking here by spelling is what lets its
-    /// uniform layout share these numbers rather than restate them.
+    /// Returns the [`StorageElemTy`] corresponding to the given WGSL type name,
+    /// or `None` if unrepresented in element storage.
     pub fn from_wgsl_name(wgsl_ty: &str) -> Option<StorageElemTy> {
         StorageElemTy::ALL
             .into_iter()

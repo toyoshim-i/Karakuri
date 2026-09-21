@@ -550,16 +550,7 @@ proc dim {
     assert_eq!(cost.ops_per_evaluation, 0, "an L5 is not a field");
 }
 
-/// **The ceiling is the fullscreen one, and an L5 never declares a topology.**
-///
-/// `fragment_ceiling` used to switch on `topology == Fullscreen` alone, which
-/// held every L5 to `MAX_OPS_PER_FRAGMENT` — the per-element stand-in for
-/// `capacity` sprites times their area times whatever they overlap, applied to
-/// a pass that covers the frame exactly once with nothing overdrawing.
-///
-/// The assertion is the gap between the two numbers: a body priced between 512
-/// and 4096 is accepted, and the same body would have been refused under the
-/// tighter one.
+/// Verifies L5 procedures are evaluated against the fullscreen fragment cost ceiling.
 #[test]
 fn an_l5_is_held_to_the_fullscreen_ceiling_without_declaring_one() {
     // Forty-eight taps: comfortably over `MAX_OPS_PER_FRAGMENT`'s 512 and

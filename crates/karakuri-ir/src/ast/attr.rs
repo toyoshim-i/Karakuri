@@ -290,20 +290,9 @@ impl Output {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Ambient {
     Seed,
-    /// Which copy of its parent this element is, from the amplifying L2 that made
-    /// it — `0` where nothing upstream amplified.
+    /// Copy index of the current element produced by an upstream amplifying L2 node (`0` if unamplified).
     ///
-    /// Identity downstream of an amplifier is the *pair* of the parent's `seed` and
-    /// this index, and keeping them apart is what the pair buys: `hash1(seed)`
-    /// still gives every mirror image of one element the same colour, which is what
-    /// makes eight copies read as one object. Telling them apart is the deliberate
-    /// `hash1(seed + copy * 8191u)`. The language has no bitwise operators, so the
-    /// combination is arithmetic — a large odd multiplier, so that two copies of
-    /// different parents do not collide.
-    ///
-    /// Stacked amplifiers compose it rather than overwrite it — a node of factor
-    /// `n` turns a parent's `copy` into `copy * n + c` — so the index stays unique
-    /// across the whole chain instead of only across the last stage.
+    /// Composed hierarchically across stacked amplifiers (`copy * n + c`).
     Copy,
     /// Where the field is being evaluated, in world space. `field` block only.
     ///
