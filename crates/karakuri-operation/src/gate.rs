@@ -137,7 +137,7 @@ impl Class {
 /// Closed by ADR-0235's rule applied past the four classes, with no bay named.
 ///
 /// ADR-0235 closes fourteen rows that are in none of the four — *"His list is
-/// exemplary — 例えば — and the rule is the question, not the list"* — and says so
+/// exemplary — for example — and the rule is the question, not the list"* — and says so
 /// of [`Unclassed::Quitting`] in as many words: *"the sharpest case in the
 /// vocabulary and in none of the four classes."* It names no bay for any of
 /// them, and its own *What this leaves undone* keeps them open: *"whether the

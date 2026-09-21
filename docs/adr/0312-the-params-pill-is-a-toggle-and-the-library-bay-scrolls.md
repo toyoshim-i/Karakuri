@@ -23,8 +23,7 @@ somebody asked.
 
 **The maintainer read the control and said two things about it**, verbatim, on 2026-09-09:
 
-> あぁ、それってアイテム選んだ時にも展開されて出るやつ？readだと意味わかりづらいな。expandとかparams
-> が直感的な気もするけどトグルボタンになって欲しい気もする。
+> Is that what expands when an item is selected? The label `read` is confusing; `expand` or `params` feels more intuitive, and it should act as a toggle button.
 
 *Is that the thing that expands under an item when you pick one? `read` is hard to make sense of.
 `expand` or `params` feels more intuitive — though I also want it to be a toggle button.*

@@ -18,7 +18,7 @@ a live Set — `Deck::write_param`, recorded as `Record::Ride` — and left the 
 its §6: **what a rebuild does with the value.** The answer it left open is the maintainer's, and it
 is one sentence:
 
-> コードが持つデフォルト値はコードの値を見ても、リアルタイムのパラメータはライブから引き継ぐのが自然では？
+> Isn't it natural for declared defaults to come from code, while real-time parameters inherit from live state?
 
 A **declared default** comes from the code, because that is what the author just wrote. A **value a
 knob moved** carries over from the live Set, because that is what the operator's hands are on.
@@ -30,7 +30,7 @@ loop can only reach it down a channel.
 
 The maintainer's reply is the whole of this record's context:
 
-> 単にデフォルトと現在値を覚えとくだけとは思うんだが。そんなに大袈裟かね。
+> It should just be a matter of remembering the defaults and current values. Is it really that complicated?
 
 **The information was already being computed and thrown away.** `declared_defaults` reads a node's
 declarations into the map `Set::params` starts life as; from the next line on, nothing remembers

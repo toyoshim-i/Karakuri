@@ -15,7 +15,7 @@ tags: [engine, binding, swap, audio, m5]
 
 The maintainer, 2026-09-10:
 
-> consoleで画像が入力音声に反応しなくなってる気がする。cliでは出来てたので、何かが壊れてるかも。
+> Visuals in the console seem to have stopped reacting to audio input. It was working in the CLI, so something might be broken.
 
 The panel's picture stopped answering to the room; `karakuri-cli --audio-in default` on the same
 material did not.

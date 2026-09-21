@@ -21,15 +21,15 @@ anything a person kept.
 
 The maintainer's, 2026-09-10, verbatim:
 
-> 今はLibraryにSetしか出してないでしょ？ここにkirも置けるようにするのはどうだろう？そしてsetもkirも
-> どのレイヤーを実装してるか名前の右にバッジをつける。setを選んだら全レイヤーをload、無いレイヤーは
-> 空に。kirを選んだ場合は、今のsetにkirが実装してるレイヤーを上書きしたsetを作ってloadする。これに
-> よって、例えばカメラだけ変更、みたいな事が出来るようになって気軽に絵を変換させられる。ライブラリ
-> 一覧はフィルターボタン追加してL1を押すとL1を実装してるkirだけ表示、SETはsetだけ、各ボタンはトグル
-> でORフィルター。
+> Currently the Library only shows Sets. How about listing `.kir` procedures here as well,
+> with badges showing which layers each set or kir implements? Selecting a set loads all layers,
+> clearing any omitted ones. Selecting a kir creates and loads a derived set overwriting just the
+> layers implemented by that kir. This allows quick swapping of individual layers like cameras to
+> effortlessly transform the visuals. The library list can add toggle filter buttons (e.g. L1 shows
+> kirs implementing L1, SET shows sets, combining as an OR filter).
 >
-> そうするとInspectorはL毎に保存ボタンが欲しくなる。そう言えばInspectorはスロットC/Dも表示できない
-> といけない。左右フリップで入れ替えるとか、各列ごとに選択できるようにするか。
+> Consequently, the Inspector will want a save button per layer. Also, the Inspector needs to display
+> slots C and D, either via flipping left/right or allowing per-column selection.
 
 **The library only shows Sets today — how about putting `.kir`s there too? And a badge at the right
 of the name, on a Set and on a `.kir` alike, saying which layer it implements. Choose a Set and
@@ -43,7 +43,7 @@ Sets, each button a toggle and the filter an OR across them.**
 C and D as well — flip left and right to swap them, or let each column be chosen.**
 
 And his two answers to the questions this raised. On what a `.kir` load leaves the slot playing:
-*「名前のない派生なんだけど、コンパイル通った時のauto snapshotは生きてる」* — **a derived Set with
+*"An unnamed derived set, but the auto snapshot upon compile stays alive"* — **a derived Set with
 no name, and the auto snapshot on every compile stays alive.** On how a pane is pointed at a deck:
 **a pulldown per pane, A–D**, which is [ADR-0305](0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md)'s
 card one bay along.
@@ -71,7 +71,7 @@ Five, and the page moved first (`docs/contributing.md` §5).
 ### 1. The Library lists procedures beside Sets, in two tiers, and a badge says which layer
 
 **A procedure is a row of the same list.** Not a sixth scope chip and not a second bay — the
-maintainer's *ここに置ける* is one list, and the filter row below decides which kinds of row are in
+maintainer's proposal to place procedures alongside sets creates a single unified list, with the filter row deciding which kinds of row are in
 it.
 
 **Two tiers, ADR-0227's, and neither of them is the store's artifacts.**
@@ -212,7 +212,7 @@ geometry or no renderer is not a Set, and nothing about this row changes that.
 
 ### 4. The Inspector keeps one node's procedure, and a library write is not a session record
 
-**A `keep` capsule on each node group's head**, which is the maintainer's *L毎に保存ボタン* at the
+**A `keep` capsule on each node group's head**, fulfilling the need for a save button per layer at the
 granularity the Inspector actually draws — a node group is one node, or the fold that stands over a
 deck's renderers, and a head standing over several carries no capsule for
 *Set a node's authority*'s reason: one control on it would be one of several answers drawn as the
@@ -276,7 +276,7 @@ swap so the slot is always running something the library holds. It is refused tw
 
 **It fills the library with things nobody kept**, which is exactly the symptom ADR-0299 closed —
 *"a `my sets` filling up with things the operator did not make"* — arriving through the other door,
-and worse, because the request is for *気軽に* : a control an operator is meant to press repeatedly
+and worse, because the requirement is ease of exploration: a control an operator is meant to press repeatedly
 while looking for a picture would leave a row per press. **And it is a write on the frame path in
 the one place P-0091 is sharpest**: a swap is judged at a frame boundary, and a disk write hung off
 it puts a file system between the operator's hand and the picture.
@@ -323,7 +323,7 @@ result a name of its own.
 
 ### e. A left/right flip for the Inspector's panes
 
-The maintainer's own first suggestion — *左右フリップで入れ替える* — and he chose the pulldown in the
+The maintainer's initial suggestion — *swapping via left/right flip* — was superseded by the pulldown in the
 same message. Recorded because it is the cheaper control and somebody will re-propose it: a flip is
 one target instead of four rectangles and it needs no card. It loses on P-0090. A flip is a step, so
 two panes on a four-deck arrangement cannot both be aimed without knowing where they started; a

@@ -24,13 +24,11 @@ fader and `Operation::ReadSet` answers a question, and the rule asks the same fo
 
 **The maintainer's words, and they are the decision:**
 
-> 操作の原理を少し変えよう。書き込み動作については今まで通り、全ての操作経路から到達出来なければ
-> ならない。読み込みについては任意。それが必要になるか否かは経路ごとのインタフェースデザインに
-> 依存する事であり、強制するものではない。
+> Let us adjust the operating principle slightly. Write operations must remain reachable from all operation routes as before. Read operations are optional; whether a read is needed depends on each route's interface design and is not mandatory.
 
 and, on where the line falls:
 
-> 副作用があれば書き込み
+> Any side effect is a write.
 
 **It is a loosening.** Everything that satisfied the old rule satisfies the new one; no route
 acquires an obligation it did not have. The whole of the change is on the read side, and the whole
@@ -64,7 +62,7 @@ All four reads are `immediate`, and so are most of the writes.
 
 Sharp, and the four are the ones `Silent::Question` already names. Not sharp, in three places:
 
-1. **A surface's own state is an effect.** Under *副作用があれば書き込み*, `SelectDeck` changing
+1. **A surface's own state is an effect.** Under *"any side effect is a write"*, `SelectDeck` changing
    which deck the next `l` addresses is a side effect and the operation is a **write**. So are
    `SelectScope`, `SetTransition`, the four *Arranging the console* folds, `SizeWindow`,
    `KeepCandidate`, `ResetArrangement`, `SaveArrangement`, `RestoreArrangement`. **Nothing moves for

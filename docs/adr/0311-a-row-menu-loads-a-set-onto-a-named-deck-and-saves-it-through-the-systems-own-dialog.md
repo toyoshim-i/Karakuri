@@ -36,9 +36,7 @@ side: *"what is missing is a gesture, and it is the page's."*
 
 **The maintainer answered on 2026-09-09, and the answer took neither of them.** Verbatim:
 
-> Set名で右クリックでコンテキストメニュー、Load to Slot A / Load to Slot B / Load to Slot C /
-> Load to Slot D / 分離バー / Save as a kbset、で最後のを選んだらシステムダイアログでファイル名指定
-> して保存、かな。
+> Right-clicking a Set name brings up a context menu with `Load to Slot A` / `Load to Slot B` / `Load to Slot C` / `Load to Slot D` / separator / `Save as a kbset`, where selecting the last option prompts the system save dialog.
 
 *A right-click on a Set's name opens a context menu — `Load to Slot A` / `Load to Slot B` /
 `Load to Slot C` / `Load to Slot D` / a separator / `Save as a kbset` — and picking the last one

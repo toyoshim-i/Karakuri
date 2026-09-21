@@ -85,8 +85,8 @@ holds and the form that travels.**
 
 **The argument is atomicity, and it is his rather than a preference for tidiness.** His words:
 
-> load次にストアするコピーはkbsetじゃないといけない。だから区別する必要がある。この検証をサボると
-> アトミックなセット入れ替えができなくなる。
+> The copy stored upon load must be a .kbset. That is why the distinction is necessary.
+> If we skip this verification, atomic set swapping becomes impossible.
 
 — *the copy stored on load has to be a `.kbset`; that is why the distinction is needed; skip that
 check and atomic set swapping stops being possible.*
@@ -177,7 +177,7 @@ answered by opening every file in it, and the answer is stale the moment somebod
 The listing would have to parse rather than name, which is the opposite of what `list_sets` is —
 *"it stands by naming rather than by opening anything"* — and a store's invariant that is only true
 of files a particular program wrote is not an invariant, it is a habit. The maintainer's sentence
-is the compressed form of this: *この検証をサボると* — skip **that** check, the cheap one, and the
+is the compressed form of this: *skipping this check* — skip **that** check, the cheap one, and the
 expensive guarantee downstream is what stops holding.
 
 **And it makes the failure silent and late.** A `.kset` copied into `sets/` under one extension is

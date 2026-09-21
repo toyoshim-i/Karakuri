@@ -30,8 +30,8 @@ mechanism would then be one call from being turned off by the thing it exists to
 
 Asked what the opening *is*, the maintainer answered on 2026-08-31:
 
-> 操作ではなく操作のマップの監査機能の制御。つまりmcpから操作へのマップの間で監査する、マップ機能の
-> 一つ。キーボードやMIDI のマップがツールチップにあるアイコンから変更できるって話しと一緒。
+> It is not an operation itself, but control over the audit function of the operation map.
+> It audits between MCP and operations as a map feature, analogous to modifying keyboard or MIDI maps via tooltip icons.
 
 — *it is not an operation; it is control of the **map's** audit function. The check sits between MCP
 and the operation it names, and it is one of the things a map does. It is the same story as the

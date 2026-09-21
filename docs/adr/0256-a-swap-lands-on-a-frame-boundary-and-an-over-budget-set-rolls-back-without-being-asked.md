@@ -20,8 +20,7 @@ tags: [engine, live]
 > exchanged between frames. Everything below about *taking a candidate back out* and about a
 > *parked* outgoing Set is history. The reason is that the undo was never one: a rollback restored
 > the picture and not the file, so the disk went on holding the refused version and the next
-> unrelated save reinstalled it, with nothing saying so — *"事情を知らないとバグってるようにしか見えな
-> い"*.
+> unrelated save reinstalled it, with nothing saying so — *"looks like nothing but a bug without knowing the circumstances"*.
 >
 > **Annotated 2026-09-09: what "over budget" is measured with had already changed, and three
 > paragraphs below describe a mechanism that no longer exists.**

@@ -30,7 +30,7 @@ pulldown over A–D — which would let a load name a deck without moving the se
 cost named beside it: a third route to naming a deck, and the keyboard-only property spent. The
 answer came on 2026-09-08, verbatim:
 
-> readは何のために作られたのか不明、load → Aとなってるボタンをloadボタン、→ラベル、Aプルダウンメニューにして、プルダウンでスロット選んでからloadクリック
+> The purpose of `read` was unclear. The `load → A` button should become a `load` button, a `→` label, and an `A` pulldown menu, so the operator chooses a slot from the pulldown before clicking `load`.
 
 *The `load → A` button becomes a `load` button, a `→` label and an `A` pulldown menu; you pick the
 slot in the pulldown and then click `load`.*
@@ -38,7 +38,7 @@ slot in the pulldown and then click `load`.*
 **The keyboard-only property is what the question turned on, and it was answered the same day**, on
 the same thread:
 
-> 2はキーボードからはa-dでスロット選択、リターンでsendとか、やりようはいくらでもある。
+> From the keyboard, `a`–`d` can select the slot and Return can send; there are plenty of viable interactions.
 
 *From the keyboard the split control is reachable too — `a`–`d` picks the slot and return presses
 send, for instance; there are plenty of ways to do it.* So the property is **kept and not spent**:

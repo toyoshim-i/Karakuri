@@ -86,8 +86,8 @@ between them.
 
 The maintainer's, on 2026-08-30:
 
-> シーケンサのパタン含めてマスターエフェクトも設定の保存と復元が必要ね。これもプリセットとユーザー
-> データの二段構成かな。他のデータと同じように。
+> Saving and restoring settings is necessary for both master effects and sequencer patterns.
+> This should likely use the same two-tier structure of presets and user data, consistent with other data.
 
 **The sequencer's patterns, and the master effects' settings too, need saving and restoring. Two
 tiers as well — presets and user data. The same as the other data.**

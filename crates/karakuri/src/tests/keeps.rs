@@ -1204,7 +1204,7 @@ fn every_verdict_says_what_it_does_to_the_lane() {
 /// draws one — the maintainer's decision on 2026-09-09, and [`settle`] is where
 /// it is carried out.
 ///
-/// > 変更ノードごとに 1 行
+/// > one row per changed node
 ///
 /// The verdict is repeated on each row rather than standing over them, which is
 /// the half of that decision a nested shape would have spent: a row is a row,

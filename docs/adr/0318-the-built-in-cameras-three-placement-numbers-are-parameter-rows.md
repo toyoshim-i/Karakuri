@@ -33,7 +33,7 @@ settled the other two-thirds and left this one where it was).
 
 The maintainer answered it on 2026-09-09:
 
-> 「Orbit の 3 値をパラメータ行として」
+> Expose Orbit's three values as parameter rows.
 
 **The `Orbit`'s three values, as parameter rows.** Which three, and what that costs, is what this
 record works out.

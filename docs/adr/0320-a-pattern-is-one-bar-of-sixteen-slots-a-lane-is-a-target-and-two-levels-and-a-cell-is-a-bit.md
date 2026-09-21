@@ -46,7 +46,7 @@ arrive."* And the mode belongs to the pattern: *"It is armed because it is what 
 rather than a preference the head is holding."* So the mode is a field of a pattern, not of the
 session and not of a lane.
 
-The maintainer took the design on **2026-09-09** — 「進める」 — against a written proposal whose
+The maintainer approved the design on **2026-09-09** — "proceed" — against a written proposal whose
 recommendations are what is decided here and in
 [ADR-0321](0321-a-lanes-target-is-an-operation-with-its-value-elided.md),
 [ADR-0322](0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md)

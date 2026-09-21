@@ -17,10 +17,10 @@ The maintainer, on 2026-08-31, hours after
 [ADR-0234](0234-carrying-a-show-through-is-a-principle-not-a-property-of-the-finished-instrument.md)
 recorded that the MCP scope was a stance nobody had stated:
 
-> MCPについては原則通り全部を繋げるのを最終目標にしよう。そこは原点に帰る。ただし、ライブの原則も大切
-> なので、リアルタイムパフォーマンスを止めうる操作はデフォルトでは禁止。例えばライブモードのデックの中
-> 身やミックスフェーダー、マスターエフェクトなど。入出力系のルーティングや有効化無効化とかも。これらは
-> Bayに開放設定を設けて、開放時のみMCPに見せよう。
+> For MCP, let us make connecting everything the ultimate goal as originally intended.
+> However, live performance principles are essential, so operations that could halt real-time performance
+> must be forbidden by default (e.g. deck contents in live mode, mix faders, master effects, I/O routing
+> and enable/disable). We should provide an unlock setting in the Bay and permit MCP access only when unlocked.
 
 **The final goal for MCP is that everything is connected, as the rule always said — that is a return
 to the origin.** But the live principle matters too, so **any operation that could stop a real-time
@@ -30,10 +30,10 @@ an opening setting in a Bay, and are shown to MCP only while it is open.**
 
 Asked what *shown only while open* meant mechanically, he settled it in the same conversation:
 
-> これは繋がってるけど監査で禁止、失敗する仕組みを作るってことね
+> This means they remain connected, but are forbidden and failed by an audit mechanism.
 
 **It is connected, and forbidden by an audit; you build a mechanism that fails.** The two sentences
-are recorded together because the second replaces the mechanism the first implied — 見せよう reads as
+are recorded together because the second replaces the mechanism the first implied — "reveal only when open" reads as
 *publish a shorter list*, and what is decided is that the list never shortens and the call is refused.
 That correction is the whole of *Alternative b* below, and it is a rejected alternative rather than a
 misreading precisely because it was the first spelling of the decision.
@@ -223,7 +223,7 @@ plumbing rather than its picture, which is exactly why they are easy to forget.
 
 ### Four groups fall on the closed side under the rule and are not in the maintainer's examples
 
-His list is exemplary — 例えば — and the rule is the question, not the list. These are what the
+His list is exemplary — for example — and the rule is the question, not the list. These are what the
 question answers where the examples do not reach, and they are marked as this record applying the
 rule rather than as words that were spoken.
 
@@ -333,7 +333,7 @@ every show, that no hand in the room is enough.
 
 ### b. Close by not advertising — publish a shorter tool list while a class is closed
 
-The first spelling of the decision, in 見せよう, and it has a real argument: a model does not plan
+The initial phrasing of the proposal ("reveal only when open") had a plausible argument: a model does not plan
 around a tool it cannot see, so a closed class costs nothing in wasted calls, and the refusal path
 never has to be written. It loses on three counts and the maintainer replaced it the same day.
 **Rule 01 says reachable, and an unadvertised tool is not reachable** — the contradiction this

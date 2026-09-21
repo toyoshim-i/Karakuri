@@ -22,7 +22,7 @@ off the deck and repainted at that rate along with everything else.
 
 That is the finding, and it is the maintainer's:
 
-> 一応Bayごとに希望最低フレームレートを持つようにしたとは思うけど、**表示内容に変化がないのに毎回読んで描きなおすのは宜しくない。**
+> While each Bay has a desired minimum frame rate, **it is undesirable to read and redraw every frame when display contents have not changed.**
 
 It is M5.14's item, and it was taken first because every control that lands writes the same
 unconditional read-back, so the number of sites grows while it waits.

@@ -48,7 +48,7 @@ and the second had no producer in this binary at all.
 
 The maintainer, on 2026-09-09:
 
-> 変更ノードごとに 1 行
+> One row per changed node.
 
 *One row per changed node.*
 

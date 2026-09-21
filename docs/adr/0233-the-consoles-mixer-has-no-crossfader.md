@@ -104,7 +104,7 @@ your fingers is the value — is the promise this one was already documented as 
 **2. The gesture is not the one modern practice reaches for**, and this half is the maintainer's own
 judgement rather than a derivation:
 
-> DJでも最近はビドル系の人しか使ってなくて、現代の複雑なミックス作業は基本縦フェーダー命だな
+> Even among DJs, mostly battle DJs use crossfaders nowadays; modern, complex mixing relies almost entirely on channel faders.
 
 — *even among DJs it is mostly the battle players who use one now; modern, complicated mixing lives
 on the channel faders.* The crossfader is the signature control of a technique — cutting, chopping,

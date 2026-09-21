@@ -53,11 +53,11 @@ much is left"* — how much is left, against no stated end.
 
 The maintainer's, on 2026-08-30, in two statements, the second sharpening the first:
 
-> M5の終了はマニュアルのモックに描いたBayを全て実用的なレベルで実装すること。それを使ってみて足りない
-> 機能をまた次の仕事として考えて行くので。まずは使えるアプリにする。
-
-> 少なくともマニュアル記載の機能はすべて実装だね。その上でつかって足りないものは埋める。なので、M5
-> マイルストーンとしてはマニュアルにあるものを実装がゴールで良いよ
+> The completion of M5 means implementing all Bays depicted in the manual mocks to a usable degree.
+> From there, we will identify missing functionality in hands-on use for the next phase. First, make it a usable application.
+>
+> At a minimum, all features in the manual must be implemented. After using it, we will fill in what is missing.
+> Therefore, for the M5 milestone, implementing what is in the manual is a solid goal.
 
 **M5 closes when everything the manual describes is implemented.** Then he uses it and fills in
 what is missing, which is the next job. First, make it an app you can use.

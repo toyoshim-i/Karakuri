@@ -33,7 +33,7 @@ three questions rather than any work:
 
 The recommendation put to the maintainer was: refuse the loosening and make the twelve `gap` with one
 sentence; make *Quit*'s route the window's own close; leave `a` unbound and make the key badge `gap`.
-His answer, on 2026-09-09, was 「推奨どおり (3 つとも)」 — as recommended, all three.
+His answer, on 2026-09-09, was "as recommended, all three".
 
 ### The twelve are read off the arm, not off a list
 
