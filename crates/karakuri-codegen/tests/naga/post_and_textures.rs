@@ -6,11 +6,7 @@ use super::naga_common::*;
 // L5 — the three shipped procedures, compiled from source
 // ---------------------------------------------------------------------------
 //
-// Built from `.kir` text through the whole pipeline rather than by hand, unlike
-// every fixture above, and the reason is what these are for: the assertion is
-// that the *shipped parts* compile and that two of them reproduce
-// `master.wgsl`'s bodies term for term. A hand-built tree would be asserting
-// that this crate lowers what this test decided to build.
+// End-to-end compilation tests for shipped L5 procedures parsed directly from `.kir` files.
 
 /// Parse, check, cost and lower one of the shipped L5 procedures.
 fn shipped_l5(name: &str) -> karakuri_codegen::L5Shader {

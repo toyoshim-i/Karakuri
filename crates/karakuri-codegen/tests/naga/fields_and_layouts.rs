@@ -258,19 +258,8 @@ proc marcher {
 }
 
 // ---------------------------------------------------------------------------
-// The element layout, checked against a real WGSL front end's own arithmetic.
-//
-// **A wrong align/size table is not a compile error anywhere.** The host writes
-// bytes at `ElementSlot::offset` and the shader reads them through the struct —
-// so if the two disagree, nothing refuses to build and nothing logs: it is an
-// element reading the middle of the element before it, which reaches a screen
-// as plausible material with the wrong values in it.
-//
-// Validating the module cannot catch that on its own, and the claim that it
-// could was wrong for a specific reason: `write_element_struct` emits no
-// `@offset` attributes at all, so naga computes every offset from its own rules
-// and can never visibly disagree with ours. It agrees with itself. What is
-// needed is to ask naga what it computed and compare, which is what these do.
+// Element struct memory layout validation against Naga alignment arithmetic.
+// Compares host-side `ElementSlot::offset` against Naga type layout offsets.
 // ---------------------------------------------------------------------------
 
 /// naga's own placement for one generated struct: each member's name and byte

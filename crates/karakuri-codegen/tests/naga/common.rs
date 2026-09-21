@@ -119,12 +119,8 @@ pub fn drift_shell() -> Checked {
         kind: BlockKind::Spawn,
         span: span(),
         stmts: vec![
-            // Named `u` and `v`, verbatim, exactly as the ir-spec's own
-            // `drift_shell` writes them (`let u = hash1(seed); let v =
-            // hash1(seed + 1000u);`). This is the regression: `u` is also
-            // the generated uniform binding's name, and `v` is what the
-            // element block below separately calls its own `let`. Neither
-            // may capture anything this crate emits.
+            // Local identifiers `u` and `v` test identifier hygiene against
+            // the generated uniform struct `u` and standard AST bindings.
             let_(
                 "u",
                 call(
