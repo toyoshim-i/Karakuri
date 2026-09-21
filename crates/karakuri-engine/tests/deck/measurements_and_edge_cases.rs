@@ -7,53 +7,8 @@ mod gpu {
     // Measured, reported.
     // ---------------------------------------------------------------------------
 
-    /// What a slot costs, and what the composite costs. **Printed, not asserted.**
-    ///
-    /// `docs/contributing.md`'s working style asks for a GPU-timestamp measurement on any
-    /// change touching the frame path, and says in the same breath that timestamps
-    /// do not work on the machine this was developed on — `probe.rs` documents an
-    /// enormous workload resolving to zero. So this is a host clock around
-    /// submit-and-wait, on the same terms as every other number in this
-    /// repository: coarse, biased high, and real. Run with
-    /// `cargo test -p karakuri-engine --test deck -- --nocapture --ignored`.
-    ///
-    /// Five configurations on this file's own [`L1`] and [`L4`] — a shell of
-    /// points — at the reference workload's capacity and canvas but **not at
-    /// the reference workload**, which is `examples/drift_cloud.kset` and is a
-    /// different pair at the same numbers
-    /// (ADR-0270,
-    /// `docs/adr/0270-the-reference-workload-is-a-named-set-rather-than-whatever-the-default-pair-is.md`).
-    /// The five are comparable with each other, which is what the test is for:
-    /// a bare Set, a deck of one, a deck of four, and a deck of four with
-    /// one slot Live — with and without the three off-air draws. Bare against
-    /// deck-of-one isolates the composite pass, since the simulation either side
-    /// of it is identical. Deck-of-one against deck-of-four is what a slot costs,
-    /// which is dominated by the Set and not by the mix.
-    ///
-    /// **The last two lines are what ADR-0258 and ADR-0269 cost**, and it is why
-    /// they are measured here rather than argued in a comment. Every slot is
-    /// drawn and stepped on every frame so that its console cell shows the
-    /// material running, which on the panel's own deck is one Live slot and
-    /// three off-air ones. `deck of one` is what a four-slot deck used to cost
-    /// on the frame path when three of its slots neither stepped, drew, nor
-    /// reached the composite; the gap between it and `four, one Live` is the
-    /// whole of the bill.
-    ///
-    /// **`four, one Live, cold` is the same deck never warmed**, which is the
-    /// panel's own state rather than this test's convenience: three slots off
-    /// air since the window opened. Before ADR-0269 it read about 209 ms against
-    /// the warm line's 20.7 — an unstepped Set draws its whole capacity at the
-    /// origin — and it now reads what the warm line reads, because the slots are
-    /// warm after one frame. **Both of those are the 11.25-texel sprite** this
-    /// test rendered with until 2026-09-07; at four texels the quietest run of
-    /// the day reads 16.2 against 16.1, which is the same claim measured more
-    /// cleanly. **The 209 was this
-    /// material's number and not the instrument's**: capacity 262144 with
-    /// additive blending is deliberately aggressive, and the same shape at
-    /// capacity 4096 costs a couple of milliseconds.
-    ///
-    /// `#[ignore]`d because four simulations at capacity 262144 is a real
-    /// workload, and `cargo test` should not be one.
+    /// Measures and prints execution costs of single-slot vs multi-slot decks,
+    /// isolating composite pass overhead and off-air slot costs (ADR-0258, ADR-0269).
     #[test]
     #[ignore = "a measurement, not a check; run with --ignored --nocapture"]
     fn the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported() {

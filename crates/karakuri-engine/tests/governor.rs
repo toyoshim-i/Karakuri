@@ -1,43 +1,7 @@
-//! The budget governor: what may prime, and what it refuses to touch.
+//! Verification of the budget governor and residency decision procedures.
 //!
-//! **It used to decide a rate as well**, one step every *n* frames, and about a
-//! third of this file asserted the arithmetic of it. ADR-0269 retired that: a
-//! drawn slot steps every frame, every slot is drawn, and a request now either
-//! fits at its whole measured cost or is parked.
-//!
-//! Two halves, deliberately.
-//!
-//! The **decision procedure** is a pure function of slot states — a
-//! measurement per slot, a *requested* residency, and a closed-form flag — so
-//! most of it is asserted without a GPU, which is what lets the arithmetic be
-//! pinned exactly rather than approximately. `Governor::decide` allocating a
-//! report is the only side effect it has.
-//!
-//! The **deck integration** needs a GPU, because the thing worth asserting
-//! there is that the report is applied: that a demoted slot really stops
-//! stepping and a Live slot really is not moved. A report nobody acted on would
-//! satisfy every assertion in the first half.
-//!
-//! **Everything about a park is in the second half**, and deliberately so. A
-//! park is a request that outlives a refusal, and a request only outlives
-//! anything if something stores it — so a pure `decide` handed the same
-//! `SlotState` twice would demonstrate recovery whether or not the deck kept
-//! the request at all. The tests that pin it therefore drive a real `Deck`
-//! across several passes, and say what a caller does *not* do between them.
-//!
-//! Measurements are constructed by hand here rather than probed. That is the
-//! point of the split `swap.rs` makes: the measurement is data that travels
-//! with a Set, so the budget arithmetic is testable at exact numbers instead of
-//! against whatever this machine happened to be doing.
-//!
-//! **The estimates are constructed the same way, and for a second reason.** A
-//! slot can now arrive with two numbers — one draw at 1280x720, and a fit
-//! through two draws at the output's size — and the governor prefers the
-//! second where it answers. `estimate::fit` is pure arithmetic over two
-//! `Measurement`s, so the whole of *Two numbers, and which one is budgeted on*
-//! is pinned here at exact figures. What the device is for is the path:
-//! `Deck::estimate_slots` taking the two draws, storing the answer on the slot,
-//! and `govern` reading it back.
+//! Tests the pure decision procedure (budgeting, admission, parking, and estimation basis)
+//! alongside live deck integration and park recovery across multiple passes.
 
 use karakuri_engine::deck::{Deck, Residency};
 use karakuri_engine::estimate::{fit, rungs, Estimate, Floor, Unfit};

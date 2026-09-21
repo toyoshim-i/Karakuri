@@ -36,13 +36,7 @@ mod gpu {
     use karakuri_ir::typed::Checked;
     use karakuri_ir::Topology;
 
-    /// **A size to measure at**, and a fixture rather than a reference.
-    ///
-    /// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
-    /// constant: this application has an output size and a preview size and no
-    /// third one, so the size a measurement is taken at is named by whoever
-    /// knows the layout. Nothing here has a layout, so these tests name one
-    /// and it is 1280x720 because that is what they were written against.
+    /// Test fixture resolution (1280x720) for probe measurement tests (ADR-0303).
     const AT: (u32, u32) = (1280, 720);
 
     const CAPACITY: u32 = 4_096;
@@ -600,13 +594,7 @@ mod corpus {
     use karakuri_ir::typed::Checked;
     use karakuri_ir::Kind;
 
-    /// **A size to measure at**, and a fixture rather than a reference.
-    ///
-    /// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
-    /// constant: this application has an output size and a preview size and no
-    /// third one, so the size a measurement is taken at is named by whoever
-    /// knows the layout. Nothing here has a layout, so these tests name one
-    /// and it is 1280x720 because that is what they were written against.
+    /// Test fixture resolution (1280x720) for probe measurement tests (ADR-0303).
     const AT: (u32, u32) = (1280, 720);
 
     /// What [`rungs`] and [`floored_share`] between them answer for a floor.

@@ -137,14 +137,8 @@ proc {name} {{
         )
     }
 
-    /// An L2 that reads a second geometry through a declared slot.
-    ///
-    /// **It emits nothing and amplifies nothing**, so every byte it is charged
-    /// comes from the chain it sits in rather than from anything it says — which is
-    /// the point: the far geometry it reads is a *simulation* with buffers of its
-    /// own, and those are charged to the far simulation and not to this node. A
-    /// figure that counted the pairing twice, or that charged the reader for what
-    /// it reads, is what the test below refuses.
+    /// An L2 deformer reading a second geometry via an input slot without introducing
+    /// its own emission or amplification storage.
     const MORPH: &str = r#"
 proc morph {
   kind L2

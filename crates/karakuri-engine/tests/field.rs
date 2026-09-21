@@ -1,10 +1,4 @@
-//! A `kind Field` procedure, spliced into whoever evaluates it.
-//!
-//! A field has no node: no buffer, no pass, no position in the chain. So there
-//! is nothing to read back and nothing to address, and every claim here is
-//! about the picture a *caller* draws — which is the right place for them,
-//! since a field that produced the correct distances and reached nobody would
-//! be a feature that does not exist.
+//! Verification of inline `kind Field` procedures spliced into evaluating nodes.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -422,13 +416,8 @@ proc lens {
         );
     }
 
-    /// **Two nodes, a field each**, which is the half a single renderer cannot
-    /// show: the two slots are both called `shape`, so nothing about the *key* a
-    /// value is written under says which field it came from — only the node does.
-    ///
-    /// A Set that resolved a param by slot spelling alone would hand both renderers
-    /// one field's numbers, and the picture would be right for whichever of them
-    /// happened to be asked first.
+    /// Asserts that when two nodes declare identical slot names (`shape`), each
+    /// node correctly resolves parameters for the field specified by its own edge.
     #[test]
     fn two_nodes_each_reach_the_field_their_own_edge_names() {
         let gpu = Gpu::headless().expect("a GPU");

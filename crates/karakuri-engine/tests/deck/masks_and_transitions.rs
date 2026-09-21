@@ -71,30 +71,8 @@ mod gpu {
         );
     }
 
-    /// **A slot faded to silence cannot take the mix with it, under any blend
-    /// mode.**
-    ///
-    /// A fader at silence has to be a *skip*, not a blend at zero, for the same
-    /// reason `Allocated` is: `0.0 * x` is zero only for finite `x`. A slot's own
-    /// target is allowed to hold a NaN — `sqrt` of a negative is a procedure that
-    /// passes every stage of this pipeline — and one blended at a zero fader would
-    /// otherwise put a NaN in every channel of the composite, wiping out every
-    /// other slot — see
-    /// `docs/adr/0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md`.
-    /// It is **the** reason the operator has a fader at all.
-    ///
-    /// The comparison is against the same deck with that slot `Allocated`, which is
-    /// the path that was already exact, so this asserts the two ways of silencing a
-    /// slot agree.
-    ///
-    /// Opacity is the fader here, and every mode is tried, because
-    /// [`Blend::silent_at`] is the only thing standing between a NaN and the mix
-    /// and a mode it forgot would be a slot that cannot be turned off. Gain gets
-    /// the same treatment under the two modes where it silences at all —
-    /// `zero_gain_silences_add_and_max_and_still_covers_under_over` is where that
-    /// list comes from. **Under `over`, gain does not silence and a NaN gets
-    /// through**; that is what the fader is for and it is deliberately not asserted
-    /// here, because pinning it would read as a promise that NaN reaches the mix.
+    /// Asserts that a slot faded to silence (via opacity or gain under additive/max)
+    /// is skipped and cannot contaminate the mix with NaNs (ADR-0040).
     #[test]
     fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -159,19 +137,8 @@ mod gpu {
         }
     }
 
-    /// **A mask at either end is exact: nothing, or everything.**
-    ///
-    /// Both matter and for different reasons. At the top, a wipe is a transition
-    /// carrying `position` to 1.0, so a corner left half-lit would be a wipe that
-    /// never finished. At the bottom, `Blend::silent_at` *skips* a layer whose mask
-    /// reveals nothing — which is only sound if it really is nothing, and skipping
-    /// is what keeps a NaN out of the mix.
-    ///
-    /// Compared against the fader, which is the path that was already exact: a
-    /// masked-out slot must render exactly what the same slot at opacity 0 renders,
-    /// and a fully revealed one exactly what it renders with no mask at all. The
-    /// material is [`L4_WASH`], because a mask's ends are at the edges of the frame
-    /// and the sphere every other fixture draws never gets there.
+    /// Asserts that masks at position 0.0 or 1.0 produce bit-exact matches to
+    /// fully silenced or fully revealed slots respectively.
     #[test]
     fn a_mask_at_either_end_is_exactly_nothing_or_exactly_everything() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -417,21 +384,8 @@ mod gpu {
         assert_eq!(deck.transitions_on(karakuri_engine::DeckSlot(1)).count(), 0);
     }
 
-    /// **The operator wins on the position, and the shape is not a hand on
-    /// it.**
-    ///
-    /// The two halves of a mask answer a scheduled move differently, and this
-    /// is what says so in both directions at once — because a cancel written
-    /// into the wrong one of the two setters passes every other test in this
-    /// file. `set_mask_position` writes the number `Control::MaskPosition` is
-    /// carrying, so a hand on it stops the move
-    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`);
-    /// `set_mask_shape` writes no position, so there is nothing under its hand
-    /// and a shape chosen mid-wipe changes what is being wiped rather than
-    /// stopping it.
-    ///
-    /// No frame is drawn: the question is what the deck holds, and
-    /// `Deck::transitions_on` is where the answer is.
+    /// Asserts that manual adjustments to mask position cancel in-flight wipes (P-0094),
+    /// while manual shape adjustments update the mask without interrupting the transition.
     #[test]
     fn a_hand_on_the_front_stops_the_wipe_and_a_hand_on_the_shape_does_not() {
         let gpu = Gpu::headless().expect("no GPU available");

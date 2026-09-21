@@ -597,11 +597,7 @@ mod gpu {
             deck.overloaded(karakuri_engine::DeckSlot(1)),
             "a parked slot over the budget was not marked stopped"
         );
-        // **The whole point of the change, as a number.** The verdict arrives on
-        // the frame the build lands on, while the slot is still Allocated. The
-        // old freeze would have taken at least a full window *and* the slot going
-        // on air, so any figure under that is a verdict that did not wait — and
-        // the build itself is what the frames before it were spent on.
+        // The overload verdict arrives on the frame the build lands while still Allocated.
         assert!(
             frames < A_FULL_WINDOW,
             "the verdict took {frames} frames, which is a window: it is waiting again"
@@ -994,12 +990,7 @@ mod gpu {
             "the fader cleared the freeze, which is a state changing by itself"
         );
 
-        // **Nor does taking it off air and putting it back**, which is the
-        // other thing an operator does to a slot that is misbehaving. What
-        // stopped is the version and not the placement (ADR-0316), so the
-        // residency moves and the freeze does not — and the slot takes no step
-        // at either level, which is what the off-air branch of `Frame::render`
-        // has to honour as well.
+        // Toggling residency off-air and back preserves the overload stopped state (ADR-0316).
         let steps = steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set());
         deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Allocated);
         for _ in 0..3 {

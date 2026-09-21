@@ -51,12 +51,7 @@ proc pair {
 }
 "#;
 
-    /// The same two elements, but **accumulating**: each step adds a fixed step to
-    /// `position`, so where an element sits is a function of how many steps ran
-    /// rather than of `seed` alone.
-    ///
-    /// [`PAIR_L1`] cannot tell one simulation from three, because a pure function of
-    /// `seed` gives the same buffer however many times it is evaluated. This can.
+    /// Two-element geometry accumulating position each step to verify step counts.
     const CREEP_L1: &str = r#"
 proc creep {
   kind     L1
@@ -327,19 +322,8 @@ proc {name} {{
         );
     }
 
-    /// **One geometry, however many read it.**
-    ///
-    /// The claim the milestone is for: a second renderer costs a draw pass and not a
-    /// simulation. The plausible defect is a draw loop that steps the simulation
-    /// once per renderer, which is invisible in a picture — three sprites drawn at
-    /// the wrong instant still look like sprites.
-    ///
-    /// **So the material has to accumulate.** [`PAIR_L1`] is a pure function of
-    /// `seed` and would give a byte-identical buffer however many times it was
-    /// evaluated, so it cannot tell one simulation from three; [`CREEP_L1`] adds a
-    /// step to `position` each time it runs, and a stack that stepped per renderer
-    /// lands three times as far along. The buffers are compared rather than the
-    /// counts, because `live_count` is 2 either way.
+    /// Asserts that adding multiple renderers adds draw passes without redundant
+    /// simulation steps on shared geometry.
     #[test]
     fn a_second_renderer_costs_a_pass_and_not_a_simulation() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -772,14 +756,8 @@ proc wash {
         );
     }
 
-    /// **An addressed binding blends from the node it names**, which is the half of
-    /// the address that only shows through the signal path.
-    ///
-    /// Both renderers declare `exposure`, at 1.0 and 0.25. Two bindings, one per
-    /// renderer, both attached to a signal nothing provides — confidence 0.0, so
-    /// each writes its param's own value unchanged. They must resolve to the two
-    /// different declarations. A binding that took the first declaring node's base,
-    /// which is what an unaddressed one does, would give both 1.0.
+    /// Asserts that addressed bindings blend from their respective targeted nodes
+    /// when default parameter declarations differ.
     #[test]
     fn two_addressed_bindings_on_one_name_blend_from_their_own_nodes() {
         let gpu = Gpu::headless().expect("no GPU available");

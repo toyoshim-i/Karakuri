@@ -161,12 +161,7 @@ fn main() {
             }
         }
 
-        // **And what the governor then does with it**, which is the half that
-        // is not arithmetic on a size. `karakuri`'s `Engine::ask_to_prime`
-        // sets the compute budget from the two **measurements** and the
-        // governor spends the **estimates** where they answer (ADR-0296), so
-        // the two sides of one comparison can be about two different frames.
-        // This is that comparison, printed at each size.
+        // Compare budget measurements against governor estimates (ADR-0296).
         let estimated = deck.estimate_slots(&gpu.device, &gpu.queue);
         deck.set_residency(karakuri_engine::DeckSlot(1), Residency::Priming);
         if let (Some(committed), Some(warming)) = (

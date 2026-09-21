@@ -32,13 +32,7 @@ mod gpu {
         use karakuri_engine::probe::Probe;
         use karakuri_engine::swap::measure;
 
-        /// **A size to measure at**, and a fixture rather than a reference.
-        ///
-        /// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
-        /// constant: this application has an output size and a preview size and no
-        /// third one, so the size a measurement is taken at is named by whoever
-        /// knows the layout. Nothing here has a layout, so these tests name one
-        /// and it is 1280x720 because that is what they were written against.
+        /// Test fixture resolution (1280x720) for probe measurement tests (ADR-0303).
         const AT: (u32, u32) = (1280, 720);
 
         let gpu = Gpu::headless().expect("no GPU available");

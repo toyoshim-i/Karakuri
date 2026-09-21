@@ -246,15 +246,8 @@ proc {name} {{
 
     const FRAMES: u32 = 20;
 
-    /// **A derived `age` is the same number an accumulating one is.**
-    ///
-    /// The anchor emits `age` and adds `dt` to it every step, which is what every
-    /// L1 in `examples/` does by hand; the subject emits only `position` and lets
-    /// the rule answer. The renderer places the sprite by `age`, so agreement is
-    /// agreement to a texel.
-    ///
-    /// The third figure is what the picture would be at age zero, and it is here
-    /// because two Sets that both returned zero would agree perfectly.
+    /// Asserts that automatically derived `age` matches an explicitly accumulated `age`
+    /// attribute across frames.
     #[test]
     fn a_derived_age_matches_one_the_procedure_accumulates() {
         let gpu = Gpu::headless().expect("a GPU");
