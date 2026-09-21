@@ -70,22 +70,59 @@ Modularize the 16 remaining files exceeding 1,500 lines:
 | **P91** | `karakuri-operation-record::tests` | 1,704 | Partition operation record serialization and backward-compatibility tests | **COMPLETED** |
 | **P92** | `karakuri-mcp::src::tests` | 1,686 | Decompose MCP server and tool handler unit test suites | **COMPLETED** |
 | **P93** | `karakuri-console::hover::probes` | 1,667 | Separate static TIPS definitions from runtime probe hit-testing algorithms | **COMPLETED** |
-| **P94** | `karakuri-mcp::spelled::table` | 1,661 | Modularize schema dictionary and spelling lookup tables | **PLANNED** |
-| **P95** | `karakuri-engine::tests::governor` | 1,653 | Partition frame pacing, timing governor, and rate-limiting test suites | **PLANNED** |
-| **P96** | `karakuri-console::panel` | 1,644 | Separate panel layout geometry arithmetic from coordinate transformations | **PLANNED** |
-| **P97** | `karakuri::bridge::handlers::apply` | 1,636 | Subdivide operation dispatch and refusal emission into domain handlers | **PLANNED** |
-| **P98** | `karakuri::session` | 1,602 | Decompose session lifecycle, state streams, and persistence coordination | **PLANNED** |
-| **P99** | `karakuri::bridge::engine` | 1,586 | Separate engine command channel management from frame telemetry collection | **PLANNED** |
-| **P100** | `karakuri-console::view::program` | 1,579 | Split program bay rendering into canvas display, stats, and overlays | **PLANNED** |
-| **P101** | `karakuri-cli::live::interactive` | 1,562 | Modularize CLI interactive terminal event handling and render loop | **PLANNED** |
-| **P102** | `karakuri-engine::tests::sources` | 1,540 | Decompose shader source loading, preprocessing, and error recovery tests | **PLANNED** |
-| **P103** | `karakuri-console::view::inspector::header` | 1,518 | Separate inspector header title rendering from chip buttons and target badges | **PLANNED** |
+| **P94** | `karakuri-mcp::spelled::table` | 1,652 | Modularize schema dictionary and spelling lookup tables | **PLANNED** |
+| **P95** | `karakuri-engine::tests::governor` | 1,617 | Partition frame pacing, timing governor, and rate-limiting test suites | **PLANNED** |
+| **P96** | `karakuri-console::panel` | 1,541 | Separate panel layout geometry arithmetic from coordinate transformations | **PLANNED** |
+| **P97** | `karakuri-engine::tests::sources` | 1,540 | Decompose shader source loading, preprocessing, and error recovery tests | **PLANNED** |
+| **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **PLANNED** |
+| **P99** | `karakuri-environment::mix::tests` | 1,485 | Partition mixer state persistence and audio synchronization test cases | **PLANNED** |
+| **P100** | `karakuri-cli::live::interactive` | 1,472 | Modularize CLI interactive terminal event handling and render loop | **PLANNED** |
+| **P101** | `karakuri-engine::tests::binding` | 1,452 | Split pipeline resource binding and bind group layout integration tests | **PLANNED** |
+| **P102** | `karakuri-console::tests::mixer` | 1,449 | Partition mixer bay fader, balance, and solo/mute test suites | **PLANNED** |
+| **P103** | `karakuri-console::view::inspector::header` | 1,429 | Separate inspector header title rendering from chip buttons and target badges | **PLANNED** |
 
 ---
 
-## 3. Future Initiatives
+## 3. Structural & Semantic Modernization Initiatives (Beyond File Splitting)
 
-- **Stage 3 Gate Lowering (<1,300 Lines)**: Target secondary cohort of 23 files (Phase 18).
-- **Stage 4 Architectural Ceiling (<1,000 Lines)**: Target final 41 files to achieve full ADR-0345 alignment (Phase 19).
+While module splitting enforces file length constraints, true architectural clarity and maintainability require semantic refactorings. The following initiatives are queued for implementation across subsequent phases:
+
+### 3.1 Workspace Test Fixture & Helper Consolidation
+Integration and unit tests currently duplicate significant setup boilerplate across multiple files:
+- **`compile(&str)`**: Duplicated across 28 distinct test files in `karakuri-engine::tests`.
+- **`render(&[IrError], &str)`**: Duplicated across 25 test files.
+- **`console(viewport: Rect)` / `console()`**: Repeated across 36 integration test files in `karakuri-console::tests`.
+- **`at(Pos2)` / `point(Pos2)`**: Coordinate transformation helpers duplicated in 28 test suites.
+- **`f16(bits: u16)`**: Bitcast conversion helpers copied into 15 test files.
+
+**Action Plan**: Consolidate into per-crate `tests/common/` modules or a shared workspace test fixture crate, eliminating thousands of lines of duplicated test infrastructure.
+
+### 3.2 Massive Match Expression Function Extraction (Dispatch Clarity)
+Several central dispatcher functions contain monolithic `match` expressions where individual arms span hundreds of lines:
+- **`karakuri::app::mod::App::act` (L526)**: 379-line match with inline operation execution, journal logging, and error conversion.
+- **`karakuri::app::handler::pointer::dispatch` (L22)**: 303-line pointer event match.
+- **`karakuri::app::handler::key::dispatch` (L108)**: 291-line keyboard event match.
+- **`karakuri::bridge::handlers::apply::apply_operation` (L797)**: 234-line operation execution match.
+
+**Action Plan**: Extract arm logic into dedicated, named private functions (e.g. `handle_emitted_operation`, `dispatch_pointer_down`). Reduce top-level matches to clean, 20–40 line dispatch tables.
+
+### 3.3 Domain Substate Decomposition (Fat Struct Remediation)
+Several monolithic structs aggregate fields across unrelated UI or storage concerns:
+- **`karakuri_console::view::View` (835 lines)**: Holds flat state for mixer, inspector, library, transport, and modals simultaneously.
+- **`karakuri_store::record::Record` (1,006 lines)**: Monolithic record enumeration.
+
+**Action Plan**: Decompose `View` into domain substate structs (`MixerState`, `InspectorState`, `LibraryState`, `TransportState`) composed under `View`. Improves borrow checker ergonomics and enforces clear component boundaries.
+
+### 3.4 Structured Error Handling & Declarative Formatting
+- **`karakuri_engine::set::SetError` (239 lines)**: Contains manual string concatenation and formatting logic embedded inside error declarations.
+
+**Action Plan**: Modernize domain error hierarchies with declarative traits and structured metadata, eliminating manual string building logic.
+
+---
+
+## 4. Future Initiatives
+
+- **Stage 3 Gate Lowering (<1,300 Lines)**: Target secondary cohort of files (Phase 18).
+- **Stage 4 Architectural Ceiling (<1,000 Lines)**: Target remaining files to achieve full ADR-0345 alignment (Phase 19).
 - **Dynamic Module Hot-Reloading Ergonomics**: Extend `.kir` hot-reloading abstractions across non-shader resource bundles.
 - **Unified Event Journal Introspection**: Standardize tooling for offline inspection and diffing of `.ndjson` session streams.
