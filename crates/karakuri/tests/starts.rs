@@ -1,49 +1,9 @@
-//! The panel starts. Not that a deck builds, not that a widget draws — that
-//! `cargo run -p karakuri` reaches a window and says so, in the process an
-//! operator would have launched.
+//! Verification of application startup as a subprocess (ADR-0141).
 //!
-//! This is the one claim nothing else in the workspace makes. `main.rs`'s own
-//! `mod gpu` tests build an `Engine` on a headless device and assert about what
-//! it produces; not one of them runs [`main`], parses a command line, resolves
-//! a preset library, writes working copies, opens a store, seeds the snapshots,
-//! binds MCP, creates a window, makes a surface, builds the panel and prints
-//! the legend — which is the *order* those happen in and therefore the only
-//! place a startup panic can live. The panel has stopped starting more than
-//! once with the whole suite green, because the suite has never started it.
-//!
-//! Why the legend and not the exit code. There is no flag that makes this
-//! program exit on its own: `--help` prints [`USAGE`] and returns without
-//! touching a device, and every other run ends when the operator closes the
-//! window or presses `esc`. So "it started" cannot be a status; it has to be
-//! something the program says *after* the part that can fail. The legend is
-//! that line — `Readout::print_legend` is called from `resumed`, after the
-//! surface, the adapter, `Engine::new` and the first solve, so a process that
-//! has printed it is past every step this test exists to watch. A panic inside
-//! `resumed` on macOS aborts rather than unwinds (it cannot cross the
-//! Objective-C frame), so the legend is also the only evidence that would
-//! survive one.
-//!
-//! Bounded, and not a fixed wait. The window is polled for the legend every few
-//! milliseconds for up to ten seconds and the test finishes the moment the line
-//! appears — usually well under a second. Ten seconds is the ceiling on a
-//! failure, not the cost of a pass. Sleeping ten seconds instead would have
-//! made the pass cost the failure's price and told the reader nothing more.
-//!
-//! What a red run looks like. If the process exits before the legend, this test
-//! fails *with the child's stderr in the message* — which is the panic, the
-//! refusal or the `no adapter:` line, printed where whoever ran the test will
-//! read it. That is the whole point: the failure this catches is a sentence the
-//! program already writes and nobody was listening for.
+//! Spawns `karakuri` in a subprocess and polls child stdout until the startup legend
+//! is emitted, capturing stderr upon failure.
 
-// Every test here drives `karakuri` as a subprocess, and that binary opens a
-// window and takes a device of its own — so these are GPU tests that no
-// in-process rule can see, exactly as `karakuri-cli/tests/replay.rs` is. The
-// whole file is one `mod gpu`, and karakuri-engine's
-// `tests/gpu_tests_are_under_mod_gpu.rs` is what keeps that honest: `karakuri`
-// is named in its `GPU_BINARIES`, so a spawn of it reads as the reach it is.
-//
-// On a machine with no adapter these fail rather than skip, and the message is
-// the program's own `no adapter: …` — which is ADR-0141 working as written.
+// GPU test suite exercising `karakuri` subprocess startup (ADR-0141).
 mod gpu {
     use std::io::{BufRead, BufReader, Read};
     use std::path::{Path, PathBuf};
