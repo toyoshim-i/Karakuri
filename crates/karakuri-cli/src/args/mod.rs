@@ -16,34 +16,16 @@ pub(crate) use validate::*;
 /// comes from `--set`.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FromSet {
-    /// What each geometry was salted with, by index, `None` where the file named
-    /// none.
-    ///
-    /// Per geometry rather than one number for the Set, because that is what the
-    /// record says and what the picture depends on: a salt derived from a source's
-    /// position in `--set` moves when the list is reordered, and one read back from
-    /// a file does not. The first entry doubles as the Set's own seed — see
-    /// [`salts_for`].
+    /// Per-geometry seeds read from the Set file, indexed by geometry slot.
+    /// See [`salts_for`].
     pub(crate) salts: Vec<Option<u32>>,
     pub(crate) camera: Option<karakuri_engine::camera::Orbit>,
-    /// Whether the file said its renderers composite, which `--merge` is the other
-    /// way of saying — see [`layering_for`], where the two meet.
-    ///
-    /// Kept here rather than pushed into `args.merge`. Folding it into the flag
-    /// would make `--load-set` of a composited Set indistinguishable from `--merge
-    /// 0` in every message that prints what the operator asked for, and the two are
-    /// different sentences: one is what the file says, the other is what the hand
-    /// said.
+    /// Layering mode specified by the Set file. See [`layering_for`].
     pub(crate) layering: karakuri_engine::set::Layering,
     /// Which renderer the file left folded to, and `None` where every one of them
     /// is live — see `setfile::Loaded::live`, whose value this is.
     pub(crate) live: Option<u32>,
-    /// What each geometry runs at, by index, `None` where the file named none.
-    ///
-    /// Kept here rather than folded into `--capacity`. One flag holds one number
-    /// and a Set file holds one per geometry, so folding would put the first
-    /// source's count onto every source — which is the bug [`capacities_for`]
-    /// exists to have stopped making.
+    /// Per-geometry capacities read from the Set file. See [`capacities_for`].
     pub(crate) capacities: Vec<Option<u32>>,
 }
 

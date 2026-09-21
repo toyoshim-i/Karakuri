@@ -145,15 +145,7 @@ mod wire_tests {
         assert_eq!(sent[1].edges, vec![edge("morph", "far", "lattice_shell")]);
     }
 
-    /// Two wires on one input on one frame: both are applied in order, the later
-    /// one is what the run holds, and the earlier one is told so.
-    ///
-    /// One aim goes out per slot after every edge on the frame is in the list, so
-    /// the rebuild carries the wiring the frame ended with rather than an
-    /// intermediate one. And the reply to the overwritten request says it was
-    /// overwritten: it did write its edge, so a refusal would be false, and a bare
-    /// "wired" would be a true sentence about a state the run no longer held by the
-    /// end of the frame it was sent on.
+    /// Verifies that multiple wire requests on the same slot in a single frame apply the latest edge.
     #[test]
     fn two_wires_on_one_input_in_one_frame_leave_the_run_wired_with_the_later_one() {
         let mut edges = vec![edge("morph", "far", "sphere_shell")];
@@ -462,36 +454,7 @@ mod wire_tests {
         );
     }
 
-    /// An `operate` naming an operation this program cannot perform comes back as a
-    /// failure, and one it can perform comes back as `ok`.
-    ///
-    /// The two halves are one claim and are asserted together, because a refusal
-    /// that refused everything would pass the first on its own. `Star a Set` is
-    /// performed on the panel by `favourite` and by nothing here; `Gain` is the
-    /// fader every surface has, and both cross the same drain.
-    ///
-    /// Why it matters more than a wrong line on a terminal: the client is a model,
-    /// it reports what it is told to the person sitting there, and *"`Star a Set`
-    /// was performed"* for a star that landed nowhere is the plausible wrong answer
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// is written against. ADR-0334 refused it for the panel in as many words and
-    /// this surface answered `ok` all the same, which is the defect
-    /// [ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)
-    /// left behind here.
-    ///
-    /// End to end: the call goes over the socket, the audit runs on the server's
-    /// own thread, the request crosses `mcp::Reporter::operations`, and a stand-in
-    /// frame loop answers it with the same [`answered`] and the same
-    /// [`performed_at_the_frame`] [`Live::run_operations`] answers with. The loop
-    /// is a thread rather than a `Live` for
-    /// `a_wire_request_is_answered_at_the_frame_it_was_applied_on`'s reason — a
-    /// `Live` needs a window and a GPU — and what it stands in for is the drain and
-    /// the answer. `Live::run_operations`' one arm this does not carry is
-    /// `Operation::TapBeat`, which is not a conversion and has its own performer.
-    ///
-    /// Watched to fail with `answered`'s `Silent` arm answering `Ok(Vec::new())`,
-    /// which is what this program did before: the star comes back as a success
-    /// carrying *was performed*, and nothing was starred.
+    /// Verifies that unsupported operations are rejected over MCP wire while supported operations succeed.
     #[test]
     fn an_operation_this_program_has_no_control_for_is_refused_over_the_wire() {
         let dir = tempfile::tempdir().expect("tempdir");

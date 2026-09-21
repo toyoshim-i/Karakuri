@@ -114,12 +114,7 @@ pub(crate) fn measure_audio(
         recorder.push_audio(audio.record_mut());
     }
 
-    // A correction is worth saying out loud when it is a decision rather than a
-    // trim: acquiring, re-acquiring, and a tap all move the grid at once, and an
-    // operator who cannot see that happen cannot tell a lock from a coincidence.
-    // Scalars only, so pushing it allocates nothing — which is why the tempo
-    // half of the audio path can be recorded on a frame and the measurement half
-    // cannot yet. See the note in `karakuri-environment`'s `session/mod.rs`.
+    // Log non-trim tempo adjustments (e.g. initial acquisition, tap, re-acquisition).
     let reason = audio.reason();
     if let Some(record) = tempo {
         if let (karakuri_store::record::Record::Tempo { bpm, .. }, Some(reason)) = (&record, reason)
@@ -134,14 +129,7 @@ pub(crate) fn measure_audio(
     }
 }
 
-/// What a governor pass decided, said out loud.
-///
-/// One function because there is one thing to say. A replay governs too —
-/// `Record::Residency` carries the request and never the effective level,
-/// precisely so that the machine replaying re-derives it — and the first
-/// version of that had its own smaller copy of these three loops, printing the
-/// parked slots and not the summary. That is the shape this whole change exists
-/// to remove: a second implementation that agrees until it does not.
+/// Logs governor pass decisions and parked slots to stderr.
 pub(crate) fn report_governing(report: &karakuri_engine::governor::Report, why: &str) {
     eprintln!("{why}: {report}");
     for decision in report.parked() {

@@ -1,32 +1,9 @@
 use super::*;
 
-/// The material a session carries at its head, so that a replay can build what
-/// the run was playing.
+/// Generates and writes session head metadata and Set files to allow deterministic replay.
 ///
-/// This used to be the `--load-set` file or nothing, and "or nothing" was a
-/// hole in the invariant the whole record stream exists for: recording without
-/// `--load-set` wrote a timeline of ticks with no material under it, and
-/// `--replay` refused it with "has no L1 slot" long after the set was over.
-/// Nothing said so at the time.
-///
-/// So the head is written from what the run is actually playing. Without a Set
-/// file there is one to make: the `.kir` pair, the capacity, the params, the
-/// bindings and the seed are exactly what `--save-set` writes, and putting the
-/// sources in the store is what makes the head's hashes resolve on the way
-/// back. The Set file it leaves behind is named after the session, so a
-/// recording is also a saved Set and neither had to be asked for twice.
-///
-/// **The head slot's Set file, which is half of a head.** A Set file describes
-/// one Set, so this is slot 0's material — its params, its bindings, its seeds
-/// and its edges. The other half is what the deck held, and
-/// [`karakuri_environment::session::head`] is where the two are put together:
-/// every other slot named by the `procedure` records a swap already writes, and
-/// then the mix. Both writers — this program and the console's `rec` pill — go
-/// through that one function, so a head has one spelling.
-///
-/// The bytes every one of those addresses resolves at are
-/// [`seed_store_for_replay`]'s: a record naming bytes nobody kept is the same
-/// silence as no record at all.
+/// Combines slot 0 Set representation with current deck procedures and mixer state
+/// (see `karakuri_environment::session::head`).
 pub(crate) fn session_head(
     args: &Args,
     placed: &[Vec<Placed>],
@@ -172,41 +149,9 @@ pub(crate) fn held_deck(
     }
 }
 
-/// Every slot's launch sources into the store, because this run records one.
+/// Seeds the store with startup source artifacts for all slots when recording a session.
 ///
-/// A `procedure` record naming a slot's launch hashes is resolved by a replay
-/// reading the artifact back, and a record naming bytes nobody kept is the same
-/// silence as no record at all, so a recorded run owes the store those bytes
-/// before the first frame.
-///
-/// What used to name them is gone, and this is left standing rather than
-/// removed here (ADR-0316). The reader was a rollback onto the launch version:
-/// the engine put a previous Set back and the stream had to say so, in records
-/// naming hashes only this seeding had put anywhere. Nothing puts a version
-/// back now — a version over the budget stays in the slot, stopped — so no
-/// record names a launch hash that a save has not also stored. Whether a
-/// recorded run still owes these bytes is a decision about the record
-/// vocabulary and is the maintainer's; taking them away on this function's own
-/// authority would be a replay that resolves nothing, discovered later.
-///
-/// And only a recorded run owes them, which is the judgement this function
-/// exists to hold. The seeding used to happen for every windowed run on exactly
-/// this reasoning, and the reasoning does not reach that far: a run with no
-/// recorder names no hash anywhere outside itself, and a save that does name
-/// one puts its own bytes as it writes the file — see [`Sources::into_nodes`].
-/// What the wider version cost was a `.karakuri` directory created by a plain
-/// windowed run, which `docs/manual.md` promises does not happen.
-///
-/// **Before [`session_head`] rather than after it**, because the head names these
-/// addresses: a `procedure` record for slot 1 is an address, and a replay refuses
-/// a slot whose address the store cannot resolve. `put_artifact` is
-/// content-addressed, so the slot-0 material `session_head` writes a moment later
-/// repeats nothing.
-///
-/// Reported and not fatal. The recorder itself is fatal on failure because a
-/// run that continued would be a performance nobody can replay with nothing
-/// saying so; this is narrower — one slot's launch material would be
-/// unresolvable — and the sentence is the saying.
+/// Ensures all referenced procedure source hashes in the recorded session are resolvable on replay.
 pub(crate) fn seed_store_for_replay(store: &karakuri_store::store::Store, placed: &[Vec<Placed>]) {
     for (slot, nodes) in placed.iter().enumerate() {
         for node in nodes {
@@ -255,22 +200,8 @@ pub(crate) fn live_sources(playing: Option<&Nodes>, startup: &[Placed]) -> Sourc
             .enumerate()
             .map(|(at, (layer, index, hash))| {
                 let placed = startup.get(at);
-                // **Carried only where the address says these are the bytes on
-                // screen.** Equal hashes mean the slot is still running what it
-                // launched with at this node, so the compiled text this process
-                // is holding is what the file will reference and the store has
-                // to be given it. Unequal means a build put that version there,
-                // and the watcher stored it as it built it — there is nothing
-                // here to add.
-                //
-                // **One predicate asked once, yielding the pair.** The card and
-                // the bytes travel on exactly the same condition, and
-                // `SavedNode::meta` states that as an invariant —
-                // `Sources::into_nodes` writes the card inside the `if let` for
-                // the source and would silently drop a card that outlived its
-                // bytes. Asked twice it was two derivations of one question with
-                // nothing holding them together, which is the defect this file
-                // has already paid for in `Running` and in `Sources`.
+                // Include source and metadata when the active node matches the startup hash;
+                // dynamically loaded nodes are already persisted by the watcher.
                 let (source, meta) = placed
                     .filter(|p| p.hash() == *hash)
                     .map(|p| {
@@ -306,26 +237,9 @@ pub(crate) fn saving_nodes(
         .collect()
 }
 
-/// What a saved Set says each of its geometries runs at: what the run was
-/// actually drawing.
+/// Computes actual operating capacities for each geometry in the Set to be saved.
 ///
-/// This wrote `args.capacity` — the flag's number, or its default when no flag
-/// was given — where the run itself asks [`capacity_for`], which prefers the
-/// procedure's own declared default. So saving `lattice_shell` recorded 262144
-/// and the run that saved it drew 32768, and loading the file back gave a
-/// visibly different picture: a larger, smeared lattice.
-///
-/// That falsified the one promise the format makes — a run driven by the file
-/// renders the same frame as the run whose flags wrote it
-/// (`docs/adr/0066-a-flag-becomes-a-record-writer.md`). It was invisible while
-/// a Set was a pair, because the number was wrong in the file and wrong again
-/// on the way back in; `--load-set` learning to honour a recorded capacity is
-/// what made the two disagree out loud.
-///
-/// It changes the bytes of Set files saved by older builds of this program.
-/// Those files still load — a `capacity` record has always meant what it says —
-/// and they go on describing whatever they described. What changes is that new
-/// ones describe the run.
+/// Respects flag overrides or procedure declared defaults (ADR-0066).
 pub(crate) fn saving_capacities(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
     l1s.iter().map(|l1| capacity_for(args, l1)).collect()
 }
@@ -400,18 +314,7 @@ pub(crate) fn save_set(
             // loads.
             edges: &args.edges,
             camera: &camera,
-            // **The flag's, because this path has no Set to ask.**
-            // `--save-set` writes the material and exits before anything is
-            // built, so what the run *would* play is what the flags say — and
-            // for a one-shot they cannot be stale, since nothing has happened
-            // to make them so. `k` and the MCP tool are the paths where that
-            // stops being true, and `playing_values` reads the Set there.
-            //
-            // Through `layering_for`, so the flag and a `--load-set` file
-            // cannot mean different things by it here than they mean anywhere
-            // else — `--load-set` beside `--save-set` is refused, so the file
-            // half is only ever the default today, and one derivation is still
-            // one derivation.
+            // Evaluated via `layering_for` from flags and defaults for one-shot save.
             layering: layering_for(args, 0, recorded_layering(args, 0)),
             // **No selection, because nothing has selected.** `r` is a key
             // pressed at a running frame and there is no flag for it, so a

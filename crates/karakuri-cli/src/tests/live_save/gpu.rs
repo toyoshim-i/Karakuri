@@ -249,17 +249,8 @@ fn a_save_after_a_rebuild_records_the_camera_the_slot_was_loaded_with() {
         "the save after a rebuild would have written a camera the operator never aimed"
     );
 }
-/// A save after a parameter moved records the moved value.
-///
-/// The Set is built with `radius` at 1.0, which is what a `--param radius=1.0`
-/// would have put there, and then moved to 2.6 the way a record moves it
-/// mid-run. The file has to say 2.6: a writer holding its own copy of what the
-/// run was started with records a number nobody has seen, which is the failure
-/// `saving_capacities` was fixed over, arriving one surface further along.
-///
-/// Addressed rather than wildcard, because that is what the Set holds — a value
-/// per node — and because it is the only form that can be checked against the
-/// node that has it.
+/// Asserts that saving after a parameter modification records the updated value
+/// attributed to the specific declaring node.
 #[test]
 fn a_live_save_records_a_param_where_the_run_moved_it_to() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -315,34 +306,11 @@ fn a_live_save_records_a_param_where_the_run_moved_it_to() {
         "a param is recorded against the node that declares it"
     );
 }
-// **Two tests stood here and were deleted with the state they were
-// about** (ADR-0316). Both were a save taken after a rollback: a build
-// compiled, was refused for cost, and the engine put the previous Set
-// back — so the path held one version and the picture another, and a
-// save that read the path wrote down material nobody had seen. Nothing
-// is put back now, so in that case the path and the picture agree and
-// neither test could be set up. The rule they held — **a save records
-// the version in the slot, whatever the path holds** — is unchanged and
-// is what the two tests below assert, through the states that do still
-// separate the two: a run with no watcher, and an edit that arrives
-// between the compile and the first frame.
+// Under ADR-0316, a save records the version currently active in the slot,
+// regardless of on-disk file modifications.
 
-/// A run with no watcher saves the version it is still drawing, however far the
-/// file underneath it has moved.
-///
-/// Nothing picks a `.kir` up without `--watch`: an editor writing over the
-/// path, an `--mcp` write with no watcher behind it — which the program's
-/// `mcp.rs` says out loud when it takes one — and an edit that failed to
-/// compile all leave the same state, and it is a state that never resolves on
-/// its own. The disk moved and the picture did not.
-///
-/// This is why the launch addresses are seeded for every windowed run and not
-/// only an editable one. There is no watcher here to hash anything later, so a
-/// run gated on `editable()` would have nothing to save from and would go on
-/// answering with the path. The bytes behind those addresses reach the store
-/// here, at the save — see
-/// [`a_windowed_run_creates_no_store_until_something_is_saved`] for the other
-/// half of that, which is that nothing reaches it before.
+/// Asserts that a run without a watcher saves the shader versions currently drawn,
+/// even if underlying source files on disk have changed.
 #[test]
 fn a_run_with_no_watcher_saves_the_version_it_is_still_drawing() {
     let gpu = Gpu::headless().expect("no GPU");

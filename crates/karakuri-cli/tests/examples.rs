@@ -1,30 +1,7 @@
-//! Every `.kir` in `examples/`, through the whole front end — and every `.kset`
-//! beside them, which is what says which of those parts make a Set.
+//! End-to-end integration tests validating all example `.kir` and `.kset` files.
 //!
-//! **These are the files the manual tells people to run**, and
-//! before this nothing in the suite opened one. A stale example is not a cosmetic
-//! problem: it is the first thing anyone types, and the first thing a model is
-//! pointed at when it asks what the language looks like.
-//!
-//! Two claims. Every file on its own terms, which is where rot shows first — a
-//! renamed builtin, a tightened range, a `blend` value that stopped existing —
-//! and then the *combinations* the documentation offers, since a command line in
-//! the manual is a claim about a combination and `Set::build` is where one is
-//! judged.
-//!
-//! **The combinations used to be an array in this file, and now they are the
-//! `.kset` files themselves.** That array's own header said why it had to be by
-//! hand — *"Which L1 goes with which L4 is written in prose and in the files'
-//! own comments, never in the files, so the pair list below is by hand"* — and
-//! the authoring form ([ADR-0229], [ADR-0231]) is the language being asked. So
-//! this test stopped holding the answer and started checking the files that do:
-//! it reads `examples/*.kset`, and a combination nobody wrote down is a
-//! combination nothing here builds. Two checks come with the move that a list in
-//! Rust could not make — that every part a Set names is a file that is there, and
-//! that every part in the directory is named by some Set.
-//!
-//! [ADR-0229]: ../../../docs/adr/0229-a-set-file-is-authored-beside-its-parts-and-travels-as-a-bundle.md
-//! [ADR-0231]: ../../../docs/adr/0231-a-sets-two-forms-take-two-extensions-and-the-store-holds-only-the-resolved-one.md
+//! Validates syntax, type checking, and contracts for standalone `.kir` files
+//! as well as combinations defined in `examples/*.kset` (ADR-0229, ADR-0231).
 
 use std::path::{Path, PathBuf};
 
@@ -67,15 +44,8 @@ struct Edge {
     to: String,
 }
 
-/// One `examples/*.kset`, read as the file rather than through a decoder.
-///
-/// **Deliberately parsed here rather than by `karakuri_store::Record`.** What
-/// these tests defend is the *shipped files*, and a reader that shared the
-/// program's vocabulary would pass on a file the program will one day stop
-/// understanding — a renamed field would move both halves at once and nothing
-/// would fail. So this reads `t`, the four fields it needs, and ignores the
-/// rest, which is what the format's own forward-compatibility rule says a reader
-/// does with a `t` it does not know.
+/// Represents an `examples/*.kset` file, parsed independently of `karakuri_store::Record`
+/// to guard against silent format drift in shipped files.
 struct Kset {
     /// The file's stem, which is the id an operator will point at.
     stem: String,

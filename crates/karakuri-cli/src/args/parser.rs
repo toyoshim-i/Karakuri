@@ -124,38 +124,8 @@ pub(crate) fn extent(flag: &str, value: String) -> Result<(u32, u32), String> {
     }
 }
 
-/// One `--bind` value, as the `bind` record's own fields.
-///
-/// The grammar is `field=value`, comma separated, and every field name is the
-/// record's. The single deviation is `range`, which the record writes as a
-/// two-element array and this writes as `LOW..HIGH` — a comma inside a value
-/// would be indistinguishable from the separator between fields, and quoting
-/// rules to fix that would be a second grammar rather than a smaller one.
-///
-/// Unknown fields are refused rather than ignored. The record format ignores an
-/// unknown `t` for forward compatibility between engine versions; a typo on a
-/// command line has no such excuse, and `curv=pow2` silently taking the default
-/// curve is the exact silence every other flag here was fixed for. `--edge
-/// <node>.<slot>=<node>` — bind one procedure's declared input slot to a node
-/// of the Set, whatever type the slot was declared with.
-///
-/// `.` between the node and the slot, `=` before the node it is bound to. The
-/// `=` is `--set`'s already and means "the thing on the left is a name for the
-/// thing on the right"; the `.` is the same dot the procedure reads the slot
-/// through, so `--edge morph.far=sphere_shell` and `far.position` in the
-/// `deform` are visibly one spelling. A Field slot is read as a call rather
-/// than through a dot — `--edge field_lens.shape=melt_blob`, then `shape(p)` —
-/// and still writes the same record, because what an edge says is the same fact
-/// whatever fills the slot. `:` was not available — `--param` and `--publish`
-/// use it for a layer and an index, and it is a path character on Windows.
-///
-/// `--bind` was taken, by signals, which is the other reason the word here is
-/// `edge`: it is what the record has always been going to be called, since what
-/// it writes down is one edge of the graph a Set describes.
-///
-/// Every part is refused empty rather than accepted and resolved to nothing: an
-/// edge with no slot in it is a sentence about a node, and there is no such
-/// sentence.
+/// Parses `--edge <node>.<slot>=<node>`, binding a procedure's declared input slot
+/// to another node in the Set.
 pub(crate) fn parse_edge(value: &str) -> Result<karakuri_engine::set::Edge, String> {
     let bad = |what: &str| format!("`--edge {value}` — {what}");
     let Some((from, to)) = value.split_once('=') else {
@@ -333,31 +303,7 @@ pub(crate) fn parse_bind(value: &str) -> Result<Binding, String> {
 /// check and the message cannot drift apart.
 pub(crate) const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
 
-/// `--param [L4:N:]name=value`.
-///
-/// The address is optional and is `layer:index:` when it is there. A bare name
-/// is a wildcard — every node declaring it, "the Set's `exposure`", one knob
-/// moving both renderers — which is what this flag has always meant and is the
-/// useful default. The prefix is what sets two renderers apart, and it is
-/// present or absent as a unit for the reason `ParamWrite::at` gives: a layer
-/// alone stopped naming a node when a Set gained a list of them, so a
-/// half-address would be a wish rather than an address.
-///
-/// `:` cannot occur in a param name — identifiers are alphanumerics and
-/// underscores — so splitting on it is unambiguous and needs no quoting. A
-/// malformed override is refused rather than dropped, on the same terms every
-/// other flag here is: silence looks exactly like a parameter that was applied
-/// and had no visible effect. A name that no procedure declares is still only a
-/// warning at build time — that one is a question about the `.kir`. A layer
-/// name as an operator writes it. One reader, so `--param` and `--bind` cannot
-/// disagree about which layers a Set has — they did, and the disagreement was
-/// silent: `--param L2:…` was refused as a malformed address while `--bind
-/// layer=L2` was refused with a sentence saying L2 did not exist yet, both long
-/// after it did. A layer as the record vocabulary spells it.
-///
-/// Exhaustive on purpose. A sixth `Kind` stops compiling here rather than
-/// falling to a default, which is what the two places that used to map this by
-/// hand could not promise.
+/// Converts an IR layer kind to the corresponding record layer enum.
 pub(crate) fn record_layer(kind: karakuri_ir::Kind) -> Layer {
     karakuri_environment::meta::layer_of(kind)
 }
@@ -412,13 +358,7 @@ pub(crate) fn parse_param(value: &str) -> Result<ParamWrite, String> {
     let (addressed, rest) = match value.split_once(':') {
         Some((layer, rest)) => {
             let kind = layer_named(layer).ok_or_else(bad)?;
-            // **The index is required, even where a layer can hold only one
-            // node.** `L3:0:radius` for a camera a Set has exactly one of is
-            // two characters of ceremony, and the rule it keeps is worth more:
-            // the address is `layer:index:` present or absent as a *unit*, so
-            // there is exactly one wildcard spelling — a bare name. Making the
-            // index optional would give `L4:exposure` a third meaning, sitting
-            // between "every renderer" and "renderer 0".
+            // The address is `layer:index:` present or absent as a unit; a bare name is a wildcard.
             let (index, rest) = rest.split_once(':').ok_or_else(bad)?;
             let index: u32 = index.parse().map_err(|_| bad())?;
             (Some((kind, index)), rest)

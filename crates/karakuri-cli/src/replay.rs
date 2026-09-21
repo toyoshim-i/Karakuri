@@ -231,11 +231,7 @@ pub(crate) fn replay_session(args: &Args, id: &str) {
         &mut vec![false; loaded.bindings.len()],
         &loaded.params,
         &loaded.bindings,
-        // **A Set file does not record an interface yet**, on the same terms it
-        // records neither a chain nor a camera: it names an L1, its renderers,
-        // their values and their bindings. Publishing nothing is
-        // publishing everything, so a replay shows the whole console — which is
-        // the safe direction, since an interface is about attention.
+        // An empty published controls list exposes the full interface by default.
         &[],
         // The Set's own seed — what an L3 reads — is the first geometry's,
         // which is what one number can hold and what a file recording one seed

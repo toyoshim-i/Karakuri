@@ -200,14 +200,7 @@ fn slot_zero_keeps_the_original_seed() {
     assert_eq!(seed_for(0), SEED);
 }
 
-/// What a Set file recorded is what the run uses, and an ordinal fills in the
-/// rest.
-///
-/// The two halves are one function on purpose: this is what a slot is built
-/// with *and* what `--save-set` writes down, so a file cannot record a salt the
-/// run was not using — the failure [`saving_capacities`] was fixed after, one
-/// field along. An unsaved `--set` is the ordinals, which is what makes saving
-/// a no-op on the picture and reloading a reproduction of it.
+/// Verifies that recorded salts take precedence and unrecorded salts are derived from the seed.
 #[test]
 fn a_recorded_salt_wins_and_an_unrecorded_one_is_derived() {
     let seed = seed_for(0);

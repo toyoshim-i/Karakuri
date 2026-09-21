@@ -852,35 +852,11 @@ pub(crate) fn build(
             // `build_many`, and deriving it a second time to print it is the
             // shape this repository keeps finding wrong.
             eprintln!("  nodes: {}", set.node_names().join(", "));
-            // **The `camera` record, into the node it is about.** It used to
-            // be applied only to a Set whose files declared no L3, because an
-            // L3 wrote the one camera state there was and an orbit assigned
-            // beside it would have been overwritten before the first draw. The
-            // orbit is its own node now — the last one, whatever else the Set
-            // holds — so the record reaches it either way, and whether any
-            // renderer draws from it is what an `edge` says rather than what
-            // the file list happens to contain.
+            // Applies recorded camera configuration into the camera node (ADR-0318).
             if let Some(camera) = camera {
-                // **Through `aim_camera`, which states the three placement
-                // numbers into the camera node's parameter map as well.**
-                // Assigning the field alone would leave the map holding the
-                // numbers the Set was built with, and the picture reads the map
-                // (ADR-0318).
                 set.aim_camera(camera);
             }
-            // **The `merge` record's selection, where the `camera` record's
-            // six numbers go** — before the params and for their reason: a
-            // value the file recorded is applied to the Set the file built,
-            // once, in the one place that knows both. A Set comes up with
-            // every input live, so leaving this out is a composited Set
-            // loading back unselected, which is the half of a variant pool
-            // that made saving one pointless.
-            //
-            // **Ineffective under `Overdraw`, and said rather than refused**,
-            // which is `Set::select_renderer`'s own rule: a file that records
-            // no `merge` records no selection either, so the only way to reach
-            // this with an overdrawing Set is `--merge` left off a file that
-            // has one — and `layering_for` decides that one line above.
+            // Restores recorded renderer selection for composited sets.
             if let Some(at) = live {
                 if !set.select_renderer(at as usize) {
                     eprintln!(

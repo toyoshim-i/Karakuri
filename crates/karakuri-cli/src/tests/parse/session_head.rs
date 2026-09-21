@@ -383,17 +383,7 @@ fn no_arguments_is_the_default_pair() {
     );
 }
 
-/// A demonstration brings the scene it is about. `--demo lines` fades each slot
-/// out in turn so the other is seen alone, and on a one-slot deck that shows
-/// the picture and then an empty frame — the demonstration would run, look like
-/// it worked, and demonstrate nothing.
-///
-/// Two slots, therefore, even though a stack would fit in one. This was briefly
-/// rewritten to a single slot holding both renderers, on the grounds that it is
-/// the shape the milestone made possible — which broke it, because the script
-/// takes one slot at a time out of the mix and a fader is per slot rather than
-/// per renderer. Slot 0 carries the stack, which is what the milestone actually
-/// buys here: the same two draws, over one simulation instead of two.
+/// Verifies that `--demo lines` configures a two-slot deck for slot fade demonstrations.
 #[test]
 fn the_lines_demo_supplies_its_own_two_slot_deck() {
     let args = parse(&["--demo", "lines"]).expect("should parse");

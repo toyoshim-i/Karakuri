@@ -70,19 +70,7 @@ fn audio_is_off_unless_asked_for_and_takes_a_device_name() {
     assert!(parse(&["--audio-in"]).is_err());
 }
 
-/// A saved Set records what the run was drawing, which is the one promise the
-/// format makes and the one it was breaking.
-///
-/// `--save-set` wrote `args.capacity` — the flag's number, or its default where
-/// no flag was given — while the run asks each procedure for the default *it*
-/// declares. A lattice written for 32768 elements was saved as 262144 and
-/// loaded back a larger, smeared version of itself.
-///
-/// It was invisible while `--load-set` also ignored what the file said: the
-/// number was wrong on the way out and wrong again on the way in, and the two
-/// cancelled. Teaching the loader to honour a recorded capacity is what made
-/// them disagree out loud, which is the ordinary way a pair of compensating
-/// errors is found.
+/// Verifies that saving a Set records actual operating capacities rather than fallback defaults.
 #[test]
 fn a_saved_set_records_the_capacity_the_run_was_drawing() {
     let small = compile::check(

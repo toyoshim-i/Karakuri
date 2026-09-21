@@ -15,11 +15,8 @@
 //! offscreen run is documented to be a function of its inputs. Without it, a
 //! renderer with any run-to-run noise at all would pass every assertion below.
 
-// Every test here drives `karakuri-cli` as a subprocess, and that binary takes
-// a device of its own — so these are GPU tests that no in-process rule can see.
-// The whole file is one `mod gpu`; `tests/gpu_tests_are_under_mod_gpu.rs` in
-// karakuri-engine is what keeps that honest, by counting a spawn of a binary
-// that reaches `Gpu::headless` as a reach of its own.
+// Subprocess GPU integration tests for `karakuri-cli`.
+// Placed in `mod gpu` to align with workspace GPU test suite conventions.
 mod gpu {
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -127,20 +124,7 @@ mod gpu {
         (of("L1"), of("L4"))
     }
 
-    /// **A head naming two slots replays both of them.**
-    ///
-    /// A session stream used to have no way to say what a *deck* held — a Set file
-    /// describes one Set — so `--replay` built a deck of one and reported every
-    /// record naming another slot rather than obeying it. A head says it now: one
-    /// Set file for slot 0 and one `procedure` record per node of every other slot.
-    ///
-    /// **Three streams differing by what the head names**, on the `look` test's
-    /// terms. `one` is the head alone; `two` puts the same material in slot 1,
-    /// which draws at its own seed and so is a second picture rather than the first
-    /// one twice; `muted` is `two` with slot 1's fader at zero. The first pair says
-    /// the second slot reached the mix at all, and the second says a record naming
-    /// it is *obeyed* rather than skipped — which is the half that a deck of one
-    /// silently got wrong.
+    /// Verifies that session replay properly reconstructs and renders multiple active deck slots.
     #[test]
     fn a_head_naming_two_slots_replays_both_of_them() {
         let dir = scratch("deck");
@@ -471,24 +455,8 @@ mod gpu {
         (at(16), at(20))
     }
 
-    /// **A replay meeting a `save` renders its frames and writes no Set file.**
-    ///
-    /// The one record in the vocabulary whose subject is outside the stream. Every
-    /// other record here describes the deck, and obeying it is what replaying
-    /// means; obeying this one would mean creating a file in a store nobody asked
-    /// this run to touch — under an id that may already exist, holding somebody
-    /// else's material. So `--replay` stops being a function from a stream to some
-    /// frames.
-    ///
-    /// Three claims, and the third is the one this file's method is for:
-    ///
-    /// - **no file appears** under the id the record names;
-    /// - **the skip is said out loud**, naming that id, because a replay that
-    ///   passed over an outside effect in silence would be the one place in this
-    ///   program where something did not happen and nothing mentioned it;
-    /// - **the frames are unaffected** — byte for byte the same as the same
-    ///   session without the record. Without that last one, "nothing was written"
-    ///   would be consistent with a replay that had refused the whole stream.
+    /// Verifies that encountering a `save` record during replay does not write to the store,
+    /// logs a skip message, and leaves rendered frames identical.
     #[test]
     fn a_save_record_is_skipped_out_loud_and_writes_nothing() {
         let dir = scratch("save");
