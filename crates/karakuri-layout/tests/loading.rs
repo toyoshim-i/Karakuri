@@ -185,13 +185,8 @@ fn a_saved_arrangement_whose_children_lead_back_up_fails_to_load_rather_than_ove
 
 #[test]
 fn a_saved_arrangement_whose_parents_loop_fails_to_load_rather_than_hanging() {
-    // The worst of the three. `visible` and `is_ancestor` walk up the parent
-    // pointers, so a pane that records its own child as its parent makes them
-    // spin forever: no panic, no output, nothing to read afterwards — and the
-    // suite would be stuck rather than red.
-    //
-    // Nothing here reaches that loop, because the file is refused before a
-    // `Layout` exists to walk.
+    // Verifies that cyclic parent-child relationships are rejected during
+    // deserialization before tree traversal occurs.
     let mut file = saved();
     let left = node(&file, "left-pane");
     let library = node(&file, "library");
