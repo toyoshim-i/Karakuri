@@ -400,14 +400,10 @@ fn element(@builtin(global_invocation_id) gid: vec3<u32>) {{
     )
 }
 
-/// Lowers a `Checked` L1 procedure to WGSL. Panics if `checked.kind` is not
-/// `Kind::L1` or it has no `element` block — both are preconditions a
-/// `Checked` value from a real check pass already guarantees.
-/// `derived` is what the *Set* has decided to synthesise — the attributes some
-/// node below this one consumes and nothing emits. An L1 file cannot know it,
-/// which is the point: the slots those rules read are written here, at spawn and
-/// on every step, and only a caller holding the whole chain knows whether
-/// anything is going to ask for them.
+/// Lowers a `Checked` L1 procedure to WGSL compute shaders.
+///
+/// Preconditions: `checked.kind` must be `Kind::L1` and contain an `element` block.
+/// `derived` specifies attributes synthesized for downstream consumers in the render graph.
 pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>) -> L1Shader {
     assert_eq!(
         checked.kind,

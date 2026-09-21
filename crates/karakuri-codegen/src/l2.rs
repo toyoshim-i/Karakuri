@@ -1,76 +1,15 @@
-//! L2 lowering: `deform` as one compute entry point over the elements that
-//! reach it.
+//! L2 procedure lowering: generates compute shader passes for element deformation.
 //!
-//! # Two element buffers, and the copy between them is the layer
+//! ## Execution Model
 //!
-//! An L1 reads `prev` and writes `next` — one buffer shape, two instances,
-//! swapped. An L2 reads the buffer **its upstream node wrote** and writes one
-//! of its own, which is a different relationship: the two layouts are not the
-//! same struct. The output carries every attribute the input had, plus whatever
-//! this procedure adds by declaring `emit`, so an L2 can widen the element for
-//! everything downstream of it — `docs/ir-spec.md`, "L2 and L3".
-//!
-//! Every generated `deform` therefore begins with a **pass-through**: each
-//! output slot is filled from the input's slot of the same name, and any slot
-//! the input did not have is zeroed. Then the block runs, over the output. That
-//! is what makes a modulator a modulator rather than a second generator — it
-//! rewrites some of what reaches it and leaves the rest alone, without every
-//! procedure having to restate the whole element.
-//!
-//! # Statelessness is structural here rather than checked
-//!
-//! `docs/ir-spec.md` makes "an L2 is stateless" the load-bearing decision of the
-//! layer: it is what keeps a modulator freely stackable, keeps `closed_form` and
-//! priming questions the L1 alone answers, and makes fusion legal for a graph
-//! compiler rather than merely plausible.
-//!
-//! **The lowering makes it true rather than the checker refusing what breaks
-//! it, and the pass-through above is the whole of the mechanism.** Because every
-//! output slot is overwritten from the input before the block runs, there is no
-//! previous value left to accumulate onto: `position = position + v` moves an
-//! element by `v` from wherever the *input* put it this frame, never from where
-//! this node left it last frame. Zeroing a slot the input did not have is the
-//! same property for a newly emitted attribute — leaving it stale would be
-//! exactly the previous frame's value coming back.
-//!
-//! Reads addressing `dst` rather than `src` is **not** what makes this true, and
-//! it would be easy to mistake for it. After the copy the two hold the same
-//! bytes, so for an attribute that came from upstream either spelling reads the
-//! same value. `dst` is used because it is the only one that works for an
-//! attribute this node *added*, which has no field in `ElementIn` at all.
-//!
-//! # A mask is where the deformation applies, and `weight` is how much
-//!
-//! Both are optional and both end at the same number. An L2 that declares
-//! neither is what every L2 was before they existed: applied everywhere, in
-//! full. What the two add is a blend at the very end of the entry point —
-//! `dst[i] <- mix(input, deformed, weight * strength)` — so a modulator becomes
-//! *partial* rather than becoming a different modulator.
-//!
-//! **They are separate because their audiences are.** `weight` is a declared
-//! `param`, so it goes on a fader, takes a signal binding, moves under a
-//! transition and is saved in a Set file; `strength` is an expression over the
-//! attributes reaching this node, and decides *where*. Folding the first into
-//! the second would put the operator's control inside a block and take every one
-//! of those surfaces away from it.
-//!
-//! **The mask runs before the body and reads the input**, which costs nothing to
-//! arrange: after the pass-through, `dst` holds exactly what `src` does, so a
-//! mask reading `dst[i].position` is reading what reached this node. It has to
-//! be that way round — a mask evaluated on the *deformed* element would be
-//! deciding where to apply a deformation from a position that deformation had
-//! already moved.
-//!
-//! # What it does not do
-//!
-//! **It cannot `kill()`** — refused in the checker, with its own reason. Liveness
-//! is settled by the compaction that runs once after L1, and nothing downstream
-//! of a deformation reconsiders it, so an L2 removing an element would be
-//! removing it from a range that had already been decided.
-//!
-//! Dead slots are skipped rather than deformed. Whatever the output holds there
-//! is never read: a reader takes its alive flags from the same buffer the input
-//! did, and the flag is what a renderer's vertex stage tests per instance.
+//! - **Pass-through copy**: Prior to running deformation statements, output slots are populated
+//!   from upstream inputs, zero-initializing any newly declared attributes.
+//! - **Statelessness invariant**: Output transformations derive strictly from upstream inputs
+//!   without temporal state accumulation.
+//! - **Masking and weighting**: If present, spatial mask evaluation and parameter weight combine
+//!   via linear interpolation: `mix(input, deformed, weight * strength)`.
+//! - **Liveness preservation**: Inactive/dead element slots are skipped; compaction occurs strictly
+//!   at the L1 stage.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
@@ -221,11 +160,7 @@ pub fn generate_l2(
         emit_stmts(&deform.stmts, &resolver, &mut req, 1, &mut out);
         out
     };
-    // **`weight` is a declared param the lowering gives a meaning to**, on the
-    // same terms `spawn_rate` is one the engine reads: the checker refuses it as
-    // anything but a `float`, and multiplying it in here is what keeps it an
-    // ordinary param everywhere else — publishable, bindable, saved in a Set
-    // file — rather than a second mechanism beside the mask.
+    // Multiplies evaluated mask strength by the declared `weight` parameter if present.
     let weight = checked.params.iter().any(|p| p.name == "weight").then(|| {
         format!(
             "    strength = strength * u.{};\n",

@@ -1,58 +1,15 @@
-//! L5 lowering: `frame` as one fullscreen fragment pass over `src`.
+//! L5 procedure lowering: generates fullscreen fragment post-processing shader passes.
 //!
-//! # It is the fullscreen L4 with the camera taken out
+//! ## Execution & Resource Layout
 //!
-//! Almost every sentence here is that one read out loud. The vertex stage is
-//! generated rather than lowered, because the procedure has no `vertex` block
-//! and no per-element form for one to be a declaration against; `point_coord`
-//! comes out 0..1 across the frame, which is what it already means everywhere
-//! else; and `color` is the one output, `vec4`, linear and unclamped, because
-//! it is the same value at the next node down.
-//!
-//! What it does *not* share is the ray. A fullscreen L4 opens with a ray
-//! prologue and binds the camera unconditionally; an L5 binds no camera at all,
-//! because the frame in front of it may hold several decks' material seen from
-//! several cameras and there is no one viewpoint for it to name. `eye`, `ray`
-//! and `camera` are refused in the check pass, so nothing here has to answer
-//! for them.
-//!
-//! # The bind group is `master.wgsl`'s, entry for entry
-//!
-//! ```text
-//! @group(0) @binding(0)  var<uniform> u: Uniforms
-//! @group(0) @binding(1)  var src:  texture_2d<f32>
-//! @group(0) @binding(2)  var held: texture_2d<f32>   // only under `retains`
-//! @group(0) @binding(3)  var samp: sampler
-//! @group(0) @binding(4…) var tex_<slot>: texture_2d<f32>
-//! ```
-//!
-//! **The first four are the hand-written chain's own layout**, in its own order
-//! — `chain`, `src`, `aux`, `samp` — so that the engine's chain binds a written
-//! pass with the layout it already has rather than with a second one invented
-//! here. `held` is what `master.rs` routes into `aux`, which is the same
-//! binding under the name the language gives it.
-//!
-//! **Binding 2 is left empty rather than renumbered** where the procedure
-//! declares no `retains`. A hole is legal — wgpu accepts a pipeline layout
-//! naming a group entry the module does not use — and it is what keeps every
-//! slot's layout the same shape whatever is in it: renumbering would make the
-//! sampler's binding depend on whether a pass reads its own history, which is a
-//! fact about the picture leaking into the plumbing.
-//!
-//! **The Texture slots start after the sampler**, in header order, so a nested
-//! merge's inputs are numbered by what the file declared and not by what an
-//! edge happened to bind first.
-//!
-//! # What is not here, and is pass 2's
-//!
-//! The chain itself: which cut `held` holds, how a slot's output becomes the
-//! next slot's `src`, and where the retention is copied from. A procedure
-//! declares `retains` and says nothing about which cut — that is the slot's
-//! answer, `mix` or `exit` — and **the retained frame is sanitised where it is
-//! written rather than where it is read**, so nothing in this module guards
-//! against a non-finite texel. That is `master.wgsl`'s `keepable` moved one
-//! step earlier, and it is what makes it something a `.kir` neither needs nor
-//! can leave out.
+//! - **Fullscreen geometry**: Generates procedural full-viewport triangle coordinates (`point_coord` in `[0.0, 1.0]`).
+//! - **Bind group layout**: Matches master compositing pass bindings:
+//!   - `@group(0) @binding(0)`: Uniform parameters (`u`)
+//!   - `@group(0) @binding(1)`: Source render texture (`src`)
+//!   - `@group(0) @binding(2)`: Retained previous frame texture (`held`, if `retains` is declared)
+//!   - `@group(0) @binding(3)`: Texture sampler (`samp`)
+//!   - `@group(0) @binding(4...)`: Auxiliary user texture bindings (`tex_<slot>`)
+//! - **Camera decoupling**: L5 post passes operate on rasterized framebuffers and exclude camera ray projections.
 
 use karakuri_ir::typed::{Checked, TStmt, Target, TexRef};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};

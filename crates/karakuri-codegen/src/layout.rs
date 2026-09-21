@@ -392,14 +392,9 @@ pub fn mangle_source_slot(slot: &str) -> String {
     format!("source_{slot}")
 }
 
-/// The **semantic** name of a Source slot's identity, which is what the engine
-/// looks the uniform field up by — [`field_param_key`]'s counterpart, and its
-/// reasoning verbatim.
+/// Returns the lookup key for a Source slot uniform field.
 ///
-/// The separator is a character no `.kir` identifier can contain, so a slot
-/// called `only` cannot collide with a param a procedure happened to call
-/// `source_only`, and the engine can take the key apart again to get the slot
-/// back without guessing where the prefix ends.
+/// Uses an unrepresentable ASCII `\x01` separator to prevent collision with user identifiers.
 pub fn source_slot_key(slot: &str) -> String {
     format!("source\u{1}{slot}")
 }
