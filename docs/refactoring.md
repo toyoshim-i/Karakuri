@@ -82,7 +82,7 @@ Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
 
 | Initiative | Subsystem / File | Lines | Scope & Approach | Status |
 |:---:|---|:---:|---|:---:|
-| **P99** | `karakuri-environment::mix::tests` | 1,485 | Partition mixer state persistence and audio synchronization test cases | **PLANNED** |
+| **P99** | `karakuri-environment::mix::tests` | 1,485 | Partition mixer state persistence and audio synchronization test cases | **COMPLETED** |
 | **P100** | `karakuri-cli::live::interactive` | 1,472 | Modularize CLI interactive terminal event handling and render loop | **PLANNED** |
 | **P101** | `karakuri-engine::tests::binding` | 1,452 | Split pipeline resource binding and bind group layout integration tests | **PLANNED** |
 | **P102** | `karakuri-console::tests::mixer` | 1,449 | Partition mixer bay fader, balance, and solo/mute test suites | **PLANNED** |
