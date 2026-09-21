@@ -1,62 +1,12 @@
-//! The port: the only part of this crate that talks to hardware.
+//! Hardware MIDI input/output port communication and asynchronous event polling.
 //!
-//! Deliberately thin, in the same shape as `karakuri-audio`'s device module —
-//! though not on the same terms, which the callback section below is careful
-//! about. It opens a port, parses each callback's bytes, and pushes whatever it
-//! recognises down a channel. Nothing here decides anything: [`crate::Map`] is
-//! where a message becomes a request, and it is tested against bytes.
+//! ## Architecture
 //!
-//! ## What the callback may not do
-//!
-//! It runs on the MIDI system's thread, and the frame loop reads from the other
-//! end of a channel. An `mpsc::Sender` is the whole of it: **neither side ever
-//! waits on the other**, since `send` on an unbounded channel does not block
-//! and the frame drains with `try_recv`.
-//!
-//! **It is not allocation-free, and `karakuri-audio`'s callback is** — so this
-//! is the weaker of the two claims and saying otherwise would be borrowing that
-//! module's guarantee. `std::sync::mpsc` allocates a block periodically on
-//! send, and an allocation can wait on the allocator. What makes that
-//! acceptable here and not there is the rate: an audio callback runs every 11
-//! ms with a hard deadline behind it, where a MIDI callback runs when a hand
-//! moves and a late one shows up as a knob that lagged. A lock-free queue with
-//! a fixed backing store would close it, and would be fifty lines of ordering
-//! argument for a control surface's worth of traffic.
-//!
-//! Unbounded rather than a ring, and the difference is worth stating: a fader
-//! sweep is a few hundred messages a second at the very most, and a frame loop
-//! that has stopped draining has larger problems than a queue. What a ring
-//! would buy is a bound on memory if nothing ever drained again; what it would
-//! cost is deciding which message to drop, and the answer for a control surface
-//! is "none of them" — the last value of a fader is the fader's position, and a
-//! dropped one leaves it somewhere the operator is not holding it.
-//!
-//! ## A frame loop that sleeps has to be woken
-//!
-//! [`Port::drain`] never waits, which is right for a caller that renders every
-//! frame anyway — `karakuri-cli` is one, and it asks on every pass. **A caller
-//! that sleeps until something happens is the other case**, and for it a
-//! message arriving is an event exactly as a key press is: nothing else is
-//! going to wake it, so a knob turned on a still panel would be applied
-//! whenever the operator next moved the mouse.
-//!
-//! So [`Port::waking`] takes a closure and calls it once per message, on the
-//! MIDI thread, immediately after the send. **It says *something arrived* and
-//! carries nothing**, which is what keeps this crate free of whoever is
-//! listening: the panel hands in an `EventLoopProxy`'s wake and this crate
-//! never learns that a window exists.
-//!
-//! **It is one more thing the callback does**, and the paragraph above is the
-//! standard it is held to rather than an exemption from it: a wake is a write
-//! to whatever the caller's loop blocks on, which is the same order of cost as
-//! the `send` beside it and is bounded by the same rate — a hand moving.
-//!
-//! ## Latency is not compensated here
-//!
-//! A knob move is an operator's hand, so it is *already* where they want it by
-//! the time it arrives; there is nothing to lead. That is the opposite of the
-//! audio path, where the analysis lag and the output lag both have to be led —
-//! see `karakuri-audio`'s `lock` module. Nothing here has a clock at all.
+//! - **Non-blocking ingestion**: MIDI callback threads deliver parsed messages through an `mpsc` channel;
+//!   the render/app thread drains incoming messages via [`Port::drain`].
+//! - **Wakeup callbacks**: Interactive frontends can register wake closures ([`Port::waking`])
+//!   to wake sleeping event loops upon message arrival without leaking GUI dependencies into this crate.
+//! - **Direct transmission**: Outgoing feedback and motorized fader updates are sent over [`midir::MidiOutputConnection`].
 
 use std::sync::mpsc::{self, Receiver, Sender};
 

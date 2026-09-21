@@ -1,10 +1,9 @@
-//! What a message means, as a table an operator writes.
+//! Declarative mapping table translating incoming MIDI messages to operations and vice versa.
 //!
-//! **A surface's numbers are the surface's.** There is no controller this
-//! engine knows the layout of, and inventing one would be a table that fits one
-//! device and misleads about every other. So the mapping is a file, the file is
-//! the operator's, and what this module owns is the translation — not the
-//! layout.
+//! ## Mapping Specification
+//!
+//! Maps MIDI Control Change (`cc`), 14-bit CC (`cc14`), and Note (`note`) events to discrete
+//! or continuous operations:
 //!
 //! ```text
 //!   # slot faders, on the channel the surface is set to
@@ -24,152 +23,17 @@
 //!   cc 30   -> param 0 3
 //! ```
 //!
-//! ## A line names a state, never a step
+//! ## Invariants & Grammar Rules
 //!
-//! **The value word is the grammar**, and it is what
-//! [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-//! costs on this surface: a pad says `residency 2 live`, not *flip slot 2*. A
-//! surface that could only step has no way to *arrive*, and two surfaces
-//! stepping one control disagree about where they are — so a pad that means
-//! *over* is one pad, and a mini that cycles the three is an affordance
-//! whoever draws it builds over three lines of this file.
-//!
-//! `on-air N`, `prime N` and a bare `blend N` were the three that did not have
-//! the shape, and **a file still holding one is refused on that line with the
-//! line to write instead** — never loaded and silently re-read, because
-//! `on-air 0` means *flip it* in a file written last month and would mean *put
-//! it live* today
-//! ([ADR-0196](../../../docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)).
-//! **`preview N | mix` had the shape and is gone**: ADR-0240 retired *Choose
-//! what the output shows*, so `preview` is not a control at all any more and
-//! is refused by the arm every unknown word is — the line is reported with its
-//! number and the rest of the map loads.
-//!
-//! ## A parameter is reached by position, and this crate cannot finish the line
-//!
-//! `cc -> param <deck> <position>` is a control of the Set on that deck, by its
-//! place in the published interface, counting from one — the number the
-//! Inspector draws beside the row. **A position and never a name**
-//! ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)):
-//! *knob 3 is knob 3 whatever Set is loaded*, where a name would be a mapping
-//! paid for again on every swap — and the same Set in two decks is two
-//! addresses, because the deck is in the address.
-//!
-//! **It is the one target [`Map::operation`] answers `None` to**, and
-//! [`Map::parameter`] answers it instead. A position becomes a `ParamAt` only
-//! against the Set that is in the deck right now, which is a readback and this
-//! module has none by charter; whoever holds the deck finishes it
-//! (`karakuri_environment::midi::Interface`). The two accessors are disjoint by
-//! target and a test holds that they are, so a target added to the grammar and
-//! to neither is a compile-time list short rather than a knob that goes quiet.
-//!
-//! **The range on that line is optional and nowhere else is.** Every other
-//! continuous target moves a control of the console's own, whose range this
-//! crate can state; a published control's range is the *Set's*, so `None`
-//! means *the range the Set published it over*, and a range on the line
-//! overrides it as it does on a gain.
-//!
-//! **It is also what a learn writes** — [`Map::learn`], the one thing here
-//! that changes a map
-//! (`docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`).
-//!
-//! ## Half the mask, because half of it can be said here
-//!
-//! `cc -> mask-position N` is the front of a deck's mask, `[0, 1]`, and a hand
-//! on it stops the wipe that was carrying it
-//! ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-//! **The mask's other row has no line here**, and the reason is in this
-//! grammar rather than in the vocabulary:
-//! [`karakuri_operation::Operation::SetMaskShape`] carries an angle as well as
-//! a kind, a line can say a slot number, a value word out of a list, or a
-//! trailing `[lo, hi]` — and **none of those is a bare number**, so an angle
-//! cannot be written. A pad that named a kind alone would have to invent the
-//! angle beside it, and this crate reads nothing back to invent it *from*,
-//! which is [ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)'s
-//! fault one field along. So the row is left with no route rather than given a
-//! lossy one, and what it would cost to give it one — a float form, an
-//! angle-less operation, or the gap — is
-//! [ADR-0202](../../../docs/adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md),
-//! which names the three and takes none. **The third is taken**
-//! ([ADR-0209](../../../docs/adr/0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md)):
-//! this grammar stays as it is, and what would reopen it is a control that
-//! *shows* an angle rather than any change here.
-//!
-//! ## What this deliberately does not do
-//!
-//! **It produces a [`karakuri_operation::Operation`], never a record and never
-//! a call.** The engine is driven through the record stream and
-//! `karakuri-operation-record` is where a record is built; a second place
-//! building them would be two spellings of one rule, and the rule is the
-//! invariant that a surface can do nothing a key cannot. What reaches the
-//! engine from a fader is the same `gain` record a keypress writes, so **a
-//! session recorded from a controller replays with no controller attached** —
-//! and the map is not in the stream, because which knob was turned is a
-//! property of the room's hardware rather than of the performance.
-//!
-//! **It reads nothing back.** [`Map::operation`] is a pure function of one
-//! message, which is this module's whole test story: `parse`, then
-//! `operation`, with no world to set up and nothing to mock. It is also why
-//! `cc -> exposure` names [`karakuri_operation::Operation::SetExposure`] and
-//! not a whole look — a map has no way to know the tone map operator a record
-//! carries beside it, and the place that writes the record fills it in
-//! ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
-//!
-//! ## A fader is 128 positions, or 16384 where the line says `cc14`
-//!
-//! A control change carries seven bits, and `cc 1 -> gain 0` reads them as 128
-//! positions — about 0.8% of a gain's range per step, which is a real
-//! coarseness and was the whole of what this crate did. **`cc14 <msb> <lsb> ->
-//! <control>` is the pair**, the MIDI convention where one controller carries
-//! the top seven bits and a second carries the bottom seven: the value is
-//! `(msb << 7) | lsb` over 16384 positions, scaled onto the target's range
-//! exactly as a 7-bit line's is.
-//!
-//! **Both numbers are written out.** The convention pairs `n` with `n + 32`
-//! and controllers exist that do not honour it, so the line names the two it
-//! means and an operator checks them against their device's manual rather than
-//! against a convention. A pair that is one controller twice, or whose second
-//! half is past 127, is refused at parse **naming both numbers**.
-//!
-//! ### The lone MSB moves the control coarsely and the LSB refines it
-//!
-//! A device sends the MSB first and the LSB after it, and the two are two
-//! messages with a frame boundary free to fall between them. **An MSB on its
-//! own is read as the 7-bit value it is** — `msb / 127`, the same reading
-//! `cc <msb>` would give — and the LSB that follows re-states the control at
-//! `((msb << 7) | lsb) / 16383`. So **both ends stay exact**: a fader at the
-//! top sends MSB 127 and reaches 1.0 whether or not its LSB arrives, and a
-//! surface that sends MSBs only is a 7-bit fader on the same line. **A lone
-//! LSB moves nothing** — [`Map::operation`] answers `None` for it — because
-//! there is nothing to refine until an MSB has been seen for that control.
-//!
-//! Nothing is held back and nothing is timed: **no message waits for its
-//! partner**, so no fader is ever left between two values by a pair that did
-//! not finish. Holding the MSB for a window instead is the alternative, and it
-//! needs a clock on a route that has none (see this crate's *Latency is not
-//! compensated here*) and leaves a coarse-only device stuck at its last
-//! position for as long as the window lasts.
-//!
-//! **The one piece of state a pair needs is the caller's.** The MSB last seen
-//! for a control has to live somewhere between two messages, and this module
-//! is a pure function of one message: [`Map::wide`] says which half arrived
-//! and which pair it belongs to, and [`Map::operation_wide`] takes the
-//! assembled value. `karakuri_environment::midi::Router` is what holds the
-//! halves, beside the frame's coalescing it already holds.
-//!
-//! ## The surface is shown what the deck holds
-//!
-//! The map read the other way: [`Map::echoes`] is every mapped control as an
-//! [`Echo`], which says *what to read* ([`Echo::control`], an address rather
-//! than a value) and *how to say it on the wire* ([`Echo::position`] and
-//! [`Echo::wire`]). That is what makes an LED follow a residency and a
-//! motorised fader follow a gain a transition is moving.
-//!
-//! **This crate still reads nothing back.** An `Echo` is handed a [`Shown`] —
-//! where the control is, in its own units — by whoever holds the deck, and
-//! answers the bytes. The inverse of [`scale`] is the whole of the
-//! arithmetic, and it is exact at both ends for the same ranges the forward
-//! direction is.
+//! - **State-targeting semantics**: Mapping rules target absolute states or setpoints rather than
+//!   relative toggle steps (Principle 0090, ADR-0196).
+//! - **Positional parameter addressing**: Published Set parameters are addressed by deck and slot
+//!   position (`cc -> param <deck> <position>`) rather than procedure name (ADR-0268).
+//! - **14-bit CC handling**: High-resolution faders (`cc14 <msb> <lsb>`) map 14-bit ranges
+//!   (`[0, 16383]`). Lone MSBs execute coarse updates immediately; incoming LSBs refine the value
+//!   without timer delays.
+//! - **Bi-directional feedback (`Echo`)**: Maps surface controls to outgoing wire representations
+//!   to drive LED indicators and motorized faders.
 
 use std::collections::HashMap;
 
