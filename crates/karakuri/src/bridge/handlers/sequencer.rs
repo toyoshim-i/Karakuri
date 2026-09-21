@@ -41,33 +41,7 @@ pub(crate) fn demonstration_banks() -> karakuri_pattern::Banks {
     banks
 }
 
-/// A lane appended to the bank the press named, and what to say about it —
-/// [`sequenced`]'s `PointLane` arm, lifted out because it is the one arm that
-/// reads something other than the pattern.
-///
-/// # Where the two levels come from, and why they are not in the payload
-///
-/// A lane carries an `on` and an `off`
-/// ([ADR-0320](../../docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md)),
-/// filled in at the press and never read back later, because a pattern outlives
-/// the Set it was written against. `Operation::PointLane` carries a bank and a
-/// target and nothing else (ADR-0321), so they are filled here — out of
-/// `View::inspector`, which is *the console's own published reading* and the
-/// very list the chooser drew its items from.
-///
-/// That is one reading and not two. Asking the deck again here would be a
-/// second derivation of the range, and the two could name different numbers the
-/// frame a Set lands; the operator saw the console's, and the lane gets the
-/// console's
-/// ([ADR-0327](../../docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md)).
-///
-/// A fader's are 1.0 and 0.0, which is a gate and is that record's own pair: a
-/// channel fader publishes no range, and `[0, 1]` is what the strip draws.
-///
-/// A parameter the console holds no row for is refused and said, rather than
-/// defaulted: a lane with invented levels would drive its target to two numbers
-/// nobody chose, and the refusal names what the next attempt needs
-/// ([P-0083](../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+/// Appends a pattern lane targeting a parameter or channel fader, resolving on/off values from the view (ADR-0320, ADR-0321, ADR-0327).
 pub(crate) fn pointed_lane(
     banks: &mut karakuri_pattern::Banks,
     view: &View,

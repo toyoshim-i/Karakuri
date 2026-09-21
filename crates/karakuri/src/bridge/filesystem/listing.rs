@@ -275,31 +275,7 @@ pub(crate) fn library(root: &std::path::Path) -> Vec<setfile::SetSummary> {
     }
 }
 
-/// Which Sets this store has starred, as their ids — the other half of what the
-/// Library bay lists, and the half `my sets` *is* (ADR-0299).
-///
-/// # It is [`library`]'s shape one file along, and its failures are the same
-///
-/// A store that is not there holds no stars, a store that will not open is said
-/// out loud rather than answered with silence, and either way the answer is a
-/// set — because a scope that is empty because a file could not be read looks
-/// exactly like one that is empty. The one difference from [`library`] is that
-/// a missing `favourites.json` is not a failure at all: `Store::favourites`
-/// answers an empty set for it, which is a store nobody has starred in.
-///
-/// Nothing is pruned against the listing here. A mark whose Set a hand removed
-/// from `sets/` stays in the file — that is `Store::favourites`' own rule and
-/// ADR-0299's — and what makes it harmless is that [`listing`] takes the
-/// *intersection* with what the store holds, so an id naming no Set draws no
-/// row and can still have its star taken off.
-///
-/// # Off the frame, on the press that builds a listing
-///
-/// One file read, beside the directory read [`library`] already does
-/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)):
-/// at startup and on every press that re-lists, which is a scope, a filter and
-/// a star. `karakuri-console` reaches no disk at all (ADR-0156), so what
-/// crosses the seam is the set of ids.
+/// Returns the set of starred Set IDs recorded in `<store>/favourites.json` (ADR-0299).
 pub(crate) fn favourites(root: &std::path::Path) -> std::collections::BTreeSet<String> {
     if !root.is_dir() {
         return std::collections::BTreeSet::new();
@@ -391,53 +367,7 @@ pub(crate) fn narrowing(holds: Option<&str>, layer: Option<&str>) -> Option<Stri
     }
 }
 
-/// The rows the Library bay lists for the scope that is marked, written into
-/// the view, and the sentence to print about it.
-///
-/// # One function, and it is what a scope *is* on this program's side
-///
-/// The console draws a row of chips and marks one of them; which listing
-/// belongs under that mark is this side's answer, because every one of the four
-/// is something outside this process — a store, a told directory, a filter over
-/// the first, a directory somebody names during the run — and
-/// `karakuri-console` takes none of them (ADR-0156). So the seam is a `Vec` of
-/// names, and this is the one place it is filled.
-///
-/// On the press that changed the scope and at startup, never on a frame. A
-/// listing is a directory read (P-0091), which is the same rule [`library`]
-/// states one scope down and the reason this is not called from the frame
-/// handler.
-///
-/// All five answer with rows now, and each of the five can still answer with
-/// none — [`why_nothing`] is where the sentences are, and it is one function so
-/// that a scope which stops being empty stops being empty in one place. Three
-/// of them depend on something that happened during the run: `folder` is `None`
-/// until somebody drops a directory on this window ([`folder_dropped`]), `my
-/// sets` is empty until somebody presses a star ([`favourite`]), and `history`
-/// is empty until the deck the load pulldown names is running a Set that has
-/// been edited.
-///
-/// # `history` is the one scope that is not a directory of Sets
-///
-/// Its rows are the versions of one Set — the one the load pulldown's deck is
-/// running, which `running` carries — and they come off
-/// `karakuri_environment::history::list`, most recent first, in that function's
-/// own order rather than in one applied here (ADR-0263's argument on a
-/// different listing).
-///
-/// The narrowing is a Set and never a deck, which is why `running` is an id
-/// rather than a slot: two decks playing one Set have one history between them,
-/// and a version is filed under the Set the slot was running (ADR-0304). A
-/// `None` row matches no Set rather than matching every one of them — a version
-/// written where there was no Set is a version of nothing, and treating it as a
-/// wildcard would put another run's edits under whatever Set happens to be
-/// loaded now (ADR-0276's own consequence).
-///
-/// The cap is on the walk and not on the Set. [`HISTORY_MOST`] rows are asked
-/// for and the narrowing happens after, so a store whose day directories hold
-/// several Sets' versions lists fewer of each; `Listing::stopped_short` is what
-/// says the walk stopped with days unread, and it is said out loud beside the
-/// count rather than left for the foot's `n of m` to imply.
+/// Populates the Library bay view rows for the currently active scope and returns a summary log line (ADR-0156, ADR-0263, ADR-0304).
 pub(crate) fn listing(
     view: &mut View,
     store: &std::path::Path,
@@ -450,16 +380,7 @@ pub(crate) fn listing(
             "  library: this console was handed no scopes, so there is no library to list",
         );
     };
-    // **The store's own listing is what the filter row narrows**, and that is
-    // `Operation::ListSets`'s own scope rather than a shortcut here: the row is
-    // *List what the **store** holds*, which is `all` — and `my sets` is that
-    // same listing starred (ADR-0299), so both are narrowed by the same retain
-    // and neither is a second reading. The other two listings are not the
-    // store: `presets` is a told directory of files and `folder` is somebody
-    // else's. So the candidates are emptied for them, which is what makes
-    // `View::filters` read both fields as unset there rather than the bay
-    // hiding rows under a filter it is not applying. The filter comes back with
-    // the scope, because the position it is kept as is still there.
+    // The filter row narrows store-backed set listings (`AllSets` and `MySets`) (ADR-0299).
     let held = match scope {
         Scope::AllSets | Scope::MySets => library(store),
         _ => Vec::new(),
@@ -622,11 +543,7 @@ pub(crate) fn listing(
     // address, and the address is the hash of bytes this side has and the
     // console has not (ADR-0156).
     view.chain_add = chain_offers(store, &kept, &shipped);
-    // **Only where the filter was applied.** `layer` survives a scope change —
-    // it is the console's own value and not a position in a listing — so a bay
-    // reading `presets` under a set `layer` field would otherwise report a
-    // narrowing that narrowed nothing. What says so out loud is the press:
-    // `Readout::narrowed`.
+    // Apply filter narrowing only for store-backed scopes.
     let narrowed = matches!(scope, Scope::AllSets | Scope::MySets)
         .then(|| narrowing(holds.as_deref(), None))
         .flatten();

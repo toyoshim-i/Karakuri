@@ -120,20 +120,7 @@ fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
     );
 }
 
-/// The deck head's two operations, as far as this program can take them without
-/// a device — and they go the same distance now, which is the point.
-///
-/// They used to go different distances: a scrub became a record and a sync mode
-/// did not, and the second half of that is what `tests/panel_column.rs`'s one
-/// exemption rested on — the chip's badge stayed `plan` because an operator who
-/// pressed it reached the emission and not the move. That test said the day it
-/// stopped being true it would stop being true here, and this is here.
-///
-/// The two are still not the same conversion, and that is what the second half
-/// asserts. A scrub is relative and reads the transport it moves from; a mode
-/// is absolute and reads the session tempo, replacing the anchor and clearing
-/// the scrub. A sync mode that came out carrying the position the slot was
-/// scrubbed to would be the two conversions having been made one.
+/// Verifies that scrub operations (relative) and sync mode selections (absolute) convert into records correctly.
 #[test]
 fn the_deck_heads_two_operations_go_different_distances() {
     // **The scrub is relative, so the record is where the slot is plus

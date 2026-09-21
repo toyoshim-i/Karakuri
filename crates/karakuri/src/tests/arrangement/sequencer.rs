@@ -1,13 +1,6 @@
 use super::*;
 
-/// The four presses the Sequencer bay performs, and the one thing this window
-/// does with a pattern that no test in `karakuri-console` can see: that bay
-/// hands back an operation and applies nothing, so this is the other side of
-/// that seam.
-///
-/// A press names a bank, and a bank this session does not have is refused and
-/// said out loud — [`pointed`]'s rule, and the reason each arm answers a
-/// sentence rather than `None`.
+/// Verifies that Sequencer bay operations update the targeted pattern bank state.
 #[test]
 fn a_sequencer_press_moves_the_pattern_it_names() {
     let mut banks = demonstration_banks();

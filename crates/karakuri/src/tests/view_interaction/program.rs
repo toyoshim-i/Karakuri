@@ -235,15 +235,7 @@ fn the_two_tiers_list_procedures_beside_sets_and_two_scopes_do_not() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// What it narrows is the store's own listing, which is `all` and is what *List
-/// what the store holds* lists. `my sets` is that listing starred (ADR-0299),
-/// so the same retain applies to it and the row is not a control over one chip.
-///
-/// It is the same retain the MCP tool applies, over the same
-/// `setfile::summarise`, which is what keeps one operation from being answered
-/// two ways by two surfaces.
-///
-/// A CPU test: a store, a `View`, and no window.
+/// Verifies that Library filter criteria correctly narrow stored sets through metadata summaries (ADR-0299).
 #[test]
 fn the_filter_row_narrows_the_stores_listing_through_the_summary() {
     use karakuri_store::hash::Hash;

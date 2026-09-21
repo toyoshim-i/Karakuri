@@ -27,73 +27,9 @@ pub(crate) fn arrangements(root: &std::path::Path) -> Vec<String> {
     }
 }
 
-/// A star put on a Set or taken off it, and the second route in this program
-/// that both reads an operation and reaches a disk.
+/// Stars or unstars a Set in the store's favourites list (ADR-0261, ADR-0299, ADR-0301).
 ///
-/// # It is [`arrangement`]'s shape and sits beside it for its reason
-///
-/// The panel cannot reach the store (ADR-0156) and the store cannot reach the
-/// panel, so the two halves meet in a third party and this file is it. It
-/// answers `None` for every other operation, which is what lets it sit on the
-/// one path an emitted operation already takes rather than being a second route
-/// into the store.
-///
-/// # What it writes, and what it deliberately does not
-///
-/// `Store::set_favourite` — one stat, one atomic write of
-/// `<store>/favourites.json`, and the whole of the layout question is
-/// ADR-0299's rather than this file's. Nothing here re-lists: the marks the bay
-/// draws and the rows `my sets` holds are both [`listing`]'s answer, and a
-/// second derivation here would be a second answer to *what is starred* with a
-/// file write between them. The caller re-lists on the same branch it re-lists
-/// a scope press on.
-///
-/// # Who asked decides where it lands, and for a star there is nowhere else
-///
-///
-/// [P-0096](../../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
-/// is the actor and not the flag, and `my sets` is by construction the list of
-/// Sets the operator chose — so a model's star must not reach
-/// `<store>/favourites.json`. That much is
-/// [ADR-0261](../../../docs/adr/0261-a-model-asked-save-lands-in-a-sandbox-because-the-operators-library-is-the-operators-own-act.md)'s
-/// rule applied one control along, and it is why this branches on [`Asked`]
-/// exactly as `karakuri_environment::filed_as` does for a save.
-///
-/// Where the two part company is the second directory. A model's save lands in
-/// `<store>/sandbox/` because what lands there is *material* — an edit-history
-/// snapshot an operator goes looking for after a show — so refusing it would
-/// lose an evening of work. A star is one bit whose whole meaning is *this row
-/// appears under `my sets`*, so a sandbox favourites file would be a list no
-/// scope lists, no tool reads and the operator never sees, while the model was
-/// told it had succeeded. So a model's star is refused out loud (ADR-0301), and
-/// the refusal names the id and says where the Set is — which is the same shape
-/// the class pills' refusals take, so that a model can tell the person beside
-/// it which mark to press.
-///
-/// `Standing::Open` stays and `gate.rs` is untouched. The refusal is the
-/// performer's and not the gate's, exactly as a model's save is not refused at
-/// the gate but filed somewhere else by whoever performs it.
-///
-/// The model arm is written before the route is, which is [`arrangement`]'s own
-/// position: no tool publishes `SetFavourite` today, the page's MCP badge is
-/// `plan`, and a control that arrives at this function finds the rule already
-/// here rather than adding it.
-///
-/// # The three things it can say, and each is said out loud
-///
-/// The state was already the one asked for, which is `Ok(false)` and is an
-/// ordinary answer rather than a refusal: the operation names a state and not a
-/// toggle, so a second press of *star this* says the same thing again and the
-/// file's own time is not touched. The Set is not one this store holds, which
-/// is `StoreError::NoSet` carrying the id back
-/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md))
-/// — a `presets` or a `folder` row is a file rather than a Set of this
-/// library's, and starring one is refused with the sentence saying so. Taking a
-/// star off is never refused, which is the asymmetry that makes a mark left
-/// behind by a file somebody deleted clearable from the row it no longer draws.
-///
-/// Never panics, for [`arrangement`]'s reason: a panic reachable from an event
-/// handler aborts this process rather than unwinding.
+/// Star operations requested by an automated model are rejected to preserve operator library intent (P-0096).
 pub(crate) fn favourite(
     root: &std::path::Path,
     asked: Asked,
@@ -144,76 +80,9 @@ pub(crate) fn favourite(
     })
 }
 
-/// Where a named arrangement is kept and put back, and the one route in
-/// this program that both reads an operation and reaches a disk.
+/// Saves or restores named layout arrangements to/from disk (ADR-0158, ADR-0221).
 ///
-/// # Why it is here, in a package neither side depends on
-///
-/// The panel cannot reach the store. `karakuri-console` dropped
-/// `karakuri-store` when this program moved out of it, and the drop was the
-/// point — a crate that takes no device and no disk is what ADR-0156 bought,
-/// and its manifest now has no entry that could be reached for at all. The
-/// store cannot reach the panel either: `karakuri-store`'s `src/` must not
-/// name `karakuri-layout`, so it keeps an arrangement as bytes it does not
-/// understand, exactly as it keeps `.kir` source
-/// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
-/// §4). So the two halves meet in a third party, and this file is the third
-/// party — the same position it holds for a record, where the vocabulary
-/// says what to write and only somebody holding a `Deck` can apply it
-/// ([`apply`]).
-///
-/// # The route, and where each half of it is decided
-///
-/// - Saving is `serde_json::to_vec` of [`Panel::layout`] into
-///   `Store::write_arrangement`, which is ADR-0221's own sentence. The format
-///   is `karakuri-layout`'s hand-written `Serialize`, so an unbounded maximum
-///   goes out as an explicit absence rather than as an infinity JSON cannot
-///   spell, and a `NodeId` goes out as the bare number it is.
-/// - Putting one back is `Store::read_arrangement`, `serde_json` into a
-///   [`Layout`], and [`Panel::restore`]. Neither this file nor the panel
-///   checks the arrangement: `Layout`'s `TryFrom<Wire>` is the one place a
-///   file that disagrees with itself is refused rather than repaired
-///   (ADR-0158), and a check here would be a second answer to a question that
-///   already has one.
-///
-/// # What it does with each of the three ways it can fail
-///
-/// Says it and moves nothing, and never panics: a panic reachable from an
-/// event handler aborts this process rather than unwinding (see the module
-/// documentation). The three are a store it could not open or write, a name
-/// nothing is filed under, and a file that will not read back — and the third
-/// is the one that has to be told apart from the second, because *there is no
-/// such arrangement* and *the arrangement you saved is broken* send an
-/// operator to two different places.
-///
-/// A name nothing is filed under never falls back to the default.
-/// `Store::read_arrangement` answers `StoreError::NoArrangement(name)` and
-/// that sentence carries the name, which is the whole reason the store has a
-/// fourth error variant rather than reusing `NotFound`: an operator who
-/// mistyped a name needs to be told the name, not to watch their console reset
-/// (ADR-0221 §2).
-///
-/// # The store is created by a save and not by a restore
-///
-/// [`library`] refuses to create one, because *"a program that listed a
-/// library by first making one would change the directory it was run in"*, and
-/// a restore is a read on exactly those terms. A save is the case
-/// `Store::open` establishing the layout is right for — it is a program that
-/// is about to write — so the two halves below differ, deliberately, and the
-/// restore's guard is what keeps `cargo run -p karakuri` in somebody's home
-/// directory from leaving a `.karakuri` behind for having asked a question.
-///
-/// # It answers `None` for every other operation
-///
-/// Which is what lets it sit on the one path every emitted operation already
-/// takes ([`App::performed`]) rather than being a second route into the
-/// panel. The transport row's arrangement pill emits both, and the
-/// manual's two rows say it is the only one of the four surfaces that can: a
-/// `panel` badge each and three empty ones, because a name is what a key
-/// press, a map line and an unpublished tool each have no way to say. This
-/// wiring was written before that control existed — exactly as [`unwritten`]
-/// is written for controls that do not exist yet — and the control is what
-/// arrived at it.
+/// Returns `None` if the operation is unrelated to arrangement persistence.
 pub(crate) fn arrangement(
     root: &std::path::Path,
     panel: &mut Panel,
@@ -279,34 +148,7 @@ pub(crate) fn keep_arrangement(
     }
 }
 
-/// The one place a typed arrangement name is refused, and the reason it is here
-/// rather than in the pill that took the letters.
-///
-/// `<name>` becomes one path component under `<store>/arrangements/`, and
-/// `karakuri-store` says outright that nothing there checks it: *"`<name>`
-/// becomes one path component and that is the caller's rule to keep"*
-/// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
-/// §1, which names letters, digits, `-` and `_`). So `../../elsewhere` is a
-/// path, and a path never reaches that call from here.
-///
-/// The surface owns the affordance and never the authority
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
-/// the pill takes whatever is typed and this is where it meets the wall, so a
-/// name refused by a hand and a name refused by anything else that ever reaches
-/// this operation meet the same one. A pill that silently dropped the
-/// characters it did not like would be a rule an operator could only find by
-/// experiment — which is the failure the console page names about a control
-/// that quietly declines.
-///
-/// It says the same three things `mcp::checked_id` says about a Set id, which
-/// is
-/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-/// as far as it can be kept today and no further: that function is private to
-/// `karakuri-environment`'s `mcp` module and its sentences say `id` and
-/// `<store>/sets/`, so it cannot be called from here and could not be quoted if
-/// it were. When an arrangement name gets a second surface — a map line, an MCP
-/// tool, a `--restore-arrangement` flag — the two collapse into one shared
-/// `checked_name`, and this comment is where whoever does it should start.
+/// Validates that an arrangement name consists of safe alphanumeric, `-`, or `_` path characters (ADR-0221, P-0090).
 pub(crate) fn checked_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err(

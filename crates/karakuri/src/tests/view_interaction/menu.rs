@@ -20,24 +20,7 @@ fn bare_strip() -> view::Strip {
     }
 }
 
-/// A secondary press on a Library row puts that row's menu down, and a primary
-/// press on the same row does not.
-///
-/// This is the one thing neither crate could assert on its own.
-/// `karakuri-console` has never known which button a press was — rules 1 to 4
-/// of `input::claim` are all about where the pointer is — so the distinction
-/// lives here, in the arm that turns a `winit` button into a [`Pointer`]. Both
-/// halves are asserted because a handler that opened the menu on either button
-/// would pass a test made only of the first, and would take the row's ordinary
-/// press away: a primary press picks a Set up to carry it, which is what the
-/// drag onto a strip is.
-///
-/// And the item is picked with either button, which is the other half of the
-/// same seam: once the card is down it is `input::claim`'s rule 2, and that
-/// rule is about a card being down rather than about what put it there. So the
-/// pick here is a *primary* press on a card a secondary press opened.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Verifies that secondary pointer press opens context menu on library rows while primary press initiates drag.
 #[test]
 fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
     let ctx = drawn_once();
@@ -93,13 +76,7 @@ fn a_secondary_press_opens_a_rows_menu_and_a_primary_press_does_not() {
         "the menu came down on a row the press was not on"
     );
 
-    // **A press on another control's capsule dismisses this card rather
-    // than opening that one.** The `load` button is the sharpest case
-    // there is: it is in this bay's own foot, it is a control the pointer
-    // reaches, and a handler that asked it before the card would have
-    // opened the pulldown with a menu still down — two cards down at once,
-    // which is the one thing `input::claim`'s rule 2 exists to make
-    // impossible. This is the assertion that says which was asked first.
+    // Pressing an outside control dismisses active context card before handling new control.
     readout.panel.solve();
     let button = library_bay(
         readout.panel.layout(),

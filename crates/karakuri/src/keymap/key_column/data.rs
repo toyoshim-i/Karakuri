@@ -275,10 +275,7 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // ------------------------------------------------------------------
     // The Program bay's grammar
     // ------------------------------------------------------------------
-    // **The four cells answer to nothing** and the picture's on and off is
-    // the Outputs row's one control, so a digit lands, the ring is drawn,
-    // and `space` and `enter` decline and say why. It is the clearest case
-    // in the walk of items with neither a state nor an act.
+    // Program bay cells do not bind digits or arrow keys.
     (Some("program"), DIGIT, &[]),
     (Some("program"), "arrows", &[]),
     // **`space` on the head's `solo`**, which is `s` and `u` collapsed
@@ -444,15 +441,7 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     (Some("outputs"), "space", &["Choose where the frame goes"]),
 ];
 
-/// The routes that reach no row, so that one which starts reaching one stops
-/// being an exception, and a new exception is written down rather than
-/// discovered. The reasons are at the entries in [`ROWS`].
-///
-/// A pair rather than a key, for [`ROWS`]' reason: `space` reaches six rows in
-/// the Mixer and two in the Library, and a list of *keys* that reach nothing
-/// could not say that.
-///
-/// In [`ROWS`]' own order, which is what the check compares.
+/// Routes that reach no row in [`ROWS`], recorded in checked evaluation order.
 pub const NO_ROW: &[(Option<&str>, &str)] = &[
     (None, "n"),
     (None, "esc"),

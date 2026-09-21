@@ -1,75 +1,7 @@
 use super::*;
 
-/// What this window says when a control's operation wrote no record, and
-/// the two ways that happens are not the same thing — so they are not the
-/// same sentence.
-///
-/// [`written`] has four answers and only one of them is a record.
-/// A harness that printed a line for that one and nothing at all for the
-/// other three would tell an operator that a press did nothing, which is true
-/// of none of them:
-///
-/// - [`Written::Silent`] is settled. Selecting a deck or folding a bay is
-///   a surface's own state and there is nothing to write; the sentence says
-///   which of the four kinds of nothing it is, and that is the end of it.
-/// - [`Written::Owed`] is a gap nobody has closed yet. A tap owes a
-///   record and no build can make it, so a press that reads as *nothing
-///   happened* is exactly the wrong reading — the sentence names the question
-///   instead, which is `Owed::why`'s whole job and the reason `Owed` is not
-///   an error.
-/// - [`Written::Refused`] is a decision taken, and it is the one answer here
-///   that is neither settled silence nor a gap: a scheduled move on a fader an
-///   unmuted lane of the armed pattern holds writes no record, and the sentence
-///   names the lane to mute (ADR-0323). It is `Refusal::why`'s words and not
-///   this file's, because the keys, the pointer, a mapped control and a model
-///   meet the same sentence.
-///
-/// `None` for [`Written::Records`], because that line is [`apply`]'s: it says
-/// the record *and* what the deck holds afterwards, and printing both would
-/// say one press twice.
-///
-/// Nothing on this panel reaches the `Owed` arm on purpose any more, and
-/// the paragraph that used to stand here is worth keeping as history because
-/// it was twice wrong in the same place. It first said no control could reach
-/// either arm and was written for the day one did; the deck head was that day,
-/// and it said the sync chip and the anchor beside it were reachable
-/// affordances over an unwritable record — the press claimed, the operation
-/// emitted, this sentence printed with the question in it, and the deck not
-/// moving.
-///
-/// What made the record unwritable was a question that had already been
-/// answered. `Transport::engaged` decides what engaging a mode means, with
-/// the reason at its own definition: the anchor is the session tempo and the
-/// scrub is cleared. The clamp that looked like a decision about the bytes on
-/// disk is the identity on every tempo an oscillator can report, so there were
-/// never two answers to choose between — only a reading nobody was handing in.
-/// [`reading`] hands it in now, `written` writes `Record::Transport`, and
-/// [`apply`] moves the deck, which is the ninth and tenth of this panel's ten
-/// emitting controls arriving where the other eight already were.
-///
-/// The refusal to route around it is what made that cheap. A surface owns
-/// the affordance and never the authority
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
-/// so this file never wrote a `Record::Transport` of its own for a `SetSync` —
-/// computing the anchor here would have been a window binary taking a decision
-/// about a file format, and the printed line was the right answer until the
-/// conversion existed
-/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-/// What changed is the conversion, not this file's authority: the anchor is
-/// still the engine's policy and this window still only reads a tempo.
-///
-/// So all ten controls write records. Five are the mixer's — `SetGain`,
-/// `SetOpacity`, `SetBlendMode`, `SetResidency` and `SetMaskShape` — two are
-/// the look's, and the last three are the deck head's: the scrub, the chip
-/// that cycles and the anchor that re-asks for the mode the deck is in
-/// (ADR-0218). The Outputs dot never arrives here at all, because it asks the
-/// panel for an arrangement [`Op`] and the panel performs it
-/// ([`Acted::Operated`]).
-///
-/// The mask is also the one that can reach [`Written::Owed`] by accident,
-/// and that is worth having rather than designing away: a reading that did not
-/// arrive answers `Owed(NotRead(Reading::Mask))`, so a harness that stopped
-/// handing one in would say so out loud instead of moving nothing.
+/// Generates a diagnostic message when an operation produces no persisted record,
+/// distinguishing between settled silence, missing readings (owed), or refusal (ADR-0323).
 pub(crate) fn unwritten(operation: &Operation, written: &Written) -> Option<String> {
     match written {
         Written::Records(_) => None,
@@ -179,27 +111,7 @@ pub(crate) fn pointed(view: &mut View, operation: &Operation) -> Option<String> 
     ))
 }
 
-/// A pick on a pane head's pulldown, applied to the console's own pointer, and
-/// what to say about it. `None` for every operation that is not it.
-///
-/// [`pointed`]'s shape one mark along and for its sentence:
-/// `Operation::PointPane` is `Silent(Surface)`, so there is nothing on the deck
-/// for [`apply`] to move and the surface that emits it performs it.
-///
-/// It is not the deck selection, and nothing here touches it — that is the
-/// whole of what this mark is for (ADR-0338, decision 5): a pane can show a
-/// deck the keys are not on, which is the Library bay's load pulldown's
-/// argument one bay along.
-///
-/// The pane is named rather than numbered, because `Operation::PointPane { pane
-/// }` is a `String` — `karakuri-operation` has no dependencies and cannot hold
-/// the arrangement's handle type — so this is where the name is resolved back
-/// to a position in `View::inspector`. A name no pane has is refused with the
-/// two that exist, which is what the next attempt needs (P-0083).
-///
-/// A deck the mixer has no strip for is refused, and `View::point_pane` is
-/// where that rule lives — [`pointed`]'s own refusal, read on a pane instead of
-/// on the ring.
+/// Applies inspector pane target selection to UI view state (ADR-0338, Principle 0083).
 pub(crate) fn pointed_pane(view: &mut View, operation: &Operation) -> Option<String> {
     let Operation::PointPane { pane, deck } = operation else {
         return None;
@@ -278,27 +190,7 @@ pub(crate) fn refusal(refused: &Go, decks: usize) -> String {
     }
 }
 
-/// A press on one of the transition row's three pills, applied to the console's
-/// own setting, and what to say about it. `None` for every operation that is
-/// not it.
-///
-/// [`pointed`]'s shape one row down, and for the same reason:
-/// `Operation::SetTransition` *"changes nothing you can see and writes nothing
-/// to the stream"* — `written` answers `Silent(Surface)` for it and no record
-/// in `karakuri-store` carries a quantum, a length or a wipe shape — so there
-/// is nothing on the deck for [`apply`] to move and the surface that emits it
-/// is what performs it. `View::set_transition` is the only door into that
-/// setting, which is where the refusal below lives.
-///
-/// What it changes is what the next wipe means, and that is why the line says
-/// the whole row rather than the field that moved: an operator reading *the
-/// shape is an iris* still has to know what grid it starts on.
-///
-/// A setting no pill can draw is refused, and it is said rather than swallowed
-/// for [`pointed`]'s reason — a press that does nothing and a press that is not
-/// bound are the same experience. Nothing this window emits can reach it: the
-/// pills name a destination out of the console's own cycles. It is a mapped
-/// controller or an MCP call that could, the day either reaches this row.
+/// Applies transition configuration updates to the UI view state.
 pub(crate) fn scheduled(view: &mut View, operation: &Operation) -> Option<String> {
     let Operation::SetTransition { setting } = operation else {
         return None;
@@ -409,73 +301,17 @@ pub(crate) fn slot_salt(slot: usize) -> u32 {
     SEED_SALT + slot as u32
 }
 
-/// What the derived material a procedure load leaves is a derivation *of*: the
-/// Set the slot is filed under, or the pair the run was launched with where it
-/// is filed under none.
-///
-/// `watch::Aim::set` first, because that is the one field a load moves and a
-/// procedure load does not (ADR-0304, ADR-0338): a slot that has been loaded is
-/// running that Set with one layer over it, and the strip has to say so. A slot
-/// nobody has loaded is running the launch pair, which no id names — that is
-/// the state `Aim::set` is `None` in, and the launch pair is what the strip has
-/// been reading since the first frame.
+/// Computes the base material identifier for a slot from loaded Set ID or launch pair.
 pub(crate) fn base_material(set: Option<&str>, launch: &str) -> String {
     set.map(str::to_owned).unwrap_or_else(|| launch.to_owned())
 }
 
-/// What the strip reads once a layer has been written over what a deck is
-/// playing: `<base> + <kir>`, which is the maintainer's own `drift_night +
-/// orbit_wide`.
-///
-/// So what is on air says what it is made of and never claims to be a Set the
-/// library holds — `keep` is what gives it a name (ADR-0338).
+/// Formats the composite material display string for a slot with an overlaid procedure (ADR-0338).
 pub(crate) fn derived_material(base: &str, procedure: &str) -> String {
     format!("{base} + {procedure}")
 }
 
-/// Write one procedure over the layer it declares and re-aim the slot, or say
-/// why it did not.
-///
-/// # Where the file comes from, and it is the two tiers and nothing else
-///
-/// `<store>/procedures/<name>.kir` first and the presets root's `<name>.kir`
-/// after it, which is the order the Library bay lists them in and the only two
-/// places a procedure row can have come from (ADR-0227's two tiers, ADR-0338's
-/// decision 1). The content-addressed artifacts at the store root are not
-/// searched: that population is the edit history's, addressed by hash, and a
-/// name is not one.
-///
-/// # Which position it lands on, and the limit is recorded rather than designed
-/// around
-///
-/// The first node of that kind. A procedure declares one `kind` and nothing
-/// about where it goes, and a library row cannot say an index — so the payload
-/// carries none, and `L4:0` is the renderer a `kind L4` replaces. The second
-/// renderer of a three-renderer Set is unreachable from this row, and the day
-/// the Inspector's node head grows a *replace this node* control is the day the
-/// payload gains a `NodeAddress` (ADR-0338, stated at the point it bites).
-///
-/// Where the slot has no node of that kind the procedure is added as node 0 of
-/// it, which is the case the request is about: a Set of a geometry and a
-/// renderer declares no camera, so it holds the built-in orbit at `L3:0` and a
-/// `kind L3` row takes that position — the picture changes camera with nothing
-/// else moving.
-///
-/// # What each file already on the slot is
-///
-/// Read off the files themselves with `history::declared_kind`, which is the
-/// one scanner for a `kind` line, and with `compile`'s own fallback where a
-/// file declares none — the first node is an L1 and the rest are L4s, which is
-/// what a bare pair is. That is one small read per node, on the press, and it
-/// compiles nothing (P-0091).
-///
-/// # The node name is kept, and that is what keeps the edges
-///
-/// A replaced position keeps the name the Set gave that node, because an `edge`
-/// and a `bind` in the aim resolve against it: a rebuild that renamed the node
-/// would break the wiring the slot is running. A node that is *added* is named
-/// after the row, and a name the slot already holds is refused rather than
-/// shadowed.
+/// Re-aims `slot` with `procedure` overlaid on its declared layer (ADR-0227, ADR-0338, Principle 0091).
 pub(crate) fn overlaying(
     root: &std::path::Path,
     presets: Option<&std::path::Path>,
@@ -611,45 +447,7 @@ pub(crate) fn asked_for(revision: &karakuri_operation::Revision) -> String {
     }
 }
 
-/// The half of [`restored`] that reaches a disk, split out for the reason
-/// [`seeded`] is a free function: `main` cannot be entered from a test, a
-/// `Gfx` cannot be built without a device, and what this does is worth
-/// asserting — it writes over the file a deck is playing from.
-///
-/// Everything it needs is an argument: the store to walk, the slot and its
-/// letter, the Set the slot is running, the revision that was asked for, and
-/// where that slot's nodes are ([`karakuri_mcp::Slots`], the
-/// run's one published layout, which the caller reads off [`Engine::pointing`]).
-/// The refusals here are the ones that are about files — a version that is
-/// not in the listing, a node with nothing behind the one it is playing, a
-/// node this slot does not hold, and a file that will not be read or written —
-/// where the two about the *deck* are the caller's and are answered before
-/// this is reached.
-///
-/// # One function and two ways of naming the file
-///
-/// `karakuri_operation::Revision` has two arms because two surfaces can ask
-/// and each says the half it holds (ADR-0308), and what differs between them
-/// is which row of this listing — nothing after that. So the walk, the
-/// read, the address and the write are one path, and the arms are one `match`
-/// over the same `Vec<Version>`:
-///
-/// - `Picked` is a name the Library bay's `history` scope handed over, matched
-///   back against the listing that produced it by rebuilding each row's
-///   spelling — `SetTransfer::Take`'s own arrangement, and the reason no
-///   surface here spells a path.
-/// - `Previous` is a node the Staging lane's row handed over, and the version
-///   is the one before the one running: the listing is most recent first,
-///   the newest entry for that node is what the slot is playing — the history
-///   is gated on compiling and not on landing, so a version that was stopped
-///   for cost is filed too — and the entry after it is the step back
-///   (`docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md`).
-///   A node with exactly one version in the listing is refused naming what is
-///   in the way, which is `P-0083`: it says the node has nothing behind what
-///   it is playing rather than that the press failed.
-///
-/// The narrowing to the Set is both arms', and it is the same narrowing
-/// for the same reason — a version filed under no Set is a version of nothing.
+/// Restores a previously snapshotted procedure version to disk for a slot (ADR-0308, ADR-0326, Principle 0083).
 pub(crate) fn put_back(
     store: &std::path::Path,
     slot: usize,
@@ -864,17 +662,7 @@ pub(crate) fn apply(
                 deck.blend(slot).name()
             ))
         }
-        // **The one record here that is followed by a governor pass**, and it
-        // is not a flourish: `Deck::set_residency` writes the request *and
-        // grants it*, so a harness that stopped there would put a slot the
-        // budget has no room for into `Priming` and draw a primed deck the
-        // governor never admitted. That is
-        // [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)
-        // exactly — the panel's parked deck is the governor's verdict or it is
-        // a drawing of one — and it is `karakuri-cli`'s own order, where
-        // `mix::Change::Residency` sets the level and calls `govern` beside
-        // it. The report is dropped here rather than printed: the line below
-        // says what the deck ended up at, which is the half this window shows.
+        // Set residency and trigger budget governor check (ADR-0191).
         Record::Residency { slot, ref level } => {
             let slot = held(deck, slot.0)?;
             let residency = mix::parse_residency(level)?;
@@ -1325,36 +1113,7 @@ pub(crate) fn apply(
                 deck.selections_on(slot).count()
             ))
         }
-        // **The session's grid, and the one record here that names no slot and
-        // touches no deck control at all.** `Record::Tempo` is a correction —
-        // a tempo, a phase shift and how much the estimate behind it was
-        // believed — and `karakuri_environment::audio::apply_tempo` is *"the
-        // only way a correction reaches the oscillator, live or on replay"*.
-        // So this arm is the live half of that sentence, and it is one call
-        // rather than a `signals.correct` beside it for exactly the reason
-        // that function says so of itself.
-        //
-        // **The signals are copied out of the deck and back in**, which is
-        // what `Deck::signals` and `set_signals` are for and is
-        // [`measure_audio`]'s own line: the bus is a `Copy` value and the deck
-        // is the model of record for it.
-        //
-        // **What reaches here today is `Operation::SetFreeRunTempo` and
-        // nothing else**, which is *what the grid runs at with nothing driving
-        // it* — the one control on this panel that works in the state this
-        // program actually runs in, where there is no device and `tapped` and
-        // `scaled` both refuse because there is no room. A tap and an octave
-        // end in this same record and do **not** come through here: theirs is
-        // the beat lock's answer and `written` cannot build it (ADR-0278), so
-        // they are applied where they are computed.
-        //
-        // **The confidence is not printed and the shift is.** A hand-named
-        // tempo carries `shift: 0.0` and `confidence: 0.0` — `Record::Tempo`'s
-        // own words for a free-running tempo being stated — and a `0.0`
-        // confidence beside a tempo an operator just chose would read as *this
-        // is not believed*, which is the opposite of what it means. The shift
-        // is printed because a beat that did not move is the claim this arm
-        // makes.
+        // Apply tempo correction to deck signals bus (ADR-0278).
         Record::Tempo { bpm, shift, .. } => {
             let mut signals = *deck.signals();
             karakuri_environment::audio::apply_tempo(&mut signals, record);
@@ -1607,15 +1366,7 @@ pub(crate) fn reading(
             .map(|slot| mix::current_mix(deck.blend(slot), deck.residency(slot))),
         _ => None,
     };
-    // **The armed pattern's lanes, handed in for every operation** — unlike the
-    // readings above, which are taken for the operations that need them. A
-    // `transition` this file forgot to hand over is said out loud
-    // (`Owed::NotRead`); a `lanes` this file forgot to hand over refuses
-    // nothing and says nothing, so it is taken once here rather than off a
-    // second list of which operations can be refused (ADR-0323).
-    //
-    // It is the armed bank alone, because a lane in a bank that is not armed
-    // drives nothing: `Banks::pattern` is what the sequencer polls.
+    // Collect held lanes for armed sequencer pattern (ADR-0323).
     let lanes = Some(karakuri_operation_record::Lanes {
         held: banks
             .pattern()

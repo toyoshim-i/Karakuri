@@ -205,20 +205,7 @@ impl Readout {
         }
     }
 
-    /// What a press on the Library bay's load control did — the button, the
-    /// pulldown, or a row of the list it puts down (ADR-0305).
-    ///
-    /// [`Readout::arranged`]'s shape one bay along, and the two are the same
-    /// division: every arm is either this console's own state moving or one
-    /// operation emitted down the path every other operation takes. Nothing is
-    /// performed here, and in particular nothing writes a file: a `LoadSet` is
-    /// `played`'s, exactly as it is for the key and for the drop.
-    ///
-    /// A pick moves no deck selection, which is what the record is about:
-    /// `View::aim_at` writes the bay's own mark and never `View::select`, so the
-    /// ring on the strip and the letter in the foot are free to name two different
-    /// decks. It also puts the list away, because a pick is one gesture and nothing
-    /// here is emitted for a caller to end it in.
+    /// Dispatches a target deck selection or load command from the Library bay (ADR-0305).
     pub(crate) fn aimed(&mut self, ask: Aim) -> Acted {
         match ask {
             Aim::Open => {
@@ -399,20 +386,7 @@ impl Readout {
         }
     }
 
-    /// The name is finished, and what that asks for.
-    ///
-    /// One operation of the vocabulary, named — the same
-    /// `Operation::SaveArrangement` the menu's *save* asks for with an arrangement
-    /// already in use, so the two ways to reach a save are two ways to name one
-    /// thing rather than two paths to a disk. The menu is shut before the operation
-    /// is emitted, whether or not the name is any good: a name that is refused is
-    /// refused out loud by `checked_name`, and a card left standing over the
-    /// refusal would be the panel asking the question again without saying the
-    /// answer.
-    ///
-    /// An empty name arrives here as an empty name and is refused there, which is
-    /// the rule this file keeps everywhere: the surface owns the affordance and
-    /// never the authority (P-0090).
+    /// Emits a `SaveArrangement` operation when inline arrangement naming is committed (P-0090).
     pub(crate) fn named(&mut self) -> Acted {
         let Some(typed) = self.view.arrangement.naming() else {
             return Acted::Nothing;
@@ -605,33 +579,7 @@ impl Readout {
         Acted::Emitted(Some(chosen.asked(self.view.aimed.as_deref())))
     }
 
-    /// A press on one of the Library bay's two filter fields, and it is
-    /// [`Readout::chose`]'s shape one row down: the surface performs its own
-    /// pointer and emits the operation for the record it is owed, which is
-    /// `Silent(Question)` — *it asks rather than changes*.
-    ///
-    /// The operation carries everything, where `SelectScope` carries nothing.
-    /// `Operation::ListSets { holds, layer }` is exactly the state the two fields
-    /// are in, so this applies it rather than guessing at it and there is no value
-    /// travelling beside it. `View::narrow` is the one door into that state and is
-    /// where a `holds` this console cannot draw is refused — which nothing here can
-    /// hand it, because the value came out of `LibraryBay::filter` stepping the
-    /// same candidates.
-    ///
-    /// The listing is not read here. It is a directory read
-    /// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md))
-    /// and the store is the window's rather than the readout's, so the caller
-    /// re-reads on `Operation::ListSets` exactly as it does on
-    /// `Operation::SelectScope` — one branch, two operations, because a scope and a
-    /// filter are the same question asked of different halves.
-    ///
-    /// A filter set while the bay is reading something else is said out loud, and
-    /// it is the one thing about this row that would otherwise be silent: the
-    /// operation is *List what the store holds*, which is `all` and the `my sets`
-    /// starred out of it, and `presets` and `folder` are not the store. The press
-    /// is still a real question — it is answered the moment one of those two is
-    /// marked again — and a press that appears to do nothing is what this line
-    /// exists to prevent.
+    /// Updates library filter state in `View` and emits `ListSets` or `FilterLibrary` (P-0090, P-0091).
     pub(crate) fn narrowed(&mut self, operation: Operation) -> Acted {
         let holds = match &operation {
             Operation::ListSets { holds, .. } => holds.as_deref(),

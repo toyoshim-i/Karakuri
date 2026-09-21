@@ -326,11 +326,7 @@ impl ApplicationHandler for App {
             &engine.present,
             &self.readout.view.chain_add.clone(),
         ));
-        // **And the room, before the legend**, because the legend says which
-        // input is open and the answer is the host's rather than a sentence
-        // here. The session tempo is the deck's own oscillator: it is what the
-        // grid free-runs at and where the tracker's octave window starts, and
-        // they are one number because they are one statement.
+        // Initialize audio input tracking using current session tempo from deck oscillator.
         let (audio, said) = listening(engine.deck.signals().oscillator().bpm());
         println!("{said}");
         // **The pill is told even where nothing opened**, which is the

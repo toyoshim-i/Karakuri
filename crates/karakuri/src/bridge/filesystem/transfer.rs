@@ -116,18 +116,7 @@ pub(crate) fn version_row(version: &karakuri_environment::history::Version) -> S
     version.filed_as()
 }
 
-/// What a take-in did: the file it read, the id that file filed itself under,
-/// and the sentence `setfile::unbundle` reported.
-///
-/// Three fields because the press has three callers for them and each is a
-/// different question. The `said` is what the operator reads. The `id` is what
-/// the load that follows names, and it is the file's own rather than the row's
-/// word. The `file` is what the *operation* names — `Operation::TransferSet`'s
-/// `SetTransfer::Take { file }` carries a path, *"because a file is what the
-/// only existing route takes"* — so it is returned rather than re-derived: the
-/// listing is asked once, on the press, and asking it a second time to name
-/// what was already taken in would be two answers to *which file was this* with
-/// a directory read between them.
+/// Result of taking a Set into the store: source file, inner Set ID, and status message.
 #[derive(Debug)]
 pub(crate) struct TakenIn {
     pub(crate) file: std::path::PathBuf,
@@ -135,33 +124,7 @@ pub(crate) struct TakenIn {
     pub(crate) said: String,
 }
 
-/// Which listing a take-in's row came off, and it is the whole of the
-/// difference between the two scopes that have rows of files.
-///
-/// # Two scopes, one row, one press
-///
-/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
-/// *"Taking one in is not a second row — opening a preset is this row"*, and a
-/// folder row is the same row again. `console.html` says the folder side in as
-/// many words — *"a folder row is a take"*, *"A row here is taken into the
-/// store and then loaded, which is one press because taking it in is what gives
-/// it a name"* — so the two differ in which directory was listed and in nothing
-/// else. That is what this type is, and it is why [`taking_in`] takes one
-/// rather than a presets root.
-///
-/// The `folder` half is what landed on 2026-09-08. It was refused out loud
-/// until then — *"a folder row is a take, taking a Set in from a folder is not
-/// built"* — because the scope had no directory to list, which ADR-0275 gave
-/// it.
-///
-/// # A path is derived here and never spelled by a surface
-///
-/// `Operation::TransferSet`'s `SetTransfer::Take { file }` carries a path, and
-/// the rule that admits it is that every route that fills it derives it from
-/// something the program itself produced. Both arms obey it the same way: the
-/// listing is asked *again* on the press and the row is found by the word that
-/// was pressed ([`Taking::file`]), so what a surface handed over is a word off
-/// a listing this program read and never a path.
+/// Identifies the file listing source for take-in operations (ADR-0230, ADR-0275).
 pub(crate) enum Taking<'a> {
     /// The preset library this run resolved (ADR-0230) — a told directory, and the
     /// same one [`presets_listing`] draws the rows of.
@@ -348,46 +311,7 @@ pub(crate) fn taking_in(
     Ok(TakenIn { file, id, said })
 }
 
-/// The two rows of the vocabulary one press on a `presets` or a `folder` row
-/// performs, in the order they happen.
-///
-/// # Two operations because they are two rows of the page, and one press
-///
-/// `docs/manual/operations.html`'s *Send a Set to somebody, and take one in*:
-/// *"Taking one in is not a second row — opening a preset is this row"*, so
-/// loading a Set out of presets or out of a folder is that row performed. The
-/// load after it is *Load material into a deck*, which is a different row with
-/// a different operation. One press, two rows — `console.html` says why it is
-/// one press: *"That is one press rather than two because taking it in is what
-/// gives it the name the load needs."*
-///
-/// So the press emits both. Emitting only the load would be a press that
-/// performs two of the page's rows and names one, and the row it dropped would
-/// be the one nothing in this workspace constructs.
-///
-/// # Naming what a surface performed is the scope's rule, not a new one
-///
-/// `space` on the Library's head steps the mark itself and emits
-/// `Operation::SelectScope` anyway, *"so that the press is recorded as
-/// `Silent(Surface)` rather than as nothing at all"*. This is that, one key
-/// along: `written` answers `Silent(NoRecord)` for a transfer, nothing in
-/// [`App::performed`] performs one, and the emission is the naming.
-///
-/// # And it is not the key badge
-///
-/// `key_column::ROWS` maps `enter` in the Library to *Load material into a
-/// deck* alone, and that stays true: what an operator reaches from the keyboard
-/// is a load, and the taking-in is what a load off `presets` does on the way.
-/// ADR-0213's distinction is between an operator reaching an operation and
-/// something happening, and constructing an operation is neither — which is
-/// `panel_column.rs`'s own sentence, *"construction is not reachability, and
-/// reachability is the definition."*
-///
-/// The transfer names the file, because that is what `SetTransfer::Take`
-/// carries — *"a path because a file is what the only existing route takes"* —
-/// and the load names the id, which is the file's own `set` record rather than
-/// the row's word. They are the two halves of [`TakenIn`] and neither is
-/// derived from the other here.
+/// Emits the pair of operations corresponding to taking in a Set and loading it into a deck.
 pub(crate) fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
     [
         Operation::TransferSet {
@@ -403,43 +327,6 @@ pub(crate) fn taken_in_press(deck: u8, taken: TakenIn) -> [Operation; 2] {
 /// The other direction of that row: a Set out of this store and into a file the
 /// operator names, asked for and answered without a frame waiting on either
 /// half.
-///
-/// # The dialog is asked for here and awaited nowhere
-///
-/// `rfd::AsyncFileDialog::save_file` is called on this thread — the main one,
-/// which is where a press handler is — and returns a future at once. On macOS
-/// what that call has already done is `beginSheetModalForWindow:`, an
-/// asynchronous sheet hung on this window: the run loop is untouched, so the
-/// frame loop goes on drawing behind it and the panel's continuous motion goes
-/// on saying *this is live*. That is the whole of what
-/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-/// asks of a mechanism that could run during a performance, and it was measured
-/// rather than assumed before this was written —
-/// [ADR-0311](../../../docs/adr/0311-a-row-menu-loads-a-set-onto-a-named-deck-and-saves-it-through-the-systems-own-dialog.md)
-/// carries the reading and the probe. The synchronous `FileDialog::save_file`
-/// is the thing this must not be: it is `runModal`, a nested run loop, and a
-/// panel that stops drawing.
-///
-/// The future is awaited on a worker and so is everything after it, which is
-/// [`Keeping::save_set`]'s thread one act along and for its reason: a bundle is
-/// a store read and every source inlined, then a file written, and none of that
-/// is a thing to do on a frame (P-0091). The thread is detached and no frame
-/// waits for it; the outcome comes back down a channel and is said where a
-/// keep's is.
-///
-/// The store is opened on the worker rather than handed in, exactly as
-/// [`Save::run`] does it: a `Store` is not what crosses the thread, a root is.
-///
-/// # Where the dialog opens, and what it is called
-///
-/// The name offered is `<id>.kbset` — the store's own naming rule, so nothing
-/// is invented
-/// ([P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md))
-/// — and the directory is the one the Library bay is pointed at where a folder
-/// has been dropped on this window (ADR-0275), and the platform's own default
-/// where none has. A file already there is the dialog's question and never this
-/// program's: asking again on this side would be two programs asking one
-/// question, and the operator would have answered the wrong one first.
 pub(crate) fn sending(
     window: &Arc<Window>,
     root: &std::path::Path,
@@ -462,17 +349,7 @@ pub(crate) fn sending(
     });
 }
 
-/// What the dialog's answer comes to: a file written, or nothing at all.
-///
-/// Split out of [`sending`]'s thread so that the half with no window in it can
-/// be run without one — the dialog is the platform's and the answer is a
-/// `PathBuf` or it is `None`, which is the whole of what this needs to know.
-///
-/// `None` writes nothing and nothing is opened: the store is not read, no
-/// bundle is built and no path is touched. That is the property
-/// `a_dismissed_dialog_writes_nothing_and_says_so` is watched to fail against,
-/// and it is why the early return is here rather than inside a `map` over the
-/// write.
+/// Processes the outcome of an export file dialog, writing the bundled Set or returning a cancelled status.
 pub(crate) fn sent(root: &std::path::Path, id: String, to: Option<std::path::PathBuf>) -> Sent {
     let Some(to) = to else {
         return Sent {

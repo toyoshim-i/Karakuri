@@ -3,38 +3,7 @@ use super::common::*;
 mod gpu {
     use super::*;
 
-    /// The whole loop, closed on the transition row: the settings the three pills
-    /// arrive at are what a press on `go` converts against, and the wipe writes its
-    /// records rather than answering `Owed`.
-    ///
-    /// `karakuri-console/tests/transition.rs` asserts everything up to the
-    /// operation with no deck anywhere, which is the point of that file. This is
-    /// the other end, and it needs a device for the reason the mask mini's test
-    /// does: a `Deck` is what the mask, the blend, the residency and the grid are
-    /// read off, and a wipe reads three of those four.
-    ///
-    /// The path is the product's own from end to end. The shape, the grid and the
-    /// length are walked to where this test wants them through [`scheduled`] — the
-    /// same function the press handler calls — rather than written into the view,
-    /// so what is converted is a setting the console took. The press is
-    /// [`TransitionRow::go`] at the capsule's centre. The reading is [`reading`]'s,
-    /// unaltered.
-    ///
-    /// What separates this from a plausible wrong answer is the `Owed` arm. Until
-    /// this window supplied `Current::transition` and `Current::mix` a wipe came
-    /// back `Owed(NotRead(…))` — a sentence rather than a fade — and every
-    /// assertion below about the records would have been unreachable. So the answer
-    /// is asserted to be `Records` before anything is read out of it, and the
-    /// transition record is checked against the settings *the row is on* rather
-    /// than against numbers written here: a conversion that invented a quantum
-    /// would otherwise agree with a test that invented the same one.
-    ///
-    /// And the mask position is asserted to still be owed, off the same deck, which
-    /// is the half
-    /// `tests::an_operation_whose_record_is_owed_is_said_rather_than_swallowed`
-    /// cannot make with no device: that test spells `Current::default()` for it,
-    /// and this is what says the empty reading and the one this window takes are
-    /// the same value.
+    /// Verifies that pressing go triggers a wipe transition converting settings into operation records (ADR-0201).
     #[test]
     fn the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -588,15 +557,7 @@ mod gpu {
             "the strip moved before the deck did, so the console is keeping a value"
         );
 
-        // The record, out of the operation and the reading the harness takes
-        // off the deck — written **whole**, which is the half the operation
-        // does not name (ADR-0201).
-        // **The transition settings are where a run begins and this press
-        // does not read them**: `Current::transition` is a wipe's, a fade's, a
-        // crossfade's and a selection's, and none of the three conversions
-        // below is one of those. Handed in because `reading` takes them, and
-        // `START` rather than a chosen value so that nothing here can look
-        // like a setting the test needed.
+        // Verify operation record generation matches current deck readings (ADR-0201).
         let written = written(
             &operation,
             &reading(

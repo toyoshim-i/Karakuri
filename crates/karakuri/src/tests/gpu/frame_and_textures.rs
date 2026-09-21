@@ -239,35 +239,7 @@ mod gpu {
         };
         let brightest = |rgb: [u8; 3]| rgb.into_iter().max().unwrap_or(0);
 
-        // **The picture, and it is lit.** Every texel of the region the
-        // rectangle names, counted rather than sampled: the material is
-        // additive points on a black clear, so a handful of rows through the
-        // middle could miss and a count cannot.
-        // Two counts over every texel of the region, rather than a handful of
-        // samples through the middle: the material is additive points on a
-        // black clear, so a row that missed would say nothing and a count
-        // cannot.
-        //
-        // **Dark** is the present pass's own clear — the letterbox bars, and
-        // the empty sky between the particles — and it is what the bay's card
-        // is not: `--c-panel` at night is `#17142a`, whose brightest channel
-        // is 42. It is the half the ordering defect fails, and it fails it
-        // completely rather than by a margin: an unwritten texture is
-        // `rgba(0, 0, 0, 0)` and `egui` blends premultiplied, so a picture
-        // sampled before it was drawn is not black — it is *transparent*, and
-        // the card shows through every texel of it. Recording the panel's pass
-        // before the engine's, and leaving the present pass out altogether,
-        // both read here as **zero** dark texels.
-        //
-        // **Bright** is the particles, well past anything the panel draws. It
-        // is the control on the fixture, in the sense `karakuri-cli`'s frame
-        // tests use: a picture that is opaque and empty — a deck compositing
-        // nothing — is all dark and no bright, and would satisfy the first
-        // count while showing an operator a black rectangle.
-        // Two counts over every texel of a rectangle: dark, and lit. A helper
-        // because the picture and deck A's cell are the same question asked of
-        // two rectangles, and a second copy of the loop is a second threshold
-        // to keep in step.
+        // Counts dark and bright texels in a rect to verify opaque background and rendered particles.
         let counted = |r: egui::Rect| {
             let mut dark = 0usize;
             let mut bright = 0usize;
@@ -560,13 +532,7 @@ mod gpu {
         )
         .expect("the frame composes at the derived size");
 
-        // **The projector off again, and the frame comes back down.** The
-        // picture is still on, so the maximum is over one output and it is the
-        // picture's — which is the half of the rule that costs: turning a
-        // larger sink on raises what every frame costs and turning it off
-        // lowers it again, visibly and by the operator's own act. The other
-        // half, where *every* output is off and the size stands, is
-        // `render_size`'s `None` and is asserted on the CPU.
+        // Disabling the projector drops presentation size back to picture bounds.
         engine.aim(&gpu, &mut renderer, panel.layout(), 1.0, None);
         assert_eq!(
             engine.present.size(),
@@ -1057,13 +1023,7 @@ mod gpu {
         );
         assert!(renderer.texture(&engine.previews[0].id).is_some());
 
-        // **And a wider window inside *that* arrangement remakes nothing
-        // either**, which is the sentence this test used to make about the row
-        // and is true of a column for a better reason: a column is
-        // `(H - 6) / 2` at 16:9, a function of the bay's **height** alone, so
-        // every pixel of width past the crossover goes to the picture. A frame
-        // where nothing moved remakes nothing, which is what keeps the free on
-        // the resize path instead of on every frame.
+        // Width expansion beyond column height constraint does not reallocate preview textures.
         panel.set_viewport(W as f32 + 800.0, H as f32);
         view::rearrange(&mut panel, CANVAS);
         let wider = physical(

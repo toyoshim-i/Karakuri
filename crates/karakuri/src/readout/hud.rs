@@ -183,11 +183,7 @@ impl Readout {
                     }
                 )
             }
-            // Said once, out loud, and it is this program's only occasion to
-            // say it: a run that needed the library for a default pair was
-            // refused before a window opened, so reaching here means the pair
-            // was given by hand and nothing is broken — the preset tier is
-            // simply empty.
+            // Reported when preset library directory does not exist or contains no valid sets.
             None => println!("{}", karakuri_environment::places::no_preset_library()),
         }
         println!(

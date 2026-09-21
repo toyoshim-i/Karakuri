@@ -40,14 +40,7 @@ pub(crate) struct App {
     /// question about what was asked for: four decks opened on one preset are
     /// playing that preset, whatever their four files are called.
     pub(crate) sources: Sources,
-    /// The working copy each deck runs from, one pair per slot, in slot order —
-    /// [`working_copies`], made in [`main`] before the window.
-    ///
-    /// Beside `sources` rather than replacing it because the two answer different
-    /// questions and always have: this is what a watcher polls and what an editor
-    /// opens, and `sources` is what the operator said. They were one field while
-    /// every slot watched the typed paths, which is the defect this pair of fields
-    /// exists to end.
+    /// Active scratch source copies polled by watchers and edited during the session.
     pub(crate) running: Vec<Sources>,
     /// Where the library is — see [`Launch::store`]. Here for `sources`' reason,
     /// and copied onto [`Gfx::store`] for the readers that are handed only a
@@ -180,13 +173,7 @@ pub(crate) struct App {
     /// watcher [`Engine::new`] makes. Kept because a window remade makes them
     /// again.
     pub(crate) built_tx: std::sync::mpsc::Sender<watch::Built>,
-    /// The store the watchers put their builds in, opened once in [`main`].
-    ///
-    /// An open store rather than the root beside it, because this one is shared
-    /// with four worker threads and each of them writes to it on every build.
-    /// [`App::store`] is still the root, and is still what a save, a listing and an
-    /// arrangement are handed: those open per call, which is what keeps a listing
-    /// from creating a directory it only wanted to read.
+    /// Shared store instance used by watcher build workers.
     pub(crate) held: std::sync::Arc<Store>,
     /// Every version that compiles in this run, seeded in [`main`] from the files
     /// the decks were about to play and handed to every watcher [`Engine::new`]
@@ -471,35 +458,8 @@ impl App {
         }
     }
 
-    /// Perform what a pointer event asked for, and say what frame it is
-    /// owed. `otherwise` is the answer for an event that acted on nothing —
-    /// the claim's, which is the answer this loop had before there were
-    /// controls.
-    ///
-    /// The two kinds of control end in two different places, which is what
-    /// [`Acted`] is for:
-    ///
-    /// - The Outputs dot's operation was already performed by the panel, and
-    ///   what is owed is what the [`Outcome`] says happened.
-    /// - A fader's operation is performed here, because it is the *deck*
-    ///   that moves and the panel has no deck (ADR-0156). It becomes a record
-    ///   and the record moves the deck — P-0090, which is what makes this
-    ///   fader the same control as a key press and a MIDI knob rather than a
-    ///   third way of writing a gain. The next frame's strips are read back off
-    ///   the deck by [`mixer`], so what the fader shows is what the deck says
-    ///   and never what this loop remembered.
-    ///
-    /// What the operation becomes is [`written`]'s answer and not this
-    /// file's, out of the operation and what [`reading`] read off the deck.
-    /// It used to be a `match` written out here, because there was
-    /// nowhere for the conversion to live; ADR-0185 said that function is
-    /// deleted the day a home lands, and
-    /// [ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)
-    /// is that home. Three answers come back and all three are said out loud —
-    /// the records go to [`apply`], and the other two go to [`unwritten`],
-    /// which is the difference between *this press writes nothing, and that is
-    /// settled* and *this press owes a record nobody has decided how to
-    /// write*.
+    /// Dispatches UI pointer actions to engine or UI state and determines redraw requirements
+    /// (ADR-0156, ADR-0194, Principle 0090).
     pub(crate) fn performed(
         gfx: &mut Gfx,
         started: Instant,
@@ -533,15 +493,7 @@ impl App {
             // `Change` of its own would be a second answer to a question that
             // is already answered.
             Acted::Opened => otherwise,
-            // **A carry that moved the library cursor earns the frame the
-            // claimed press already earns, and no more**, which is the arm
-            // above word for word. `Change::Pointer(Claim::Panel)` — what
-            // `otherwise` is on every path that can reach this — is already
-            // `Repaint::Now`, and `Change::Pointed(true)` is what the arrow
-            // keys raise for the same move and is the same answer. The re-read
-            // this press owes is not here because the store is not: see the
-            // button-up arm of `App::window_event`, which is where every other
-            // press that reaches a disk reaches it.
+            // Acted::Pointed moves the library cursor without generating an operation.
             Acted::Pointed => otherwise,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
@@ -590,23 +542,7 @@ impl App {
                     ) {
                         println!("{line}");
                     }
-                    // **The two the console performs itself**, and they are
-                    // here for the same reason the arrangement is: both write
-                    // no record, so `written` below answers `Silent` for them
-                    // and there is nothing for `apply` to do. One moves a
-                    // pointer this crate does not hold, the other re-points a
-                    // slot's source and lets the worker do the rest — neither
-                    // is the mix. Each answers `None` for every other
-                    // operation, which is what keeps this two lines rather
-                    // than two more routes into the engine.
-                    // **The one that reaches a device**, and it is here
-                    // beside the arrangement for the same reason: it writes no
-                    // record either — `written` answers `Silent(NoRecord)`,
-                    // because nothing in the session stream says what the beat
-                    // is taken from — and what it changes is this program's
-                    // audio session and the pill that reads it. The session
-                    // tempo is read first so that the borrow of `gfx.audio`
-                    // below does not have to hold the deck as well.
+                    // Console-local actions (Silent in record stream).
                     let session_bpm = gfx.engine.deck.signals().oscillator().bpm();
                     if let Some(line) = attached(
                         &mut gfx.audio,
@@ -616,11 +552,6 @@ impl App {
                     ) {
                         println!("{line}");
                     }
-                    // **The second that reaches that device**, and it is here
-                    // for the reason the attach is: `written` answers
-                    // `Silent(NoRecord)` for it too, so there is nothing for
-                    // `apply` to do and the session this program opened is the
-                    // only thing that holds the value. See [`nudged`].
                     if let Some(line) = nudged(&mut gfx.audio, operation) {
                         println!("{line}");
                     }
@@ -701,13 +632,7 @@ impl App {
                     if let Some(line) = re_salted(&mut gfx.engine.aimed, operation) {
                         println!("{line}");
                     }
-                    // **The publish mark, performed with them**, and it is the
-                    // fourth field of one aim: the layering, the capacity, the
-                    // salt and now the interface. `written` answers
-                    // `Silent(NoRecord)` for `Publish` as it does for the other
-                    // three, so the surface that names it performs it. See
-                    // [`attended`], where the reason it is the aim rather than a
-                    // writer into the live Set is argued.
+                    // Propagate published control interfaces to watcher aims.
                     if let Some(line) = attended(&mut gfx.engine.aimed, operation) {
                         println!("{line}");
                     }
@@ -821,23 +746,7 @@ impl App {
                     // `Crossfade` is four and `Wipe` is up to six — one
                     // control is not one record (P-0090, ADR-0194).
                     if let Written::Records(records) = &written {
-                        // **Into the session before the deck moves**, where
-                        // one is being recorded: the stream is the timeline
-                        // and the deck is what the timeline does, so a record
-                        // that reached the deck and not the file would be a
-                        // replay that does not reach where this run did. It is
-                        // pushed whether or not `apply` finds somewhere to put
-                        // it — a record the deck refused is still what the
-                        // operator asked for, and a replay refuses it the same
-                        // way.
-                        //
-                        // **Cloned, and it is the one place this program
-                        // clones a record.** `push` takes ownership and the
-                        // list is borrowed by the loop that applies it; every
-                        // record here is scalars and a short string, and a
-                        // press is not the frame path — `push_audio` exists
-                        // precisely because the *one* record that carries a
-                        // buffer must not be copied, and none of these is it.
+                        // Persist records into session timeline before applying them to deck.
                         if let Some(recorder) = recorder {
                             for record in records {
                                 recorder.push(record.clone());
@@ -1029,18 +938,7 @@ impl App {
             None => return,
         };
         for mcp::OperateRequest { operation, reply } in asked {
-            // **The one act in this drain that ends on a disk**, and it leaves
-            // here rather than falling through: a keep is *"on a worker"* on
-            // the page it is specified on, so the press goes and the answer
-            // arrives later — which is what the reply riding the request is
-            // for (`Kept::reply`). The sentence below would say it was
-            // performed on this frame, and the file is not written yet.
-            //
-            // **`Asked::Model`, so it lands in `<store>/sandbox/`** — stamped,
-            // overwriting nothing, and readable by nothing that reads the
-            // library. A model is not refused here where its star is, because
-            // what it keeps is a file and so has a sandbox form to land in
-            // (P-0096, ADR-0261, ADR-0301).
+            // Model keeps execute asynchronously and save to `<store>/sandbox/` (P-0096, ADR-0261, ADR-0301).
             if let Operation::KeepProcedure { deck, node, ref id } = operation {
                 keeping.keep_procedure(
                     &gfx.engine,
@@ -1266,37 +1164,7 @@ impl App {
         });
     }
 
-    /// A knob turned while `learn` is lit binds the control under the pointer to
-    /// it, and says what happened.
-    ///
-    /// # The gesture is three things and the panel already knew two
-    ///
-    /// *Arm, point, turn.* The pill is the arming; [`Hover::resting`] is what the
-    /// pointer is on, which the tooltip layer works out anyway; and [`asked_at`]
-    /// turns that into the operation a press there would ask for, which
-    /// [`target_of`] spells as the right-hand side of a map line. What is left is
-    /// the left-hand side, and that is the message that just arrived.
-    ///
-    /// # It stays armed until it is pressed again
-    ///
-    /// Mapping a surface is *turn every knob once*, a dozen bindings in a row, and
-    /// re-arming between each would be a click per knob. Nothing is hidden by that
-    /// — the pill is lit for exactly as long as this is true.
-    ///
-    /// # Every refusal is out loud
-    ///
-    /// A knob turned with the pointer on nothing, on a control no map line can
-    /// name, or against a map file that will not open — each says so and leaves the
-    /// arming alone. A learn that quietly did nothing is the one outcome
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// rules out, and it is the likely one: the operator is looking at the
-    /// controller rather than the screen.
-    ///
-    /// # And the frame is owed
-    ///
-    /// The tip under the pointer has just changed — its last line is read off the
-    /// live map — so the layer is asked for a frame. That is the whole of what *the
-    /// assignment shows at once* takes.
+    /// Binds the UI control under the mouse pointer to the active MIDI learn message (Principle 0094).
     pub(crate) fn learned(
         gfx: &mut Gfx,
         readout: &mut Readout,
