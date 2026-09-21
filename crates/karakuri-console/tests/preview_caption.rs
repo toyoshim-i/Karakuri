@@ -69,20 +69,8 @@ fn texts(view: &mut View, panel: &mut karakuri_console::panel::Panel) -> Vec<(eg
 // Where the caption is
 // ---------------------------------------------------------------------------
 
-/// The caption is outside the image, and inside the row.
-///
-/// The rectangle a caption is drawn in and the rectangle a texture is drawn in
-/// share an edge and no area at all — `preview_rects` is what the engine sizes
-/// a slot's texture from, so a caption rectangle that overlapped it would be a
-/// caption under texels rather than under the image.
-///
-/// And the row is what pays for it. The caption band comes off the track before
-/// the image is fitted into it, so the image plus its caption is the row's
-/// height exactly. The defect this exists for is that subtraction being
-/// dropped: the image is then fitted into the whole track, `caption_of` puts
-/// the caption under it as it always does, and the caption hangs off the bottom
-/// of the row into `.program-body`'s padding and the bay's edge. It is the half
-/// that is not true by construction, and it is the half that fails.
+/// Verifies that the preview caption is placed strictly below the preview image
+/// and fits within the preview row bounds.
 #[test]
 fn the_caption_is_outside_the_image() {
     let (panel, cells) = cells();
@@ -157,25 +145,8 @@ fn the_letter_is_not_painted_over_the_material() {
 // What the caption says
 // ---------------------------------------------------------------------------
 
-/// The state word is what the cell actually distinguishes.
-///
-/// A cell has a slot behind it or it has none, and a slot behind it is
-/// running or has stopped updating — and those are the three words.
-/// `overloaded` is the third since ADR-0316: the version in that slot costs
-/// more than one frame may, so the engine skips its step and its draw and the
-/// image is the last frame it made. The image stays and the word is what
-/// marks it, because a still that is not marked is a preview that lies
-/// (ADR-0269) and a blanked cell is indistinguishable from an empty slot.
-///
-/// The two words it is *not* are the ones this file exists to keep out:
-///
-/// - `off` is residency, and residency has not gated a cell since
-///   ADR-0240. It is what `view::preview` said until this pass, copied out of
-///   a `C · off` the mock stopped drawing.
-/// - `empty` is a slot that exists with nothing loaded into it. The manual
-///   names it; `Deck::new` builds a slot per `HotSwap` and `Deck::slot_view`
-///   is `None` only past `slot_count`, so the engine cannot be in it and
-///   nothing may draw it.
+/// Verifies that preview captions distinguish slots using explicit state words
+/// (ADR-0240, ADR-0269, ADR-0316).
 #[test]
 fn the_state_word_is_what_the_cell_actually_distinguishes() {
     // The words themselves, and not only the constants that hold them: a
@@ -263,26 +234,8 @@ fn in_caption(painted: &[(egui::Pos2, String)], caption: Rect) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
-// The badge
+// The badge (ADR-0296)
 // ---------------------------------------------------------------------------
-//
-// **What used to be here, and what it cost to retire it.**
-// `the_badge_is_absent_rather_than_drawn_empty` asserted that a caption paints
-// no shape but text — written when nothing in this workspace could say what a
-// slot costs, so a dot of any kind would have been a reading nobody took. It
-// **fails only when somebody draws a badge and never when a number arrives**,
-// which is why the engine grew
-// `a_governed_slot_now_has_a_number_a_band_can_be_predicted_from` beside it
-// rather than trusting it (ADR-0296).
-//
-// It caught exactly one thing this file now has to catch some other way: a
-// caption that paints a mark it has no value for. That is
-// `a_slot_with_no_number_draws_no_dot` and
-// `a_cell_with_no_slot_draws_no_dot_even_with_a_number` together, and they are
-// **stronger** than what they replace — the old assertion could not tell a dot
-// drawn from a number apart from a dot drawn by default, because it refused
-// both. These two hold the refusal exactly where the manual puts it and the
-// drawing everywhere else.
 
 /// A slot the governor budgeted at `ms` on the better of its two numbers.
 fn estimated(ms: f32) -> Option<Budgeted> {
@@ -493,24 +446,7 @@ fn the_dot_is_drawn_in_its_bands_colour_at_the_far_end_of_the_caption() {
     }
 }
 
-/// A slot with no number draws no dot.
-///
-/// This is what `the_badge_is_absent_rather_than_drawn_empty` protected and it
-/// is asserted the same way — no shape but text inside the caption — so it
-/// fails for a circle, a filled rectangle, a ring, or a glyph standing in for
-/// one. What has changed is that it now holds only where there is no number,
-/// which is the half of that test that was ever a rule.
-///
-/// Three nothings take this path and none of them is a small number.
-///
-/// - Nobody has governed this deck, which is every other test in this crate.
-/// - The governor found neither number for the slot —
-///   `karakuri_engine::governor::Basis::Unbudgetable`, which is *not zero* and
-///   is why it crosses this seam as an absent entry rather than as a `0.0`
-///   ([`Budgeted`]). A `0.0` here would draw green, which is the exact defect.
-/// - A number that is not finite. A failed reading is not a cheap Set, which
-///   is the engine's own rule for `Unfit::FragmentTermNegative` said once more
-///   at the drawing.
+/// Verifies that a slot without a valid budgeted execution cost draws no status dot.
 #[test]
 fn a_slot_with_no_number_draws_no_dot() {
     let (mut panel, cells) = cells();

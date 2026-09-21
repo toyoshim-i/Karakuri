@@ -454,15 +454,7 @@ fn a_folded_or_soloed_or_narrow_row_draws_nothing() {
 // The beat grid
 // ---------------------------------------------------------------------------
 
-/// The position of the light and the bar are one number read two ways, and this
-/// is that number walked across a bar boundary.
-///
-/// Four beats to the bar, so beats 0 through 3 are bar 1 and beat 4 is bar 2 —
-/// the boundary is where a position that counted from the session instead of
-/// from the bar shows itself, and where a bar that counted from zero does. The
-/// half-beats are the half of this the grid used to throw away: the light is
-/// between two dots at 1.5, and where it is at every instant is what the grid
-/// draws now (ADR-0212).
+/// Verifies that the beat grid calculates continuous positions across bar boundaries (ADR-0212).
 #[test]
 fn the_grid_reads_the_position_the_beats_say() {
     for (beats, at, bar) in [
@@ -593,19 +585,7 @@ fn beat_zero_and_the_beats_before_it_are_places_on_this_grid() {
     }
 }
 
-/// The light is a pure function of the position it is handed, and this is that
-/// function on its own — no row, no panel, no `egui` and no clock.
-///
-/// `beat_at` is [`karakuri_console::view::roll_at`]'s shape one row up
-/// (ADR-0212), and the four claims below are the presentation: it peaks under
-/// the light, it is exactly dark a dot pitch away, the grid's total light is
-/// constant wherever the light is sitting, and it measures round the cycle so
-/// the last dot and the first are one pitch apart rather than three.
-///
-/// Run against its defect: a falloff measured along the row rather than round
-/// it — `(index as f32 - at).abs()` — fails the wrap with *"the light at 3.5 of
-/// 4 lit dot 0 by 0"*, which is the light disappearing off the right-hand end
-/// of the grid and reappearing at the left a quarter of a beat later.
+/// Verifies that beat indicator brightness smoothly transitions and wraps around bar boundaries (ADR-0212).
 #[test]
 fn the_light_is_a_pure_function_of_the_position() {
     // On a dot: all of the light, and none anywhere else.
@@ -769,24 +749,7 @@ fn at_the_instant_of_a_beat_the_grid_is_the_mocks_picture() {
     }
 }
 
-/// Between two beats the light is on both dots, and the halo goes with it —
-/// which is the half of this presentation the mock's still picture cannot show
-/// and the whole of what P-0094 asked for.
-///
-///
-/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-/// prefers continuous movement to a discrete flip because a flip proves
-/// liveness *across an interval* — an observer knows the panel was alive
-/// between two flips — where movement proves it *at every instant*. So the
-/// frame drawn halfway between two beats has to be a different picture from the
-/// frame drawn at either of them, and a picture nothing else on this panel
-/// draws: two dots part lit, two halos, and a total light of exactly one dot.
-///
-/// Run against its defect: painting the fill as `match lit > 0.5 { true =>
-/// pal.pink, false => pal.line }` — a flip with a threshold, which is what a
-/// continuous position drawn discretely comes to — fails with *"halfway between
-/// two beats painted 0 dots between the two colours, so the light is switching
-/// rather than travelling"*.
+/// Verifies continuous interpolation of beat indicators and halos between beats (P-0094).
 #[test]
 fn between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
@@ -1209,12 +1172,7 @@ fn the_readouts_in_the_transport_row_are_not_controls() {
         (row.bar.center(), "the bar"),
         (row.frame.center(), "the frame readout"),
         (
-            // **The health capsule**, which is drawn as a capsule and is not
-            // one: it is what the last write did, and there is nothing to
-            // press. It is in this list rather than in a sentence for the
-            // reason the four above it are — the answer is stated where a
-            // control added here without a decision about the pointer would
-            // fail it.
+            // Health indicator capsule (readout only, non-interactive).
             row.health
                 .expect("the mock's row draws its capsule")
                 .center(),

@@ -171,18 +171,7 @@ pub struct Candidate {
     /// program rather than a property of the lane; the copies ended it, and the
     /// argument for the letter is the parked deck above.
     pub deck: usize,
-    /// Which node of that slot the build changed, and `None` where no node can be
-    /// named — see the head of this type.
-    ///
-    /// It is the payload half and [`addr`](Self::addr) is the drawn half, which is
-    /// [`Param`]'s arrangement one bay over: `Param::name` is what the row reads
-    /// and `Param::param` is what a press asks with. Both are written by whoever
-    /// read the Set, in one place, so they are filled together or not at all.
-    ///
-    /// It is what both of this row's presses are addressed by. `Keep a candidate`
-    /// settles this node and `Put a node's previous version back` steps it back one
-    /// version; neither can be spelled without it, so a row where this is `None`
-    /// offers neither.
+    /// Node address of the slot modified by the build, or `None` if unspecified.
     pub at: Option<NodeAddress>,
     /// The mock's `.addr` — `L4:0` — and empty on a row that names no node.
     ///

@@ -1,39 +1,7 @@
-//! The four class pills: what a model may reach, and the hand that opens it.
+//! Verification for the four MCP class pills across console bays (ADR-0156).
 //!
-//! `docs/manual/console.html` draws four of them and specifies each in its own
-//! tooltip — one in the Program bay's head beside `solo`, one in the Mixer
-//! bay's, one in the Master bay's, and one beside the `Outputs` label, because
-//! that row has no head to put an indicator in. Each says what it opens, that a
-//! click opens the class and a second click shuts it, and what about the press
-//! is deliberately unsettled.
-//!
-//! Six things, and the third and the fourth are why this file exists rather
-//! than a few more assertions in `solo_pill.rs` and `outputs.rs`:
-//!
-//! 1. That each of the four is drawn where the page puts it, and that the
-//!    region it is in is the bay a refusal names.
-//! 2. That each is hit-tested where it is painted, and that nothing beside
-//!    one is.
-//! 3. That a press opens exactly one class and leaves the other three shut
-//!    — the property, over all four, because an opening that took its
-//!    neighbours with it is a permission nobody granted.
-//! 4. That a second press shuts it, which is the half of the page's
-//!    sentence a control could silently not have.
-//! 5. That the word says which state the class is in, and that the capsule
-//!    is measured for the word it holds.
-//! 6. That a bay carrying no class draws nothing at all, and that a pill
-//!    nobody has drawn is not one a press can be on.
-//!
-//! What is not here is the press reaching a run's `Opening`, and the audit
-//! answering differently afterwards. That crosses two crates this one cannot
-//! see — `karakuri-environment` holds the handle and `karakuri-operation`'s
-//! gate holds the audit — so it is `crates/karakuri/src/main.rs`'s
-//! `the_gate_lets_a_refused_operation_through_once_the_class_is_open`, which is
-//! the one place that can see both. This crate takes no handle at all
-//! (ADR-0156): `McpPill::next` hands a value back and somebody else writes it.
-//!
-//! None of it needs a window or a device. It does need `egui`'s fonts, because
-//! a `.pill` is as wide as the word in it — see `common::drawn_once`.
+//! Tests pill layout, hit testing, click-to-toggle transitions, state labeling,
+//! and empty-class behavior.
 
 mod common;
 

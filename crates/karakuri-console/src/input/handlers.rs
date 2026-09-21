@@ -45,20 +45,7 @@ pub(super) fn on_back(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
         .is_some_and(|bay| bay.back(ctx, &view.staging, p).is_some())
 }
 
-/// The rows of the Staging lane, and the row is the control — a press on one
-/// keeps that candidate, which is the Library bay's list read the other way
-/// round: there a row press takes a Set in hand and asks for nothing, and here
-/// it names an operation outright.
-///
-/// Its count is one for the list's reason one bay up: a press lands on one of
-/// however many rows the bay drew, and how many that is moves when a divider
-/// moves — [`CONTROLS`] is what the pointer *may* have to hit-test, and a
-/// figure that moved with the arrangement would answer a different question.
-///
-/// It answers `false` for a row that offers no keep, which is not the same as a
-/// row that is not there: a row on `overloaded` and a row that names no node
-/// are readouts, and a press on either is `egui`'s. The rule is
-/// [`crate::view::StagingBay::keep`]'s and it is asked rather than restated.
+/// Hit-tests a press against rows in the Staging lane.
 pub(super) fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     staging(panel.layout(), &view.staging)
         .is_some_and(|bay| bay.keep(ctx, &view.staging, p).is_some())
@@ -350,28 +337,7 @@ pub(super) fn on_node_keep(panel: &Panel, ctx: &egui::Context, view: &View, p: P
     })
 }
 
-/// The deck head's seven, one pane at a time, and each pane is derived once for
-/// all of them exactly as a strip is: the anchor's place is measured from the
-/// mode chip's, the arrows' from the anchor's, and the fold is what the row is
-/// laid out *to* with the two build chips measured leftwards from it — so they
-/// are seven questions about one laid-out pane. A console with no deck behind
-/// it has no panes and pays nothing — [`View::inspector`] is empty, and this
-/// iterates over nothing.
-///
-/// Seven controls and six methods, which is why the row's `claims` is not the
-/// number of calls `karakuri/src/main.rs` makes on the head: the two arrows are
-/// one control each and `DeckHead::scrub` answers for both of them.
-///
-/// The fold is the fifth, since 2026-09-09. A press on it asks the slot to
-/// composite or to overdraw, which the window turns into a re-aim and a rebuild
-/// (ADR-0314); it used to be drawn and claimed by nothing.
-///
-/// The capacity chip and the `re-salt` capsule are the sixth and seventh, and
-/// they are the fold's mechanism with a different field of the aim changed
-/// (ADR-0328). Both are drawn only where the deck has a geometry, and the
-/// capacity is claimed only where its ladder has somewhere to go — *a control
-/// claims what it acts on and no more*, which on this row the inert scrub
-/// already answers with a state.
+/// Hit-tests a press against Inspector pane deck head controls across all panes.
 pub(super) fn on_deck_head(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     view.inspector.iter().enumerate().any(|(index, pane)| {
         inspector(panel.layout(), index, pane, view.scroll_in(index))
@@ -648,27 +614,7 @@ pub(super) fn on_read(panel: &Panel, ctx: &egui::Context, view: &View, p: Point)
     })
 }
 
-/// The `load` button and the deck pulldown beside it, derived once for both:
-/// the pulldown is as wide as the letter in it and the button is laid out back
-/// from it, so a second derivation would put the capsule a press lands on
-/// somewhere the word is not. It is a mixer strip's arrangement in a foot
-/// rather than in a column.
-///
-/// Two controls in one row of this table (ADR-0305). They were one *readout*
-/// until 2026-09-08 — `load → A`, which said where the key would land and
-/// answered no pointer at all — so this row is what the split cost: the button
-/// asks for `Operation::LoadSet` naming the pulldown's deck, and the pulldown
-/// names that deck.
-///
-/// The `→` between them is not one of the two, which is the whole of why
-/// `hit_button` and `hit_deck` are two questions rather than one box: the label
-/// is punctuation on the foot's own ground, and a press on it belongs to
-/// neither capsule.
-///
-/// The list the pulldown puts down is not hit-tested here. Rule 2 above claims
-/// every press while it is down, exactly as it does for the two cards in the
-/// transport row, so this probe is only ever asked in the state where there is
-/// no card.
+/// Hit-tests a press against the Library footer `load` button or deck pulldown pill.
 pub(super) fn on_load(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     library(
         panel.layout(),

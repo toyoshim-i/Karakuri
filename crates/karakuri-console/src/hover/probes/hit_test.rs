@@ -632,15 +632,7 @@ pub(crate) fn on_seq(
         .is_some_and(|op| which(&op))
 }
 
-/// The `+ lane` pill, which is the one control in this bay whose press is not
-/// an operation: it puts a card down, so `Sequencer::chose` is what answers for
-/// it and `Chose::Open` is the pill itself.
-///
-/// `Shut` is every other point on the console while the card is down, and that
-/// is what keeps this from claiming the whole window: with the card up this
-/// answers `Open` on the pill and `None` everywhere else, and with one down it
-/// answers `Shut` — which is not this control — everywhere including on the
-/// pill. A tip under an open card is ADR-0330's own open seam.
+/// Hit-tests point `p` against the `+ lane` pill in the sequencer bay.
 pub(crate) fn on_add_lane(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
     // The one derivation, and the choices it was laid out from asked again:
     // the card's items are the chooser's own listing, so a bay drawn from one

@@ -1,38 +1,4 @@
-//! The mixer strip's tally chip, pressed.
-//!
-//! `mixer.rs` is where a strip's rectangles are and which of them are controls;
-//! `parked.rs` is what the chip *draws* while a request has not landed;
-//! `blend.rs` is the chip one row down. This is the fourth control (ADR-0195):
-//! the tally cycles, and a press on it emits `Operation::SetResidency` naming
-//! the residency it arrived at.
-//!
-//! The step is taken from the residency that was requested, which is the
-//! decision this file exists to hold. The requested and the effective residency
-//! are the same value on every settled slot and they part on exactly one state
-//! the engine can produce — parked, asked to prime and held at allocated — so
-//! that state is where cycling from the request and cycling from the readout
-//! give different answers, and it is the state
-//! `a_parked_chip_asks_for_the_withdrawal_rather_than_going_on_air` is written
-//! at. From the request the next is `Allocated`, which *is* the withdrawal of
-//! the prime request; from the readout it would be `Live`, and a press meant to
-//! take a request back would put the deck on air.
-//!
-//! That is the affordance a surface owns and not a lock it holds
-//! ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)):
-//! the chip refuses nothing, and `karakuri-cli`'s `w` — `toggle_priming`, which
-//! reads `Deck::requested_residency` to choose its direction — is the same
-//! choice on another surface.
-//!
-//! None of it needs a device. Laying a strip out needs `egui`, because the
-//! capsule is as wide as the widest of the three words, and what comes out is
-//! `karakuri-operation`'s, which has no dependencies at all.
-//!
-//! # Where this stops
-//!
-//! At the operation, exactly as `blend.rs` and `fader.rs` do. Turning it into a
-//! `Record::Residency`, applying it and letting the governor answer is the
-//! harness's — `crates/karakuri/src/main.rs`, where there is a deck — and this
-//! crate has none (ADR-0156).
+//! Integration tests for mixer strip tally chip interaction and residency cycling.
 
 mod common;
 

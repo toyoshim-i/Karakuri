@@ -1,35 +1,7 @@
-//! The hover layer: that the words are the page's, that the dwell is a dwell,
-//! and that a tip stays inside the window.
+//! Verification for the hover and tooltip layer.
 //!
-//! Six things, and the first three are what stop the layer becoming a second
-//! copy of the manual:
-//!
-//! 1. The table is the console's own rows, at the granularity they claim.
-//!    `hover::TIPS` is one entry per row of `input::PROBES`, in that order,
-//!    so a control registered there and never given a tip is a compile
-//!    error and an entry cannot answer for its neighbour — and a row that
-//!    claims five controls carries five entries unless `UNEVEN` says why it
-//!    does not, which is the half of *every compact control explains
-//!    itself* that the array's length cannot hold.
-//! 2. Every citation resolves to the one element it names, in
-//!    `docs/manual/console.html`. This is the half that goes stale in
-//!    silence: nothing about editing the page tells you a `Cite` was
-//!    reading it, so the check is *does the element this comment names
-//!    still exist* rather than *is this text plausible* —
-//!    `tests/transcribed_constants_cite_the_mock.rs`'s argument, over the
-//!    page rather than over the stylesheet.
-//! 3. No tip arrives with an entity still in it. The mock writes `&#8853;`
-//!    and `&mdash;`, and a panel drawing those five characters is drawing
-//!    markup at an operator. The scan refuses what it cannot read rather
-//!    than reading it wrongly.
-//! 4. The box is the mock's own rule, term for term out of `[data-
-//!    tip]::after`.
-//! 5. The dwell is a dwell: nothing before it, the page's words after it,
-//!    and nothing at all once the pointer leaves.
-//! 6. A tip is inside the window at every corner, and it asks for a frame
-//!    when it appears or goes and never while it is up.
-//!
-//! None of it needs a window, a device or a disk — the page is compiled in.
+//! Tests tooltip table coverage against registered input probes, citation validity
+//! against `docs/manual/console.html`, HTML entity scrubbing, dwell timing, and boundary placement.
 
 mod common;
 
@@ -270,12 +242,7 @@ fn a_row_is_tipped_at_the_granularity_it_claims() {
             tips.len()
         );
     }
-    // **And every exception is a row that needs one, and carries what it
-    // says it carries.** A name that no row has, or a row that has since been
-    // tipped whole, is a line to delete: left there it takes that row out of
-    // the check above for good. The count is what keeps an excused row from
-    // quietly losing an entry — the one thing the check above would have
-    // caught for it.
+    // Verify that every row listed in UNEVEN is valid and matches its expected tip count.
     for (name, why, entries) in UNEVEN {
         let (at, (_, tips)) = TIPS
             .iter()
@@ -516,12 +483,7 @@ fn a_tip_at_an_edge_is_inside_the_window() {
     let under = karakuri_console::hover::placed(viewport, Point::new(100.0, 100.0), size);
     assert_eq!(under.min, egui::pos2(100.0, 100.0 + TIP_GAP));
 
-    // **And it flips rather than being pushed.** A box merely clamped to the
-    // window would sit *over* the control it is explaining, which is what the
-    // mock's `.tip-right` and its `.outputs` rule exist to stop: near an edge
-    // the box opens back towards the pointer and leaves it on the edge of the
-    // box. Measured away from the corner, where a clamp and a flip land in
-    // the same place and neither tells you which happened.
+    // Verify that tooltips flip rather than clamp near viewport edges (.tip-right).
     let near_right = karakuri_console::hover::placed(viewport, Point::new(1300.0, 100.0), size);
     assert!(
         near_right.max.x <= 1300.0,

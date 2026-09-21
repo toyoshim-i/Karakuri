@@ -1,67 +1,7 @@
-//! The Staging lane: a card, a head, and a row per node a build changed — and,
-//! with nothing outstanding, a card and a head and nothing else.
+//! Verification for the Staging lane layout, painting, and interactions (ADR-0200, ADR-0310, ADR-0326).
 //!
-//! The lane draws four of the six things a candidate row could carry — the
-//! deck, the node's address, what that node's procedure calls itself, and
-//! whether it is on screen — and the argument for the two it omits is written
-//! out in `view`'s module documentation and at `view::staging`. A row per
-//! changed node rather than per slot is
-//! [ADR-0326](../../../docs/adr/0326-a-staging-row-is-a-changed-node-and-the-row-is-the-keep.md),
-//! and it is what gives the row its two presses: the row is *keep a candidate*
-//! and the `back` capsule at its end is *put a node's previous version back*.
-//! ADR-0200 is why what has no value is omitted outright rather than drawn
-//! hollow.
-//!
-//! The empty case is still the case this file leads with, because it is still
-//! this lane's ordinary state: *"a staging lane with nothing in it is simply a
-//! run in which nobody has rewritten a procedure yet — which is every run at
-//! its start and most runs throughout"*. A decision to draw nothing needs a
-//! test more than a decision to draw something does: nothing about deleting the
-//! argument would make a suite fail, and what would be added back is what the
-//! page refuses.
-//!
-//! Seven things:
-//!
-//! 1. With nothing outstanding the bay draws the shapes of a bay with no
-//!    body, asserted against the Sequencer bay — the lane's twin in this
-//!    console's furniture: a title, no pill, no grip, and nothing in its
-//!    body at all. It is a claim about the paint pass, so it is made by
-//!    drawing a frame and counting.
-//! 2. Nothing else the console is handed puts anything there. The Library's
-//!    names, the mixer's strips, the Inspector's panes and a picture are
-//!    all written onto the `View` and the lane is the same two shapes
-//!    after, which is what says the bay reads none of them: the one field
-//!    it reads is `View::staging`.
-//! 3. A candidate draws a row, and the rows are where the arithmetic says —
-//!    the list box off `.stage-list`'s three paddings, a stride of a
-//!    `.cand` and `.stage-list`'s gap, every row inside the list.
-//! 4. The lane holds the mock's three and no more, which is the one piece
-//!    of boundary arithmetic in this bay: `lib.rs` pins it at 125 because
-//!    the mock draws three rows and two gaps, and a fourth candidate is
-//!    counted and not drawn.
-//! 5. The head is untouched by any of it, asserted with the lane full as
-//!    well as empty: the mock's `2 waiting` is a readout and a bay head's
-//!    pills are its controls.
-//! 6. What in it is a control and what is not, asked of a full lane as well
-//!    as an empty one: the bay's own ground is `egui`'s, a row that offers
-//!    a keep is the panel's, and the `back` capsule inside it is asked
-//!    first because it is the smaller box.
-//! 7. A row the checker turned down carries what it said, which is the one
-//!    row that draws a sentence: nothing was built for it, so the word
-//!    alone says a save did not take and nothing about why (ADR-0310).
-//! 8. Each press asks for the operation its row is addressed by, and the
-//!    rows that offer neither say so: an overloaded row has nothing to keep
-//!    and a row that names no node has nothing to keep and nothing to step
-//!    back.
-//!
-//! And the four words a row can end in are the manual's own, which is ADR-0159
-//! asked of this bay: *"whether it is on screen: landed, overloaded for costing
-//! more than one frame may, refused, or did not compile"*. This quoted *refused
-//! by the checker* until 2026-09-08, which was a paraphrase of a sentence the
-//! page does not have and had the two refusals the other way round: *refused*
-//! is a build that failed, and the checker's is the fourth word.
-//!
-//! None of it needs a window or a device.
+//! Tests empty state rendering, row layout under candidate limits, hit testing
+//! for keep/revert operations, and status rendering.
 
 mod common;
 
@@ -493,12 +433,7 @@ fn the_lane_has_room_for_the_mocks_three() {
     assert_eq!(held, 4, "not every count was asked");
 }
 
-/// A row is drawn, and it is drawn inside the list.
-///
-/// The geometry above is what `staging` answers; this is what the paint pass
-/// does with it. Each candidate adds shapes wholly inside the bay — a well and
-/// the type in it — and the fourth adds none, which is the boundary above
-/// asserted from the other side.
+/// Verifies that candidate rows add painted shapes within the staging bay up to the display limit.
 #[test]
 fn each_candidate_adds_shapes_and_the_fourth_adds_none() {
     let mut panel = console(PLAUSIBLE);

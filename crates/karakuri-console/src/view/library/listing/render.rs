@@ -22,31 +22,12 @@ pub(crate) struct Listed<'a> {
     pub(crate) starred: &'a std::collections::BTreeSet<String>,
 }
 
-/// A star's mark, drawn rather than typed — [`arrow_mark`]'s reason one bay
-/// along, and the case is sharper here: this mark's whole job is saying
-/// *starred* or *not starred*, and a face with no `★` would answer it with a
-/// tofu in both states.
-///
-/// `across` wide and the same tall, which is [`arrow_mark`]'s rule for a mark
-/// that stands in for a glyph: the box is the size the glyph would have been,
-/// so the name beside it starts in the same place whichever way this is drawn.
-///
-/// Ten rim points at two radii, the outer at the top and the rest every 36°
-/// round — [`STAR_WAIST`] is the inner one. `filled` is `.star` and the outline
-/// is `.star.off`, which is the mock's own pair.
-///
-/// A fan from the centre and not a polygon, because a five-pointed star is not
-/// convex: `egui::Shape::convex_polygon` fans from the first vertex, which for
-/// this outline puts triangles outside the ink. A star *is* star-shaped about
-/// its own centre, so a fan anchored there is exact — which is
-/// [`mixer::mask_mark`]'s answer to `epaint` having no arc, one shape along.
+/// Draws a 5-pointed star mark (outline or filled).
 fn star_mark(painter: &egui::Painter, centre: Pos2, across: f32, colour: Color32, filled: bool) {
     let outer = across * 0.5;
     let rim: Vec<Pos2> = (0..10)
         .map(|step| {
-            // **From straight up, and clockwise**, which is where a star's
-            // point is drawn: `egui`'s y runs down the screen, so the turn is
-            // taken as a positive angle off `-y`.
+            // Clockwise from top.
             let angle = std::f32::consts::PI * 0.2 * step as f32;
             let r = match step % 2 {
                 0 => outer,
@@ -73,29 +54,7 @@ fn star_mark(painter: &egui::Painter, centre: Pos2, across: f32, colour: Color32
     painter.add(egui::Shape::mesh(mesh));
 }
 
-/// A reading, painted: the well, and a row of it per line.
-///
-/// Where the box goes is [`library`]'s and where each row in it goes is
-/// [`Block::row`]'s, so this paints and derives nothing — [`library_into`]'s
-/// own rule one box out.
-///
-/// Term for term from `style.css` and from the markup the mock sets inline:
-///
-/// - the box — `background: var(--c-well)` at [`size::READING_RADIUS`], which
-///   is the well a candidate row stands on in the staging lane.
-/// - `.lib-row` with its left padding overridden — a name at [`size::BASE`],
-///   one [`size::READING_PAD_X`] in from the left of the well, centred across
-///   the row's own height.
-/// - `.lib-row .dim` — `color: var(--c-faint)` at [`size::LIB_FOOT_SIZE`],
-///   `margin-left: auto`, so the value ends one [`size::LIB_ROW_PAD_X`] in
-///   from the right of the well. The same 10px the foot's count is drawn
-///   at, which is the mock's own reading: a declaration is what the row is
-///   *about* and the range beside it is the small type this bay uses for
-///   everything a row is not named by.
-/// - `.addr` — `color: var(--c-lav)`, on the head's word alone. The weight is
-///   not honoured and cannot be, which is [`room`](crate::room)'s own sentence:
-///   `egui`'s default proportional face has no bold, so a `font-weight: 700`
-///   is a colour and a size here.
+/// Renders an expanded set/procedure reading block within the library listing.
 pub(crate) fn reading_into(
     painter: &egui::Painter,
     pal: &Palette,

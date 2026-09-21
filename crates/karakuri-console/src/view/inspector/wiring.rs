@@ -5,30 +5,9 @@ use super::*;
 // The Inspector's wiring, nodes and uses lines
 // ---------------------------------------------------------------------------
 
-/// What a slot is built at, in the two fields the deck head offers: how many
-/// elements each of its geometries runs at, and the salt its randomness comes
-/// from.
+/// Slot configuration in the deck head, providing capacity options and deterministic salt.
 ///
-/// # It is a reading somebody else took, which is why the candidates are here
-///
-/// Neither number can be worked out on this side. The ladder is the powers of
-/// two inside the range the *material* declares — `capacity [min, max] =
-/// default`, which is a `.kir`'s statement and reaches this crate through
-/// whoever read the Set — and the salt is the next in the slot's own
-/// deterministic sequence, which is the engine's arithmetic over the salt the
-/// slot is actually running. So both cross the seam as answers rather than as
-/// the facts they are computed from, exactly as [`Pane::allows`] does and for
-/// the same reason: a control is not the authority on what it may ask for
-/// ([P-0090](../../../../docs/principles/0090-a-surface-offers-it-never-decides.md)),
-/// and this crate holds no engine and no store (ADR-0156).
-///
-/// The salt is handed over rather than invented, which is the half worth
-/// stating twice. A console that reached for a random number would produce a
-/// picture no later run could produce again
-/// ([P-0092](../../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md));
-/// a console handed the next value of a sequence names a destination the way
-/// every other control here does.
-/// `docs/adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md`.
+/// See ADR-0328 for details on deck head capacity stepping and re-salting.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Aimed {
     /// What the slot is running at, which is the number the chip reads.
@@ -416,23 +395,9 @@ fn rend_width(ctx: &egui::Context, name: &str) -> f32 {
     }) + size::REND_PAD_X * 2.0
 }
 
-/// Every renderer chip and its box, left to right in draw order — the same walk
-/// [`rend_row_into`] paints and [`InspectorPane::select_renderer`] hit-tests,
-/// so the capsule a press lands on is the capsule the wash is drawn in.
+/// Iterates over each renderer chip bounding box from left to right in draw order.
 ///
-/// [`LibraryBay::chips`]' arrangement one bay along, down to the reason it is
-/// an iterator: a `Vec` of rectangles would be an allocation on a path asked
-/// once per pointer event and once per frame.
-///
-/// The index is the renderer's own, in draw order — the numbering
-/// `Operation::SelectRenderer`, `--param L4:1:…` and a `select` record all use,
-/// so what comes out of a press is a position in the Set rather than a position
-/// in whatever this row managed to draw.
-///
-/// The boxes are not clipped and the paint is. `.rend-row` wraps in the mock
-/// and this console draws one row of it (see [`rend_row_into`]), so a chip past
-/// the pane's right edge is yielded whole here and held to the part of it that
-/// is drawn where the press is answered.
+/// Yields `(index, Rect)` without heap allocations.
 pub fn rend_chips<'a>(
     ctx: &'a egui::Context,
     row: Rect,

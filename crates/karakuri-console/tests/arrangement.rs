@@ -139,15 +139,8 @@ fn the_minimum_viewport_is_the_sum_of_the_declared_minima() {
     assert!(karakuri_console::MINIMUM_VIEWPORT.0 < SMALLEST.w);
 }
 
-/// At the minimum viewport every region is at or above what it declares, and
-/// one logical pixel under it none of them is.
-///
-/// The first half is what the constant means. The second is what it buys: at
-/// 691.9 the body row's three tracks are all short — 171.74 for a right pane
-/// that declared 172 — because the last step of `solve_split` scales every
-/// child together once the frozen minima come to more than the extent
-/// (ADR-0250). Nothing is out of place and nothing is negative; the panel is
-/// simply no longer the panel its own numbers describe.
+/// Verifies that at the minimum viewport, all regions maintain their declared minima,
+/// and that any viewport smaller causes proportional scaling below minima (ADR-0250).
 #[test]
 fn one_pixel_under_the_minimum_no_region_holds_its_minimum() {
     let at = |w: f32, h: f32| {
@@ -179,33 +172,8 @@ fn one_pixel_under_the_minimum_no_region_holds_its_minimum() {
     assert!(rect_of(&layout, "outputs").h < 34.0);
 }
 
-/// At the minimum viewport an inspector pane is wide enough to draw a parameter
-/// row's fader, and a pixel narrower it is not — which is what the centre's
-/// declared minimum is *for*, and what it was not before ADR-0279.
-///
-/// The `.param` grid is `15px 88px 1fr 58px` with 8px gaps and 12 + 10 of
-/// padding, and a pane is exactly as wide as the rows in it, so 207 of a pane
-/// is spoken for before the fader — the `1fr` — has any width at all.
-/// `view::param_into` draws the fader only where that leftover is positive, so
-/// a pane of exactly 207 draws a parameter row with no fader in it. The minimum
-/// is therefore 208 a pane and 2 x 208 + 9 = 425 in the centre, and not the 2 x
-/// 207 + 9 = 423 ADR-0272 names: at 423 the leftover is zero and the bay still
-/// draws no fader.
-///
-/// The 207 is recomputed from `room::size` rather than written here, so this is
-/// the same reading `lib.rs` makes and not a second copy of it.
-///
-/// The drag is the other half and it is the reason a window minimum could not
-/// have done this job: the body row's first boundary starves the centre to its
-/// declared minimum at *any* window width, so the property has to hold at 1920
-/// as well as at 777, and what makes it hold is the declared minimum rather
-/// than the viewport.
-///
-/// It was watched to fail with `centre` back at the CSS track's 340 and the
-/// panes at 165: *"inspector-1 is 165.5 wide, and a `.param` row's fixed tracks
-/// want 207 before the fader has any width"*, at the minimum viewport and again
-/// after the drag. With the centre at 423 and the panes at 207 it fails the
-/// same way, one pixel out.
+/// Verifies that at the declared minimum viewport and after drag gestures, inspector panes
+/// remain wide enough to render parameter faders (ADR-0272, ADR-0279).
 #[test]
 fn at_the_minimum_an_inspector_pane_draws_a_parameter_fader() {
     use karakuri_console::room::size;
@@ -331,13 +299,7 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
 /// not reaching them.
 #[test]
 fn the_picture_and_the_previews_fold_apart() {
-    // The picture off: the previews stay, and they are what is left in the
-    // bay — at the 89 they are, not swollen to the height the picture was
-    // holding. The bay claims what its visible content can use, which is the
-    // preview row and nothing else, so the bay is 89 too. That the 306 it gave
-    // up goes to the inspector is the sink's own sentence and is asserted in
-    // the test below; what is asserted here is what the fold does — the row
-    // survives it, at its own size.
+    // Folding the picture leaves the preview row intact at its own height.
     let mut layout = solved(PLAUSIBLE);
     layout.collapse(id_of(&layout, "program-view"));
     layout.solve();

@@ -157,14 +157,7 @@ fn the_bay_rearranges_at_the_crossover() {
         below.size()
     );
 
-    // **And the width past it is what the arrangement is for**: at a 1920
-    // window the body is 1396 x 350, the picture beside the cells is
-    // **622 x 350**, and the same bay with the cells under it would have the
-    // mock's 466 x 262 — 78% more picture, which is ADR-0182's motivating
-    // number reached through the console rather than through the arithmetic.
-    // The body is 17 taller than it was because the preview captions grew the
-    // bay by that much, and beside is the arrangement that spends a bay's
-    // height on the picture rather than on the row.
+    // Verify picture sizing at 1920 window width (ADR-0182).
     let wide = picture_rect(at(PLAUSIBLE.w).layout(), CANVAS).expect("on screen");
     assert!(
         near(wide.width(), 622.0) && near(wide.height(), 350.0),

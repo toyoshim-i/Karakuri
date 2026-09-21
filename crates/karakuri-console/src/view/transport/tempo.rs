@@ -221,141 +221,15 @@ impl Transport {
         self.beats.rem_euclid(self.dots() as f64) as f32
     }
 
-    /// Which bar it is, counting from one — the `37` in the mock's `bar 37`.
-    ///
-    /// One-based because that is how a bar is counted out loud, and there is no bar
-    /// 0 in anything an operator says. Signed for the reason [`Transport::beat`]
-    /// takes `rem_euclid`: a position before the session's zero is a bar before the
-    /// first one, and `as u32` on it would saturate to zero and draw `bar 1` for
-    /// every one of them.
+    /// One-based bar index computed from beat count and dots per bar.
     pub fn bar(&self) -> i64 {
         self.beats.div_euclid(self.dots() as f64) as i64 + 1
     }
 }
 
-/// The transport row, laid out: where each of the five readouts goes, and
-/// which beat is lit.
+/// Computes layout rectangles and values for the transport row readouts and controls.
 ///
-/// # One derivation, for the reason [`Outputs`] is one
-///
-/// [`View::draw`] paints exactly these rectangles. Nothing hit-tests *these*
-/// four, because none of them is a control — see below — but this now has
-/// three call sites rather than the one it was written with: the frame paints
-/// it, and [`arrangement`] asks it where the bar ended and where the frame
-/// readout begins, from both the frame and [`crate::input::claim`]. A value
-/// rather than a paint-as-you-go pass is what made that possible, and it was
-/// already the right shape for the reason it was written: it makes the
-/// arithmetic something `tests/transport.rs` can ask about without a device,
-/// which is the whole of how this crate is checked.
-///
-/// # Four of the six are readouts, and two are controls
-///
-/// A point in this row that is not inside a boundary's [`GRAB`] and not on one
-/// of this row's controls is `egui`'s. A beat, a bar, a frame time and what
-/// the last write did are four readouts, and a readout is not something a
-/// press acts on. The last of them is drawn as a capsule and is still one:
-/// the shape is the mock's, and what makes a thing a control here is that a
-/// press on it asks for something. `tests/transport.rs` asserts it over the
-/// row rather than leaving it to be inferred from the absence of a hit test,
-/// and it asks with the pill drawn so that the assertion cannot pass on the
-/// control having gone.
-///
-/// The tempo is not one of the four, and it left them when the figure
-/// became the track: the number is still a reading, and a press on it names a
-/// value outright — [`TransportRow::tempo`], and ADR-0291. A readout that a
-/// press acts on is a control, which is the same test the capsule fails.
-///
-/// The other control is [`TransportRow::rec`], and it is drawn *inside* this
-/// derivation where [`arrangement`] is drawn beside it. The difference is
-/// where each one sits: the arrangement pill is laid out from
-/// [`TransportRow::bar`] and held clear of [`TransportRow::frame`], so a row
-/// that never heard of it is laid out exactly as it is now; the `rec` pill
-/// takes the row's right padding, and the health capsule and the frame readout
-/// are laid out backwards from it. A pill drawn beside the row could not move
-/// them, and two derivations of one right-hand end are two answers.
-///
-/// This paragraph said *nothing here is a control*, then *none of these five
-/// is*, then *the sixth is this row's one control*, and every one of those
-/// changes is deliberate. What a press on the capsule asks for is
-/// [`TransportRow::record`], and what a press on the number asks for is
-/// [`TransportRow::tempo`].
-///
-/// # What is in the mock's row and is deliberately not here
-///
-/// The list is empty as of 2026-09-10, and that is a state rather than a
-/// deletion. It held `learn` and `map · nanoKONTROL2 ▾` — *"each a control
-/// over machinery that is in neither this crate nor the program"* — and both
-/// are drawn now:
-///
-/// - `learn` is [`learn_pill`], and the machinery arrived with
-///   `docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`:
-///   the panel opens a port at start-up, and a press on this arms the gesture
-///   the mock's tooltip describes.
-/// - `map · <name>` is [`map_pill`], and it is a readout. What was written
-///   against it was that *"a menu naming a device nobody has plugged in is
-///   worse than no menu"*, and that half is unchanged — reaching a map while
-///   running is not built, so the pill has no chevron and no menu and says
-///   which file is loaded. A capsule that looked like a menu and opened none
-///   would still be the scaffolding this module refuses; one that states a
-///   true thing is not.
-///
-/// The rule that emptied it is the one that kept them out: a control is
-/// drawn when there is something behind it. [`arrangement`] was the first item
-/// in this row to pass that test and [`audio_in`] the second; these are the
-/// third and fourth.
-///
-/// `● rec` left this list on 2026-09-08, and what was written against it
-/// was that *"there is no session recorder behind this panel and no record
-/// stream is written from it"*. There is one now: `crates/karakuri` opens a
-/// `karakuri_environment::session::Recorder` on a press and closes it on the
-/// next, and this pill is the toggle — [`TransportRow::record`], drawn in the
-/// mock's `.pill.on` while a recording runs. The mock's tip named one gesture
-/// on it, *click to stop*, and the control is both: what a press means is what
-/// [`Transport::rec`] says it will be, before it is made.
-///
-/// This paragraph carried a total of the row and it no longer does, which
-/// is a deletion rather than an oversight. It said *"the mock draws ten things
-/// and five of them exist"*, and the ten was a number nobody could check
-/// against the markup: `.transport` has fourteen children and one of them —
-/// `.tracker` — holds four more. A list of what is missing is checkable one
-/// item at a time; a total of what a row holds is a second count of the mock,
-/// and it had already gone stale once, when `audio-in` left this list.
-///
-/// `landed` left it on 2026-09-08 and it is the one item here that never
-/// was a control. What was written against it was that *"nothing writes a
-/// procedure while this panel runs, so the pill would be reporting on a write
-/// that never happens"*, and that was already false when it was read again:
-/// `crates/karakuri` watches every slot's sources, so a save from any editor
-/// builds, swaps and is judged, and every verdict of that is drawn in the
-/// Staging lane. This row is where the same stream says *what the last write
-/// did* — [`Transport::health`], which is a value the harness hands in and not
-/// a control this crate offers.
-///
-/// Three items left it on 2026-09-08 — `tap`, `offset` and the octave's
-/// `½ ×2` — which is M5.4's own work: [`tracker_group`] draws them, and what
-/// was written here about the first of them was that *"nothing times a tap
-/// here, and the pill would correct nothing"*. Something does now, and it
-/// always did on the keyboard: `karakuri_environment::audio::Audio::tap` is
-/// what `b` has been reaching, and the pill reaches it by emitting the same
-/// operation. `audio-in` was the first to leave, on the same terms.
-///
-/// The `.sep` between the bar and the frame readout is drawn, in the only
-/// way a `flex: 1` spacer can be: it is space, so what it does is push the
-/// frame readout to the right edge, and that is where [`transport_row`] puts
-/// it.
-///
-/// # No tooltips, for the reason the Outputs row has none
-///
-/// Most of the mock's items carry a `data-tip` and so do most of the drawn
-/// ones — the beat grid's is what the travelling light means, and it landed
-/// with the light
-/// ([ADR-0212](../../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). A tooltip needs `egui` to own a widget, this console paints, and
-/// giving one readout a widget is a decision about who owns the pointer — see
-/// [`outputs`], where the same sentence is written about a control.
-///
-/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
-/// one. `ctx` is asked for the type, because where each readout ends is where
-/// the next one starts.
+/// Returns `None` if transport values are missing or layout is uninitialized.
 pub fn transport(
     ctx: &egui::Context,
     layout: &karakuri_layout::Layout,
@@ -647,31 +521,8 @@ impl TransportRow {
     /// What a press at `p` asks the grid to run at, or `None` off the figure and on
     /// the guard around it.
     ///
-    /// # The press names the tempo outright, and that is the decision
-    ///
-    /// [`Operation::SetFreeRunTempo`] carries the number, and the number is where
-    /// along the figure the press landed. `docs/manual/console.html`: *"A press
-    /// names a value outright rather than stepping, so the figure is the track and
-    /// the number under your finger is the one you get."* It is [`OffsetTrack`]'s
-    /// sentence one control to the left
-    /// ([ADR-0277](../../../../docs/adr/0277-the-latency-offset-is-a-track-because-a-capsule-cannot-name-a-value.md)),
-    /// and it arrives here without that record's derivation: this row has no key,
-    /// so there is no press to make a pixel out of, and what decides the figure's
-    /// scale is the figure's own width and [`TEMPO_BAND`].
-    ///
-    /// # It is emitted with a room being tracked, and that is not this crate's call
-    ///
-    /// The operation is *what the grid runs at with nothing driving it*, and the
-    /// state it is for is a program with no audio device — which is the state
-    /// `crates/karakuri` runs in, where `tap` and the octave both refuse out loud
-    /// because there is no room. With a room open it is accepted rather than
-    /// refused: the tracker searches a window centred on the grid, so moving the
-    /// grid moves the window and the estimate is made again around the new target —
-    /// `karakuri_audio`'s `BeatLock::retarget`, which is where that is written down
-    /// and is the reason this is not a control that undoes itself two seconds
-    /// later. Nothing here can see whether a room is being tracked in any case:
-    /// this crate takes no device (ADR-0156), and [`Tracker`] carries what the
-    /// panel *draws* rather than what a press is allowed to be.
+    /// The press maps directly to a BPM value along the figure track via [`TEMPO_BAND`]
+    /// and emits [`Operation::SetFreeRunTempo`].
     pub fn tempo(&self, p: karakuri_layout::Point) -> Option<Operation> {
         self.on_tempo(p).then(|| Operation::SetFreeRunTempo {
             bpm: self.tempo_at(self.along(p)),
@@ -742,74 +593,20 @@ pub const BEAT_PITCH: f32 = size::BEAT_W + size::BEAT_GAP;
 /// a gap every beat.
 const BEAT_STEPS: u64 = BEAT_PITCH as u64;
 
-/// How stale the beat grid may get, which is what the transport row declares
-/// under
-/// [P-0091](../../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
-/// and what the harness turns into a deadline.
+/// How stale the beat grid may get, declared under P-0091 and turned into a deadline.
 ///
-/// [`BEAT_MICROS`] in [`BEAT_STEPS`] steps — 24.67 ms, about forty a second.
-/// One beat of travel is one [`BEAT_PITCH`], so this is the light moving by one
-/// pixel and no more, which is the coarsest step that reads as a movement
-/// rather than as a sequence of positions
-/// ([P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-///
-/// Stated at the mock's tempo, and it is the one number here that the music
-/// moves. A beat is 468.75 ms at 128.0 BPM and 375 ms at 160, so the same
-/// declaration is a pixel and a quarter a step up there. The alternative —
-/// derive it per frame from [`Transport::bpm`], which the row is handed — is
-/// [ADR-0212](../../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
-/// and it lost on what it does to the arithmetic rather than on the drawing: a
-/// staleness that falls with the tempo makes `Σ (cost / staleness)` a function
-/// of how fast the music is, so the two schedulability conditions could only be
-/// asserted against a fastest tempo nobody has written down — and inventing one
-/// inside the test that noticed it was missing is exactly what
-/// [ADR-0210](../../../../docs/adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)
-/// refused for the panel's share of the budget.
-///
-/// Finer than [`ROLL_STALENESS`]'s 33.33 ms and coarser than a frame, and both
-/// are the presentation rather than a preference for frames: the roll travels a
-/// few pixels and this crosses the grid, so it wants more steps; and a 60 Hz
-/// frame is 16.6 ms, so a beat grid that asked for every frame would be asking
-/// for more than its own drawing can use.
+/// Set to [`BEAT_MICROS`] in [`BEAT_STEPS`] steps (24.67 ms, ~40 updates/sec).
+/// Configured as a constant mock-tempo baseline rather than dynamic per-frame
+/// derivation (ADR-0212, ADR-0210).
 pub const BEAT_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / BEAT_STEPS);
 
 /// How much of the light is on the dot at `index`, with the light `at` beats
 /// into a bar of `dots`: `1.0` under its centre, `0.0` a whole [`BEAT_PITCH`]
 /// away, and a raised cosine between the two.
 ///
-/// # The same curve as [`roll_at`], and two of the reasons are the same
-///
-/// It leaves and arrives at zero with zero velocity, so a dot does not snap
-/// into being dark as the light leaves it. And it is a pure function of a value
-/// the harness handed in, so a test asserts it at a position it chose and
-/// nothing samples a clock to find out what the panel is doing.
-///
-/// # Two dots at once, and the row's total light is constant
-///
-/// The falloff is exactly one pitch wide, so at most two dots are lit and
-/// `f(d) + f(1 - d) = 1` for every `d` — the raised cosine's own identity, and
-/// therefore the grid's dots always sum to exactly one dot's worth of light
-/// (every grid but the degenerate one below, which is one dot and holds all of
-/// it). The light moves along the grid rather than the grid brightening and
-/// dimming as it goes, which is what makes a stop visible: a still grid at half
-/// brightness would be indistinguishable from a light sat between two dots.
-///
-/// # Measured round the cycle, not along the row
-///
-/// The bar wraps, so the distance from the last dot to the first is one pitch
-/// and not three: the light leaves the right-hand end of the grid and arrives
-/// at the left-hand end in the same instant, each dot half lit, and there is no
-/// frame on which it jumps. That is also why [`Transport::position`] needs no
-/// clamp — a position of exactly `dots` is a distance of zero from the first
-/// dot.
-///
-/// # What it draws at the instant of a beat is the mock
-///
-/// At a whole `at` the dot under the light is `1.0` and every other is exactly
-/// `0.0`: one dot in `--c-pink` with its halo and the rest in `--c-line`, which
-/// is `.beat-grid i.on` and the four dots the mock's markup draws. The mock is
-/// a frame of this rather than a picture this contradicts, and
-/// `docs/manual/style.css` carries the travel between those frames.
+/// Leaves and arrives at zero with zero velocity, ensuring smooth dot transitions.
+/// Total light across dots sums to 1.0 (raised cosine identity `f(d) + f(1-d) = 1`).
+/// Distance is wrapped cyclically around the bar length.
 pub fn beat_at(at: f32, index: u32, dots: u32) -> f32 {
     let dots = dots.max(1) as f32;
     // **A grid of one dot has nowhere for the light to go**, so it is on that
@@ -974,23 +771,8 @@ fn transport_row(
     }
 }
 
-/// The tempo as one laid-out run, so that measuring it and painting it cannot
-/// be two different runs of type.
-///
-/// `.bpm`'s `128.0` is one decimal place, which is also as fine as a tempo is
-/// ever named — and the mock's own number, so a transcription that started
-/// printing `128` would be visible against it.
-///
-/// # The gradient is drawn per glyph, which is what the CSS comes to here
-///
-/// `.bpm` is `background: linear-gradient(94deg, var(--c-mint), var(--c-lav))`
-/// with `background-clip: text`: the two colours run left to right across the
-/// number, near enough — 94deg is four degrees off horizontal. `epaint` fills a
-/// galley with one colour, so the run is split into one format run per glyph
-/// and each takes its own point along the ramp. Five glyphs is a coarse ramp
-/// and it is the mock's two colours rather than one of them; the alternative is
-/// picking an end and losing the other, which is a transcription that drops
-/// half of what it read.
+/// Layout job for the tempo value, formatting to one decimal place and applying
+/// a horizontal color gradient across glyphs.
 fn bpm_job(t: &Transport, from: Color32, to: Color32) -> LayoutJob {
     let text = bpm_text(t);
     let mut job = LayoutJob::default();
@@ -1020,19 +802,9 @@ fn bar_text(t: &Transport) -> String {
     format!("bar {}", t.bar())
 }
 
-/// The frame readout as one laid-out run: `58 fps · 12.4/16.6 ms`, with the
-/// numbers in `.val` and everything else faint.
+/// Layout job for the frame readout (`fps · ms/budget`).
 ///
-/// One [`LayoutJob`] rather than four galleys laid end to end, because the mock
-/// is one run of text with two colours in it — `.val { color: var(--c-text);
-/// font-weight: 500 }` inside a span that is `--c-faint` — and laying it out as
-/// one is what keeps the spaces between the parts the type's own rather than a
-/// gap this file invented. The weight is not honoured: `egui`'s default
-/// proportional face has no bold, which `room` says once for the whole crate.
-///
-/// Both absences drop their own words and nothing else. No rate drops `58 fps ·
-/// ` and leaves `12.4 ms`; no budget drops `/16.6` and leaves `12.4 ms`.
-/// Neither draws a `0`, a `—` or a plausible 16.6 that nothing measured.
+/// Missing rate or budget values omit their respective segments rather than drawing placeholders.
 fn frame_job(t: &Transport, val: Color32, faint: Color32) -> LayoutJob {
     let mut job = LayoutJob::default();
     let mut push = |text: String, colour: Color32| {

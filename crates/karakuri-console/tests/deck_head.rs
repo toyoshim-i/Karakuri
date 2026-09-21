@@ -627,12 +627,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
 // What a press asks for
 // ---------------------------------------------------------------------------
 
-/// The chip cycles all three modes and comes back, once each — which is
-/// `tests/blend.rs`'s measurement over the deck's clock, and is what keeps
-/// `SYNCS` and the cycle from drifting apart.
-///
-/// The step is asserted as an operation, so what is checked is the thing a map
-/// or a model would be offered: `SetSync` naming the destination, never a step.
+/// Verifies that the sync chip cycles through all sync modes and emits `SetSync`.
 #[test]
 fn the_chip_cycles_every_mode_once_and_wraps() {
     let (panel, ctx) = console(PLAUSIBLE);

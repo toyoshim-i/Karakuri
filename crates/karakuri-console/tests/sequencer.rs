@@ -1001,16 +1001,7 @@ fn a_chooser_with_nothing_to_point_at_refuses_to_open() {
     assert!(!view.lane_open());
 }
 
-/// The bay's own minimum is what the arrangement reserves for it, and the foot
-/// is part of it.
-///
-/// `lib.rs` reserves `min(100.0)` for this region with the arithmetic written
-/// out beside it — *"the same with one lane and no foot"* — and the panel draws
-/// a foot now, so this is the assertion that says which of the two moved. The
-/// bay is clipped rather than half drawn, so a region at a height that cannot
-/// hold the rows *and* the `+ lane` pill draws nothing at all, and a minimum
-/// that had not moved would be a Sequencer bay that went blank on a short
-/// window.
+/// Verifies that the sequencer bay minimum height accommodates one lane and the footer.
 #[test]
 fn the_reserved_minimum_holds_one_lane_and_the_foot() {
     let ctx = drawn_once();

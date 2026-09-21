@@ -164,12 +164,7 @@ fn chip_w(ctx: &egui::Context, name: &str) -> f32 {
 // Where the controls are
 // ---------------------------------------------------------------------------
 
-/// The row is under the head and it is the rest of the group, which is
-/// `group_h`'s own sum read back off a laid-out group: a group with a renderer
-/// row and no parameters is a head and that row, and nothing is left over.
-///
-/// And a group with no renderers has no row at all — the chips belong to the
-/// renderers group and to no other, which is what the second group here is for.
+/// Verifies that the renderer row is positioned beneath the node head and spans the remainder of the group.
 #[test]
 fn the_row_sits_under_the_node_head_and_is_the_rest_of_the_group() {
     let pane = mock();

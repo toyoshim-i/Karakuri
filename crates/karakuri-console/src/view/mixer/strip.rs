@@ -134,23 +134,11 @@ pub(super) const ROLL_STEPS: u32 = 12;
 pub const ROLL_STALENESS: Duration =
     Duration::from_micros(ROLL_TRAVEL.as_millis() as u64 * 1000 / ROLL_STEPS as u64);
 
-/// How far a pending presentation has got toward its destination this frame, as
-/// a fraction of the distance to it: `0.0` at rest, [`ROLL_REACH`] at the top
-/// of the travel, and never `1.0`.
+/// How far a pending presentation has progressed toward its destination this frame,
+/// as a fraction of distance: `0.0` at rest, [`ROLL_REACH`] at peak, never `1.0`.
 ///
-/// One curve, two readers — the pitch between the tally's two words
-/// ([`tally_into`]) and the gap between a fader's value and its mark
-/// ([`reach`]).
-///
-/// A raised cosine over [`ROLL_TRAVEL`], flat for the rest of [`ROLL_PERIOD`].
-/// It is that curve rather than a triangle for one reason worth having: it
-/// leaves and arrives at zero *with zero velocity*, so the word does not snap
-/// into the rest it holds for the next 600 ms, and the frame the travel begins
-/// on is not a jump.
-///
-/// A pure function of the phase, which is the point of the phase being a value.
-/// A test asserts it at a phase it chose; nothing samples a clock to find out
-/// what the panel is doing.
+/// Implemented as a raised cosine over [`ROLL_TRAVEL`], remaining zero for the
+/// rest of [`ROLL_PERIOD`] to ensure zero velocity at boundaries.
 pub fn roll_at(phase: Phase) -> f32 {
     let travel = ROLL_TRAVEL.as_secs_f32() / ROLL_PERIOD.as_secs_f32();
     let t = phase.cycle(ROLL_PERIOD);
@@ -160,41 +148,10 @@ pub fn roll_at(phase: Phase) -> f32 {
     }
 }
 
-/// How long until anything rolling on this panel next moves, from `phase` —
-/// [`ROLL_STALENESS`] while the travel is under way, and the rest of the rest
-/// while it is not.
+/// Duration until the next presentation movement from `phase` (ADR-0283).
 ///
-/// # What it is for
-///
-/// [`roll_at`] is exactly `0.0` for the 600 ms of every [`ROLL_PERIOD`] that is
-/// not [`ROLL_TRAVEL`], so a chip drawn at the start of the rest and a chip
-/// drawn 33 ms later are the same picture, pixel for pixel. Servicing
-/// [`ROLL_STALENESS`] through that stretch buys seventeen frames a second of
-/// the panel being redrawn exactly as it already is — 31 asked for in a period
-/// where 14 draw something, counted in `tests/moving.rs`. This is what the
-/// declaration answers instead, and
-/// [ADR-0283](../../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)
-/// is the argument.
-///
-/// It is not a second rate. ADR-0190 rejected *a fine deadline while the word
-/// moves and a coarse one while it rests* on the grounds that two numbers is
-/// two live regions wearing one name; the rest here is not a second tolerance
-/// somebody chose but the same two constants read for when the curve leaves
-/// zero, so there is nothing that could drift from the rate and nothing to
-/// arbitrate between. [`ROLL_STALENESS`] is still the only staleness this
-/// presentation declares, and it is still what the arithmetic sums.
-///
-/// # It never answers finer than the rate it declared
-///
-/// A rest with less than one step left of it answers one step, which is
-/// [`crate::budget::Declared::moves_in`]'s invariant and costs at most the
-/// first [`ROLL_STALENESS`] of the travel — one step out of twelve, and inside
-/// the tolerance the presentation itself named. The alternative is a deadline
-/// tending to zero as the period wraps, which is the spin [`crate::repaint`]
-/// exists to refuse.
-///
-/// A pure function of the phase, for [`roll_at`]'s reason: a test chooses the
-/// phase it asserts at, and nothing here reads a clock.
+/// Returns [`ROLL_STALENESS`] during travel, or the remaining duration until the
+/// next travel window begins, clamped to at least [`ROLL_STALENESS`].
 pub fn roll_moves_in(phase: Phase) -> Duration {
     let travel = ROLL_TRAVEL.as_secs_f32() / ROLL_PERIOD.as_secs_f32();
     let t = phase.cycle(ROLL_PERIOD);
@@ -515,53 +472,17 @@ pub struct Strip {
     /// [ADR-0187](../../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)
     /// settled it: `docs/manual/console.html` now lists the three that exist.
     pub blend: BlendMode,
-    /// The mask in force — `Deck::mask(slot).kind()`. Its angle, position and
-    /// softness are not drawn: `.mini` is a chip that says *which shape*, and three
-    /// numbers about that shape are the inspector's row, not this one.
-    ///
-    /// What a press on the chip counts from ([`Mixer::mask`]), the way
-    /// [`Strip::requested`] is what the tally's press counts from.
+    /// The mask in force (`Deck::mask(slot).kind()`).
     pub mask: Mask,
     /// The angle the mask is already wearing — `Deck::mask(slot).angle()`, in
     /// radians. Read to build an operation, and drawn nowhere.
     ///
-    /// # Why the strip carries a number no part of it paints
-    ///
-    /// [`Operation::SetMaskShape`] carries a shape and an angle, because the
-    /// vocabulary's row is one an operator can say the whole of and a record is
-    /// written whole
-    /// ([ADR-0201](../../../../docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)).
-    /// The chip names the shape and nothing on this strip names the angle — so a
-    /// press has to carry a value the control does not control, and the only honest
-    /// one is the value it already has. Sending `0.0` would make choosing a shape
-    /// silently straighten a diagonal wipe: a press that changed something nobody
-    /// asked it to, which is the class of failure
-    /// [ADR-0192](../../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)
-    /// and ADR-0201 are both about, arriving one layer further out.
-    ///
-    /// It is [`Strip::requested`]'s arrangement exactly: a value the strip carries
-    /// because a press has to be computed from it, written by whoever owns the deck
-    /// like every other field here, and never a value this crate keeps. See
-    /// [ADR-0203](../../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md).
-    ///
-    /// Not the position and not the softness, which the record also carries:
-    /// neither is in the operation at all, and the half a shape operation does not
-    /// ask for is filled in from a reading of the mask that is running, where the
-    /// record is written — `karakuri_operation_record`'s `Current`. The angle is
-    /// here because the *operation* names it; those two are not, because it does
-    /// not.
+    /// Preserved from existing state when building [`Operation::SetMaskShape`]
+    /// so shape selection does not reset current rotation (ADR-0192, ADR-0201, ADR-0203).
     pub mask_angle: f32,
     /// What the slot's meter last read, or `None` for no reading at all.
     ///
-    /// `Deck::level` is already `None` for *no meter, no measurement yet, a slot
-    /// that is neither Live nor being auditioned, and a slot whose material was
-    /// just replaced by a resize or a swap* — every case where a held reading would
-    /// be about a different image. So `None` here draws the meter's well and
-    /// nothing in it, which is the mock's own `alloc` strip: a `.vmeter` with no
-    /// `b` and no `u` inside it.
-    ///
-    /// The one value on a strip that moves without a hand on anything, and it
-    /// declares nothing — decided rather than missed, in [`View::mixer_declares`].
+    /// `None` draws an empty meter well without bars.
     pub level: Option<Level>,
     /// Whether this channel is currently muted.
     pub is_muted: bool,
@@ -570,36 +491,9 @@ pub struct Strip {
 }
 
 impl Strip {
-    /// Where this slot has been asked to go and has not got to, or `None` for a
-    /// slot that is where it was asked to be.
+    /// Where this slot has been asked to go and has not reached, or `None` if settled.
     ///
-    /// The one derivation the pending presentation reads, and it answers a *word*
-    /// rather than a `bool` because that is what the surface has to draw: the
-    /// second of P-0087's three is where the control is going, which ADR-0188
-    /// states as *identifiable from the surface itself* — so the thing worth
-    /// deriving is the destination and not the fact that there is one.
-    ///
-    /// # Why it is an inequality and not the engine's pair
-    ///
-    /// `Deck::is_parked` is exactly `requested == Residency::Priming && effective
-    /// == Residency::Allocated`, and today this answers `Some` on precisely those
-    /// slots — `deck.rs`'s module doc closes the other cases itself: *"the governor
-    /// may hold a slot below what was asked for, and may never put one above it"*,
-    /// and *"effective Live and requested Live are the same set of slots"*. So the
-    /// two forms agree slot for slot, and there is no frame on which they differ.
-    ///
-    /// They differ in what a second kind of disagreement would do to them. Written
-    /// as the engine's pair, a surface matching `Priming` over `Allocated` draws a
-    /// settled chip over any other outstanding request — an under-draw, silent, and
-    /// exactly the failure the rule exists to name. Written as an inequality it
-    /// draws the new one without being taught, because the presentation was never
-    /// about *parked*: it is about a request that has not landed, which is
-    /// [P-0087](../../../../docs/principles/0087-name-the-property-never-the-shape.md)
-    /// — the property rather than the one shape it currently takes.
-    ///
-    /// `park` is still the word, and it is the status line's: `karakuri-cli` spells
-    /// it out for an operator in prose, which is the same clause met by a different
-    /// means (ADR-0188).
+    /// Returns `Some(requested)` when `requested != tally` (P-0087, ADR-0188).
     pub fn pending(&self) -> Option<Tally> {
         match self.requested == self.tally {
             true => None,
@@ -792,20 +686,7 @@ pub struct StripBox {
     /// `.strip-name`, the full width of the strip's content box because the CSS
     /// says `width: 100%`.
     pub name: Rect,
-    /// `.tally`'s capsule, as wide as the widest of the three residency words
-    /// inside its padding — the same box whichever one it is showing, so the chip
-    /// does not resize when the deck moves and does not resize under a word rolling
-    /// through it. See [`mixer`], where it is measured.
-    ///
-    /// The word is centred in it ([`tally_into`]), and the capsule is centred in
-    /// the strip, so widening the box does not move the word: it grows
-    /// symmetrically around type that was already on the strip's centre line.
-    ///
-    /// It is the chip a press acts on and not only the box a word is painted into —
-    /// [`Mixer::tally`] hit-tests exactly this rectangle, the way
-    /// [`StripBox::blend`] is hit-tested. Being the widest word's width rather than
-    /// the shown word's is what the blend chip cannot say: this target stands still
-    /// while the deck moves under it and while a word rolls through it.
+    /// `.tally`'s capsule, sized to the widest residency word to prevent resizing.
     pub tally: Rect,
     /// The SOLO toggle button rect on the left of the tally capsule.
     pub solo: Rect,
@@ -1048,26 +929,7 @@ pub(super) fn centred_in(row: Rect, w: f32) -> Rect {
     )
 }
 
-/// A scheduled move on a laid-out fader: the mark on where it is going, and the
-/// band reaching `rolled` of the way from where it is.
-///
-/// Two faders in and no value arithmetic, which is what keeps this honest:
-/// `now` and `to` are the same track measured at the two values, so the mark
-/// lands exactly where the knob would and the band starts exactly where the
-/// fill ends. The knob's centre is the fill's moving edge — [`fader`] says so —
-/// and that one number is the whole of what this reads out of each.
-///
-/// The displacement is a fraction of the gap rather than a distance, so the
-/// reach is in proportion to the move: a fade across the fader sets off a long
-/// way and a fade of a hundredth sets off a pixel. That is the honest picture
-/// and it is also the limit — under about a hundredth of the travel the whole
-/// disagreement is a pixel, and what carries the message there is the mark
-/// rather than the motion. See
-/// [ADR-0206](../../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md).
-///
-/// Two call sites the day it is written, which is this repository's rule about
-/// an abstraction: the trim and the opacity fader, exactly as [`fader`] itself
-/// has.
+/// A scheduled move on a laid-out fader: destination mark and interpolation band (ADR-0206).
 fn reach(now: Fader, to: Fader, rolled: f32) -> Reach {
     let (from, dest) = (now.knob.center(), to.knob.center());
     match now.axis {
@@ -1354,11 +1216,7 @@ fn meter_into(painter: &egui::Painter, pal: &Palette, well: Rect, meter: Option<
     painter.rect_filled(meter.peak, CornerRadius::ZERO, pal.pink);
 }
 
-/// The mask's mark, drawn rather than typed — see [`Mask`].
-///
-/// A circle [`size::MINI_SIZE`] across, which is the size the glyph it stands
-/// in for would have been, and then what the mask does to it: nothing, one half
-/// filled, or a filled centre.
+/// Draws the mask shape glyph (none, linear split, or radial center dot).
 pub fn mask_mark(painter: &egui::Painter, centre: Pos2, colour: Color32, mask: Mask) {
     let r = size::MINI_SIZE * 0.5;
     match mask {

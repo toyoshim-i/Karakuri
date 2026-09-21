@@ -273,19 +273,8 @@ fn the_value_drawn_is_the_decks_own_at_every_phase() {
 // 3. The destination is on the surface, and it is not a word
 // ---------------------------------------------------------------------------
 
-/// The destination is read off the track, in the same reading the knob's own
-/// position is — and no type was added to say it.
-///
-/// ADR-0188 writes the destination clause as *from the surface itself*
-/// precisely so that a tooltip cannot satisfy it, and this console draws no
-/// tooltips at all: a tooltip needs `egui` to own a widget where this console
-/// paints, and who owns the pointer is undecided. Half of what is being said
-/// would otherwise be delivered by a mechanism that does not exist.
-///
-/// A *word* on the strip is the other way this clause gets met on paper and
-/// missed in practice — `o>0.80` is what the status line prints, and two of
-/// them side by side are 61.59 wide against a 53-pixel strip. So the count of
-/// galleys is asserted to be exactly the count a settled strip paints.
+/// Verifies that destination position is rendered directly on the track rather
+/// than via text galleys (ADR-0188).
 #[test]
 fn the_destination_is_read_off_the_track_rather_than_out_of_a_word() {
     let (_, _, settled_words) = painted(vec![settled()], Phase::ZERO);

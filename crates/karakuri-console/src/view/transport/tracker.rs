@@ -574,28 +574,9 @@ pub(crate) fn tracker_into(ui: &Ui, pal: &Palette, group: &TrackerGroup) {
 
 #[cfg(test)]
 mod tests {
-    //! The one figure this row writes that is worth asserting from `src/` rather
-    //! than from `tests/transport.rs`.
-    //!
-    //! [`offset_text`] is private, and moving the assertion out would mean widening
-    //! a surface to test it — a wider surface for a narrower reason. `view::mod`'s
-    //! own `tests` module states the same rule for the Inspector's arithmetic,
-    //! which is the precedent this one follows.
-
     use super::*;
 
-    /// The offset figure carries its sign and its unit, and it has no `-0 ms`.
-    ///
-    /// `docs/manual/console.html` is why the sign is always drawn — *"the sign is
-    /// the half that gets read wrong at two in the morning"* — and why the unit is
-    /// never left off: *"Two things on this panel are called an offset … The unit
-    /// is what tells them apart."*
-    ///
-    /// The zero is the case worth an assertion. The track is 80 pixels for a range
-    /// of 400 ms, so a press a fraction of a pixel either side of the middle asks
-    /// for a value that rounds to zero — and a `{:+.0}` written straight off it
-    /// answers `-0 ms` on one side and `+0 ms` on the other, which is two spellings
-    /// of the one value an operator is most likely to be aiming at.
+    /// Verifies offset formatting: signed value, units, and no `-0 ms`.
     #[test]
     fn the_offset_figure_is_signed_carries_its_unit_and_has_one_zero() {
         assert_eq!(offset_text(-15.0), "-15 ms");

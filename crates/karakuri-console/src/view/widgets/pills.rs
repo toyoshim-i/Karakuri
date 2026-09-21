@@ -34,14 +34,7 @@ pub fn opens(class: Class) -> &'static str {
     }
 }
 
-/// The class a region opens, or `None` for the nine regions that open none.
-///
-/// A bay carrying no class draws no pill, which is the answer that commits to
-/// neither of the two ADR-0235 leaves open: it lists *"whether a bay that
-/// carries no class draws the indicator at all"* as undecided, and the manual
-/// says why it matters — *"an indicator that is present everywhere reads as a
-/// state wherever it is absent"*. Drawing nothing at the Library, the
-/// Inspector, Staging and the Sequencer is what the page draws.
+/// Returns the [`Class`] opened by a given region, or `None` if the region has none.
 pub fn class_at(region: &str) -> Option<Class> {
     Class::ALL
         .iter()

@@ -554,15 +554,7 @@ fn save_means_the_name_in_use_and_asks_for_one_where_there_is_none() {
 // The name being typed
 // ---------------------------------------------------------------------------
 
-/// The buffer is the console's own state and moves only through the two methods
-/// that move it, one character at a time — because `src/` has no key events to
-/// read (ADR-0156) and whoever holds the keyboard is on the other side of that
-/// seam.
-///
-/// Nothing typed is checked, which is the half that matters: a name that is not
-/// one path component is refused where the file is written, in one sentence,
-/// and a pill that dropped the characters it did not like would be a rule an
-/// operator could only find by experiment (P-0090).
+/// Verifies typing and rubout into the arrangement name buffer.
 #[test]
 fn typing_fills_the_name_and_nothing_in_it_is_checked() {
     let mut arr = Arrangement::NONE;

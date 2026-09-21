@@ -30,110 +30,10 @@ pub struct Picture {
     pub rect: Rect,
 }
 
-/// Where the picture goes: the canvas's own shape, as large as the Program
-/// bay's body leaves room for once the four deck previews have their places,
-/// centred in what is left — below the bay head painted over the top of the bay
-/// and inside `.program-body`'s padding.
+/// Returns the fitted picture rectangle for `canvas` within the Program bay,
+/// or `None` if folded or if insufficient room exists (ADR-0182).
 ///
-/// `canvas` is what the Set renders at and what the deck is sized to:
-/// `--canvas` in the product, which reaches a replay through `Record::Canvas`
-/// so a session renders at the size the performance ran at. Two dimensions
-/// rather than a ratio, and that is a conclusion rather than a habit. It is the
-/// shape `karakuri_engine::present::letterbox(canvas, target)` and
-/// `Present::size` already speak, so a caller hands over the number it built
-/// its `Present` from rather than deriving a float on the way in — and a ratio
-/// derived at a call site is exactly where `9.0 / 16.0` gets written for `16.0
-/// / 9.0`, which is a bug nothing on screen shows. It also carries its own
-/// provenance: `(1280, 720)` reads as a canvas and `1.7777778` reads as a
-/// number somebody typed. `src/` still takes no engine (ADR-0156) — this is a
-/// pair of `u32`s, arriving the way every other value does.
-///
-/// `None` where there is no picture to draw, which is the manual's *"it is on
-/// screen exactly when that sink is on — so there is no state where it is
-/// hidden and still costing a pass"*: a caller that renders into this rectangle
-/// records no pass at all when there is no rectangle. A folded picture is the
-/// case that matters — see *The rectangle is the bay's now* below, and
-/// [`program_bay`], which is where it is decided.
-///
-/// # The insets are the bay's own derivation, read backwards
-///
-/// The box is the bay less [`size::HEAD_H`] and one [`size::PROGRAM_BODY_PAD`]
-/// on each of the four sides ([`bay_body`]), and then less whatever arrangement
-/// the cells took out of it — a row and a divider along the bottom, or a column
-/// and a divider down each side.
-///
-/// It reaches the mock's own numbers by the same arithmetic it always did. The
-/// arrangement gives `program-view` 27 + 9 + 262 at the mock's width — bay
-/// head, `.program-body`'s padding above the picture, and the picture itself —
-/// and `deck-previews` 63 + 9 under it with the split's 8px divider between, so
-/// the body less the row less the divider is that region less the head and the
-/// top pad, to the pixel. The 9 under the picture in the CSS is the divider and
-/// belongs to neither child; the 9 under the *row* is the body's bottom
-/// padding, and it is the body's now rather than the row region's, which is the
-/// one term that moved. `tests/program_body.rs`'s
-/// `below_is_what_the_console_draws_today` is that agreement as an assertion.
-///
-/// At the narrowest console the mock will draw, that box is exactly 466 x 262 —
-/// and 466 x 262 is 16:9 *to a quarter of a pixel* rather than exactly.
-/// `.program-view` carries `aspect-ratio: 16/9`, so 466 wide is 262.125 tall,
-/// and the arrangement transcribed the whole pixel the mock rasterises it at.
-/// The box is therefore 1.778626 where the canvas is 1.7777778, which is the
-/// whole of why the paragraph below exists.
-///
-/// # The rectangle is a whole number of pixels, and that is about resampling
-///
-/// A strict fit into that box gives 465.7778 x 262. A caller's `physical`
-/// rounds to whole texels, so the texture it then allocates is 466 wide — and
-/// the picture would be a 466-texel texture drawn into a 465.7778-wide box,
-/// where every texel on screen is a fractional sample of its neighbours instead
-/// of a blit. Of every region on this panel that is worst here: the picture is
-/// a *preview of what is being captured*, and softening it is the one thing it
-/// may not do. It also buys nothing — the texture's own ratio is 466:262 either
-/// way, because `physical` rounded. The fractional quarter pixel is not more
-/// faithful to 16:9; it is the same texture, softened.
-///
-/// Two smaller reasons, and they are second. Every number in this console is a
-/// whole logical pixel because the mock is authored in whole ones —
-/// [`preview_cells`] comes out 112 x 63 with no rounding at all because 466
-/// happens to divide, not because a cell is exempt from this. And a box whose
-/// extent is whole is a box the picture's edge lands on the pixel grid in,
-/// which is what `.program-view`'s own hard-edged well is drawn as.
-///
-/// What it costs, plainly: the picture's ratio is then the mock's 1.778626
-/// rather than exactly the canvas's. `Present::draw` is what absorbs the
-/// difference and that is why it stays — see [`WHOLE_TEXTURE`]. Snapping does
-/// not make the engine's letterbox redundant; it makes it sub-texel.
-///
-/// # The leftover is the console's ground, and a capture pays for it
-///
-/// Above the mock's narrowest the region is wider than the picture, and what is
-/// beside the picture is the Program bay's card with nothing drawn on it.
-/// [`Kind::Picture`] is where that is argued and where the cost to an operator
-/// capturing a soloed window is written out, along with the `a` this console's
-/// window has not got yet.
-///
-/// # The rectangle is the bay's now, and not this region's
-///
-/// It was this region's until the body started arranging itself. Beside the
-/// picture the four cells stand in ground the `program-view` region owns — the
-/// row is [`Layout::set_aside`](karakuri_layout::Layout::set_aside) there and
-/// has no extent at all — so a picture inset out of this region and cells taken
-/// off the bay would be two answers to *where does the picture go*, and they
-/// would differ by two columns and a divider. One derivation, and this is one
-/// of its readers: [`program_bay`] arranges the whole body once and this is its
-/// picture. See
-/// [ADR-0182](../../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md).
-///
-/// The `None` rule moved with it, and that is the one line of this that is not
-/// the same sentence it was. *A folded region keeps its rectangle and loses its
-/// extent* was what said the picture is not on screen, and it does not any
-/// more: the box is taken off the bay, which keeps its 378 whatever the picture
-/// does, so a folded picture would be handed a body and fitted into it.
-/// [`program_bay`] asks the operator's fold by name and this answers `None`
-/// from it — and the size test is still in there underneath, on the fitted
-/// rectangle, for a bay with no room in it.
-///
-/// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
+/// Requires `layout` to be cleanly solved before invocation.
 pub fn picture_rect(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Option<Rect> {
     program_bay(layout, canvas)?.picture
 }
@@ -186,31 +86,7 @@ fn fitted(inside: Rect, aspect: (u32, u32)) -> Rect {
     )
 }
 
-/// The shape of one deck preview cell, and it is the mock's number rather than
-/// the canvas's: `.preview` carries `aspect-ratio: 16/9` in `style.css`, in a
-/// `.previews` grid of `repeat(4, 1fr)` with a 6px gap.
-///
-/// Two numbers rather than a ratio for [`picture_rect`]'s reason, and passed to
-/// the same [`fitted`] the picture goes through.
-///
-/// # It agrees with the canvas today by coincidence, and that is a pass rather
-/// than a rename
-///
-/// An audition is the same canvas the picture shows, so a canvas that is not
-/// 16:9 would letterbox inside a cell — a second fit inside a rectangle
-/// `Present::draw` has already fitted, which is precisely what ADR-0170
-/// rejected one level up. The honest number here is therefore the canvas's.
-///
-/// The reason it is not the canvas's has changed, and the number has not. It
-/// used to be structural — *"making a cell canvas-aware means putting a canvas
-/// on [`View`] and writing it per frame"*, and there was no canvas on [`View`]
-/// to read. There is one now ([`View::canvas`]), so that reason is spent; what
-/// holds the number is
-/// [ADR-0182](../../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)'s
-/// own decision instead — a cell is the mock's shape and never the canvas's,
-/// asserted by `a_cell_is_the_mocks_shape_and_never_the_canvass` — and making
-/// it the canvas's is still a pass of its own, with the second fit above to
-/// answer for.
+/// Aspect ratio of a deck preview cell (16:9) per CSS grid specification (ADR-0170, ADR-0182).
 const PREVIEW_ASPECT: (u32, u32) = (16, 9);
 
 /// What the Program bay arranges its body for when nobody has said what is
@@ -924,30 +800,7 @@ pub fn program_bay(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Opti
     }
 }
 
-/// The `solo` pill in the Program bay's head, derived -- the one control this
-/// console has in a bay head, and the panel's route into *Solo a region*.
-///
-/// `docs/manual/console.html` draws it and says what it does in as many words:
-/// *"Solo the program view: the panel folds away and only the picture is left,
-/// which is also how you capture this window."* So the region it names is
-/// `program-view` and not the bay around it, and that is read off the page
-/// rather than chosen here.
-///
-/// # It is two operations and no toggle, which is [`Outputs::op`]'s rule
-///
-/// A solo has an undo and the vocabulary spells the two apart --
-/// `karakuri_operation::Operation::Solo`'s `region` is `None` for *undo the
-/// solo*, *"explicit rather than a toggle: the caller says which way"* -- so
-/// [`Op::Solo`] and [`Op::Unsolo`] are what a press asks for and the choosing
-/// between them is the affordance. [`ProgramHead::soloed`] is what it is chosen
-/// from, and it is read back out of the layout rather than remembered.
-///
-/// It undoes a solo it did not make. `Layout::solo` collapses everything off
-/// the soloed node's path, so the only solo this pill is still drawn under is
-/// one on `program-view` itself or on something enclosing it -- every other
-/// solo takes the Program bay off the screen and there is no pill to press.
-/// Which is the same sentence `Op::Unsolo` already carries: what an unsolo
-/// undoes is *the* solo, because there is only ever one.
+/// Layout state for the Program bay header `solo` pill control.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProgramHead {
     /// The control: the `solo` capsule, which is what a press has to land in.
@@ -1186,42 +1039,7 @@ pub(super) fn preview(ui: &Ui, pal: &Palette, cell: Rect, picture: Option<Pictur
     );
 }
 
-/// The word a cell's caption gives for what the cell is showing.
-///
-/// Three, because three is what the pair of values this reads distinguishes
-/// and drawing a fourth would be drawing a state the program cannot be in.
-///
-/// - [`PREVIEW_MATERIAL`] — there is a deck slot behind this cell and the
-///   image is that slot's own target. It says nothing about residency: a
-///   parked deck's still and a live deck's frame are the same word, which is
-///   [ADR-0258](../../../../docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md).
-/// - [`PREVIEW_OVERLOADED`] — there is a slot behind this cell and it has
-///   stopped updating: the version in it costs more than one frame may, so
-///   the engine skips its step and its draw and the image is the last frame it
-///   made (ADR-0316). It outranks `material` and does not replace what the
-///   cell shows, which is the whole shape of the decision — the image stays,
-///   because blanking it would be indistinguishable from an empty slot, and
-///   the word is what separates a still from a preview
-///   ([ADR-0269](../../../../docs/adr/0269-a-slot-that-is-drawn-is-stepped-and-a-preview-runs-at-the-rooms-tempo.md)).
-///   It is not residency either: this cell reads the same word on air and off.
-/// - [`PREVIEW_NO_SLOT`] — there is no slot behind this cell at all: a deck of
-///   fewer slots than there are cells, or a console with no engine behind it.
-///   It wins over the mark, because a mark about a slot that is not there
-///   is about nothing: the flag crosses the seam per cell and a caller writing
-///   one beside no picture is saying two things at once, of which this draws
-///   the one that is about the cell.
-///
-/// Not `empty` and not `off`, and both of those are worth naming. The
-/// mock's D cell said `D · off` when
-/// [ADR-0170](../../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
-/// landed and this function's ancestor copied the word; the page has since
-/// moved and neither word is what the cell distinguishes. *Off* was residency,
-/// and residency has not gated a cell since ADR-0240. *Empty* is a slot that
-/// exists with nothing loaded into it — the manual names it and the engine
-/// cannot be in it, because `Deck::new` builds a slot per `HotSwap` and
-/// `slot_view` is `None` only past `slot_count`. Writing either here would
-/// assert a reading nobody took, which is ADR-0200's rule and ADR-0191's
-/// before it.
+/// Returns the status label for a preview cell (`material`, `overloaded`, or `no slot`).
 fn state_word(picture: Option<Picture>, overloaded: bool) -> &'static str {
     match (picture, overloaded) {
         (None, _) => PREVIEW_NO_SLOT,

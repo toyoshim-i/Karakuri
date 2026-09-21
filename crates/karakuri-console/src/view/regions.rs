@@ -118,73 +118,9 @@ pub enum Kind {
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
-    /// The one region a texture is drawn into: the picture in the Program bay,
-    /// which is a sink and whose texels somebody else rendered.
-    ///
-    /// A pane in every other respect — it is inside the Program bay's card and has
-    /// no head of its own — and it is a kind of its own for one reason:
-    /// [`View::draw`] has to know *which* pane the picture goes in, and the
-    /// alternative is comparing a name in the frame path, which puts a string where
-    /// the table already says what a region is.
-    ///
-    /// It carries no label, and the manual says why: *"The picture carries no label
-    /// of its own. The bay head already says Program, and this is a region somebody
-    /// may be capturing: a capture that is neither the canvas nor a clean crop of
-    /// it is worse than useless, and a word burnt into the corner is exactly
-    /// that."*
-    ///
-    /// A clean crop is what the picture now is. [`picture_rect`] gives it the
-    /// canvas's own aspect rather than the whole region, so the rectangle somebody
-    /// captures is the canvas's shape and the sentence above is satisfied rather
-    /// than merely quoted — before that rule the region was neither the canvas nor
-    /// a crop of it, and the manual asked for one of the two.
-    ///
-    /// # What is beside it is the bay's card, and the cells may be in it
-    ///
-    /// The region is wider than the picture at every window above the mock's
-    /// narrowest, and the leftover is the console's ground rather than the engine's
-    /// black inside the texture. The bay's card shows through exactly as it does in
-    /// every other empty body, which is the rule this module opens with and is also
-    /// the mock's own answer — `.program-view` *is* the picture, and what surrounds
-    /// it is `.program-body`, which sets no background of its own.
-    ///
-    /// Far enough above it, the four deck previews are what is in that ground —
-    /// [`program_bay`], and ADR-0182 for why it is the ground down each side that
-    /// they take. What is drawn beside the picture is therefore either nothing or
-    /// the cells, and never a placeholder; the paragraph below is about the case
-    /// where it is nothing, which is every window a capture is likely to be taken
-    /// at.
-    ///
-    /// What that costs a capture, said here rather than found later. The `solo`
-    /// pill's tooltip is *"Solo the program view: the panel folds away and only the
-    /// picture is left, which is also how you capture this window"* — so after a
-    /// solo the window is this region, and an operator whose window is not the
-    /// canvas's shape captures `--c-panel` bars where black would read as an
-    /// ordinary letterbox. That is a real cost and it is new: before this rule the
-    /// bars were the engine's clear inside the texture, and they were black.
-    ///
-    /// `karakuri-cli`'s `a` — `Live::snap_to_canvas` — is the answer to exactly
-    /// this one window along, and its own documentation says why: *"an OBS window
-    /// capture of it would otherwise pick up the bars and a scale."* The console's
-    /// window has no `a` yet, and this rule is what creates that gap.
+    /// Texture display target region for rendered output in the Program bay.
     Picture,
-    /// The region the deck previews are in when they are in a region: the row under
-    /// the picture, [`DECKS`] cells side by side.
-    ///
-    /// A pane in every other respect, and it draws nothing, which is the one thing
-    /// about it that is worth reading twice. The four cells are the *bay's* body
-    /// rather than this region's — beside the picture they are down the sides and
-    /// this region is set aside, with no extent and no entry in the plan — so they
-    /// are drawn once from [`program_bay`] and never from here. The kind stays
-    /// because the arrangement still has the region and the table still has to say
-    /// what it is: a row that folds apart from the picture, which is what the
-    /// manual promises and what the operator's `f` still acts on.
-    ///
-    /// Each cell carries a label and the picture does not, and the manual states
-    /// both in one breath: *"The picture carries no label of its own … The A–D
-    /// under it keep their letters, which are outside anything you would capture
-    /// and are the only thing naming a deck."* So the two are consistent rather
-    /// than at odds. See [`preview_rects`] and [`View::previews`].
+    /// Layout region for deck preview cells under or beside the Program picture.
     Previews,
 }
 

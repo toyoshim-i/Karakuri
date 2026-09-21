@@ -560,24 +560,7 @@ fn the_cursor_during_a_fader_drag_is_not_a_resize() {
     assert_eq!(cursor(&mut panel), egui::CursorIcon::ResizeHorizontal);
 }
 
-/// No knob is inside a boundary's grab, which is what keeps rule 3 ahead of
-/// rule 4 from ever costing anything in this bay.
-///
-/// ADR-0176 measured the Outputs chip against `GRAB` rather than asserting in
-/// prose that it cleared it, and this is that measurement over every knob of
-/// every strip: a boundary gets first refusal, so a knob inside one would
-/// simply be dead — a control drawn where a press drags a divider instead, and
-/// nothing on screen saying so.
-///
-/// The question is `Layout::hit`'s and not `claim`'s, and that distinction is
-/// the whole test: `claim` answers `Claim::Panel` for a boundary *and* for a
-/// control, so a knob swallowed by a grab would go on answering `Panel` and a
-/// test written on it would pass with the defect in place. It was, and it did —
-/// `GRAB` was widened to 60 and the first draft of this test did not notice.
-///
-/// It carries the same guard on itself the Outputs test does: the bay's own
-/// bottom edge *is* inside a grab, so it cannot pass by the grab having gone
-/// missing.
+/// Verifies that no fader knob is placed within a boundary grab zone.
 #[test]
 fn no_knob_is_inside_a_boundarys_grab() {
     let (mut panel, ctx) = console();

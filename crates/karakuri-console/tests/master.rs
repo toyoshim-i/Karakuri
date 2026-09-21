@@ -206,19 +206,7 @@ fn the_out_row_is_the_bays_own_geometry() {
     }
 }
 
-/// The figure's box holds every reading this control can ask for, and it does
-/// not move.
-///
-/// The mock gives the fader `flex: 1` and puts the figure after it, so the
-/// track's far end is wherever the figure begins — and a box sized to what it
-/// says would resize *while the value is being dragged*, taking the knob under
-/// the hand with it. So the box is as wide as the widest reading the control
-/// can ask for, which is what these two assertions are between them: it is
-/// never narrower than the reading in it, and it is the same box at every one.
-///
-/// The width is measured from `egui` here rather than asked of the crate, so a
-/// box too small is two numbers disagreeing rather than one derivation agreeing
-/// with itself — `tests/fader.rs`'s rule about a travel.
+/// Verifies that the figure bounding box fits all possible output readings without shifting.
 #[test]
 fn the_figures_box_holds_every_reading_and_does_not_move() {
     let (panel, ctx) = console(PLAUSIBLE);

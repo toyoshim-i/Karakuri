@@ -101,26 +101,10 @@ pub use model::*;
 const NOT_BUILT: &str = "the six keys are not built in this bay yet — space still folds it, and \
                          tab moves on to the next";
 
-/// What a press asks for, and the address moved to answer it.
+/// Handles keyboard grammar navigation and actions within the focused bay.
 ///
-/// The one entry point for the four keys of the grammar. It resolves the
-/// focused bay's address against what that bay is drawing, moves the address
-/// where the key says to, and answers what the host has to do about it.
-///
-/// # Every write goes through the method that already refused it
-///
-/// A digit that names a strip calls `View::select`, one that names a row calls
-/// `View::point_at`, an arrow that walks the library calls `View::walk` and
-/// `space` on a chip calls `View::step_scope` — so a deck the mixer draws no
-/// strip for, a row past the listing and a scope with no chip are refused
-/// exactly where they were refused before, and the address descends only where
-/// the refusal did not fire. The grammar adds a route and no exception.
-///
-/// `held` is asked what the deck is holding, and only where a press needs a
-/// state to cycle from. A closure rather than a value, because which strip to
-/// read is what the address says and the address is what this function
-/// resolves. It answers `None` where this deck has no slot behind that strip,
-/// and the press then declines and says so.
+/// Resolves the address against current layout and view state, dispatching to
+/// appropriate view selection or step methods (ADR-0259).
 pub fn press(
     view: &mut View,
     panel: &Panel,

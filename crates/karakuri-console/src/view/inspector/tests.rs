@@ -1,21 +1,4 @@
-//! What is private and worth asserting, and it is in `src/` rather than in
-//! `tests/` for that one reason.
-//!
-//! Every region of this console is asserted from a file in `tests/`, one per
-//! region, and everything here would have been in one of them. It is here
-//! because what it names is private, and moving it out would mean widening a
-//! surface to test it — a wider surface for a narrower reason.
-//!
-//! Moved here from `view/mod.rs`, on [`transport`]'s own precedent:
-//! [`pane_box`] and [`group_h`] are the pane's arithmetic, and the public
-//! [`inspector`] is that arithmetic plus a layout lookup — the reasoning that
-//! was already written here travels with the code under
-//! [ADR-0121](../../../../docs/adr/0121-moving-code-leaves-its-reasoning-behind.md),
-//! the same rule `offset_text`'s own assertion moved under, one bay over.
-//!
-//! What is *not* here and belongs in `tests/inspector.rs` when somebody writes
-//! it: the bay drawn against a real arrangement at the two viewports, on
-//! `tests/library.rs`'s pattern.
+//! Unit tests for private inspector layout and geometry calculations.
 
 use super::*;
 
@@ -93,13 +76,7 @@ fn a_pane_is_two_heads_and_what_is_left() {
     assert_eq!(at.body.max.y, 400.0);
 }
 
-/// The inspector's own minimum is the least this draws, and the two are one
-/// derivation: a pane at the minimum less the bay head has room for exactly the
-/// one group of two parameters the minimum is written from, and a pixel less
-/// has room for none of it.
-///
-/// This is what the 151.5 in `lib.rs` *means*: bay head 27, `.half-head` 27.5,
-/// `.deck-head` 25.5, `.node-head` 26.5 and two `.param` rows at 22.5.
+/// Verifies that the inspector bay minimum height accommodates exactly one node group with two parameters.
 #[test]
 fn the_bays_minimum_is_the_least_a_pane_can_draw() {
     let pane = one_node(2);

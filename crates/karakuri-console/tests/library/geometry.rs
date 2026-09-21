@@ -261,13 +261,7 @@ fn the_rows_tile_the_list_and_stay_inside_it() {
     );
 }
 
-/// The foot's number is how many are listed of how many there are, which is the
-/// mock's `5 of 27` read the mock's way.
-///
-/// The two halves come from different places on purpose — the total is what the
-/// harness handed over and the count is what the bay had room for — so this
-/// asks it at two window heights, one where every name fits and one where they
-/// do not.
+/// Verifies that the footer displays the count of visible items versus total items.
 #[test]
 fn the_foot_says_how_many_are_listed_of_how_many_there_are() {
     let names = mock();
@@ -1184,14 +1178,7 @@ fn a_chip_is_pressed_only_where_it_is_drawn() {
     }
 }
 
-/// The capsule a press lands on is the capsule the wash is drawn in.
-///
-/// One derivation asked twice, which is this crate's rule for every control:
-/// [`LibraryBay::chips`] is what the paint walks and what the hit test walks,
-/// so a chip cannot be pressed anywhere the mark is not drawn. It is worth a
-/// test of its own because a chip is as wide as the word in it — a second
-/// measurement would agree on `favourites` and be wrong about `folder` by the
-/// sum of three words' widths.
+/// Verifies that scope chip hit-test capsules exactly match painted wash boundaries.
 #[test]
 fn the_capsule_a_press_lands_on_is_the_capsule_the_wash_is_drawn_in() {
     let (mut view, mut panel) = showing_mock();

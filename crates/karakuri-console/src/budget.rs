@@ -111,28 +111,9 @@ pub struct Declared {
     /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
     /// What the frame moves is [`Declared::moves_in`] beside it.
     pub staleness: Duration,
-    /// How long until this region's picture is different from the one now on screen
-    /// — the deadline a window sleeps until, where [`Declared::staleness`] is the
-    /// rate the region needs *while it is moving*.
+    /// Duration until this region's picture next changes.
     ///
-    /// # Two numbers, and they answer two different questions
-    ///
-    /// [`Declared::staleness`] answers *how finely must this be drawn while it
-    /// moves*, and it is what the schedulability arithmetic sums, because admission
-    /// is decided on the worst case. This one answers *when does it next move*, and
-    /// it is what the window waits on, because servicing is decided on the frame. A
-    /// region that is moving now answers the same number twice; a region that is
-    /// pending and at rest answers the rest it has left
-    /// ([ADR-0283](../../../docs/adr/0283-a-region-declares-when-its-picture-next-changes-not-that-something-is-pending.md)).
-    ///
-    /// # The invariant, and the whole of the safety argument
-    ///
-    /// `moves_in >= staleness`, always. Change detection may only take a frame
-    /// away, never bring one forward: the sooner deadline is the one the region
-    /// already declared and the arithmetic already admitted, so nothing here can
-    /// ask for capacity that was never granted. It is the direction
-    /// [`crate::repaint::Repaint::soonest`] argues in the other sense, and
-    /// `tests/schedulable.rs` asserts it across a whole period.
+    /// Invariant: `moves_in >= staleness`. See ADR-0283 for details.
     pub moves_in: Duration,
 }
 

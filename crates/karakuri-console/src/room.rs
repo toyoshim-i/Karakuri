@@ -1,55 +1,6 @@
-//! The room the panel is in, and the colours and type it wears there.
+//! Room themes, color palettes, and typographic scales for console styling.
 //!
-//! *"The whole panel follows the room, pastel on white by day and lit on black
-//! in a dark hall."* — `docs/manual/console.html`. The mock offers three
-//! settings (`day`, `night`, and follow the reader); two of them are rooms and
-//! the third is a way of choosing between them, so [`Room`] has two variants
-//! and choosing is the caller's.
-//!
-//! # Everything here is read off `docs/manual/style.css`, once
-//!
-//! The stylesheet states each room twice — once under
-//! `@media (prefers-color-scheme: …)` for the page, and once as `.console.day`
-//! and `.console.night` for the panel itself, which is what the room switch
-//! toggles. The `.console.*` pair is what this transcribes, because those
-//! are the panel's own values; the page's are the surrounding document's and
-//! only happen to agree.
-//!
-//! The custom properties are named `--c-*` there and the fields are named
-//! after them without the prefix, so a colour can be checked against the CSS
-//! by searching for one word.
-//!
-//! # What is transcribed and what is interpreted
-//!
-//! Seventeen of the twenty-one properties are plain hex and are copied — the
-//! twelve moods, and the risk badge's five bands. Four are `rgba(…)` or a
-//! shadow, and are written out:
-//!
-//! - `--c-shadow` is two shadows by day and one by night. `epaint` draws
-//!   one, so the day pair is collapsed to its larger member — the `0 4px 14px`
-//!   at 7% — and the `0 1px 0` hairline at 4% is dropped. It contributes about
-//!   a pixel of edge that the bay's own boundary already gives.
-//! - `--c-glow` and `--c-glowp` are the halo on an armed control, and no
-//!   control is drawn in this pass. They are transcribed anyway, because they
-//!   are two lines and the alternative is reading the stylesheet a second time
-//!   for them.
-//! - `--c-tint` is the fourth, and it is the plain case the rule below
-//!   covers: a colour at an alpha, premultiplied here because
-//!   `Color32::from_rgba_unmultiplied` is not `const`.
-//!
-//! `color-mix(in srgb, X 14%, transparent)` appears throughout the mock's
-//! controls and is exactly a colour at that alpha, so where it is needed it is
-//! [`Color32::from_rgba_unmultiplied`] with the same percentage.
-//!
-//! # The type is `egui`'s default faces at the mock's sizes
-//!
-//! The mock sets `--f-round: "M PLUS Rounded 1c"` and
-//! `--f-code: "M PLUS 1 Code"`, and neither is chased here: shipping two
-//! webfonts is a decision of its own and the sizes and weights are what a
-//! layout is checked against. So the sizes below are the stylesheet's and the
-//! faces are whatever `egui` loaded. Weight is the one that cannot be
-//! honoured at all — `egui`'s default proportional face has no bold — so a
-//! `font-weight: 700` in the CSS is a colour and a size here and nothing else.
+//! Provides color constants and dimension metrics corresponding to CSS styles.
 
 use egui::epaint::Shadow;
 use egui::Color32;
@@ -525,15 +476,7 @@ pub mod size {
     /// of it is.
     pub const DROP_RING: f32 = 2.0;
 
-    /// `.wfocus`'s `outline: 2px dashed var(--c-sun)`: the second of the mock's two
-    /// focuses, and the one the panel draws since 2026-09-09 — the ring on the bay
-    /// a key press is addressed to (ADR-0259, and [`crate::focus::mark`] for where
-    /// it goes).
-    ///
-    /// The same 2 as [`STRIP_FOCUS_RING`] on purpose, which is that constant's own
-    /// sentence read from this side: *"the two have to be told apart by their line
-    /// and not by their weight"*. What tells them apart is that this one is dashed,
-    /// in `--c-sun` rather than `--c-lav`, and outside the box rather than inset.
+    /// Outline width for the window/bay focus indicator (`.wfocus`). See ADR-0259.
     pub const WFOCUS_RING: f32 = 2.0;
 
     /// `.wfocus`'s `outline-offset: 2px`: the ring is drawn proud of the thing it
@@ -1168,20 +1111,9 @@ pub mod size {
     /// than the type either side.
     pub const PARAM_H: f32 = PARAM_PAD_Y * 2.0 + BASE * LINE;
 
-    /// How far one notch of the wheel scrolls an Inspector pane — three parameter
-    /// rows, 67.5.
+    /// Scroll step distance in pixels for one notch of mouse wheel, set to three parameter rows.
     ///
-    /// It is written as a multiple of [`PARAM_H`] rather than as a number because
-    /// that is what the page says it is (`docs/manual/console.html`, *The pane
-    /// scrolls, and it says how much it is not showing*: *"three parameter rows a
-    /// notch"*), and a figure here that stopped being a multiple of the row would
-    /// be a second answer to how far a notch goes.
-    ///
-    /// Only a notch is measured in these, which is the whole of why this is not the
-    /// console's idea of a scroll speed: a trackpad hands over a distance in pixels
-    /// already and is passed through untouched, so this converts a *count of
-    /// detents* and nothing else
-    /// ([ADR-0307](../../../docs/adr/0307-the-inspectors-pane-scrolls-and-the-position-is-the-panes-own.md)).
+    /// See ADR-0307.
     pub const WHEEL_STEP: f32 = PARAM_H * 3.0;
 
     /// `.rend-row`'s `padding: 3px 10px 6px 12px` — the renderer chips stand on the

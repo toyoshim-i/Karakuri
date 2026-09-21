@@ -86,24 +86,7 @@ pub struct Param {
     pub bound: Option<Source>,
 }
 
-/// What is driving one parameter row — the mock's `.pval.src` and the three
-/// readouts on the `.sens` row under it.
-///
-/// # It is the attachment's own answer and not a second derivation
-///
-/// The signal, the shape and the range are read off the binding the Set is
-/// holding and carried over unchanged, which is [`Param::param`]'s rule one
-/// field along: what a control *is* comes from whoever published it, and a
-/// surface that rebuilt any of it would be a second statement about one
-/// attachment.
-///
-/// [`Source::range`] is not [`Param::range`], and the two are two facts. The
-/// row's range is what the control was *published* over — the span the fader
-/// rides, which is the procedure's declaration narrowed — and this one is what
-/// the signal is *mapped onto*, which a `bind` may narrow again within it.
-/// Drawing one and writing the other is what a chip on this row would do if
-/// there were one range here, and the operator would see a mapping change under
-/// a press that only asked for a different curve.
+/// Describes the signal source and mapping driving a parameter row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Source {
     /// The signal's own name, as the row's `.pval.src` reads it: `energy`, `beat`,
@@ -208,50 +191,9 @@ impl Param {
     }
 }
 
-/// A parameter fader taken hold of: which deck, which control, and the
-/// track the value rides.
+/// Active parameter fader grip state during interaction, tracking deck, control, and range.
 ///
-/// # What it answers, and what it deliberately does not
-///
-/// The brief on this control is *a pointer landing on a parameter row's fader
-/// answers which deck, which parameter and what value*, and those are the
-/// three things here: [`deck`](Self::deck), [`param`](Self::param)'s
-/// [`Param::param`], and [`Param::valued`] at wherever the drag gets to.
-///
-/// It is not a `Grab`, and that is the seam rather than a gap. A
-/// [`crate::panel::Knob`] is what turns a track position into an
-/// [`Operation`], and the arm for this control is
-/// [`crate::panel::Knob`]'s to grow — see the module the operation is
-/// constructed in. What is here is everything the view can answer without it:
-/// where the knob is, which is geometry and the value it was drawn from, and
-/// which control it belongs to, which is what the harness read off
-/// `Set::published`. The one line that closes it reads
-///
-/// ```ignore
-/// grabbed(
-///     grip.fader,
-///     Knob::Param {
-///         deck: grip.deck,
-///         param: grip.param.param.clone(),
-///         range: grip.param.range,
-///     },
-///     Pos2::new(p.x, p.y),
-/// )
-/// ```
-///
-/// and it is [`grabbed`] — the same inverse of [`fader`] the mixer's two
-/// knobs and the master out are taken hold of through, so a parameter fader
-/// keeps whatever it grabbed at and the value does not jump.
-///
-/// # The control it names is the published one, not the group it was drawn in
-///
-/// [`Param::param`] is `Published::at` and `Published::key` carried over, so a
-/// wildcard row stays a wildcard: `None` means every node that declares
-/// the key, and the engine refuses one that spans nodes under disagreeing
-/// authorities (ADR-0223). The row was *placed* in a group by resolving that
-/// wildcard where it covered exactly one node, and writing what the placement
-/// resolved to would narrow the control to the node it happens to reach today
-/// — [ADR-0286](../../../../docs/adr/0286-a-parameter-row-writes-the-control-it-draws-and-carries-the-range-rather-than-the-position.md).
+/// See ADR-0286 for parameter fader range representation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamGrip<'a> {
     /// Which deck's, which is the manual's word for what the code calls a slot —

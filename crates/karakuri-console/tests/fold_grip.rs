@@ -480,15 +480,7 @@ fn take_hold(panel: &mut Panel, split: NodeId, index: usize) -> Point {
     at
 }
 
-/// Exactly the two panes the page names fold to their edge, read off the
-/// arrangement.
-///
-/// `docs/manual/console.html`: *"a left pane and a right pane, which fold away
-/// to give room, and the centre, which is what they give it to … The middle one
-/// is not a third pane on purpose: folding it is not a thing anybody wants, and
-/// solo is."* The centre is the case that matters: fold the left pane and the
-/// centre inherits the window's edge, so a rule reading the edge alone would
-/// hand an operator the fold the page has just refused.
+/// Verifies that only left-pane and right-pane fold to their respective outer edges.
 #[test]
 fn only_the_two_panes_the_page_names_fold_to_their_edge() {
     let panel = console(PLAUSIBLE);

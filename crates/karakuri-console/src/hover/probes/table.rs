@@ -3,20 +3,7 @@ use super::Tipped;
 use crate::hover::citation::Cite;
 use crate::input::PROBES;
 
-/// Every tip this console can draw, one entry per row of
-/// [`crate::input::PROBES`] and in that table's order.
-///
-/// The array is `PROBES.len()` long, so a control registered there and never
-/// given a tip here is a compile error rather than a control that quietly
-/// explains nothing. `tests/hover.rs` holds each entry against the row it
-/// answers for, by name and by position, so an entry cannot answer for its
-/// neighbour.
-///
-/// An empty slice is the reading rule and not an omission. The maintainer,
-/// 2026-08-31: *"the mock is not exhaustive … there will be gaps in the
-/// functions too"*, and the roadmap carries it — a control the mock draws
-/// without a tip gets none. Each empty slice says which control it is silent
-/// about.
+/// Tooltip entries for each control registered in [`crate::input::PROBES`].
 pub const TIPS: [(&str, &[Tipped]); PROBES.len()] = [
     // **The Outputs row's chips.** Two of the four answer: a plugin chip
     // switches nothing and `Outputs::chip_at` says so, which is the same

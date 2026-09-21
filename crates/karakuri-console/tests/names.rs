@@ -31,28 +31,7 @@ const MANUAL: &[&str] = &[
     "outputs",
 ];
 
-/// Names that are not headings of *What each region is standing on*, each with
-/// what it is and where the word came from.
-///
-/// The three columns are the manual's lede: a left pane and a right pane "which
-/// fold away to give room, and the centre, which is what they give it to".
-/// `left-pane` is `karakuri-layout`'s own word for the first of them, the split
-/// that "fold the left pane away" reaches by name, and `right-pane` is that
-/// operation on the other side. `centre` is deliberately not a third pane
-/// (ADR-0159) — folding it is not an operation anybody wants — and it is named
-/// because the drag on the program's height addresses it.
-///
-/// The inspector's panes are the *n* the manual describes ("n panes, each
-/// showing whatever you point it at"), numbered because the mock's control for
-/// them counts — `2 up` — and because a view's name is required.
-///
-/// The Program bay's two regions are the last two, and they are the one pair
-/// here the manual names outright without heading them. *"The bay is two
-/// regions and they fold apart. The picture is a sink, listed in Outputs as
-/// program view ... The deck previews under it are auditions of their own, so
-/// they stay when it goes."* Both words are the manual's, and both are
-/// addressed: turning the sink off is a fold on `program-view`, and the row
-/// staying when it goes is `deck-previews` not folding with it.
+/// Structural region names and layout identifiers (ADR-0159).
 const STRUCTURAL: &[&str] = &[
     "left-pane",
     "centre",

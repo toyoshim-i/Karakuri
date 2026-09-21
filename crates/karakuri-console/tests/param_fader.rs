@@ -68,17 +68,7 @@ fn row(ord: usize, name: &str, at: Option<(Layer, u32)>, range: [f32; 2], value:
     }
 }
 
-/// The mock's deck A, with the two shapes of group on it.
-///
-/// The first group is a plain node with three rows, one of which has a
-/// published range of no width. The second is the renderers' — a `.rend-row`
-/// between the head and the rows, which is the offset a row's place has to
-/// carry — and one of its two rows is a wildcard, which is what the whole of a
-/// default interface is made of and is the case ADR-0286 is about.
-///
-/// The values are apart from each other, none of them is at an end of its own
-/// range, and no two rows share a range — so a press answered off the wrong
-/// row, or a value read against the wrong range, says so.
+/// Returns mock test pane for deck A with node and renderer groups (ADR-0286).
 fn mock() -> Pane {
     Pane {
         deck: 0,
@@ -430,13 +420,7 @@ fn each_row_is_its_own_control() {
     }
 }
 
-/// A wildcard row writes the wildcard, and not the group it was drawn in.
-///
-/// `exposure` is published bare — one control over every node that declares the
-/// key — and is drawn under the renderers' head because it covers exactly one
-/// of them today. ADR-0286: the placement is where the row goes and the control
-/// is what the write names, and reading the placement back as the address would
-/// narrow the control to the node it happens to reach.
+/// Verifies that a wildcard row writes the wildcard rather than the group it is placed in (ADR-0286).
 #[test]
 fn a_wildcard_row_writes_the_wildcard_and_not_the_group_it_was_drawn_in() {
     let pane = mock();
@@ -552,15 +536,7 @@ fn the_knob_moves_with_the_value() {
 // What is not drawn is not reachable
 // ---------------------------------------------------------------------------
 
-/// A row the pane's body does not reach is not reachable by a press either.
-///
-/// What says so is the body and no longer `shown`. A pane used to draw a group
-/// whole or not at all, so *how many are drawn* was one number and a press
-/// walked it; a pane scrolls now, so what is on screen is the body rectangle —
-/// which is what `InspectorPane::drawn` walks, what `InspectorPane::grip`
-/// refuses a press outside, and what `inspector_into` clips the paint to
-/// (ADR-0307). The body is cut off above the second group here, and that
-/// group's rows are asked for where they would have been.
+/// Verifies that a parameter row outside the visible pane body cannot be reached by presses (ADR-0307).
 #[test]
 fn a_row_the_body_does_not_reach_is_not_reachable() {
     let pane = mock();

@@ -233,18 +233,7 @@ fn a_press_on_a_row_takes_that_rows_set_in_hand() {
     );
 }
 
-/// A press on an open reading takes nothing in hand.
-///
-/// The `read` chip opens a block of lines *between* two rows — *"one row is
-/// open at a time, which is what keeps this a mode of the list rather than a
-/// second list"* — and the rows below it move down by the whole block. So the
-/// list has a region in the middle of it that is not a row, and a press there
-/// must take nothing: a walk that divided the list by the row stride instead of
-/// asking `LibraryBay::row` would answer with whichever row the block happens
-/// to be sitting over, and a hand reading a Set would carry a different one.
-///
-/// The rows under the block still answer their own names, which is the other
-/// half: the block pushes them down and they are still the rows they were.
+/// Verifies that pressing on an open reading block does not initiate a drag/carry.
 #[test]
 fn a_press_on_an_open_reading_takes_nothing_in_hand() {
     use karakuri_console::view::{Published, Reading};
@@ -451,19 +440,7 @@ fn a_drop_on_nothing_asks_for_nothing() {
     assert_eq!(asked, 3, "not every drop was asked");
 }
 
-/// A drop on a live deck still asks for the load, and this drag has no reading
-/// of residency at all.
-///
-/// `console.html` rules on it in as many words — *"Nothing refuses it: what may
-/// be asked for is the instrument's to decide, and a panel refusing what the
-/// key allows would be a second rule kept in a second place"* — so the one
-/// thing this control must not learn is what a deck is doing.
-///
-/// Asserted twice over, because a refusal could hide in either half. The live
-/// strip's drop asks for its load like every other; and the same bay laid out
-/// from strips whose residencies have all been changed answers the same deck at
-/// the same point, which is what says the destination is a rectangle and not a
-/// state.
+/// Verifies that dropping onto a live deck strip requests a load regardless of residency state.
 #[test]
 fn a_drop_on_a_live_deck_still_asks_for_the_load() {
     let (view, mut panel, ctx) = console();

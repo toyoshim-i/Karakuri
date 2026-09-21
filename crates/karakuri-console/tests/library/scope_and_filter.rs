@@ -385,20 +385,7 @@ fn the_foots_arrow_is_drawn_rather_than_typed() {
     );
 }
 
-/// A press on `load` asks for the deck the pulldown names, and never the one
-/// the selection is on.
-///
-/// This is ADR-0305's decision at the seam it crosses: the operation carries
-/// the deck, and which deck it carries is the whole of what the split bought.
-/// The two marks are pulled apart before the press — the keys addressed to deck
-/// C, the load aimed at deck B — because a console where they agree cannot tell
-/// the two readings apart, and that is exactly the state the readout this
-/// replaced was always in.
-///
-/// And a press with no row under the cursor says so rather than emitting. A
-/// load names a Set and a deck; with the listing empty there is no Set, and a
-/// `LoadSet` carrying a name nobody chose would be worse than a press that
-/// declines out loud (`Aim::NoSet`, and P-0083).
+/// Verifies that clicking load targets the deck specified by the pulldown (ADR-0305, P-0083).
 #[test]
 fn a_press_on_load_asks_for_the_deck_the_pulldown_names() {
     let (mut view, panel) = showing_mock();
@@ -681,13 +668,7 @@ fn with_a_procedure() -> (Vec<String>, Vec<RowKind>) {
     )
 }
 
-/// A row carries its kinds, and the words are the chips' own — a Set's are the
-/// layers its files fill and a procedure's is the one kind it declares
-/// (ADR-0338).
-///
-/// And a row with no kinds beside it is a Set with no badge, which is what the
-/// seam's default buys: every other test in this file hands a listing and no
-/// kinds, and this asserts that reads as it did before this row existed.
+/// Verifies that a row displays kind badges matching the layers it implements (ADR-0338).
 #[test]
 fn a_row_carries_the_words_of_the_layers_it_implements() {
     let (names, kinds) = with_a_procedure();
