@@ -48,11 +48,7 @@ pub(crate) fn wired_input(args: &Value, slots: &Slots) -> Result<Operation, Stri
     Ok(Operation::WireInput {
         deck,
         node,
-        // **`Operation::WireInput`'s `slot` is the *input*, and this surface's
-        // `slot` is the deck's.** One word for two things is what the schema's
-        // `input` exists to avoid
-        // (`docs/contributing.md` §4),
-        // and this line is where the two spellings meet.
+        // Maps the MCP schema `input` argument to `Operation::WireInput::slot`.
         slot: input.into(),
         to,
     })

@@ -279,22 +279,7 @@ pub fn started(watching: bool) -> (Server, Reporter) {
     (Server { port, dir }, reporter)
 }
 
-/// **A stand-in for the render loop**, holding the [`Reporter`] the real one
-/// holds and answering the saves the server sends it.
-///
-/// It also replaces the `std::mem::forget` that used to keep the reporter
-/// alive, and says what that was: the loop is the other half of this
-/// surface, and a `forget` is a loop that is present and permanently asleep
-/// — which is now a thing a client can wait on rather than only a channel
-/// that stays open.
-///
-/// **Nothing here saves anything.** What a save *is* belongs to
-/// `Live::save_set` and needs a window and a GPU; what these tests are about
-/// is that a request crosses with its arguments intact and that whatever the
-/// loop says comes back to the client unchanged. So each fixture decides
-/// what the loop says.
-///
-/// The thread never ends, which is what keeps the reporter alive.
+/// Spawns a background thread acting as a mock render loop to process [`SaveRequest`]s from the server.
 pub fn stand_in(reporter: Reporter, answer: impl Fn(SaveRequest) + Send + 'static) {
     std::thread::spawn(move || loop {
         for request in reporter.saves() {

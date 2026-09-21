@@ -999,11 +999,7 @@ pub(crate) const SPELLED: &[Spelled] = &[
                 }),
             )
         },
-        // **The whole list, never one entry**, which is what the operation
-        // carries and why: adding or removing one at a time is a statement
-        // about an entry, and it is what lets two hands on one deck disagree
-        // about what is published. An empty list asks for every declared
-        // control published, which is what an unnarrowed deck is.
+        // Replaces the published interface atomically; an empty array publishes all declared controls.
         make: Some(|with, slots| {
             let deck = deck_of(with, "deck", slots)?;
             let listed = with.get("controls").and_then(Value::as_array).ok_or(
@@ -1169,12 +1165,7 @@ pub(crate) const SPELLED: &[Spelled] = &[
             Ok(Operation::KeepProcedure {
                 deck: deck_of(with, "deck", slots)?,
                 node: node_of(with, "node")?,
-                // **Left out is a stamp**, which is `save_set`'s own
-                // convention and is what the panel's capsule sends: a caller
-                // that can type a name is not made to take a timestamp, and
-                // one that says nothing gets the time it kept it. Checked
-                // here, because what a model names becomes one path component
-                // (`checked_id`).
+                // Validates user-supplied procedure ID; omits explicit timestamp to use server-generated stamps.
                 id: match with.get("id") {
                     None | Some(Value::Null) => None,
                     Some(_) => Some(checked_id(text_of(with, "id")?)?),

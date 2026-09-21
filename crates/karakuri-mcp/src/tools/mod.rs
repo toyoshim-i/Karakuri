@@ -457,13 +457,7 @@ pub(crate) fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, St
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
         },
-        // **The ninth tool, and the one that names rather than does.** The
-        // eight above each turn a tool's own arguments into the operation the
-        // manual specifies; this one is handed the operation's own name and
-        // looks it up — see [`operated`] and [`SPELLED`]. It is here at the end
-        // rather than first so that a tool with a name of its own is still
-        // matched by that name, which is what keeps `operate` from becoming a
-        // second spelling of any of them.
+        // The `operate` tool dispatches arbitrary operations by name via [`operated`] and [`SPELLED`].
         "operate" => match operated(args, slots) {
             Ok(operation) => Asked::Named(operation),
             Err(refusal) => Asked::Refused(refusal),
@@ -1332,23 +1326,9 @@ pub(crate) fn awaited(
     })
 }
 
-/// Wait for one edge to be applied, and say something true when it is not.
+/// Awaits acknowledgment for an applied edge from the render loop up to `wait` duration.
 ///
-/// Not [`awaited`], because a save and an edge are not waiting for the same
-/// kind of thing. A save's third state is real and unavoidable — the loop took
-/// it, the disk has not answered, and *neither a success nor a failure* is the
-/// only honest report. An edge has no such state by construction: the loop
-/// applies it at the frame it takes it and answers there, and everything slow
-/// about it — the compile, the swap, the thirty judged frames — happens after
-/// the answer and is `swap_outcome`'s to report. So the two sentences a timeout
-/// can produce here are *it was not taken* and *it was taken and then the loop
-/// went quiet*, and the second one is a loop at odds with what [`WireRequest`]
-/// says it owes rather than an ordinary outcome.
-///
-/// A run whose loop does not drain [`Reporter::wires`] at all ends up in the
-/// first of those, which is the point: a tool that reported success into a
-/// channel nobody empties would be this surface claiming work that never
-/// happened.
+/// Returns `Ok(result)` on loop acceptance, or `Err(reason)` if the edge was refused or timed out.
 pub(crate) fn applied(
     news: &mpsc::Receiver<News>,
     wait: std::time::Duration,

@@ -143,14 +143,8 @@ fn a_head_that_declares_nothing_is_still_the_slots_l1() {
     );
 }
 
-/// **A write lands on the file its address names, and a camera-headed slot
-/// does not lose its camera to a valid L1.**
-///
-/// This is what the address bug cost: `write_procedure(slot, "L1", 0, …)`
-/// with a real geometry in it passed the kind guard — the source said L1
-/// and the address said L1 — and overwrote the camera's file. The rebuild
-/// then sorted by `kind`, so the slot quietly gained a second geometry and
-/// lost the camera it was looking through.
+/// Verifies that writing a procedure targets the exact file path matching its layer and index,
+/// without overwriting slot heads or losing attached camera definitions.
 #[test]
 fn a_write_addressed_to_a_geometry_does_not_overwrite_the_head() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -573,34 +567,8 @@ fn an_edge_written_without_watch_says_no_watcher_will_rebuild_the_slot() {
     );
 }
 
-/// **The seven tools still work with every class closed**, over the socket
-/// a model actually reaches them on.
-///
-/// ADR-0235 puts all seven in the open set and promises *"no code in this
-/// workspace changes on the day this is recorded"* of their behaviour. The
-/// gate is new code on the path every one of them takes, so this is checked
-/// rather than assumed — and checked here rather than only over
-/// [`asked`], because the gate could have been wired into the wrong seam
-/// and a unit test on the right one would never notice.
-///
-/// **An `operate` the audit passes reaches the render loop's drain and is
-/// performed there; one it refuses never reaches it at all.**
-///
-/// This is the whole claim of the eighth tool, and both halves of it are
-/// here because they are one mechanism: the operation is named on a
-/// connection thread, audited on that thread, and *performed* on the frame
-/// the panel performs a press on — so nothing that a closed class would have
-/// stopped can be sitting in the queue when the operator looks
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-///
-/// **No device, and a stand-in for the loop.** What a put-back *is* belongs
-/// to `crates/karakuri`'s own performer and needs a window; what is asserted
-/// here is that the operation crosses the channel with its payload as it was
-/// spelled, and that what the loop says is what the client is handed.
-///
-/// **Watched to fail** with the audit moved after the send: the second call
-/// then comes back as a success and the loop has two operations rather than
-/// one, which is the failure this is really about.
+/// Verifies that operations permitted by safety gate policy reach the render loop,
+/// while refused operations are blocked before queuing (ADR-0235, Principle 0094).
 #[test]
 fn an_operate_the_audit_passes_reaches_the_loop_and_a_closed_one_does_not() {
     let (server, reporter) = started(true);
