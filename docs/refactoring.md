@@ -4,9 +4,9 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases Summary (P1–P71)
+## 1. Completed Phases Summary (P1–P87)
 
-All prior refactoring phases through Phase 11 are complete, verified with full workspace tests, and documented across crate-level `README.md` files:
+All refactoring phases through Phase 16 (P1–P87) are complete, verified with full workspace tests and Clippy quality gates, and documented across crate-level `README.md` files:
 
 - **Phases 1 & 2 (P1–P20)**: Transient render graph DAG, WGSL AST & pass fusion, machine-readable AI diagnostics, zero-allocation stream replay, and keymap convergence.
 - **Phase 3 (P21–P26)**: Subsystem decomposition, monolith extraction, layer type centralization, full crate-level `README.md` documentation, and Google Style comment standardization across all 16 crates.
@@ -18,10 +18,15 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 - **Phase 9 (P52–P58)**: Secondary monolith modularization: `karakuri-console::hover` (P52), `karakuri-operation` & `karakuri-operation-record` (P53), `karakuri::app::handler` (P54), `karakuri::bridge::filesystem` (P55), `karakuri-mcp::spelled` (P56), `karakuri-midi::map` (P57), and `karakuri::readout::dispatch` (P58).
 - **Phase 10 (P59–P68)**: Workspace-wide test suite monolith decomposition across the 10 largest test files (>2,300 lines decomposed into modular subdirectories).
 - **Phase 11 (P69–P71)**: Final 2,000+ line monolith elimination (`hot_swap.rs`, `listing.rs`, `view/mod.rs`) and pre-commit 2,000-line gate enforcement.
+- **Phase 12 (P72–P73)**: Pre-commit Clippy gate integration and initial lint cleanup across the workspace.
+- **Phase 13 (P74–P78)**: Proactive modularization of danger-zone source monoliths (1,700–1,950 lines) into submodules strictly < 1,000 lines.
+- **Phase 14 (P79–P82)**: Secondary test monolith decomposition across integration suites (>1,700 lines).
+- **Phase 15 (P83–P86)**: Architectural principles realization (destination purity, structured refusal unification, parameter objects, and sandbox-safe test partitioning).
+- **Phase 16 (P87)**: Documentation modernization, elimination of speculative/philosophical prose comments, CommonMark indentation restoration, and strict `clippy::doc_lazy_continuation` re-enforcement.
 
 ---
 
-## 2. Active & Planned Refactoring Roadmap (P72–P87)
+## 2. Refactoring Initiatives Ledger (P72–P87)
 
 | Initiative | Target Subsystem | Actionable Deliverable | Status |
 |:---:|---|---|:---:|
@@ -37,10 +42,10 @@ All prior refactoring phases through Phase 11 are complete, verified with full w
 | **P81** | `karakuri::tests::arrangement` (1,781 lines) | Decompose arrangement and session integration test suite | **COMPLETED** |
 | **P82** | `karakuri-cli::src::tests::live_save` (1,773 lines) | Decompose interactive runtime save/replay test suite | **COMPLETED** |
 | **P83** | Vocabulary Destination Purity | Purge toggle/step operations (`ToggleSolo`, `ToggleMute`) in favor of destination operations (`SetSolo`, `SetMute`) across all surfaces (P-0090, ADR-0180) | **COMPLETED** |
-| **P84** | Structured Refusal Unification | Standardize `RefusalDetail` structured type and guarantee bit-exact error wording across GUI, CLI, and MCP (P-0083, ADR-0131) | **PLANNED** |
-| **P85** | Context & Parameter Objects | Replace 8-argument cascades with dedicated Context structs (`PlanSourcesCtx`, `InspectorRenderCtx`) (P-0091, ADR-0210) | **PLANNED** |
-| **P86** | Sandbox-Safe Test Partitioning | Partition socket-dependent MCP integration tests from offline CPU/GPU tests to guarantee 100% deterministic test execution in sandboxes (ADR-0017, ADR-0242) | **PLANNED** |
-| **P87** | Documentation Modernization & Style | Replace verbose poetic commentary with technical RustDoc and restore strict `clippy::doc_lazy_continuation` enforcement | **PLANNED** |
+| **P84** | Structured Refusal Unification | Standardize `RefusalDetail` structured type and guarantee bit-exact error wording across GUI, CLI, and MCP (P-0083, ADR-0131) | **COMPLETED** |
+| **P85** | Context & Parameter Objects | Replace 8-argument cascades with dedicated Context structs (`PlanSourcesCtx`, `InspectorRenderCtx`) (P-0091, ADR-0210) | **COMPLETED** |
+| **P86** | Sandbox-Safe Test Partitioning | Partition socket-dependent MCP integration tests from offline CPU/GPU tests to guarantee 100% deterministic test execution in sandboxes (ADR-0017, ADR-0242) | **COMPLETED** |
+| **P87** | Documentation Modernization & Style | Replace verbose poetic commentary with technical RustDoc and restore strict `clippy::doc_lazy_continuation` enforcement | **COMPLETED** |
 
 ---
 
@@ -70,7 +75,7 @@ Decompose the final three files across the entire workspace exceeding 2,000 line
 
 ---
 
-## 5. Phase 12: CI / Git Hook Modernization & Clippy Quality Gate (P72–P73) — PLANNED
+## 5. Phase 12: CI / Git Hook Modernization & Clippy Quality Gate (P72–P73) — COMPLETED
 
 Clean up existing linter warnings and shift quality enforcement earlier in the developer workflow by moving Clippy from `pre-push` into `pre-commit`:
 
@@ -88,7 +93,7 @@ Clean up existing linter warnings and shift quality enforcement earlier in the d
 
 ---
 
-## 6. Phase 13: Proactive Decomposition of Near-Monoliths (1,500–1,950 Lines) (P74–P78) — PLANNED
+## 6. Phase 13: Proactive Decomposition of Near-Monoliths (1,500–1,950 Lines) (P74–P78) — COMPLETED
 
 Target files in the "danger zone" (1,500 to 1,950 lines) to prevent accidental pre-commit gate rejections and maintain high cognitive readability:
 
@@ -168,7 +173,7 @@ Decompose test suites that have accumulated beyond 1,700 lines:
 
 ---
 
-## 8. Phase 15: Architectural Principle Realization & Vocabulary Modernization (P83–P86) — PLANNED
+## 8. Phase 15: Architectural Principle Realization & Vocabulary Modernization (P83–P86) — COMPLETED
 
 Ground system design in Karakuri's standing principles (`docs/principles/`) and Architectural Decision Records (`docs/adr/`), turning implicit design conventions into enforceable compiler contracts:
 
@@ -217,7 +222,3 @@ Eliminate verbose, speculative, and philosophical prose comments left behind by 
 
 - **Dynamic Module Hot-Reloading Ergonomics**: Extend `.kir` hot-reloading abstractions across non-shader resource bundles.
 - **Unified Event Journal Introspection**: Standardize tooling for offline inspection and diffing of `.ndjson` session streams.
-
-
-
-
