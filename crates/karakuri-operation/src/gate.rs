@@ -181,15 +181,9 @@ pub enum Reading {
     Live,
 }
 
-/// What the audit reads about the instrument, for the rows whose class is a
-/// predicate over an operation *and its target* rather than over the operation
-/// alone.
-///
-/// ADR-0235 calls this *"the sharpest new cost in the design: the audit is not
-/// a pure function of the operation"*, and it is one row —
-/// [`Operation::LoadSet`], because the class the maintainer drew is *a deck in
-/// live mode*. Loading into an `Allocated` or `Priming` slot touches nothing on
-/// air.
+/// State read about the instrument for gate operations whose classification
+/// depends on both the operation and its target state (ADR-0235).
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Running<'a> {
     /// The decks whose slot is live, as somebody read them from the engine.
@@ -449,10 +443,7 @@ fn because(operation: &Operation, class: Class) -> String {
 pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
     match operation {
         // ----- The clock ---------------------------------------------------
-        //
-        // ADR-0235 applying its own rule past the maintainer's examples:
-        // unpriced, immediate, irreversible, and everything moving on the grid
-        // moves with them.
+        // Immediate, unpriced clock adjustments (ADR-0235).
         Operation::TapBeat => Standing::ClosedUnclassed(Unclassed::Clock),
         Operation::ScaleGrid { .. } => Standing::ClosedUnclassed(Unclassed::Clock),
         Operation::SetLatencyOffset { .. } => Standing::ClosedUnclassed(Unclassed::Clock),
@@ -461,11 +452,7 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SetFreeRunTempo { .. } => Standing::ClosedUnclassed(Unclassed::Clock),
 
         // ----- Inputs and outputs, routed, enabled and disabled -------------
-        //
-        // *"None of them has a bounded worst case and all four are the show's
-        // plumbing rather than its picture, which is exactly why they are easy
-        // to forget."* ADR-0235 named four; `SetPreview` was retired by
-        // ADR-0240 and the remaining three keep the class and the rule.
+        // I/O routing and session recording operations (ADR-0235, ADR-0240).
         Operation::AttachBeatSource { .. } => Standing::Closed(Class::InputsAndOutputs),
         Operation::RouteFrame { .. } => Standing::Closed(Class::InputsAndOutputs),
         Operation::RecordSession { .. } => Standing::Closed(Class::InputsAndOutputs),
@@ -474,29 +461,14 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SelectDeck { .. } => Standing::ClosedUnclassed(Unclassed::Selection),
 
         // ----- What a deck that is live is drawing --------------------------
-        //
-        // *"At its worst each of these replaces what the audience is looking
-        // at, in the frame it arrives, with nothing that prices it and nothing
-        // that puts it back."*
-        //
-        // **`SetResidency` is the hinge**: it is how a slot becomes live and
-        // how one stops being live, so leaving it open while closing the
-        // contents would be a hole big enough to walk the whole class through.
+        // Operations affecting visible live deck rendering output (ADR-0235).
         Operation::SetResidency { .. } => Standing::Closed(Class::LiveDeck),
-        // **The one row whose class is a predicate over its target.** Loading
-        // into a slot that is not live touches nothing on air; loading into one
-        // that is replaces the picture.
+        // Loading into a live deck replaces visual output; non-live decks remain open.
         Operation::LoadSet { deck, .. } => match running.live {
             None => Standing::Unread(Reading::Live),
             Some(live) if live.contains(deck) => Standing::Closed(Class::LiveDeck),
             Some(_) => Standing::Open,
         },
-        // **`LoadProcedure` is `LoadSet`'s class exactly**, and it is the same
-        // predicate rather than a second one: it re-points the same slot
-        // through the same watcher, differing only in how many of the aim's
-        // files it replaces. Loading a layer into a slot that is not live
-        // touches nothing on air; loading one into a slot that is live
-        // replaces the picture.
         Operation::LoadProcedure { deck, .. } => match running.live {
             None => Standing::Unread(Reading::Live),
             Some(live) if live.contains(deck) => Standing::Closed(Class::LiveDeck),
@@ -508,16 +480,11 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::AttachSignal { .. } => Standing::Closed(Class::LiveDeck),
         Operation::TakeParamBack { .. } => Standing::Closed(Class::LiveDeck),
         Operation::SetProperty { .. } => Standing::Closed(Class::LiveDeck),
-        // Here for a reason of its own and the same rule: narrowing a live
-        // deck's published interface takes controls out from under the
-        // operator's hand and renumbers every MIDI binding after the one it
-        // removed.
+        // Modifying published interfaces renumbers bindings on live decks.
         Operation::Publish { .. } => Standing::Closed(Class::LiveDeck),
 
         // ----- The mix faders ----------------------------------------------
-        //
-        // The class P-0094 already worked: none of its three answers is
-        // available, and it is what the audience is looking at.
+        // Direct audience-facing mixer controls (P-0094).
         Operation::SetGain { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetOpacity { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetMute { .. } => Standing::Closed(Class::MixFaders),

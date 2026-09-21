@@ -125,13 +125,9 @@ operations! {
     SetResidency { deck: u8, residency: Residency }
         => "Put a deck on air, prime it, or take it off",
 
-    /// The single largest gap in the manual's table: nothing loads a Set into a
-    /// running deck.
+    /// Loads a Set from the store into a running deck.
     ///
-    /// The id is a store id — what the library shows, what `save_set` comes back
-    /// naming, what `--load-set` takes. `--set`'s file paths are the launch
-    /// spelling of the same operation and are not carried: a path is how a Set is
-    /// *authored*, and the library is what the panel drags from.
+    /// Takes the target deck index and store Set identifier.
     LoadSet { deck: u8, set: String } => "Load material into a deck",
 
     /// Composite a deck's renderers rather than overdrawing them.
@@ -407,38 +403,10 @@ operations! {
     // which is [`Operation::SelectDeck`]'s rule: implying the armed one is the
     // shape that record refuses.
 
-    /// A step of one lane, on or off, heard the next time the playhead reaches that
-    /// step rather than when it was asked for.
+    /// Sets a step state (on/off) in a sequencer pattern lane.
     ///
-    /// `SetStep` and not `ToggleStep`, because there are no toggles in this
-    /// vocabulary and the reason is at the top of this file: a toggle is an
-    /// affordance built over two operations by whoever draws it, and a map with a
-    /// button per direction has to be able to say *this step is on* and mean it.
-    /// The manual's heading is the operator's word for the control and the title is
-    /// copied from it verbatim, which is all a title is for.
-    ///
-    /// The address is a bank, a lane and a slot, which is the sentence this payload
-    /// used to be [`Undecided`] for: it *"names a step and cannot yet say what it
-    /// is a step of"*, and
-    /// `docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md`
-    /// is what it is a step of. Every one of the three is named rather than
-    /// implied, which is [`Operation::SelectDeck`]'s rule: implying the armed bank
-    /// would be the shape that record refuses.
-    ///
-    /// `step` is one of sixteen stored slots and not a step index. A pattern holds
-    /// sixteen either way and an eighth reads slot `2k` ([`StepMode::slot_of`]), so
-    /// a surface in the finer reading sends the even ones. That keeps this payload
-    /// independent of the mode, so a step press and a mode press cannot race into
-    /// an address that means two things.
-    ///
-    /// What an on step is *worth* is not here, and that is the decision rather than
-    /// an omission: a cell is a bit and the two levels are the lane's, because a
-    /// level only means anything against what the lane drives.
-    /// `karakuri_pattern::Lane` carries them.
-    ///
-    /// The grid under it is no new clock — a step is the beat clock subdivided and
-    /// a pure function of `Oscillator::beats`, so correcting the tempo changes the
-    /// rate from now on without moving a beat that has already happened (ADR-0222).
+    /// Identifies the bank, lane, and 16-slot step index. Takes effect when
+    /// the playhead reaches that step (ADR-0222, ADR-0320).
     SetStep { pattern: u8, lane: u8, step: u8, on: bool } => "Toggle a step",
 
     /// The pattern is kept and drives nothing, and the control is the lane's own
@@ -520,34 +488,10 @@ operations! {
     /// wrote it.
     RemoveLane { pattern: u8, lane: u8 } => "Remove a lane",
 
-    /// A mode with two values — a sixteenth or an eighth — drawn as one pill on the
-    /// grid head. The pattern is one bar, fixed, so the step count is not a second
-    /// thing a hand sets: it follows the mode, sixteen cells at a sixteenth and
-    /// eight at an eighth, the row keeping its width so the cells halve in the
-    /// finer one.
+    /// Sets the step subdivision grid mode (sixteenth or eighth) for a pattern bank.
     ///
-    /// This paragraph rationalised three pills until 2026-09-08 — *"sixteen steps
-    /// of an eighth apiece is two bars, so any two of the three fix the third"* —
-    /// which is arithmetic taken from the wrong two. The mock's ruler had drawn one
-    /// bar of sixteenths since the same first commit, and with the length fixed at
-    /// a bar neither a count nor a length has anything left to say. ADR-0306.
-    ///
-    /// The payload is a bank and a [`StepMode`], and it was [`Undecided`] until
-    /// 2026-09-09 on two things that are both gone. The list was *"a list this
-    /// crate has to own, on [`Curve`]'s terms, that nothing anywhere holds yet"*,
-    /// and a two-valued mode is exactly that list; what was left was ADR-0192's
-    /// rule — an operation asks for what a surface can say — and the console now
-    /// draws the pill that says it. The bank is named rather than implied
-    /// ([`Operation::SelectDeck`]'s rule), because the mode is what a *pattern* is
-    /// rather than a preference the head holds.
-    ///
-    /// An eighth at 128 BPM is 234 ms, which is faster than the band
-    /// `docs/adr/0255-three-clocks-run-at-once-and-a-slower-ones-work-never-lands-on-a-faster-one.md`
-    /// writes the beat clock's rule for; a sixteenth is 117 ms, so the finer of the
-    /// two modes is the worse case and neither that record nor ADR-0222 has it.
-    /// ADR-0222 records the caveat rather than waving it away, and this is the row
-    /// a hand would first feel it through, because it is the one that chooses the
-    /// subdivision.
+    /// The pattern spans one fixed bar, so step count directly follows the grid mode
+    /// (ADR-0222, ADR-0306).
     SetPatternGrid { pattern: u8, grid: StepMode } => "Choose what a step is worth",
 
     /// The bay head's `seq 1 · seq 2 · +`: which pattern the lanes are reading. The
@@ -588,44 +532,10 @@ operations! {
     /// knob.
     WriteParam { deck: u8, param: ParamAt, value: ParamValue } => "Write a parameter",
 
-    /// A source, a curve and a range — which is the whole of what "how hard it
-    /// reacts" means.
+    /// Attaches an audio or analysis signal bus to modulate a parameter.
     ///
-    /// `signal` is a name on the bus (`energy`, `beat`, `band3`, `noise`) and is a
-    /// `String` rather than a list, because that bus is open by design:
-    /// `docs/principles/0090-a-surface-offers-it-never-decides.md`.
-    ///
-    /// A step sequencer is not one more name on that bus, and this documentation
-    /// said it was planned as one. ADR-0222 surveyed the bay before drawing it and
-    /// found both halves of that plan false: the bus is stateless by construction —
-    /// every value on it is a pure function of the local oscillator's `t` and
-    /// `bpm`, and *"nothing seeded lives here"* — where a pattern is authored
-    /// state; and it is keyed by name alone with one `Signals` per session, so two
-    /// lanes sourced from `seq 1` with different targets would sample the same name
-    /// in the same frame and get the same value, which is not a sequencer. A lane
-    /// is a fifth route into this vocabulary, emitting operations on the beat the
-    /// way the other four surfaces do, which is what the sequencer's five rows
-    /// above are and why none of them is a binding
-    /// (`docs/adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md`).
-    ///
-    /// The noise generator's own parameters, which `--bind` also takes, describe
-    /// the *source* rather than the attachment and are not carried here.
-    ///
-    /// There is no confidence here and there is nowhere for one to go. A value
-    /// arrives with how well it is known and the blend is `lerp(the param's own
-    /// value, the mapped signal, confidence)`, so a confidence an operator could
-    /// write would be a caller telling the system how much to trust a measurement
-    /// it took —
-    /// `docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md`
-    /// exactly inverted. It comes off the sample and off nothing else.
-    ///
-    /// `range` is the range the control was *published* over. A surface sending
-    /// this has it in hand — it is what the fader on the same row is drawn against
-    /// — and it is not a second thing for an operator to choose: `ParamValue` says
-    /// a range *"is the procedure's declaration and not an operator's to write"*,
-    /// and a published range narrows it without redefining it. So the field states
-    /// which of a parameter's declared span the signal is mapped onto, and the
-    /// answer a console gives is *all of what it published* (ADR-0286, ADR-0319).
+    /// Maps the named signal via a curve onto the published parameter range
+    /// (ADR-0222, ADR-0286, ADR-0319).
     AttachSignal {
         deck: u8,
         /// A [`BindAt`] and not a [`ParamAt`], because an attachment is one layer's —
@@ -785,26 +695,10 @@ operations! {
         id: Option<String>,
     } => "Keep a node's procedure",
 
-    /// Which deck a pane of the Inspector is showing. A pulldown on the pane's own
-    /// head over the decks the mixer is drawing strips for, which is
-    /// `View::select`'s refusal read again rather than a rule of its own.
+    /// Configures an Inspector pane to display the given deck.
     ///
-    /// It is not [`Operation::SelectDeck`], and the difference is the same one the
-    /// Library bay's load pulldown makes
-    /// (`docs/adr/0305-the-library-bays-load-is-a-button-and-a-pulldown-and-the-deck-it-names-is-not-the-selection.md`):
-    /// that operation moves where the keys are addressed, and this mark exists so
-    /// that a pane can show a deck the keys are not on. A pick moves no selection,
-    /// no other pane and no load target.
-    ///
-    /// A pulldown rather than a flip, which is the maintainer's choice and
-    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-    /// underneath it: a flip is a step, two panes stepping cannot both be aimed
-    /// without knowing where they started, and a key, a map line or a model would
-    /// have to count presses to say *deck C*. This names the deck.
-    ///
-    /// `pane` is a `String`, which is [`Operation::FoldPane`]'s spelling and for
-    /// its reason: this crate has no dependencies and cannot hold the arrangement's
-    /// handle type, so a pane is named by the name the arrangement gives it.
+    /// Targets the pane identified by name without changing global deck selection
+    /// (ADR-0305).
     PointPane { pane: String, deck: u8 } => "Point an Inspector pane at a deck",
 
     // ----- The library --------------------------------------------------
@@ -1123,34 +1017,10 @@ operations! {
 
     // ----- Arranging the console ----------------------------------------
 
-    /// Undecided, and the manual says so: *"How a pane is sized and unfolded
-    /// without a mouse is not decided."*
+    /// Adjusts layout pane boundary divider position.
     ///
-    /// Two things are missing, not one. A boundary is `(split, index)`, and
-    /// `karakuri_layout::Layout::name` answers `None` for *"a split the arrangement
-    /// left unnamed"* — so more than half the boundaries in the console's
-    /// arrangement have no address any surface but the pointer could say. And
-    /// `Layout::set_divider` takes a position in the viewport's own coordinates,
-    /// which is a pixel: a number a drag produces and a key press or a model has no
-    /// way to mean.
-    ///
-    /// The payload stays [`Undecided`] for the keyboard's reason, which is the
-    /// second of the two above read at a key:
-    /// `docs/adr/0259-the-keyboard-is-addressed-to-the-bay-that-has-focus-and-a-global-letter-is-a-convenience-or-the-operators-own.md`
-    /// is where a key that can only *step* is refused, and a viewport pixel is not
-    /// something a press can mean. Settling the address half alone would not settle
-    /// it.
-    ///
-    /// And a model has no window, so the page's MCP badge is `gap`. A divider's
-    /// position is the arrangement's own state, which is what the twelve rows of
-    /// `docs/adr/0315-a-model-has-no-window-so-the-twelve-surface-rows-mcp-badges-are-gap.md`
-    /// are — this was the thirteenth, left `plan` only because its payload is open,
-    /// and that record's own consequences say so. The two facts are held apart: the
-    /// badge is `gap` because a route into a surface's own state is a route into a
-    /// window the model is not looking at, and the payload is open because no
-    /// surface but the pointer can say a boundary. Settling one would not settle
-    /// the other
-    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
+    /// Payload is currently undecided pending non-pointer coordinate specification
+    /// (ADR-0259, ADR-0315, ADR-0342).
     MoveBoundary { boundary: Undecided } => "Move a boundary",
 
     /// A folded bay takes no space at all and no divider is drawn beside it; what
