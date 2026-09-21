@@ -74,7 +74,7 @@ Modularize the 16 remaining files exceeding 1,500 lines:
 | **P95** | `karakuri-engine::tests::governor` | 1,617 | Partition frame pacing and timing governor tests into `pure.rs` and `deck.rs` | **COMPLETED** |
 | **P96** | `karakuri-console::panel` | 1,541 | Separate panel layout geometry arithmetic and types into `panel/` submodules | **COMPLETED** |
 | **P97** | `karakuri-engine::tests::sources` | 1,540 | Decompose multiple geometry sources and deformation tests into `sources/` submodules | **COMPLETED** |
-| **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **PLANNED** |
+| **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **COMPLETED** |
 | **P99** | `karakuri-environment::mix::tests` | 1,485 | Partition mixer state persistence and audio synchronization test cases | **PLANNED** |
 | **P100** | `karakuri-cli::live::interactive` | 1,472 | Modularize CLI interactive terminal event handling and render loop | **PLANNED** |
 | **P101** | `karakuri-engine::tests::binding` | 1,452 | Split pipeline resource binding and bind group layout integration tests | **PLANNED** |
