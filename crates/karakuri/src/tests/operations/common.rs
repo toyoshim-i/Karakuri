@@ -48,19 +48,7 @@ pub(crate) fn blend_mode_back(blend: BlendMode) -> Blend {
     }
 }
 
-/// One `.kir`, parsed and checked, for the tests that need a `Checked` and no
-/// window.
-///
-/// Reachable from test modules because it is at the file's own scope.
-///
-/// `karakuri-environment`'s own five stages and not a sixth spelling. This used
-/// to be a hand-rolled parse-then-check, which is what the run itself used to
-/// build a slot from; the run compiles through
-/// [`karakuri_environment::compile::sort_slot`] now, because that is the one
-/// place that keeps the bytes a node's address is derived from
-/// ([`karakuri_environment::compile::Placed::source`]). What is left here is a
-/// test helper, and a test helper with its own compiler would be a second
-/// answer to *does this file check* the day either moved.
+/// Parses and checks a single `.kir` source file using `karakuri_environment::compile::load`.
 pub(crate) fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
     match karakuri_environment::compile::load(path) {
         Ok((checked, _)) => checked,

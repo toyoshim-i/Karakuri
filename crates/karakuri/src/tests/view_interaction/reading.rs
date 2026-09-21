@@ -126,21 +126,7 @@ fn reread_if_open_re_reads_only_on_a_move_with_a_reading_open() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A press on the `params` chip asks for the Set under the cursor, and a second
-/// press puts the reading away.
-///
-/// The seam, driven the way an operator drives it: the pointer arrives, the
-/// panel claims it, and what comes back is
-/// [`Operation::ReadSet`](karakuri_operation::Operation::ReadSet) naming the
-/// row the cursor is on. `press_handler` cannot see this — it reads text and
-/// asks whether the control is asked — and `karakuri-console`'s own tests
-/// cannot see it either, because the press handler is here.
-///
-/// The close emits nothing, which is the half worth a test: a second press
-/// changes which rows the bay draws and asks no question, so a `ReadSet` here
-/// would be this program saying a Set was read at the moment one stopped being.
-///
-/// A CPU test: a `Readout` takes no device.
+/// Verifies that pressing the params chip toggles `Operation::ReadSet` for the selected set.
 #[test]
 fn a_press_on_the_params_chip_asks_for_the_set_under_the_cursor() {
     let ctx = drawn_once();

@@ -54,53 +54,7 @@ fn a_refused_wipe_says_which_refusal_it_was_and_where_to_go_next() {
     );
 }
 
-/// An operation whose record nobody can write yet does not silently do nothing,
-/// and it is not the same event as one that writes no record on purpose.
-///
-/// This is what the third answer is *for*, and the cheap harness is the one
-/// that treats *not `Records`* as a no-op. A press that emitted `TapBeat` would
-/// then look exactly like a press that emitted `SelectDeck` — nothing printed
-/// and nothing moved — and an operator would read the first as *the tap did not
-/// take* when what happened is *nobody has decided what a tap writes* (`Owed`
-/// is a question, not an error: ADR-0194).
-///
-/// The operation this names has had to change twice, which is the test doing
-/// what it says on the line below. It was `FadeDeck`, which stopped being owed
-/// the day the transition settings became a reading; it was then `Wipe`, which
-/// stopped the day the front shape went over with them and the soft edge turned
-/// out to be the arriving deck's. It is now `Operation::TapBeat` — and that one
-/// is a different shape rather than the next in a queue: what a tap owes is the
-/// beat lock's answer and not a value any surface holds, so no reading added to
-/// `Current` closes it.
-///
-/// The second half has been re-pointed once, and the reason is worth reading.
-/// It was `FadeDeck`, on the grounds that this panel held no transition
-/// settings to hand over — and the day the transition row was wired into this
-/// window that stopped being true, without this test going red: it builds a
-/// `Current::default()` by hand, so it went on passing while its own sentence
-/// had become false. That is the failure mode `docs/contributing.md` §3 is
-/// about, met from the wrong side.
-///
-/// It is `Operation::SetMaskPosition` against a reading nobody took, and the
-/// second half stopped being about this window on 2026-09-10. Its record is
-/// `Record::Mask` written whole and it needs the shape, the angle and the
-/// softness it does not name (ADR-0201). Until that day [`reading`]'s mask arm
-/// answered for `SetMaskShape` and for a wipe's arriving deck and for nothing
-/// else, so this *was* a gap in this file — which is what ADR-0334 recorded and
-/// ADR-0341 closed with one arm.
-///
-/// What it asserts now is the third answer itself, which is why the operation
-/// did not have to change a third time: handed a `Current` with no mask in it —
-/// a reading that was not taken, whatever the reason — the conversion says
-/// *which* reading is missing rather than sending a front back to wherever a
-/// default put it, mid-wipe. That the real reading is now taken is asserted
-/// where there *is* a deck,
-/// `gpu::the_go_pill_runs_a_wipe_against_the_settings_the_row_is_on`, which is
-/// the half a test with no device cannot make.
-///
-/// Neither sentence is asserted word for word. What has to hold is that the
-/// window says something, that it names the operation and the reason, and that
-/// the two answers are two different sentences.
+/// Verifies that operations missing necessary current readings evaluate to `Written::Owed` rather than silent drops (ADR-0194, ADR-0201).
 #[test]
 fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
     // Owed, and `NotSettled` is the reason: a tap's record is the beat
@@ -161,12 +115,7 @@ fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
         "the window said `{told}`, which does not name both the operation and the \
          reading it did not get"
     );
-    // **And the one it replaced is not owed any more**, which is the half
-    // that would have caught this test going quietly stale: a fade is
-    // scheduled against settings this console holds now, so `FadeDeck` is
-    // no longer a case of *a reading this window does not have*. If this
-    // ever fails, the second half above has a candidate again and somebody
-    // has to say which of the two this test is about.
+    // `FadeDeck` is scheduled against active transition settings and returns `Records`.
     assert_ne!(
         written(
             &Operation::FadeDeck { deck: 1, to: 0.0 },
@@ -313,38 +262,7 @@ fn a_move_on_a_fader_a_lane_holds_is_refused_and_said_as_a_decision() {
     }
 }
 
-/// A press on the Inspector deck head's fold re-aims the slot, and the rest of
-/// that watcher's aim is restated with it.
-///
-/// The test above one operation along, and it is the same property for the same
-/// reason: a `watch::Aim` is every field of a slot's identity, so an arm that
-/// changed the layering and left the rest behind would come back with the
-/// outgoing slot's fold, capacity, salts, camera and Set — on the *next* build
-/// rather than on the press, which is the hardest version of it to see
-/// (ADR-0228, ADR-0314).
-///
-/// `Aiming::at` is what the second half asserts against. A press that sent an
-/// aim and left `at` behind would leave the next re-aim restating the layering
-/// the run launched with, so the third assertion here is that a *second* press
-/// comes back to where the first one put it rather than to where the run
-/// started.
-///
-/// No window, no device and no `Deck` — `composited` is a free function over
-/// the aims for exactly this. A procedure loaded over a layer re-aims the slot
-/// with exactly one file replaced, and leaves `Aim::set` where it is —
-/// ADR-0338's decision 3, at the seam it crosses.
-///
-/// Three things it would be wrong about silently: the position it lands on (the
-/// first node of that kind), the file it puts there (the procedure's own bytes,
-/// in the deck's scratch), and everything else about the aim, which has to come
-/// back restated rather than defaulted. The fourth is the one the maintainer
-/// answered: the versions this slot writes from here on go on being filed under
-/// the Set it started from.
-///
-/// No window, no device and no `Deck` — `overlaying` takes the aim. The strip
-/// reads `<base> + <kir>` once a layer has been written over what a deck is
-/// playing, and the base is the Set it is filed under — or the launch pair
-/// where it is filed under none (ADR-0338).
+/// Verifies that layer procedure overrides update the derived material label string (ADR-0228, ADR-0338).
 #[test]
 fn the_strip_reads_the_base_and_the_procedure_written_over_it() {
     assert_eq!(

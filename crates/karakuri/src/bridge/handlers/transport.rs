@@ -89,38 +89,7 @@ pub(crate) fn exposure_key(step: Step, from: f32) -> f32 {
 /// outright and binds no key for it.
 pub(crate) const TEMPO_STEP_BPM: f32 = 1.0;
 
-/// Where a press takes the latency offset — five milliseconds, which is the
-/// page's own step and the one `karakuri-cli`'s `o` and `p` use.
-///
-/// The sign is the half that gets read wrong at two in the morning, and
-/// `docs/manual/console.html` says so: *"Negative and the picture waits for the
-/// music, positive and it leads."* So `Step::Down` is the picture waiting, and
-/// this function is where a test can ask which way each direction goes — a pair
-/// wired the wrong way round reads correct and points backwards.
-///
-/// `o` and `p` were this keyboard's letters until 2026-09-10, and what survived
-/// them is the step rather than the spelling: the constant is
-/// `karakuri_environment::audio`'s, which is what the command line steps by,
-/// and this program does not keep a second copy of it.
-///
-/// Not clamped here, which is the one place this differs from [`gain_key`] and
-/// [`opacity_key`]: the offset's range is `karakuri_environment::audio`'s and
-/// the session holds a press at the end of its travel and says so
-/// ([`offset_said`]). A second clamp here would decide the same thing twice.
-///
-/// The default is zero, which is the value the offset is declared at: a session
-/// nobody has nudged runs at no offset at all.
-/// Where a press takes the free-run tempo — one beat a minute, which is
-/// [`TEMPO_STEP_BPM`].
-///
-/// `from` is the tempo the grid is running, read off the oscillator at the press.
-///
-/// Floored at one beat a minute, which is `karakuri_signal`'s own floor: a grid
-/// at zero has no beat to run, and this decides what the record says.
-///
-/// [`Step::Default`] is the tempo unchanged. The figure has no value it was
-/// declared at, so `space` declines on it in `karakuri_console::focus` and never
-/// reaches this.
+/// Calculates the new free-run tempo after applying a key step adjustment, floored at 1.0 BPM.
 pub(crate) fn tempo_key(step: Step, from: f32) -> f32 {
     let asked = match step {
         Step::Down => from - TEMPO_STEP_BPM,
@@ -130,6 +99,7 @@ pub(crate) fn tempo_key(step: Step, from: f32) -> f32 {
     asked.max(1.0)
 }
 
+/// Calculates the new audio latency offset in milliseconds after applying a key step adjustment.
 pub(crate) fn offset_key(step: Step, from: f32) -> f32 {
     match step {
         Step::Down => from - audio::LATENCY_OFFSET_STEP_MS,

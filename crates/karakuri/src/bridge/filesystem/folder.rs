@@ -25,32 +25,7 @@ pub(crate) struct FileRow {
     pub(crate) path: std::path::PathBuf,
 }
 
-/// Every Set the preset library offers, which is the `.kset` files in the root
-/// this run resolved.
-///
-/// # One call, and the reading is not this program's
-///
-/// The listing is `karakuri_environment::places`', beside the resolution that
-/// answers *where* the presets are: what a `.kset` is and which directory holds
-/// them is that module's business, and a second program wanting the same list
-/// must not read the same directory a second way. So this is the one place in
-/// this program that knows a preset library can be listed at all, and it knows
-/// nothing about how — the shape of a row, the order they come in, and what a
-/// name the layout does not claim does are all answered there.
-///
-/// # What it lists, and why not the `.kir` files beside them
-///
-/// `console.html`'s *A folder scope reads Sets, and a bundle is not a third
-/// thing* settles it: *"A directory of `.kir` files is a directory of parts,
-/// and a library lists what you can put on a deck."* A `.kir` is one node's
-/// source addressed by its content and nothing in the vocabulary takes one, so
-/// the parts are not rows — they are what the rows *name*.
-///
-/// A root with nothing in it is a library nobody has filled, and it is not a
-/// failure: the scope lists nothing and the sentence about it is
-/// [`why_nothing`]'s. A directory that will not open is said out loud, for
-/// [`library`]'s reason one scope along — a scope empty because a directory
-/// could not be read looks exactly like one that is empty.
+/// Lists available Sets (`.kset` files) from the resolved preset library root.
 pub(crate) fn presets_listing(
     presets: Option<&karakuri_environment::places::Presets>,
 ) -> Vec<FileRow> {
@@ -65,12 +40,7 @@ pub(crate) fn presets_listing(
                 path: set.file,
             })
             .collect(),
-        // **Said out loud and then empty**, which is the same shape the store
-        // side takes one scope along: a root that will not open looks exactly
-        // like a root nobody has filled, and the difference has to be spoken
-        // or it is not there. The sentence is `places`' own — it names the
-        // path and how that path was arrived at — so an operator who typed
-        // `--presets` reads something different from one whose checkout moved.
+        // Log preset discovery error and return empty listing.
         Err(why) => {
             println!("presets: {why}");
             Vec::new()
@@ -143,12 +113,7 @@ pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
     };
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
-        // **Said out loud and then empty**, which is `presets_listing`'s shape
-        // one scope along and for its reason: a folder that will not open
-        // looks exactly like a folder holding no Sets, and the difference has
-        // to be spoken or it is not there. A dropped directory can go between
-        // the drop and a press an hour later — it is somebody else's
-        // directory, which this program neither made nor writes.
+        // Log folder read failure and return empty listing.
         Err(why) => {
             println!("  folder: `{}` could not be listed: {why}", dir.display());
             return Vec::new();
@@ -180,52 +145,7 @@ pub(crate) fn folder_files(dir: Option<&std::path::Path>) -> Vec<FileRow> {
         .collect()
 }
 
-/// Why the scope that is marked lists nothing, in the words that say which
-/// kind of nothing it is — and among these four chips there are two kinds.
-///
-/// Two of them are empty as *data*: a store nobody has saved into and a preset
-/// root nobody has filled are libraries with nothing in them, which
-/// `console.html` says outright — *"An empty tier is a library nobody has
-/// filled rather than something gone wrong."* Fill either and the rows appear
-/// with nothing else changing.
-///
-/// `my sets` is a third kind, and it is neither of those: the store may
-/// hold plenty and nothing be starred, which is a listing that is empty
-/// because of an answer rather than because of an absence (ADR-0299). What to
-/// do about it is press a star, and the sentence says so.
-///
-/// The last of them is empty as *machinery*, and it is the one that
-/// changed:
-///
-/// - A folder nobody has pointed anywhere is empty for want of a gesture,
-///   and that is the one of the four that changed on 2026-09-08. It used to be
-///   empty for want of machinery — this said *"nothing here reads a folder
-///   dropped on this window yet"* — and [`folder_dropped`] is that machinery.
-///   `Operation::ListSets` still has nowhere to put a directory and should
-///   not: both its fields narrow what a store already holds, and which store
-///   is asked at all is [`listing`]'s own answer. So this scope has two
-///   sentences and `pointed` is which: no folder has been dropped yet, or
-///   one has and holds no Set file. The second is [`Scope::AllSets`]' kind of
-///   nothing — a library nobody has filled — read in somebody else's
-///   directory.
-///
-/// It is said out loud on the step and again on a press, because a scope that
-/// went quiet and a scope that is empty are the same experience — which is the
-/// rule every other refusal in this file is written to.
-///
-/// The fifth is a third kind again, and it has two sentences of its own.
-/// `history` lists the versions of the Set the load pulldown's deck is
-/// running, so it can be empty because that deck is running *no Set* — a run
-/// launched on a pair somebody typed, whose versions are filed under none
-/// (ADR-0276, ADR-0304) — or because the Set it is running has not been
-/// edited yet. The first is the one worth spelling out: a listing narrowed to
-/// a Set matches a `None` row not at all rather than matching every one of
-/// them, so *nothing here* is the true answer and not a filter that misfired.
-///
-/// `pointed` is whether the bay has a directory at all and `running` is
-/// whether the pulldown's deck names a Set; each is read by one arm only, and
-/// the other four are the same sentence whatever this window has been dropped
-/// on and whatever any deck is playing.
+/// Returns descriptive explanation when a given library scope contains no listing rows.
 pub(crate) fn why_nothing(scope: Scope, pointed: bool, running: bool) -> &'static str {
     match scope {
         Scope::AllSets => {

@@ -24,19 +24,7 @@ fn the_scan_finds_the_page_and_the_keys() {
     );
 }
 
-/// The list, the `match` and the legend are one list.
-///
-/// [`crate::KEYS`] is the table the window loop prints when it starts, and it
-/// is the one thing here the compiler cannot check: an arm added without an
-/// entry — or an entry left behind by an arm that went — arrives as a failure
-/// rather than as a key nobody noticed had stopped being reachable, *or as a
-/// legend that goes on telling an operator this program folds, solos, resets
-/// and quits*.
-///
-/// That second half is why the printed table is the checked one. It was a
-/// separate list of nine `println!`s, and it stayed at nine while ten more keys
-/// were bound: the maintainer who read it reported the program unchanged, which
-/// it was not.
+/// Verifies that KEYS entries match the window loop's bound key arms.
 #[test]
 fn the_keys_this_file_lists_are_the_keys_the_window_loop_binds() {
     let listed: BTreeSet<String> = KEYS.iter().map(|(k, _)| (*k).to_owned()).collect();
@@ -365,28 +353,7 @@ fn every_key_route_the_page_marks_built_is_bound_by_the_instrument() {
     }
 }
 
-/// The grammar the page is checked against is the grammar the console
-/// declares, both ways round.
-///
-/// This is the half ADR-0259 asked for and ADR-0331 could not have:
-/// *"`key_column`'s machinery changes shape … the check reads this file's
-/// own `match` arms as text, so a keyboard that becomes a per-bay dispatch
-/// table is invisible to it — which is the thing to solve rather than to
-/// discover."*
-///
-/// [`ROWS`] holds the rows because a page heading is what a check reads and
-/// is not something this program says to anybody.
-/// `karakuri_console::focus::reaches` holds the pairs, because which
-/// keys act in which bay is a property of the dispatch and not of this
-/// file's text. Neither is derivable from the other, and this is what keeps
-/// them from being two answers:
-///
-/// - A bay whose grammar is built and has no rows written down is a
-///   press an operator can make that no badge on the page describes.
-/// - A pair written down that the console does not declare is a badge
-///   telling an operator to press a key in a bay where nothing dispatches
-///   it, which is exactly the failure a built badge naming a bay was
-///   forbidden to make until now.
+/// Verifies that key grammar documented in [`ROWS`] matches console declared focus dispatch (ADR-0259, ADR-0331).
 #[test]
 fn the_grammar_the_page_names_is_the_grammar_the_console_declares() {
     let declared: BTreeSet<(&str, &str)> = karakuri_console::focus::reaches()

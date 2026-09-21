@@ -146,17 +146,9 @@ pub(crate) fn routed(
     ))
 }
 
-/// What the window loop does about what a press asked for, for every answer but
-/// the two that reach the store.
+/// Dispatches UI focus responses, handling in-process operations and refusals (P-0083).
 ///
-/// `Asked::Scope` and `Asked::Load` are the caller's, because both end in a
-/// directory read or a file write and this function has neither the store nor
-/// the folder; everything else is one operation or one sentence.
-///
-/// A refusal is said out loud, which is the whole of what `Asked::Nothing`
-/// carries: a key that declines and a key that is not bound are the same
-/// experience, so the console's own sentence is printed rather than swallowed
-/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+/// Returns whether the action triggered state changes, delegating scope navigation and loads to the caller.
 pub(crate) fn answered(
     gfx: &mut Gfx,
     started: Instant,
@@ -333,37 +325,9 @@ pub(crate) fn played(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     }
 }
 
-/// A procedure loaded over one layer of what a deck is playing, performed — a
-/// press on a procedure row's `load`, on one of its row menu's four loads, or a
-/// drag of it onto a strip or a cell, and `None` for every operation that is
-/// not one.
+/// Loads an individual procedure into a slot's layer stack without modifying other layers (ADR-0338).
 ///
-/// # It is [`played`]'s shape with one file instead of every file
-///
-/// A Set load re-points the slot at every file that Set names; this re-points
-/// it at the files it is already on with one of them replaced, which is the
-/// whole of ADR-0338 taken literally. Both are one `Aiming::re_point`, both are
-/// compiled off the render thread and judged at a frame boundary on what one
-/// frame of the result costs, and the Staging lane says which of the three
-/// happened. Nothing is installed and nothing is written where the presets are.
-///
-/// `Aim::set` is left where it is, which is the half of the maintainer's answer
-/// that has a mechanism behind it: the versions this slot writes from here on
-/// go on being filed under the Set it started from, so the `history` chip keeps
-/// listing that deck's versions and the snapshot every compile takes stays
-/// alive (ADR-0304, ADR-0308). It follows from `overlaying` restating the aim
-/// rather than building one.
-///
-/// The strip then reads `<base> + <kir>`, so what is on air says what it is
-/// made of and never claims to be a Set the library holds. `keep` is what gives
-/// it a name, and it files a new Set exactly as it does for any other deck —
-/// what `Playing` gathers is the aim's own files, which is what this changed.
-///
-/// Written on the aim rather than on the swap, which is [`played`]'s own choice
-/// and its argument word for word: the build may be refused or land and stop
-/// its slot for cost, and a readout that waited for the verdict would name
-/// material that is no longer in the file. The staging lane is the surface
-/// built for that disagreement.
+/// Re-points the slot watcher at the target `.kir` file while maintaining the underlying base set aim.
 pub(crate) fn overlaid(gfx: &mut Gfx, operation: &Operation) -> Option<String> {
     let Operation::LoadProcedure { deck, procedure } = operation else {
         return None;

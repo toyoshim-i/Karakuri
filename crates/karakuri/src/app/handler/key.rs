@@ -260,25 +260,7 @@ impl App {
                             // be one `Acted`.
                             let mut took = Repaint::Never;
                             let acted = match (self.readout.view.scope(), row) {
-                                // **A preset or a folder row is taken in and then
-                                // loaded**, which is one press because taking it in
-                                // is what gives the Set the id the load needs —
-                                // ADR-0229's *one operation, two moments*,
-                                // performed at the second of them. What lands in
-                                // the store is a Set of the operator's, so `all`
-                                // gains a row they did not make: `console.html`
-                                // says that out loud so that nobody meets it as a
-                                // surprise. It gains no row under `my sets`, which
-                                // is ADR-0299 — a Set the operator did not choose
-                                // is in the library and is not one of their
-                                // favourites.
-                                //
-                                // **The two scopes are one arm**, and the folder
-                                // half is what landed on 2026-09-08: a folder row
-                                // was refused here because the scope had no
-                                // directory to list, and ADR-0275 gave it one. See
-                                // [`Taking`], which is the whole of the difference
-                                // between them.
+                                // Take in preset or folder item into store and load it (ADR-0229, ADR-0275, ADR-0299).
                                 (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
                                     let from = match scope {
                                         Scope::Folder => Taking::Folder(self.folder.as_deref()),

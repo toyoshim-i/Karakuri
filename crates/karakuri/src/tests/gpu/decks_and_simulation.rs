@@ -537,22 +537,7 @@ mod gpu {
         assert_ne!(now.mask_angle, before.mask_angle);
     }
 
-    /// Every slot is its own simulation of the one procedure, which is what keeps a
-    /// mixer of four channels from being one picture drawn four times.
-    ///
-    /// [`slot_salt`] is the derivation and this asserts it where it lands: the salt
-    /// is read back off the `Set` the deck actually built, which
-    /// `Set::source_salts` exists for — *"a caller that assigned none finds out
-    /// what it got"* — so a slot built at the wrong seed, or four slots built at
-    /// one, fails here rather than in a picture only an operator with two channels
-    /// up would ever notice. Read off the deck rather than by calling `slot_salt`
-    /// again, which would be the test agreeing with itself about the one thing it
-    /// checks.
-    ///
-    /// It is deck A's salt that is named against a constant, because that one is a
-    /// claim about a *value* — 7 is what `karakuri-cli`'s own tests use, so this
-    /// program's picture looks like theirs. The rest is a claim about distinctness,
-    /// and distinctness is what is asserted.
+    /// Verifies that distinct slots derive independent simulation salts and render independently.
     #[test]
     fn every_slot_is_its_own_simulation() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;

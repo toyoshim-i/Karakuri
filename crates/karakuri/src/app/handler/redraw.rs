@@ -894,51 +894,9 @@ impl App {
 
         self.costs.push(cost);
         App::wants(gfx, &mut self.egui_due, &mut self.costs, asked);
-        // **Something is live, so the next frame is asked for here —
-        // and asked for without `Costs::owes`.**
-        //
-        // Nothing used to ask for a frame at this point, and that was
-        // ADR-0164's still-panel clause holding: a panel with nothing changing
-        // on it drew nothing. A picture that moves is something
-        // changing on it, so the clause stops holding the moment the
-        // engine runs — which is expected, is what the rest of ADR-0164
-        // exists for, and is **not fixed here**. There is no scheduler
-        // in this file, the panel is not cached to a texture, and
-        // `karakuri_console::repaint` has not been given a fourth
-        // answer.
-        //
-        // What is done instead is to make the price visible.
-        // `Costs::owes` is deliberately not called, so every frame the
-        // picture asks for lands in the still-panel reading as what it
-        // is: a frame drawn on a window nobody touched. The reading
-        // then prints the rate rather than the zero, and the next
-        // decision gets made on a number.
-        //
-        // **Asked for only while something is on screen making
-        // texels.** It used to be unconditional, with `live` set once
-        // when the engine was built and never cleared — so folding the
-        // picture away left the loop drawing at full rate for nothing,
-        // and the reading went on calling it live. Another machine
-        // found that by following this file's own instructions and
-        // getting 270 frames out of a window that was supposed to have
-        // gone quiet.
-        //
-        // Then it became the picture alone, and deck A's audition put
-        // that wrong again in the same direction: fold the picture and
-        // the preview goes on rendering under it, so the panel keeps
-        // changing while the loop stops asking for frames. **The rule
-        // is anything that makes texels, and the list is closed** —
-        // [`live`] is where it is written and where a test can reach
-        // it.
+        // Request continuous redraw if any active surface or preview is generating texels (ADR-0164).
         self.costs.live = live;
-        // **The verdict this program earned about this adapter's
-        // timestamps**, kept for the reading beside `live` and for the
-        // same reason: one answer per frame, off whoever took it. The
-        // deck's startup probe calibrates against a load whose answer
-        // is already known, so this is what the adapter *did* rather
-        // than what it advertises (P-0095) — and asking the deck costs
-        // a copy of an `Option` rather than a second calibration that
-        // could disagree with the numbers the governor decided on.
+        // Timestamp clock mode determined by engine calibration probe (P-0095).
         self.costs.clock = gfx.engine.deck.clock();
         // **And what the panel asked for on its own account**, which
         // is the other half of why frames are being drawn on an

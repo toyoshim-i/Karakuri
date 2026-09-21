@@ -551,16 +551,7 @@ fn the_offset_says_which_way_it_points_and_says_when_it_was_held_at_the_bound() 
     );
 }
 
-/// "It only means anything with an audio input attached" —
-/// `docs/manual/console.html`, and the operations page's row says it too.
-///
-/// The offset is a term in the lead a beat correction is applied with, so with
-/// no room being listened to there is nothing for the picture to be early or
-/// late against and nothing to read the current value off. A value dialled
-/// against no session would be dropped the moment one opened — [`attached`]
-/// starts a new one at the offset the old one held and at the default when
-/// there was none — so the press changes nothing and says why, which is
-/// [`tapped`]'s and [`scaled`]'s answer to the same state.
+/// Verifies latency offset operations do not modify state when no audio input is attached.
 #[test]
 fn the_offset_keys_say_so_and_change_nothing_with_no_input_attached() {
     let mut open: Option<audio::Audio> = None;
@@ -795,14 +786,7 @@ fn a_press_on_the_tracker_group_reaches_the_operation_its_key_reaches() {
     );
 }
 
-/// The legend this window prints for one key, or a panic naming the key that is
-/// not in it.
-///
-/// [`KEYS`] is what the loop prints on startup, so it is the one place this
-/// program tells an operator in words what a press does. That makes it
-/// something the three tests below can check a constant *against*: a step size
-/// compared with a second literal is a copy of itself, and a step size compared
-/// with the sentence the operator reads is a measurement.
+/// Returns the printed help legend text associated with a key name in [`KEYS`].
 fn legend(key: &str) -> &'static str {
     KEYS.iter()
         .find(|(name, _)| *name == key)
@@ -817,42 +801,7 @@ fn same(got: f32, want: f32) -> bool {
     (got - want).abs() <= 1e-6
 }
 
-/// "A key steps it" — `docs/manual/operations.html`'s Gain row, whose badge
-/// reads `&uarr;&darr; space &middot; in the Mixer`. How far a press goes and
-/// what `space` does are decided here rather than there, so both are worth
-/// measuring rather than reading.
-///
-/// The pair and the tenth are `karakuri-cli`'s, taken whole — [`gain_key`]'s
-/// own sentence, and the reason they are worth an assertion at all: two
-/// keyboards that disagree about how far one press goes is the mistake an
-/// operator makes in the dark and cannot see. The size is [`GAIN_STEP`], and
-/// the legend [`KEYS`] prints for `up` calls it *a tenth*, so the constant is
-/// checked against something this program says out loud rather than against a
-/// literal written twice.
-///
-/// Linear and additive, over several levels rather than one. A step written as
-/// a proportion of wherever the trim happens to be reads correct at whichever
-/// single level a test picked and is wrong at every other one, and the levels
-/// above 1.0 are where that shows.
-///
-/// The two ends are different ends, and that is the decision in here. The floor
-/// is real — a negative gain would subtract one slot's light from another's,
-/// which is a blend mode rather than a level — and there is no ceiling, because
-/// the pipeline is HDR
-/// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)),
-/// which the legend for `up` says in as many words: *"the trim is not held at
-/// 1.0, because the mix is HDR"*. A trim clamped at unity here would look like
-/// tidiness and would quietly cap the mix.
-///
-/// Held at the floor it says nothing, which is where this differs from the
-/// offset three tests up: `offset_said` has a sentence for a press that asked
-/// past the bound and this route has none — what an operator gets is the
-/// absolute value the operation carries, printed twice.
-///
-/// It took letters and takes a step since 2026-09-10 (ADR-0333). What the
-/// arrows and `space` reach is the *addressed* trim, which is the console's
-/// answer and `karakuri-console/tests/grammar.rs`'s; this is the arithmetic at
-/// the end of it and is unchanged.
+/// Verifies linear incremental gain trim adjustments with floor at 0.0 and unconstrained ceiling (P-0064, ADR-0333).
 #[test]
 fn stepping_the_trim_moves_it_a_tenth_each_way_and_space_names_unity() {
     // Every level that says something different: under the default, at it,

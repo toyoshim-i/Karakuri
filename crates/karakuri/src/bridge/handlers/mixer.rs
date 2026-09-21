@@ -259,41 +259,20 @@ pub(crate) fn blend_mode(blend: Blend) -> BlendMode {
 // engine's three and the vocabulary's three are two crates' words for the same
 // states, and a `match` is where they are made to agree.
 
-/// What the deck is holding on `at`, for the three chips whose next state the
-/// console names — or `None` where this deck has no slot there.
-///
-/// [`held`] is the guard, for its own reason: `Deck::blend` indexes its slots
-/// and a panic reachable from an event handler aborts this process rather than
-/// unwinding.
-///
-/// Read at the press and never off `view::Strip`, which is what the three mix
-/// keys this replaces already said: a strip is this same reading copied once a
-/// frame, and a scheduled fade landing between the frame and the press would
-/// leave the cycle counting from a state the deck has left behind.
+/// Reads live deck mixer parameters (residency, blend mode, and mask settings) for a given slot index.
 pub(crate) fn holding(deck: &Deck, at: u8) -> Option<focus::Held> {
     let slot = held(deck, at)?;
     Some(focus::Held {
-        // **The residency the deck was last *asked* for**, which is what the
-        // tally cycles from — `view::Mixer::tally`'s decision, and the one
-        // that makes a parked slot's press a withdrawal rather than a
-        // re-request.
+        // The residency the deck was last requested for.
         requested: tally(deck.requested_residency(slot)),
         blend: blend_mode(deck.blend(slot)),
         mask: masked(deck.mask(slot).kind()),
-        // The angle the slot is already wearing, carried through unchanged
-        // (ADR-0203).
         mask_angle: deck.mask(slot).angle(),
     })
 }
 
 /// The engine's mask shape as the console's, and the mirror image of
 /// `karakuri_console::view::wipe_kind` on the way back out.
-///
-/// One function and two callers — [`mixer`] builds a strip from it every frame
-/// and [`holding`] reads it at a press — because two copies of a three-arm
-/// translation is exactly the shape that goes wrong the day a fourth shape
-/// lands: a `match` with no wildcard stops the build in one place instead of
-/// two.
 pub(crate) fn masked(kind: MaskKind) -> view::Mask {
     match kind {
         MaskKind::None => view::Mask::None,
@@ -302,16 +281,7 @@ pub(crate) fn masked(kind: MaskKind) -> view::Mask {
     }
 }
 
-/// One press of a gain key. Linear and additive, because a fader is: the same
-/// press means the same amount wherever the trim is standing, rather than a
-/// proportion of wherever it happens to be.
-///
-/// A tenth, because that is what the other keyboard steps by.
-/// `docs/manual/operations.html` names the keys and says nothing about how far
-/// a press goes, so the size comes from `karakuri-cli`'s own `GAIN_STEP` —
-/// which `docs/manual.md` documents as *"focused slot gain down / up"* — and it
-/// is copied rather than shared because neither binary may depend on the other
-/// (ADR-0214). A page that decides otherwise moves this constant.
+/// Linear delta (0.1) applied per keyboard step to slot trim gain (ADR-0214).
 pub(crate) const GAIN_STEP: f32 = 0.1;
 
 /// One press of an opacity key, and [`GAIN_STEP`]'s sentence one control along:
@@ -319,43 +289,7 @@ pub(crate) const GAIN_STEP: f32 = 0.1;
 /// page is silent about this one too.
 pub(crate) const OPACITY_STEP: f32 = 0.1;
 
-/// Where a press takes the trim it is standing on.
-///
-/// [`offset_step`]'s shape one bay along, with the grammar's own word for a
-/// direction in place of a letter: which way each press goes is a value this
-/// file can be asked about without a window.
-///
-/// # What the page does not say, and where each answer comes from
-///
-/// The row names the keys and stops. So the size of a step and the destination
-/// [`Step::Default`] names are `karakuri-cli`'s `'['`, `']'` and `'\\'` —
-/// *"focused slot gain down / up / back to 1.0"* in `docs/manual.md` — taken
-/// whole rather than invented here, because two keyboards that disagree about
-/// how far one press goes is the one mistake an operator makes in the dark and
-/// cannot see. The letters were this keyboard's too until 2026-09-10, and what
-/// survived them is the arithmetic rather than the spelling.
-///
-/// # Floored and not ceilinged, and the clamp is the surface's
-///
-/// A negative gain would subtract one slot's light from another's, which is a
-/// blend mode rather than a level; above 1.0 is ordinary, because the pipeline
-/// is HDR
-/// ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
-/// It is clamped here rather than left to `Deck::set_gain` for `karakuri-cli`'s
-/// `clamp_gain` reason: this decides what the *record* says, so a session
-/// replays the value that took effect rather than one the engine quietly
-/// corrected.
-///
-/// So [`Step::Default`] is a destination and the other two are steps, and all
-/// three leave as the same absolute [`Operation::SetGain`] — an absolute value
-/// can express every step and a step cannot express a setting.
-///
-/// It took the letter and takes the step since 2026-09-10. `[`, `]` and `\` are
-/// unbound: the trim is reached by addressing it — `space` on the Mixer's strip
-/// — and the arrows step it (ADR-0259, ADR-0333). The pair of directions and
-/// the tenth between them are unchanged and are still `karakuri-cli`'s, which
-/// is what the paragraphs above are about; what went is the letter that named
-/// each one.
+/// Calculates the adjusted gain value for a step input, floored at 0.0 with default at 1.0 (P-0064, ADR-0259).
 pub(crate) fn gain_key(step: Step, from: f32) -> f32 {
     let asked = match step {
         Step::Down => from - GAIN_STEP,

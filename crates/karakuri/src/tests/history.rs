@@ -4,16 +4,7 @@ use karakuri_environment::Asked;
 use karakuri_operation::{Operation, SetTransfer};
 use karakuri_operation_record::Written;
 
-/// The library is what the store holds, and a store that is not there is listed
-/// as nothing rather than created.
-///
-/// Two claims, and the second is the one worth a test: `Store::open`
-/// establishes the layout it is pointed at, so a listing that opened first
-/// would leave a `.karakuri` behind in whatever directory this program was run
-/// from. [`library`] asks whether the root is there before it opens anything,
-/// and this is what says so.
-///
-/// A CPU test: nothing here takes a device, and the store is a directory.
+/// Verifies that an uninitialized store directory lists nothing and is not created (P-0091).
 #[test]
 fn a_library_is_the_store_and_a_missing_store_is_not_made() {
     let root = std::env::temp_dir().join(format!(
@@ -35,12 +26,7 @@ fn a_library_is_the_store_and_a_missing_store_is_not_made() {
         root.display()
     );
 
-    // And with two Sets in it, both names come back — **most recent
-    // first**, which is what the operation's own row says a listing is and
-    // what the MCP tool already answered. `morph01` is written second and
-    // is first here either way the clock falls: on a fine one it is the
-    // more recent, and on a coarse one the two mtimes tie and the tie-break
-    // is the id ascending.
+    // Verifies listing order: most recently written first, tie-broken by id ascending.
     let store = Store::open(&root).expect("a store to list");
     for id in ["night01", "morph01"] {
         store
@@ -236,28 +222,7 @@ fn a_landing_writes_the_versions_bytes_over_the_nodes_working_copy() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A step back lands the version before the one the node is running, and a node
-/// with only that one version is refused saying so.
-///
-/// The Staging lane's arm of `karakuri_operation::Revision`, and the whole of
-/// what it adds over the Library bay's: the surface says the node, and which
-/// version that is, is worked out here — the history walked for that node of
-/// that Set, most recent first, with the entry after the newest taken
-/// (ADR-0326). The newest is what the slot is running, because the history is
-/// gated on compiling and not on landing, so a version stopped for cost is
-/// filed too and is the one an operator most wants to step away from.
-///
-/// Three versions and not two, so that *the one before the one running* is a
-/// different answer from *the oldest*: a resolver that took the last row of the
-/// chain would pass a two-version fixture and land the wrong file here.
-///
-/// And the chain is narrowed by the node as well as by the Set, which is the
-/// assertion the L1 version beside them makes: a version of another node of the
-/// same Set is a newer row of the same listing, so a walk that narrowed only by
-/// the Set would call it *the one running* and land the L4's own newest as the
-/// step back.
-///
-/// A CPU test: [`put_back`] takes a store, a slot and a `Slots`, and no device.
+/// Verifies stepping back a node's revision restores the immediately preceding version (ADR-0326).
 #[test]
 fn a_step_back_lands_the_version_before_the_one_running() {
     let root = scratch_dir("history-step-back");
@@ -543,26 +508,7 @@ fn the_presets_scope_lists_the_kset_files_and_not_the_parts_beside_them() {
     assert!(presets_listing(None).is_empty());
 }
 
-/// A folder row is taken into the store and then loaded, which is the half of
-/// *Send a Set to somebody, and take one in* the folder scope was refused for
-/// until it had a directory.
-///
-/// It is the preset press over somebody else's directory — ADR-0267's *"the bay
-/// is already a file browser"* reached from the taking-in side, and ADR-0275 is
-/// what gave the scope a directory to be pointed at. The two arms are one arm
-/// in the press handler and [`Taking`] is the whole of the difference, so this
-/// asserts the difference rather than the shared half: the same `taking_in`,
-/// pointed at a folder.
-///
-/// Both spellings, because a folder holds both and a presets root holds one.
-/// `examples/` is a directory of `.kset` files, which is the authored form; the
-/// store the first take-in wrote is a directory of `.kbset` files, which is the
-/// bundle — so pointing a second store's folder scope at the first store's
-/// `sets/` is a take-in of a form the `presets` scope could never have offered.
-/// That is the branch this row gained and the one `karakuri-cli`'s `--take-in`
-/// has always had.
-///
-/// A CPU test: a store, a directory, and no window.
+/// Verifies taking in a Set from a folder directory and loading it (ADR-0267, ADR-0275).
 #[test]
 fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
     let root = scratch_dir("folder-take-in");
@@ -666,22 +612,7 @@ fn a_folder_row_is_taken_in_by_the_same_press_a_preset_row_is() {
     std::fs::remove_dir_all(&sent).expect("clean up");
 }
 
-/// A word two files in a folder wear is refused, and both names come back.
-///
-/// `folder_listing` draws one row per *file*, so a directory holding
-/// `night.kbset` and `night.kset` draws two rows reading `night` — that is its
-/// own decision and it is deliberate, because choosing between the two forms in
-/// a listing would be inventing a precedence between them. What it left open
-/// was which of them a press means, and the answer is that nothing here answers
-/// it: a row names a word, two files wear the word, and taking one would be
-/// this program choosing for an operator between two rows they cannot tell
-/// apart on screen.
-///
-/// So the refusal carries both file names
-/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)),
-/// which is what the next attempt needs: rename or move one of them.
-///
-/// A CPU test: a directory and two empty files.
+/// Verifies that ambiguous Set IDs sharing identical names across multiple formats in a folder are refused (P-0083).
 #[test]
 fn a_folder_row_two_files_wear_is_refused_with_both_names() {
     let dir = scratch_dir("folder-two-forms");
@@ -758,18 +689,7 @@ fn loading_a_preset_takes_it_in_and_leaves_it_under_my_sets() {
     std::fs::remove_dir_all(&root).expect("clean up");
 }
 
-/// A take-in names the file it read, because that is what the operation carries
-/// — `SetTransfer::Take`'s own sentence, *"a path because a file is what the
-/// only existing route takes"*.
-///
-/// The id and the file are two different answers and the row needs both: the
-/// load after the press names the id, and the transfer names the file. The
-/// claim here is that the file is the row's own `.kset` in the preset library
-/// and not something re-derived afterwards — asking the listing a second time
-/// to name what was already taken in would be two answers to *which file was
-/// this* with a directory read between them.
-///
-/// A CPU test, for the test above's reason.
+/// Verifies that `SetTransfer::Take` records the actual file path loaded.
 #[test]
 fn a_take_in_names_the_file_it_read_because_that_is_what_the_operation_carries() {
     let root = scratch_dir("preset-take-in-file");

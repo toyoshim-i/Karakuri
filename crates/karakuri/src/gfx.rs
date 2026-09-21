@@ -104,79 +104,23 @@ pub(crate) struct Gfx {
     pub(crate) gpu: Gpu,
     pub(crate) surface: wgpu::Surface<'static>,
     pub(crate) config: wgpu::SurfaceConfiguration,
-    /// What the present pass draws into, what every picture texture is in, and
-    /// what every window surface that shows a picture is configured to: the
-    /// first sRGB format this console's own surface offers, read off it once in
-    /// [`App::resumed`] and never named as a constant anywhere.
-    ///
-    /// It is sRGB so the hardware does the one encode
-    /// ([P-0064](../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)),
-    /// and it is the *surface's* rather than a chosen value because a surface
-    /// offers what the display and the backend offer and no more —
-    /// `Bgra8UnormSrgb` on Metal, where no 8-bit RGBA sRGB format is offered at
-    /// all. `karakuri-cli` picks its present format the same way, off its own
-    /// surface, and hands it to `Present::new` (`crates/karakuri-cli/src/app.rs`).
-    ///
-    /// `config.format` is *not* this: the console's own swapchain is the
-    /// non-sRGB one `egui` wants (ADR-0162), and this is what the engine's
-    /// picture is in.
+    /// Target texture format for rendering pictures, selected as the first supported sRGB format on the surface (P-0064, ADR-0162).
     pub(crate) picture_format: wgpu::TextureFormat,
     pub(crate) egui: egui_winit::State,
     pub(crate) renderer: egui_wgpu::Renderer,
-    /// The engine, on the same device as the panel. It lives beside the renderer
-    /// rather than beside the model because everything in it takes a device: that
-    /// is the seam `karakuri-console` keeps, and this is the side of it that is
-    /// allowed one.
+    /// The engine instance managing GPU pipelines, passes, and deck state.
     pub(crate) engine: Engine,
-    /// The room this window is listening to, or `None` for a machine with no input
-    /// — see [`listening`], where all three of that decision's cases are argued.
-    ///
-    /// It is here beside the engine rather than on [`App`] because the two halves
-    /// of what it is for are both here: the deck's signal bus is what a measurement
-    /// is written into, and the *output lag* a beat correction leads by is this
-    /// display's frame queue. A window remade is a display remade, and the input is
-    /// re-opened with it.
+    /// Audio input stream handle, or `None` if audio input was not opened.
     pub(crate) audio: Option<audio::Audio>,
-    /// The control surface this window opened, or `None` for a run with nothing
-    /// plugged in — see [`surfaced`], where the three cases are argued, and
-    /// [`App::mapped`], which is the drain.
-    ///
-    /// Beside `audio` and for its reason. Both are doors this window opens at
-    /// startup and neither is a flag; a window remade re-opens both, which is right
-    /// for the microphone and harmless for the port.
+    /// Connected MIDI control surface handle, or `None` if none was opened.
     pub(crate) midi: Option<midi::Surface>,
-    /// Scratch for [`midi::Surface::take`], owned so the drain allocates nothing on
-    /// a frame — `karakuri-cli` keeps the same buffer for the same reason. Sized
-    /// once at construction; a frame's worth of a surface's fastest gesture is
-    /// single figures.
+    /// Pre-allocated buffer for draining hand-performed operations from MIDI without allocating per frame.
     pub(crate) performed_by_hand: Vec<Operation>,
-    /// What a frame has to fit in on this window, read from the display once when
-    /// the window opened — see [`budget_ms`].
+    /// Display frame budget in milliseconds, measured on window initialization.
     pub(crate) budget_ms: Option<f32>,
-    /// What the mixer strip calls what each slot is playing, in slot order — see
-    /// [`Sources::material`]. Kept rather than recomputed because a name is a
-    /// string and the frame path is budgeted.
-    ///
-    /// One per slot rather than one for the deck, and the difference only began to
-    /// matter when a load did. Both slots open on the pair this program was
-    /// launched with, so one name was every slot's name and could not become wrong;
-    /// a load moves one slot's material and leaves the other where it was, and a
-    /// single name would then have both strips reading the launch pair with the
-    /// picture showing something else. That is a readout that is wrong and silent,
-    /// which is the one thing P-0094 refuses.
-    ///
-    /// Rewritten where the slot is: [`played`], on the press, which is also where
-    /// the store is read. Nothing on the frame path touches it.
+    /// Display names of currently loaded material per slot for mixer readout (P-0094).
     pub(crate) material: Vec<String>,
-    /// What a slot that has never been loaded is playing, which is the pair this
-    /// run was launched with — [`Sources::material`], said once because every slot
-    /// opens on it.
-    ///
-    /// It is the base a procedure load reads, and it is the one case
-    /// `watch::Aim::set` cannot answer: a slot running a Set is filed under that id
-    /// and a slot running the launch pair is filed under nothing, so the strip's
-    /// `<base> + <kir>` needs this where the aim says `None` (ADR-0338). It never
-    /// moves — a load writes [`Gfx::material`], which is what the strip reads.
+    /// Base name of the launch material, used when slot aim has no explicit set id (ADR-0338).
     pub(crate) launch: String,
     /// Where the presets root is, copied from [`App::presets`] when the device was
     /// made, or `None` on a machine with no library.

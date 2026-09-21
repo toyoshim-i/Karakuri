@@ -401,11 +401,7 @@ mod gpu {
         // opens on the same pair, and a load is what makes them differ.
         let material = vec![sources.material(); engine.deck.slot_count()];
         let mut panes = Vec::new();
-        // **The run's own aims**, so the `uses` lines are read off what each
-        // slot is actually pointed at rather than off an empty list. The pair
-        // this panel opens on declares no input, so every group's line count is
-        // zero — which is what the assertion below says rather than assumes
-        // (ADR-0329).
+        // Uses lines are populated from slot aims (ADR-0329).
         inspector(
             &engine.deck,
             &material,

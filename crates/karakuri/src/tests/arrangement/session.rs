@@ -1,28 +1,6 @@
 use super::*;
 
-/// A load writes the Set's procedures where the slot's watcher is looking and
-/// aims it there, and it touches no deck at all.
-///
-/// This is the whole of what `Operation::LoadSet` needed, and what it is *not*
-/// is the claim: `Deck::install` is the one function that puts a built Set in a
-/// slot and is documented as deliberately unreachable from a key or a surface,
-/// because *"a live run changes its material by editing a file and letting the
-/// worker build it, which is what the budget watchdog is attached to"*. So this
-/// asserts files and an aim. A load that built a Set here would be a picture
-/// nothing measured, in a slot the watchdog never got to judge.
-///
-/// Three things beyond *it happened*, and each is a wrong load that looks
-/// right. The scratch name carries the deck letter and the node's place,
-/// because `scratch::place` overwrites by name and two decks loading Sets whose
-/// procedures share one would silently become one file — the second load moving
-/// the first deck on its watcher's next poll. The aim restates the layering,
-/// the fold, the capacity and the salts the *file* recorded rather than the
-/// ones the slot was running at, because that is the failure every `Watch`
-/// field is documented against and it does not show on the load: it shows on
-/// the first save afterwards. And the node names are the file's, because an
-/// `edge` resolves against them.
-///
-/// A CPU test: a store is a directory, and nothing here takes a device.
+/// Verifies that loading a Set writes procedures into the scratch directory and updates slot aiming.
 #[test]
 fn a_load_writes_the_sets_procedures_into_the_scratch_and_aims_the_slot_there() {
     use karakuri_environment::setfile;

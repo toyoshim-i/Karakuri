@@ -313,19 +313,7 @@ fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
         pane_width(&readout)
     );
 
-    // And on past it, and let go there. **The pointer ends nowhere near
-    // the boundary**, which is the ordinary end of a drag and the case
-    // that catches a release routed after `released` rather than before
-    // it.
-    //
-    // **A pull this far past a pane's own minimum closes the pane**
-    // (`docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md`),
-    // which is what the assertion above used to say instead: the minimum
-    // holds a drag that stops at it, and a drag that goes on through it is
-    // asking for the fold. The pane keeps its edge, so the boundary is
-    // still there at the window's own edge and another drag brings it
-    // back — none of which is this test's subject, which is that the
-    // window loop's routing never lets go of the gesture.
+    // Dragging beyond minimum boundary threshold triggers pane fold (ADR-0300).
     let far = Point::new(start.x - 200.0, start.y);
     assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Panel);
     assert_eq!(readout.pointer(&ctx, Pointer::Up).0, Claim::Panel);

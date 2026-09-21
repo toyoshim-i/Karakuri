@@ -30,45 +30,9 @@ pub(crate) const LISTEN_ON: &str = "default";
 /// `karakuri-cli` names the same constant for the same reason.
 pub(crate) const DT: f32 = karakuri_engine::set::DT;
 
-/// Open the input this program listens on, and say what happened.
+/// Opens the default audio input stream for room tracking, returning the stream handle and a startup legend line.
 ///
-/// Returns the session and one line for the legend — never a refusal that stops
-/// the run, and that is the decision rather than an omission. The three cases
-/// it has to be right about are the three the window can meet, and two
-/// principles point in different directions across them:
-///
-/// 1. No device at all.
-///    [P-0084](../../../docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md)
-///    — *a quiet room is not a missing microphone* — and neither is a missing
-///    microphone a fault. Nobody asked for one here: this program opens the
-///    default because that is what an instrument does, and a machine with no input
-///    is a machine where every name goes on answering what it answered before
-///    audio existed and the oscillator free-runs. It is said out loud, once, and
-///    the run continues. Exiting would mean a laptop with its microphone switched
-///    off cannot open the panel at all.
-/// 2. A device that was named and is not there. A different case, and
-///    [P-0094](../../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-///    is why: somebody said *that one*, and going quietly on with a different one
-///    — or with none — is the silently wrong picture. It cannot happen *here*,
-///    because nothing names an input at launch; it happens at the pill, where the
-///    list an operator picked from was read at the press and a device can have
-///    gone away since. [`attached`] is that case and it is loud there. Loud and
-///    not fatal, which is where this program parts from `karakuri-cli`: a window
-///    with a set on it must not close because an interface was unplugged, and the
-///    operator is standing in front of the refusal.
-/// 3. A device that goes away mid-set. Nothing here notices, deliberately, and
-///    that *is* the answer: `karakuri-audio`'s `staleness` takes the confidence of
-///    both the signals and the tempo estimate to zero over half a second, every
-///    bound parameter is handed back to the value it had, and the grid free-runs
-///    from wherever it was. A watchdog that re-opened the stream would be a second
-///    answer to a question that already has one, and it would re-lock the grid to a
-///    room in the middle of a set. What an operator does about it is pick again on
-///    the pill.
-///
-/// A free function rather than a step of `resumed`, for the reason
-/// [`sources_from`] is one: `resumed` cannot be called from a test, and a
-/// refusal nobody can reach is a refusal nobody checked. See [`unopened`],
-/// which is the half of it that has no device in it at all.
+/// Falls back gracefully with a status message if no audio input device is available (P-0084, P-0094).
 pub(crate) fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
     match audio::Audio::open(LISTEN_ON, audio::DEFAULT_LATENCY_OFFSET_MS, DT, session_bpm) {
         Ok(open) => {
@@ -88,20 +52,7 @@ pub(crate) fn listening(session_bpm: f32) -> (Option<audio::Audio>, String) {
     }
 }
 
-/// What to say about an input that did not open, and which of the two kinds of
-/// nothing it was.
-///
-/// Split out from [`listening`] because it is the whole of the judgement and
-/// none of the device: a machine with no inputs and a machine whose default
-/// vanished are two sentences, and the difference between them is the
-/// difference between P-0084 and P-0094. Being a function of an error and a
-/// string, it is checkable where no input can be opened at all — which is every
-/// machine a test runs on, whatever it happens to have plugged in.
-///
-/// The empty case is not apologetic and the non-empty one is not calm. A
-/// machine with no inputs is a state; a machine with inputs where the one asked
-/// for is not among them is somebody's mistake or somebody's cable, and the
-/// list is what they need rather than an invitation to go and look.
+/// Formats a startup legend message explaining why audio input failed to open.
 pub(crate) fn unopened(selector: &str, why: &audio::AudioError) -> String {
     match why {
         audio::AudioError::NoMatch { available, .. } if available.is_empty() => String::from(
@@ -134,46 +85,9 @@ pub(crate) fn unopened(selector: &str, why: &audio::AudioError) -> String {
 // The control surface this instrument is playing from
 // ---------------------------------------------------------------------------
 
-/// Open the surface this program plays from, and say what happened.
+/// Opens the first available MIDI control surface, returning the surface handle and a startup legend line.
 ///
-/// Returns the surface and one line for the legend — never a refusal that stops
-/// the run, which is [`listening`]'s decision one door along and it is the same
-/// decision for the same reason. Three cases, and the three are not the
-/// microphone's three:
-///
-/// 1. Nothing plugged in, which is most machines and is a state rather than a
-///    fault. Nobody named a port: this program takes whatever is there because
-///    that is what an instrument does, and a run with no surface is a run played
-///    with the pointer and the keyboard, which is every run this program has had
-///    until now. Said out loud, once.
-/// 2. A port that is there and will not open — taken by another program, usually.
-///    Said in the port's own words, and the run continues: a window with a set on
-///    it must not fail to start because something else has the controller.
-/// 3. A port that goes away mid-set. Nothing here notices, deliberately. `midir`
-///    holds the connection and a device unplugged stops sending; every control
-///    on this panel is still under the pointer and under a key, and nothing on
-///    the deck moves on its own. What an operator does about it is plug it back in
-///    and restart, which is what the legend says — there is no pill to re-open one,
-///    because the transport row's `map` is one of the two controls the mock
-///    draws and this console does not.
-///
-/// Which port is the first one there is, and it is not a flag. `karakuri-cli`
-/// is told with `--midi-in` and refuses the run without the one it was told;
-/// [`USAGE`] declines that flag by name for
-/// [ADR-0220](../../../docs/adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)'s
-/// reason read one column along — this program is the instrument, and a
-/// launch-time answer is one an operator standing in front of the panel cannot
-/// change. So it opens what is there and says which, exactly as `audio-in`
-/// does.
-///
-/// Which map is [`midi::map_for`] — the operator's own under the store, then
-/// the one that ships — and the path is printed rather than described, for the
-/// reason every line of [`Readout::print_legend`] is derived.
-///
-/// A free function rather than a step of `resumed`, for [`listening`]'s reason:
-/// `resumed` cannot be called from a test, and the sentences are the half of
-/// this that has no device in it. See [`surface_line`] and [`unsurfaced`],
-/// which are that half.
+/// Falls back to keyboard and pointer controls if no MIDI surface is connected (ADR-0220, ADR-0335).
 pub(crate) fn surfaced(
     map: Option<&std::path::Path>,
     waker: EventLoopProxy<()>,
@@ -602,34 +516,7 @@ pub(crate) fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> 
     Some(offset_said(ms, now))
 }
 
-/// The grid's tempo, named by hand and handed to the room's tracker — and
-/// `None` for every operation that is not [`Operation::SetFreeRunTempo`].
-///
-/// # It does not move the grid, and that is what separates it from [`nudged`]
-///
-/// The offset above is `Silent(NoRecord)`: nothing in a session stream carries
-/// a delay between two outputs, so the session this program opened is the only
-/// thing that holds it. A free-run tempo is the opposite — `written` answers a
-/// `Record::Tempo` for it, and [`apply`] is what applies it, through the same
-/// `audio::apply_tempo` a replay goes through. Moving the oscillator here as
-/// well would be a second route into the engine, taken only when a device
-/// happens to be open (P-0090).
-///
-/// So what this hands over is the state the record does not carry: the beat
-/// lock's run of evidence, and the window the tracker searches. Both are
-/// `Audio::set_tempo`, and the argument for each is there and in
-/// `karakuri_audio`'s `BeatLock::retarget`.
-///
-/// # With nothing open it says nothing, and that is the state it is for
-///
-/// [`nudged`] refuses out loud with no session — an offset belongs to one, and
-/// an operation that arrives and does nothing at all is what P-0094 is about.
-/// This is the other way round: *what the grid runs at with nothing driving it*
-/// is exactly the case with no device, [`apply`] moves the oscillator and
-/// prints the line, and a refusal here would be this file talking about a
-/// tracker that is not part of the operation. What it says when there is one is
-/// that the set was accepted and the room is still being tracked, which is the
-/// one thing an operator cannot see from the tempo alone.
+/// Updates the audio beat tracking window to target a new manual free-run BPM setting.
 pub(crate) fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
     let Operation::SetFreeRunTempo { bpm } = *operation else {
         return None;
@@ -711,11 +598,7 @@ pub(crate) fn measure_audio(
         None => None,
     };
 
-    // **A correction worth saying out loud is one that is a decision rather
-    // than a trim** — acquiring, re-acquiring, a tap, an octave — which is
-    // `karakuri-cli`'s rule and is here for P-0094's reason: an operator who
-    // cannot see the grid decide cannot tell a lock from a coincidence. A trim
-    // happens on every frame once locked and says nothing.
+    // Log beat tracker state changes, ignoring recurring sub-frame trims (P-0094).
     let reason = open.reason();
     if let (Some(Record::Tempo { bpm, .. }), Some(reason)) = (&tempo, reason) {
         if !matches!(reason, karakuri_environment::audio::Reason::Trim) {
@@ -727,36 +610,7 @@ pub(crate) fn measure_audio(
     }
 }
 
-/// What the tracker's three controls read this frame: the offset the open
-/// session is holding, and which way the grid can still be moved an octave.
-///
-/// [`transport`]'s shape one group along the same row — a function of what this
-/// program can see and of nothing the console could work out for itself.
-///
-/// The offset is `None` where nothing is open, and that is the state rather
-/// than a default: an offset belongs to a session, and
-/// `karakuri_environment::audio`'s `DEFAULT_LATENCY_OFFSET_MS` is where the
-/// *next* session starts rather than a value anything is holding now. The
-/// console draws no track at all for it, which is `View::audio`'s own rule one
-/// control to the left.
-///
-/// The two octave halves are the range against the session tempo, which is
-/// exactly what `Audio::octave` refuses on — `BeatLock::octave` is
-/// `BPM_RANGE.contains(&(bpm * factor))` and nothing else — so the chip the
-/// panel draws inert is the press the lock would turn down. The range is asked
-/// for by name through `karakuri_environment::audio`, which is the door this
-/// program takes its audio through; a `60.0..=200.0` written here would be a
-/// second copy of the tracker's own bound.
-///
-/// The tempo is the session's oscillator, which is the number the transport row
-/// draws and the number the lock multiplies: one reading, so the chip that is
-/// drawn and the press that is refused cannot come apart.
-///
-/// Not `Audio::octave` asked twice, which is the obvious alternative and is
-/// wrong twice over: it *performs* the move, and it needs a session, where both
-/// halves are drawn on a console with no input open — the refusal that is
-/// *drawn* is the range's, and the one for a room that is not being listened to
-/// is said out loud by [`scaled`].
+/// Returns the current [`Tracker`] state for UI display based on active audio session and session BPM.
 pub(crate) fn tracking(open: Option<&audio::Audio>, bpm: f32) -> Tracker {
     Tracker {
         offset_ms: open.map(audio::Audio::latency_offset_ms),
@@ -768,20 +622,6 @@ pub(crate) fn tracking(open: Option<&audio::Audio>, bpm: f32) -> Tracker {
 /// The two operations that move the room's tracker, performed against the
 /// session this program opened — and `None` for every operation that is not one
 /// of them.
-///
-/// [`attached`]'s and [`nudged`]'s shape, and it is deliberately not beside
-/// them in [`App::performed`]: those two are `Silent(NoRecord)`, so the line
-/// `unwritten` prints after them is true and they fall through to it. These two
-/// are `Owed(NotSettled)`, so the arm that calls this leaves as soon as it
-/// answers — the reason is written at the call, and what the alternatives were
-/// is
-/// [ADR-0278](../../../docs/adr/0278-an-operation-no-record-can-be-written-for-leaves-the-window-before-it-is-written.md).
-///
-/// `Instant::now()` is read here rather than passed in, because the instant a
-/// tap means is the instant it arrived and this is the last place that is still
-/// true. `started` is the run's own origin and comes from the caller: it is
-/// `App::started`, the one this program measures every tap against, and a
-/// second origin taken here would put two taps on two clocks.
 pub(crate) fn tracked(gfx: &mut Gfx, started: Instant, operation: &Operation) -> Option<String> {
     match operation {
         Operation::TapBeat => Some(tapped(
@@ -795,27 +635,7 @@ pub(crate) fn tracked(gfx: &mut Gfx, started: Instant, operation: &Operation) ->
     }
 }
 
-/// A tap on the beat, performed against the room this program is listening to,
-/// and what to say about it.
-///
-/// # Why it does not go through `written`
-///
-/// Every other control on this panel emits an `Operation`, `written` turns it
-/// into a `Record` and [`apply`] moves the deck with it — P-0090. A tap does
-/// end in a record: `karakuri_environment::audio` writes a `Record::Tempo` for
-/// it and applies it to the session's oscillator, which is the same record a
-/// replay would hand the engine. What it cannot do is come out of `written`:
-/// that function is a pure function of the operation and a reading, and a tap's
-/// record is the *beat lock's* answer — the tapped tempo, the phase error
-/// against the oscillator, the output lag — none of which a `Current` carries.
-/// So `written(TapBeat)` answers `Owed(NotSettled)`, and routing this key
-/// through [`App::performed`] would print *"nothing moved, and nothing here
-/// decides it"* about a press that moved the grid.
-///
-/// That is a gap in `karakuri-operation-record` and it is named here rather
-/// than papered over: the day a `Current` can carry a correction, this key
-/// emits like every other control and this function goes. Until then it is
-/// `karakuri-cli`'s own wiring, which is what the panel was asked to use.
+/// Applies a beat tap event against the audio tracker and deck oscillator, returning a summary message.
 pub(crate) fn tapped(
     open: &mut Option<audio::Audio>,
     deck: &mut Deck,

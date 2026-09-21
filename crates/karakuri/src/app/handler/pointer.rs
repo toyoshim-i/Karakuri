@@ -30,13 +30,7 @@ impl App {
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
-                // **A move can now change the mix**, which no pointer event
-                // could before: a fader in hand turns this move into one
-                // operation of the vocabulary. What is owed for it is what the
-                // drag asked for and not the claim — a fader held against the
-                // top of its track asks for 1.0 sixty times a second and
-                // changes nothing, and `Change::Pointer(Panel)` would draw a
-                // frame for every one of them.
+                // Process operations emitted by pointer drags (e.g. fader moves).
                 let repaint = App::performed(
                     gfx,
                     self.started,

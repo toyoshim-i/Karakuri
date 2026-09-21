@@ -42,33 +42,7 @@ pub(crate) fn ir_layer(layer: karakuri_operation::Layer) -> Layer {
     karakuri_environment::meta::kind_of_op(layer)
 }
 
-/// Which node a published control belongs to, and `None` where it belongs to no
-/// one node.
-///
-/// `Published::at` is `Some` for a control an author addressed — the `--publish
-/// name=L4:0:exposure` form — and `None` for a wildcard, which is what the
-/// whole of the *default* interface is made of: *"one control per key, not one
-/// per declaration"*, covering every node that declares the key. This program
-/// has no `--publish` flag, so every control it ever draws is a wildcard.
-///
-/// A wildcard over exactly one node is that node's, and the resolution invents
-/// nothing: *where a bare name lands* is a set the Set itself determines, and
-/// where it holds one member there is no second group the row could go in. Over
-/// two or more it belongs to several groups at once, and the mock draws no
-/// `.param` outside a `.node-group` — so the row is dropped and [`inspector`]
-/// says how many were, rather than a place for it being invented here
-/// (ADR-0200: *no placeholder, and no empty case the mock did not itself
-/// draw*).
-///
-/// The landing is asked for rather than worked out here, and that is a
-/// correction rather than a tidying. This walked `Set::params` and counted the
-/// nodes holding the key, which is the same walk `Set::write_param` refuses on
-/// — agreeing with it by coincidence. The day the built-in camera declared a
-/// `radius` of its own the two stopped agreeing: a bare name does not reach
-/// that node, so the engine saw one landing where this saw two, and a `radius`
-/// row the pane draws every run was dropped as belonging to several groups
-/// (ADR-0318). `Set::landing_of` is the one answer, where the write is decided
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
+/// Resolves which `(Layer, u32)` node a published control targets, or `None` if ambiguous/unmatched (ADR-0200, ADR-0318, P-0090).
 pub(crate) fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
     if let Some(at) = control.at {
         return Some(at);
@@ -81,25 +55,7 @@ pub(crate) fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
     }
 }
 
-/// What is driving one node's parameter, or `None` where nothing is — the
-/// reading behind a `.param.bound` row and the `.sens` row under it.
-///
-/// # The first match, because that is what the engine writes
-///
-/// `Set::bindings` is a list and `karakuri_engine::set::effective` takes the
-/// first entry matching the layer, the key and the node, so a pane that took
-/// the last would draw a source that is not the one holding the control. This
-/// is that same `find`, and it is the one place in this file that reads a
-/// binding at all: the pane's seventh reading, which ADR-0191 kept out while
-/// nothing in this program could attach one.
-///
-/// Addressed by the node the row was resolved to, which is safe here for the
-/// reason it would not be safe for a *write*: every row this pane draws covers
-/// exactly one node — [`node_of`] drops the ones that do not — so asking which
-/// binding covers that node is asking about the row itself. The address the
-/// take-back and the re-attach carry is the binding's own, off the entry found,
-/// and not this pair (ADR-0286: the placement is where a row goes, the address
-/// is what a control is).
+/// Finds the active signal binding for a given node parameter, if bound (ADR-0191, ADR-0286).
 pub(crate) fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Option<view::Source> {
     let binding = set
         .bindings()
@@ -117,125 +73,22 @@ pub(crate) fn source_of(set: &Set, layer: Layer, index: u32, key: &str) -> Optio
     })
 }
 
-/// What the Inspector's panes read: one pane per slot the deck has, up to
-/// the [`PANES`] the arrangement has, out of the seven things a `Set` will say
-/// about itself.
+/// Populates the inspector panes from the active decks and aim state (ADR-0156, ADR-0191, ADR-0319).
 ///
-/// Everything here is reachable from a `Deck` and nothing reaches around one —
-/// `slot`, `transport` and the `Set` behind each slot are its own — and what
-/// crosses into the console is a word, some numbers and some names (ADR-0156).
-///
-/// # Where each one comes from, and what is checked before it is drawn
-///
-/// All seven reads answer off a running `Set`, and each was checked against
-/// the source rather than taken on trust:
-///
-/// - `Set::layering` is the fold chip. It is a *build* decision —
-///   `merge.is_some()` — so it is a readout here and the mock's press is a
-///   rebuild rather than a write.
-/// - `Set::inputs` is the renderer row: one edge per renderer in draw
-///   order, and `Input::live` says which one reaches the screen. It is
-///   *"empty of meaning under `Layering::Overdraw`"* by the engine's own
-///   words, so `live` is only ever passed on under composite — under overdraw
-///   every renderer draws and marking one would assert a choice the layering
-///   does not make.
-/// - `Set::node_names` is a name per node, in node order, and
-///   `Set::node_named` turns each one back into the `(layer, index)` the mock's
-///   `.addr` is.
-/// - `Set::authority` is the `man / sug / auto` chip, through
-///   [`mix::authority`], and the node's own address goes across beside it
-///   because a press on a chip has to say which node it is about
-///   (`view::NodeAuthority`). A press writes one now: `Deck::set_authority`
-///   landed with ADR-0319, so the chips are three destinations rather than a
-///   drawing. What a run *starts* at is still the default on every node —
-///   `Request::authorities` is empty, because `Record::Authority` is
-///   deliberately excluded from Set-file state in two places (ADR-0216) — and
-///   that is the default being read rather than a placeholder being drawn: a
-///   node nobody has spoken for is manual.
-/// - `Set::published` is which controls appear and in what order, which is
-///   what numbers the rows. It allocates and says it is not for the frame
-///   path, which is why this is called once — see below.
-/// - `Set::params` is what resolves a wildcard control to a node — see
-///   [`node_of`].
-/// - `Set::bindings` is the seventh, and it was the one this did not
-///   read until 2026-09-09. The reason was ADR-0191's — nothing in this
-///   program bound a signal to anything, so it was empty in every run and a
-///   `.pval.src` drawn off it would have been a state the engine never
-///   entered — and what changed is that the sensitivity row's chips can attach
-///   one (ADR-0319). [`source_of`] is the read, at the node each row was
-///   resolved to, and it takes the first matching entry because that is
-///   what `karakuri_engine::set::effective` writes.
-///
-/// # Read once, and that is the engine's instruction rather than a shortcut
-///
-/// `Set::published` is documented *"Allocates, so not the frame path. A
-/// console reads this when a Set lands, not per frame."* A Set lands
-/// whenever a `.kir` in a slot is saved, since every slot is watched, so
-/// this is called at startup and again on the frame a build is installed —
-/// `staging` is what answers *did one land*, and it is the only thing in this
-/// program that knows. Between those
-/// frames almost every value above used to be constant. Four things move
-/// one now, and each is a press: a `ride`, a `source`, an `authority` and a
-/// `transport`. Every one of them re-reads the panes from
-/// [`Readout::performed`], off the *record* rather than off the operation, so
-/// a second operation writing one is caught by the same line — and none of
-/// them is on a frame.
-///
-/// The transport was the first that moved, and it is why this is called a
-/// second time. It had no caller outside its own tests when this was written
-/// (ADR-0218); the deck head's scrub is that caller, so a press that writes a
-/// `Record::Transport` re-reads the panes in [`Readout::performed`] — on the
-/// press, which is where a directory read already happens, and never on a
-/// frame. Re-reading the whole pane rather than writing the two numbers back
-/// is deliberate: a second writer into `View::inspector` is a second answer to
-/// *what is this pane showing*, and the reading that draws the anchor has to
-/// be the reading the deck holds.
-///
-/// The other three arrived with ADR-0319 and ADR-0280, which is what that
-/// sentence was waiting for: the writer the authority chip wanted is
-/// `Deck::set_authority`, and the parameter's is `Deck::write_param`.
+/// Reads published controls, node metadata, authority settings, and bindings for each targeted deck slot.
 pub(crate) fn inspector(
     deck: &Deck,
     names: &[String],
-    // **Where each slot's watcher is pointed**, which is what a node's `uses`
-    // line reads: `Aiming::at.edges` is the wiring that slot was last sent, so
-    // a pane draws the wiring of the deck it is *showing* rather than a run
-    // list read once for four decks. It is the same list — `rewired` restates
-    // the run's whole wiring to every slot it names — and this is the copy that
-    // belongs to the slot the pane is about.
-    //
-    // **A pane with no aim behind it draws no `uses` line**, which is every
-    // test in this crate that hands none in and is honest either way: a slot
-    // nothing is pointed at is a slot nothing will rebuild.
+    // The wiring edges targeting each slot, used to render node `uses` lines.
     aims: &[Aiming],
-    // **Which deck each pane is pointed at**, which is the console's own
-    // pointer read back — `view::View::pane_deck`, one per pane, moved by the
-    // pulldown on that pane's head (ADR-0338, decision 5).
-    //
-    // **It is handed in rather than read here**, which is `View::target_deck`'s
-    // arrangement one bay along: the pointer belongs to the console and what
-    // is under it belongs to the deck, so this function answers *what is that
-    // slot playing* and never *which slot should this pane show*.
-    //
-    // Panes used to be filled slot by slot — pane `n` from slot `n` — so slots
-    // C and D had no way onto this bay at all. That arrangement is the default
-    // this array opens with (`view::PANE_DECKS`) rather than a rule.
+    // Slot index targeted by each pane (ADR-0338).
     targets: [u8; view::PANES],
     out: &mut Vec<view::Pane>,
 ) {
     out.clear();
-    // **A pane per target, in pane order**, which is what makes the position
-    // of an entry in `out` the pane it belongs to — `view::inspector` reads it
-    // by index, and `View::inspector` is walked the same way.
+    // Populate panes in target order, stopping if target points to an unallocated deck slot.
     for target in targets {
         let slot = usize::from(target);
-        // **A pane pointed at a deck this run has no slot for draws nothing**,
-        // and the panes after it go with it because a pane is addressed by its
-        // position in this list. `View::point_pane` refuses a deck the mixer
-        // draws no strip for, so the only way here is the tail of the default:
-        // a run with one slot opens with the second pane pointed at deck B,
-        // which is where `slot_count().min(PANES)` left it before this
-        // pointer existed.
         if slot >= deck.slot_count() {
             break;
         }
@@ -281,24 +134,12 @@ pub(crate) fn inspector(
         // MIDI control is learned against, so it counts the controls that were
         // published and not the rows that could be placed.
         let published = set.published();
-        // **And every control the material declares**, which is what the
-        // publish mark is chosen *from*: a row taken off the interface has to
-        // stay drawn or the choice cannot be unmade, and its declared range is
-        // what putting it back is over. `Set::declared_interface` is the
-        // reading — the default interface, whether or not one is authored
-        // (ADR-0100, `docs/adr/0329-…`).
-        //
-        // **Identity is the address and the key together**, which is
-        // `Published`'s own pair: a wildcard control and an addressed one may
-        // share a key and are two controls, and comparing names would fold a
-        // renamed control onto the declaration it renames.
+        // Controls declared by the material's default interface (ADR-0100, ADR-0329).
+        // Matches by (address, key) pair to distinguish wildcards from addressed controls (ADR-0318).
         let declared = set.declared_interface();
         let mut rows: Vec<(Option<(Layer, u32)>, view::Param)> = Vec::new();
         for (at, control) in published.iter().enumerate() {
-            // **By the address the control carries, not by its name.** The
-            // built-in camera's three publish addressed, so a Set whose
-            // geometry also declares `radius` has two controls under that name
-            // and a name lookup answers for whichever comes first (ADR-0318).
+            // Addressed controls evaluate by address to resolve duplicates correctly (ADR-0318).
             let value = set
                 .value_at(control.at, &control.key)
                 .unwrap_or(control.range[0]);
@@ -309,18 +150,7 @@ pub(crate) fn inspector(
                     ord: Some(at + 1),
                     name: control.name.clone(),
                     value,
-                    // **The range and not the position.** A fader a hand can
-                    // move has a second reader — the grab — so the map from a
-                    // value to a place on the track is one statement in one
-                    // place, `view::Param::at` and `view::Param::valued`, and
-                    // the guard on a range of no width went with it
-                    // (ADR-0286).
                     range: control.range,
-                    // **The control the interface published, and not the
-                    // group `node_of` put the row in.** A wildcard stays a
-                    // wildcard, so a bare name goes on meaning every node that
-                    // declares the key and meets `Set::write_param`'s
-                    // authority refusal (ADR-0286, ADR-0223).
                     param: karakuri_operation::ParamAt {
                         node: control
                             .at
@@ -330,33 +160,12 @@ pub(crate) fn inspector(
                             }),
                         key: control.key.clone(),
                     },
-                    // **The seventh reading, and the one this pane used to
-                    // leave out.** It was omitted on ADR-0191's terms —
-                    // nothing in this program bound anything, so a bound row
-                    // was a state the engine could not enter — and what
-                    // changed is that a press can attach one now (ADR-0319).
-                    // Asked at the node the row was resolved to, which is the
-                    // node the row *is*: `node_of` drops a control covering
-                    // more than one.
                     bound: node
                         .and_then(|(layer, index)| source_of(set, layer, index, &control.key)),
                 },
             ));
         }
-        // **Then every declared control the interface leaves out**, drawn with
-        // no number, no fader and no figure — the mark that publishes them is
-        // the cell the number would be in, so a row that vanished would be a
-        // choice nobody could unmake (`docs/adr/0329-…`).
-        //
-        // **After the published ones**, which is the order they are drawn in
-        // *within a group*: a group's published rows come first and the ones
-        // off the list follow, so the numbers a reader is counting down do not
-        // step over a gap.
-        //
-        // **On a Set nobody has narrowed this loop adds nothing**, because
-        // `Set::published` answers with `declared_interface` itself there —
-        // which is why every deck opens looking exactly as it did before this
-        // control existed.
+        // Include declared controls omitted from published interface (ADR-0329).
         let mut unplaced = 0;
         for control in declared {
             if published
@@ -370,16 +179,11 @@ pub(crate) fn inspector(
             rows.push((
                 node,
                 view::Param {
-                    // **No position, because a control off the interface has
-                    // none** — and a position is what a MIDI knob counts.
                     ord: None,
                     name: control.name.clone(),
                     value: set
                         .value_at(control.at, &control.key)
                         .unwrap_or(control.range[0]),
-                    // **The declared range and not a narrowed one**: this is
-                    // what publishing it back would be over, and the row is
-                    // drawn from `declared_interface`, which never narrows.
                     range: control.range,
                     param: karakuri_operation::ParamAt {
                         node: control
@@ -390,11 +194,6 @@ pub(crate) fn inspector(
                             }),
                         key: control.key.clone(),
                     },
-                    // **Nothing can be holding it**, because a binding names a
-                    // published control or a param and the row draws neither a
-                    // value nor a sensitivity row. Read anyway rather than
-                    // assumed `None`: what a Set holds is the engine's answer
-                    // and this file does not have a second one.
                     bound: node
                         .and_then(|(layer, index)| source_of(set, layer, index, &control.key)),
                 },
@@ -451,11 +250,7 @@ pub(crate) fn inspector(
                     .collect::<Vec<_>>()
             };
             if layer == Layer::L4 {
-                // **The renderers fold into one group**, which is the mock's
-                // own `L4 renderers` head over a row of chips: the chips *are*
-                // the L4 nodes, and the row is what the fold turns into a
-                // choice. Every other layer is one group per node, addressed
-                // `L2:0` the way the mock addresses it.
+                // L4 renderers fold into one group displaying chips for live state.
                 renderers.push(view::Renderer {
                     name: name.clone(),
                     live: composite
@@ -906,38 +701,9 @@ pub(crate) fn wired_input(
     })
 }
 
-/// A deck's published interface narrowed or widened, performed — a parameter
-/// row's publish mark pressed, and `None` for every operation that is not one.
+/// Handles narrowing or widening the published interface of a deck (ADR-0280, ADR-0329).
 ///
-/// # It is a field of the aim, which is what makes the choice survive
-///
-/// `watch::Aim::published` is the interface a slot's watcher states at every
-/// build, and it has been empty in every run this program has ever had — an
-/// empty list *is* publish everything, so nothing had to fill it until
-/// something narrowed. This fills it, and the reason it is the aim rather than
-/// a writer into the live `Set` is the one thing that decides between them: a
-/// live write is wiped by the next rebuild, and the next rebuild is the
-/// operator's own next save of any `.kir` in the deck. A control that undoes
-/// itself on an unrelated act is the defect ADR-0280 §6 named for parameters
-/// and ADR-0282 closed; there is no `Set::carry_moved_from` for an interface,
-/// so the aim is where it has to live (`docs/adr/0329-…`).
-///
-/// The cost is a recompile for a choice about a display, and it is named rather
-/// than hidden: the build is the same files at the same capacity, so it is a
-/// build that has already landed once, and the Staging lane carries the verdict
-/// like every other.
-///
-/// `written` answers `Silent(NoRecord)`, and here that is a gap in the format
-/// rather than a record with no slot: nothing in this vocabulary says what a
-/// Set publishes, in a Set file or in a session. So a replay does not come back
-/// narrowed and neither does a keep — which is what makes this the weakest of
-/// the four re-aims on that row, and both manual pages say so.
-///
-/// An empty list is not nothing. `Publish { controls: [] }` asks for *every
-/// declared control published*, which is what an unnarrowed deck is, and it is
-/// what a press that takes the last control off the interface would mean if
-/// anything could produce one — nothing can, because taking a row off leaves
-/// the rest on it.
+/// Updates the slot's aim with the new list of published controls, triggering a background rebuild.
 pub(crate) fn attended(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
     let Operation::Publish { deck, controls } = operation else {
         return None;
@@ -979,36 +745,9 @@ pub(crate) fn attended(aims: &mut [Aiming], operation: &Operation) -> Option<Str
     }
 }
 
-/// A deck re-seeded, performed — the Inspector deck head's `re-salt` capsule
-/// pressed, and `None` for every operation that is not one.
+/// Handles re-seeding a deck's randomness salt (P-0087, P-0092).
 ///
-/// # The salts are cleared and the seed is stated, which is one derivation
-///
-/// `watch::Aim` carries both a `seed_salt` for the slot and a `salts` list per
-/// geometry, and the list wins where it is filled: `Set::build` reads a
-/// recorded salt and falls back to `derived_salt(seed_salt, ordinal)`. So a
-/// re-salt that wrote only the seed would move nothing on a slot filled from a
-/// Set file, which records one `seed` line per geometry. It clears the list
-/// instead of rewriting it, which is the same numbers with the arithmetic left
-/// where it belongs: the engine derives each geometry's salt from the slot's,
-/// and this program does not keep a second copy of that function
-/// ([P-0087](../../../docs/principles/0087-name-the-property-never-the-shape.md)).
-///
-/// # Nothing here invents the number
-///
-/// The salt arrives in the operation, because the console was handed it: the
-/// pane reads `Set::source_salts`, which is what the slot is actually running,
-/// and the next value of the sequence comes off
-/// `karakuri_engine::set::derived_salt` — so a press names a destination like
-/// every other control on this row, the same press from the same place lands on
-/// the same picture twice, and nothing on this panel produces a frame a later
-/// run cannot produce again
-/// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
-///
-/// Nothing is refused. The sequence goes forward, so a press cannot ask for the
-/// salt the slot is already on, and a re-seed always changes the picture —
-/// which is what the fold's *already in that state* guard exists for and this
-/// one does not need.
+/// Updates the seed salt on the aim and clears individual geometry salts to force derivation.
 pub(crate) fn re_salted(aims: &mut [Aiming], operation: &Operation) -> Option<String> {
     let Operation::SetProperty {
         deck,

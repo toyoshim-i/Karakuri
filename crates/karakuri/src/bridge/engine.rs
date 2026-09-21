@@ -1,21 +1,6 @@
 use super::*;
 
-/// The look this window opens under, and it is where [`Engine::look`] starts
-/// rather than what every frame is drawn under.
-///
-/// [`compose`] writes the tone-map uniform on every frame from the
-/// [`Committed`] the closure hands back, so a harness with nothing to say about
-/// the look still has to say something. This file now has something to say: the
-/// transport row's two look controls move [`Engine::look`] through a record, so
-/// what a frame is committed under is that field and this is only its first
-/// value.
-///
-/// Aces, and it is still not this program inventing an aesthetic. ADR-0037
-/// picked the default *by looking* and left the trade open — *"ACES works on
-/// stage … AgX is kind to material"* — and recorded that the choice is only
-/// about what happens when nobody chooses, *"and can be changed on the night"*.
-/// Until this pass nobody could change it here; now a press can, and the
-/// constant is what the night starts at.
+/// Initial look settings (ACES tonemapping, 1.0 exposure, 1.0 white point) configured at startup (ADR-0037).
 pub(crate) const LOOK: Look = Look {
     op: TonemapOp::Aces,
     exposure: 1.0,
@@ -76,28 +61,7 @@ pub(crate) struct Engine {
     pub(crate) previews: [Presented; DECKS],
     /// Cached bind groups for each slot view into the tone-mapping pipeline.
     pub(crate) slot_bind_groups: [Option<wgpu::BindGroup>; DECKS],
-    /// The look every sink is drawn under this frame, and the one piece of engine
-    /// state this program *moves*.
-    ///
-    /// It was [`LOOK`] handed straight to `compose` every frame, with the reason
-    /// written at that constant: this file had no session, no `look` record and no
-    /// key that changed it. It has a control now — the transport row's tone map
-    /// capsule and its exposure track — so a press becomes `Operation::SetTonemap`
-    /// or `SetExposure`, which become one `Record::Look`, which [`apply`] writes
-    /// here; the next frame hands this to `compose` and the present pass uploads
-    /// it. That is P-0090 on this value exactly: the control ends in the record
-    /// every other surface's does, and nothing calls `Present::set_tonemap` behind
-    /// its back.
-    ///
-    /// It lives here rather than beside the panel because it is what the *engine*
-    /// is drawing under: `view::Look` is the console's reading of it, written per
-    /// frame from this the way a strip is written from the deck, and a second copy
-    /// that the console owned would be the reading and the state as one thing
-    /// (ADR-0156).
-    ///
-    /// `white_point` is carried and never asked for: no surface has a control for
-    /// it, so it is read back into every record and written out again unchanged
-    /// ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
+    /// Active tonemapping and exposure look configuration applied on present passes (P-0090, ADR-0192).
     pub(crate) look: Look,
     /// What the master chain is set to, and [`Engine::look`]'s twin at the other
     /// end of that chain.
@@ -136,26 +100,7 @@ pub(crate) struct Engine {
     /// tally rather than either texture's, which is why it lives here and is handed
     /// to [`Presented::fit`].
     pub(crate) freed: usize,
-    /// One [`Aiming`] per slot, in slot order: how a load or a rewiring reaches
-    /// that slot's build worker, and where that watcher is pointed.
-    ///
-    /// This is the whole of what putting a library Set on a running deck took, and
-    /// what it is *not* is the point of it. `Deck::install` is the one function
-    /// that puts a built Set in a slot and says of itself that it is *"deliberately
-    /// not reachable from a key or a surface: a live run changes its material by
-    /// editing a file and letting the worker build it, which is what the budget
-    /// watchdog is attached to."* So nothing here builds a Set: [`loading`] writes
-    /// the library Set's procedures into the scratch and sends an aim, and the same
-    /// worker that watches for a save picks it up. The swap lands at a frame
-    /// boundary, is judged there on what one frame of that Set costs, and rolls
-    /// back on its own if that is over the budget — none of which had to be written
-    /// for the library, because a load is now literally an edit this program made.
-    ///
-    /// In slot order, so the index is the deck letter: `aimed[0]` is deck A's, and
-    /// it is the same index `Deck::events`, the strips and the preview cells are
-    /// all in. Kept beside the deck rather than inside it for the reason the whole
-    /// of [`Engine`] is on this side: the channel is `karakuri-environment`'s and
-    /// the engine takes no environment.
+    /// Target aim definitions and watch channels for each deck slot, indexed by slot.
     pub(crate) aimed: Vec<Aiming>,
     /// The run's wiring — every edge a `wire_input` has written, for the whole run
     /// and not per slot.
@@ -332,11 +277,7 @@ impl Aiming {
         self.aim.send(restated(&self.at)).map_err(|_| ())
     }
 
-    /// The run's wiring, said again, which is [`changed`](Self::changed) with the
-    /// one field a `wire_procedure` moves.
-    ///
-    /// A method rather than the closure at the call site because `rewired` maps
-    /// over slots and a named field is what the reader of that map wants to see.
+    /// Re-aims the slot with updated graph wiring edges.
     pub(crate) fn re_aim(&mut self, edges: Vec<karakuri_engine::set::Edge>) -> Result<(), ()> {
         self.changed(|at| at.edges = edges)
     }
@@ -1255,26 +1196,7 @@ impl Engine {
         self.deck.estimate_slots(&gpu.device, &gpu.queue);
         self.deck
             .set_residency(EngineSlot(ASKED_TO_PRIME as u8), Residency::Priming);
-        // **The number the governor will spend for this slot**, which since
-        // ADR-0303 is not the same quantity as its measurement.
-        //
-        // This read the measurement alone and could not any more: the
-        // measurement is taken at the size this file names — the preview cell,
-        // which is what a slot is auditioned in — and the governor spends the
-        // *estimate* at the output's size wherever one answers (ADR-0296). A
-        // budget stated in one of those and spent in the other is not a
-        // comparison, and on this machine it is not a small error either: the
-        // reference workload estimates 45 ms at 1280x720 and measures 12 at a
-        // 252x142 cell, so a budget off the measurement puts a single live
-        // slot permanently over it.
-        //
-        // So the budget is taken on the same precedence the governor decides
-        // on — estimate where it answers, measurement where it refuses. That
-        // is not a new policy; it is ADR-0296's, applied to the budget's own
-        // currency so that both sides of the comparison are about one frame.
-        // **Whether that is the right repair is the maintainer's**, and the
-        // two alternatives are in ADR-0303: extrapolating the measurement, or
-        // stating the budget per size.
+        // Compute budgeted cost per slot using build estimate if available, falling back to measurement (ADR-0296, ADR-0303).
         let budgeted = |slot: &HotSwap| {
             slot.estimated_cost()
                 .and_then(Estimate::ms)
