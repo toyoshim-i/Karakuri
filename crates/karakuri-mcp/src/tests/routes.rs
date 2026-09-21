@@ -262,7 +262,7 @@ fn every_operation_operate_takes_stands_where_the_page_says_it_does() {
         "only {} rows with an MCP badge found in {PAGE}",
         routes.len()
     );
-    for row in SPELLED {
+    for row in SPELLED.iter() {
         let title = row.title();
         let (badge, names) = routes
             .iter()

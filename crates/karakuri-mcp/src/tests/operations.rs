@@ -114,7 +114,7 @@ fn every_operation_of_the_vocabulary_is_spelled_here() {
 /// in step by hand.
 #[test]
 fn the_table_and_the_classification_agree() {
-    for row in SPELLED {
+    for row in SPELLED.iter() {
         let (operation, call) = (row.sample)();
         let operable = sayable(&operation) == Sayable::Operable;
         assert_eq!(
@@ -161,7 +161,7 @@ fn the_table_and_the_classification_agree() {
 fn every_operation_operate_takes_round_trips_through_the_wire() {
     let slots = slots();
     let mut checked = 0;
-    for row in SPELLED {
+    for row in SPELLED.iter() {
         let (operation, call) = (row.sample)();
         let Some(make) = row.make else { continue };
         // The sample is the `with` object itself, which is what `make`
