@@ -1,27 +1,12 @@
-//! The questions that go **upward and across**: the parent of a node, the
-//! visible children of a split, where one boundary is, where all of them are,
-//! how a region claims its extent, what a solo is holding, and whether a node
-//! is a view.
-//!
-//! Every one of these was a caller's problem until it was this crate's, and
-//! the first caller to need them wrote a model of its own to answer them —
-//! which is what these are here to stop the second one doing.
-//!
-//! **Most of them are about `visible` rather than `children`.** A divider
-//! index counts the children a split is *showing*, so a test run with nothing
-//! folded cannot tell a visible-child index from a child index, and that is
-//! the exact confusion these methods exist to end. So the arrangement is
-//! folded in the middle of nearly every test below, and the assertion is that
-//! the answer moved with the fold.
+//! Layout tree query tests: node lineage, visible child indexing, boundary positions,
+//! region extent claims, and solo view state across folded and unfolded hierarchies.
 
 mod common;
 
 use common::{console, console_ids, named_console, near, EPS};
 use karakuri_layout::{Axis, Layout, NodeId, Point, Rect, Sizing, Spec};
 
-/// The console's arrangement, solved somewhere roomy. 1000x800 leaves every
-/// region well inside its bounds, so a fold below is what moves things rather
-/// than a clamp.
+/// Returns a solved console layout in an unconstrained viewport (1000x800).
 fn solved() -> Layout {
     let mut l = named_console();
     l.set_viewport(Rect::new(0.0, 0.0, 1000.0, 800.0));

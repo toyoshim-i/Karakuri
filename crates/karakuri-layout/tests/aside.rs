@@ -230,15 +230,8 @@ fn setting_a_node_aside_lays_out_exactly_as_folding_it_does() {
     }
 }
 
-/// **It is never saved, and the wire format did not grow a field.** A saved
-/// arrangement is what the operator arranged; this bit is a function of the
-/// geometry whoever was drawing had at the time, and the next caller to draw
-/// the loaded arrangement works it out again from the space it actually has.
-///
-/// Both halves are asserted, because either alone would pass against a wrong
-/// implementation: a field that is written and ignored on load still puts a
-/// stale answer in the file, and a load that clears the bit but reads the
-/// field still has a format to keep compatible.
+/// Verifies that the set-aside bit is ephemeral and excluded from serialized
+/// arrangements without introducing wire format fields (ADR-0157).
 #[test]
 fn a_saved_arrangement_neither_carries_the_bit_nor_gained_a_field_for_it() {
     let (plain, _) = row();

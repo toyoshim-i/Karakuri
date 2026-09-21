@@ -865,21 +865,11 @@ impl Layout {
     ///    the size it stores, and its siblings get the difference.
     ///    [`Sizing::Flex`] children share what is left in proportion to their
     ///    weights.
-    /// 4. Each child is clamped to its `[min, max]` — where the minimum is
-    ///    also capped by what the child can use, since a minimum is what a
-    ///    node needs *while it has something to show*, and holding it with
-    ///    nothing behind it is holding space the node will leave empty.
-    ///    Clamping changes the total, so this iterates: whoever hit a bound
-    ///    freezes there and the remainder is redistributed among the rest.
-    ///    Each pass freezes at least one child, so it terminates. When nothing
-    ///    flexible is left unfrozen and there is still a discrepancy, the
-    ///    fixed children take it in proportion — which is also why a split
-    ///    with no flexible child at all still tiles its parent rather than
-    ///    leaving a gap. **The cap is on what a node claims, and that branch
-    ///    is what happens to what nobody claimed**, so it is the one place a
-    ///    fixed child scales from its stored size rather than its capped
-    ///    claim: only a `max` stops it growing there, which is ADR-0157
-    ///    unchanged.
+    /// 4. Each child is clamped to `[min, max]`, where `min` is capped to
+    ///    usable content extent. If bounds are hit, constrained children freeze
+    ///    and remaining extent is redistributed iteratively. If no flexible
+    ///    children remain unfrozen, discrepancies are distributed proportionally
+    ///    across fixed children scaled from stored sizes (ADR-0157).
     /// 5. If the viewport is smaller than the sum of minima, layout scales
     ///    down proportionally, floored at zero. Rectangles are never negative.
     ///
@@ -930,15 +920,9 @@ impl Layout {
         Some(axis.slice(self.solved.rects[split.0], start, size))
     }
 
-    /// Every boundary in the arrangement, as the `(split, index)` pair that
-    /// addresses it, splits in the order [`children`](Layout::children) walks
-    /// them.
+    /// Returns an iterator over all boundary `(split, index)` pairs in traversal order.
     ///
-    /// An iterator rather than a `Vec`, because a frame that drew the dividers
-    /// would otherwise allocate to find them. Nothing here reads a rectangle,
-    /// so it does not need a solve; a boundary inside a folded split is listed
-    /// like any other and [`boundary`](Layout::boundary) gives it the zero
-    /// extent everything under a fold has.
+    /// Does not allocate or require layout resolution. Folded boundaries yield zero extent.
     pub fn boundaries(&self) -> impl Iterator<Item = (NodeId, usize)> + '_ {
         (0..self.arrangement.nodes.len()).flat_map(move |i| {
             (0..self.arrangement.placed_count(i).saturating_sub(1)).map(move |k| (NodeId(i), k))
@@ -1175,19 +1159,12 @@ fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f
     usable
 }
 
-/// What child `c` of a split claims of its parent's extent: the size it
-/// stores, or what it can use, whichever is smaller.
-///
-/// Both halves of the cap are this one sentence — see the minimum in
-/// [`solve_split`], which is capped the same way and for the same reason.
+/// Returns child `c`'s extent claim along the split axis, capped to its usable content extent.
 fn claim(s: &Solved, c: usize, size: f32) -> f32 {
     size.max(0.0).min(s.usable[c])
 }
 
-/// The solve, as a function of the arrangement rather than a method on it.
-///
-/// `a` is shared and `s` is exclusive, which is the whole enforcement of
-/// P-0082: there is no path from here to a mutable node.
+/// Solves the subtree rooted at `i` against scratch buffer `s` without mutating arrangement `a` (P-0082).
 fn solve_subtree(a: &Arrangement, s: &mut Solved, i: usize) {
     if a.split_of(i).is_none() {
         return;
@@ -1253,23 +1230,8 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
                 s.sizes[k] = size;
             }
         } else {
-            // Nothing flexible is left unfrozen, so the fixed children take
-            // the discrepancy in proportion — in both directions, because a
-            // split that came up short would otherwise leave a gap its
-            // parent has no other child to fill.
-            //
-            // **This is the one place the claim is the stored size rather
-            // than the capped one, and the reason is that same gap.** A cap
-            // says what a node would *ask* for; here nobody is asking, and
-            // the split is disposing of space no child claimed. Scaling the
-            // capped claims instead would divide it more sensibly right up
-            // until every unfrozen child's claim is zero — a split whose
-            // children are all folded away is exactly that — and then there
-            // is nothing to scale, the pool goes nowhere, and the hole in the
-            // middle of the parent is permanent until something is unfolded.
-            // So the cap is on what a node claims, and this branch is what
-            // happens to what nobody claimed: only a `max` stops a child
-            // growing here, which is ADR-0157 unchanged.
+            // Distribute discrepancy proportionally across fixed children when no flexible
+            // children remain unfrozen, scaling from stored sizes up to maxima (ADR-0157).
             let pool = (avail - frozen_sum).max(0.0);
             let scale = if stored > 0.0 { pool / stored } else { 0.0 };
             for k in 0..n {
@@ -1291,11 +1253,7 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
                 continue;
             }
             let c = a.child(split, k);
-            // The declared minimum, capped by what the child can use — the
-            // same sentence as the claim above. A node that says it needs 200
-            // is saying so while it has 200 worth of content; with only a
-            // 72-tall row left visible inside it, holding 200 is holding
-            // space it will leave empty.
+            // Declared minimum capped by usable content extent to avoid reserving empty space.
             let min = a.nodes[c].min.max(0.0).min(s.usable[c]);
             let max = a.nodes[c].max;
             if s.sizes[k] < min {
