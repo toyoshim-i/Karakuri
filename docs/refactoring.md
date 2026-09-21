@@ -71,7 +71,7 @@ Modularize the 16 remaining files exceeding 1,500 lines:
 | **P92** | `karakuri-mcp::src::tests` | 1,686 | Decompose MCP server and tool handler unit test suites | **COMPLETED** |
 | **P93** | `karakuri-console::hover::probes` | 1,667 | Separate static TIPS definitions from runtime probe hit-testing algorithms | **COMPLETED** |
 | **P94** | `karakuri-mcp::spelled::table` | 1,652 | Modularize schema dictionary and spelling lookup tables into `table/` submodules | **COMPLETED** |
-| **P95** | `karakuri-engine::tests::governor` | 1,617 | Partition frame pacing, timing governor, and rate-limiting test suites | **PLANNED** |
+| **P95** | `karakuri-engine::tests::governor` | 1,617 | Partition frame pacing and timing governor tests into `pure.rs` and `deck.rs` | **COMPLETED** |
 | **P96** | `karakuri-console::panel` | 1,541 | Separate panel layout geometry arithmetic from coordinate transformations | **PLANNED** |
 | **P97** | `karakuri-engine::tests::sources` | 1,540 | Decompose shader source loading, preprocessing, and error recovery tests | **PLANNED** |
 | **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **PLANNED** |
