@@ -97,12 +97,7 @@ pub struct SetSummary {
     /// time of its own. See `Store::list_sets`.
     pub written: std::time::SystemTime,
     pub nodes: Vec<NodeSummary>,
-    /// Why this Set's file could not be read, where it could not be.
-    ///
-    /// Listed anyway, and said out loud. A file in `sets/` that will not parse is
-    /// something an operator has to be told about; dropping it from the listing
-    /// would answer *what have I kept* with a Set missing, and reporting it with an
-    /// empty node list would say it holds nothing.
+    /// Error description if this Set file failed to read or parse.
     pub unreadable: Option<String>,
 }
 
@@ -171,13 +166,7 @@ pub fn summarise(store: &Store) -> Result<Vec<SetSummary>, StoreError> {
     Ok(out)
 }
 
-/// When a Set was written, spelled the one way every listing spells it.
-///
-/// Local, for the reason [`crate::history::stamped_id`] is local: the answer
-/// has to be the one the person would say out loud, and a UTC clock is the
-/// wrong one for half the world and half the day. To the second, because that
-/// is as fine as a filesystem mtime is worth reading and finer than anybody
-/// scanning a column wants.
+/// Formats a filesystem timestamp in local time as `%Y-%m-%d %H:%M:%S`.
 pub fn written_at(at: std::time::SystemTime) -> String {
     chrono::DateTime::<chrono::Local>::from(at)
         .format("%Y-%m-%d %H:%M:%S")
@@ -249,14 +238,7 @@ pub struct SavedNode {
 pub struct Sources(pub Vec<SavedNode>);
 
 impl Sources {
-    /// How many nodes this names. Zero is a slot with nothing behind it — see the
-    /// surface's `Live::save_set`, which refuses rather than writing a file
-    /// describing no Set.
-    ///
-    /// `pub(crate)` where [`Sources::is_empty`] is `pub`, which is the widening
-    /// rule and not an oversight: the surface asks *whether* there is anything to
-    /// save and this crate's own [`crate::accepted_save`] asks *how many*, to say
-    /// "saving 3 nodes" out loud.
+    /// Returns the number of saved nodes. Zero indicates no nodes.
     pub(crate) fn len(&self) -> usize {
         self.0.len()
     }

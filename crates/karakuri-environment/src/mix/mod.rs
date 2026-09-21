@@ -1,167 +1,9 @@
-//! The mix, through the record stream on the way.
+//! Mix state translation, recording, and application.
 //!
-//! The faders, the blend modes, residency and the output look are the state an
-//! operator moves during a performance and the only state the engine had no
-//! record vocabulary for at all, and the gap was written down rather than
-//! papered over. A
-//! session that replayed everything else would replay the material and not the
-//! *performance*: the same Sets, on the same beat, all at whatever gain they
-//! happened to start at, with nothing ever going on or off air.
-//!
-//! ```text
-//!   a key press ─→ Record::Gain      ─┐
-//!                  Record::Opacity    │
-//!                  Record::Blend      │
-//!                  Record::Residency  ┼→ Change ─→ Deck / Present
-//!                  Record::Look      ─┘
-//! ```
-//!
-//! Built and read back, never applied directly, which is the same
-//! arrangement `karakuri-environment`'s `audio.rs` has and is there for the
-//! same reason: the path the
-//! engine is driven through is the record's rather than one that happens to
-//! agree with it. A decode that only a test exercises is a decode that is
-//! correct until the day it matters.
-//!
-//! ## The `String`s here are on the frame path, and this is what they cost
-//!
-//! This used to say they were not: a fader moved when a hand moved it, so a
-//! record's `String` was a key press's allocation. The MIDI map ended that.
-//! `Live::run_surface` is called from `Live::frame`, and `crate::midi` puts the
-//! number on it — *"A fader sweep is several hundred messages, this runs inside
-//! `Live::frame`"* — so a swept control's record is built once per message, on
-//! the render thread.
-//!
-//! What allocates is the record and nothing either side of it.
-//! `karakuri_midi::map` says of its own routing that nothing there allocates,
-//! every operation a map line can name carrying scalars only, and
-//! `session::Recorder::push` allocates nothing and never blocks. Of the four
-//! continuous targets a map line can reach, `gain` and `opacity` become records
-//! of scalars and touch no heap at all. The other two become a record carrying
-//! a name — `exposure` writes `Record::Look` with the tone map operator's, and
-//! `mask-position` writes `Record::Mask` with the shape's — each a `String`
-//! copied from a `&'static str` of at most eight bytes. `Live::record` clones
-//! the record for the recorder, so with `--record-session` attached it is two
-//! such allocations per message and otherwise one.
-//!
-//! What bounds it is the message count, not the value range. A control
-//! change is 7-bit, so a sweep passes through at most 128 *distinct* values —
-//! but nothing between the port and here drops a repeat, and a knob held
-//! against its stop keeps sending, so what arrives is however many messages the
-//! device sends: a few hundred a second, which is the figure `midi::INBOX` is
-//! sized from. That is a few hundred eight-byte allocations a second at worst,
-//! twice that while recording, each freed in the same frame or on the writer
-//! thread, with no lock and nothing unbounded in it.
-//!
-//! Bounded is not the same as allowed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would* cost and are why:
-//! [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
-//! says the frame path allocates no heap memory, with no clause for a small
-//! one, so the question a byte-sized allocation per message raised was settled
-//! by taking away the *per message* rather than by writing the clause.
-//! `crate::midi`'s router coalesces a continuous control per frame — the
-//! last value a fader sent within a frame is the one that becomes an
-//! operation — so a sweep builds one of these records a frame, and two only
-//! while recording. A pad is untouched, because two presses in one frame are
-//! two things that happened
-//! (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`, which
-//! also carries what the record stream loses and the two alternatives it
-//! turned down: moving the engine's list of names into `karakuri-store`, and
-//! an exception in the first rule with no measured threshold behind it).
-//!
-//! The numbers are kept rather than deleted because they are the reason the
-//! coalescer exists, and whoever removes it should meet them.
-//! `karakuri-environment`'s `audio.rs`'s
-//! record is reused in place because that one was on the frame path from the
-//! start; this one arrived on it later and is now on it a frame at a time.
-//!
-//! ## What of this moved to the vocabulary, and what did not
-//!
-//! `gain_record` and `preview_record` are gone, and they are gone rather
-//! than deprecated: their whole content was `Record::Gain { slot, value }` and
-//! a `preview` record, and the first is now what
-//! `karakuri_operation_record::written` answers for `Operation::SetGain`. Two
-//! derivations of one record is the drift this module was written to end, in
-//! miniature, so the second one went. The preview half went further:
-//! ADR-0240 retired *Choose what the output shows* and the record with it —
-//! switching a preview is a bay-internal move rather than an engine one, so
-//! there is nothing to record and no `Change` to decode into.
-//!
-//! `opacity_record`, `blend_record` and `residency_record` went the same way,
-//! and what moved was not a conversion but a reading of what a gesture is made
-//! of. They were the last three records this program built twice, and their
-//! second caller was `crossfade` and `wipe` — one operation each and four or
-//! five records each. That count is why the *gestures* cannot convert; it was
-//! never a reason their parts could not. Silencing the incoming deck is
-//! `Operation::SetOpacity`, forcing `over` is `Operation::SetBlendMode` and
-//! putting it on air is `Operation::SetResidency`, whatever the gesture around
-//! them still owes. So each gesture asks `Live::operate` for the parts that are
-//! decided and builds only the parts that are not, and the second derivation is
-//! gone rather than kept in step by a test.
-//!
-//! `mask_record` went the same way, and it is the one that needed a page
-//! change first. It was `wipe`'s and had no operation at all; the mask now
-//! has two — a shape and a position, because a row carrying both could only
-//! ever be reached by a press
-//! (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`)
-//! — so the gesture asks `Live::operate` for each of them and the hand-built
-//! record is gone. It writes two `Record::Mask` where it wrote one, which is
-//! what routing it honestly costs: each row writes the record whole.
-//!
-//! `select_record` and `transition_record` went the same way, and the
-//! second of them went in two steps. They were `cycle_renderer`'s,
-//! `fade_slot`'s and `wipe`'s, held while `Operation::FadeDeck`,
-//! `Operation::Crossfade` and `Operation::SelectRenderer` needed the grid
-//! quantised onto a musical instant plus the quantum and the length
-//! `Operation::SetTransition` sets and no record carries. The quantum and
-//! the length turned out not to be missing but unassigned, and they are the
-//! surface's: `karakuri_operation_record::Current` carries them the way it
-//! carries the look and the mask, [`current_transition`] is the reading that
-//! hands them over, and the three operations write their own records now. A
-//! selection is one record, so `select_record` had nothing left to be and went
-//! then; `transition_record` stayed one caller longer, because
-//! `Operation::Wipe` was still owed the shape its front takes and its soft
-//! edge. Those turned out to be unassigned too. The shape is the same
-//! operation's third setting and travels the same road — [`current_transition`]
-//! carries it, which is why that function takes a `MaskKind` and an angle — and
-//! the soft edge is read off the deck by [`current_mask`], which was already
-//! the reading `Operation::SetMaskShape` takes. So `wipe` is one `operate` call
-//! and this function has no caller left.
-//!
-//! What `wipe` did keep is the one decision a gesture was making rather than
-//! a record it was building, and it kept it for a moment: it wrote the blend
-//! mode only where the slot was still at the mode a slot starts in, and the
-//! put-on-air only where the slot was not already live, so `m` in front of `c`
-//! left the operator's mode alone. Routing the gesture took a deck to ask away
-//! from it. [`current_mix`] is the reading that hands the answer over, and the
-//! condition now lives beside the records it governs in the conversion's own
-//! `Wipe` arm.
-//!
-//! `look_record` builds the launch look, which is a complete look rather than
-//! an ask. `canvas_record` names a record no operation writes. Each of them
-//! goes the day its operation's conversion is settled — see ADR-0194.
-//!
-//! `transport_record` is the one that has already gone, and it did not get
-//! deleted. It was `cycle_sync`'s, for an anchor clamp the vocabulary was
-//! thought to have no way to apply; `Operation::SetSync` now converts, so `y`
-//! routes through `Live::operate` like every other settled key and this
-//! function has no gesture behind it. What it is now is the engine's side of
-//! that record — a `Transport` as the `Record::Transport` that carries it —
-//! which is exactly what [`current_tempo`]'s test needs to hold the conversion
-//! against `Transport::engaged`. A derivation kept as the thing a second
-//! derivation is checked against is not a second derivation.
-//!
-//! ## Opacity, which used to be deliberately not here
-//!
-//! `Deck::set_opacity` existed with no key, no flag and no record, and this
-//! module said so: a record type for a control the operator cannot move is one
-//! more record nobody writes, which is the condition it exists to end rather
-//! than extend. It got a record when it got a control, and it got a control
-//! when [`karakuri_engine::deck::Blend`] made it mean something a gain does not
-//! — the fader across the blend rather than the level the material arrives at.
-//! Under `add` the two multiply together and a stream carrying either would
-//! replay the same; under `over` one dims a deck slot's layer and the other
-//! stops it hiding what is beneath.
+//! Bridges live performance gestures (faders, blend modes, residency, look, mask transitions)
+//! to engine updates via [`karakuri_operation_record::Record`].
+//! Continuous controls coalesce per frame (ADR-0207, Principle 0091).
+//! Translates between engine types (`karakuri-engine`) and UI/operation types (`karakuri-operation`).
 
 use karakuri_engine::binding::Curve;
 use karakuri_engine::chain_swap::ChainSlot;
@@ -237,22 +79,7 @@ pub enum Change {
         slot: usize,
         level: Residency,
     },
-    /// A parameter an operator moved on a slot that is playing. The one change here
-    /// that reaches inside a Set rather than moving the deck around it, and the one
-    /// that takes a `Vec`.
-    ///
-    /// One record, one or three writes, because a parameter is driven one component
-    /// at a time and a `vec3` value is one line that names three of them
-    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)).
-    /// Expanded here rather than by the applier for the reason every other variant
-    /// is decoded here: two appliers would be two answers. Expanded without asking
-    /// what the Set declares, which is where this parts company with
-    /// `setfile::from_lines` — that reader has just read the `slot` records and has
-    /// the procedures in hand, and this one is looking at a Set that is already on
-    /// air and holds none of them. A component key nothing declares lands as
-    /// `Ok(0)` from `karakuri_engine::deck::Deck::write_param`, which the applier
-    /// says out loud; the width the record wrote is the only thing that could name
-    /// the components, and it does.
+    /// Parameter modification on a playing slot, expanded into individual component writes (ADR-0268).
     Ride {
         slot: usize,
         writes: Vec<karakuri_engine::ParamWrite>,
@@ -521,29 +348,8 @@ pub fn install_chain(
     Ok(())
 }
 
-/// The engine's list, as the vocabulary's — one function per list, and the one
-/// place the two copies of each are made to agree.
-///
-/// `karakuri-operation` owns a copy of every list a destination is drawn from,
-/// which is the cost P-0090 says the vocabulary pays: *"The two rules — be
-/// engine-neutral, and have no toggles — are not jointly satisfiable unless the
-/// vocabulary owns the lists."* A copy needs somewhere the two meet, and this
-/// is that place: this package is where the two are seen together, because a
-/// record is what the engine is driven through here and the vocabulary is what
-/// every surface asks in.
-///
-/// `From` impls, which is what ADR-0180 said, are not available here. Both
-/// types are foreign to this package — `Blend` is `karakuri-engine`'s and
-/// `BlendMode` is `karakuri-operation`'s — so the orphan rule refuses the impl
-/// and there is nothing to be done about it short of one of those two crates
-/// depending on the other, which is the thing neither of them may do. Plain
-/// functions, then, exactly as the panel program's own `blend_mode` already is.
+/// Converts an engine [`Blend`] mode to the corresponding vocabulary [`karakuri_operation::BlendMode`].
 /// See ADR-0194.
-///
-/// A match apiece, so a value added to the engine stops the build here rather
-/// than reaching a surface that draws a chip nothing can read. That is
-/// `Blend::name`'s argument and `residency_wire_name`'s, applied to a list
-/// instead of to a spelling.
 pub fn blend_mode(blend: Blend) -> karakuri_operation::BlendMode {
     match blend {
         Blend::Add => karakuri_operation::BlendMode::Add,
@@ -1346,16 +1152,7 @@ pub const TONEMAPS: [TonemapOp; 4] = [
     TonemapOp::AgX,
 ];
 
-/// Both of an operator's spellings: the one a stream and a flag use, and the
-/// one a human reads.
-///
-/// An exhaustive match, and that is the point. There were two hand-written
-/// lists — `--tonemap`'s parser and `op_name`'s display arm — and the `look`
-/// record wanted a third. A lookup over a table would have been one list but
-/// would still answer for an operator missing from it, by falling back to
-/// something plausible; a match does not compile until every operator has both
-/// names. Everything below derives from here, parsing included, so the two
-/// directions cannot disagree.
+/// Returns the canonical wire name and display name for a tonemap operator.
 fn spellings(op: TonemapOp) -> (&'static str, &'static str) {
     match op {
         TonemapOp::Clamp => ("clamp", "clamp"),

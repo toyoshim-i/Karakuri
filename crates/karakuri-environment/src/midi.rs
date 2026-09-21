@@ -1,121 +1,12 @@
-//! The surface, on the way to the record stream.
+//! MIDI surface input and output routing.
 //!
-//! `karakuri-midi` says what the operator asked for; this says what that is
-//! worth. What arrives is a [`karakuri_operation::Operation`] — the same name
-//! a key press and a console fader carry — so a control surface can do nothing
-//! a keyboard cannot and a session recorded from one replays with neither
-//! attached.
+//! Maps hardware MIDI messages to [`karakuri_operation::Operation`] commands and
+//! converts deck state back into feedback messages for LED/fader controllers.
 //!
-//! ```text
-//!   a knob ─→ Message ─→ Router ─→ Operation ─→ Live::operate
-//!                                                  └→ written() ─→ Record ─→ Deck
-//! ```
-//!
-//! The exhaustiveness moved and did not go. This used to be one match over
-//! eight `Action`s in the CLI's `Live` — a plain name rather than a link, since
-//! ADR-0215 keeps the window and the device with the surface and this module is
-//! one crate over from it now — and *a control added to one and not the other
-//! does not compile* was its whole claim. Against a fifty-variant
-//! vocabulary that claim would be false, and the guarantee lives where it is
-//! now true: `karakuri_operation_record::written` is one exhaustive match over
-//! all fifty, so an operation nobody has said what to do with stops the build
-//! there rather than reaching a router arm nobody wrote
-//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
-//!
-//! ## The map is a file and is not in the stream
-//!
-//! Which knob is which belongs to the hardware in the room. Two rooms with two
-//! surfaces play the same session; replaying one room's wiring in the other
-//! would be replaying the furniture. It is the same argument `residency` makes
-//! from the other end, where the *request* is recorded and the effective level
-//! is recomputed on whatever machine is running.
-//!
-//! ## Two halves, and the tested one is the one with decisions in it
-//!
-//! [`Router`] owns the map, the slot check and what gets said out loud. It
-//! takes messages and returns actions, so it is a pure function of what arrived
-//! and needs no port, no device and no window — which is the whole reason it is
-//! not inside [`Surface`]. `Surface` is a `Router` with a port in front of it
-//! and has nothing in it to be wrong about.
-//!
-//! ## Two tiers, and two ways to open a port
-//!
-//! Which map is [`map_for`]: the operator's own under
-//! `<store>/maps/default.map`, then the `examples/surface.map` that ships, and
-//! `None` for a machine with neither. That is ADR-0227's two tiers, and it is
-//! the one place that record found the shape ragged — a map had a preset tier
-//! and no operator tier at all, being *"whatever path they hand to
-//! `--midi-map FILE`"*.
-//!
-//! Which port is the difference between the two constructors, and it is
-//! the difference between the two programs rather than a convenience.
-//! [`Surface::open`] takes a selector and is the command line's: a flag is a
-//! contract made before the run, so asking for a port and getting another is a
-//! run that is not the run that was asked for. [`Surface::first`] takes
-//! whatever is plugged in and is the panel's, for the reason `crate::audio`'s
-//! default input is the panel's: an instrument with somebody standing in front
-//! of it opens something rather than nothing, and what it opened is a sentence
-//! it says out loud.
-//!
-//! [`Surface::first`] also takes a wake, because the panel's loop sleeps —
-//! see [`karakuri_midi::Port::waking`], which carries that argument whole.
-//!
-//! ## Unmapped messages are printed, and that is `karakuri-cli`'s learn mode
-//!
-//! An unmapped message prints the line that would map it, so discovering a
-//! surface from the command line is turning every knob once and pasting the
-//! output into a file. The panel has a real one now — arm `learn`, point
-//! at a control, move a knob, and [`Surface::learn`] writes the line into the
-//! operator's own map
-//! (`docs/adr/0336-a-learn-is-a-map-edit-and-the-tips-midi-line-is-the-live-map.md`).
-//! The printed line stays, because `karakuri-cli` has no pointer to point with
-//! and because it is what tells an operator what their controller sends at
-//! all.
-//!
-//! ## A continuous control says one thing per frame, and a pad says everything
-//!
-//! A sweep is several hundred messages and a frame renders once, so a fader's
-//! earlier values are positions it passed through rather than places it was.
-//! [`Router::emit`] keeps the last value each continuous control sent within a
-//! frame and drops the ones before it — which is what takes a record's
-//! `String` off the frame path on `exposure` and `mask-position`, where
-//! building one per message was an allocation per message inside `Live::frame`
-//! and the first rule this repository has says there is none
-//! (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`, and
-//! `crate::mix` carries the measurement).
-//!
-//! A pad is untouched. Two presses in one frame are two operations that
-//! both mean something, and the line between the two halves is
-//! `karakuri_midi::Map::is_continuous` rather than a list kept here.
-//!
-//! ## The surface is written to as well, and the frame does not wait for it
-//!
-//! [`Router::shown`] is the other direction: every mapped control's current
-//! value, read back through [`Feedback`] and turned into wire messages, so a
-//! surface's LEDs and motorised faders follow the deck. It runs on the frame
-//! the change lands — the drain and the send are one pass — and it sends
-//! only what *moved*, which is the difference between it and writing the whole
-//! map out sixty times a second.
-//!
-//! Nothing on the frame path blocks (P-0094): what [`Surface::show`] does
-//! with the bytes is `karakuri_midi::Out::send`, a bounded queue to a thread
-//! that owns the connection, dropping and counting when it is full — ADR-0067's
-//! shape, and `karakuri_midi::device`'s own documentation carries why a bound
-//! is right for this stream and not for a session's.
-//!
-//! And nothing is written into the record stream. A surface being shown
-//! where the deck is produces no `Operation` and no `Record`: the wire is the
-//! only thing that changes, so a session recorded from a controller still
-//! replays with neither controller nor map attached
-//! ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
-//!
-//! Everything said here is said once per control, and that is not tidiness.
-//! A fader sweep is several hundred messages, this runs inside `Live::frame`,
-//! and `eprintln!` takes a lock and issues a write — so a line per message is a
-//! blocking I/O storm on the render thread, which is the first rule this
-//! repository has. The same dedup covers the slot check for the same reason:
-//! `cc 1 -> gain 4` on a deck of four is the likeliest typo there is, since
-//! `ch` on the line above it *is* one-based.
+//! - Continuous controls coalesce per frame (ADR-0207).
+//! - 14-bit CC pairs combine MSB and LSB values.
+//! - Learn mode edits or appends to the active map file (ADR-0336).
+//! - Feedback updates send non-blocking delta changes on frame commit (Principle 0092, Principle 0094).
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -133,20 +24,8 @@ use karakuri_midi::{Control, Echo, Half, Map, Out, Port, Shown};
 pub use karakuri_midi::Message;
 use karakuri_operation::{Operation, ParamAt, ParamValue};
 
-/// A deck's published interface, asked what is at a position — the only
-/// readback on this route, and the reason it is here rather than in
-/// `karakuri-midi`.
-///
-/// A `param` line holds a position and never a key (ADR-0268): *knob 3 is knob
-/// 3 whatever Set is loaded*. Turning position 3 into a `ParamAt` is a question
-/// about the Set that is in the deck right now, so `karakuri-midi` answers
-/// [`karakuri_midi::Map::parameter`] and stops, and this is what finishes it.
-///
-/// A trait rather than the deck itself, and that is what keeps [`Router`]'s
-/// tests free of a device: `karakuri_engine::deck::Deck` cannot be built
-/// without one, and every decision on this route is about what arrived rather
-/// than about what is running. [`Decks`] is the real implementation and is four
-/// lines.
+/// Published interface query for resolving 1-indexed MIDI parameter positions
+/// to deck nodes and value ranges (ADR-0268).
 pub trait Interface {
     /// The control at `position` — counting from one, the number the Inspector
     /// draws — of the deck in `slot`, and the range the Set published it over.
@@ -279,11 +158,7 @@ fn layer_of(kind: karakuri_ir::Kind) -> karakuri_operation::Layer {
 /// The map, the slot check, and what has already been said. No port.
 pub struct Router {
     map: Map,
-    /// What this frame has to say, for the caller to say. Collected rather than
-    /// printed, so that "once per control, not once per message" is something a
-    /// test can read rather than something a reader has to trust — and `eprintln!`
-    /// inside a frame is what the rule is about in the first place. Allocates only
-    /// on a first discovery, of which there are at most a surface's worth.
+    /// Notices generated during routing in the current frame, deduplicated per control.
     notices: Vec<String>,
     /// What has been reported as unmapped or out of range: `(channel, number,
     /// is_cc)` for the first, `slot` for the second. Two sets because they are two
@@ -297,30 +172,9 @@ pub struct Router {
     /// controls has five dead lines against one with four, and it is worth exactly
     /// one sentence each.
     seen_no_control: HashSet<(u8, u16)>,
-    /// Where in `out` each continuous control this frame already spoke put its
-    /// operation, so a later message from the same control overwrites it instead of
-    /// adding one. Cleared at the top of every [`Router::route`]; see
-    /// [`Router::emit`], which is where the whole of coalescing is.
-    ///
-    /// A `Vec` with room for the whole map and a linear scan, not a `HashMap`: a
-    /// map's continuous controls are single figures, and a `HashMap` that had to
-    /// grow would allocate on the frame path — which is what this field exists to
-    /// stop. The capacity is an upper bound rather than a guess, because every key
-    /// here comes from a target and a target comes from an entry.
+    /// Output index of coalesced continuous control operations in the current frame.
     coalescing: Vec<(Continuous, usize)>,
-    /// The MSB last seen for each 14-bit control, keyed by the channel it arrived
-    /// on and the pair's own controller number (`karakuri_midi::Wide::control`).
-    ///
-    /// The one piece of state a `cc14` pair needs, and it is here because
-    /// `karakuri_midi::Map` is a pure function of one message: the two halves are
-    /// two messages with a frame boundary free to fall between them. See that
-    /// module's *A fader is 128 positions, or 16384*, which carries the lone-MSB
-    /// rule this holds the state for.
-    ///
-    /// A `Vec` with the map's own length reserved and a linear scan, for
-    /// `coalescing`'s reason exactly: a map's 14-bit controls are single figures
-    /// and a `HashMap` that had to grow would allocate on the frame path. It is
-    /// pushed to once per control per run and read after that.
+    /// Cached MSB values for 14-bit CC pairs, keyed by (channel, controller).
     halves: Vec<((u8, u8), u8)>,
     /// Every mapped control, as something to show a surface — the map read the
     /// other way, built once because it allocates and this is read inside a frame.
@@ -568,31 +422,7 @@ impl Router {
         out.push(operation);
     }
 
-    /// Which resolution this message is read at, holding the MSB half of a
-    /// 14-bit pair as it goes past.
-    ///
-    /// The rule is `karakuri_midi::map`'s and this is where its one piece of
-    /// state lives:
-    ///
-    /// - A 7-bit line is [`Paired::Seven`] and nothing is held.
-    /// - An MSB half is held *and* answered [`Paired::Seven`], so it moves
-    ///   the control coarsely at `msb / 127` — both ends of the fader exact,
-    ///   which is what keeps a surface that sends no LSB from being a fader
-    ///   that cannot quite arrive.
-    /// - An LSB half with an MSB held is [`Paired::Wide`], carrying
-    ///   `(msb << 7) | lsb`.
-    /// - An LSB half with nothing held is [`Paired::Lone`] and moves
-    ///   nothing: there is nothing to refine yet.
-    ///
-    /// Nothing waits and nothing is timed. Every message that arrives is
-    /// acted on as it arrives, so no fader is left between two values by a
-    /// pair that did not finish — which is why there is no deadline here and
-    /// no clock to hang one on.
-    ///
-    /// The channel is part of the key. Two surfaces on two channels
-    /// sending the same pair of controller numbers are two faders, and a map
-    /// line that named no channel maps both of them; holding one MSB for the
-    /// two would refine each with the other's top bits.
+    /// Resolves value resolution for a message, tracking MSB state for 14-bit CC pairs.
     fn paired(&mut self, message: Message) -> Paired {
         let Some(wide) = self.map.wide(message) else {
             return Paired::Seven;
@@ -721,36 +551,7 @@ impl Router {
     }
 }
 
-/// The deck an operation names, if it names one.
-///
-/// The seven arms are every operation a map line can produce that names a deck,
-/// and `karakuri_midi::map`'s `parse_target` is that list — `cc -> exposure`
-/// and `note -> tap` name no deck, and the other forty-one operations have no
-/// spelling in the grammar at all. The wildcard is what the vocabulary being
-/// fifty wide costs here, and it is safe rather than merely convenient: the
-/// record path is the backstop. A slot this deck does not hold is refused by
-/// `mix::change` with [`crate::no_such_slot`] — this very sentence — and
-/// nothing moves, where the old `Action` path indexed a `Vec` directly and
-/// panicked on the render thread.
-///
-/// So what this buys is not safety but silence: the refusal is said once per
-/// slot per run rather than once per message, and `cc 1 -> gain 4` on a deck of
-/// four is the likeliest typo a map has.
-///
-/// `WriteParam` is the seventh and it arrives already checked.
-/// [`Router::resolved`] refuses a deck this deck does not have before it asks
-/// the interface for anything, so this arm never catches one — it is here for
-/// the *coalescing* key, which is what `deck_of` is asked for a second time:
-/// two knobs on two decks' parameters must not collapse into one operation, and
-/// a `None` here would collapse them.
-///
-/// `SetMaskPosition` is here because for it the backstop is not silent. The
-/// other five reach `mix::change` and are refused once; a mask operation is
-/// stopped a step earlier, at `Live::operate`, which cannot read the mask of a
-/// slot the deck does not hold and answers `Owed::NotRead` — and `operate`
-/// prints that, every time. On a fader sweep against a mistyped slot that is a
-/// blocking write per message inside `Live::frame`, which is the exact cost
-/// this router exists to keep off the frame path.
+/// Returns the deck index an operation targets, or `None` if it targets no deck.
 fn deck_of(operation: &Operation) -> Option<usize> {
     match operation {
         Operation::SetGain { deck, .. }
@@ -818,37 +619,8 @@ pub fn map_for(store: &Path, presets: Option<&Path>) -> Option<std::path::PathBu
     shipped.is_file().then_some(shipped)
 }
 
-/// What a learned map file holds afterwards — the half of [`Surface::learn`]
-/// that has no device and no disk in it.
-///
-/// `held` is what the operator's map file already says, or `None` where there
-/// is none yet; `seed` is the map in force, written out, for that case.
-///
-/// # It replaces the knob's own line and appends everything else
-///
-/// This was an append and nothing else, and the test said why not. A re-learn
-/// of one knob left both lines in the file; `Map::parse`'s *the later line
-/// wins* means the map is still right, but it also reports the shadowed line —
-/// so a knob learned five times printed four complaints on every start, about a
-/// file the operator never wrote by hand. The complaint is correct and the file
-/// is what was wrong.
-///
-/// So a line whose left-hand side is this same message is replaced where it
-/// sits, and a knob nothing is mapped to is appended. What that buys beyond
-/// silence is that the file does not grow on a gesture an operator will make
-/// dozens of times in a session, and that a learned line stays where they last
-/// saw it.
-///
-/// Everything else in the file is bytes. Comments, blank lines, the order of
-/// the rest, a line for another knob — none of it is parsed, re-emitted or
-/// moved. The shipped map an operator starts from is two-thirds prose
-/// explaining what a line means, and rewriting the file from the table would
-/// turn the one document that teaches the format into forty bare lines on the
-/// first press.
-///
-/// Split out to be tested, which is the only way this can be: a [`Surface`]
-/// cannot be built without a port, and *what a learn does to a file* is the
-/// half worth checking on every machine.
+/// Updates map text with a newly learned binding, replacing existing mapping in-place
+/// or appending to the end if not previously present.
 fn appended(held: Option<String>, seed: &str, key: &str, line: &str) -> String {
     let mut text = held.unwrap_or_else(|| seed.to_owned());
     let wanted = squashed(key);
@@ -960,24 +732,9 @@ impl Surface {
         Ok(surface)
     }
 
-    /// Open the first input there is, and say nothing out loud.
+    /// Opens the default available MIDI input port with a wake callback for background processing.
     ///
-    /// [`Surface::open`] is for a program told which port to take before the run,
-    /// and it prints its own line because a command line has already gone past.
-    /// This is for one with somebody standing in front of it: it takes whatever is
-    /// plugged in — [`karakuri_midi::Port::open`]'s empty selector — and hands the
-    /// caller back the map's parse notes to put in its own legend. It is
-    /// `crate::audio`'s `default` one door along, and the argument is the same: a
-    /// surface an operator plugged in and a program that waited to be told about it
-    /// are not the same instrument.
-    ///
-    /// `wake` is called once per message on the MIDI thread. A caller whose loop
-    /// sleeps has nothing else to tell it a knob moved; see
-    /// [`karakuri_midi::Port::waking`], which is where that whole argument is.
-    ///
-    /// Returns the surface and the map's complaints, in order. Both are meant to be
-    /// used — a caller that dropped the second would leave an operator pressing a
-    /// pad that never loaded, with nothing said.
+    /// Returns the opened surface and any map parse warnings.
     pub fn first(
         map_path: Option<&Path>,
         wake: impl Fn() + Send + 'static,

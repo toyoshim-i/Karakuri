@@ -423,21 +423,8 @@ fn what_a_wipe_schedules_decodes_back_onto_the_masks_front() {
     );
 }
 
-/// A wipe onto a deck the operator has already moved leaves it where they put
-/// it, which is the affordance `m` in front of `c` is, checked where both
-/// halves of it can be seen at once.
-///
-/// `karakuri-operation-record` holds the same statement about the records; this
-/// holds it about the deck, which is the half that crate cannot see. A wipe
-/// under `max` is a wipe *on* rather than a wipe *over* — a different picture
-/// and a legitimate one — and the gesture that decides whether it survives is
-/// the one this module hands the reading to
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-///
-/// Decoded rather than counted, because what is at stake is a `Change::Blend`
-/// reaching the deck: a record that decodes to *the mode is `over`* is the mode
-/// being taken back from the hand that set it, whatever the list it arrived in
-/// was.
+/// Verifies that applying a wipe transition preserves the user's active blend mode
+/// on the destination deck. See Principle 0094.
 #[test]
 fn a_wipe_leaves_the_mode_the_operator_chose_on_the_deck() {
     use karakuri_operation_record::Written;

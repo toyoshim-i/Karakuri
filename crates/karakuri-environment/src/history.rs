@@ -1,93 +1,8 @@
-//! Every version that compiled, kept where a person can find it.
+//! Procedure edit history and snapshot tracking.
 //!
-//! # What this is for
-//!
-//! An edit replaces a procedure with no backup, whoever made it. A hand at an
-//! editor and a model over MCP reach the same file through the same path, and
-//! the version that was there is gone. This keeps it.
-//!
-//! The gate is compiling, not landing. A build that compiled and cost too
-//! much to run is in here like any other, and the version *before* it is
-//! exactly the kind of version worth going back to — it was a real attempt and
-//! something about it was right, and landing it is one of the three ways out of
-//! a slot the watchdog stopped (ADR-0316). What the session stream does *not*
-//! have is a version that compiled and never reached a slot, because
-//! `Record::Procedure` only names what reached the screen.
-//!
-//! # A chain is a node, and walking it is a listing
-//!
-//! A chain of snapshots per slot, layer and renderer is what a surface offers
-//! a walk over, and what an operator saves from once they find the one they
-//! liked. [`list`] is the reading half and it is a listing, on the same
-//! terms `karakuri_store::Store::list_sets` is one — *what versions has this
-//! had* is a list, landing on one is a load, and neither word is *undo*. What
-//! does not exist is the surface: no control names a version, and saving to a
-//! user preset is `--save-set`'s neighbourhood. The snapshots have to be taken
-//! while the editing is happening or there is nothing to list later.
-//!
-//! # A version is filed under the Set the slot was running
-//!
-//! ```text
-//! <store>/history/2026/08/16/143052-271_slot0_L4_beat_strokes@star_vortex.kir
-//! ```
-//!
-//! A chain is still `(slot, layer, index)` and that is no longer the whole
-//! address. The same slot holds a different Set after a library load, so
-//! without the id the two sides of that load are one chain, and *what versions
-//! has this Set had* is a question these files could not be asked at all.
-//!
-//! It cost an argument rather than a design, because every route that edits
-//! is addressed by slot. [`crate::mcp`]'s `write_procedure` resolves
-//! `Slots::path(slot, layer, index)` and refuses a node the slot does not
-//! hold, and an operator's own editor is pointed at that slot's scratch copy.
-//! So at the moment of a write the program knows which Set the slot is
-//! running, and [`Snapshots::record`] is handed it rather than deducing it
-//! from anything.
-//!
-//! The id is the answer at the moment of the write, and a version that is
-//! filed is never re-filed. Both of the cases where there is no Set fall out
-//! of that one sentence, and neither of them is a word — see
-//! [`Snapshots::record`].
-//!
-//! # Why a date directory, and why local time
-//!
-//! ```text
-//! <store>/history/2026/08/16/143052-271_slot0_L4_beat_strokes.kir
-//! ```
-//!
-//! There is deliberately no retention policy and no cleanup command. A day
-//! per directory means `rm -rf history/2026/07` is the cleanup, which is a
-//! feature nobody has to write, learn, or trust.
-//!
-//! The date is local, and the reason is narrower than it first looks. It is
-//! *not* that local time avoids splitting a night's work across two
-//! directories: an event that runs past midnight splits either way, and if
-//! anything it splits more often in local time, because that is when people
-//! actually work. The reason is that the directory has to be named the day the
-//! operator would call it — a person looking for last night's edits opens the
-//! directory with last night's date on it, and a UTC name would be the wrong
-//! one for half the world and half the day.
-//!
-//! # The version a run starts with is snapshotted before anything is edited
-//!
-//! Otherwise the first edit records only its *result*, and the version being
-//! replaced — the one an undo goes back to — was never written down. So the
-//! chain is seeded from the scratch at launch, which is what makes the first
-//! edit undoable rather than the second.
-//!
-//! That seeding and the watcher's snapshots share one [`Snapshots`] for the
-//! run, because they share the dedup: seeded separately, the first rebuild
-//! would write the untouched procedure a second time.
-//!
-//! # Unchanged sources are not snapshotted
-//!
-//! A rebuild recompiles both procedures whichever one was saved, so writing
-//! both every time would fill the directory with duplicates of the file nobody
-//! touched — and make the chain for that layer a row of identical entries with
-//! nothing to choose between. Each chain remembers what it last wrote, and a
-//! chain is a node of a Set: a slot re-pointed at other material is a
-//! different chain with its own memory, which is what keeps a load's first
-//! version from being skipped as an edit that did not happen.
+//! Stores compiled procedure versions in date-partitioned directories (`history/YYYY/MM/DD/`)
+//! tagged by slot, layer, index, procedure name, and Set id. Snapshots are seeded at startup
+//! and recorded on every compile change for undo and version inspection. See ADR-0316.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -102,19 +17,7 @@ pub const DIR: &str = "history";
 /// the thing it was supposed to be preserving.
 const TIME: &str = "%H%M%S-%3f";
 
-/// A name for something an operator will look for by when they made it.
-///
-/// This module's convention, borrowed rather than reinvented, and borrowed for
-/// its stated reason: a live save has no way to be given a name — a key press
-/// cannot type one — so the only thing it can be filed under is the moment it
-/// happened, and an operator goes looking for the time they pressed the key.
-/// Local for the reason the date directory is local: the answer has to be the
-/// one the person would say out loud, and a UTC name is the wrong one for half
-/// the world and half the day.
-///
-/// The date is spelled `20260816` rather than `2026/08/16` because this is a
-/// Set id and a Set id is one path component; the *time* half is [`TIME`], the
-/// same string a snapshot is named with, so the two cannot drift.
+/// Generates a unique, collision-resistant identifier using local date and millisecond time.
 pub fn stamped_id() -> String {
     let now = chrono::Local::now();
     let stamp = format!("{}-{}", now.format("%Y%m%d"), now.format(TIME));
@@ -490,129 +393,10 @@ fn known_layer(word: &str) -> Option<&'static str> {
     LAYERS.into_iter().find(|layer| *layer == word)
 }
 
-/// What versions the history holds, most recent first, at most `most` of
-/// them.
+/// Lists history versions ordered most recent first, returning at most `most` entries.
 ///
-/// `store_root` is the store, not the history root — the same argument
-/// [`Snapshots::new`] takes, and [`DIR`] joined on here for the same reason, so
-/// a reader and the writer cannot end up looking at two directories.
-///
-/// # What a version is *of*, and why this is still not `versions_of(set_id)`
-///
-/// [`Snapshots::record`] addresses a snapshot by slot, layer and renderer
-/// index — a node of the arrangement that was running when it was written —
-/// and by the Set the slot was running, which it writes into the name. So
-/// both questions are answerable off these rows and neither needs a second
-/// reader: *the versions this node has had* is `(slot, layer, index)`, the key
-/// `record`'s dedup is on, and *the versions this Set has had* is
-/// [`Version::set`].
-///
-/// Neither narrowing is here, and that is one rule applied twice. One
-/// listing, ordered, with the whole address on every row; which rows an
-/// operator is looking at is a question the surface asks, the way
-/// `Operation::ListSets`' two filters are applied where they are answered
-/// ([ADR-0262](../../../docs/adr/0262-a-library-filter-field-steps-through-what-the-store-already-holds-rather-than-taking-letters.md))
-/// and not inside `Store::list_sets`. What this owes the surface is that the
-/// filter is *possible*, and the address on the row is that.
-///
-/// A row whose `set` is `None` is a row no Set matches, and a narrowing has
-/// to spell that rather than let it fall through as a wildcard: those versions
-/// were written where there was no Set — `record` says which runs those are —
-/// and a filter that folded them into whichever Set was asked for would be
-/// inventing a history for it.
-///
-/// # Most recent first, and here that is the layout's order rather than a sort
-///
-/// [ADR-0263](../../../docs/adr/0263-the-library-bay-lists-most-recent-first-because-the-listing-is-the-operations-and-not-the-surfaces.md)
-/// decided the Library bay lists most recent first, and this is that order.
-/// It also rejected sorting inside `Store::list_sets`, and that half does
-/// not carry over, for the two reasons it was rejected on:
-///
-/// - *The store answers what files are there and recency is a presentation
-///   choice.* Here recency is what files are there. The directory is
-///   `YYYY/MM/DD` and the name opens with `HHMMSS-mmm`; there is no other key,
-///   and offering the alphabetical order of a name whose first ten characters
-///   are a clock would be offering the same order under a worse description.
-/// - *Two files inside one tick of a coarse clock tie, and a tied sort is not
-///   an order.* No mtime is read here at all — the time is in the name, to the
-///   millisecond, and the rest of the name breaks even that tie: two nodes
-///   recorded in one millisecond differ by slot, layer, index or procedure. The
-///   tie-break is the file name ascending, which is ADR-0263's shape (recency
-///   descending, then the id ascending) with the only id these rows have.
-///
-/// The order is total and repeatable without touching the filesystem clock,
-/// which is what lets the walk below be lazy.
-///
-/// # A directory of directories, and what is skipped
-///
-/// Three levels — a four-digit year, a two-digit month, a two-digit day — and
-/// exactly three: nothing recurses, because nothing writes deeper than that.
-///
-/// A name the layout does not claim is skipped and counted, never repaired
-/// and never opened. That is `Store::list_sets`' rule, plus the count, and the
-/// count is the difference: a `sets/` directory holds what an operator saved,
-/// while a history directory is one they are told to go into and delete from by
-/// hand, so *something is in there that I did not write* is the ordinary case
-/// rather than the alarming one, and a listing that dropped it silently would
-/// be the only party who knew. [`Listing::unclaimed`] is the report;
-/// `Operation::ListSets`' own row — *"and it says how many it did not show"* —
-/// is the sentence it is written after.
-///
-/// Skipped, concretely: anything at the date levels that is not a directory of
-/// the right width in digits; anything in a day directory that is a directory,
-/// or whose name is not one [`Snapshots::record`] would have written — the
-/// `.kir` suffix, a `HHMMSS-mmm` stamp, `slot<digits>`, a [`LAYERS`] word with
-/// an optional index after it, a procedure name in [`sanitize`]'s alphabet, and
-/// — where there is one — an `@` and a Set id in that same alphabet.
-/// A non-UTF-8 name fails `to_str` and falls out with the rest, no lossy
-/// repair and no unwrap for a hostile name to trip.
-///
-/// The digits are checked for width and not for a calendar. `2026/13/40`
-/// lists under `20261340-…` and sorts where its name says. What this reads is
-/// a layout, and a month number is not something it is in a position to
-/// dispute — a directory an operator made by hand is theirs.
-///
-/// # Cost
-///
-/// Days newest first, and it stops opening them once it has enough. One
-/// `read_dir` per date directory entered, one per day opened, and no file is
-/// opened at all — a row is a name, which is why *no reader for the file
-/// contents* is not a shortcut here but the shape of the thing.
-///
-/// So the bound is on days opened, not on entries seen: the day directory
-/// that meets the cap is read whole, because `read_dir` has no order and the
-/// newest name in a day cannot be known without seeing all of them. A day with
-/// fifty thousand files in it is fifty thousand entries however small `most`
-/// is. That is the floor, and it is the operator's own directory.
-///
-/// `most` is the caller's and there is no default. What a bay can afford to
-/// draw and what a model can afford to be handed are different numbers, and
-/// this is not the place either is decided
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-///
-/// Nothing counts what lies past the cap, and that is the deliberate hole:
-/// counting the rest means reading every remaining day directory, which is the
-/// cost the cap exists not to pay. [`Listing::stopped_short`] says the walk
-/// stopped, which is the property that matters — it is what keeps a truncated
-/// listing from reading as a whole one — and a caller that wants the number
-/// asks for a larger `most` and pays for it knowingly
-/// ([P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)).
-///
-/// # A history that is not there is empty, and that is not an error
-///
-/// The opposite of `Store::list_sets`, and the difference is who creates the
-/// directory. `Store::open` creates `sets/`, so a `sets/` that has gone is a
-/// store that has been damaged since it was opened and an empty `Vec` would
-/// answer a question that could not be read. Nothing creates `history/`:
-/// [`Snapshots::record`] makes it on the first snapshot, so a store that has
-/// never been edited has none — and neither has one whose only runs were
-/// offscreen, since a `--render` is handed no store to write into. *No
-/// versions* is the true answer to both, and the same holds for a day
-/// directory that vanishes mid-walk, since `rm -rf history/2026/07` is this
-/// module's retention policy and an operator running it is not an error.
-///
-/// Anything else the filesystem refuses is an `Err`, naming the directory it
-/// refused, in the `String` this module's other failure is spelled in.
+/// Scans date directories (`YYYY/MM/DD/`) lazily and skips unrecognized files.
+/// See ADR-0262, ADR-0263, Principle 0090, and Principle 0091.
 pub fn list(store_root: &Path, most: usize) -> Result<Listing, String> {
     let mut listing = Listing::default();
     let root = store_root.join(DIR);

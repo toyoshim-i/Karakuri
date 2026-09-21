@@ -15,12 +15,7 @@ pub const VERSION: u32 = 1;
 /// `karakuri-store`'s `BindNoise` default, which is the record this stands for.
 pub const DEFAULT_OCTAVES: u32 = 4;
 
-/// What a Set file said, in the terms the engine takes.
-///
-/// Per layer, which is the shape `Set::build_many` takes its nodes in. A Set
-/// file records a `slot` per node and the layer is what the node's own `kind`
-/// declared, so a chain comes back as a chain rather than as a pile the loader
-/// has to classify a second time.
+/// Set definition decoded into engine layer collections.
 #[cfg_attr(test, derive(Debug))]
 pub struct Loaded {
     pub id: String,
@@ -239,10 +234,8 @@ pub struct Saving<'a> {
     pub camera: &'a Orbit,
     /// Whether this Set composites its renderers or overdraws them.
     ///
-    /// [`Layering::Composite`] writes a `merge` record and [`Layering::Overdraw`]
-    /// writes nothing at all: the record's presence is the whole statement, so a
-    /// Set that overdraws is a file with no line to say so — which is what keeps
-    /// every file written before the record existed byte for byte the file it was.
+    /// [`Layering::Composite`] serializes as a `merge` record; [`Layering::Overdraw`]
+    /// is the default and omits the record.
     pub layering: Layering,
     /// Which renderer is the only live one, in draw order, and `None` where every
     /// one of them is — the state a Set nobody has selected in is in.

@@ -86,23 +86,10 @@ pub fn load(path: &Path) -> Result<(Checked, String), String> {
     Ok((checked, src))
 }
 
-/// Every diagnostic from one refused file, in the two forms it has readers for.
+/// Diagnostics from a refused compilation unit in full and summary form.
 ///
-/// A terminal takes the whole of it — the message, the line under it and the
-/// caret, and the hint where there is one — and that is what every caller
-/// before this one wanted. A *row* cannot: the Staging lane draws one line per
-/// candidate, so what it can hold is the head of the first diagnostic and a
-/// count of the rest ([`karakuri_engine::swap::Refusal`], and
-/// `docs/principles/0083-…`, whose one-round-trip half is what keeps the whole
-/// report on the terminal and on the MCP surface rather than trimming it
-/// everywhere).
-///
-/// [`Diagnostics::said`] is the first line of each rendered diagnostic and not
-/// a second rendering of it. `IrError::render` writes *line:col: stage:
-/// message* and then the source line, the caret and the hint, so the head of
-/// what a terminal reads and the whole of what a row reads are one derivation
-/// rather than two that can drift
-/// (`docs/principles/0087-name-the-property-never-the-shape.md`).
+/// `report` contains the full formatted compiler error output, while `said`
+/// provides single-line summaries per diagnostic for compact UI display.
 pub struct Diagnostics {
     /// Rendered against the source it came from, diagnostics separated by a blank
     /// line — what was printed before this type existed, unchanged.
@@ -282,20 +269,8 @@ pub struct Material {
     pub names: Names,
 }
 
-/// Where one of a slot's files ended up: the layer its own `kind` declaration
-/// puts it on, and which node of that layer it is, beside the name and path it
-/// was spelled with.
-///
-/// Kept beside the compiled [`Material`] rather than worked out again. A Set
-/// file records a node's layer and its index, and a run that answered "what
-/// layer is this file on" once for the engine and once for the file it saves
-/// would hold two answers to one question — the shape this project has been
-/// bitten by twice. See [`crate::setfile::Node`], which is this as the record.
-// **`Eq` and not merely `PartialEq` is what the metadata card costs**: a record
-// carries the declared range as `f32`, so the lines are comparable and not
-// totally so. Nothing asks for `Eq` — no `Placed` is a map key — and the
-// comparison that is used, in the tests below, is unchanged: two nodes with the
-// same source have the same card, because the card is a function of it.
+/// Placement metadata for a compiled file: declared layer, layer node index,
+/// and associated invocation name and path.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Placed {
     pub named: Named,
@@ -360,25 +335,10 @@ impl Placed {
         karakuri_store::hash::Hash::of(self.source.as_bytes())
     }
 
-    /// Put this node's source in `store`, so that a file or a record naming
-    /// [`Placed::hash`] resolves on the way back in.
+    /// Persists this node's source in `store`.
     ///
-    /// Separate from [`Placed::node`], and called later than it. Knowing what a
-    /// slot is running costs nothing and every windowed run needs it; writing the
-    /// bytes down creates a directory and a file, and only two callers need that —
-    /// a save that actually happened, and a run recording a session, whose
-    /// `procedure` records a replay has to resolve. Folding the two together is
-    /// what made a plain windowed run create a store it was never asked for; see
-    /// the surface's `Running::at_launch`.
-    ///
-    /// The card goes down beside the artifact, and a card that will not write does
-    /// not fail the put. The artifact is the thing; its metadata is derived from
-    /// the `.kir` plus a compile pass and regenerates on the next one, so a store
-    /// holding the source and no card holds everything that cannot be recovered.
-    /// Failing here instead would mean an operator losing a save — or a session
-    /// losing a `procedure` record's source — over a file nothing has read yet. It
-    /// is still said out loud: silence would leave a library quietly thinning out
-    /// as it grew.
+    /// Writes the source artifact and attempts to save the metadata card. Returns
+    /// the source hash on success.
     pub fn put(
         &self,
         store: &karakuri_store::store::Store,

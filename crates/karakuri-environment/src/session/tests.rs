@@ -44,21 +44,8 @@ fn state_after_the_first_tick_is_an_edit_and_not_the_head() {
     assert_eq!(session.frames[1].steps, 2);
 }
 
-/// A `tick` is a terminator, not a header, and that is what decides where a
-/// frame's own measurements land.
-///
-/// Written in the order `Live::frame` emits them — the edits an operator made,
-/// then the audio that frame heard, then the tick that closes it — every record
-/// reaches the frame it was produced during. The audio used to go out *after*
-/// the tick, which put frame N's reading in front of frame N+1: live, frame N
-/// rendered with what frame N heard; replayed, with what N−1 heard. One frame
-/// late, every frame, in the two signals every binding is driven by.
-///
-/// What this test cannot see is the writer. `Live::frame` needs a window, so
-/// the order it pushes in is checked by reading it and this checks only that
-/// `split` honours that order once written. Swap the two pushes back and
-/// nothing here goes red — said out loud rather than left for someone to assume
-/// otherwise.
+/// Verifies that frame records (edits, audio, and tick terminator) partition
+/// correctly into their corresponding frame rather than shifting to the next frame.
 #[test]
 fn a_frames_own_records_land_in_that_frame_and_not_the_next() {
     let audio = |energy: f32| {

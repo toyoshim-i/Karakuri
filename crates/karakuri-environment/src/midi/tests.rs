@@ -22,11 +22,7 @@ fn note(note: u8) -> Message {
     }
 }
 
-/// A deck's published interface, without a deck. Positions count from one, and
-/// each answers with the key the Inspector would draw beside it and the range
-/// the Set published it over — which is what [`Decks`] reads off a real one. A
-/// `Deck` takes a device and every decision on this route is about what
-/// arrived, so the trait is what keeps these tests CPU-only.
+/// Mock deck interface for CPU-only MIDI testing without a GPU device.
 struct Fake(Vec<Vec<(&'static str, [f32; 2])>>);
 
 impl Interface for Fake {
@@ -587,18 +583,8 @@ fn a_learn_appends_to_the_operators_map_and_seeds_it_from_what_is_playing() {
     assert_eq!(map.bound("param 0 3"), None);
 }
 
-/// What a learn leaves in the file, which is the half of it that has no device
-/// in it.
-///
-/// It appends and never rewrites. The shipped map an operator starts from is
-/// two-thirds prose explaining what a line means, and a learn that rewrote the
-/// file from the table would turn the one document that teaches the format into
-/// forty bare lines on the first press.
-///
-/// And a file that is not there yet is seeded with what is playing, rather than
-/// created holding one line: the lines in force are the ones the run loaded,
-/// and a map that shrank to a single control on a press would be the map going
-/// quiet.
+/// Verifies that MIDI learn appends bindings and seeds nonexistent map files
+/// with the currently active configuration.
 #[test]
 fn a_learn_appends_and_seeds_a_file_that_is_not_there_with_what_is_playing() {
     let seed = "# seeded\ncc 1 -> gain 0\n";

@@ -758,24 +758,8 @@ fn a_slot_that_cannot_be_assembled_leaves_the_running_set_alone() {
     }
 }
 
-/// A missing file is stable rather than a change every interval, so deleting
-/// one does not put the watcher into a recompile loop against a path that is
-/// not there. A re-point builds the material it was aimed at, on the poll it
-/// arrives, and the new files are not then seen as an edit.
-///
-/// This is how a Set reaches a *running* deck, and the whole reason it is a
-/// re-point rather than an install: `Deck::install` is documented as
-/// deliberately unreachable from a key or a surface, because *"a live run
-/// changes its material by editing a file and letting the worker build it,
-/// which is what the budget watchdog is attached to"*. So the failure this
-/// catches is a load that goes nowhere — an aim taken and no request made — and
-/// the deck goes on playing what it was with nothing said.
-///
-/// The second half is the debounce not eating it. A save is acted on the poll
-/// *after* the one that saw it, because an editor writing in place leaves a
-/// file truncated for a moment. An aim has no such moment, and a re-point that
-/// went through the debounce would then be seen a second time as a change and
-/// built twice — so the poll after the build has to be quiet.
+/// Verifies that re-pointing a slot builds target materials immediately without
+/// debounce delays, and does not trigger duplicate builds on subsequent polls.
 #[test]
 fn an_aim_points_the_slot_at_what_it_names_and_is_not_debounced() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

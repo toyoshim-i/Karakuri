@@ -1,105 +1,10 @@
-//! The program: everything this instrument deals with that is not itself.
+//! External environment integration layer for Karakuri.
 //!
-//! A module belongs here if what it deals with lives outside this process — a
-//! disk, a device, a port, a socket, another process — or is the record of what
-//! happened. That sentence is the charter, and it is a test rather than a
-//! description: the next module anyone proposes for this package is checked
-//! against it, and the answer is not a vote. It is stated in
-//! `docs/adr/0215-the-package-is-karakuri-environment-and-a-module-belongs-if-what-it-deals-with-is-outside-this-process.md`,
-//! which is also where the name comes from and where the five nouns it was
-//! weighed against are measured.
+//! Provides platform and environment services for audio input, MIDI control, file watching,
+//! compilation, MCP server endpoints, session recording, and history management (ADR-0214, ADR-0215).
 //!
-//! The second half of the sentence is not decoration. Two of the modules in
-//! scope — the metadata card and the mixer's wire spellings — touch no device
-//! and open no file, and are entirely the record of what happened; a test with
-//! only the first clause would have left them behind in the command line, which
-//! is wrong. Both clauses are load-bearing and neither stands in for the other.
-//!
-//! ## Why this is a package and not a module of the binary
-//!
-//!
-//! `docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md`
-//! is the decision, and its argument is a bill that had already been paid five
-//! times. `karakuri-cli` has no library target, so nothing in this workspace
-//! could depend on any of this: the frame loop was written twice, an operation
-//! record needed a whole new crate to land in, the Library bay's time column
-//! was cut rather than draw a third date format, and the console's example
-//! transcribes a store path and a residency parser by hand. Each of those
-//! arrived looking like a local question. None of them was.
-//!
-//! So: two thin binaries sit over this package. `karakuri-cli` is one today —
-//! it keeps its flags, its terminal, its keys and its `--headless` runs, and it
-//! parses arguments and calls in here. The panel is the second when it exists,
-//! and it is the destination; `README.md`'s sentence that the CLI is
-//! scaffolding rather than the destination is unchanged by any of this. Nothing
-//! in this crate is the command line's and nothing in it is the panel's. Both
-//! are surfaces, which is what the vocabulary has said since
-//! `docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md`.
-//!
-//! What follows from that is the rule to hold when adding to this crate: no
-//! module here may know which surface it is under. A window, an event loop and
-//! a key handler are a surface's; the disk, the ports and the record are this
-//! package's, and the day a module here needs to ask which binary called it is
-//! the day the boundary has been drawn in the wrong place.
-//!
-//! ## What is here, and what is not yet
-//!
-//! ADR-0215 applied its test to thirteen modules and thirteen passed, and all
-//! thirteen are here — [`audio`], [`compile`], [`history`], [`mcp`], [`meta`],
-//! [`midi`], [`mix`], [`render`], [`scratch`], [`session`], [`setfile`],
-//! [`tempo_source`] and [`watch`] — because ADR-0214 left open whether the move
-//! lands in one commit or several and answered its own question with *several
-//! is the likelier*. The seven that came first were the seven that named
-//! nothing else in `karakuri-cli`; the metadata card and the Set file came
-//! second, and they brought the two items they named with them — the card
-//! writer that puts a card in a store, and a Set file's per-layer node names,
-//! which are part of that file's shape. The watcher, the MCP server, the mixer
-//! and the MIDI map came last and brought eighteen items with them, which is
-//! why this file has code in it at all: five of the eighteen belong to no
-//! module here and are reached from several. Each slice is a package boundary
-//! and not a redesign: `use` paths changed, `pub` appeared where crate-private
-//! had been enough, and the code inside the functions did not.
-//!
-//! [`places`] is the fourteenth and was none of the thirteen, because it is the
-//! first module written *for* this package rather than moved into it. It is
-//! checked against the charter like anything else proposed here, and passes on
-//! the first clause without argument: where the shipped presets are and where
-//! the store is are two directories on a disk, and a directory is outside this
-//! process by any reading of that sentence. That it is also what deletes the
-//! two `.karakuri` transcriptions ADR-0214 named is the occasion rather than
-//! the reason — a module that passed the test only because it was convenient
-//! would be the test not being applied.
-//!
-//! What is left in `karakuri-cli/src/` is `main.rs` and nothing else — the
-//! window, the arguments, the key handler and `Live`. That is the line ADR-0214
-//! said it would not name in advance, and ADR-0215 named the two ends of it:
-//! `Live` holds a window and a device and stays with the surface, while `Clock`
-//! was owed a move, because wall-clock time comes from outside this process.
-//!
-//! [`clock`] is that move, taken. It was owed for as long as one program read a
-//! clock; the second one needs the same derivation now, and a frame's step
-//! count is the live half of a determinism rule
-//! ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)),
-//! so two copies of it would be two answers to that rule. See
-//! `docs/adr/0297-the-panels-tick-is-measured-and-the-fixed-step-a-frame-ran-the-room-at-the-displays-rate.md`.
-//!
-//! ## The five items here that are no module's
-//!
-//! [`no_such_slot`], [`no_such_renderer`] and [`nothing_to_save`] are refusals,
-//! and `docs/principles/0090-a-surface-offers-it-never-decides.md` says a
-//! refusal a person can reach from two surfaces is one sentence. These are
-//! reached from four — the keys, [`mcp`], [`midi`] and a replayed record
-//! through [`mix`] — and [`accepted_save`] is the sentence beside them that is
-//! not a refusal, said to a terminal and to a waiting client at once. They are
-//! at the crate root because they are nobody's module: putting `no_such_slot`
-//! in [`mix`] would make [`mcp`] and [`midi`] depend on the mixer for a
-//! sentence, which is a shape rather than a home. [`SAVE_WAIT`] is here for the
-//! other half of that reason — the run bounds its quit by it and [`mcp`] bounds
-//! a client's wait by it plus five, and neither of them owns it.
-//!
-//! These are one-line restatements; the canonical text is one file each in
-//! `docs/principles/` and one record each in `docs/adr/`, and where this
-//! comment disagrees with them, this comment is the one that is wrong.
+//! Surfaces (CLI, console GUI) consume this crate without embedding device- or platform-specific
+//! handling into their own binaries.
 
 // Each module's own header is the documentation for it, and there is
 // deliberately no second sentence here: a `///` on one of these declarations
@@ -382,23 +287,7 @@ pub fn no_such_renderer(slot: usize, at: usize, count: usize) -> String {
     }
 }
 
-/// A parameter the Set a slot is playing does not declare, in the words every
-/// surface says it in.
-///
-/// [`no_such_renderer`]'s shape and its reason, one address along: a write is
-/// the second control that addresses *inside* a slot, and a key press, a mapped
-/// knob, an MCP call and a replayed `ride` record all meet the same answer.
-/// `karakuri_engine::deck::Deck::write_param` answers `Ok(0)` for it rather
-/// than an error, because zero declarations reached is a fact the caller says
-/// out loud rather than a refusal — a name a rebuild no longer declares must
-/// not take the show down
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-///
-/// The key as written, and it is the component key where there is one. `glow`
-/// is not a parameter and `glow.x` is
-/// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
-/// so echoing what was asked for is what tells the two apart
-/// ([P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)).
+/// Error message for parameter names not declared by the Set in `slot` (ADR-0268, Principle 0083).
 pub fn no_such_param(slot: usize, key: &str) -> String {
     format!("no parameter `{key}`: the Set in slot {slot} declares none by that name")
 }
@@ -518,37 +407,9 @@ pub fn accepted_save(
     id
 }
 
-/// What a save is filed under, which is the caller's name, a stamp, or both.
+/// Resolves the save file identifier based on caller type and optional user-supplied name (ADR-0128).
 ///
-/// An operator's own act gets the name it asked for. A key press cannot type
-/// one and takes a stamp — `history::stamped_id`, whose convention this is: an
-/// operator looks for the time they saved it — and a caller that *can* type one
-/// is not made to take a timestamp. A name typed twice overwrites the library
-/// entry under it, which is
-/// [ADR-0128](../../../docs/adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)'s
-/// decision and unchanged: an id an operator types is an instruction.
-///
-/// A model's save always carries the stamp, and its chosen name rides behind it
-/// as `<stamp>_<name>`. Two reasons, and the second is the one that decides it.
-///
-/// 1. Nothing in the sandbox is overwritten. What lands there is an edit
-///    history — the thing an operator goes looking for after a show when a model
-///    has been editing live — and a snapshot a later snapshot can replace is not a
-///    snapshot. ADR-0128's argument does not reach here because its premise does
-///    not: there is no id an operator typed.
-/// 2. A directory of snapshots is read by time. `history.rs` files every kept
-///    version under the moment it was written and the operator's name for it second,
-///    and this is the same directory read the same way. The separator is `_` for
-///    that reason: it is the one a snapshot's own name already uses, and `-` is what
-///    [`history::stamped_id`] appends when it breaks a tie.
-///
-/// The cost is that a model is answered with an id it did not ask for, which
-/// `mcp::checked_id` calls the worse answer where the library is concerned and
-/// where a name is an instruction. It is the right answer here: the accept and
-/// the outcome both name the id the file was written under, so a model that
-/// reads what it is told is never wrong about where its work is, and a model
-/// that assumes its own name would have been wrong about a file it had already
-/// destroyed.
+/// Operator saves preserve explicit IDs or generate timestamps. Model saves always prefix a timestamp.
 fn filed_as(asked: Asked, id: Option<String>) -> String {
     match (asked, id) {
         (Asked::Operator, Some(id)) => id,
