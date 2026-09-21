@@ -443,27 +443,8 @@ impl Tracker {
 
         let window = &self.window[..count];
 
-        // The period, and it is worth being fussy about: a grid running 1% fast
-        // drifts a whole beat inside ten seconds, which is the steady-state
-        // error this whole design exists to avoid. Two things buy that back
-        // from a lag that is a whole number of hops.
-        //
-        // **It is measured at the longest lag in this peak's octave ladder that
-        // still overlaps half the window.** One hop is 3% of the period at 174
-        // bpm and 48 kHz, and 0.4% of the same tempo measured eight lags
-        // further out; the fold below brings whichever was measured back to the
-        // octave the grid is in, so there is no reason at all to measure at the
-        // coarse end. It is worth a factor of five at the fast end — 196 bpm
-        // reads 0.02% out this way and 0.13% out at its own lag. Half the
-        // window is where it stops, because past that the correlation is
-        // averaging over too few beats to be a peak rather than an accident.
-        // The doubled peak sits within a hop of twice this one — a period is
-        // not a whole number of hops, so the two do not land on the same
-        // fraction of one — and finding it there is what keeps the parabola
-        // below centred on a maximum instead of clamped against one.
-        //
-        // **Then a parabola through the peak and its neighbours**, which is
-        // what makes the answer sub-hop at all.
+        // Estimates period using the longest valid harmonic lag under half the window length,
+        // then applies parabolic interpolation across adjacent lags for sub-hop precision.
         let mut measured = lag;
         while 2 * measured < count / 2 {
             measured = peak_near(window, 2 * measured);
