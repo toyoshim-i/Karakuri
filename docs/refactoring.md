@@ -65,7 +65,7 @@ Modularize the 16 remaining files exceeding 1,500 lines:
 | Initiative | Subsystem / File | Lines | Scope & Approach | Status |
 |:---:|---|:---:|---|:---:|
 | **P88** | `karakuri::tests::view_interaction` | 1,768 | Partition UI view interaction tests into focused modal, hover, and bay submodules | **COMPLETED** |
-| **P89** | `karakuri-ir::ast` | 1,726 | Decompose AST definitions into `expr.rs`, `stmt.rs`, `types.rs`, and `visitor.rs` | **PLANNED** |
+| **P89** | `karakuri-ir::ast` | 1,726 | Decompose AST definitions into `types.rs`, `attr.rs`, `decl.rs`, `expr.rs`, and `stmt.rs` | **COMPLETED** |
 | **P90** | `karakuri-cli::src::tests::parse` | 1,708 | Split CLI argument and flag parser tests into category submodules | **PLANNED** |
 | **P91** | `karakuri-operation-record::tests` | 1,704 | Partition operation record serialization and backward-compatibility tests | **PLANNED** |
 | **P92** | `karakuri-mcp::src::tests` | 1,686 | Decompose MCP server and tool handler unit test suites | **PLANNED** |
