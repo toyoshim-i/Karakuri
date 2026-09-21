@@ -17,6 +17,7 @@ use super::*;
 /// because [`Spelled::make`] reads better for having it.
 pub(crate) type Make = fn(&Value, &Slots) -> Result<Operation, String>;
 
+#[derive(Clone, Copy)]
 pub(crate) struct Spelled {
     /// One instance of this operation, and the smallest `operate` call that names
     /// it where this surface takes one — `Value::Null` where it does not.
