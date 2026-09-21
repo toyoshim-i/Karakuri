@@ -476,7 +476,7 @@ pub mod size {
     /// of it is.
     pub const DROP_RING: f32 = 2.0;
 
-    /// Outline width for the window/bay focus indicator (`.wfocus`). See ADR-0259.
+    /// `.wfocus`'s `outline: 2px dashed var(--c-sun)`: outline width for the window/bay focus indicator. See ADR-0259.
     pub const WFOCUS_RING: f32 = 2.0;
 
     /// `.wfocus`'s `outline-offset: 2px`: the ring is drawn proud of the thing it
