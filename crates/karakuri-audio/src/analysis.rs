@@ -1,58 +1,21 @@
-//! The analyser: a block of samples in, a frame of measured signals out.
+//! Audio block spectral analysis and feature extraction.
 //!
-//! **Nothing here opens a device, reads a clock, or allocates after
-//! construction.** [`Analyzer::analyze`] is a function of the blocks it has
-//! been given and nothing else, which is what makes every claim below testable
-//! against synthesised input — a tone at a known frequency, a click, silence —
-//! rather than against whatever is plugged in today.
+//! Transforms PCM sample blocks into frequency band energies, RMS levels, and spectral flux onsets.
 //!
-//! It is not quite a pure function of *one* block, and the exception is worth
-//! naming: onset detection is a comparison with the previous block and a
-//! running sense of how much a spectrum normally moves, so the analyser carries
-//! that history. Given the same sequence of blocks it produces the same
-//! sequence of frames, which is the property tests and replay both need.
+//! ## Normalization
 //!
-//! ## What maps to 1.0
-//!
-//! Levels are in **dBFS, mapped from [`FLOOR_DB`] to [`TOP_DB`]**, and both
-//! ends are chosen rather than inherited:
-//!
-//! - `TOP_DB` is −6 dBFS RMS. A well-mastered track's loud windows sit near
-//!   −10 to −8 dBFS RMS, so a normal set lives in the top third and the loudest
-//!   material pins — which is what pinning should mean. A full-scale sine is
-//!   −3 dBFS RMS and reads 1.0 with headroom to spare. Putting the top at 0
-//!   dBFS instead would leave real music between 0.80 and 0.90 and a parameter
-//!   bound to it barely moving.
-//! - `FLOOR_DB` is −60 dBFS, below which everything reads 0.0. That is quiet
-//!   enough that room noise on an open input does not lift a parameter off its
-//!   floor, and 54 dB of range is more than a set uses.
-//!
-//! Bands use the **same mapping**, normalised so that a band reads the RMS of
-//! the part of the signal inside it. A tone that is all there is therefore
-//! makes its band read what `energy` reads, and the bands sum to roughly the
-//! broadband level — the two numbers are commensurable rather than each being
-//! on a scale of its own.
+//! - Levels map from [`FLOOR_DB`] (-60 dBFS) to [`TOP_DB`] (-6 dBFS RMS) into `[0.0, 1.0]`.
+//! - Sub-band energies share broadband scaling for consistent level calibration across signals.
 
 use std::sync::Arc;
 
 use karakuri_signal::measured::{AudioFrame, MAX_BANDS};
 use rustfft::{num_complex::Complex, Fft, FftPlanner};
 
-/// Samples per analysis block. At 48 kHz this is 43 ms, or 23 Hz per bin.
-///
-/// The bass end sets this. Eight log-spaced bands from 40 Hz put the lowest two
-/// edges 45 Hz apart, and at 1024 samples the whole of `band0` is a single bin
-/// — a kick and the note under it become the same number, and a tone in one
-/// band reads almost as loudly in its neighbour. The cost of the longer window
-/// is that a transient is smeared over more of it, which the hop below buys
-/// back.
+/// Samples per analysis block (2048 samples / ~43 ms at 48 kHz, providing ~23 Hz bin resolution).
 pub const BLOCK: usize = 2048;
 
-/// Samples between blocks. A quarter of a block, not half: the window is long
-/// for the sake of the spectrum, and stepping it a quarter at a time keeps the
-/// novelty curve's time resolution at 10.7 ms — which is what the tempo tracker
-/// resolves a period with. Four FFTs per block's worth of audio is 94 a second
-/// at 48 kHz, which is nothing next to a callback's budget.
+/// Hop size in samples between analysis blocks (512 samples / 10.7 ms at 48 kHz).
 pub const HOP: usize = 512;
 
 /// Below this, a level reads 0.0. See the module doc.

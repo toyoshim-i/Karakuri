@@ -1,63 +1,16 @@
-//! The device: the only part of this crate that talks to hardware.
+//! Audio input device stream management and lock-free thread synchronization.
 //!
-//! Deliberately thin. Everything that decides anything — [`crate::analysis`],
-//! [`crate::tempo`], [`crate::lock`] — is a pure function of samples or of
-//! numbers, and is tested against synthesised input. This module opens a
-//! stream, feeds those, and hands the result across a thread boundary.
+//! ## Architecture
 //!
-//! ## Where the analysis happens, and why it is on the audio side
-//!
-//! **In the audio callback.** The alternative — copying raw samples into a ring
-//! and transforming them on the render thread — was rejected on two counts: it
-//! puts an FFT and an autocorrelation inside the frame budget the engine's
-//! governor is policing, and it makes the amount of work per
-//! frame depend on how much audio happened to arrive, which is the shape of a
-//! frame-time spike.
-//!
-//! Doing it here is bounded and cheap. **Measured, on a host clock, release
-//! build, Apple M4 Pro**: one 2048-sample analysis is 12.7 µs against a hop
-//! that carries 10.7 ms of audio, and a tempo estimate — an autocorrelation
-//! over every candidate lag, plus one pass folding the window onto the settled
-//! period — costs 30 µs once per 256 ms. That is about 0.13% of the callback's
-//! time. Both numbers come from the ignored measurements in `analysis` and
-//! `tempo`, which print them on demand rather than asserting them, and both
-//! move by a third between a cold run and a warm one: the estimator that folds
-//! and the two heuristics it replaced measure the same to within that noise. It allocates nothing (every buffer is planned at construction) and
-//! locks nothing.
-//!
-//! ## How the frame reads it without waiting
-//!
-//! One [`Mutex`] holding one small `Copy` value, and **both sides use
-//! `try_lock`**:
-//!
-//! - the callback skips publishing if the render thread happens to hold it —
-//!   losing one measurement out of ninety a second, which staleness already
-//!   describes;
-//! - the render thread keeps the value it read last frame if the callback
-//!   happens to hold it.
-//!
-//! Neither side ever blocks on the other, which is the requirement in both
-//! directions: no audio callback may block on anything, and nothing on the
-//! render thread may block on audio. A lock-free seqlock would remove the
-//! word "skip" from that paragraph and add fifty lines of ordering argument to
-//! this file; the value it protects is stale within 11 ms anyway.
-//!
-//! One thing travels the other way — the tempo tracker's window centre, which
-//! is the grid's current tempo — and it is an `AtomicU32` rather than a second
-//! mutex for the reason above: the callback reads it on **every** hop, so
-//! "skip on contention" would mean the octave window occasionally not moving,
-//! and one `f32` needs no more than a relaxed load to carry.
-//!
-//! ## Confidence and staleness
-//!
-//! The analyser says what it measured, at confidence 1.0 — including a
-//! measured silence. [`staleness`] is what turns "how long ago" into "how much
-//! to believe", and it lives here because it is the one part of the audio path
-//! that reads a clock. That is the same division
-//! `docs/principles/0092-the-same-inputs-produce-the-same-frame.md`
-//! draws for `tick`:
-//! measurement happens where the clock is, and what comes out joins the record
-//! stream.
+//! - **Callback-side analysis**: Audio frame analysis ([`crate::analysis`]) and tempo estimation
+//!   ([`crate::tempo`]) execute within the audio callback thread without dynamic allocations.
+//! - **Non-blocking synchronization**: Frame data is transferred across thread boundaries
+//!   via `try_lock` access on a single mutex, ensuring neither the audio callback nor the render
+//!   thread blocks.
+//! - **Reverse tempo control**: Tempo window guidance is passed from the render thread to the
+//!   audio thread using atomic floats (`AtomicU32`).
+//! - **Staleness attenuation**: Hardware timestamps compute signal confidence decay across dropped
+//!   or delayed sample frames (Principle 0092).
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};

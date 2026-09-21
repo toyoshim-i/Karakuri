@@ -131,12 +131,8 @@ impl Rig {
     }
 }
 
-/// The whole point, end to end: real analysis, a real estimate, a real device
-/// delay in front of it — and the beat lands on the beat.
-///
-/// The second half of the test is what keeps the first half honest. The same
-/// rig with the lead removed has to be late by `A + D`, or the assertion above
-/// would also pass against a loop that compensated for nothing.
+/// Verifies end-to-end beat tracking alignment against synthesized click trains,
+/// asserting that latency compensation aligns oscillator phase with incoming audio.
 #[test]
 fn a_click_train_puts_the_oscillators_beat_on_the_music_s_beat() {
     let bpm = 128.0;
