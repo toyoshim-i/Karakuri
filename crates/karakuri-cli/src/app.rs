@@ -230,18 +230,7 @@ impl ApplicationHandler for App {
                         })
                         .collect(),
                 );
-                // The store this run was given, not a second answer to where
-                // the library is: `read_set` reads a saved Set and its cards
-                // out of the same root `--save-set`, `--load-set` and the `k`
-                // key write into.
-                // **Closed, all four classes**, which is the state ADR-0235
-                // says a run starts in. It is handed in rather than decided
-                // inside the server: what a model may reach is the operator's
-                // to say (P-0094), and a constant compiled into the server is
-                // the one place it must not be said. **Nothing writes it
-                // yet** — the bay-head toggles are the console's — so every
-                // closed class stays closed for the whole run, and the handle
-                // is what the toggles will hold the other end of.
+                // Starts in closed state across all classes per ADR-0235 and P-0094.
                 let opening = karakuri_environment::Opening::closed();
                 let slot_policies = karakuri_environment::SlotPolicies::default();
                 match mcp::serve(

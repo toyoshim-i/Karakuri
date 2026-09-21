@@ -99,22 +99,8 @@ fn a_stored_artifact_has_a_card_saying_what_its_source_declares() {
     );
 }
 
-/// A card that will not write is said out loud and does not fail the save.
-///
-/// The policy [`Placed::put`] states: the artifact is the thing, its card is
-/// derived from the `.kir` plus a compile pass and regenerates on the next one,
-/// so a store holding the source and no card holds everything that cannot be
-/// recovered — and failing the put instead would lose an operator a save over a
-/// file nothing has read yet. Both halves were prose until here, and the half
-/// that rots quietly is the second: a `put` that started returning the card's
-/// error would be caught by any test that saves, while a `put_meta` that
-/// swallowed it would be caught by none.
-///
-/// The card's own path taken by a directory, because that is the one failure
-/// that reaches the card and nothing else. A read-only store root would fail
-/// `put_artifact` first and prove the opposite thing. The path is spelled here
-/// the way `Store::meta_path` spells it — it is private — as `karakuri-store`'s
-/// own metadata tests spell it.
+/// Asserts that a failure to write a metadata card logs a warning but does not
+/// fail the save operation itself.
 #[test]
 fn a_card_that_will_not_write_is_said_and_does_not_fail_the_save() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -282,28 +268,8 @@ fn a_windowed_run_creates_no_store_until_something_is_saved() {
     );
 }
 
-/// A recorded run puts every slot's launch sources where a replay looks.
-///
-/// A replay rebuilds each slot by reading its sources back out of the store,
-/// and a record naming bytes nobody kept is the same silence as no record at
-/// all.
-///
-/// What the seeding was argued from has moved, and the seeding is left where it
-/// is rather than removed on this test's authority: the reader named was a
-/// rollback onto the launch version, which emitted `procedure` records naming
-/// these hashes, and ADR-0316 removed rollbacks. Whether a recorded run still
-/// owes the store its launch bytes is a decision about the record vocabulary
-/// and is the maintainer's; what this pins is that the seeding does what it
-/// says.
-///
-/// Slot 1, deliberately. `session_head` writes slot 0's material and says out
-/// loud that a session stream cannot describe a deck, so slot 0 would pass on
-/// the head's I/O alone and prove nothing about the seeding. A `procedure`
-/// record, unlike a head, does address any slot.
-///
-/// Paired with its control: nothing is in the store before the seeding, so this
-/// is about the seeding rather than about a store that had the bytes from
-/// somewhere else.
+/// Asserts that a recorded run writes the launch sources of all slots to the store
+/// so they remain available for replays.
 #[test]
 fn a_recorded_run_puts_its_launch_sources_where_a_replay_looks() {
     let dir = tempfile::tempdir().expect("tempdir");

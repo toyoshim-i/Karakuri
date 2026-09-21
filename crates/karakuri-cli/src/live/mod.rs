@@ -85,32 +85,10 @@ pub(crate) struct Live {
     /// save, and an operator asking why is owed the id and the flag that would
     /// change the answer.
     pub(crate) loaded_set: Option<String>,
-    /// Which node fills each declared input slot, for the whole run.
+    /// Declared input slot wiring edges for the run.
     ///
-    /// Read from the arguments rather than from the live Set, which is the one
-    /// place `Live::save_set` does that and needs its reason. An edge is consumed
-    /// where a Set is *built* and is not kept on it, so there is nothing to read
-    /// back. So this is a copy of a value, not a second copy of a rule, which is
-    /// the distinction `saving_capacities` was fixed over.
-    ///
-    /// It moves during a run, and this is where it moves. That sentence used to
-    /// read *no key and no MCP tool rewires a `uses` slot*; `wire_input` does, and
-    /// [`rewired`] is what it reaches. There is still no second answer to what the
-    /// run is wired with — this list is the one, a rewiring replaces one entry of
-    /// it and hands the whole of it to the slot's watcher through [`Aiming`], so
-    /// the list a rebuild restates and the list a save records stay one list.
-    ///
-    /// One list for the run and not one per slot, which is what makes the key
-    /// `(node, slot)` and not `(deck, node, slot)` — see [`rewired`], and
-    /// `Wiring::edges` for why an edge naming a node a Set has not got is simply
-    /// passed over.
-    ///
-    /// A limit worth naming: a rewiring re-aims only the slot the request named, so
-    /// any *other* watcher goes on restating the list it was last aimed with until
-    /// it is itself re-aimed. That is invisible unless two slots hold nodes of the
-    /// same name, which is also the only case where one entry in this list was ever
-    /// about two Sets. Re-aiming every watcher instead would recompile the whole
-    /// deck for one edge, which is a far louder wrong answer.
+    /// Updated during runtime via rewiring operations and propagated to slot
+    /// watchers via [`Aiming`] for Set rebuilding and Set file saving.
     pub(crate) edges: Vec<karakuri_engine::set::Edge>,
     /// Where each slot's watcher can be re-pointed, one entry per slot and `None`
     /// for a slot with no watcher — a run without `--watch`, and every
@@ -143,12 +121,8 @@ pub(crate) struct Live {
     /// The MCP server's half of the channel, when `--mcp` asked for one. Told what
     /// the swap machinery said, and nothing else — see [`crate::mcp`].
     pub(crate) mcp: Option<mcp::Reporter>,
-    /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
-    /// nothing. Empty on every frame nothing was touched.
-    ///
-    /// Nothing a map line can name carries a heap payload — every one of them is
-    /// scalars — so a fader sweep reuses this buffer and touches no allocator,
-    /// which is what the render-thread rule asks of it.
+    /// Reusable scratch buffer for [`midi::Surface::take`], avoiding per-frame
+    /// allocations on the render thread.
     pub(crate) operations: Vec<Operation>,
     /// The musical grid a scheduled fade starts on — see [`QUANTA`]. State on the
     /// operator rather than in the record: what reaches the stream is the resolved
@@ -322,46 +296,17 @@ impl Live {
         }
     }
 
-    /// What a model has asked for since the last frame.
+    /// Polls and processes incoming MCP save, wire, and operate requests.
     ///
-    /// Beside [`Live::run_surface`] and on the same terms: a surface is polled at
-    /// the top of a frame and every request it produces ends in the method a key
-    /// press ends in. That is what makes `--mcp` a third pair of hands rather than
-    /// a second way to do anything.
-    ///
-    /// Collected out of the borrow before any of it is acted on, exactly as the
-    /// MIDI operations are, because every arm below takes `&mut self`. Nothing is
-    /// allocated on a frame that was asked for nothing: collecting an empty
-    /// iterator makes no allocation.
-    ///
-    /// Here rather than beside the swap drain below `frame::compose`, which was the
-    /// other candidate: a client asking to keep what is playing should not be
-    /// waiting on a swapchain, and nothing a request reaches needs the GPU. When
-    /// that was written a frame with no surface returned before the drain, so it
-    /// *was* waiting on one; a frame no longer returns early at all, and being
-    /// above `frame::compose` is what the argument was always about.
-    ///
-    /// [`Live::finished_saves`] is here for the same reason and used to be down
-    /// there, which meant this argument was made and then half applied: the request
-    /// was taken above the early returns and its *answer* was withheld below them.
-    /// See the comment at the head of [`Live::frame`].
+    /// Drains requests at the top of the frame before composition or early exits,
+    /// decoupling client responses from swapchain and GPU state.
     fn run_requests(&mut self) {
         let Some(mcp) = &self.mcp else {
             return;
         };
         let asked: Vec<mcp::SaveRequest> = mcp.saves().collect();
-        // **Both channels drained before either is acted on**, for the borrow
-        // reason above and for a second one: they are two queues by design —
-        // see `mcp::Reporter::wires` — so a deck being saved to a slow disk
-        // cannot delay a rewiring, and taking them in one pass is what keeps
-        // that true on this side too.
+        // Drain queues before acting so long saves do not block wiring or operation updates.
         let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
-        // **And the operations, on the third channel and for the same two
-        // reasons.** This run serves the same `mcp::serve` the panel does, so
-        // its `operate` tool reaches this loop and not another one — a channel
-        // this program did not drain would answer every call *the render loop
-        // had not taken this operation*, which is true and is not what this
-        // program is.
         let operations: Vec<mcp::OperateRequest> = mcp.operations().collect();
         for request in asked {
             self.save_set(Asked::Model, request.slot, request.id, Some(request.reply));
@@ -370,45 +315,8 @@ impl Live {
         self.run_operations(operations);
     }
 
-    /// Every operation a model named since the last frame, performed where a mapped
-    /// control's operation is performed.
-    ///
-    /// [`Live::run_surface`]'s own two lines, and they are two lines rather than a
-    /// call into it because a map has a surface to poll and this has a channel to
-    /// drain. What is shared is what matters: [`Live::operate`] is where a key
-    /// press and a MIDI message end, and it is where this ends, so a model's
-    /// `SetGain` on this program is the same write as a knob's
-    /// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
-    ///
-    /// Already audited. `karakuri_operation::gate` ran on the server's own thread —
-    /// the one call ADR-0235 puts the mechanism on — so nothing is judged again
-    /// here.
-    ///
-    /// Answered once, at the frame it was performed on, which is
-    /// [`mcp::WireRequest`]'s third point one route along: what a rebuild or a
-    /// scheduled move started here comes to is reported where it lands, and a tool
-    /// that waited for it would hold a connection open across a transition.
-    ///
-    /// An operation this program cannot perform is refused rather than answered
-    /// `ok`. `operate` is the panel's tool as much as this one's, and the two
-    /// surfaces do not perform the same set: `crates/karakuri`'s `App::operated`
-    /// calls the window's own press arms for a star, a projector, a recording and a
-    /// kept procedure
-    /// ([ADR-0341](../../../docs/adr/0341-a-route-that-answers-is-built-and-a-send-that-ends-in-a-dialog-is-gap.md)),
-    /// and this program has none of them — it has keys, a MIDI map and the records
-    /// they write. So every operation whose conversion writes no record does
-    /// nothing here, and [`answered`] hands back the sentence that says so, which
-    /// goes to the client as the call's error and to the terminal through
-    /// [`refused`]. Reporting *performed* for it is the plausible wrong answer
-    /// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)
-    /// is written against, and ADR-0334 refused it in as many words for the panel —
-    /// *"a call answered `ok` for work that did not happen"* — one surface before
-    /// it was this one's turn.
-    ///
-    /// [`Operation::TapBeat`] is the one arm that is not a conversion, and it is
-    /// here for [`Live::run_surface`]'s reason: a tap moves the beat tracker,
-    /// `written` answers `Owed::NotSettled` for it, and [`Live::tap`] is the
-    /// performer this surface does have.
+    /// Executes MCP model operations through [`Live::operate`], returning whether
+    /// the requested operation succeeded or was refused.
     fn run_operations(&mut self, asked: Vec<mcp::OperateRequest>) {
         for mcp::OperateRequest { operation, reply } in asked {
             let title = operation.title();
@@ -924,22 +832,14 @@ impl Live {
             for selection in self.deck.selections_on(addr) {
                 let _ = write!(self.status, "r>{} ", selection.renderer());
             }
-            // The fader and the mode, **only when they are doing something**,
-            // on the same terms as the transport below: a deck nobody has
-            // touched prints the line it always printed. Full opacity under
-            // `add` is what every slot comes up as, and a column repeating it
-            // four times is four columns of nothing to read in the dark.
+            // Omit opacity and blend mode when at defaults (opacity 1.0, Add).
             if self.deck.opacity(addr) != 1.0 {
                 let _ = write!(self.status, "o{:.2} ", self.deck.opacity(addr));
             }
             if self.deck.blend(addr) != Blend::Add {
                 let _ = write!(self.status, "{} ", self.deck.blend(addr).name());
             }
-            // The transport, and **only when it is doing something**: a deck
-            // nobody has synced prints the line it always printed. `free` is
-            // the absence of a transport rather than a setting, and a column
-            // reading `free` on every slot would be four characters of nothing
-            // on a line that has to be read at a glance in the dark.
+            // Display transport status only when active (non-free).
             let transport = self.deck.transport(addr);
             match transport.sync() {
                 Sync::Free => {}
@@ -1080,24 +980,8 @@ impl Live {
     }
 }
 
-/// What the status line says about a slot the watchdog stopped, and the empty
-/// string for every other slot.
-///
-/// The version in that slot costs more than one frame may, so the engine skips
-/// its step and its draw and it holds the frame it last drew (ADR-0316). What
-/// an operator would otherwise read is `LIVE` beside a `t` that has stopped
-/// moving, which is exactly the reading the maintainer called *"nothing but a
-/// bug"*.
-///
-/// The whole word, and not a four-letter column beside the residency. It is not
-/// a residency: a stopped slot that is Live is still mixed, and taking it off
-/// air and putting it back leaves it stopped. Printed only while it is true, on
-/// the same terms as the transport and the fader — a run in which no slot is
-/// stopped prints the line it always printed.
-///
-/// Pulled out beside [`residency_tag`] for its reason: the distinction it
-/// carries is the one thing about it that can be wrong, and checking it should
-/// not need a GPU, a window, or a `Deck`.
+/// Status label for a watchdog-stopped overloaded slot (ADR-0316).
+/// Returns `"overloaded "` if true, or empty string otherwise.
 pub(crate) fn stopped_tag(overloaded: bool) -> &'static str {
     match overloaded {
         true => "overloaded ",

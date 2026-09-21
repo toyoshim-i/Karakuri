@@ -5,12 +5,7 @@ use super::*;
 /// not a proportion of wherever the slot happens to be.
 pub(crate) const GAIN_STEP: f32 = 0.1;
 
-/// Where a scheduled fade starts, and what to call it. A bar is four beats
-/// here, which is an assumption rather than a measurement: nothing in the
-/// signal bus knows a time signature, and four is what the `bar` signal already
-/// means. A set in three would want this to be a dial, and would say so by
-/// having a fade land in the wrong place — which is a better way to find out
-/// than a setting nobody knew to change.
+/// Quantization intervals for scheduled fades, represented as beat counts and labels.
 pub(crate) const QUANTA: [(f64, &str); 3] =
     [(4.0, "the next bar"), (1.0, "the next beat"), (0.0, "now")];
 
@@ -471,15 +466,7 @@ impl Live {
         self.record_procedure(slot, &nodes);
     }
 
-    /// Say what a slot is playing, now that it changed.
-    ///
-    /// One thing these records cannot carry, and ADR-0316 moved which thing that
-    /// is. A swap *in* is documented to start cold, so a replay meeting these
-    /// records builds afresh and replays exactly. What no record says is that a
-    /// slot was stopped: a version over the budget is recorded like any other,
-    /// because it is what the slot holds, and a replay judges nothing — so it runs
-    /// material the performance had frozen. That is a gap in the record vocabulary
-    /// rather than in this function.
+    /// Emits `Record::Procedure` entries for the active nodes of the given slot.
     pub(super) fn record_procedure(&mut self, slot: usize, nodes: &Nodes) {
         if self.recorder.is_none() {
             return;
@@ -516,55 +503,11 @@ impl Live {
         }
     }
 
-    /// Write what this run is playing as a Set file.
+    /// Saves the active state of a slot's Set to disk (ADR-0122).
     ///
-    /// The control that closes an open gap: `--save-set` writes what the *flags*
-    /// say and exits, so the loop that lets an operator load a preset, edit it and
-    /// watch it had no way to keep the result. This is the render-loop half of
-    /// closing that — see
-    /// `docs/adr/0122-a-save-writes-the-bytes-that-are-on-screen.md`. Every surface
-    /// ends here — the key below, the MCP tool, and whatever surface arrives next —
-    /// for the same reason every mix control ends in one method. This is the only
-    /// save path, which is what makes a refusal and an outcome one sentence each
-    /// rather than one sentence per surface.
-    ///
-    /// The slot is an argument and the key passes its focus in. A Set file
-    /// describes one Set and a deck holds four; the one an *operator* means is the
-    /// one their hands are already on, which is what focus is — and a model has no
-    /// hands and no focus, so it names the slot as it names one to read a
-    /// procedure. This is `toggle_on_air`'s split, for its reason.
-    ///
-    /// `id` is what the caller wanted it called, or a stamp. A key press cannot
-    /// type a name, so it passes `None`; see `history::stamped_id`, whose
-    /// convention that is and whose reason it borrows — an operator looks for the
-    /// time they saved it. A caller that *can* type one is not made to take a
-    /// timestamp.
-    ///
-    /// `reply` is whoever is waiting who is not at the terminal. Every sentence
-    /// below goes to both, and each of them is written once: a refusal that reached
-    /// a model in different words than it reaches the terminal would be two
-    /// refusals to keep in step, and the wording of this one has already had to be
-    /// corrected once.
-    ///
-    /// Read off the live Set, not off `Args`. `saving_seeds` states the hazard from
-    /// the other side: a writer with its own copy of the rule records numbers the
-    /// run was not using. Every number a Set file carries can have moved since the
-    /// flags were parsed — a param through a record, a capacity or a salt through a
-    /// rebuilt Set file — so the only reading that cannot be stale is the Set's
-    /// own.
-    ///
-    /// Refused, accepted, gathered, written — and only the third of those needs a
-    /// `Deck`. The three sentences a save can produce before the disk speaks are
-    /// [`no_such_slot`], [`nothing_to_save`] and [`accepted_save`], all free
-    /// functions, so what a client is told is checkable without a window.
-    /// `playing_values` is the line that is not, and everything above it here is
-    /// above it deliberately.
-    ///
-    /// Gathered here, written elsewhere. Everything below this line is a read off
-    /// values already in memory; the store I/O goes to a thread of its own — one
-    /// per save, since saves are rare and a pool would be machinery for a rate of a
-    /// few an hour. The outcome comes back over `saves` and the record is written
-    /// at the frame it arrives, not at this key press. See `Live::finished_saves`.
+    /// Reads parameters, bindings, and active values directly from the live Set,
+    /// spawning a background thread to handle disk I/O while outcome notifications
+    /// and records are handled on frame completion.
     pub(super) fn save_set(
         &mut self,
         asked: Asked,
@@ -682,13 +625,7 @@ impl Live {
         self.saves_in_flight = self.saves_in_flight.saturating_sub(1);
         let said = match outcome {
             Ok(()) => {
-                // **Two sentences because two things are true**, and the second
-                // would be a lie in the first's words: `--load-set` reads the
-                // library, so telling a model to load what it just wrote into
-                // the sandbox would send it after a file that path cannot see.
-                // What it is told instead is where the file is, which is what
-                // the operator needs to find it after the show
-                // (P-0096, ADR-0261).
+                // Distinguish between operator library saves and MCP sandbox saves (ADR-0261).
                 let said = match asked {
                     Asked::Operator => {
                         format!("slot {slot}: saved as set `{id}` — load it with `--load-set {id}`")
@@ -1478,35 +1415,8 @@ impl Live {
             Operation::SetSync { .. } => Some(mix::current_tempo(self.deck.signals().oscillator())),
             _ => None,
         };
-        // **The transition settings, for the four operations that schedule a
-        // move**, and the one reading here that is read off nothing: `z`, `n`
-        // and `j` set the shape, the quantum and the length, no record carries
-        // any of them, and they are this program's own state until it hands
-        // them over. That is the whole of what settling these four
-        // conversions decided — see `karakuri_operation_record::Transition`.
-        //
-        // **The shape is the third setting and the wipe is the only reader.**
-        // `mask_kind` and `mask_angle` are what `z` cycles, they are the shape
-        // the *next* wipe takes rather than the shape any slot is wearing, and
-        // handing them over here is what stopped `Live::wipe` building a
-        // record of its own.
-        //
-        // `mix::current_transition` takes the oscillator and the quantum
-        // rather than an instant, so the start is
-        // `karakuri_engine::transition::quantise`'s answer and this file
-        // cannot hand in a beat the grid was never on.
-        // **Where the deck a wipe is arriving on already sits in the mix**,
-        // and the one reading here taken so that a record can be left *out*.
-        // A wipe puts that deck under `over` and on air; this program is what
-        // knows the deck is already there, and the conversion is where the two
-        // records that would say so again are dropped. `c` used to make that
-        // decision here, in the two `if`s that are gone — the mode is the
-        // operator's, and `m` in front of `c` is what it buys.
-        //
-        // **The deck as it reports, which is what the governor may have held
-        // below the request.** `mix::current_mix` takes the engine's two
-        // values rather than the vocabulary's, so the crossing is made in one
-        // place, exactly as the mask's and the transition's are.
+        // Transition settings and current mix state for operations scheduling moves
+        // (FadeDeck, Crossfade, SelectRenderer, Wipe).
         let mix = match operation {
             Operation::Wipe { to: deck, .. } => EngineSlot::new(*deck, self.deck.slot_count())
                 .map(|slot| mix::current_mix(self.deck.blend(slot), self.deck.residency(slot))),

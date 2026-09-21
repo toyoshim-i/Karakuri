@@ -113,14 +113,7 @@ fn blank_comments_and_strings(src: &str) -> String {
     String::from_utf8(out).expect("blanking only ever writes spaces")
 }
 
-/// [`Live::key`]'s body, blanked, found by its signature.
-///
-/// The signature and not a line number, and not the name alone — `key` is a
-/// common word. It is spelled with `concat!` so the joined needle exists
-/// nowhere in this file except the function it names: a source scanner that
-/// finds itself is the classic way one of these comes back green. That it
-/// occurs exactly once is asserted, so a renamed or reformatted signature fails
-/// here instead of leaving the scan with nothing to read.
+/// Extracts the blanked function body of [`Live::key`] identified by signature.
 fn live_key_body() -> String {
     let blanked = blank_comments_and_strings(SOURCE);
     let needle = concat!("fn ", "key(&mut self, key: &Key) -> bool {");
@@ -407,26 +400,8 @@ fn enclosing_method(blanked: &str, at: usize) -> &str {
     &blanked[start..name_end]
 }
 
-/// A key reaches the deck through [`Live::operate`], or it is one of the owed
-/// ones and says why.
-///
-/// The route `karakuri-midi` took is *operation → `written` → record*, and the
-/// reason it could take it whole is that every operation a map line produces
-/// converts. A key handler cannot: three of its operations owe a record nobody
-/// can write yet, and routing one of those through `operate` would print the
-/// gap where the gesture used to be. It was seven, and four have left —
-/// `SetSync`, then `FadeDeck`, `Crossfade` and `SelectRenderer` together when
-/// the transition settings became a reading — each a row deleted here rather
-/// than kept, which is what the last loop below is for. So the ones that keep
-/// their own path are named here rather than left to be noticed, and this is
-/// what stops the list growing by accident — a record built beside the
-/// conversion is exactly the drift `karakuri-operation-record` exists to end,
-/// and `mix::gain_record`, `mix::opacity_record` and their neighbours went one
-/// at a time as each operation landed.
-///
-/// Read out of the checked-in source, in the shape
-/// [`every_key_the_live_path_acts_on_is_documented`] set, with a floor so a
-/// scan that stops matching fails instead of passing everything.
+/// Asserts that any method in `Live` calling `self.record(` directly is listed in
+/// `OWED_RECORD_PATHS` with a documented reason why its operation cannot convert.
 #[test]
 fn every_record_written_outside_operate_is_a_path_whose_conversion_is_owed() {
     let blanked = blank_comments_and_strings(SOURCE);
@@ -445,18 +420,7 @@ fn every_record_written_outside_operate_is_a_path_whose_conversion_is_owed() {
             reached.push(name);
         }
     }
-    // A floor rather than a count, and a low one: what is guarded against
-    // is the scan going quiet, which would let every direct write through.
-    // **One, where it was five, then four, then two.** `cycle_sync` was
-    // the fifth; `fade_slot` and `cycle_renderer` were the third and
-    // fourth and went together when the transition settings became a
-    // reading; `wipe` was the second and went when the front shape joined
-    // them. What is left is `operate` itself, which is the route rather
-    // than a path around it — so this floor is now as low as it can go,
-    // and the loop below is what actually keeps the table honest. A floor
-    // above what is left would fail as a dead scan on the day a row was
-    // correctly deleted — which is the one failure a guard against a dead
-    // scan must not invent.
+    // Verify that at least one method is matched so that dead scans fail.
     assert!(
         !reached.is_empty(),
         "no method reads as a record writer — the scan is not seeing `Live`'s \
@@ -474,23 +438,8 @@ fn every_record_written_outside_operate_is_a_path_whose_conversion_is_owed() {
     }
 }
 
-/// The keys that keep their own path are exactly the ones whose record is not
-/// settled, and this is what will say so the day one changes.
-///
-/// `b` and `, .` reach the beat tracker where they stand because `written`
-/// answers `Owed::NotSettled` for the operation each of them names. `y`, `f g`,
-/// `x`, `r` and `c` are the five that have already gone, and every one of them
-/// went the way this test names: `SetSync` stopped being owed when the
-/// conversion took a session tempo, `FadeDeck`, `Crossfade` and
-/// `SelectRenderer` stopped when it took the transition settings, and `Wipe`
-/// stopped when the front shape went over with them and the soft edge turned
-/// out to be the arriving deck's — so each key moved through [`Live::operate`]
-/// and its line here came out, taking `Live::fade_slot` and the last hand-built
-/// record with it. That is a statement about `karakuri-operation-record` rather
-/// than about this file, so it is checked against that crate: the day somebody
-/// settles one of these conversions, this fails and names the key that is now
-/// due to move through [`Live::operate`] — the promise `run_surface`'s
-/// `TapBeat` arm makes, kept by a test rather than by anyone remembering.
+/// Asserts that direct key paths only remain for operations whose conversion
+/// is not yet settled (`Written::Owed(Owed::NotSettled)`).
 #[test]
 fn the_keys_that_keep_their_own_path_are_the_ones_whose_record_is_not_settled() {
     use karakuri_operation_record::Owed;
@@ -515,14 +464,8 @@ fn the_keys_that_keep_their_own_path_are_the_ones_whose_record_is_not_settled() 
     }
 }
 
-/// A save still being written when the run ends is waited for, so the `save`
-/// record promised for every save that reached the disk
-/// (`docs/adr/0120-a-record-may-reach-outside-the-stream.md`) is in the stream.
-///
-/// The window is small and it is exactly the one an operator is in: press `k`,
-/// read that it took, quit. The wait is bounded — see [`SAVE_WAIT`] — and the
-/// bound is what the second half of this checks: a save that never reports back
-/// costs the quit the bound and no more.
+/// Asserts that in-flight background saves are awaited up to `SAVE_WAIT` when
+/// a run ends (ADR-0120).
 #[test]
 fn a_save_in_flight_at_the_end_of_a_run_is_waited_for() {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -557,41 +500,8 @@ fn a_save_in_flight_at_the_end_of_a_run_is_waited_for() {
     );
 }
 
-/// Both halves of the save path sit above everything in [`Live::frame`] that
-/// could stop them, which is the whole of what makes an answer to a waiting
-/// client independent of there being a swapchain.
-///
-/// [`Live::run_requests`] argues this for itself: a client asking to keep what
-/// is playing should not be waiting on a surface. The *outcome* drain used to
-/// sit below `frame::compose`, past three returns, so the argument was made and
-/// then half applied. On a window latched to `frame::Skip::Fault`, or returning
-/// `Outdated` every frame, the request was taken and the save thread wrote the
-/// file successfully — and the client waited out `mcp::SAVE_REPLY` to be told
-/// the outcome was neither success nor failure about a save already on disk,
-/// the terminal never said "saved as set X", and the `save` record promised for
-/// every save that reached the disk was withheld from the stream until the run
-/// quit.
-///
-/// This used to demand an early return and assert the calls were above it.
-/// There is no longer one: a sink with no target stopped being a reason to
-/// leave the function when a frame stopped belonging to one sink — see
-/// `frame`'s module documentation — so a frame that publishes nowhere now runs
-/// to the end. Demanding a `return` would make this test fail for the reason
-/// the defect it guards was fixed, which is the wrong question. What it asks
-/// instead is the property that outlives either shape: the two calls come above
-/// `frame::compose`, which is the GPU work and everything that has ever been a
-/// reason to bail out, and above the first `return` if one ever comes back. The
-/// second half is dormant today and is the half that matters on the day it is
-/// not.
-///
-/// Read off the source, and that is the honest description of what this can
-/// reach. `Live::frame` needs a window, a GPU and an event loop, and the two
-/// replay defects this project found both lived in this one function's
-/// statement order
-/// (`docs/adr/0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md`).
-/// The defect here is a statement order too, and this asserts it where it is,
-/// rather than asserting nothing and calling it untestable. Comment lines are
-/// dropped first, so prose about returning cannot stand in for a `return`.
+/// Asserts that save request handling and save outcome draining in `Live::frame`
+/// precede any early returns or GPU composition calls (ADR-0078).
 #[test]
 fn a_frame_attends_to_its_saves_before_anything_can_stop_them() {
     let source = include_str!("../../live/mod.rs");
