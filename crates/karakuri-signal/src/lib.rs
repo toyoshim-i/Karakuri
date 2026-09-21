@@ -1,20 +1,13 @@
-//! The signal bus and the local oscillator.
+//! Signal bus and local oscillator for tempo and modulation routing.
 //!
-//! Two invariants shape this crate, and both exist so that consumers never have
-//! to know where a value came from:
+//! ## Invariants
 //!
-//! - **The bus is always complete.** A signal with no provider returns a
-//!   synthesised value, so consumers never branch on whether a provider exists.
-//!   They branch only on [`Sample::confidence`]. A *measured* signal arrives as
-//!   one more layer over that same completeness — see [`measured`] — and
-//!   changes no answer to any name it does not measure.
-//! - **Rendering reads only the local oscillator**, never an external clock.
-//!   External input is correction applied to the oscillator, not a substitute
-//!   for it.
-//!
-//! The IR cannot read this bus at all. A procedure reacts to audio or tempo by
-//! declaring a `param` and having a `bind` record attach a signal to it, which
-//! is what keeps every external coupling declarative.
+//! - **Bus completeness**: Missing signal providers fall back to synthesized defaults;
+//!   consumers differentiate signals via [`Sample::confidence`].
+//! - **Local oscillator decoupling**: Render frames sample only the local oscillator;
+//!   external inputs apply corrections rather than replacing clock state.
+//! - **Declarative bindings**: Procedures consume signals strictly through declared params
+//!   attached via bind records.
 
 pub mod bus;
 pub mod id;
