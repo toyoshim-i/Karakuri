@@ -18,6 +18,11 @@ To maintain clarity across documentation and prevent conversational monologue fr
 - **Manuals and Code Comments are Specifications**: Manuals ([`docs/manual.md`](manual.md), [`docs/manual/`](manual/)), UI tooltips, and source comments (`//!`, `///`) record *what* the system does, observable behavior, invariants, and how to use the interface.
 - **Never write arguments, historical narratives, or philosophical justifications in manuals, tooltips, or code comments.** Keep manuals focused strictly on user-facing behavior, and code comments on technical contracts, pre/post-conditions, and invariants. If you need to explain why an alternative was rejected, write an ADR.
 
+### All Committed Content Must Be in English
+All files committed to the repository—including Rust source code, test suites, doc comments (`//!`, `///`, `//`), specifications, architecture documents, ADRs, examples, and git commit messages—**MUST be written strictly in English**.
+- **No verbatim chat logs in ADRs or comments**: Do not dump non-English chat excerpts, raw conversational quotes, or assistant monologue into committed documents or code comments.
+- **Technical distillation**: When capturing maintainer decisions, feedback, or rationale originally expressed in other languages (e.g. Japanese), translate and synthesize the requirements into clean, objective, technical English before committing.
+
 ### Rapidly Understanding the Codebase Architecture (3-Tier Hierarchy)
 Before writing code or proposing changes, contributors and AI agents MUST understand the system topology and component boundaries. The codebase is documented in a three-tier hierarchy designed for quick onboarding:
 
@@ -65,8 +70,9 @@ Standing invariants are maintained in [docs/principles/](principles/) — **one 
 - **Verify status before staging**: Run `git status` and `git diff` to inspect changes thoroughly before staging and committing.
 - **Preserve unrelated working changes**: If the working tree contains uncommitted files from another session or task, do not clean, revert, or commit them. Stage only the files relevant to your task.
 - **Atomic, focused commits**: Group related changes into single, coherent commits where documentation and implementation updates land together.
-- **Clear, descriptive commit messages**: Explain what changed and why in the commit message. For work co-authored with AI assistants, append the standard trailer:
+- **Clear, descriptive commit messages**: Explain what changed and why in the commit message. All commit messages MUST be in English. For work co-authored with AI assistants, append the standard trailer:
   `Co-Authored-By: <Agent Name> <<agent-email>>`
+- **English-only committed artifacts**: Ensure all committed files, comments, and documentation are strictly in English.
 - **Do not push without review**: Commits should be staged and committed locally; pushing to remote repositories is handled by the maintainer.
 
 ---
@@ -200,6 +206,7 @@ For architectural modifications that do not involve operations (e.g., DSL syntax
 Before marking a task or pull request as complete, verify that:
 
 - [ ] **Distinguish specification from argument in all added text**: Every added documentation block (whether in `.rs` docstrings/comments, HTML manuals, or UI tooltips) MUST be a specification (what it does / how to use it). Any design arguments, historical context, or rejected alternatives belong strictly in an ADR, not in code or manuals.
+- [ ] **All committed content is strictly in English**: All newly added or modified source code, tests, doc comments, specifications, ADRs, documentation, and commit messages are in English without raw non-English chat logs or quotes.
 - [ ] **A decision with a losing alternative has an ADR**: Recorded in `docs/adr/` and registered in `docs/adr/INDEX.md`.
 - [ ] **Operation changes updated across all surfaces**: Checked against Section 5 steps and validated with vocabulary tests.
 - [ ] **All workspace tests pass**: `cargo test --workspace` completes successfully with zero failures.
