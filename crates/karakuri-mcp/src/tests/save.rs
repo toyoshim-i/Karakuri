@@ -57,21 +57,8 @@ fn a_save_the_loop_does_not_answer_ends_and_says_something_true() {
     assert!(said.contains("`keeper`"), "{said}");
 }
 
-/// The render loop's own accept reaches a client that times out, and names the
-/// id it will find the set under.
-///
-/// The two halves of a truthful timeout meeting for the first time:
-/// [`crate::accepted_save`] is what the loop says at the frame it takes a save,
-/// and [`awaited`] is what this server does with it. Every other test that
-/// reaches a save drives a stand-in loop which sends `accepted` *itself* — so
-/// deleting `reply.accepted` from the real loop left the whole suite green,
-/// while a client whose deadline passed was told "Nothing was saved, and asking
-/// again is safe" about a save that was running and would land. That is a false
-/// claim to a model about a disk, and preventing exactly it is why [`Reply`]
-/// carries two messages rather than one.
-///
-/// The reply is deliberately still alive at the deadline: this is a slow save,
-/// not a dead loop, and the two have different answers.
+/// Verifies that when a client times out after the render loop accepts a save request,
+/// the timeout response includes the pending Set ID so the client does not assume failure.
 #[test]
 fn a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out() {
     let (tx, news) = mpsc::channel();

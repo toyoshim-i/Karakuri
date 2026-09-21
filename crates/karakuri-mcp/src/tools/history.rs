@@ -236,11 +236,8 @@ pub(crate) fn element_storage_block(store: &Store, id: &str) -> String {
         Ok(loaded) => loaded,
         Err(why) => return unavailable(&why),
     };
-    // **What each geometry runs at: the file's number, or the procedure's own
-    // default where the file names none** — `capacity [min, max] = default`,
-    // and the default is what the spec says applies. The other branch of
-    // `capacity_for` is `--capacity`, an operator's flag overriding both, and
-    // there are no flags in an MCP call: this answer is about a file.
+    // Resolves element capacity for each geometry from explicit file configuration
+    // or falls back to procedure defaults.
     let mut sources: Vec<(&Checked, u32)> = Vec::with_capacity(loaded.l1s.len());
     for (at, l1) in loaded.l1s.iter().enumerate() {
         match loaded

@@ -414,13 +414,8 @@ fn a_store_that_cannot_be_opened_is_an_error_naming_the_path() {
     );
 }
 
-/// **The tool is offered, and what comes back is what the source
-/// declared.**
-///
-/// The two halves are one test on purpose: a tool that is advertised and
-/// answers nothing, and one that answers without being advertised, are both
-/// invisible to a client, and this is the pass that says a model can find it
-/// and use it in one go.
+/// Verifies that the set tool is advertised in tool discovery and returns
+/// declared source parameters upon invocation.
 #[test]
 fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
     let server = start(true);

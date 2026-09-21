@@ -73,13 +73,7 @@ fn mcp_routes() -> Vec<(String, String, String)> {
     found
 }
 
-/// Arguments each published tool accepts, and the only thing this file says
-/// about a tool that the code does not.
-///
-/// Not a second list of titles: what a tool *is* comes back from [`asked`],
-/// which is the path a real call takes. This is the smallest call that gets
-/// past each schema, so that a tool cannot be surveyed by inventing what it
-/// would have been named.
+/// Returns minimal valid argument payloads satisfying each published tool schema.
 fn sample(name: &str) -> Value {
     match name {
         "read_procedure" => json!({ "slot": 0, "layer": "L4" }),
