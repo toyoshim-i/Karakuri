@@ -1,20 +1,8 @@
-//! Offscreen rendering to a PNG.
+//! Offscreen rendering to PNG.
 //!
-//! The same path the window takes, minus the window: the deck composites its
-//! Live slots into the linear HDR target, the present pass tone maps once and
-//! encodes to sRGB exactly once — on write, because the destination texture
-//! carries the transfer function. That makes this a preview of what is actually
-//! on screen rather than a second rendering path that might disagree with it.
-//!
-//! With several Sets this renders the mix, for that reason and no other: it is
-//! what the window shows. A flag that rendered each slot to its own file would
-//! be a different feature — looking at one candidate on its own is what the
-//! console's four deck preview cells do on screen, and the deck draws every
-//! slot into a target of its own on every frame whatever its residency
-//! (`docs/adr/0258-the-look-comes-before-the-fader-so-a-cell-draws-every-slot-and-says-which-nothing-it-is.md`),
-//! so a per-slot file is `Deck::slot_target` and a second present pass and
-//! changes nothing here. What the mix must not become is a fourth definition of
-//! "the output"; there is one, and this is it.
+//! Reuses the window render path without display presentation: composites live slots
+//! into a linear HDR target, executes the present pass tone mapping, and encodes to
+//! sRGB PNG output. See ADR-0258.
 
 use std::path::Path;
 

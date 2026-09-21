@@ -517,14 +517,7 @@ pub fn no_presets_at(dir: &Path) -> String {
     )
 }
 
-/// There is no preset library on this machine, said once and out loud.
-///
-/// Not an error and not a silence. The four places were tried and none of them
-/// holds one, which an operator can act on — by naming one — and cannot act on
-/// if nobody says it. It names no path because there is no path to name: the
-/// candidates are a function of where the binary is, and reciting four
-/// speculative directories at somebody is a sentence about a search rather than
-/// about their machine.
+/// Returns the message displayed when no preset library directory is found.
 pub fn no_preset_library() -> String {
     String::from(
         "no preset library: none of the places this program looks holds one, so nothing \

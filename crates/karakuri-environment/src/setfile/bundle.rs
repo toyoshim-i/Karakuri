@@ -73,13 +73,8 @@ pub fn resolve(store: &Store, path: &Path) -> Result<Vec<Line>, String> {
     let lines = karakuri_store::ndjson::read(path)
         .map_err(|e| format!("reading `{}`: {e}", path.display()))?;
 
-    // **The directory the file is in, and the whole of what its parts may
-    // name.** Canonical, because the comparison below is against it: on this
-    // maintainer's own machine a temporary directory is `/var/folders/…`, which
-    // *is* a symlink to `/private/var/folders/…`, so a root taken as spelled
-    // would fail to contain every path under it — the wall would refuse
-    // everything, and the first fix anybody reaches for when a wall refuses
-    // everything is to loosen it.
+    // Base directory for resolving bundle parts. Canonicalized to resolve symlinks
+    // (such as macOS `/var` -> `/private/var`) before prefix checks.
     let dir = match path.parent() {
         Some(dir) if !dir.as_os_str().is_empty() => dir,
         // `foo.kset` with no directory at all: the file is in the working

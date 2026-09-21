@@ -844,14 +844,8 @@ mod runner_tests {
         source.close();
     }
 
-    /// The offset estimate is what the module is about, and nothing pinned it.
-    /// Deleting it entirely, and inverting the minimum to a maximum, both left the
-    /// whole suite green — the existing anchor test asserts `beat_at(at_us + 1s)`,
-    /// which is relative to whatever `at_us` came out as, so it constrains the
-    /// extrapolation and says nothing about the derivation.
-    ///
-    /// Here the source's clock has an epoch far from ours, which is the realistic
-    /// case and the one a `clock_us: 0` script never exercises.
+    /// Verifies that the clock offset is estimated from the message with minimal delay,
+    /// tested against a non-zero remote epoch.
     #[test]
     fn the_offset_is_estimated_from_the_least_delayed_message() {
         let epoch = 1_000_000_000_i64;

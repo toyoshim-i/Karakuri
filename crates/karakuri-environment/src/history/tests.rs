@@ -886,13 +886,8 @@ fn a_set_id_cannot_escape_the_history_directory() {
     assert!(!path.to_string_lossy().contains(".."), "{}", path.display());
 }
 
-/// The cap bounds the walk, and the listing says it stopped.
-///
-/// The history grows with every save an operator makes and nothing prunes it,
-/// so a listing on a path an operator can press has to have a price (P-0091).
-/// The bound is on days opened: with nothing asked for, nothing is opened,
-/// which is what the `unclaimed` count proves here — the stray file in the day
-/// directory is only seen by a walk that went in.
+/// Verifies that history scanning respects the day limit cap and marks truncated listings.
+/// See Principle 0091.
 #[test]
 fn the_cap_bounds_the_walk_and_a_short_listing_says_so() {
     let tmp = tempfile::tempdir().expect("tempdir");

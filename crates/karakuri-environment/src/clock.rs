@@ -115,12 +115,7 @@ impl Clock {
         (whole as u32).min(u32::from(MAX_STEPS)) as u8
     }
 
-    /// The last frame interval, in seconds — the same measurement [`Clock::steps`]
-    /// took, handed out rather than taken again.
-    ///
-    /// It is what the beat correction's output lag is built from, and the whole of
-    /// why the interval is kept at all: the lag starts with the frame queue, which
-    /// is a number of frames at the display's rate rather than at `DT`.
+    /// Returns the last measured frame interval in seconds.
     pub fn interval(&self) -> f32 {
         self.interval
     }
@@ -201,38 +196,10 @@ mod tests {
         assert!((clock.interval() - 0.025).abs() < 1e-6);
     }
 
-    // -- what came with the type -------------------------------------------
-    //
-    // These three were `karakuri-cli`'s and came here with [`Clock`] under
-    // ADR-0297. They never touched a sink and never took a device — they are
-    // about the derivation, which is what made the type movable and is now
-    // two programs' rather than one program's. A test that stayed behind
-    // would have been a test of one caller's copy.
+    // Tests migrated under ADR-0297.
 
-    /// The interval of a frame that never ran is not lost — the next frame counts
-    /// it.
-    ///
-    /// This used to be about a frame that found nowhere to draw, which was the only
-    /// way the clock could go unread: `frame::compose` withheld the committing
-    /// closure from a refused frame, so `Clock::steps` was not called and the
-    /// interval carried. That is no longer a case at all — every frame
-    /// `frame::compose` composes reads the clock, whatever the sinks answered — and
-    /// the property it was checking is the same one, now carrying the gap where the
-    /// frame loop itself does not run: a paused event loop, a window the operating
-    /// system stopped sending redraws to, a long stall. The arithmetic below never
-    /// mentioned a sink, which is why the assertion stands unchanged while its
-    /// subject moved.
-    ///
-    /// The claim the frame loop's ordering rests on, and until `steps` could be
-    /// told what time it is there was no way to state it: the first version of this
-    /// test asserted that the step count did not exceed `MAX_STEPS` (it cannot:
-    /// `steps` clamps to it) and that the carry was under one (it is: `steps`
-    /// subtracts its own floor). Both survived deleting the body of `Clock::steps`.
-    ///
-    /// Two clocks over the same span, one reading it in two frames and one in a
-    /// single frame because the other was abandoned, must hand out the same total.
-    /// That is what "the time survives" means, and it is false for any clock that
-    /// resets `last` somewhere other than a frame that goes ahead.
+    /// Verifies that clock intervals accumulate across paused or skipped frames
+    /// so the total elapsed time matches regardless of frame cadence.
     #[test]
     fn a_frame_that_never_ran_leaves_its_time_for_the_next_one() {
         let start = Instant::now();

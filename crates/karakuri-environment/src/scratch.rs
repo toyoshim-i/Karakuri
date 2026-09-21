@@ -1,95 +1,8 @@
-//! The working copy an editing session runs from.
+//! Working copy management for live editable sessions.
 //!
-//! # The one place a live edit may land, and this module is it
-//!
-//! Where the material lives and who writes each place is
-//! `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`.
-//! The table is there and not here, because it was here as well as in
-//! [`crate::places`] and the two copies drifted together: both said the
-//! operator's library was written by `--save-set` *"and nothing else"* long
-//! after three other controls were writing it. What this module owns is the row
-//! it is: `<store>/scratch/` is where the deck actually runs, and `--watch`,
-//! MCP and the operator's editor all write there.
-//!
-//! Before this existed there was one place and it was whatever path the
-//! operator named, so `--mcp` handed a model write access to the repository's
-//! own examples. It used them: three shipped presets were replaced in one
-//! session, and what saved them was that they happened to be under version
-//! control. That is not a property of this program, and a `.kir` an operator
-//! wrote for a show would simply have been gone.
-//!
-//! So a run that can be edited copies its material here first and runs from the
-//! copy. Nothing downstream needs to know: [`materialise`] rewrites the deck's
-//! paths, and the compile, the watcher and the MCP surface all read the same
-//! field.
-//!
-//! # Only when something can write
-//!
-//! An offscreen render never edits anything, and creating a directory as a side
-//! effect of `--render` would make a pure function of its arguments into one
-//! that leaves a mark. The caller gates on that; see [`materialise`]'s
-//! documentation for the condition.
-//!
-//! # Material that has no file of its own
-//!
-//! A Set loaded with `--load-set` names its procedures by hash: the sources are
-//! in the store and there is no `.kir` anywhere to copy. [`place`] writes them
-//! here, which is what makes a saved Set editable at all — before there was a
-//! scratch, `--mcp` with `--load-set` was refused because there was nothing for
-//! a model to read or rewrite.
-//!
-//! That closes the loop the places were separated for: a Set of the operator's
-//! is materialised here, edited by a hand or a model, and saved back — into the
-//! library by the operator's own act, and into `<store>/sandbox/` when a model
-//! asked for it. Saving worked already; reading one back to edit it did not.
-//!
-//! # A slot runs from its own copy, and the name carries the slot
-//!
-//! One copy per slot, named `A0-drift_shell.kir` — the deck letter, the node's
-//! place in that slot, and the material's own name ([`node_name`]). The same
-//! preset in four slots is four files, and that is the requirement rather than
-//! the price of meeting it: a slot is the unit that gets replaced —
-//! [`crate::watch`]'s *"that is what it means for each slot to own its own
-//! `HotSwap`"* — so a slot whose material is also somebody else's is a slot
-//! that is not a channel.
-//!
-//! This replaces the opposite rule, which stood here until 2026-09-01. It is
-//! quoted rather than deleted because it was argued rather than assumed, and
-//! somebody will re-propose it:
-//!
-//! > Two slots naming one file share it — `watch` documents that as supported,
-//! > and a write through MCP reports the other slots it reached. Copying per-slot
-//! > would quietly end that.
-//!
-//! Three things are wrong with it.
-//!
-//! 1. It is circular. The report it defends — *this file is also slot 1* —
-//!    exists only to describe the sharing. End the sharing and that sentence is
-//!    not made untrue, it is made empty, which is what it should say. What is lost
-//!    is a warning about an accident, not something an operator asked for.
-//! 2. It contradicts the naming rule in the same directory. [`place`] has written
-//!    `A0-drift.kir` since ADR-0228, whose argument is that
-//!    `<store>/scratch/<name>.kir` overwrites what is there, so two decks whose
-//!    material shares a name *"would silently become one file — the second load
-//!    moving the first deck on its watcher's next poll, with nothing to say why"*.
-//!    A copy named after its source alone put that exact failure back into the one
-//!    module written to stop it, and a run with `--load-set --watch` used both
-//!    rules at once, in one directory.
-//! 3. It costs the thing the slots are for.
-//!    Four decks opened on one preset are four simulations to be driven apart; one
-//!    shared file means the first edit moves all four and no one of them can be
-//!    moved alone. In `crates/karakuri` it also meant one save rebuilt four slots,
-//!    four candidates entered the Staging lane, and the three that are parked
-//!    never reach a verdict — a lane that fills on the first save and stays full
-//!    for the rest of the run.
-//!
-//! What survives is the obligation to speak, not the shared file. An operator
-//! who gave one preset to four decks had an edit reach all four, and will
-//! expect it to. So the surface that writes says what its write reached:
-//! [`crate::mcp`] still scans the other slots for the path it wrote — a scan
-//! that is normally empty now, and empty *because* of this rule rather than
-//! because nobody shares — and both programs print the per-deck file list at
-//! startup, so the operator opens the file belonging to the deck they mean.
+//! Materializes editable shaders into `<store>/scratch/` per slot, ensuring each slot
+//! owns an isolated copy of its files (`<letter><node_index>-<name>.kir`) so that edits
+//! and watcher triggers do not collide across channels (P-0096, ADR-0228).
 
 use std::path::{Path, PathBuf};
 
@@ -154,28 +67,9 @@ where
     Ok(dir)
 }
 
-/// The name one node of one slot is filed under, and the one rule: the deck
-/// letter, the node's place in that slot, and the material's own name —
-/// `A0-drift_shell`. [`place`] appends the `.kir`.
+/// Formats a scratch file stem for a node in a given slot: `<deck_letter><at>-<name>`.
 ///
-/// This is ADR-0228's spelling, made the whole directory's rather than the
-/// library load's. That record's argument is the one that generalises: `place`
-/// *"writes `<store>/scratch/<name>.kir` and overwrites what is there, so two
-/// decks loading Sets whose procedures happen to share a name would silently
-/// become one file — the second load moving the first deck on its watcher's
-/// next poll, with nothing to say why."* Nothing in that sentence is about a
-/// *load*: it is about two decks and one directory, which is every run.
-///
-/// The material's own name is kept, disambiguated by the prefix rather than
-/// replaced by it, for the reason the counter it replaces gave: *"a scratch of
-/// hashes is a scratch nobody opens in an editor."* An operator has to be able
-/// to see which file is which deck and what is in it, and the two questions are
-/// answered by the two halves of this name.
-///
-/// No counter and no collision list. `<letter><at>` is unique by construction —
-/// a slot index and a node index — so two different sources can no longer land
-/// on one file however they are named, which is what the `unique_name` this
-/// replaces was scanning for.
+/// Uniquely scopes files per deck slot and node index to prevent collisions (ADR-0228).
 pub fn node_name(slot: usize, at: usize, name: &str) -> String {
     format!("{}{at}-{}", deck_letter(slot), sanitize(name))
 }

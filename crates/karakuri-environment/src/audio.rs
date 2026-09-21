@@ -150,11 +150,8 @@ pub struct Status {
 impl Audio {
     /// Open an input. `selector` is `default` or part of a device's name.
     ///
-    /// `session_bpm` is `--bpm`, and it does two jobs: it is what the oscillator
-    /// free-runs at, and it is where the tempo tracker's octave window starts. They
-    /// are the same number because they are the same statement — "this is roughly
-    /// the tempo" — and after the first lock the window centre simply follows the
-    /// grid. See `karakuri-audio`'s `tempo` module.
+    /// `session_bpm` defines the free-running oscillator BPM and the tempo tracker's
+    /// initial octave window center. See `karakuri-audio::tempo`.
     pub fn open(
         selector: &str,
         latency_offset_ms: f32,
@@ -306,16 +303,9 @@ impl Audio {
         &mut self.audio
     }
 
-    /// The operator moving the grid an octave: `2.0` for ×2, `0.5` for ÷2.
+    /// Shifts the tempo grid by an octave factor (`2.0` for double, `0.5` for half).
     ///
-    /// The one decision the estimator cannot make, and the reason it is a key
-    /// rather than a measurement is in `karakuri-audio`'s `tempo` module. It moves
-    /// the grid *and* the window together — the window because the centre is read
-    /// off the oscillator on the next frame, so tracking continues in the new
-    /// octave rather than folding straight back.
-    ///
-    /// `None` when the new tempo would leave the trackable range, which is the
-    /// lock's call rather than this one's.
+    /// Returns `None` if the resulting tempo falls outside the trackable range.
     pub fn octave(&mut self, signals: &mut Signals, factor: f32) -> Option<Record> {
         let correction = self.lock.octave(factor, signals.oscillator())?;
         let record = tempo_record(&correction);

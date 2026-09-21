@@ -334,31 +334,7 @@ pub struct Watch {
     /// would turn every save of a morph's `.kir` into a build that does not land,
     /// with the picture frozen at whatever startup produced.
     edges: Vec<karakuri_engine::set::Edge>,
-    /// Who may move each node the operator has spoken for, restated on every
-    /// rebuild for the reason the edges above it are: a request that depended on
-    /// what happened to be live is not reproducible from a record stream.
-    /// Concretely, and this is the whole of it — an operator grants a node to an
-    /// agent, a `.kir` in the slot is saved, and the rebuild takes the grant back
-    /// without a word. A picture that changed says so; an arrangement about who may
-    /// write does not.
-    ///
-    /// Empty in every run there is today, and said here rather than hidden at the
-    /// request. Nothing writes an authority into a watcher yet, and the startup
-    /// path is not the thing that will: `Record::Authority` is deliberately *not*
-    /// Set-file state — `setfile` and `karakuri_store::project` both drop it,
-    /// because an authority is an arrangement made during a performance and a Set
-    /// file carrying one would hand the node over wherever it was next loaded. So
-    /// there is no `--load-set` reading to seed this from, and a `Vec::new()`
-    /// spelled at the `Request` would have been the truth of today and unreachable
-    /// tomorrow. It is a field, taken through [`Watch::new`] like the bindings and
-    /// the edges beside it, so that the day a writer exists there is somewhere for
-    /// it to write: a field that cannot be filled is worse than no field at all.
-    ///
-    /// The run's own grants are not tracked here, which is a limit on
-    /// `Watch::live`'s exact terms rather than an oversight: an
-    /// `Operation::SetAuthority` moves a node at a frame this watcher never sees,
-    /// so a rebuild restates what the slot was *handed*, and what a hand did later
-    /// is in the stream as an `authority` record.
+    /// Authority grants for node modification permissions across rebuilds.
     authorities: Vec<karakuri_engine::swap::AuthorityAt>,
     /// A hash of each file's contents as of the previous poll. `None` for a file
     /// that does not exist or cannot be read, which compares equal to itself and so
@@ -384,32 +360,7 @@ pub struct Watch {
     /// nothing this watcher owns, so a load costs the frame it happens on a `send`
     /// and no more.
     aimed: Option<Receiver<Aim>>,
-    /// Where every version that compiled is kept, so an edit can be undone, and the
-    /// Set this slot is running, which is what a version is filed under. `None`
-    /// when no store root was given, which is the offscreen paths.
-    ///
-    /// Separate from `stored`, and not folded into it. That one keeps what reached
-    /// the *screen*; this keeps what reached the *compiler*, and the difference is
-    /// the whole value — a build that compiled and never reached a slot, because a
-    /// newer one superseded it before the boundary, becomes no `Record::Procedure`
-    /// and reaches no save, and the version *before* the one that stopped a slot
-    /// for cost is exactly what an operator goes looking for (ADR-0316).
-    ///
-    /// The id is inside the pair rather than a field beside it, because this is its
-    /// only reader: a slot keeping no history has nothing to file under, and a
-    /// second field that meant nothing whenever this was `None` would be a second
-    /// answer to *what is this slot running* with nobody asking it. `None` inside
-    /// the pair is a slot running material no Set names — a pair on the command
-    /// line — which [`crate::history::Snapshots::record`] argues is a state rather
-    /// than a missing answer.
-    ///
-    /// It is what the slot was running when the watcher was built, until a re-point
-    /// says otherwise, and [`Watch::repointed`] is where it moves: [`Aim::set`] is
-    /// a field of an aim like the files are, so a library load carries the Set it
-    /// is loading and the versions written after it are filed under that Set rather
-    /// than under the one before it. There is one holder of the answer here and the
-    /// destructuring that moves it has no `..`, so a re-point cannot leave it
-    /// behind.
+    /// History snapshot recorder and optional Set ID for version tracking (ADR-0316).
     snapshots: Option<(crate::history::Shared, Option<String>)>,
 }
 
@@ -518,33 +469,11 @@ impl Watch {
         self
     }
 
-    /// Let whoever holds the other end of `rx` point this watcher at different
-    /// material, which is how a Set reaches a *running* deck.
+    /// Attaches a receiver to accept re-point requests for slot hot-reloading.
     ///
-    /// # It is a re-point and deliberately not an install
-    ///
-    /// `karakuri_engine::deck::Deck::install` is the one function that puts a built
-    /// Set in a slot, and it says of itself that it is *"deliberately not reachable
-    /// from a key or a surface: a live run changes its material by editing a file
-    /// and letting the worker build it, which is what the budget watchdog is
-    /// attached to."* A surface that built a Set and handed it over would be
-    /// putting material on air that nothing measured, in a slot the watchdog never
-    /// got to judge — the two things `HotSwap` exists to guarantee.
-    ///
-    /// So a load says *look at these files instead* and lets go. Everything after
-    /// that is the path an edit already takes: compiled on this thread, offered on
-    /// the same channel, swapped at a frame boundary (P-0094), judged on that Set's
-    /// own measured frame against the budget (ADR-0313), and left in the slot with
-    /// the slot stopped if it costs too much (ADR-0316). The library gets the
-    /// watchdog for nothing, and no second route into a slot is opened.
-    ///
-    /// # What the sender owes
-    ///
-    /// Files. This watcher reads paths and never a store ([`Source::poll`]), so a
-    /// Set whose sources are content-addressed blobs has to be written out where
-    /// the watcher can read it before the aim is sent — which is
-    /// [`crate::scratch::place`], and is exactly what `--load-set` does at startup
-    /// for the same watcher.
+    /// Triggers recompilation and budget evaluation through the standard hot-swap path
+    /// (ADR-0313, ADR-0316, Principle 0094). Requires source files to be placed on disk
+    /// beforehand via [`crate::scratch::place`].
     pub fn aimed_by(mut self, rx: Receiver<Aim>) -> Watch {
         self.aimed = Some(rx);
         self
@@ -798,19 +727,7 @@ impl Watch {
             // compiled — this is bookkeeping either way.
             match snapshots.lock() {
                 Ok(mut snapshots) => {
-                    // Every file, each under its own layer and index. A rebuild
-                    // recompiles the whole stack whichever file was saved, so
-                    // every one of them is offered — and `Snapshots::record`
-                    // drops the ones that did not change, which is what keeps
-                    // the untouched renderers' chains from becoming rows of
-                    // identical files.
-                    // **The bytes come off the node, not off a second list
-                    // zipped onto it.** `placed` carries the text each file was
-                    // compiled from — see [`crate::compile::Placed`] — so what a version
-                    // is filed under and what is written into it are read from
-                    // one place. Zipping `srcs` back on was a second way to
-                    // pair a node with its source, correct only for as long as
-                    // the sort kept file order.
+                    // Record snapshots for changed files using Placed source strings.
                     for node in &placed {
                         let layer = crate::setfile::kind_name(node.layer);
                         let index = node.index as usize;
@@ -954,12 +871,7 @@ impl Watch {
             params,
             published: self.published.clone(),
             bindings: self.bindings.clone(),
-            // **Who may move each node, restated with them.** Empty in every
-            // run today, and cloned from the field rather than spelled
-            // `Vec::new()` here for the reason `Watch::authorities` gives: what
-            // is stated at the request is what the rebuild carries, so the day
-            // a grant is handed to a watcher this is already the line that
-            // stops the next save from taking it back.
+            // Propagate declared authority grants through rebuild.
             authorities: self.authorities.clone(),
             label,
         }))

@@ -475,17 +475,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     layer_name(other)
                 )),
             },
-            // **Held rather than turned into writes here.** What a `param`
-            // record becomes depends on what the procedures declare — a
-            // `vec3` value against a `vec3` param is three writes, one per
-            // component — and the procedures are not in hand until every
-            // `slot` record has been met and checked. So the records are
-            // collected in file order and expanded below, where the
-            // declarations are.
-            //
-            // `at` absent is the wildcard, and `at`'s own type is what keeps a
-            // record with no node meaning *every* node regardless of what
-            // placeholder `layer` the wire line carries.
+            // Deferred expansion: param records depend on procedure declarations
+            // (e.g. multi-component vectors). Absent `at` acts as wildcard for all nodes.
             Record::Param { at, key, value } => param_records.push((
                 at.map(|at| (kind_of(at.layer), at.index)),
                 key.clone(),
@@ -780,14 +771,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let l4s = check(&l4_srcs)?;
     let fields = check(&field_srcs)?;
 
-    // -- What a `param` and a `bind` mean, now that the declarations are in hand -
-    //
-    // **A parameter is driven one component at a time**
-    // ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
-    // so the engine holds `glow.x`, `glow.y` and `glow.z` where a `.kir`
-    // declares one `vec3 glow`. That is the whole of what this section turns a
-    // record into — and the reason it is here rather than in the loop above is
-    // that the width comes from the *declaration*, which the loop does not have.
+    // Expands parameter and binding records per component declaration width (ADR-0268).
     let layers: [(Kind, &[Checked]); 5] = [
         (Kind::L1, &l1s),
         (Kind::L2, &l2s),
