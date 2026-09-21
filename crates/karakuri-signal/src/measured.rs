@@ -238,13 +238,10 @@ fn clamp_unit(x: f32) -> f32 {
     }
 }
 
-/// The measured layer, over the synthesized one.
+/// Layered signal bus overlaying measured audio frame samples onto synthesized defaults.
 ///
-/// Every name a frame measured is answered from the frame; every other name —
-/// including a band index past what was measured, and every oscillator-derived
-/// signal — falls through unchanged. With `measured` as `None` this *is* the
-/// synthesized bus, which is what keeps a run with no audio configured
-/// bit-identical to one from before audio existed.
+/// Measured frame channels override underlying values; unmeasured channels and
+/// oscillator signals fall through to the underlying [`SynthesizedBus`].
 pub struct MeasuredBus<'a> {
     measured: Option<&'a AudioFrame>,
     beneath: SynthesizedBus<'a>,

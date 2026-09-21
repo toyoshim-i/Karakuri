@@ -1,20 +1,6 @@
-//! A parameterised noise generator.
+//! Parameterized lattice noise generation for procedural modulation.
 //!
-//! Irregular spawning binds a noise signal to `spawn_rate` instead of baking
-//! a distribution into the engine, specifically so its "depth and period are
-//! declarative and adjustable" (see "Spawn timing" in `docs/ir-spec.md`).
-//! Depth is the `bind` record's `range`. Period lives here, as [`NoiseConfig::rate`]:
-//! without it, noise runs at a fixed rate no consumer can turn, which is
-//! exactly the "fixed property nobody can reach" that section rejects Poisson
-//! for.
-//!
-//! Every kind shares one structure: a lattice coordinate, `beats * rate`,
-//! split into an integer index and a fraction. What differs between kinds is
-//! only what happens with that split — see [`NoiseKind`].
-//!
-//! Deterministic: a [`NoiseConfig::sample`] call is a pure function of an
-//! explicit `seed`, the config, and the oscillator's `t` and `bpm`. No clock,
-//! no interior mutability, nothing thread-derived.
+//! Provides deterministic PRNG lattice sampling driven by oscillator phase and frequency.
 
 use crate::oscillator::Oscillator;
 
@@ -100,19 +86,12 @@ impl Default for NoiseConfig {
 }
 
 impl NoiseConfig {
-    /// Sample this configuration at the oscillator's current phase.
+    /// Evaluates noise at the oscillator's current phase and frequency.
     ///
-    /// Deterministic: a pure function of `seed`, `self`, and
-    /// `oscillator.t()`/`oscillator.bpm()` — nothing else is read, so the
-    /// same seed over an oscillator fed the same sequence of
-    /// [`Oscillator::advance`] calls reproduces the same sample, bit for bit.
+    /// Deterministic given `seed`, configuration, and oscillator timing.
     pub fn sample(&self, seed: u64, oscillator: &Oscillator) -> f32 {
-        // `elapsed_beats`, not `beats`: a noise stream follows a tempo
-        // correction, because cycles-per-beat is a rate and the accumulator
-        // keeps it continuous, but a **phase** correction does not re-hash it.
-        // Realigning the beat grid with a room is no reason for a flicker with
-        // no musical intent to jump. See `Oscillator`'s module doc, which is
-        // also where this is settled.
+        // Samples over continuous `elapsed_beats` rather than phase-wrapped `beats`
+        // so that manual phase shifts do not induce discontinuous output hops.
         let lattice = oscillator.elapsed_beats() * self.rate as f64;
         sample_kind(self.kind, seed, self.stream, lattice)
     }
@@ -190,11 +169,7 @@ fn hash_signed(seed: u64, stream: u64, index: i64) -> f32 {
     2.0 * hash_unit(seed, stream, index as u64) - 1.0
 }
 
-/// SplitMix64's finalizer: a fixed, portable bit mix with no external state.
-/// Same input bits always produce the same output bits on every platform,
-/// which is the whole requirement for "a pure function of its seed and the
-/// oscillator phase" — there is no RNG to seed from the OS, the clock, or a
-/// thread ID.
+/// SplitMix64 64-bit integer mixing finalizer with deterministic cross-platform output.
 fn mix64(mut x: u64) -> u64 {
     x ^= x >> 30;
     x = x.wrapping_mul(0xbf58476d1ce4e5b9);
