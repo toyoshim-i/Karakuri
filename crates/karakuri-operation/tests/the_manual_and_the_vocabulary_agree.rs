@@ -1,54 +1,8 @@
-//! **`docs/manual/operations.html` and [`Operation`] enumerate the same
-//! operations.** This file is what makes that true rather than intended: it
-//! reads the checked-in page and checks it against the type, both ways round.
+//! Integration tests verifying bidirectional correspondence between
+//! operations specified in `docs/manual/operations.html` and the [`Operation`] enum.
 //!
-//! # Why the page is the specification and not the other way round
-//!
-//! The naming was done there. One `<h3>` per operation, grouped
-//! into sections, each row carrying which of the four surfaces reaches it —
-//! and the page's own footer states the direction of authority for behaviour:
-//! *"Where a row here and the program disagree, the program is right and this
-//! page is a bug."* For **which operations exist**, the arrow points the other
-//! way, and it has to: the program does not have a vocabulary yet, which is
-//! the whole reason this crate was written. So the page names them, and the
-//! type is checked against the page.
-//!
-//! # Why the check is both ways round
-//!
-//! The two failures are different failures and both matter:
-//!
-//! - a row in the page with **no variant** is an operation the vocabulary
-//!   cannot say, and therefore one no surface can route into — the first
-//!   rule's whole content, failing silently;
-//! - a variant with **no row** is an operation nobody specified. It would
-//!   arrive with no prose, no four routes, and nothing saying what it acts on
-//!   — and the moment the surfaces migrate onto this type it would be an
-//!   operation a key could reach and the map, the panel and MCP could not,
-//!   which is the same rule broken from the other end.
-//!
-//! [`Operation::TITLES`] cannot drift from the variants themselves — the two
-//! come out of one `operations!` invocation — so checking the titles against
-//! the page checks the enum against the page.
-//!
-//! # What it does not check yet
-//!
-//! **Not the routes.** Every row carries four badges — `has`, `plan`, `gap` —
-//! and asserting those means asserting that a key binding, a map target, a
-//! panel control and an MCP tool exist for each. This crate cannot check one:
-//! it has no dependencies at all and the surfaces are what would have to be
-//! read. It becomes checkable one surface at a time as they migrate, in the
-//! crate that owns the surface — and **the MCP column is checked now**, both
-//! ways round, in `karakuri-cli`'s `mcp.rs`
-//! (`docs/adr/0199-mcp-names-its-operations-and-performs-them-itself.md`). The
-//! other three columns are still nobody's.
-//!
-//! **Not the payloads.** Nothing here can tell whether a variant carries the
-//! right fields; that is what the prose at each variant is for, and thirteen
-//! of them carry `Undecided` and say so.
-//!
-//! The shape is `crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`:
-//! scan the checked-in source, assert in both directions, and carry floors so
-//! the scan cannot silently match nothing.
+//! Ensures every documented operation row matches a corresponding [`Operation`] variant
+//! and that no orphaned variants exist without documentation.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -132,21 +86,7 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
         );
     }
 
-    // A floor, not a count: the point is that the scan cannot come back empty
-    // because the page moved or its markup changed, which would make this test
-    // pass by finding nothing to check. It read 46 when this landed, 45 once
-    // two residency rows became one (ADR-0186), 46 again since the look split
-    // into a tone map and an exposure (ADR-0192), and 48 since the mask took a
-    // row for its shape and a row for its position (ADR-0201), 49 since
-    // the arrangement took one for its reset (ADR-0208), 50 since a node
-    // took one for its authority (ADR-0211), 52 since the staging lane
-    // took one to keep a candidate and one to put a version back, and 54
-    // since the arrangement gained a save and a put-back beside the reset
-    // (ADR-0221), and 62 since two whole bays were specified at once — the
-    // master chain's three effects and the sequencer's five, the first rows on
-    // the page waiting on neither a control nor a surface (ADR-0222,
-    // ADR-0227); it is meant to move with the page, never to be lowered to
-    // fit a smaller scan.
+    // Minimum floor assertion to prevent false passes if document structure or path changes.
     assert!(
         rows.len() >= 62,
         "only {} operations found in {PAGE} — is a row still `{ROW}` followed by an `<h3>`?",

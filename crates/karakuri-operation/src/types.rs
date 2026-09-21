@@ -282,30 +282,11 @@ impl std::str::FromStr for Layer {
     }
 }
 
-/// Which kinds of row a library listing shows: the five procedure kinds and
-/// Sets, each on or off, with an OR across the ones that are on and everything
-/// where none is.
+/// Filters applied to library listings across procedure kinds and Sets.
 ///
-/// [`Operation::FilterLibrary`]'s payload, and the whole of it. Seven named
-/// booleans rather than a list of members, because the list is closed by
-/// construction — a procedure declares one of [`Layer`]'s six kinds and the
-/// seventh row kind is a Set — and a `Vec` would admit a member said twice,
-/// which is a state this control cannot be in.
-///
-/// Every state is said at once. A press names the whole row and never one chip,
-/// which is [`Operation::Publish`]'s rule on a different list: *"adding or
-/// removing one at a time is a statement about an entry, and an interface that
-/// publishes nothing publishes everything is a statement about the list"* — and
-/// it is what keeps two hands on one bay from disagreeing about which kinds are
-/// showing.
-///
-/// The affordance is the surface's. Nothing here says *toggle*
-/// ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md));
-/// a chip that flips one field and sends all six is the console's arithmetic,
-/// exactly as the blend chip's cycle is.
-///
-/// See
-/// `docs/adr/0338-a-procedure-is-a-row-of-the-library-and-one-loaded-over-a-layer-makes-a-set-with-no-name.md`.
+/// Used as the payload for [`Operation::FilterLibrary`]. Evaluated as an OR
+/// across all enabled filter flags; if none are enabled, all kinds match.
+/// See ADR-0338.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LibraryKinds {
     pub l1: bool,
@@ -397,30 +378,14 @@ impl Sync {
     }
 }
 
-/// What one step of a sequencer pattern is worth: a sixteenth or an eighth, and
-/// the list is closed.
+/// Subdivision value for one step of a sequencer pattern: sixteenth or eighth.
 ///
-/// The pattern is one bar, fixed, so the count follows the mode rather than
-/// being a second thing a hand sets — sixteen cells at a sixteenth and eight at
-/// an eighth, the row keeping its width so the cells halve in the finer one
-/// (`docs/adr/0306-the-grid-head-is-one-pill-because-the-bar-is-one-bar-and-the-count-follows-the-mode.md`).
-///
-/// It is the pattern's and not the session's or a lane's, which is the
-/// console's own sentence about the pill that draws it: *"It is armed because
-/// it is what the pattern is rather than a preference the head is holding."* So
-/// [`Operation::SetPatternGrid`] names the bank it is the mode of.
-///
-/// A pattern stores sixteen slots in both modes and an eighth reads slot `2k`,
-/// so this is a change of *reading* and never of the pattern — which is
-/// [`StepMode::slot_of`] and
-/// `docs/adr/0320-a-pattern-is-one-bar-of-sixteen-slots-a-lane-is-a-target-and-two-levels-and-a-cell-is-a-bit.md`.
-/// The stored width is `karakuri_pattern`'s, because it belongs to the thing
-/// that holds the steps.
+/// Pattern length is one fixed bar; step count directly corresponds to mode
+/// (16 steps for sixteenth, 8 steps for eighth). Stored pattern width remains 16 slots.
+/// See ADR-0306 and ADR-0320.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum StepMode {
-    /// Sixteen steps to the bar, four to the beat. What the console's ruler and
-    /// cells have been drawn in since the mock's first commit, and what a pattern
-    /// nobody has pressed the pill on is in.
+    /// Sixteen steps to the bar, four to the beat. Default mode.
     #[default]
     Sixteenth,
     /// Eight steps to the bar, two to the beat.
@@ -778,14 +743,9 @@ impl Tonemap {
     }
 }
 
-/// Which frame the master chain's feedback pass reads back.
-/// `karakuri_engine::master::Cut`'s two, mirrored here rather than imported for
-/// this crate's own reason — see the module documentation.
+/// Which frame the master chain feedback pass reads back.
 ///
-/// The maintainer's decision on 2026-09-09 was *both, selectable*: the two are
-/// different pictures and a design that picked one would be taking a decision
-/// away from a hand. See
-/// `docs/adr/0317-the-master-chain-is-three-fixed-passes-and-feedback-reads-either-cut.md`.
+/// Mirrors `karakuri_engine::master::Cut`. See ADR-0317.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Cut {
     /// The frame as the mix wrote it, before this chain touched it. One echo of the
@@ -836,19 +796,8 @@ pub struct Feedback {
 }
 
 impl Feedback {
-    /// The most a surface may ask for, and the reason it is short of 1.0 is the
-    /// engine's: under [`Cut::Exit`] the pass is an accumulator with no decay in
-    /// it, so 1.0 runs still material away to infinity. At 0.95 the ceiling is
-    /// twenty times the frame.
-    ///
-    /// This is the reach a control draws, and it is not the wall. The wall is
-    /// `karakuri_engine::master::Chain::clamped`, where the record is applied, so a
-    /// MIDI map and a model meet it too
-    /// (`docs/principles/0090-a-surface-offers-it-never-decides.md`). The number is
-    /// here as well so a fader can be laid out without reading the engine, and the
-    /// two being one number is asserted where both are visible — `crates/karakuri`,
-    /// which depends on this crate and on the engine. That is [`Tonemap`]'s
-    /// arrangement for a range instead of a list.
+    /// Maximum feedback amount allowed (0.95) to prevent unbounded accumulation
+    /// under [`Cut::Exit`]. Clamped in `karakuri_engine::master::Chain::clamped`.
     pub const MAX: f32 = 0.95;
 }
 
@@ -1006,20 +955,8 @@ pub enum Authority {
 }
 
 impl Authority {
-    /// The lower-case word for this level, which is what
-    /// `karakuri_store::record::Record::Authority` carries.
-    ///
-    /// A match rather than a table, for [`BlendMode::name`]'s reason: a level added
-    /// to the enum does not compile until it has a name. The three words are rule
-    /// 06's own — *manual*, *suggesting*, *automatic* — and not the console's `man
-    /// / sug / auto`, which is a node head's abbreviation for a reader rather than
-    /// a name a record is read back with.
-    ///
-    /// There is no `ALL` beside it, on [`WipeKind`]'s terms exactly: that constant
-    /// exists so a map file can be offered the values a target may end in, and no
-    /// map target names an authority — a map line cannot say a node address at all,
-    /// which is what the manual's gap section says of MIDI. It arrives with the
-    /// first reader.
+    /// Returns the lowercase representation of this authority level,
+    /// matching `karakuri_store::record::Record::Authority`.
     pub fn name(self) -> &'static str {
         match self {
             Authority::Manual => "manual",
@@ -1282,12 +1219,10 @@ pub enum TransitionSetting {
     Length { beats: f64 },
 }
 
-/// One control on a deck's published interface, on
-/// `karakuri_engine::set::Published`'s terms.
+/// One control on a deck's published interface.
 ///
-/// The range narrows the declared one and never redefines it. `node` absent is
-/// the wildcard, as in [`ParamAt`], which is what the *default* interface is
-/// made of.
+/// The range narrows the declared parameter range without redefining it.
+/// If `node` is `None`, it functions as a wildcard match.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Control {
     /// What the console shows.
@@ -1297,54 +1232,9 @@ pub struct Control {
     pub range: [f32; 2],
 }
 
-/// One of the two things [`Operation::SetProperty`] can set — and the row is
-/// *"Element capacity, seeds, the camera"*, which was three operations wearing
-/// one heading and is two. Carried as a sum for [`TransitionSetting`]'s reason.
+/// Settable deck properties: element capacity or hash builtin seed salt.
 ///
-/// # The camera was the third and is not one of these
-///
-/// It was carried as `Camera(Undecided)` because *the camera* looked like two
-/// things that were not one operation: the built-in orbit, whose numbers came
-/// in through a `camera` record and which declared nothing, or an L3 procedure
-/// whose params are written like any other node's. The answer is that they were
-/// never two. The built-in orbit's `radius`, `speed` and `height` are
-/// parameters of the camera node — the engine declares them where an artifact
-/// would, because the built-in is a node with no procedure behind it — so
-/// [`Operation::WriteParam`] moves them, `--param L3:0:radius` reaches them,
-/// and a knob learned against their positions in the published interface
-/// reaches them too. The arm is deleted rather than filled in: an arm carrying
-/// three numbers would have been a second way to write a parameter, and the two
-/// would disagree the first time one of them grew a refusal.
-///
-/// The heading still names the camera and this crate's title still matches it
-/// exactly, which `the_manual_and_the_vocabulary_agree` checks. That is a cost
-/// taken on purpose: *the camera* is the word an operator comes to that row
-/// looking for, and the row's own tip is where the page says which row took it.
-/// Renaming it to *Element capacity and seeds* was the alternative and is
-/// recorded as the one that lost, so it stays a one-line change if a reader
-/// disagrees.
-/// `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`.
-///
-/// # Neither arm names a node, and that is where the mismatch was closed
-///
-/// Both carried a [`NodeAddress`] until 2026-09-09, and the capacity's was the
-/// standing reason the row could not be drawn: *"an aim carries one capacity
-/// for the whole slot where `Property::Capacity` addresses a node"*, which is
-/// [ADR-0228](../../docs/adr/0228-a-library-load-re-points-the-slots-source-and-never-installs-a-set.md)'s
-/// recorded limit read as a blocker. It was closed by narrowing the payload
-/// rather than by widening the aim. What a slot's watcher is pointed at carries
-/// one capacity and one seed for the whole slot, which is exactly what
-/// `--capacity` has always meant — *"`--capacity` overrides every source"* — so
-/// the operation names the deck it already names and no node.
-///
-/// A payload nobody reads is a free variable
-/// ([P-0087](../../docs/principles/0087-name-the-property-never-the-shape.md)):
-/// no route filled the address, nothing could have honoured it, and the one
-/// route that exists now — the Inspector deck head's two chips — is per slot.
-/// What would revive it is a pairing Set whose two geometries want two
-/// different capacities; the day that is a want, `watch::Aim::capacity` grows
-/// an entry per geometry and this arm grows its address back.
-/// `docs/adr/0328-the-inspectors-deck-head-steps-a-slots-capacity-and-re-salts-it.md`.
+/// See ADR-0318 and ADR-0328.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Property {
     /// How many elements each of a deck's geometries runs at, overriding what their
@@ -1376,13 +1266,8 @@ pub enum SetTransfer {
     /// `--package ID` — or `--package FILE.kset`, which resolves an authoring
     /// file's parts into the store first and packages that.
     Send { id: String },
-    /// Read a Set file, store its sources, write its Set file. The id comes from
-    /// the file, and one already taken is refused. `--take-in FILE`, which takes a
-    /// `.kbset` as it stands and resolves a `.kset` first.
-    ///
-    /// A path because a file is what the only existing route takes; whether a route
-    /// that has no filesystem — a model handing over the text — takes bytes instead
-    /// is open, and is a smaller question than the row's own.
+    /// Read a Set file, store its sources, and write its Set file.
+    /// The Set ID is extracted from the file; duplicate IDs are rejected.
     Take { file: PathBuf },
 }
 
@@ -1394,31 +1279,10 @@ pub enum SetTransfer {
 /// (`docs/principles/0087-name-the-property-never-the-shape.md`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Recording {
-    /// Begin one, under this id or under a stamp.
+    /// Begin session recording under the given ID or timestamp.
     ///
-    /// A press can start one, and this doc said the opposite until 2026-09-08. It
-    /// argued that only the instant a run begins can produce a head, so a recording
-    /// begun mid-performance would replay the launch deck against a late
-    /// performance's records. The premise was wrong: `Recorder::open` takes a Set
-    /// file's lines, and a Set file written from the live deck is what a keep
-    /// already produces at any frame. `karakuri-cli` builds its head from the
-    /// launch arguments because that is all it holds at that instant, not because a
-    /// later head cannot be made.
-    ///
-    /// What survives is narrower, and it is about the replay rather than a refusal.
-    /// A Set file says what is playing and at what values and holds no *running*
-    /// state, so material that accumulates begins again from the top: a replay from
-    /// a mid-performance head is a true session of the material as it stood, and
-    /// not the picture that was on screen. `karakuri_store::project`'s `key_for`
-    /// still holds — the projection that would fold a session down to the deck
-    /// state it ends at does not exist — and it is why a head is gathered from the
-    /// deck rather than from the stream.
-    ///
-    /// Each start is a fresh id, which is what keeps
-    /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
-    /// met: `Store::append_session` appends and `session::split` sets `started` at
-    /// the first tick and never clears it, so a second head under one id would be
-    /// read back as edits.
+    /// Live deck state is captured as a Set head for the session.
+    /// Each recording session requires a unique identifier (P-0092).
     Start { id: Option<String> },
     /// End the one running. Nothing refuses it, and `crates/karakuri`'s `rec` pill
     /// is the other end of the same press that starts one (ADR-0289).
