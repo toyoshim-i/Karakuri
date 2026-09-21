@@ -1,29 +1,12 @@
-// The first L3 in this library: a camera that jumps on the beat and keeps
-// facing the middle.
+// An L3 camera procedure that jumps randomly on beat intervals while facing the center.
 //
-// **This is the expectation that decided the layer's shape.** Asked what a
-// camera should do, the two answers on record were "follow the first vertex"
-// and "jump on the beat at random while continuously facing the center" — jump on the
-// beat, at random, while continuing to look at the centre. The first takes
-// geometry as an input and is why the camera edge is a GPU buffer; this one is
-// the half that can be written today, and it is worth noticing that it needs no
-// state at all. A jump chosen by hashing the beat number is a *pure function of
-// the clock*, so this camera is seekable: scrub the transport and it is exactly
-// where it would have been.
+// Camera position is derived deterministically from the beat clock via hashing,
+// making trajectory evaluation seekable without internal state.
 //
-// **What it is not is smooth.** Every jump is a hard cut, which is the honest
-// thing for a camera driven by a grid to be — cutting on the beat is a real
-// technique and a damped version of it would be neither a cut nor a move. A
-// damped follow wants state, which an L3 is allowed to hold and this compiler
-// does not implement yet.
-//
-// Use it in place of the built-in orbit:
+// Usage:
 //
 //     --set drift_shell.kir,beat_jump.kir,soft_points.kir
-//
-// The camera is a node like any other, so its params are addressed like any
-// other node's: `--param L3:0:radius=14.0` — a Set holds one camera, and the
-// index is written anyway so that an address is always `layer:index:`.
+//     --param L3:0:radius=14.0
 proc beat_jump {
   kind L3
 

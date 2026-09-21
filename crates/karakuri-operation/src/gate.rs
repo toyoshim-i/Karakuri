@@ -134,21 +134,10 @@ impl Class {
     }
 }
 
-/// Closed by ADR-0235's rule applied past the four classes, with no bay named.
+/// Operations that are closed by safety policy without belonging to any unlockable bay class (ADR-0235).
 ///
-/// ADR-0235 closes fourteen rows that are in none of the four — *"His list is
-/// exemplary — for example — and the rule is the question, not the list"* — and says so
-/// of [`Unclassed::Quitting`] in as many words: *"the sharpest case in the
-/// vocabulary and in none of the four classes."* It names no bay for any of
-/// them, and its own *What this leaves undone* keeps them open: *"whether the
-/// clock, `Quit`, `SelectDeck` and the lane rows are closed as this record
-/// classes them … each is one line to move."*
-///
-/// So they are refused and nothing opens them, which is the safe half of an
-/// undecided question and is said out loud rather than smoothed over: an
-/// [`Open`] has no field for these, so a caller cannot open one by mistake and
-/// cannot open one on purpose either. Moving a group into a [`Class`] is one
-/// line here the day the maintainer says which bay it belongs to.
+/// These operations are unconditionally refused by the safety gate and cannot be
+/// unlocked via [`Open`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unclassed {
     /// The clock. *"Unpriced, immediate, irreversible — a tap sets the phase and
