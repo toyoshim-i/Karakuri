@@ -69,7 +69,7 @@ Modularize the 16 remaining files exceeding 1,500 lines:
 | **P90** | `karakuri-cli::src::tests::parse` | 1,708 | Split CLI argument and flag parser tests into category submodules | **COMPLETED** |
 | **P91** | `karakuri-operation-record::tests` | 1,704 | Partition operation record serialization and backward-compatibility tests | **COMPLETED** |
 | **P92** | `karakuri-mcp::src::tests` | 1,686 | Decompose MCP server and tool handler unit test suites | **COMPLETED** |
-| **P93** | `karakuri-console::hover::probes` | 1,667 | Separate static TIPS definitions from runtime probe hit-testing algorithms | **PLANNED** |
+| **P93** | `karakuri-console::hover::probes` | 1,667 | Separate static TIPS definitions from runtime probe hit-testing algorithms | **COMPLETED** |
 | **P94** | `karakuri-mcp::spelled::table` | 1,661 | Modularize schema dictionary and spelling lookup tables | **PLANNED** |
 | **P95** | `karakuri-engine::tests::governor` | 1,653 | Partition frame pacing, timing governor, and rate-limiting test suites | **PLANNED** |
 | **P96** | `karakuri-console::panel` | 1,644 | Separate panel layout geometry arithmetic from coordinate transformations | **PLANNED** |
