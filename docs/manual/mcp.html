@@ -31,11 +31,11 @@
     <p class="eyebrow">Karakuri &middot; the manual</p>
     <h1>A partner that shares the console</h1>
     <p class="lede">
-      Karakuri treats AI pair-programmers as co-performers. Over the Model
-      Context Protocol (MCP), an assistant can inspect what each deck is playing,
-      re-wire modulation graphs, edit shader procedures on the fly, and trigger
-      musical operations &mdash; all subject to safety gates and live mixer tracking
-      controlled directly from the performance console.
+      Karakuri treats AI pair-programmers as live co-performers. Over the Model
+      Context Protocol (MCP), an assistant can inspect active deck procedures,
+      wire modulation graphs, author procedural shaders on the fly, and trigger
+      musical operations &mdash; all subject to an explicit, bay-aligned permission
+      model and live mixer tracking controlled directly from the performance console.
     </p>
   </header>
 
@@ -47,62 +47,261 @@
     </p>
     <pre><code>karakuri --mcp 8080</code></pre>
     <p>
-      Any standard MCP client (Claude Desktop, Cursor, Gemini, or custom scripts)
-      can connect to the endpoint <code>http://127.0.0.1:8080/</code>. Every
-      interaction obeys the core architectural invariant:
-      <em>a surface offers, it never decides</em> (Principle 0090). An agent
-      dispatches standard operations through the same permission gates that
+      Standard MCP clients (such as Claude Desktop, Cursor, Gemini, or custom scripts)
+      connect to the endpoint <code>http://127.0.0.1:8080/</code>. Every interaction
+      obeys Karakuri's core architectural invariant:
+      <em>a surface offers, it never decides</em> (<a href="../principles/0090-a-surface-offers-it-never-decides.md">Principle 0090</a>).
+      An assistant dispatches operations through the identical permission gates that
       govern keyboard and MIDI controls.
     </p>
   </section>
 
   <section>
-    <h2>The Permission Model &amp; Safety Gates</h2>
+    <h2>The Unified Gate Architecture &amp; Protection Model</h2>
     <p>
-      Live visual performances cannot tolerate broken shaders or rogue edits on
-      material currently projected on air. Karakuri provides a two-tier safety
-      mechanism:
+      Live visual performance cannot tolerate broken shaders, frame stalls, or
+      accidental mutations on material currently projected to an audience
+      (<a href="../principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md">Principle 0094</a>).
+      Rather than imposing a blanket restriction on the protocol, Karakuri maps
+      <strong>each functional console bay 1:1 to an explicit protection gate</strong>:
     </p>
 
-    <h3>1. Bay Class Openings</h3>
+    <div class="table-wrap">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Console Bay</th>
+            <th>UI Control</th>
+            <th>Granularity</th>
+            <th>Default Status</th>
+            <th>Domain of Protection</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Inspector</strong></td>
+            <td>Slot Pill (<code>mcp · auto/on/off</code>)</td>
+            <td>Per-Slot (Deck A&ndash;D)</td>
+            <td><span class="tag slot">Auto</span></td>
+            <td>All shader code, parameters, bindings, and configurations in that specific slot</td>
+          </tr>
+          <tr>
+            <td><strong>Mixer</strong></td>
+            <td>Bay Head Capsule (<code>mcp · on/off</code>)</td>
+            <td>Global Bay</td>
+            <td><span class="tag bay">Closed</span></td>
+            <td>Channel faders, trims, mutes, solos, crossfader, wipes, and masks</td>
+          </tr>
+          <tr>
+            <td><strong>Master</strong></td>
+            <td>Bay Head Capsule (<code>mcp · on/off</code>)</td>
+            <td>Global Bay</td>
+            <td><span class="tag bay">Closed</span></td>
+            <td>Master effect chain insertions, tonemapping, exposure, and color grades</td>
+          </tr>
+          <tr>
+            <td><strong>Outputs</strong></td>
+            <td>Row Capsule (<code>mcp · on/off</code>)</td>
+            <td>Global Row</td>
+            <td><span class="tag bay">Closed</span></td>
+            <td>External video sinks (Syphon/Spout/NDI), window routing, and session recording</td>
+          </tr>
+          <tr>
+            <td><strong>Program</strong></td>
+            <td>Bay Head Capsule (<code>mcp · on/off</code>)</td>
+            <td>Global Bay</td>
+            <td><span class="tag bay">Closed</span></td>
+            <td>Whole-deck residency changes and forcing sets live</td>
+          </tr>
+          <tr>
+            <td><strong>Transport / Clock</strong></td>
+            <td>None (Unclassed)</td>
+            <td>Global</td>
+            <td><span class="tag lock">Locked</span></td>
+            <td>BPM taps, tempo nudging, and phase sync (reserved for human tempo authority)</td>
+          </tr>
+          <tr>
+            <td><strong>Sequencer Lanes</strong></td>
+            <td>None (Unclassed)</td>
+            <td>Global</td>
+            <td><span class="tag lock">Locked</span></td>
+            <td>Step automation pattern editing (reserved for human arrangement)</td>
+          </tr>
+          <tr>
+            <td><strong>Inspection &amp; Layout</strong></td>
+            <td>None (Open)</td>
+            <td>Global</td>
+            <td><span class="tag open">Open</span></td>
+            <td>All non-destructive reads, static checkers, and window pane arrangements</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>1. Inspector Bay: Per-Slot Protection (Deck A&ndash;D)</h3>
     <p>
-      Console bay heads feature dedicated class toggle capsules. An operator
-      opens or closes permissions per functional section:
+      The Inspector bay inspects and edits a slot's procedural tree (Layers L1&ndash;L5 and Field).
+      Because co-performance relies on the operator driving the live picture while an agent
+      prepares visual material in an off-air slot, <strong>Inspector protection is per-slot</strong>
+      rather than an all-or-nothing bay lock:
     </p>
     <ul>
-      <li><strong>LiveDeck</strong> (Program bay): Enables or restricts operations that directly swap active deck procedures.</li>
-      <li><strong>MixFaders</strong> (Mixer bay): Authorizes changes to mixer opacity faders, trims, and blends.</li>
-      <li><strong>MasterEffects</strong> (Master bay): Governs global shader effects and color balance.</li>
-      <li><strong>InputsAndOutputs</strong> (Outputs row): Controls projector assignments and audio-in routing.</li>
+      <li>
+        <strong><code>Auto</code> (Default)</strong>: Automatically write-protects the slot while
+        contributing to the main projection (<code>tally == Live &amp;&amp; opacity &gt; 0.0</code>).
+        The moment the human operator pulls the fader down to 0.0 or mutes the channel, the slot
+        leaves the mix and becomes immediately writable by the agent. Pushing the fader back up
+        re-arms protection instantly.
+      </li>
+      <li>
+        <strong><code>On</code></strong>: The operator explicitly authorizes the agent to live-code
+        this slot directly on air, with hot-reloading reflected live in the projection.
+      </li>
+      <li>
+        <strong><code>Off</code></strong>: The slot is strictly locked against all agent mutations,
+        regardless of fader position.
+      </li>
     </ul>
 
-    <h3>2. Slot MCP Policies (Auto / On / Off)</h3>
+    <h3>2. Bay Class Gates: Coarse Safety Openings</h3>
     <p>
-      Each deck slot wears an explicit MCP policy pill in the Inspector bay head:
+      The remaining console bays control shared stage surfaces. Their bay heads carry an interactive
+      capsule (e.g. <code>mcp &middot; on</code> / <code>mcp &middot; off</code>). By default, all mutating
+      operations targeting these bays are refused by the audit gate with a clear, actionable
+      explanation until the operator intentionally clicks the bay header to grant permission.
     </p>
-    <ul>
-      <li><strong>Auto (Default)</strong>: The slot is freely editable while parked or rehearsing. The moment the mixer fader rises or the slot goes on air, it becomes automatically write-protected to safeguard the live projection.</li>
-      <li><strong>On</strong>: The operator explicitly grants live live-coding access to this slot, even while contributing to the main screen mix.</li>
-      <li><strong>Off</strong>: The slot is strictly locked against all agent modifications regardless of fader position.</li>
-    </ul>
+
+    <h3>3. Permanently Locked (Unclassed) Controls</h3>
+    <p>
+      Certain controls &mdash; specifically live musical tempo tapping (<code>TapBeat</code>),
+      clock phase nudging (<code>ScaleGrid</code>), step sequence triggers, and application
+      termination (<code>Quit</code>) &mdash; are unclassed and permanently barred from MCP control.
+      These operations belong exclusively to the human performer on stage.
+    </p>
   </section>
 
   <section>
-    <h2>The M7 Co-Performance Tool Suite</h2>
+    <h2>Complete MCP Tool Catalog &amp; Permission Matrix</h2>
     <p>
-      Collaborative live coding requires rapid discovery and atomic staging.
-      Three specialized workflow tools form the core of the agent loop:
+      Karakuri publishes 14 high-level MCP tools. Every tool is either a non-destructive read,
+      a statically checked file mutation guarded by the Inspector slot policy, or an operational
+      action governed by the bay gate:
+    </p>
+
+    <div class="table-wrap">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Tool Name</th>
+            <th>Category</th>
+            <th>Governing Gate</th>
+            <th>Allowance Condition / Refusal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>get_permissions</code></td>
+            <td>Discovery</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Returns bay open/closed states and per-slot policies.</td>
+          </tr>
+          <tr>
+            <td><code>read_slot</code></td>
+            <td>Inspection</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Reads all active procedural layers (L1&ndash;L5) for a slot.</td>
+          </tr>
+          <tr>
+            <td><code>read_procedure</code></td>
+            <td>Inspection</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Reads the <code>.kir</code> shader source of a single node.</td>
+          </tr>
+          <tr>
+            <td><code>read_set</code></td>
+            <td>Inspection</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Reads Set configuration, knob mappings, and declarations.</td>
+          </tr>
+          <tr>
+            <td><code>list_sets</code></td>
+            <td>Inspection</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Catalogs stored Sets with optional layer/name filters.</td>
+          </tr>
+          <tr>
+            <td><code>walk_history</code></td>
+            <td>Inspection</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Lists past compiled versions and revisions for a Set.</td>
+          </tr>
+          <tr>
+            <td><code>swap_outcome</code></td>
+            <td>Inspection</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Polls the outcome and GPU cost verdict of recent swaps.</td>
+          </tr>
+          <tr>
+            <td><code>check_procedure</code></td>
+            <td>Validation</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Pure static syntax/type checker; touches no GPU state.</td>
+          </tr>
+          <tr>
+            <td><code>check_set</code></td>
+            <td>Validation</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Always permitted. Validates Set asset dependencies without activating.</td>
+          </tr>
+          <tr>
+            <td><code>write_procedure</code></td>
+            <td>Authoring</td>
+            <td><span class="tag slot">Inspector Slot</span></td>
+            <td>Guarded by target slot policy: rejected if <code>Auto</code> in mix or <code>Off</code>.</td>
+          </tr>
+          <tr>
+            <td><code>copy_slot</code></td>
+            <td>Authoring</td>
+            <td><span class="tag slot">Inspector Slot</span></td>
+            <td>Guarded by destination slot policy. Staged via atomic rename (<code>.tmp</code>).</td>
+          </tr>
+          <tr>
+            <td><code>wire_input</code></td>
+            <td>Graph</td>
+            <td><span class="tag slot">Inspector Slot</span></td>
+            <td>Guarded by target slot policy. Rewires modulation edges between nodes.</td>
+          </tr>
+          <tr>
+            <td><code>save_set</code></td>
+            <td>Storage</td>
+            <td><span class="tag open">Open</span></td>
+            <td>Writes active slot state to <code>&lt;store&gt;/sandbox/</code> (never overwrites library).</td>
+          </tr>
+          <tr>
+            <td><code>operate</code></td>
+            <td>Execution</td>
+            <td><span class="tag bay">Bay Class</span> / <span class="tag slot">Slot</span></td>
+            <td>Dispatches vocabulary operations; verified against the corresponding bay or slot gate.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The M7 Co-Performance Tool Suite</h3>
+    <p>
+      Collaborative live coding requires rapid discovery and atomic staging. Three specialized
+      workflow tools form the primary operational loop for autonomous agents:
     </p>
 
     <div class="rule">
       <span class="n">01</span>
       <div>
-        <h3><code>get_permissions</code> &mdash; Discover current constraints</h3>
+        <h3><code>get_permissions</code> &mdash; Discover constraints before acting</h3>
         <p>
-          Returns the open/closed status of all bay classes, per-slot policies,
-          real-time mixer contribution state (<code>in_mix</code>), and whether
-          each deck slot is currently writable. Agents query this before planning
-          edits to avoid rejected roundtrips.
+          Queries the live state of all console bays, per-slot MCP policies, whether each
+          slot is currently contributing to the audience mix (<code>in_mix</code>), and whether
+          it is writable. Agents call this at the start of a session to plan mutations only
+          in authorized slots.
         </p>
       </div>
     </div>
@@ -110,12 +309,12 @@
     <div class="rule">
       <span class="n">02</span>
       <div>
-        <h3><code>read_slot</code> &mdash; Full slot procedural inspection</h3>
+        <h3><code>read_slot</code> &mdash; Complete procedural inspection</h3>
         <p>
-          Fetches all active procedural layers (<code>L1</code> material,
-          <code>L2</code> deformation, <code>L3</code> camera, <code>L4</code>
-          renderers, and <code>Field</code> distance functions) for a deck slot
-          in a single call.
+          Fetches the source code and configuration for all active procedural layers
+          (<code>L1</code> material, <code>L2</code> deformation, <code>L3</code> camera,
+          <code>L4</code> renderers, and <code>Field</code> distance functions) in a single
+          roundtrip, eliminating multi-call assembly latency.
         </p>
       </div>
     </div>
@@ -125,54 +324,76 @@
       <div>
         <h3><code>copy_slot</code> &mdash; Safe rehearsal &amp; duplication</h3>
         <p>
-          Copies the complete procedural setup from one slot to another with
-          atomic staging. A common workflow is copying a live slot (e.g. Deck A)
-          to an off-air slot (e.g. Deck B), modifying it safely with the agent,
-          previewing the result, and transitioning it live with the crossfader.
+          Duplicates a complete visual setup from a source slot to a destination slot with
+          atomic staging. A canonical live workflow is copying on-air Deck A to off-air Deck B,
+          generating thematic variations with the agent, previewing them in Deck B's monitor,
+          and transitioning them live with the mixer faders.
         </p>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Complete MCP Tool Catalog</h2>
+    <h2>Machine-Readable Refusals &amp; Autonomous Recovery</h2>
+    <p>
+      When an operation or tool call is refused by a gate, it is returned as an application-level
+      tool error (<code>isError: true</code>) carrying a structured, machine-readable
+      <code>refusal</code> object (<a href="../principles/0083-a-refusal-carries-what-the-next-attempt-needs.md">Principle 0083</a>):
+    </p>
 
-    <h3>Procedure Authoring</h3>
-    <ul>
-      <li><code>read_procedure</code>: Reads the <code>.kir</code> shader source for a specific slot, layer, and index.</li>
-      <li><code>write_procedure</code>: Submits revised source code. Compiles on a background worker thread, swaps at a frame boundary, and monitors GPU render budget for 30 frames. If it exceeds frame time, it automatically reverts.</li>
-      <li><code>check_procedure</code>: Statically validates syntax, types, and execution costs without touching GPU memory or changing state.</li>
-    </ul>
+    <pre><code>{
+  "jsonrpc": "2.0",
+  "id": 42,
+  "result": {
+    "isError": true,
+    "content": [
+      {
+        "type": "text",
+        "text": "deck 1 is protected by mcp policy: auto (currently in live mix)"
+      }
+    ],
+    "refusal": {
+      "code": "SLOT_IN_MIX",
+      "slot": 0,
+      "policy": "auto",
+      "in_mix": true,
+      "message": "deck 1 is protected by mcp policy: auto (currently in live mix)"
+    }
+  }
+}</code></pre>
 
-    <h3>Set Management</h3>
+    <h3>Standard Refusal Codes &amp; Recommended Recovery</h3>
     <ul>
-      <li><code>read_set</code>: Inspects Set configuration, knob mappings, and node assignments.</li>
-      <li><code>list_sets</code>: Catalogs available Sets in the library with optional text or tag filters.</li>
-      <li><code>save_set</code>: Commits active deck parameters to a new or existing Set file.</li>
-      <li><code>check_set</code>: Validates Set configuration and asset availability without activation.</li>
-    </ul>
-
-    <h3>Graph &amp; History</h3>
-    <ul>
-      <li><code>wire_input</code>: Connects modulation sources or audio-in channels to node inputs.</li>
-      <li><code>walk_history</code>: Reads compilation and revision history for a Set, allowing previous versions to be recalled.</li>
-      <li><code>swap_outcome</code>: Checks the compilation and performance measurement verdict of a background shader swap.</li>
-    </ul>
-
-    <h3>Performance Control</h3>
-    <ul>
-      <li><code>operate</code>: Dispatches any of the 64 vocabulary operations from <code>docs/manual/operations.html</code>, fully verified against console permissions.</li>
+      <li>
+        <strong><code>SLOT_IN_MIX</code></strong>: The target slot is active in the live projection under policy <code>Auto</code>.
+        <br><em>Agent strategy:</em> Switch to an off-air slot (e.g. Deck B or C), or notify the operator that changes are staged and waiting for a transition.
+        <br><em>Operator action:</em> Lower the slot's mixer fader to 0.0, or cycle its policy pill to <code>mcp &middot; on</code> if live modification is desired.
+      </li>
+      <li>
+        <strong><code>SLOT_POLICY_OFF</code></strong>: The target slot is explicitly locked by the operator.
+        <br><em>Agent strategy:</em> Do not retry mutations on this slot; query <code>get_permissions</code> to locate an unlocked slot.
+        <br><em>Operator action:</em> Click the Inspector header pill to set the policy to <code>Auto</code> or <code>On</code>.
+      </li>
+      <li>
+        <strong><code>BAY_CLOSED</code></strong>: A functional bay required by an <code>operate</code> call is closed.
+        <br><em>Agent strategy:</em> Inform the operator exactly which bay capsule needs to be opened (e.g. <em>"Please open MixFaders in the Mixer bay"</em>).
+        <br><em>Operator action:</em> Click the corresponding bay header capsule to toggle it to <code>mcp &middot; on</code>.
+      </li>
+      <li>
+        <strong><code>SLOT_UNALLOCATED</code></strong>: The requested slot number does not exist in the active session.
+        <br><em>Agent strategy:</em> Query <code>get_permissions</code> to discover valid slot numbers (typically 0 to 3).
+      </li>
     </ul>
   </section>
 
   <section>
     <h2>Atomic Staging &amp; Scratch Directory Safety</h2>
     <p>
-      When an agent modifies or copies procedures, files are written first to
-      temporary files (<code>.kir.tmp</code>) and swapped via atomic filesystem
-      rename (<code>scratch::write_atomic</code>; ADR-0363). This prevents file
-      watchers and background compilers from reading truncated ASTs or observing
-      torn writes during multi-file interface updates.
+      When an agent modifies or copies procedures, files are written first to adjacent
+      temporary files (<code>.kir.tmp</code>) and replaced via atomic filesystem renames
+      (<code>scratch::write_atomic</code>; <a href="../adr/0363-agent-workflow-operations-are-read-slot-copy-slot-and-get-permissions-staged-through-atomic-rename.md">ADR-0363</a>).
+      This guarantees that background compiler workers and filesystem watchers never observe
+      partial AST writes or mismatched multi-layer interface changes mid-frame.
     </p>
   </section>
 
@@ -180,4 +401,3 @@
 
 </body>
 </html>
-

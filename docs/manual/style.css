@@ -1001,3 +1001,32 @@
   .legend i.has { background: var(--mint); }
   .legend i.plan { background: var(--lav); }
   .legend i.gap { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); }
+
+  /* ── data and matrix tables ────────────────────────────────────────── */
+  .table-wrap { width: 100%; overflow-x: auto; margin: 1rem 0; border-radius: 8px; border: 1px solid var(--line); }
+  table.matrix {
+    width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;
+  }
+  table.matrix th {
+    font-family: var(--f-code); font-size: 0.78rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim);
+    padding: 0.75rem 1rem; border-bottom: 2px solid var(--line); background: var(--surface);
+  }
+  table.matrix td {
+    padding: 0.75rem 1rem; border-bottom: 1px solid var(--line); vertical-align: top;
+  }
+  table.matrix tr:last-child td { border-bottom: none; }
+  table.matrix tr:hover td {
+    background: color-mix(in srgb, var(--lav) 6%, transparent);
+  }
+  table.matrix code {
+    font-size: 0.82rem;
+  }
+  .tag {
+    display: inline-block; padding: 2px 7px; border-radius: 4px;
+    font-family: var(--f-code); font-size: 0.74rem; font-weight: 500; white-space: nowrap;
+  }
+  .tag.open { background: color-mix(in srgb, var(--mint) 20%, transparent); color: var(--mint); }
+  .tag.slot { background: color-mix(in srgb, var(--pink) 20%, transparent); color: var(--pink); }
+  .tag.bay  { background: color-mix(in srgb, var(--lav) 22%, transparent); color: var(--lav); }
+  .tag.lock { background: color-mix(in srgb, var(--faint) 25%, transparent); color: var(--dim); }
