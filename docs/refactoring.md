@@ -99,7 +99,7 @@ Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
 | **P113** | `karakuri-console::tests::library::geometry` | 1,334 | Partition library geometry browser and card loading tests | **COMPLETED** |
 | **P114** | `karakuri-ir::tests::check::layers` | 1,333 | Partition IR layer type checking and diagnostic emission tests | **COMPLETED** |
 | **P115** | `karakuri-operation::gate` | 1,330 | Modularize operation validation gating rules and authority checks | **COMPLETED** |
-| **P116** | `karakuri-engine::frame` | 1,308 | Decompose frame synchronization and render target binding lifecycle | **PLANNED** |
+| **P116** | `karakuri-engine::frame` | 1,308 | Decompose frame synchronization and render target binding lifecycle | **COMPLETED** |
 
 ---
 
