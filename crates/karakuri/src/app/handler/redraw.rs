@@ -205,12 +205,14 @@ impl App {
         // rather than a call on the window: `aim` takes `&mut` of the
         // engine and `Gfx` holds both.
         let projector = gfx.projector.as_ref().map(|p| p.size);
+        let plugin = gfx.plugin.as_ref().map(|p| p.size());
+        let external_output = crate::bridge::render_size(&[projector, plugin]);
         let (picture, previews) = gfx.engine.aim(
             &gfx.gpu,
             &mut gfx.renderer,
             self.readout.panel.layout(),
             scale,
-            projector,
+            external_output,
         );
         // **What the console draws on the projector's chip**, written
         // per frame beside the frame it is about, exactly as the
@@ -652,6 +654,7 @@ impl App {
                 renderer,
                 engine,
                 projector,
+                plugin,
                 ..
             } = &mut *gfx;
             let gpu = &*gpu;
@@ -708,23 +711,28 @@ impl App {
             }
             let textures_delta = &mut output.textures_delta;
             let cost = &mut cost;
-            // **The picture first, and the projector beside it
-            // when there is one.** Two arrays rather than one of
-            // `Option`s because `compose` takes a slice of live
-            // references and a hole in it would be a sink that has to
-            // be asked whether it is there — which is the
-            // `Sink::acquired` this seam already refused
-            // (ADR-0171). The order is the Outputs row's, which is
-            // also `render_size`'s, so an index in the refusal below
-            // means the same thing in all three.
+            // **The picture first, and the projector and plugin sinks beside it
+            // when present.** Fixed arrays rather than one of `Option`s because
+            // `compose` takes a slice of live references and a hole in it would
+            // be a sink that has to be asked whether it is there — which is the
+            // `Sink::acquired` this seam already refused (ADR-0171).
             let mut one: [&mut dyn Sink; 1];
             let mut two: [&mut dyn Sink; 2];
-            let sinks: &mut [&mut dyn Sink] = match projector {
-                Some(p) => {
+            let mut three: [&mut dyn Sink; 3];
+            let sinks: &mut [&mut dyn Sink] = match (projector.as_mut(), plugin.as_mut()) {
+                (Some(p), Some(pl)) => {
+                    three = [picture, &mut p.sink, pl];
+                    &mut three
+                }
+                (Some(p), None) => {
                     two = [picture, &mut p.sink];
                     &mut two
                 }
-                None => {
+                (None, Some(pl)) => {
+                    two = [picture, pl];
+                    &mut two
+                }
+                (None, None) => {
                     one = [picture];
                     &mut one
                 }

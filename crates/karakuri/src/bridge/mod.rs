@@ -37,9 +37,11 @@ use crate::{
 mod engine;
 mod filesystem;
 mod handlers;
+pub(crate) mod plugin_sink;
 mod sinks;
 
 pub(crate) use engine::*;
 pub(crate) use filesystem::*;
 pub(crate) use handlers::*;
+pub(crate) use plugin_sink::*;
 pub(crate) use sinks::*;

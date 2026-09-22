@@ -407,6 +407,7 @@ impl ApplicationHandler for App {
             // for would put a second window on their desk and raise what every
             // frame costs before the first one is drawn.
             projector: None,
+            plugin: None,
             gpu,
             surface,
             config,

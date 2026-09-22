@@ -101,6 +101,8 @@ pub(crate) struct Gfx {
     /// with one output, the picture — and it is the state every run starts in. See
     /// [`Projector`].
     pub(crate) projector: Option<Projector>,
+    /// Out-of-process video output plugin sink (e.g. Syphon on macOS).
+    pub(crate) plugin: Option<crate::bridge::PluginSink>,
     pub(crate) gpu: Gpu,
     pub(crate) surface: wgpu::Surface<'static>,
     pub(crate) config: wgpu::SurfaceConfiguration,

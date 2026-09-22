@@ -66,12 +66,7 @@ pub(crate) fn routed(
         // The console's, and it is already done by the time this is asked.
         Output::Program => return None,
         Output::Projector(n) => n,
-        Output::Plugin(n) => {
-            return Some(format!(
-                "outputs: plugin {n} is not loaded — there is no plugin manifest to read a \
-                 sink out of, and `docs/plugins.md` is the specification nothing implements"
-            ))
-        }
+        Output::Plugin(n) => return route_plugin(gfx, n, on),
     };
     if !on {
         return Some(match gfx.projector.take() {
@@ -144,6 +139,71 @@ pub(crate) fn routed(
         "outputs: projector {n} is on — a window at {} x {}, and the frame is composited at the          largest enabled output",
         size.0, size.1
     ))
+}
+
+fn route_plugin(gfx: &mut Gfx, n: u8, on: bool) -> Option<String> {
+    if n != 0 {
+        return Some(format!(
+            "outputs: plugin {n} is not loaded — there is no plugin manifest to read a \
+             sink out of, and `docs/plugins.md` is the specification nothing implements"
+        ));
+    }
+    if !on {
+        return Some(match gfx.plugin.take() {
+            Some(_) => format!("outputs: plugin {n} is off"),
+            None => format!("outputs: plugin {n} was already off"),
+        });
+    }
+    if gfx.plugin.is_some() {
+        return Some(format!("outputs: plugin {n} is already on"));
+    }
+    let command = resolve_plugin_command(n);
+    let (w, h) = CANVAS;
+    match crate::bridge::PluginSink::open(&gfx.gpu, &command, w, h) {
+        Ok(sink) => {
+            let server_name = sink.server_name().to_string();
+            gfx.plugin = Some(sink);
+            Some(format!(
+                "outputs: plugin {n} is on — streaming {w} x {h} via {server_name}"
+            ))
+        }
+        Err(e) => Some(format!("outputs: plugin {n} failed to open: {e}")),
+    }
+}
+
+fn resolve_plugin_command(n: u8) -> String {
+    if n == 0 {
+        if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_SYPHON") {
+            return cmd;
+        }
+        if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_0") {
+            return cmd;
+        }
+        let candidates = [
+            "../Karakuri-syphon/target/debug/karakuri-syphon",
+            "../Karakuri-syphon/target/release/karakuri-syphon",
+            "../../Karakuri-syphon/target/debug/karakuri-syphon",
+            "../../Karakuri-syphon/target/release/karakuri-syphon",
+        ];
+        for candidate in candidates {
+            if let Ok(canon) = std::fs::canonicalize(candidate) {
+                return canon.to_string_lossy().into_owned();
+            }
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let p1 = parent.join("karakuri-syphon");
+                if p1.exists() {
+                    return p1.to_string_lossy().into_owned();
+                }
+                let p2 = parent.join("../../Karakuri-syphon/target/debug/karakuri-syphon");
+                if let Ok(canon) = p2.canonicalize() {
+                    return canon.to_string_lossy().into_owned();
+                }
+            }
+        }
+    }
+    "karakuri-syphon".to_string()
 }
 
 /// Dispatches UI focus responses, handling in-process operations and refusals (P-0083).
