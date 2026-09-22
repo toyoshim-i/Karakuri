@@ -63,7 +63,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ M8: Musical Synchronization & Hardware Integration (Active / In Prog)  │
 │ - Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation (Done)│
-│ - External Output Plugin Sinks (Syphon, Spout, NDI)                     │
+│ - External Output Plugin Sinks (Syphon completed on macOS, Spout/NDI)   │
 │ - Live MIDI Surface Mapping & Profile Persistence                       │
 │ - Bar- and Beat-Quantized Transition Scheduling                         │
 │ - Wipe Mask Geometry & Edge Softness Control                            │
@@ -89,7 +89,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
 1. **Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation** *(Completed — M8-4)*:
    - Low-latency real-time FFT processing with multi-band energy extraction (8 log-spaced semantic bands: `sub`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `air`) and transient `onset` detection feeding `.kir` shader parameter bindings.
 2. **Output Plugin Sinks**:
-   - Syphon on macOS, Spout on Windows, and NDI as out-of-process sinks beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md)).
+   - Syphon on macOS implemented via standalone `karakuri-syphon` plugin using zero-copy `IOSurfaceID` IPC protocol (M8-2 completed for macOS; Spout/NDI pending beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md))).
 3. **Quantized Transition Engine**:
    - Implement precise bar- and phrase-quantized execution for wipes, fades, and deck swaps, ensuring visual changes lock to musical drops and phrase boundaries.
 4. **Live MIDI Surface Mapping & Profile Management**:
