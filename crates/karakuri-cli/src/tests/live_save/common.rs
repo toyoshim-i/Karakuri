@@ -3,7 +3,13 @@ pub(crate) use karakuri_environment::meta::put_meta;
 use std::path::{Path, PathBuf};
 
 /// Interactive live loop source at compile time, scanned by consistency tests.
-pub(crate) const SOURCE: &str = include_str!("../../live/interactive.rs");
+pub(crate) const SOURCE: &str = concat!(
+    include_str!("../../live/interactive/constants.rs"),
+    include_str!("../../live/interactive/key.rs"),
+    include_str!("../../live/interactive/session.rs"),
+    include_str!("../../live/interactive/transport.rs"),
+    include_str!("../../live/interactive/mix.rs"),
+);
 
 pub(crate) fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
