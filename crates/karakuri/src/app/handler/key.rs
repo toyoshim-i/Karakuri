@@ -61,47 +61,17 @@ impl App {
             // Rule 2 claims the keyboard while either flow is active. Handled symmetrically
             // through [`TextInputSession`] (P42) with post-event side-effects decoupled (P46).
             if let Some(session) = self.readout.view.active_text_input() {
-                let (acted, moved) = match key.logical_key.as_ref() {
-                    Key::Named(NamedKey::Escape) => {
-                        match session {
-                            TextInputKind::Arrangement => {
-                                println!("arrangement: nothing was saved");
-                            }
-                            TextInputKind::DeckName(_) => {
-                                println!("inspector: nothing was kept");
-                            }
-                        }
-                        self.readout.view.cancel_active_text_input();
-                        (Acted::Nothing, true)
-                    }
-                    Key::Named(NamedKey::Enter) => (self.readout.commit_active_text_input(), true),
-                    Key::Named(NamedKey::Backspace) => {
-                        (Acted::Nothing, self.readout.view.rub_out_active())
-                    }
-                    Key::Character(text) => {
-                        (Acted::Nothing, self.readout.view.type_into_active(text))
-                    }
-                    Key::Named(NamedKey::Space) => {
-                        (Acted::Nothing, self.readout.view.type_into_active(" "))
-                    }
-                    _ => (Acted::Nothing, false),
-                };
-                let repaint = App::performed(
+                Self::handle_active_text_input(
                     gfx,
                     self.started,
                     &mut self.readout,
                     self.recording.recorder(),
-                    &acted,
-                    Change::Naming(moved).repaint(),
-                )
-                .repaint;
-                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
-                handle_post_event_side_effects(
+                    &mut self.egui_due,
+                    &mut self.costs,
                     &mut self.keeping,
-                    &gfx.engine,
                     &self.store,
-                    &mut self.readout.view,
-                    &acted,
+                    key,
+                    session,
                 );
                 return;
             }
@@ -169,238 +139,32 @@ impl App {
                         println!("{line}");
                     }
                     match asked {
-                        // **The Library head's scope**, and it is this
-                        // file's because a scope *is* a listing on this
-                        // side and a directory read is not a thing to do on
-                        // a frame (P-0091). What was `e` until 2026-09-10.
                         focus::Asked::Scope => {
-                            if self.readout.view.step_scope() {
-                                // Whose history, for the press branch's reason:
-                                // the scope key steps onto the `history` chip
-                                // as readily as the pointer names it.
-                                let running = aimed_set(gfx, &self.readout.view);
-                                println!(
-                                    "{}",
-                                    listing(
-                                        &mut self.readout.view,
-                                        &self.store,
-                                        self.presets.as_ref(),
-                                        self.folder.as_deref(),
-                                        running.as_deref(),
-                                    )
-                                );
-                            }
-                            // **Emitted whether or not the mark moved**, which is
-                            // the deck keys' rule: what a press asked for is what
-                            // is emitted, and `unwritten` is what says the press
-                            // wrote no record and that it is settled.
-                            //
-                            // **And nothing performs it in `performed`**, where
-                            // `SelectDeck` has `pointed` — because this payload
-                            // cannot say which scope was chosen and a performer
-                            // reading `Undecided` would have to guess. The step
-                            // above *is* the performance, and it is the surface's
-                            // own pointer either way.
-                            let acted =
-                                Acted::Emitted(Some(Operation::SelectScope { scope: Undecided }));
-                            let repaint = App::performed(
+                            Self::handle_grammar_scope(
                                 gfx,
                                 self.started,
                                 &mut self.readout,
                                 self.recording.recorder(),
-                                &acted,
-                                Repaint::Never,
-                            )
-                            .repaint;
-                            App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                                &mut self.egui_due,
+                                &mut self.costs,
+                                &self.store,
+                                self.presets.as_ref(),
+                                self.folder.as_deref(),
+                            );
                             return;
                         }
-                        // **The load, and the two operands are already on screen.**
-                        // The cursor says which Set and the selection says which
-                        // deck, which is `console.html`'s *"a cursor and a key
-                        // with no pointer anywhere in it"*. What the press does is
-                        // re-point the slot's source — [`loading`] — so the worker
-                        // builds it and the watchdog judges it exactly as it does
-                        // an edit, and nothing here reaches `Deck::install`.
-                        // **The scope, and the key steps where the operation
-                        // names.** `Operation::SelectScope`'s payload is
-                        // `Undecided` — *"what identifies one member of a growable
-                        // list is spelled nowhere"* — and its own doc says where
-                        // the stepping goes: *"The key steps and this does not …
-                        // that is the translator's arithmetic rather than this
-                        // operation's payload"* (P-0090). So the surface moves its
-                        // own pointer, exactly as the four deck keys do, and the
-                        // operation is emitted through the same route so that the
-                        // press is recorded as `Silent(Surface)` rather than as
-                        // nothing at all.
-                        //
-                        // **The listing is re-read here**, on the press that
-                        // changed the scope: a scope *is* a listing on this side
-                        // (`listing`), and a directory read is not a thing to do
-                        // on a frame (P-0091).
                         focus::Asked::Load => {
-                            let deck = self.readout.view.selection();
-                            let at = self.readout.view.cursor_row();
-                            // **The Sets, which is empty under `history`**: a row
-                            // of that scope is a version and this key loads a Set,
-                            // so the arm below names it rather than this line
-                            // handing a word no store holds to a load
-                            // (`view::View::sets`).
-                            let row = self.readout.view.sets().get(at).cloned();
-                            // Whose history, for `why_nothing`'s `history` arm —
-                            // which this key cannot reach, because the arm below
-                            // answers that scope first, and which is passed anyway
-                            // because a sentence chosen by a caller is a sentence
-                            // that can be chosen wrongly.
-                            let running = aimed_set(gfx, &self.readout.view).is_some();
-                            // **What the take-in half of this press asked for**,
-                            // where a press that took nothing in leaves it
-                            // `Repaint::Never` — see the preset arm below for why
-                            // one press emits two operations and why they cannot
-                            // be one `Acted`.
-                            let mut took = Repaint::Never;
-                            let acted = match (self.readout.view.scope(), row) {
-                                // Take in preset or folder item into store and load it (ADR-0229, ADR-0275, ADR-0299).
-                                (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
-                                    let from = match scope {
-                                        Scope::Folder => Taking::Folder(self.folder.as_deref()),
-                                        _ => Taking::Presets(self.presets.as_ref()),
-                                    };
-                                    match taking_in(&self.store, from, &row) {
-                                        Ok(taken) => {
-                                            println!("  take in: {}", taken.said);
-                                            // **The take-in is named as well as
-                                            // performed, and that is `e`'s rule
-                                            // one key along**: the scope step
-                                            // emits `SelectScope` *"so that the
-                                            // press is recorded as `Silent` rather
-                                            // than as nothing at all"*, and this
-                                            // press has just performed a whole row
-                                            // of the vocabulary —
-                                            // `docs/manual/operations.html`'s
-                                            // *Send a Set to somebody, and take
-                                            // one in*, *"opening a preset is this
-                                            // row"*. Emitting only the load would
-                                            // be a press that does two of the
-                                            // page's rows and names one.
-                                            //
-                                            // **Two emissions rather than one**,
-                                            // because they are two rows: taking in
-                                            // is what gives the Set the id, and
-                                            // the load names that id. `Acted`
-                                            // carries one operation — a fader
-                                            // drag, a chip, a key each emit
-                                            // exactly one — so the pair is two
-                                            // trips through `App::performed`
-                                            // rather than a shape invented here
-                                            // for the one press that has two.
-                                            //
-                                            // **In the order they happened.**
-                                            // `written` answers
-                                            // `Silent(NoRecord)` for the transfer,
-                                            // so nothing in `performed` performs
-                                            // it and the emission is the naming;
-                                            // the load after it is what re-points
-                                            // the slot.
-                                            let [take, load] = taken_in_press(deck, taken);
-                                            took = App::performed(
-                                                gfx,
-                                                self.started,
-                                                &mut self.readout,
-                                                self.recording.recorder(),
-                                                &Acted::Emitted(Some(take)),
-                                                Repaint::Never,
-                                            )
-                                            .repaint;
-                                            Acted::Emitted(Some(load))
-                                        }
-                                        // **Which of the two acts failed is the
-                                        // whole of what this sentence adds.**
-                                        // Nothing was taken in, so nothing was
-                                        // loaded — where a load that fails says so
-                                        // in `played`'s own words, with the deck
-                                        // it did not reach. The refusal itself is
-                                        // `setfile::unbundle`'s, including the one
-                                        // for an id this store already holds.
-                                        Err(e) => {
-                                            println!(
-                                                "  take in: `{row}` was not taken into the store: \
-                                                 {e}\n  take in: so nothing was loaded, and what is \
-                                                 on deck {} is still running — a Set already here is \
-                                                 listed under `all`, which is where it is loaded \
-                                                 from",
-                                                deck_letter(deck)
-                                            );
-                                            Acted::Nothing
-                                        }
-                                    }
-                                }
-                                // **A row of `history` is a version and not a
-                                // Set**, so this key has nothing to load and says
-                                // so rather than falling through to the sentence
-                                // below, which would report a listing as empty
-                                // while it is drawing rows. What lands a version is
-                                // a press on the row itself —
-                                // `Operation::RestoreProcedure`, on the deck the
-                                // load pulldown names rather than on the selection.
-                                (Some(Scope::History), _) => {
-                                    println!(
-                                        "  load: `history` lists the versions of a Set rather than \
-                                         Sets, so there is nothing here for enter to load — press a \
-                                         row to put that version back on its node, or mark `all` \
-                                         and load a Set"
-                                    );
-                                    Acted::Nothing
-                                }
-                                // A row of `all` or of `my sets`, which is a Set
-                                // this store already holds and is the route
-                                // ADR-0228 built.
-                                (_, Some(set)) => {
-                                    Acted::Emitted(Some(Operation::LoadSet { deck, set }))
-                                }
-                                // Not a refusal of the load: there is no Set under
-                                // the cursor because this scope lists nothing. The
-                                // bay says so by drawing no rows; this says so in
-                                // words, and it says **which** nothing it is —
-                                // `favourites`, a folder nobody has pointed
-                                // anywhere and a folder holding nothing are three
-                                // different reasons, and a key that did nothing and
-                                // a key that is not bound are the same experience.
-                                (scope, None) => {
-                                    println!(
-                                        "  load: `{}` lists nothing, so there is no Set under the \
-                                         cursor — {}",
-                                        match scope {
-                                            Some(scope) => scope.name(),
-                                            None => "the library",
-                                        },
-                                        match scope {
-                                            Some(scope) =>
-                                                why_nothing(scope, self.folder.is_some(), running),
-                                            None => "this console was handed no scopes at all",
-                                        }
-                                    );
-                                    Acted::Nothing
-                                }
-                            };
-                            // **One frame asked for, however many operations the
-                            // press emitted.** `App::wants` counts a frame against
-                            // the run's costs and asks the window for a redraw, so
-                            // calling it twice for one press would ask for two
-                            // frames where one is drawn. `Repaint::soonest` is
-                            // what combines them, and its own rule is why it is
-                            // safe: it can only bring a frame forward.
-                            let repaint = App::performed(
+                            Self::handle_grammar_load(
                                 gfx,
                                 self.started,
                                 &mut self.readout,
                                 self.recording.recorder(),
-                                &acted,
-                                Repaint::Never,
-                            )
-                            .repaint
-                            .soonest(took);
-                            App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
+                                &mut self.egui_due,
+                                &mut self.costs,
+                                &self.store,
+                                self.presets.as_ref(),
+                                self.folder.as_deref(),
+                            );
                             return;
                         }
                         asked => {
@@ -491,5 +255,261 @@ impl App {
                 Change::Operated(&outcome).repaint(),
             );
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn handle_active_text_input(
+        gfx: &mut Gfx,
+        started: Instant,
+        readout: &mut Readout,
+        recorder: Option<&mut karakuri_environment::session::Recorder>,
+        egui_due: &mut Option<Instant>,
+        costs: &mut Costs,
+        keeping: &mut Keeping,
+        store: &std::path::Path,
+        key: &winit::event::KeyEvent,
+        session: TextInputKind,
+    ) {
+        let (acted, moved) = match key.logical_key.as_ref() {
+            Key::Named(NamedKey::Escape) => {
+                match session {
+                    TextInputKind::Arrangement => {
+                        println!("arrangement: nothing was saved");
+                    }
+                    TextInputKind::DeckName(_) => {
+                        println!("inspector: nothing was kept");
+                    }
+                }
+                readout.view.cancel_active_text_input();
+                (Acted::Nothing, true)
+            }
+            Key::Named(NamedKey::Enter) => (readout.commit_active_text_input(), true),
+            Key::Named(NamedKey::Backspace) => (Acted::Nothing, readout.view.rub_out_active()),
+            Key::Character(text) => (Acted::Nothing, readout.view.type_into_active(text)),
+            Key::Named(NamedKey::Space) => (Acted::Nothing, readout.view.type_into_active(" ")),
+            _ => (Acted::Nothing, false),
+        };
+        let repaint = App::performed(
+            gfx,
+            started,
+            readout,
+            recorder,
+            &acted,
+            Change::Naming(moved).repaint(),
+        )
+        .repaint;
+        App::wants(gfx, egui_due, costs, repaint);
+        handle_post_event_side_effects(keeping, &gfx.engine, store, &mut readout.view, &acted);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn handle_grammar_scope(
+        gfx: &mut Gfx,
+        started: Instant,
+        readout: &mut Readout,
+        recorder: Option<&mut karakuri_environment::session::Recorder>,
+        egui_due: &mut Option<Instant>,
+        costs: &mut Costs,
+        store: &std::path::Path,
+        presets: Option<&karakuri_environment::places::Presets>,
+        folder: Option<&std::path::Path>,
+    ) {
+        if readout.view.step_scope() {
+            // Whose history, for the press branch's reason:
+            // the scope key steps onto the `history` chip
+            // as readily as the pointer names it.
+            let running = aimed_set(gfx, &readout.view);
+            println!(
+                "{}",
+                listing(
+                    &mut readout.view,
+                    store,
+                    presets,
+                    folder,
+                    running.as_deref(),
+                )
+            );
+        }
+        // **Emitted whether or not the mark moved**, which is
+        // the deck keys' rule: what a press asked for is what
+        // is emitted, and `unwritten` is what says the press
+        // wrote no record and that it is settled.
+        //
+        // **And nothing performs it in `performed`**, where
+        // `SelectDeck` has `pointed` — because this payload
+        // cannot say which scope was chosen and a performer
+        // reading `Undecided` would have to guess. The step
+        // above *is* the performance, and it is the surface's
+        // own pointer either way.
+        let acted = Acted::Emitted(Some(Operation::SelectScope { scope: Undecided }));
+        let repaint =
+            App::performed(gfx, started, readout, recorder, &acted, Repaint::Never).repaint;
+        App::wants(gfx, egui_due, costs, repaint);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn handle_grammar_load(
+        gfx: &mut Gfx,
+        started: Instant,
+        readout: &mut Readout,
+        mut recorder: Option<&mut karakuri_environment::session::Recorder>,
+        egui_due: &mut Option<Instant>,
+        costs: &mut Costs,
+        store: &std::path::Path,
+        presets: Option<&karakuri_environment::places::Presets>,
+        folder: Option<&std::path::Path>,
+    ) {
+        let deck = readout.view.selection();
+        let at = readout.view.cursor_row();
+        // **The Sets, which is empty under `history`**: a row
+        // of that scope is a version and this key loads a Set,
+        // so the arm below names it rather than this line
+        // handing a word no store holds to a load
+        // (`view::View::sets`).
+        let row = readout.view.sets().get(at).cloned();
+        // Whose history, for `why_nothing`'s `history` arm —
+        // which this key cannot reach, because the arm below
+        // answers that scope first, and which is passed anyway
+        // because a sentence chosen by a caller is a sentence
+        // that can be chosen wrongly.
+        let running = aimed_set(gfx, &readout.view).is_some();
+        // **What the take-in half of this press asked for**,
+        // where a press that took nothing in leaves it
+        // `Repaint::Never` — see the preset arm below for why
+        // one press emits two operations and why they cannot
+        // be one `Acted`.
+        let mut took = Repaint::Never;
+        let acted = match (readout.view.scope(), row) {
+            // Take in preset or folder item into store and load it (ADR-0229, ADR-0275, ADR-0299).
+            (Some(scope @ (Scope::Presets | Scope::Folder)), Some(row)) => {
+                let from = match scope {
+                    Scope::Folder => Taking::Folder(folder),
+                    _ => Taking::Presets(presets),
+                };
+                match taking_in(store, from, &row) {
+                    Ok(taken) => {
+                        println!("  take in: {}", taken.said);
+                        // **The take-in is named as well as
+                        // performed, and that is `e`'s rule
+                        // one key along**: the scope step
+                        // emits `SelectScope` *"so that the
+                        // press is recorded as `Silent` rather
+                        // than as nothing at all"*, and this
+                        // press has just performed a whole row
+                        // of the vocabulary —
+                        // `docs/manual/operations.html`'s
+                        // *Send a Set to somebody, and take
+                        // one in*, *"opening a preset is this
+                        // row"*. Emitting only the load would
+                        // be a press that does two of the
+                        // page's rows and names one.
+                        //
+                        // **Two emissions rather than one**,
+                        // because they are two rows: taking in
+                        // is what gives the Set the id, and
+                        // the load names that id. `Acted`
+                        // carries one operation — a fader
+                        // drag, a chip, a key each emit
+                        // exactly one — so the pair is two
+                        // trips through `App::performed`
+                        // rather than a shape invented here
+                        // for the one press that has two.
+                        //
+                        // **In the order they happened.**
+                        // `written` answers
+                        // `Silent(NoRecord)` for the transfer,
+                        // so nothing in `performed` performs
+                        // it and the emission is the naming;
+                        // the load after it is what re-points
+                        // the slot.
+                        let [take, load] = taken_in_press(deck, taken);
+                        took = App::performed(
+                            gfx,
+                            started,
+                            readout,
+                            recorder.as_deref_mut(),
+                            &Acted::Emitted(Some(take)),
+                            Repaint::Never,
+                        )
+                        .repaint;
+                        Acted::Emitted(Some(load))
+                    }
+                    // **Which of the two acts failed is the
+                    // whole of what this sentence adds.**
+                    // Nothing was taken in, so nothing was
+                    // loaded — where a load that fails says so
+                    // in `played`'s own words, with the deck
+                    // it did not reach. The refusal itself is
+                    // `setfile::unbundle`'s, including the one
+                    // for an id this store already holds.
+                    Err(e) => {
+                        println!(
+                            "  take in: `{row}` was not taken into the store: \
+                             {e}\n  take in: so nothing was loaded, and what is \
+                             on deck {} is still running — a Set already here is \
+                             listed under `all`, which is where it is loaded \
+                             from",
+                            deck_letter(deck)
+                        );
+                        Acted::Nothing
+                    }
+                }
+            }
+            // **A row of `history` is a version and not a
+            // Set**, so this key has nothing to load and says
+            // so rather than falling through to the sentence
+            // below, which would report a listing as empty
+            // while it is drawing rows. What lands a version is
+            // a press on the row itself —
+            // `Operation::RestoreProcedure`, on the deck the
+            // load pulldown names rather than on the selection.
+            (Some(Scope::History), _) => {
+                println!(
+                    "  load: `history` lists the versions of a Set rather than \
+                     Sets, so there is nothing here for enter to load — press a \
+                     row to put that version back on its node, or mark `all` \
+                     and load a Set"
+                );
+                Acted::Nothing
+            }
+            // A row of `all` or of `my sets`, which is a Set
+            // this store already holds and is the route
+            // ADR-0228 built.
+            (_, Some(set)) => Acted::Emitted(Some(Operation::LoadSet { deck, set })),
+            // Not a refusal of the load: there is no Set under
+            // the cursor because this scope lists nothing. The
+            // bay says so by drawing no rows; this says so in
+            // words, and it says **which** nothing it is —
+            // `favourites`, a folder nobody has pointed
+            // anywhere and a folder holding nothing are three
+            // different reasons, and a key that did nothing and
+            // a key that is not bound are the same experience.
+            (scope, None) => {
+                println!(
+                    "  load: `{}` lists nothing, so there is no Set under the \
+                     cursor — {}",
+                    match scope {
+                        Some(scope) => scope.name(),
+                        None => "the library",
+                    },
+                    match scope {
+                        Some(scope) => why_nothing(scope, folder.is_some(), running),
+                        None => "this console was handed no scopes at all",
+                    }
+                );
+                Acted::Nothing
+            }
+        };
+        // **One frame asked for, however many operations the
+        // press emitted.** `App::wants` counts a frame against
+        // the run's costs and asks the window for a redraw, so
+        // calling it twice for one press would ask for two
+        // frames where one is drawn. `Repaint::soonest` is
+        // what combines them, and its own rule is why it is
+        // safe: it can only bring a frame forward.
+        let repaint = App::performed(gfx, started, readout, recorder, &acted, Repaint::Never)
+            .repaint
+            .soonest(took);
+        App::wants(gfx, egui_due, costs, repaint);
     }
 }
