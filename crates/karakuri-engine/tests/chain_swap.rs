@@ -175,7 +175,7 @@ fn the_offline_renderer_is_the_synchronous_path() {
 /// nothing builds a slot or a target.
 #[test]
 fn apply_chain_builds_nothing_on_the_callers_thread() {
-    let code = source("crates/karakuri-environment/src/mix/mod.rs");
+    let code = source("crates/karakuri-environment/src/mix/chain.rs");
     let at = code
         .find("pub fn apply_chain(")
         .expect("mix::apply_chain has moved or been renamed");
