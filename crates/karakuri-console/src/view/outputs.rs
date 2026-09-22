@@ -202,6 +202,18 @@ impl Outputs {
         self
     }
 
+    /// Say whether an output plugin sink is active and whether it is available on this machine.
+    pub fn told_plugin(mut self, index: usize, on: bool, present: bool) -> Outputs {
+        if let Some(chip) = self.more.get_mut(index + 1) {
+            chip.on = on;
+            chip.present = present;
+            if index == 0 {
+                chip.name = if present { "Syphon" } else { PLUGIN_SINKS[0] };
+            }
+        }
+        self
+    }
+
     /// Whether `p` is on the program view's control.
     pub fn hit(&self, p: karakuri_layout::Point) -> bool {
         self.sink.contains(Pos2::new(p.x, p.y))
@@ -275,6 +287,18 @@ pub fn outputs(
     layout: &karakuri_layout::Layout,
     open: Open,
 ) -> Option<Outputs> {
+    outputs_with(ctx, layout, open, false)
+}
+
+/// The Outputs row, laid out: where the word goes, where the console's one
+/// control is, and whether that control is lit. Allows specifying whether plugin
+/// sink 0 (Syphon) is present on this machine.
+pub fn outputs_with(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    open: Open,
+    plugin_available: bool,
+) -> Option<Outputs> {
     // **Fonts are not valid until `egui` has run a pass**, and it says so
     // outright. A pointer event can reach this before the first frame — the
     // window is up and the loop has not drawn yet — so the answer there is
@@ -299,6 +323,13 @@ pub fn outputs(
         let word = match i {
             0 => PROGRAM_VIEW,
             1 => PROJECTOR,
+            2 => {
+                if plugin_available {
+                    "Syphon"
+                } else {
+                    PLUGIN_SINKS[0]
+                }
+            }
             n => PLUGIN_SINKS[n - 2],
         };
         ctx.fonts_mut(|f| {
@@ -327,9 +358,20 @@ pub fn outputs(
             chip: chips[i + 1].0,
             dot: chips[i + 1].1,
             on: false,
-            present: i == 0,
+            present: match i {
+                0 => true,
+                1 => plugin_available,
+                _ => false,
+            },
             name: match i {
                 0 => PROJECTOR,
+                1 => {
+                    if plugin_available {
+                        "Syphon"
+                    } else {
+                        PLUGIN_SINKS[0]
+                    }
+                }
                 n => PLUGIN_SINKS[n - 1],
             },
         }),

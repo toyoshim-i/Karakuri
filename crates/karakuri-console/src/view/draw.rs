@@ -184,6 +184,8 @@ impl View {
         // arrangement and the palette, and one `bool` read here is one place
         // the answer comes from.
         let projector = self.projector;
+        let plugin = self.plugin;
+        let plugin_available = self.plugin_available;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -249,7 +251,8 @@ impl View {
                     Kind::Outputs => {
                         bay_card(ui, &pal, rect);
                         if let Some(row) =
-                            outputs(ui.ctx(), panel.layout(), opening).map(|r| r.told(projector))
+                            outputs_with(ui.ctx(), panel.layout(), opening, plugin_available)
+                                .map(|r| r.told(projector).told_plugin(0, plugin, plugin_available))
                         {
                             outputs::outputs_into(ui, &pal, &row);
                         }
