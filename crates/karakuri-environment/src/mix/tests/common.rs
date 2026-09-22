@@ -1,6 +1,17 @@
 #![allow(unused_imports, dead_code)]
 
 pub(super) use super::super::*;
+pub(super) use karakuri_engine::binding::Curve;
+pub(super) use karakuri_engine::chain_swap::ChainSlot;
+pub(super) use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
+pub(super) use karakuri_engine::master::{Chain, Cut, Slot, SlotSpec};
+pub(super) use karakuri_engine::present::TonemapOp;
+pub(super) use karakuri_engine::set::Authority;
+pub(super) use karakuri_engine::transition::Control;
+pub(super) use karakuri_engine::transport::{Sync, Transport};
+pub(super) use karakuri_engine::Look;
+pub(super) use karakuri_signal::oscillator::Oscillator;
+pub(super) use karakuri_store::record::{DeckSlot, Record};
 
 /// test that wants a `Record::Opacity` asks the conversion for one rather than
 /// spelling it, so what it round-trips below is what a key press and a mapped
