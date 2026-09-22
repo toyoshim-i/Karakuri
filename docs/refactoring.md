@@ -4,9 +4,9 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases Summary (P1–P87)
+## 1. Completed Phases Summary (P1–P116)
 
-All refactoring phases through Phase 16 (P1–P87) are complete, verified with full workspace tests and Clippy quality gates, and documented across crate-level `README.md` files:
+All refactoring phases through Phase 18 (P1–P116) are complete, verified with full workspace tests and Clippy quality gates, and documented across crate-level `README.md` files:
 
 - **Phases 1 & 2 (P1–P20)**: Transient render graph DAG, WGSL AST & pass fusion, machine-readable AI diagnostics, zero-allocation stream replay, and keymap convergence.
 - **Phase 3 (P21–P26)**: Subsystem decomposition, monolith extraction, layer type centralization, full crate-level `README.md` documentation, and Google Style comment standardization across all 16 crates.
@@ -23,6 +23,8 @@ All refactoring phases through Phase 16 (P1–P87) are complete, verified with f
 - **Phase 14 (P79–P82)**: Secondary test monolith decomposition across integration suites (>1,700 lines).
 - **Phase 15 (P83–P86)**: Architectural principles realization (destination purity, structured refusal unification, parameter objects, and sandbox-safe test partitioning).
 - **Phase 16 (P87)**: Documentation modernization, elimination of speculative/philosophical prose comments, CommonMark indentation restoration, and strict `clippy::doc_lazy_continuation` re-enforcement.
+- **Phase 17 (P88–P98)**: Near-monolith modularization (1,500–1,800 lines target) across 11 files (`karakuri::tests::view_interaction`, `karakuri-ir::ast`, `karakuri-cli::src::tests::parse`, etc.), lowering pre-commit hard gate to 1,500 lines.
+- **Phase 18 (P99–P116)**: Intermediate reduction (1,300–1,500 lines target) across 18 files (`karakuri-environment::mix::tests`, `karakuri-cli::live::interactive`, `karakuri-engine::tests::binding`, `karakuri-console::tests::mixer`, etc.), lowering pre-commit hard gate to 1,300 lines.
 
 ---
 
@@ -53,53 +55,14 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Stage 4: Ultimate Architectural Target <1,000 Lines (Phase 19)          │
-│ - Files in 1,000–1,300 range to be modularized.                         │
+│ - 48 remaining files in 1,000–1,300 range to be modularized.            │
 │ - Aligns fully with ADR-0345 (1,000 lines as single-file ceiling).     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 17: Near-Monolith Modularization (1,500–1,800 Lines Target) — COMPLETED
+### Phase 19: Final Architectural Ceiling (<1,000 Lines Target) — PLANNED
 
-All 11 initiatives targeting files exceeding 1,500 lines are complete:
-
-| Initiative | Subsystem / File | Lines | Scope & Approach | Status |
-|:---:|---|:---:|---|:---:|
-| **P88** | `karakuri::tests::view_interaction` | 1,768 | Partition UI view interaction tests into focused modal, hover, and bay submodules | **COMPLETED** |
-| **P89** | `karakuri-ir::ast` | 1,726 | Decompose AST definitions into `types.rs`, `attr.rs`, `decl.rs`, `expr.rs`, and `stmt.rs` | **COMPLETED** |
-| **P90** | `karakuri-cli::src::tests::parse` | 1,708 | Split CLI argument and flag parser tests into category submodules | **COMPLETED** |
-| **P91** | `karakuri-operation-record::tests` | 1,704 | Partition operation record serialization and backward-compatibility tests | **COMPLETED** |
-| **P92** | `karakuri-mcp::src::tests` | 1,686 | Decompose MCP server and tool handler unit test suites | **COMPLETED** |
-| **P93** | `karakuri-console::hover::probes` | 1,667 | Separate static TIPS definitions from runtime probe hit-testing algorithms | **COMPLETED** |
-| **P94** | `karakuri-mcp::spelled::table` | 1,652 | Modularize schema dictionary and spelling lookup tables into `table/` submodules | **COMPLETED** |
-| **P95** | `karakuri-engine::tests::governor` | 1,617 | Partition frame pacing and timing governor tests into `pure.rs` and `deck.rs` | **COMPLETED** |
-| **P96** | `karakuri-console::panel` | 1,541 | Separate panel layout geometry arithmetic and types into `panel/` submodules | **COMPLETED** |
-| **P97** | `karakuri-engine::tests::sources` | 1,540 | Decompose multiple geometry sources and deformation tests into `sources/` submodules | **COMPLETED** |
-| **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **COMPLETED** |
-
-### Phase 18: Intermediate Reduction (1,300–1,500 Lines Target) — COMPLETED
-
-All 18 initiatives targeting files exceeding 1,300 lines are complete:
-
-| Initiative | Subsystem / File | Lines | Scope & Approach | Status |
-|:---:|---|:---:|---|:---:|
-| **P99** | `karakuri-environment::mix::tests` | 1,485 | Partition mixer state persistence and audio synchronization test cases | **COMPLETED** |
-| **P100** | `karakuri-cli::live::interactive` | 1,472 | Modularize CLI interactive terminal event handling and render loop | **COMPLETED** |
-| **P101** | `karakuri-engine::tests::binding` | 1,452 | Split pipeline resource binding and bind group layout integration tests | **COMPLETED** |
-| **P102** | `karakuri-console::tests::mixer` | 1,449 | Partition mixer bay fader, balance, and solo/mute test suites | **COMPLETED** |
-| **P103** | `karakuri-console::view::inspector::header` | 1,429 | Separate inspector header title rendering from chip buttons and target badges | **COMPLETED** |
-| **P104** | `karakuri-engine::set::layers` | 1,412 | Separate layer binding management from uniform buffer assignment | **COMPLETED** |
-| **P105** | `karakuri-engine::tests::master` | 1,402 | Partition master chain GPU pipeline and pass fusion tests | **COMPLETED** |
-| **P106** | `karakuri-console::view::program` | 1,397 | Decompose program bay monitor rendering and aspect ratio calculations | **COMPLETED** |
-| **P107** | `karakuri::bridge::handlers::apply` | 1,387 | Extract operation execution match arms into focused handler functions | **COMPLETED** |
-| **P108** | `karakuri-layout::layout` | 1,373 | Decompose layout constraint solver and rect partitioning utilities | **COMPLETED** |
-| **P109** | `karakuri-mcp::tools::mod` | 1,371 | Extract tool dispatch registry and argument schemas into submodules | **COMPLETED** |
-| **P110** | `karakuri::session` | 1,370 | Separate session state persistence from event log playback | **COMPLETED** |
-| **P111** | `karakuri-engine::deck` | 1,364 | Partition deck slot execution and texture lifecycle management | **COMPLETED** |
-| **P112** | `karakuri::readout::costs` | 1,354 | Separate frame cost tracking from telemetry aggregation | **COMPLETED** |
-| **P113** | `karakuri-console::tests::library::geometry` | 1,334 | Partition library geometry browser and card loading tests | **COMPLETED** |
-| **P114** | `karakuri-ir::tests::check::layers` | 1,333 | Partition IR layer type checking and diagnostic emission tests | **COMPLETED** |
-| **P115** | `karakuri-operation::gate` | 1,330 | Modularize operation validation gating rules and authority checks | **COMPLETED** |
-| **P116** | `karakuri-engine::frame` | 1,308 | Decompose frame synchronization and render target binding lifecycle | **COMPLETED** |
+Following the completion of Phase 18 and the enforcement of the 1,300-line pre-commit limit, 48 files currently reside in the 1,000–1,300 line range (24 source files, 24 test suites). Phase 19 will systematically modularize these files to bring the entire codebase into strict compliance with ADR-0345 (<1,000 lines).
 
 ---
 
