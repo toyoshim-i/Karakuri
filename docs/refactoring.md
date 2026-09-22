@@ -45,9 +45,9 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 3: Target <1,300 Lines (Phase 18) (ACTIVE)                        │
-│ - 18 files currently in 1,300–1,500 range to be modularized (P99–P116). │
-│ - Once complete, lower hard gate in pre-commit to 1,300 lines.          │
+│ Stage 3: Target <1,300 Lines (Phase 18) (COMPLETED)                     │
+│ - All 18 files brought under 1,300 lines (P99–P116).                    │
+│ - Hard gate lowered to 1,300 lines in .githooks/pre-commit.             │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
@@ -76,9 +76,9 @@ All 11 initiatives targeting files exceeding 1,500 lines are complete:
 | **P97** | `karakuri-engine::tests::sources` | 1,540 | Decompose multiple geometry sources and deformation tests into `sources/` submodules | **COMPLETED** |
 | **P98** | `karakuri::bridge::engine` | 1,508 | Separate engine command channel management from frame telemetry collection | **COMPLETED** |
 
-### Phase 18: Intermediate Reduction (1,300–1,500 Lines Target) — ACTIVE
+### Phase 18: Intermediate Reduction (1,300–1,500 Lines Target) — COMPLETED
 
-Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
+All 18 initiatives targeting files exceeding 1,300 lines are complete:
 
 | Initiative | Subsystem / File | Lines | Scope & Approach | Status |
 |:---:|---|:---:|---|:---:|
