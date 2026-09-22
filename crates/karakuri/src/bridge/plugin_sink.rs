@@ -46,8 +46,33 @@ mod macos {
     }
 
     impl MacOsSurface {
-        pub fn new(gpu: &Gpu, width: u32, height: u32) -> Result<Self, String> {
+        pub fn new(
+            gpu: &Gpu,
+            width: u32,
+            height: u32,
+            format: wgpu::TextureFormat,
+        ) -> Result<Self, String> {
             unsafe {
+                let mtl_format = match format.remove_srgb_suffix() {
+                    wgpu::TextureFormat::Bgra8Unorm => {
+                        if format.is_srgb() {
+                            MTLPixelFormat::BGRA8Unorm_sRGB
+                        } else {
+                            MTLPixelFormat::BGRA8Unorm
+                        }
+                    }
+                    wgpu::TextureFormat::Rgba8Unorm => {
+                        if format.is_srgb() {
+                            MTLPixelFormat::RGBA8Unorm_sRGB
+                        } else {
+                            MTLPixelFormat::RGBA8Unorm
+                        }
+                    }
+                    other => {
+                        return Err(format!("unsupported format for output plugin: {other:?}"))
+                    }
+                };
+
                 let k_width = CFString::new("IOSurfaceWidth");
                 let k_height = CFString::new("IOSurfaceHeight");
                 let k_bytes_per_elem = CFString::new("IOSurfaceBytesPerElement");
@@ -90,7 +115,7 @@ mod macos {
 
                 let desc =
                     MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
-                        MTLPixelFormat::BGRA8Unorm,
+                        mtl_format,
                         width as usize,
                         height as usize,
                         false,
@@ -110,7 +135,7 @@ mod macos {
 
                 let hal_texture = wgpu_hal::metal::Device::texture_from_raw(
                     raw_texture,
-                    wgpu::TextureFormat::Bgra8Unorm,
+                    format,
                     MTLTextureType::Type2D,
                     1,
                     1,
@@ -132,7 +157,7 @@ mod macos {
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    format,
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                         | wgpu::TextureUsages::TEXTURE_BINDING,
                     view_formats: &[],
@@ -180,10 +205,16 @@ pub(crate) struct PluginSink {
 
 impl PluginSink {
     /// Opens the specified plugin command and sets up zero-copy GPU surface sharing.
-    pub(crate) fn open(gpu: &Gpu, command: &str, width: u32, height: u32) -> Result<Self, String> {
+    pub(crate) fn open(
+        gpu: &Gpu,
+        command: &str,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    ) -> Result<Self, String> {
         #[cfg(target_os = "macos")]
         {
-            let surface = macos::MacOsSurface::new(gpu, width, height)?;
+            let surface = macos::MacOsSurface::new(gpu, width, height, format)?;
             let plugin = OutputPlugin::open(command, "iosurface", width, height, "bgra8unorm")
                 .map_err(|e| format!("{e}"))?;
             Ok(Self {
@@ -196,7 +227,7 @@ impl PluginSink {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = (gpu, command, width, height);
+            let _ = (gpu, command, width, height, format);
             Err("output plugin sinks currently require macOS (IOSurface)".to_string())
         }
     }
@@ -268,7 +299,13 @@ mod tests {
         #[cfg(target_os = "macos")]
         fn macos_surface_creates_and_allocates_iosurface_id() {
             let gpu = Gpu::headless().expect("no GPU");
-            let surface = macos::MacOsSurface::new(&gpu, 640, 480).expect("MacOsSurface");
+            let surface = macos::MacOsSurface::new(
+                &gpu,
+                640,
+                480,
+                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
+            )
+            .expect("MacOsSurface");
             assert!(surface.surface_id > 0, "IOSurfaceID must be non-zero");
             assert_eq!(surface.width, 640);
             assert_eq!(surface.height, 480);
@@ -301,15 +338,32 @@ mod tests {
             };
 
             let gpu = Gpu::headless().expect("no GPU");
-            let mut sink = PluginSink::open(&gpu, &command, 1280, 720).expect("PluginSink::open");
+            let mut sink = PluginSink::open(
+                &gpu,
+                &command,
+                1280,
+                720,
+                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
+            )
+            .expect("PluginSink::open");
             assert!(sink.is_alive());
             assert_eq!(sink.server_name(), "Karakuri");
             assert_eq!(sink.size(), (1280, 720));
 
+            let present = karakuri_engine::Present::new(
+                &gpu.device,
+                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
+                1280,
+                720,
+            );
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            present.draw(&mut encoder, sink.view(), sink.size());
+            gpu.queue.submit([encoder.finish()]);
+
             sink.acquire(&gpu).expect("acquire");
             sink.present(&gpu).expect("present frame 0");
-            sink.acquire(&gpu).expect("acquire");
-            sink.present(&gpu).expect("present frame 1");
 
             let t = sink.telemetry();
             assert_eq!(t.host_dropped, 0);

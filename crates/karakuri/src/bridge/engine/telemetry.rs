@@ -2,7 +2,10 @@ use super::*;
 
 /// Is anything making texels this frame?
 pub(crate) fn live(view: &View) -> bool {
-    view.picture.is_some() || view.previews.iter().any(Option::is_some) || view.projector
+    view.picture.is_some()
+        || view.previews.iter().any(Option::is_some)
+        || view.projector
+        || view.plugin
 }
 
 /// What the transport row reads this frame, from the deck's oscillator and frame costs.
