@@ -24,7 +24,11 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
+    pub(super) use super::common::{compile, f16};
     use karakuri_engine::set::Layering;
     use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
     use karakuri_ir::typed::Checked;
@@ -119,21 +123,6 @@ proc dots {
   }
 }
 "#;
-
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        let checked =
-            karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        checked
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
 
     fn build(gpu: &Gpu, l2s: &[&str]) -> Set {
         build_over(gpu, STILL, l2s, CAPACITY)
@@ -240,18 +229,6 @@ proc dots {
         drop(data);
         readback.unmap();
         out
-    }
-
-    fn f16(bits: u16) -> f32 {
-        let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
-        let exp = (bits >> 10) & 0x1f;
-        let mant = u32::from(bits & 0x3ff);
-        let v = match exp {
-            0 => f32::from_bits(mant << 13) * 2.0f32.powi(-112),
-            0x1f => f32::from_bits(0x7f80_0000 | (mant << 13)),
-            _ => f32::from_bits(((u32::from(exp) + 112) << 23) | (mant << 13)),
-        };
-        f32::from_bits(v.to_bits() | sign.to_bits())
     }
 
     // ---------------------------------------------------------------------------

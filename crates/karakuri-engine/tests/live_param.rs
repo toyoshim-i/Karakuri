@@ -23,10 +23,13 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
+    pub(super) use super::common::{compile, f16};
     use karakuri_engine::swap::HotSwap;
     use karakuri_engine::{Authority, Deck, Gpu, ParamWrite, Present, Set};
-    use karakuri_ir::typed::Checked;
     use karakuri_ir::Kind;
 
     const W: u32 = 64;
@@ -84,18 +87,6 @@ proc glowing {
   }
 }
 "#;
-
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)))
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
 
     fn set_of(gpu: &Gpu, l1: &str) -> Set {
         let mut set = Set::build(
@@ -163,21 +154,6 @@ proc glowing {
         drop(data);
         readback.unmap();
         out
-    }
-
-    /// `f16` bits to `f32`. Written out rather than pulled in as a dependency,
-    /// the way `tests/vector_param.rs` and `tests/deck.rs` do it.
-    fn f16(bits: u16) -> f32 {
-        let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
-        let exponent = (bits >> 10) & 0x1f;
-        let mantissa = bits & 0x03ff;
-        let magnitude = match exponent {
-            0 => f32::from(mantissa) * 2.0f32.powi(-24),
-            0x1f if mantissa == 0 => f32::INFINITY,
-            0x1f => f32::NAN,
-            e => (1.0 + f32::from(mantissa) / 1024.0) * 2.0f32.powi(i32::from(e) - 15),
-        };
-        sign * magnitude
     }
 
     /// The target is `Rgba16Float`, so a number that survived the round trip is
