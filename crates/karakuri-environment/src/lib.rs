@@ -20,6 +20,7 @@
 // - `meta` — an artifact's card: what a compile pass can say, and where it lands.
 // - `midi` — a port, and what the operator asked for through it.
 // - `mix` — the performance as records: faders, blends, residency, the look.
+// - `output_plugin` — out-of-process video sink plugins (Syphon, Spout, NDI).
 // - `places` — where the presets and the store are, told or gone looking for.
 // - `render` — a frame written to a PNG: the window's path, minus the window.
 // - `scratch` — the copies a live run edits, so an original is untouched.
@@ -34,6 +35,7 @@ pub mod history;
 pub mod meta;
 pub mod midi;
 pub mod mix;
+pub mod output_plugin;
 pub mod places;
 pub mod render;
 pub mod scratch;
