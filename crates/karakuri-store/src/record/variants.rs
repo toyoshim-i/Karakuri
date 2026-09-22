@@ -20,31 +20,10 @@ pub enum Record {
         /// Target node address within the Set. Default index 0 is omitted when serialized.
         #[serde(flatten)]
         at: NodeAddress,
-        /// What this Set calls the node, for whatever wants to point at it.
+        /// What this Set calls the node, for whatever wants to point at it (see `docs/ir-spec.md`).
         ///
-        /// On the terms HTML gives an `id`, and the analogy settles where it lives: an
-        /// `id` belongs to the element rather than to the tag, so a name belongs to the
-        /// *use* and is written here rather than in the `.kir` — which is why one
-        /// procedure loaded twice is two names and not a collision. Absent is the
-        /// ordinary case and costs nothing: a name is a cost you pay when you want to
-        /// point at something, and it is written here only where somebody chose one.
-        /// What absent does *not* mean is a node nothing can point at — every node has
-        /// a name whether or not one was written, and an unwritten one is derived from
-        /// the procedure and disambiguated where the Set is built, which is what lets
-        /// [`Record::Edge`] name both its ends in a file that wrote no names at all.
-        /// See `docs/ir-spec.md`, "Naming a source, on the terms HTML gives an `id`".
-        ///
-        /// It is not part of the address. `(layer, index)` says which node the record
-        /// is about and the name is one of the things it says about that node, exactly
-        /// as `proc` is — so a file naming one node twice has named it twice and the
-        /// later name wins, the way the later `proc` does. Keying the fold by the name
-        /// would turn one renamed node into two that were never there; see `key_for` in
-        /// `project.rs`.
-        ///
-        /// Uniqueness within a Set is not this record's to enforce. It is checked where
-        /// every source is in hand, beside the composition check — a duplicate name is
-        /// a Set that will not build, not a line that will not parse, and the
-        /// vocabulary's job is to carry what a file said.
+        /// A name belongs to the use rather than the procedure, allowing identical procedures
+        /// to be loaded under distinct names without collision. It is not part of the address.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
         #[serde(rename = "proc")]
@@ -1000,7 +979,3 @@ pub enum Record {
     #[serde(other)]
     Unknown,
 }
-
-/// Beyond this the simulation is allowed to fall behind rather than catch up.
-/// Unbounded catch-up turns a load spike into a death spiral.
-pub const MAX_STEPS: u8 = 4;

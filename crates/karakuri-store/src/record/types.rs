@@ -540,3 +540,7 @@ pub struct ChainSlot {
 /// Files without an explicit header are detected as Version 1 (legacy
 /// unversioned).
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+
+/// Beyond this the simulation is allowed to fall behind rather than catch up.
+/// Unbounded catch-up turns a load spike into a death spiral.
+pub const MAX_STEPS: u8 = 4;
