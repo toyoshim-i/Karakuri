@@ -184,6 +184,8 @@ fn resolve_plugin_command(n: u8) -> String {
             "../Karakuri-syphon/target/release/karakuri-syphon",
             "../../Karakuri-syphon/target/debug/karakuri-syphon",
             "../../Karakuri-syphon/target/release/karakuri-syphon",
+            "../../../Karakuri-syphon/target/debug/karakuri-syphon",
+            "../../../Karakuri-syphon/target/release/karakuri-syphon",
         ];
         for candidate in candidates {
             if let Ok(canon) = std::fs::canonicalize(candidate) {
@@ -196,8 +198,13 @@ fn resolve_plugin_command(n: u8) -> String {
                 if p1.exists() {
                     return p1.to_string_lossy().into_owned();
                 }
-                let p2 = parent.join("../../Karakuri-syphon/target/debug/karakuri-syphon");
-                if let Ok(canon) = p2.canonicalize() {
+                let p_debug = parent.join("../../../Karakuri-syphon/target/debug/karakuri-syphon");
+                if let Ok(canon) = p_debug.canonicalize() {
+                    return canon.to_string_lossy().into_owned();
+                }
+                let p_release =
+                    parent.join("../../../Karakuri-syphon/target/release/karakuri-syphon");
+                if let Ok(canon) = p_release.canonicalize() {
                     return canon.to_string_lossy().into_owned();
                 }
             }
