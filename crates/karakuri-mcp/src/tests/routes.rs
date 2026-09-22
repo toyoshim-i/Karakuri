@@ -105,6 +105,14 @@ fn sample(name: &str) -> Value {
     }
 }
 
+const WORKFLOW_TOOLS: &[&str] = &[
+    "get_permissions",
+    "read_slot",
+    "copy_slot",
+    "check_procedure",
+    "check_set",
+];
+
 /// Every tool this server publishes, with the operation one call names.
 fn published() -> Vec<(String, Operation)> {
     let slots = slots();
@@ -112,15 +120,18 @@ fn published() -> Vec<(String, Operation)> {
         .as_array()
         .expect("tools() is an array")
         .iter()
-        .map(|tool| {
+        .filter_map(|tool| {
             let name = tool["name"]
                 .as_str()
                 .expect("a tool has a name")
                 .to_string();
+            if WORKFLOW_TOOLS.contains(&name.as_str()) {
+                return None;
+            }
             let asked = asked(&name, &sample(&name), &slots)
                 .unwrap_or_else(|e| panic!("`{name}` is advertised and is not a tool: {e}"));
             match asked {
-                Asked::Named(operation) => (name, operation),
+                Asked::Named(operation) => Some((name, operation)),
                 Asked::Refused(refusal) => panic!(
                     "`{name}` refused the sample call in this file: {refusal} — the \
                      arguments in `sample` no longer get past its schema"
@@ -128,6 +139,22 @@ fn published() -> Vec<(String, Operation)> {
             }
         })
         .collect()
+}
+
+#[test]
+fn every_workflow_tool_is_published_by_tools() {
+    let names: std::collections::HashSet<String> = tools()
+        .as_array()
+        .expect("tools() is an array")
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+    for tool in WORKFLOW_TOOLS {
+        assert!(
+            names.contains(*tool),
+            "workflow tool `{tool}` must be in tools()"
+        );
+    }
 }
 
 /// A tool with no row is an operation nobody specified.

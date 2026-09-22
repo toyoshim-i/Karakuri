@@ -177,10 +177,10 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
 
     if name == "check_procedure" {
-        let source = args
-            .get("source")
-            .and_then(Value::as_str)
-            .ok_or("`source` is required")?;
+        let source = match args.get("source").and_then(Value::as_str) {
+            Some(s) => s,
+            None => return Ok(Called::Answered(Err("`source` is required".into()))),
+        };
         let report = check_procedure(source);
         let report_json = serde_json::to_string_pretty(&report).unwrap_or_default();
         return Ok(Called::Answered(if report.success {
@@ -190,10 +190,10 @@ pub(crate) fn call_tool(request: &Value, state: &mut State) -> Result<Called, St
         }));
     }
     if name == "check_set" {
-        let id = args
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or("`id` is required")?;
+        let id = match args.get("id").and_then(Value::as_str) {
+            Some(i) => i,
+            None => return Ok(Called::Answered(Err("`id` is required".into()))),
+        };
         let report = check_set_configuration(&state.store, id);
         let report_json = serde_json::to_string_pretty(&report).unwrap_or_default();
         return Ok(Called::Answered(if report.success {

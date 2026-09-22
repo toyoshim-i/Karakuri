@@ -45,12 +45,21 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
         ),
     ];
     // Sorted, because the order a tool is published in is `tools()`'s to
-    // choose and is not what this is about.
+    // choose and is not what this is about. Filter out M7 workflow tools,
+    // which are tested by `every_workflow_tool_is_published_and_callable`.
+    const WORKFLOW_TOOLS: &[&str] = &[
+        "get_permissions",
+        "read_slot",
+        "copy_slot",
+        "check_procedure",
+        "check_set",
+    ];
     let mut published: Vec<String> = tools()
         .as_array()
         .expect("a list of tools")
         .iter()
         .map(|tool| tool["name"].as_str().expect("a name").to_string())
+        .filter(|name| !WORKFLOW_TOOLS.contains(&name.as_str()))
         .collect();
     published.sort();
     let mut covered: Vec<String> = arguments.iter().map(|(name, _)| name.to_string()).collect();
@@ -68,12 +77,38 @@ fn every_tool_this_server_publishes_names_an_operation_the_gate_lets_through() {
         };
         audited(&operation, &state).unwrap_or_else(|refused| {
             panic!(
-                "`{name}` names `{}`, and ADR-0235 puts all seven tools in the open set: \
-                 {refused}",
-                operation.title()
-            )
+                "`{name}` is published and the gate refused it: {refused:?} — every tool \
+                 this server publishes must name an operation the gate lets through"
+            );
         });
     }
+}
+
+#[test]
+fn every_workflow_tool_is_published_and_callable() {
+    let (_tx, rx) = mpsc::channel();
+    let mut state = state(rx);
+    for tool_name in [
+        "get_permissions",
+        "read_slot",
+        "copy_slot",
+        "check_procedure",
+        "check_set",
+    ] {
+        let published = tools()
+            .as_array()
+            .expect("tools list")
+            .iter()
+            .any(|t| t["name"] == tool_name);
+        assert!(published, "`{tool_name}` must be published in `tools()`");
+    }
+
+    let req = json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": { "name": "get_permissions", "arguments": {} }
+    });
+    let rep = dispatch(&req, &mut state).settled().expect("rep");
+    assert_eq!(rep["result"]["isError"], false);
 }
 
 /// Every operation of the vocabulary is spelled here, once, and this is the

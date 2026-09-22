@@ -348,5 +348,95 @@ pub(crate) fn tools() -> Value {
         // and a hand-written copy of it beside the vocabulary is the drift
         // `karakuri-operation` exists to end.
         operate_tool(),
+        // **Agent workflow & co-performance tools (M7, ADR-0363)**
+        {
+            "name": "get_permissions",
+            "description":
+                "Discover current console constraints: bay class openings, per-slot MCP \
+                 policies (Auto, On, Off), live mixer contribution status (in_mix), and \
+                 whether each deck slot is writable. Call this at the start of a session \
+                 to plan edits in authorized slots.",
+            "inputSchema": { "type": "object", "properties": {} },
+        },
+        {
+            "name": "read_slot",
+            "description":
+                "Read the complete procedural tree (L1 material, L2 deformation, L3 camera, \
+                 L4 renderers, and Field distance functions) for a deck slot in a single \
+                 call, eliminating multi-call inspection latency.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "deck slot, from 0",
+                    },
+                },
+                "required": ["slot"],
+            },
+        },
+        {
+            "name": "copy_slot",
+            "description":
+                "Atomically duplicate procedural definitions from a source slot to a destination \
+                 slot with optional layer filtering, guarded by destination slot policy and staged \
+                 through temporary files to prevent torn reads.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "from_slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "source deck slot, from 0",
+                    },
+                    "to_slot": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "destination deck slot, from 0",
+                    },
+                    "layer": {
+                        "type": "string",
+                        "enum": layers,
+                        "description": "optional layer filter (e.g. L1, L4)",
+                    },
+                },
+                "required": ["from_slot", "to_slot"],
+            },
+        },
+        {
+            "name": "check_procedure",
+            "description":
+                "Statically validate .kir shader source syntax, types, and execution costs \
+                 without compiling to GPU or altering engine memory state.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "description": "the .kir shader source code to validate",
+                    },
+                },
+                "required": ["source"],
+            },
+        },
+        {
+            "name": "check_set",
+            "description":
+                "Validate Set configuration, knob mappings, and asset integrity in the store \
+                 before activation without touching GPU state.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "pattern": ID_PATTERN,
+                        "maxLength": MAX_ID,
+                        "description": "the Set ID to validate",
+                    },
+                },
+                "required": ["id"],
+            },
+        },
     ])
 }
