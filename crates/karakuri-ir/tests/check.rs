@@ -12,6 +12,12 @@ mod canonical;
 #[path = "check/layers.rs"]
 mod layers;
 
+#[path = "check/camera.rs"]
+mod camera;
+
+#[path = "check/mask.rs"]
+mod mask;
+
 #[path = "check/slots.rs"]
 mod slots;
 
