@@ -66,7 +66,8 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 5: Final Architectural Ceiling (<1,000 Lines Polish) (Phase 20)   │
+│ Stage 5: Final Architectural Ceiling (<1,000 Lines Polish) (Phase 20 -  │
+│          DONE)                                                          │
 │ - Lower pre-commit hard gate to 1,000 lines (hard_limit=1000).          │
 │ - Complete compliance with ADR-0345 (1,000 lines single-file ceiling).  │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -111,11 +112,19 @@ Several monolithic structs aggregate fields across unrelated UI or storage conce
 
 ## 4. Final Stage: Architectural Ceiling Polish (<1,000 Lines)
 
-### Phase 20: ADR-0345 Ceiling Enforcement — PLANNED
-Following the semantic refactorings in Phase 19:
-1. Re-evaluate file sizes and verify all files remain within the optimal ~500–800 line range.
-2. Finalize pre-commit hook hard limit at 1,000 lines (`hard_limit=1000` in `.githooks/pre-commit`) with 800-line warning threshold.
-3. Achieve 100% compliance with ADR-0345 across all crates.
+### Phase 20: ADR-0345 Ceiling Enforcement & Modularization — COMPLETED
+Following the semantic refactorings in Phase 19, Phase 20 audited all files across the 16 crates approaching the 1,000-line limit:
+1. **Monolith Modularization (>950 Lines)**:
+   - Decomposed `karakuri-console::view::transport::arrangement` (982 -> 730 lines) by extracting `arrangement/pill.rs` (258 lines).
+   - Decomposed `karakuri-cli::live` (981 -> 772 lines) by extracting `live/status.rs` (217 lines).
+   - Decomposed `karakuri-console::view::sequencer` (972 -> 723 lines) by extracting `sequencer/chooser.rs` (260 lines).
+   - Decomposed `karakuri-environment::midi` (969 -> 669 lines) by extracting `midi/surface.rs` (310 lines).
+   - Decomposed `karakuri-environment::places` (967 -> 545 lines) by extracting `places/tests.rs` (421 lines).
+2. **Strict Limit Verification**:
+   - Every single file across all 16 crates in the workspace strictly satisfies the ADR-0345 ceiling (<1,000 lines).
+   - Pre-commit hook (`.githooks/pre-commit`) hard limit enforced at 1,000 lines (`hard_limit=1000`) with 800-line proactive warning threshold.
+   - All unit, integration, doc tests and strict Clippy checks (`-D warnings`) pass cleanly across the entire workspace.
+3. **100% Compliance with ADR-0345 Achieved**.
 
 ---
 
