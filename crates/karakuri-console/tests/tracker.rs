@@ -41,7 +41,7 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
@@ -50,7 +50,7 @@ use karakuri_console::view::{
     TrackerGroup, Transport, View, LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS,
     LATENCY_OFFSET_STEP_MS, OFFSET_TRACK_W,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::{GridScale, Operation};
 
 /// The mock's own transport, as numbers — `transport.rs`'s, which is where the
@@ -94,21 +94,10 @@ fn view(at: Tracker) -> View {
     view
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The laid-out group at that reading, on a solved console.
 fn laid_out(panel: &Panel, ctx: &egui::Context, at: Tracker) -> TrackerGroup {
     tracker_group(ctx, panel.layout(), Some(mock()), Some(&heard()), Some(at))
         .expect("the transport row draws the tracker group")
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 // ---------------------------------------------------------------------------

@@ -28,12 +28,12 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Outcome, Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{arrangement, Arrangement, Ask, Item, Menu, Transport, View};
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::Operation;
 
 /// The mock's own transport, as numbers — `transport.rs`'s `mock`, which is
@@ -50,19 +50,6 @@ fn view(arr: Arrangement) -> View {
     view.transport = Some(mock());
     view.arrangement = arr;
     view
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// every test here starts from, and `outputs.rs`'s own opening.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// An arrangement in use, with three filed beside it.

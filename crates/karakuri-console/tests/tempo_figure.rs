@@ -40,23 +40,16 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, showing, PLAUSIBLE};
+use common::{console, near, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::view::{transport, Transport, TransportRow, TEMPO_BAND, TEMPO_SPAN};
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::Operation;
 
 /// The mock's own transport, which is where `128.0` comes from.
 fn mock() -> Transport {
     common::mock_transport()
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
 }
 
 /// The row, drawn at `bpm`.

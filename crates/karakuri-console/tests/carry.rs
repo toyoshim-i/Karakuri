@@ -29,7 +29,7 @@
 
 mod common;
 
-use common::{drawn_once, rect_of, showing, PLAUSIBLE};
+use common::{drawn_once, point, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Landing, Panel, Released};
 use karakuri_console::room::size;
@@ -118,10 +118,6 @@ fn bay(panel: &Panel, view: &View) -> LibraryBay {
 
 fn strips_bay<'a>(panel: &Panel, ctx: &egui::Context, view: &'a View) -> Mixer<'a> {
     mixer(ctx, panel.layout(), &view.mixer).expect("the mixer bay draws its strips")
-}
-
-fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// The middle of the `index`th drawn row.

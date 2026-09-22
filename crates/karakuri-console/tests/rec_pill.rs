@@ -5,12 +5,12 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE};
+use common::{console, drawn_once, near, rect_of, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{transport, Rec, Stage, Transport, TransportRow, View};
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::{Operation, Recording};
 
 /// The mock's own transport, as numbers — `transport.rs`'s, which is where the
@@ -21,13 +21,6 @@ fn mock() -> Transport {
         rec: Some(Rec::Running),
         ..common::mock_transport()
     }
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
 }
 
 /// The row, drawn with `values`.

@@ -25,7 +25,7 @@
 
 mod common;
 
-use common::{drawn_once, rect_of, showing, PLAUSIBLE};
+use common::{drawn_once, point, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::size;
@@ -78,10 +78,6 @@ fn console() -> (Panel, egui::Context) {
 
 fn bay<'a>(panel: &Panel, ctx: &egui::Context, strips: &'a [Strip]) -> Mixer<'a> {
     mixer(ctx, panel.layout(), strips).expect("the mixer bay draws its strips")
-}
-
-fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// What a press at the centre of strip `slot`'s chip asks for. Panics where

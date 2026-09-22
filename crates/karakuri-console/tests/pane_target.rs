@@ -34,14 +34,13 @@
 
 mod common;
 
-use common::{drawn_once, near, PLAUSIBLE};
+use common::{at, drawn_once, near, PLAUSIBLE};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     deck_name, inspector, slot_mcp_pill, to_egui, Mask, Pane, Strip, Tally, View, DECK_LETTERS,
     PANES, PANE_NAMES, SYNCS,
 };
-use karakuri_layout::Point;
 use karakuri_operation::{BlendMode, Operation, Sync};
 
 /// One mixer strip, which is what makes a deck a row of this card.
@@ -89,10 +88,6 @@ fn console(decks: usize) -> (Panel, egui::Context, View) {
         .map(|d| pane(d, DECK_LETTERS[d]))
         .collect();
     (panel, drawn_once(), view)
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// The pulldown in pane `index`'s head, as the paint and the press both ask for

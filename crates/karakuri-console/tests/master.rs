@@ -30,14 +30,14 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Knob, Panel, Released, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     master, AddChoice, AddChoices, Added, Chain, ChainSlot, MasterRow, SlotParam, View,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::{ChainParam, Cut, Operation};
 
 /// The mock's own level: `out 1.00`, which is what `docs/manual/console.html`'s
@@ -119,23 +119,10 @@ fn down() -> AddChoices {
     }
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// every test here starts from, and `look.rs`'s own opening.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The laid-out row at that level, on a solved console.
 fn row(panel: &Panel, ctx: &egui::Context, out: f32) -> MasterRow {
     master(ctx, panel.layout(), Some(out), Some(&mock_chain()), &shut())
         .expect("the Master bay draws its out row")
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 // ---------------------------------------------------------------------------

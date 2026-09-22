@@ -30,7 +30,7 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
@@ -38,7 +38,7 @@ use karakuri_console::view::{
     arrangement, exposure_at, look, unit_of, Arrangement, Look, LookRow, Transport, View,
     EXPOSURE_MAX, EXPOSURE_MIN, EXPOSURE_TRACK_W,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::{Operation, Tonemap};
 
 /// The mock's own transport, as numbers — `transport.rs`'s, which is where the
@@ -69,14 +69,6 @@ fn view(at: Look) -> View {
     view
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// every test here starts from, and `arrangement_pill.rs`'s own opening.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The laid-out group at that look, on a solved console.
 fn group(panel: &Panel, ctx: &egui::Context, at: Look) -> LookRow {
     look(
@@ -90,11 +82,6 @@ fn group(panel: &Panel, ctx: &egui::Context, at: Look) -> LookRow {
         Some(at),
     )
     .expect("the transport row draws the look controls")
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Every operator, which is what this file walks the cycle against. The order

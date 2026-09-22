@@ -5,27 +5,15 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     class_at, mcp_pill, mcp_word, outputs, program_head, region, View, REGIONS,
 };
-use karakuri_layout::{Layout, Point, Rect};
+use karakuri_layout::{Layout, Point};
 use karakuri_operation::gate::{Class, Open};
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
-}
 
 /// The four pills on one solved console, in `Class::ALL`'s order.
 fn pills(ctx: &egui::Context, layout: &Layout, open: Open) -> Vec<karakuri_console::view::McpPill> {

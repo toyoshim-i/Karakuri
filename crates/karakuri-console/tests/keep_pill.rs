@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::size;
 
@@ -12,7 +12,6 @@ use karakuri_console::room::Room;
 use karakuri_console::view::{
     inspector, keep_pill, InspectorPane, Mask, Pane, Strip, Tally, View, PANES, PANE_NAMES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
 use karakuri_operation::{BlendMode, Operation, Sync};
 
 /// The mock's own deck A, which is the pane the mock draws this capsule lit in.
@@ -38,18 +37,6 @@ fn mock() -> Pane {
 /// tests vary.
 fn showing(deck: usize) -> Pane {
     Pane { deck, ..mock() }
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// How wide the word in the capsule is, asked of the same fonts the paint asks.

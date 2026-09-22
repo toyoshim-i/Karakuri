@@ -22,12 +22,12 @@
 
 mod common;
 
-use common::{drawn_once, PLAUSIBLE};
+use common::{at, drawn_once, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::Room;
 use karakuri_console::view::{arrangement, learn_pill, map_pill, MapPill, Transport, View};
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Rect;
 
 fn mock() -> Transport {
     common::mock_transport()
@@ -46,10 +46,6 @@ fn view(map: Option<MapPill>, armed: bool) -> View {
     view.map = map;
     view.learn = armed;
     view
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// A console nobody has told about a surface draws neither pill, and the

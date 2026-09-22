@@ -37,14 +37,14 @@ mod common;
 
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 
-use common::{drawn_once, near, rect_of, showing, PLAUSIBLE, SMALLEST};
+use common::{console, drawn_once, near, point, rect_of, showing, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     mixer, transition, Go, Level, Mask, Strip, Tally, TransitionRow, TransitionSettings, View,
 };
-use karakuri_layout::{Hit, Point, Rect};
+use karakuri_layout::{Hit, Point};
 use karakuri_operation::{BlendMode, Operation, TransitionSetting, WipeKind};
 
 /// The six shapes the row's first pill cycles, in order — the curation
@@ -112,14 +112,6 @@ fn strips() -> Vec<Strip> {
         .collect()
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// `mixer.rs`, `blend.rs` and `fader.rs` all open with.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// A console showing `strips` with the transition row at `settings`.
 fn showing_at(strips: &[Strip], settings: TransitionSettings) -> View {
     let mut view = showing(strips);
@@ -166,10 +158,6 @@ fn place(shape: usize, quantum: usize, length: usize) -> TransitionSettings {
         quantum: QUANTA[quantum],
         length: LENGTHS[length],
     }
-}
-
-fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Every text the console paints on one frame, with where it was painted —

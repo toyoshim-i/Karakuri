@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{drawn_once, rect_of, showing, PLAUSIBLE, SMALLEST};
+use common::{console_panel as console, drawn_once, rect_of, showing, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::Room;
@@ -13,13 +13,6 @@ use karakuri_console::view::{
     staging, Candidate, Kind, Level, Pane, Stage, Strip, Tally, View, DECK_LETTERS, PANES,
 };
 use karakuri_layout::{Point, Rect};
-
-/// A panel at a viewport, solved — the pair every test here starts from.
-fn console(viewport: Rect) -> Panel {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    panel
-}
 
 /// `egui`'s rectangle, from `karakuri_layout`'s.
 fn to_egui(r: Rect) -> egui::Rect {

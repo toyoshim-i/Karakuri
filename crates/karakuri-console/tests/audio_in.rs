@@ -36,14 +36,14 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
-use karakuri_console::panel::{Panel, GRAB};
+use karakuri_console::panel::GRAB;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     arrangement, audio_in, Arrangement, AudioAsk, AudioIn, Transport, View,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::{BeatSource, Operation};
 
 /// The mock's own transport, as numbers — `transport.rs`'s `mock`. The pill
@@ -51,18 +51,6 @@ use karakuri_operation::{BeatSource, Operation};
 /// all.
 fn mock() -> Transport {
     common::mock_transport()
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// A machine with three inputs and the first of them open, which is what a

@@ -2,13 +2,13 @@
 
 mod common;
 
-use common::{drawn_once, near, PLAUSIBLE, SMALLEST};
+use common::{at, drawn_once, near, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     count_text, inspector, pane_count, InspectorPane, Node, NodeAuthority, Pane, Param, View, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Rect;
 use karakuri_operation::{Authority, Layer, NodeAddress, ParamAt, Sync};
 
 /// A row over `[0, 1]` at the middle of it, so every knob in these panes is at
@@ -113,10 +113,6 @@ fn knob(at: &InspectorPane, pane: &Pane, group: usize, index: usize) -> egui::Po
         left + size::PARAM_ORD_W + size::PARAM_GAP + size::PARAM_NAME_W + size::PARAM_GAP;
     let track_max = right - size::PARAM_VAL_W - size::PARAM_GAP;
     egui::pos2((track_min + track_max) * 0.5, rect.center().y)
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 // ---------------------------------------------------------------------------

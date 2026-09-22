@@ -31,13 +31,12 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{
     inspector, rend_chips, InspectorPane, Node, NodeAuthority, Pane, Renderer, PANE_NAMES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Authority, Layer, NodeAddress, Operation, Sync};
 
 /// The mock's own `L4 renderers` group: three renderers folded under one head,
@@ -100,18 +99,6 @@ fn mock() -> Pane {
         aimed: None,
         nodes: vec![renderers(), shell()],
     }
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// The laid-out pane, and the boxes of the chips in its first group.
