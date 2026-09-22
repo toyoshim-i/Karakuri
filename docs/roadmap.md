@@ -45,7 +45,13 @@ Karakuri is a real-time visual performance system where human performers and aut
   - Multi-level keyboard navigation and focus ladder.
   - Verified exit condition: 100% of panel operations implemented (`grep -c 'rt plan">panel' docs/manual/operations.html` returns 0).
 - **[M6: Live Performance Hardening & Runtime Safety](history/m6.md)** (Closed 2026-09-14): the chain compiles on a worker (ADR-0354), a swapped-in Set is estimated (ADR-0356), a session head names the deck (ADR-0355), ADR-0323's refusal is called, a lane can be removed (ADR-0357); the projector, the transport figure and `over_budget` settled by ADR-0358..0360.
-- **[M7: Autonomous Agent Control & MCP Integration](history/m7.md)** (Closed 2026-09-20): Slot access policies (Auto/On/Off), live mixer contribution tracking, agent workflow tools (get_permissions, read_slot, copy_slot), atomic file staging, session policy persistence, machine-readable refusal codes, Master Chain build indicator, structured Tooltip HUD cards, and dedicated MCP manual.
+- **[M7: Autonomous Agent Control & MCP Integration](history/m7.md)** (Closed 2026-09-20, Hardened 2026-09-22):
+  - Unified Console Bay 1:1 gate architecture (Inspector bay gate as per-slot policy `Auto`/`On`/`Off`, Mixer/Master/Outputs/Program bay gate capsules).
+  - Slot access policies (`Auto`/`On`/`Off`) and live mixer contribution tracking.
+  - Complete 14-tool matrix, machine-readable refusal codes, and recovery flows in `docs/manual/mcp.html`.
+  - Workflow and validation tools (`get_permissions`, `read_slot`, `copy_slot`, `check_procedure`, `check_set`) published in `tools/list` schema.
+  - Enforced slot policy write checks across all deck-mutating operations in `operate`.
+  - Atomic file staging, session policy persistence, Master Chain in-flight build indicator, and structured Tooltip HUD cards.
 
 ---
 
@@ -116,12 +122,12 @@ The remaining open work is structured into two sequential milestones: anchoring 
    - Complete synchronization of `docs/manual/` with all implemented operations.
    - Production build packaging for macOS and Linux.
 
-#### Carried from M6 (closed 2026-09-14), each still owed:
-- Nothing on the console says a chain build is in flight; `ChainSwap::building()` is the reading a badge would draw from. `MasterChain::resize` still frees on the render thread. A `SlotError` arrives a frame later as `ChainEvent::Refused`.
+#### Carried from M6 (closed 2026-09-14), status:
+- Master Chain in-flight build badge was landed in M7 (`Head::building` pill). `MasterChain::resize` still frees on the render thread. A `SlotError` arrives a frame later as `ChainEvent::Refused`.
 - A value ridden on a non-head slot before the press is not in the session head (needs a per-slot parameter table `karakuri-cli` does not hold); the GUI records the canvas at the press and never again.
 - The build worker's two rungs are taken on a host clock while the render thread draws, so an estimate can refuse under load and the slot falls to its measurement; a param write does not invalidate the estimate.
 - A channel fader does not say who is holding it (rule 02); lanes cannot be reordered; `Hover::owed` is asked before `paint` on the frame a card comes down.
-- `cargo clippy --workspace --all-targets -- -D warnings` is red at HEAD on `doc_lazy_continuation` in files untouched today (karakuri-ir, karakuri-store, karakuri-console); the pre-push hook runs it on tag pushes.
+- Workspace clippy warnings (`doc_lazy_continuation` etc.) resolved; clean build across all targets with `-D warnings`.
 
 **Exit Condition**: Clean 4-hour rehearsal without crashes, memory leaks, or unhandled errors; 100% operation coverage across all implemented surfaces; clean workspace lint and test suite.
 
