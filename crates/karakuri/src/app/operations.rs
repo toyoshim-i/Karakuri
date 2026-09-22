@@ -213,6 +213,28 @@ fn resolve_plugin_command(n: u8) -> String {
     "karakuri-syphon".to_string()
 }
 
+pub(crate) fn is_plugin_available(n: u8) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        if n == 0 {
+            let cmd = resolve_plugin_command(n);
+            if cmd != "karakuri-syphon" {
+                return std::path::Path::new(&cmd).exists();
+            }
+            if let Ok(path) = std::env::var("PATH") {
+                for dir in std::env::split_paths(&path) {
+                    if dir.join("karakuri-syphon").exists() {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = n;
+    false
+}
+
 /// Dispatches UI focus responses, handling in-process operations and refusals (P-0083).
 ///
 /// Returns whether the action triggered state changes, delegating scope navigation and loads to the caller.

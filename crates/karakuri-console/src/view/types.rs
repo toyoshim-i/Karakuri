@@ -8,6 +8,10 @@ pub struct View {
     pub room: Room,
     /// Whether the external projector window is open (ADR-0156).
     pub projector: bool,
+    /// Whether plugin sink 0 (Syphon) is active.
+    pub plugin: bool,
+    /// Whether plugin sink 0 (Syphon) is available on this machine.
+    pub plugin_available: bool,
     /// What to draw in the Program bay's picture this frame, or `None` for a
     /// console with no engine behind it — which is every test in this crate and the
     /// whole of what `cargo test -p karakuri-console` sees.

@@ -5,11 +5,13 @@ pub(crate) use karakuri_console::panel::{
     Dragged, InHand, Knob, Landing, Op, Outcome, Panel, Pressed, Released,
 };
 pub(crate) use karakuri_console::room::Room;
+#[cfg(test)]
+pub(crate) use karakuri_console::view::outputs;
 pub(crate) use karakuri_console::view::{
     self, arrangement as arrangement_pill, audio_in as audio_in_pill, bay_grip, class_at,
     deck_head as deck_head_row, deck_name, inspector as inspector_pane, keep_pill,
     library as library_bay, look as look_row, master as master_row, mcp_pill, mixer as mixer_bay,
-    outputs, program_bay, program_head, sequencer as sequencer_bay, slot_mcp_pill,
+    outputs_with, program_bay, program_head, sequencer as sequencer_bay, slot_mcp_pill,
     staging as staging_bay, tracker_group, transition as transition_row,
     transport as transport_row, Aim, Ask, AudioAsk, AudioIn, Chose, Chosen, Go, Kind, McpPill,
     Picked, Read, Scope, Taken, View, Wiring, DECKS, DECK_LETTERS, REGIONS,

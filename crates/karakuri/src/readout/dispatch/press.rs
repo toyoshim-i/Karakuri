@@ -649,9 +649,20 @@ impl Readout {
         ctx: &egui::Context,
         at: Point,
     ) -> Acted {
-        let sink = outputs(ctx, self.panel.layout(), self.view.opening)
-            .map(|row| row.told(self.view.projector))
-            .and_then(|row| row.chip_at(at).map(|output| (row, output)));
+        let sink = outputs_with(
+            ctx,
+            self.panel.layout(),
+            self.view.opening,
+            self.view.plugin_available,
+        )
+        .map(|row| {
+            row.told(self.view.projector).told_plugin(
+                0,
+                self.view.plugin,
+                self.view.plugin_available,
+            )
+        })
+        .and_then(|row| row.chip_at(at).map(|output| (row, output)));
         let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
         let adding = self.view.chain_choices();
         let master = master_row(

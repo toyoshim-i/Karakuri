@@ -297,6 +297,8 @@ impl View {
             // which is every test in this crate and every frame before
             // whoever owns the window has said otherwise.
             projector: false,
+            plugin: false,
+            plugin_available: false,
             picture: None,
             previews: [None; DECKS],
             // Nothing is stopped on a console with no engine behind it, which
