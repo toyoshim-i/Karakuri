@@ -510,3 +510,169 @@ pub(crate) fn handle_post_event_side_effects(
         _ => {}
     }
 }
+
+/// Executes an emitted operation across console, audio, and engine subsystems,
+/// persisting written records and returning any resulting `Written` conversion.
+pub(crate) fn perform_emitted_operation(
+    gfx: &mut Gfx,
+    started: Instant,
+    readout: &mut Readout,
+    recorder: Option<&mut karakuri_environment::session::Recorder>,
+    operation: &Operation,
+) -> Option<Option<Written>> {
+    // 1. Tracker tap/nudge operations
+    if let Some(line) = tracked(gfx, started, operation) {
+        println!("{line}");
+        return Some(None);
+    }
+
+    // 2. Arrangement operations reaching store/disk
+    if let Some(line) = arrangement(
+        &gfx.store,
+        &mut readout.panel,
+        &mut readout.view.arrangement,
+        operation,
+    ) {
+        println!("{line}");
+    }
+
+    // 3. Audio/tempo local actions
+    let session_bpm = gfx.engine.deck.signals().oscillator().bpm();
+    if let Some(line) = attached(
+        &mut gfx.audio,
+        session_bpm,
+        &mut readout.view.audio,
+        operation,
+    ) {
+        println!("{line}");
+    }
+    if let Some(line) = nudged(&mut gfx.audio, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = retargeted(&mut gfx.audio, operation) {
+        println!("{line}");
+    }
+
+    // 4. View and pane pointers
+    if let Some(line) = pointed(&mut readout.view, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = pointed_pane(&mut readout.view, operation) {
+        println!("{line}");
+        let targets = readout.view.pane_decks();
+        inspector(
+            &gfx.engine.deck,
+            &gfx.material,
+            &gfx.engine.aimed,
+            targets,
+            &mut readout.view.inspector,
+        );
+    }
+
+    // 5. Deck and slot playback/overlay/aim changes
+    if let Some(line) = played(gfx, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = overlaid(gfx, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = composited(&mut gfx.engine.aimed, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = resized(&mut gfx.engine.aimed, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = re_salted(&mut gfx.engine.aimed, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = attended(&mut gfx.engine.aimed, operation) {
+        println!("{line}");
+    }
+
+    let slots = gfx.engine.deck.slot_count();
+    let Engine {
+        edges: run_edges,
+        aimed,
+        ..
+    } = &mut gfx.engine;
+    if let Some(line) = wired_input(run_edges, aimed, slots, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = restored(gfx, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = kept(&mut readout.view, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = scheduled(&mut readout.view, operation) {
+        println!("{line}");
+    }
+    if let Some(line) = sequenced(
+        &mut readout.sequencer,
+        &mut readout.playhead,
+        &readout.view,
+        operation,
+    ) {
+        println!("{line}");
+    }
+    if let Operation::ClearSolo = operation {
+        gfx.engine.deck.clear_solo();
+        println!("  solo: ClearSolo -> cleared all solo");
+    }
+
+    // 6. Record conversion & application
+    let settings = readout.view.transition();
+    let written = written(
+        operation,
+        &reading(
+            operation,
+            &gfx.engine.deck,
+            &gfx.engine.look,
+            &gfx.engine.chain,
+            settings,
+            &readout.sequencer,
+        ),
+    );
+
+    if let Some(line) = unwritten(operation, &written) {
+        println!("{line}");
+    }
+
+    if let Written::Records(records) = &written {
+        if let Some(recorder) = recorder {
+            for record in records {
+                recorder.push(record.clone());
+            }
+        }
+        for record in records {
+            if let Some(line) = apply(
+                record,
+                &mut gfx.engine.deck,
+                &mut gfx.engine.look,
+                &mut gfx.engine.chain,
+            ) {
+                println!("{line}");
+            }
+        }
+        if records.iter().any(|record| {
+            matches!(
+                record,
+                Record::Transport { .. }
+                    | Record::Ride { .. }
+                    | Record::Source { .. }
+                    | Record::Authority { .. }
+            )
+        }) {
+            let targets = readout.view.pane_decks();
+            inspector(
+                &gfx.engine.deck,
+                &gfx.material,
+                &gfx.engine.aimed,
+                targets,
+                &mut readout.view.inspector,
+            );
+        }
+    }
+
+    Some(Some(written))
+}
