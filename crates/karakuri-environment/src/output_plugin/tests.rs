@@ -80,3 +80,29 @@ fn successful_handshake_and_non_blocking_frame_dispatch() {
         assert!(sent || plugin.telemetry().host_dropped > 0);
     }
 }
+
+#[test]
+fn integration_with_karakuri_syphon_binary() {
+    let binary = std::path::Path::new("../../../Karakuri-syphon/target/debug/karakuri-syphon");
+    if !binary.exists() {
+        return;
+    }
+    let plugin = OutputPlugin::open(
+        binary.to_str().unwrap(),
+        "iosurface",
+        1920,
+        1080,
+        "bgra8unorm",
+    )
+    .expect("karakuri-syphon binary opens successfully");
+
+    assert_eq!(plugin.name(), "syphon");
+    assert_eq!(plugin.server_name(), "Karakuri");
+    assert!(plugin.is_alive());
+
+    for i in 0..5 {
+        let sent = plugin.send_frame(i, 100 + i as u32, 1920, 1080);
+        assert!(sent || plugin.telemetry().host_dropped > 0);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
