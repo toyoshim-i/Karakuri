@@ -94,7 +94,7 @@ Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
 | **P108** | `karakuri-layout::layout` | 1,373 | Decompose layout constraint solver and rect partitioning utilities | **COMPLETED** |
 | **P109** | `karakuri-mcp::tools::mod` | 1,371 | Extract tool dispatch registry and argument schemas into submodules | **COMPLETED** |
 | **P110** | `karakuri::session` | 1,370 | Separate session state persistence from event log playback | **COMPLETED** |
-| **P111** | `karakuri-engine::deck` | 1,364 | Partition deck slot execution and texture lifecycle management | **PLANNED** |
+| **P111** | `karakuri-engine::deck` | 1,364 | Partition deck slot execution and texture lifecycle management | **COMPLETED** |
 | **P112** | `karakuri::readout::costs` | 1,354 | Separate frame cost tracking from telemetry aggregation | **PLANNED** |
 | **P113** | `karakuri-console::tests::library::geometry` | 1,334 | Partition library geometry browser and card loading tests | **PLANNED** |
 | **P114** | `karakuri-ir::tests::check::layers` | 1,333 | Partition IR layer type checking and diagnostic emission tests | **PLANNED** |
