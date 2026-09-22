@@ -90,7 +90,7 @@ Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
 | **P104** | `karakuri-engine::set::layers` | 1,412 | Separate layer binding management from uniform buffer assignment | **COMPLETED** |
 | **P105** | `karakuri-engine::tests::master` | 1,402 | Partition master chain GPU pipeline and pass fusion tests | **COMPLETED** |
 | **P106** | `karakuri-console::view::program` | 1,397 | Decompose program bay monitor rendering and aspect ratio calculations | **COMPLETED** |
-| **P107** | `karakuri::bridge::handlers::apply` | 1,387 | Extract operation execution match arms into focused handler functions | **PLANNED** |
+| **P107** | `karakuri::bridge::handlers::apply` | 1,387 | Extract operation execution match arms into focused handler functions | **COMPLETED** |
 | **P108** | `karakuri-layout::layout` | 1,373 | Decompose layout constraint solver and rect partitioning utilities | **PLANNED** |
 | **P109** | `karakuri-mcp::tools::mod` | 1,371 | Extract tool dispatch registry and argument schemas into submodules | **PLANNED** |
 | **P110** | `karakuri::session` | 1,370 | Separate session state persistence from event log playback | **PLANNED** |
