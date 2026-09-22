@@ -5,4 +5,5 @@ mod common;
 mod decks_and_simulation;
 mod frame_and_textures;
 mod mcp_and_storage;
-mod transitions_and_sinks;
+mod sinks;
+mod transitions;
