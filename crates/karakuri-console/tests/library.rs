@@ -11,8 +11,11 @@ mod geometry;
 #[path = "library/controls.rs"]
 mod controls;
 
-#[path = "library/scope_and_filter.rs"]
-mod scope_and_filter;
+#[path = "library/scope.rs"]
+mod scope;
+
+#[path = "library/filter.rs"]
+mod filter;
 
 #[path = "library/params_and_history.rs"]
 mod params_and_history;
