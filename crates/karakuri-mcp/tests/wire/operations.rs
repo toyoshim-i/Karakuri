@@ -364,6 +364,27 @@ fn copy_slot_copies_and_respects_slot_policies() {
     );
     assert_eq!(raw_rend["result"]["refusal"]["code"], "SLOT_IN_MIX");
 
+    // Also SetCompositing on slot 1 is refused when in mix
+    let (failed_comp, text_comp) = call(
+        port,
+        "operate",
+        json!({
+            "operation": "Composite a deck's renderers",
+            "with": {"deck": 1, "compositing": true}
+        }),
+    );
+    assert!(failed_comp);
+    assert!(text_comp.contains("active in the mix"), "{text_comp}");
+    let raw_comp = call_raw(
+        port,
+        "operate",
+        json!({
+            "operation": "Composite a deck's renderers",
+            "with": {"deck": 1, "compositing": true}
+        }),
+    );
+    assert_eq!(raw_comp["result"]["refusal"]["code"], "SLOT_IN_MIX");
+
     // 2. Slot 1 is off-air (in_mix = false) -> copy succeeds
     slot_policies.set_in_mix(1, false);
     let (failed, text) = call(port, "copy_slot", json!({"from_slot": 0, "to_slot": 1}));

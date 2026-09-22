@@ -44,7 +44,12 @@ pub(crate) fn operate(
     | Operation::TakeParamBack { deck, .. }
     | Operation::LoadProcedure { deck, .. }
     | Operation::RestoreProcedure { deck, .. }
-    | Operation::SelectRenderer { deck, .. } = operation
+    | Operation::SelectRenderer { deck, .. }
+    | Operation::LoadSet { deck, .. }
+    | Operation::SetCompositing { deck, .. }
+    | Operation::AttachSignal { deck, .. }
+    | Operation::SetProperty { deck, .. }
+    | Operation::Publish { deck, .. } = operation
     {
         state
             .slot_policies
