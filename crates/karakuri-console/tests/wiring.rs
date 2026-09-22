@@ -30,13 +30,12 @@
 
 mod common;
 
-use common::{drawn_once, near, PLAUSIBLE};
+use common::{at, console, drawn_once, near, PLAUSIBLE};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     inspector, InspectorPane, Node, Pane, Param, Uses, View, PANES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Control, Layer, NodeAddress, Operation, ParamAt, Sync};
 
 /// A published row: a position in the interface, a name, an address and a
@@ -143,20 +142,9 @@ fn view(pane: &Pane) -> View {
     view
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The laid-out pane.
 fn pane_at(panel: &Panel, index: usize, pane: &Pane) -> InspectorPane {
     inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it")
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 // ---------------------------------------------------------------------------

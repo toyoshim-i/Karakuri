@@ -28,13 +28,13 @@
 
 mod common;
 
-use common::{drawn_once, near, PLAUSIBLE};
+use common::{at, drawn_once, near, PLAUSIBLE};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     auth_chips, inspector, node_keep, Node, NodeAuthority, Pane, View, AUTHORITIES, PANES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Rect;
 use karakuri_operation::{Authority, Layer, NodeAddress, Operation, Sync};
 
 /// A node group with a source behind it — every node but the built-in camera.
@@ -102,10 +102,6 @@ fn console(viewport: Rect) -> (Panel, egui::Context) {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
     (panel, drawn_once())
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// A view with one pane over the groups given, and nothing else.

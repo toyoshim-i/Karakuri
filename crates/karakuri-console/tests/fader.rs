@@ -24,7 +24,7 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, showing, PLAUSIBLE};
+use common::{drawn_once, near, point, rect_of, showing, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Grab, InHand, Knob, Panel, Released, GRAB};
 use karakuri_console::repaint::{Change, Repaint};
@@ -75,10 +75,6 @@ fn console() -> (Panel, egui::Context) {
 
 fn bay<'a>(panel: &Panel, ctx: &egui::Context, strips: &'a [Strip]) -> Mixer<'a> {
     mixer(ctx, panel.layout(), strips).expect("the mixer bay draws its strips")
-}
-
-fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Where a strip's two knobs are, at the values that strip is carrying.

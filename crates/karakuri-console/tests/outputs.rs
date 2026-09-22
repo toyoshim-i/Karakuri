@@ -20,7 +20,9 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, rects, showing, solved, PLAUSIBLE, SMALLEST};
+use common::{
+    at, console, drawn_once, id_of, near, rect_of, rects, showing, solved, PLAUSIBLE, SMALLEST,
+};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Outcome, Panel, GRAB};
 use karakuri_console::room::size;
@@ -28,19 +30,6 @@ use karakuri_console::view::outputs;
 use karakuri_layout::{Axis, Layout, Point, Rect};
 use karakuri_operation::gate::Open;
 use karakuri_operation::{Operation, Output};
-
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// every test here starts from.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
-}
 
 // ---------------------------------------------------------------------------
 // Where the control is

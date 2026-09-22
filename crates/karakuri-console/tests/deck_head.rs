@@ -43,7 +43,7 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
@@ -51,7 +51,7 @@ use karakuri_console::view::{
     deck_head, inspector, Aimed, DeckHead, InspectorPane, Pane, View, PANES, PANE_NAMES,
     SCRUB_BEATS, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::{Operation, Sync};
 
 /// The mock's own deck B: beat-synced, engaged at 128 BPM and sitting a quarter
@@ -117,13 +117,6 @@ fn view(pane: &Pane) -> View {
     view
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The laid-out pane, and the laid-out chips of its deck head inside it.
 fn chips(
     panel: &Panel,
@@ -134,11 +127,6 @@ fn chips(
     let at = inspector(panel.layout(), index, pane, 0.0).expect("a pane with room in it");
     let head = deck_head(ctx, &at, pane).expect("a deck head with room for its chips");
     (at, head)
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Every mode, and the order is deliberately not the cycle's: what is asserted

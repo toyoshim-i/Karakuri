@@ -42,13 +42,13 @@
 
 mod common;
 
-use common::{drawn_once, near, PLAUSIBLE};
+use common::{at, drawn_once, near, PLAUSIBLE};
 use karakuri_console::room::size;
 use karakuri_console::view::{
     inspector, sens_chips, InspectorPane, Node, NodeAuthority, Pane, Param, Renderer, SensChip,
     Source, AUTHORITIES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Rect;
 use karakuri_operation::{Authority, BindAt, Curve, Layer, NodeAddress, Operation, ParamAt, Sync};
 
 /// A row nothing is holding.
@@ -184,10 +184,6 @@ fn console(viewport: Rect) -> (karakuri_console::panel::Panel, egui::Context) {
 
 fn pane_at(panel: &karakuri_console::panel::Panel, pane: &Pane) -> InspectorPane {
     inspector(panel.layout(), 0, pane, 0.0).expect("a pane with room in it")
-}
-
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Where the `index`th row of the first group goes, worked out here from the

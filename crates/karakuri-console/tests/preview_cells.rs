@@ -28,19 +28,15 @@
 
 mod common;
 
-use common::{arranged, drawn_once, near, rect_of, showing, PLAUSIBLE, SMALLEST};
+use common::{arranged, drawn_once, near, point, rect_of, showing, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{program_bay, Placement, DECKS, DECK_LETTERS, MOCK_CANVAS};
-use karakuri_layout::{Hit, Point};
+use karakuri_layout::Hit;
 
 fn console(viewport: karakuri_layout::Rect) -> (Panel, egui::Context) {
     (arranged(viewport, MOCK_CANVAS), drawn_once())
-}
-
-fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// The four cells at `viewport`, and which way round the bay arranged itself.

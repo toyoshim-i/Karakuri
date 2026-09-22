@@ -28,22 +28,18 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, showing, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, near, point, rect_of, showing, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Outcome, Panel, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{program_head, MOCK_CANVAS};
-use karakuri_layout::{Hit, Point};
+use karakuri_layout::Hit;
 use karakuri_operation::gate::Open;
 
 /// A console at `viewport`, arranged for the mock's canvas and drawn once —
 /// which is what a `.pill`'s width takes.
 fn console(viewport: karakuri_layout::Rect) -> (Panel, egui::Context) {
     (common::arranged(viewport, MOCK_CANVAS), drawn_once())
-}
-
-fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 // ---------------------------------------------------------------------------

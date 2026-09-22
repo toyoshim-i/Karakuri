@@ -60,7 +60,7 @@
 
 mod common;
 
-use common::{id_of, near, rect_of, EPS, PLAUSIBLE, SMALLEST};
+use common::{at, id_of, near, rect_of, EPS, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, GRAB};
 use karakuri_console::room::size;
 use karakuri_console::view::{bay_grip, head_of, region, BAY_GRIPS, GRIP_W, REGIONS};
@@ -71,11 +71,6 @@ fn console(viewport: Rect) -> Panel {
     let mut panel = Panel::new(viewport.w, viewport.h);
     panel.solve();
     panel
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Whether a boundary grabs `p` — the same question `input`'s rule 3 asks, in

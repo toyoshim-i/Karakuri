@@ -41,14 +41,13 @@
 
 mod common;
 
-use common::{drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, near, rect_of, PLAUSIBLE, SMALLEST};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     deck_name, inspector, keep_pill, pane_count, slot_mcp_pill, InspectorPane, Pane, SlotPolicy,
     View, PANES, PANE_NAMES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
 use karakuri_operation::{Operation, Sync};
 
 /// The mock's own deck A, which is the head the mock draws `deck A ·
@@ -72,18 +71,6 @@ fn mock() -> Pane {
 /// That pane pointed at another deck.
 fn showing(deck: usize) -> Pane {
     Pane { deck, ..mock() }
-}
-
-/// A panel at a viewport, solved, with a context that has drawn once.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// How wide a run of the head's own type is, asked of the same fonts the paint

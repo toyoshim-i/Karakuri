@@ -34,7 +34,7 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
+use common::{at, console, drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
@@ -49,22 +49,9 @@ fn mock() -> Transport {
     common::mock_transport()
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// every test here starts from, and `outputs.rs`'s own opening.
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The row, drawn with the mock's values.
 fn row(panel: &Panel, ctx: &egui::Context) -> TransportRow {
     transport(ctx, panel.layout(), Some(mock())).expect("the transport row draws its readouts")
-}
-
-/// A `karakuri_layout` point, from `egui`'s.
-fn at(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 // ---------------------------------------------------------------------------

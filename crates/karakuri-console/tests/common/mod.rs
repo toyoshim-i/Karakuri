@@ -114,6 +114,28 @@ pub fn solved(viewport: Rect) -> Layout {
     layout
 }
 
+/// A solved panel at `viewport`.
+pub fn console_panel(viewport: Rect) -> karakuri_console::panel::Panel {
+    let mut panel = karakuri_console::panel::Panel::new(viewport.w, viewport.h);
+    panel.solve();
+    panel
+}
+
+/// A solved panel paired with a context that has drawn once at `viewport`.
+pub fn console(viewport: Rect) -> (karakuri_console::panel::Panel, egui::Context) {
+    (console_panel(viewport), drawn_once())
+}
+
+/// Convert an `egui::Pos2` into a `karakuri_layout::Point`.
+pub fn point(p: egui::Pos2) -> karakuri_layout::Point {
+    karakuri_layout::Point::new(p.x, p.y)
+}
+
+/// Alias for `point` for tests that name it `at`.
+pub fn at(p: egui::Pos2) -> karakuri_layout::Point {
+    point(p)
+}
+
 /// Every name in the arrangement, in arena order.
 pub fn names(l: &Layout) -> Vec<String> {
     let mut out = Vec::new();
