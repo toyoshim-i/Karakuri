@@ -17,11 +17,14 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
+    pub(super) use super::common::compile;
     use karakuri_engine::binding::{Binding, Curve};
     use karakuri_engine::set::{Bound, Layering, PublishError, Published};
     use karakuri_engine::{Gpu, Set, Signals};
-    use karakuri_ir::typed::Checked;
     use karakuri_ir::Kind;
 
     const GRID: &str = r#"
@@ -68,18 +71,6 @@ proc {name} {{
 }}
 "#
         )
-    }
-
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)))
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
     }
 
     fn build(gpu: &Gpu) -> Set {

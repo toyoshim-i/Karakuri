@@ -17,9 +17,12 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
+    pub(super) use super::common::{compile, f16};
     use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
-    use karakuri_ir::typed::Checked;
 
     const W: u32 = 256;
     const H: u32 = 256;
@@ -121,21 +124,6 @@ proc sprite {{
         )
     }
 
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        let checked =
-            karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        checked
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
     /// RGBA f32 per texel, row-major, after one step of `l1` drawn by `l4`, at
     /// this file's own [`W`] x [`H`].
     fn draw(gpu: &Gpu, l1: &str, l4: &str) -> Vec<[f32; 4]> {
@@ -208,19 +196,6 @@ proc sprite {{
 
     /// `f16` bits to `f32`. Written out rather than pulled in as a dependency, the
     /// same way `tests/deck.rs` does it and for the same reason.
-    fn f16(bits: u16) -> f32 {
-        let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
-        let exponent = (bits >> 10) & 0x1f;
-        let mantissa = bits & 0x03ff;
-        let magnitude = match exponent {
-            0 => f32::from(mantissa) * 2.0f32.powi(-24),
-            0x1f if mantissa == 0 => f32::INFINITY,
-            0x1f => f32::NAN,
-            e => (1.0 + f32::from(mantissa) / 1024.0) * 2.0f32.powi(i32::from(e) - 15),
-        };
-        sign * magnitude
-    }
-
     fn at(px: &[[f32; 4]], x: u32, y: u32) -> [f32; 4] {
         px[(y * W + x) as usize]
     }

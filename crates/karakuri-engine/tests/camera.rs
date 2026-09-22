@@ -23,6 +23,9 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
     use karakuri_engine::camera::Orbit;
     use karakuri_engine::set::Layering;
@@ -73,20 +76,7 @@ proc dot {
 }
 "#;
 
-    pub(super) fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        let checked =
-            karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        checked
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
+    use super::common::{compile, f16};
 
     /// A Set of one element and one renderer, at `w` by `h`, seen from `camera`.
     fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
@@ -186,18 +176,6 @@ proc dot {
         drop(data);
         readback.unmap();
         out
-    }
-
-    fn f16(bits: u16) -> f32 {
-        let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
-        let exp = (bits >> 10) & 0x1f;
-        let mant = u32::from(bits & 0x3ff);
-        let v = match exp {
-            0 => f32::from_bits(mant << 13) * 2.0f32.powi(-112),
-            0x1f => f32::from_bits(0x7f80_0000 | (mant << 13)),
-            _ => f32::from_bits(((u32::from(exp) + 112) << 23) | (mant << 13)),
-        };
-        f32::from_bits(v.to_bits() | sign.to_bits())
     }
 
     // ---------------------------------------------------------------------------
@@ -1137,7 +1115,8 @@ proc plain {
 /// exists. They used to take an adapter apiece because `Set::build_many` was
 /// the only door to the rule; it reaches the same rule by calling `validate`.
 mod refused {
-    use super::gpu::{compile, through, MARK};
+    use super::common::compile;
+    use super::gpu::{through, MARK};
     use karakuri_engine::set::{Edge, Layering, SetError, Wiring};
     use karakuri_engine::Set;
     use karakuri_ir::typed::Checked;

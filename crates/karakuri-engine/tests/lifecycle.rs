@@ -15,9 +15,12 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
+    pub(super) use super::common::compile;
     use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
-    use karakuri_ir::typed::Checked;
 
     const WIDTH: u32 = 128;
     const HEIGHT: u32 = 128;
@@ -80,22 +83,6 @@ proc emitter {{
 }}
 "#
         )
-    }
-
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-        let checked = karakuri_ir::check::check(&proc)
-            .unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-        karakuri_ir::cost::estimate(&checked)
-            .unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-        checked
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
     }
 
     fn build(gpu: &Gpu, l1_src: &str, capacity: u32) -> Set {

@@ -16,15 +16,19 @@
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+#[path = "common/mod.rs"]
+mod common;
+
 mod gpu {
     use std::sync::mpsc;
     use std::time::Instant;
+
+    use super::common::{compile, f32_to_f16 as f16};
 
     use karakuri_engine::deck::{Deck, DeckSlot, Residency};
     use karakuri_engine::meter::{Level, Meters};
     use karakuri_engine::swap::{Event, HotSwap, Request};
     use karakuri_engine::{Gpu, Present, Set};
-    use karakuri_ir::typed::Checked;
 
     const WIDTH: u32 = 256;
     const HEIGHT: u32 = 256;
@@ -46,38 +50,6 @@ mod gpu {
     // ---------------------------------------------------------------------------
     // Half one: a meter over a texture of known contents.
     // ---------------------------------------------------------------------------
-
-    /// `f32` to `f16` bits, for values that are exactly representable — which
-    /// every value in this file is, on purpose. A test that wrote 0.1 and expected
-    /// 0.1 back would be measuring the conversion rather than the meter, so the
-    /// inputs are all halves and powers of two and this refuses anything else.
-    fn f16(x: f32) -> u16 {
-        if x == 0.0 {
-            return 0;
-        }
-        // The two that are exactly representable and are not numbers. They are
-        // here because a shader reaches them by dividing by a value that got to
-        // zero, which is what
-        // `a_texel_that_is_not_a_number_is_counted_and_left_out_rather_than_spreading`
-        // is about; the exactness check below is written for finite values and
-        // would refuse both.
-        if x.is_nan() {
-            return 0x7e00;
-        }
-        if x.is_infinite() {
-            return if x > 0.0 { 0x7c00 } else { 0xfc00 };
-        }
-        let bits = x.to_bits();
-        let sign = ((bits >> 16) & 0x8000) as u16;
-        let exponent = ((bits >> 23) & 0xff) as i32 - 127;
-        let mantissa = bits & 0x007f_ffff;
-        assert!(
-            (-14..=15).contains(&exponent) && mantissa & 0x1fff == 0,
-            "{x} is not exactly representable as an f16, so this test would be measuring \
-         a rounding rather than a reduction"
-        );
-        sign | (((exponent + 15) as u16) << 10) | (mantissa >> 13) as u16
-    }
 
     /// A linear HDR texture of `width` x `height`, filled by `texel` — the same
     /// format and the same sample type a deck slot's target has, so what the meter
@@ -548,21 +520,6 @@ proc nan_points {
   }
 }
 "#;
-
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        let checked =
-            karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-        checked
-    }
-
-    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-        errs.iter()
-            .map(|e| e.render(src))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
 
     fn build(gpu: &Gpu, exposure: f32) -> Set {
         build_l4(gpu, &L4.replace("{{EXPOSURE}}", &format!("{exposure:.3}")))
