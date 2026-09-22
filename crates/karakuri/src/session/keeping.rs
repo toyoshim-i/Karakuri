@@ -1,0 +1,611 @@
+use std::time::Instant;
+
+use crate::{
+    built_nodes, copied, deck_letter, ir_layer, node_addr, playing_values, refused, slot_in_range,
+    Aiming, Engine, Kept, Playing, Save, Saved, Sent,
+};
+use karakuri_engine::DeckSlot as EngineSlot;
+use karakuri_environment::{session, setfile, watch, Asked};
+use karakuri_mcp as mcp;
+
+use super::recording::{addressed, Starting};
+use super::watch::rewired;
+use super::HEAD_SLOT;
+
+// ---------------------------------------------------------------------------
+// Keeping what a deck is playing, and rewiring it
+// ---------------------------------------------------------------------------
+
+/// What this run holds so that a deck can be kept, and rewired.
+///
+/// One value rather than seven fields on [`App`], because the seven move
+/// together and every one of them is read by the same three moments: a request
+/// arriving, a build landing, and a save coming back off the disk. It is also
+/// what makes those three reachable at all — the window loop binds `gfx` out of
+/// `self.gfx` and holds it for the length of the handler, so a method on `App`
+/// could not be called there. This is the piece that is passed instead.
+///
+/// Every field is `pub(crate)` rather than reached only through methods:
+/// `App::new` builds one whole (its fields come from the same opening that
+/// builds the rest of `App`) and `mod gpu`'s tests build one from nothing, and
+/// both are outside this module — see `crate::App::new` and
+/// `crate::gpu::keeping`.
+pub(crate) struct Keeping {
+    /// The server's half of the channel, when `--mcp` asked for one, and the whole
+    /// of what a model reaches this program through.
+    ///
+    /// Told what the swap machinery said, handed what a client asked the render
+    /// loop for, and nothing else — see [`karakuri_mcp`]. It is bound in [`main`],
+    /// before the window, for the reason the working copies are made there: `serve`
+    /// binds a socket and can fail, and a failure has to be a sentence on a
+    /// terminal rather than a panic inside a `winit` callback, where it aborts with
+    /// no message at all.
+    pub(crate) mcp: Option<mcp::Reporter>,
+    /// Thread-safe slot MCP modification policies.
+    pub(crate) slot_policies: karakuri_environment::SlotPolicies,
+    /// What each deck is playing, seeded before the first frame and moved by every
+    /// build that lands — see [`Playing`].
+    pub(crate) playing: Playing,
+    /// Where the watchers report what they built and stored — the other end of
+    /// [`watch::Watch::storing_to`], drained where a build lands.
+    pub(crate) built: std::sync::mpsc::Receiver<watch::Built>,
+    /// Builds reported but not yet landed, kept by their build id.
+    ///
+    /// The two arrive on two channels and in either order: a watcher stores a build
+    /// on its worker thread and the swap lands at a frame boundary some frames
+    /// later, so a report that came in before its `Swapped` has to wait somewhere.
+    /// Removed when it lands, so a build that was refused or that the deck never
+    /// took leaves nothing behind — there is at most one outstanding build per
+    /// slot, which is what `HotSwap` allows.
+    pub(crate) pending: Vec<watch::Built>,
+    /// Where a save that has reached the disk comes back, and the sending half each
+    /// save thread is given a clone of.
+    pub(crate) saves: std::sync::mpsc::Receiver<Saved>,
+    pub(crate) save_tx: std::sync::mpsc::Sender<Saved>,
+    /// Where a send that has answered the dialog comes back, and the sending half
+    /// each send thread is given a clone of. [`saves`]' shape one act along, and it
+    /// is a second channel rather than a second arm of the first because a send is
+    /// not a save: it writes outside the store, under a name the operator typed
+    /// into a window this program does not own, and nothing is waiting on it over
+    /// MCP.
+    ///
+    /// The run does not wait for these, where it waits for the saves once at the
+    /// end ([`Keeping::awaited_saves`]). A save is bounded by a disk; a send is
+    /// bounded by a hand that has not answered a dialog yet, and a quit that
+    /// blocked on one would be a program refusing to close because it had opened a
+    /// window over itself. So there is no count kept here: a send still waiting on
+    /// its dialog when the run ends wrote nothing, which is the same answer a
+    /// dismissal gives.
+    ///
+    /// [`saves`]: Self::saves
+    pub(crate) sends: std::sync::mpsc::Receiver<Sent>,
+    pub(crate) send_tx: std::sync::mpsc::Sender<Sent>,
+    /// Where a kept procedure's outcome comes back, and it is a third channel
+    /// beside [`saves`](Self::saves) and [`sends`](Self::sends) for their reason:
+    /// three acts that end on a disk, each answered at the frame its answer arrives
+    /// on, and a queue apiece so that a slow write of one cannot delay another's
+    /// answer.
+    ///
+    /// It is not the save channel with a flag on it. A keep writes one `.kir` under
+    /// a name and a save writes a Set file naming every node; the two outcomes say
+    /// different things, land in different directories and are refused for
+    /// different reasons — one of them refuses a name that is taken, which a Set
+    /// save does not — so folding them would be one sentence meaning two things.
+    pub(crate) keeps: std::sync::mpsc::Receiver<Kept>,
+    pub(crate) keep_tx: std::sync::mpsc::Sender<Kept>,
+    /// How many saves are being written right now. The run waits for these once, at
+    /// the end and under a bound — see [`Keeping::awaited_saves`].
+    pub(crate) in_flight: usize,
+}
+
+impl Keeping {
+    /// Processes pending MCP save and wire requests from the background channel.
+    pub(crate) fn requests(&mut self, engine: &mut Engine, root: &std::path::Path) {
+        let Some(mcp) = &self.mcp else {
+            return;
+        };
+        let asked: Vec<mcp::SaveRequest> = mcp.saves().collect();
+        let wires: Vec<mcp::WireRequest> = mcp.wires().collect();
+        for request in asked {
+            self.save_set(
+                engine,
+                root,
+                Asked::Model,
+                request.slot,
+                request.id,
+                Some(request.reply),
+            );
+        }
+        self.rewire(engine, wires);
+    }
+
+    /// Every edge asked for since the last frame, written and answered here, on
+    /// this frame.
+    ///
+    /// The decisions are [`rewired`]'s and are written there, because none of them
+    /// needs a device. What is here is the two things that do: the deck's own slot
+    /// count, which is the only thing that knows how many slots there are, and the
+    /// answer going back to whoever asked.
+    ///
+    /// Answered once, at the frame it was applied on, which is `mcp::WireRequest`'s
+    /// third point. Not at the swap: what the *build* made of the edge is
+    /// `swap_outcome`'s answer, as it is for every other rebuild, and a tool that
+    /// waited for thirty judged frames would hold a connection open across a
+    /// transition.
+    ///
+    /// One sentence for both audiences, which is [`refused`]'s rule: what the
+    /// terminal is told and what the client is handed are the same words, so the
+    /// second cannot be right on the day it is written and wrong at the next
+    /// correction.
+    fn rewire(&mut self, engine: &mut Engine, asked: Vec<mcp::WireRequest>) {
+        if asked.is_empty() {
+            return;
+        }
+        let mut wires = Vec::with_capacity(asked.len());
+        let mut replies = Vec::with_capacity(asked.len());
+        for mcp::WireRequest { slot, edge, reply } in asked {
+            wires.push((slot, edge));
+            replies.push(reply);
+        }
+        let said = rewired(
+            &wires,
+            &mut engine.edges,
+            &mut engine.aimed,
+            engine.deck.slot_count(),
+        );
+        for (reply, said) in replies.into_iter().zip(said) {
+            match &said {
+                Ok(line) | Err(line) => println!("{line}"),
+            }
+            reply.settled(said);
+        }
+    }
+
+    /// Saves the current configuration of the deck in `slot` to a Set file on a background thread.
+    pub(crate) fn save_set(
+        &mut self,
+        engine: &Engine,
+        root: &std::path::Path,
+        asked: Asked,
+        slot: usize,
+        id: Option<String>,
+        reply: Option<mcp::Reply>,
+    ) {
+        // **Checked here rather than only where the request came from.** A key
+        // press cannot name a slot this deck does not hold and a tool call can,
+        // and below this line `playing_values` reads `deck.slot(slot)`, which
+        // indexes. The server refuses it too, in its own words, so a model never
+        // reaches this — and this is the guard that does not depend on it
+        // having.
+        let count = engine.deck.slot_count();
+        if !slot_in_range(slot, count) {
+            return refused(reply, karakuri_environment::no_such_slot(slot, count));
+        }
+        let Some(nodes) = self.playing.at(slot) else {
+            // **The only way to reach this in this program**: a build landed
+            // whose sources the store would not take, which the watcher said at
+            // the time. Every slot is seeded at launch, so a slot that has never
+            // rebuilt always has an address.
+            return refused(
+                reply,
+                karakuri_environment::nothing_to_save(slot, None, false),
+            );
+        };
+        let sources = setfile::Sources(nodes.iter().map(copied).collect());
+        if sources.is_empty() {
+            return refused(
+                reply,
+                karakuri_environment::nothing_to_save(slot, None, true),
+            );
+        }
+        // **Named and answered above the line that needs a deck**, which is
+        // where the whole of `accepted_save`'s doc lives: `playing_values` below
+        // is the one read here that needs one, and the accept has to be on the
+        // side of it a test can reach.
+        // **An id an operator typed is checked here**, which is
+        // `checked_name`'s wall for an arrangement's name one bay along: the
+        // panel owns the affordance and never the authority (P-0090).
+        // `filed_as` takes an `Asked::Operator` id verbatim, and until the
+        // pane head's name (ADR-0292) nothing on an operator's side of this
+        // call could carry one — `k` and the `keep` capsule both pass `None`.
+        // The first thing that can is the first thing that could put a `/` in
+        // a file name.
+        if let Some(said) = id
+            .as_deref()
+            .and_then(|id| karakuri_mcp::checked_id(id).err())
+        {
+            println!("keep: {said}");
+            return refused(reply, said);
+        }
+        let id = karakuri_environment::accepted_save(
+            slot,
+            asked,
+            id,
+            &sources,
+            root,
+            reply
+                .as_ref()
+                .map(|r| r as &dyn karakuri_environment::SaveReply),
+        );
+        let values = playing_values(
+            engine.deck.slot(EngineSlot(slot as u8)).set(),
+            &engine.edges,
+        );
+        let save = Save {
+            slot,
+            asked,
+            id,
+            root: root.to_path_buf(),
+            sources,
+            values,
+        };
+        let tx = self.save_tx.clone();
+        // **A thread per save**, and detached: no frame waits for it. The *run*
+        // waits, once, at the end and under a bound — see
+        // [`Keeping::awaited_saves`], which is what this count is for.
+        self.in_flight += 1;
+        std::thread::spawn(move || {
+            let (slot, asked, id) = (save.slot, save.asked, save.id.clone());
+            // **Carried back rather than answered from here.** This thread knows
+            // the outcome and could say it, and that would be a second place a
+            // save is reported from.
+            let outcome = save.run();
+            let _ = tx.send(Saved {
+                slot,
+                asked,
+                id,
+                outcome,
+                reply,
+            });
+        });
+    }
+
+    /// Writes a single node procedure into the library on a background worker thread
+    /// (Principle 0096, ADR-0338).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn keep_procedure(
+        &mut self,
+        engine: &Engine,
+        root: &std::path::Path,
+        asked: Asked,
+        slot: usize,
+        node: karakuri_operation::NodeAddress,
+        id: Option<String>,
+        reply: Option<mcp::Reply>,
+    ) {
+        // **Checked here rather than only where the request came from**, which
+        // is `save_set`'s own guard: a press cannot name a slot this deck does
+        // not hold and a tool call can.
+        let count = engine.deck.slot_count();
+        if !slot_in_range(slot, count) {
+            return refused(reply, karakuri_environment::no_such_slot(slot, count));
+        }
+        // **The address as the pane draws it** — `node_addr`'s own spelling,
+        // which is the run of text under the operator's eye when they pressed.
+        let addr = node_addr(ir_layer(node.layer), node.index);
+        let Some(nodes) = self.playing.at(slot) else {
+            return refused(
+                reply,
+                karakuri_environment::nothing_to_save(slot, None, false),
+            );
+        };
+        // **The one node of that slot, by layer and index.** A node the list
+        // has no entry for is the built-in camera or an address nobody drew,
+        // and either way there is no source: the panel draws no capsule on the
+        // camera's head, so a hand cannot reach this, and a model naming it is
+        // told what it named rather than handed an empty file (P-0083).
+        let Some(found) = nodes.iter().find(|kept| {
+            kept.layer == setfile::kind_name(ir_layer(node.layer)) && kept.index == node.index
+        }) else {
+            let said = format!(
+                "`{addr}` on deck {} has no source to keep — the built-in camera is a node with \
+                 no procedure behind it, and no other address on this deck is missing one",
+                deck_letter(slot as u8)
+            );
+            println!("keep: {said}");
+            return refused(reply, said);
+        };
+        // **An id an operator typed is checked here**, which is `save_set`'s
+        // own wall and its reason: `<name>` becomes one path component, and
+        // the console emits what was typed including the empty string.
+        if let Some(said) = id
+            .as_deref()
+            .and_then(|id| karakuri_mcp::checked_id(id).err())
+        {
+            println!("keep: {said}");
+            return refused(reply, said);
+        }
+        // **A stamp where nobody typed**, which is `accepted_save`'s own
+        // convention read one file kind along: the capsule is the press that
+        // types nothing (ADR-0128, ADR-0287).
+        let name = id.unwrap_or_else(karakuri_environment::history::stamped_id);
+        let kept = Kept {
+            asked,
+            name,
+            root: root.to_path_buf(),
+            source: found.source.clone(),
+            hash: found.hash,
+            addr,
+            // **Filled by the thread**, and this value is never read: the
+            // request and the outcome are one type here because the two carry
+            // the same fields, and the `Ok` below is the unwritten state
+            // rather than a claim.
+            outcome: Ok(std::path::PathBuf::new()),
+            reply,
+        };
+        let tx = self.keep_tx.clone();
+        // **A thread per keep**, and detached: no frame waits for it — the
+        // save path's own arrangement, and a keep is rarer than a save.
+        self.in_flight += 1;
+        std::thread::spawn(move || {
+            let _ = tx.send(kept.run());
+        });
+    }
+
+    /// Collects completed procedure save tasks and returns true if any operator keep landed.
+    pub(crate) fn finished_keeps(&mut self) -> bool {
+        let mut landed = false;
+        while let Ok(kept) = self.keeps.try_recv() {
+            self.in_flight = self.in_flight.saturating_sub(1);
+            let said = kept.said();
+            match &said {
+                Ok(line) | Err(line) => println!("{line}"),
+            }
+            landed |= said.is_ok() && kept.asked == Asked::Operator;
+            if let Some(reply) = kept.reply {
+                reply.settled(said);
+            }
+        }
+        landed
+    }
+
+    /// Gathers live deck state and returns a [`Starting`] record used to initialize a recorded session.
+    ///
+    /// Reads current playing values and sources across all active slots in memory.
+    /// The material set for [`HEAD_SLOT`] is saved under `{session}-material` in the library.
+    pub(crate) fn head_opening(
+        &self,
+        engine: &Engine,
+        root: &std::path::Path,
+        session: &str,
+    ) -> Result<Starting, String> {
+        let count = engine.deck.slot_count();
+        if !slot_in_range(HEAD_SLOT, count) {
+            return Err(karakuri_environment::no_such_slot(HEAD_SLOT, count));
+        }
+        let Some(nodes) = self.playing.at(HEAD_SLOT) else {
+            return Err(karakuri_environment::nothing_to_save(
+                HEAD_SLOT, None, false,
+            ));
+        };
+        let sources = setfile::Sources(nodes.iter().map(copied).collect());
+        if sources.is_empty() {
+            return Err(karakuri_environment::nothing_to_save(HEAD_SLOT, None, true));
+        }
+        let held = session::Held {
+            // **What the frame is composited at, and not [`crate::CANVAS`]** —
+            // the frame follows the largest enabled output (ADR-0247), so the
+            // constant is the size this run *started* at rather than the size
+            // it is running at.
+            canvas: engine.present.size(),
+            look: engine.look,
+            master_out: engine.deck.out(),
+            master_chain: engine.chain.clone(),
+            slots: (0..count)
+                .map(|slot| {
+                    let at = EngineSlot(slot as u8);
+                    session::SlotHeld {
+                        nodes: self
+                            .playing
+                            .at(slot)
+                            .map(|nodes| nodes.iter().filter_map(addressed).collect())
+                            .unwrap_or_default(),
+                        gain: engine.deck.gain(at),
+                        opacity: engine.deck.opacity(at),
+                        blend: engine.deck.blend(at),
+                        // **The request and not the grant.**
+                        // `Record::Residency` records what a slot was asked to
+                        // do; the governor re-derives the rest on whatever
+                        // machine replays it.
+                        residency: engine.deck.requested_residency(at),
+                        policy: self.slot_policies.policy(slot),
+                        mask: engine.deck.mask(at),
+                        transport: *engine.deck.transport(at),
+                    }
+                })
+                .collect(),
+        };
+        // **Slot 0's ride inside the `Save`**, which puts them as it writes the
+        // file — see [`setfile::Sources::into_nodes`]. These are the others, and
+        // an empty list for slot 0 keeps the index meaning the deck slot.
+        let others = (0..count)
+            .map(|slot| {
+                if slot == HEAD_SLOT {
+                    return setfile::Sources(Vec::new());
+                }
+                setfile::Sources(
+                    self.playing
+                        .at(slot)
+                        .map(|nodes| nodes.iter().map(copied).collect())
+                        .unwrap_or_default(),
+                )
+            })
+            .collect();
+        Ok(Starting {
+            sources: others,
+            held,
+            material: Save {
+                slot: HEAD_SLOT,
+                asked: Asked::Operator,
+                id: format!("{session}-material"),
+                root: root.to_path_buf(),
+                sources,
+                values: playing_values(
+                    engine.deck.slot(EngineSlot(HEAD_SLOT as u8)).set(),
+                    &engine.edges,
+                ),
+            },
+        })
+    }
+
+    /// Drains and processes saves and sends that completed since the last frame.
+    ///
+    /// Non-blocking drain called per frame. Returns true if any save completed,
+    /// triggering a reload of the library listing.
+    pub(crate) fn finished_saves(&mut self) -> bool {
+        let mut landed: Vec<Saved> = Vec::new();
+        while let Ok(saved) = self.saves.try_recv() {
+            landed.push(saved);
+        }
+        let mut written = false;
+        for saved in landed {
+            written |= self.took_save(saved);
+        }
+        // Drain completed sends non-blockingly; sends write outside the store and do not affect library rows.
+        while let Ok(sent) = self.sends.try_recv() {
+            Keeping::took_send(sent);
+        }
+        written
+    }
+
+    /// Logs the outcome of an export/send operation to the console.
+    fn took_send(sent: Sent) {
+        println!("{}", sent.said());
+    }
+
+    /// Processes a completed save event, logging results and replying to MCP callers if attached.
+    fn took_save(&mut self, saved: Saved) -> bool {
+        let Saved {
+            slot,
+            asked,
+            id,
+            outcome,
+            reply,
+        } = saved;
+        self.in_flight = self.in_flight.saturating_sub(1);
+        let (written, said) = match outcome {
+            // Operator saves update the library listing; sandbox saves write to sandbox without listing.
+            Ok(()) => match asked {
+                Asked::Operator => {
+                    let said = format!(
+                        "  keep: deck {}: saved as set `{id}` — the Library bay's `all` \
+                         lists it, and a load off that row puts it back",
+                        deck_letter(slot as u8)
+                    );
+                    println!("{said}");
+                    (true, Ok(said))
+                }
+                Asked::Model => {
+                    let said = format!(
+                        "  keep: deck {}: saved as set `{id}` in the sandbox — \
+                         `<store>/{}/{id}{}`. A save asked for over MCP is kept there \
+                         rather than in the operator's library, so `all` does not list \
+                         it and no load off that row reaches it; the operator's own `k` writes \
+                         library",
+                        deck_letter(slot as u8),
+                        karakuri_store::store::Store::SANDBOX,
+                        karakuri_store::store::Store::SET_FILE_SUFFIX,
+                    );
+                    println!("{said}");
+                    (false, Ok(said))
+                }
+            },
+            Err(e) => {
+                let said = format!(
+                    "  keep: deck {}: set `{id}` was not saved: {e}",
+                    deck_letter(slot as u8)
+                );
+                println!("{said}");
+                (false, Err(said))
+            }
+        };
+        if let Some(reply) = reply {
+            reply.settled(said);
+        }
+        written
+    }
+
+    /// Updates node tracking for a slot following a build swap and returns changed `(layer, index)` nodes.
+    ///
+    /// Drains `built` receiver, updates `playing` node records, and computes the diff
+    /// of added or modified nodes for staging lane presentation (ADR-0326).
+    pub(crate) fn took_up(
+        &mut self,
+        aims: &[Aiming],
+        slot: usize,
+        landed: u64,
+    ) -> Vec<(&'static str, u32)> {
+        let mut ready: Vec<watch::Built> = Vec::new();
+        while let Ok(built) = self.built.try_recv() {
+            ready.push(built);
+        }
+        for built in ready {
+            self.pending.push(built);
+        }
+        let at = self.pending.iter().position(|built| built.id == landed);
+        let built = at.map(|at| self.pending.remove(at));
+        let nodes = built
+            .as_ref()
+            .zip(aims.get(slot))
+            .map(|(built, aiming)| built_nodes(built, &aiming.at));
+        // Compute diff against previously playing nodes by layer, index, and content hash.
+        let changed = match (self.playing.at(slot), nodes.as_ref()) {
+            (Some(was), Some(now)) => now
+                .iter()
+                .filter(|node| {
+                    !was.iter().any(|before| {
+                        before.layer == node.layer
+                            && before.index == node.index
+                            && before.hash == node.hash
+                    })
+                })
+                .map(|node| (node.layer, node.index))
+                .collect(),
+            _ => Vec::new(),
+        };
+        self.playing.landed(slot, nodes);
+        changed
+    }
+
+    /// Blocks up to [`karakuri_environment::SAVE_WAIT`] on shutdown to drain in-flight saves and keeps.
+    pub(crate) fn awaited_saves(&mut self) {
+        self.finished_saves();
+        self.finished_keeps();
+        if self.in_flight == 0 {
+            return;
+        }
+        println!(
+            "waiting up to {:.0}s for {} save{} still being written",
+            karakuri_environment::SAVE_WAIT.as_secs_f32(),
+            self.in_flight,
+            match self.in_flight {
+                1 => "",
+                _ => "s",
+            }
+        );
+        let deadline = Instant::now() + karakuri_environment::SAVE_WAIT;
+        while self.in_flight > 0 {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                break;
+            };
+            // Poll saves channel with bounded timeout and drain keeps.
+            let slice = left.min(std::time::Duration::from_millis(20));
+            if let Ok(saved) = self.saves.recv_timeout(slice) {
+                self.took_save(saved);
+            }
+            self.finished_keeps();
+        }
+        if self.in_flight > 0 {
+            println!(
+                "  {} save{} still unfinished after {:.0}s — each is written or it is not, and \
+                 nothing here claims either way",
+                self.in_flight,
+                match self.in_flight {
+                    1 => "",
+                    _ => "s",
+                },
+                karakuri_environment::SAVE_WAIT.as_secs_f32(),
+            );
+        }
+    }
+}
