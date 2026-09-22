@@ -25,7 +25,7 @@
 
 mod common;
 
-use common::{drawn_once, point, rect_of, showing, PLAUSIBLE};
+use common::{point, rect_of, showing};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Panel, GRAB};
 use karakuri_console::room::size;
@@ -68,13 +68,7 @@ fn strips() -> Vec<Strip> {
         .collect()
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// `mixer.rs`, `fader.rs` and `transport.rs` all open with.
-fn console() -> (Panel, egui::Context) {
-    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
-    panel.solve();
-    (panel, drawn_once())
-}
+use common::default_console as console;
 
 fn bay<'a>(panel: &Panel, ctx: &egui::Context, strips: &'a [Strip]) -> Mixer<'a> {
     mixer(ctx, panel.layout(), strips).expect("the mixer bay draws its strips")

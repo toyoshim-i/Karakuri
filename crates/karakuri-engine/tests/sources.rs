@@ -4,6 +4,9 @@
 //! structured layouts run identically per source, while hash salts differ by default.
 //! Tests both GPU-backed simulation/rendering and pure CPU-side validation refusals.
 
+#[path = "common/mod.rs"]
+mod engine_common;
+
 #[path = "sources/common.rs"]
 mod common;
 

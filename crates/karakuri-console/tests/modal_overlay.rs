@@ -4,7 +4,6 @@ mod common;
 
 use std::time::Duration;
 
-use common::{drawn_once, PLAUSIBLE};
 use karakuri_console::hover::{self, Hover, Tip};
 use karakuri_console::input::Claim;
 use karakuri_console::panel::Panel;
@@ -68,13 +67,7 @@ fn modal_overlay_suppresses_hover_tooltips() {
 
 // -- a card that comes down over a tip -------------------------------------
 
-/// A panel at a plausible viewport, solved, with a context that has drawn once —
-/// `tests/hover.rs`'s own opening.
-fn console() -> (Panel, egui::Context) {
-    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
-    panel.solve();
-    (panel, drawn_once())
-}
+use common::default_console as console;
 
 /// A console every one of the nine cards can come down on: an engine behind the
 /// transport, a mixer, a listing, two panes, an audio pill and something for the

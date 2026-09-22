@@ -42,7 +42,7 @@
 
 mod common;
 
-use common::{at, drawn_once, near, PLAUSIBLE};
+use common::{at, near, PLAUSIBLE};
 use karakuri_console::room::size;
 use karakuri_console::view::{
     inspector, sens_chips, InspectorPane, Node, NodeAuthority, Pane, Param, Renderer, SensChip,
@@ -176,11 +176,7 @@ fn mock() -> Pane {
     }
 }
 
-fn console(viewport: Rect) -> (karakuri_console::panel::Panel, egui::Context) {
-    let mut panel = karakuri_console::panel::Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
+use common::console;
 
 fn pane_at(panel: &karakuri_console::panel::Panel, pane: &Pane) -> InspectorPane {
     inspector(panel.layout(), 0, pane, 0.0).expect("a pane with room in it")

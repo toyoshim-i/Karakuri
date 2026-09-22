@@ -95,20 +95,7 @@ proc soft_points {
 }
 "#;
 
-pub(crate) fn compile(src: &str) -> Checked {
-    let proc = karakuri_ir::parse(src).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-    let checked =
-        karakuri_ir::check::check(&proc).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-    karakuri_ir::cost::estimate(&checked).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-    checked
-}
-
-pub(crate) fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+pub(crate) use crate::engine_common::{compile, render};
 
 pub(crate) fn build(gpu: &Gpu) -> Set {
     Set::build(

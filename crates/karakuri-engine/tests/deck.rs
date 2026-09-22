@@ -2,6 +2,9 @@
 //!
 //! Decomposed into submodules under `tests/deck/`.
 
+#[path = "common/mod.rs"]
+mod engine_common;
+
 #[path = "deck/common.rs"]
 pub mod common;
 

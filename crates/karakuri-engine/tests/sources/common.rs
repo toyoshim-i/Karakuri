@@ -85,20 +85,7 @@ proc dissolve {
 }
 "#;
 
-pub(crate) fn compile(src: &str) -> Checked {
-    let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked =
-        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    checked
-}
-
-pub(crate) fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+pub(crate) use crate::engine_common::compile;
 
 pub(crate) fn build(gpu: &Gpu, l1s: &[&str]) -> Set {
     build_with(gpu, l1s, &[DOTS], Layering::Overdraw)
@@ -251,17 +238,7 @@ pub(crate) fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
     out
 }
 
-pub(crate) fn f16(bits: u16) -> f32 {
-    let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
-    let exp = (bits >> 10) & 0x1f;
-    let mant = u32::from(bits & 0x3ff);
-    let v = match exp {
-        0 => f32::from_bits(mant << 13) * 2.0f32.powi(-112),
-        0x1f => f32::from_bits(0x7f80_0000 | (mant << 13)),
-        _ => f32::from_bits(((u32::from(exp) + 112) << 23) | (mant << 13)),
-    };
-    f32::from_bits(v.to_bits() | sign.to_bits())
-}
+pub(crate) use crate::engine_common::f16;
 
 /// Total light in the frame.
 pub(crate) fn total(gpu: &Gpu, set: &mut Set) -> f64 {

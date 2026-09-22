@@ -1,5 +1,8 @@
 //! Integration tests for parameter bindings, audio modulation, and GPU signals.
 
+#[path = "common/mod.rs"]
+mod engine_common;
+
 #[path = "binding/common.rs"]
 mod common;
 

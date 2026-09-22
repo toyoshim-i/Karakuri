@@ -1,6 +1,8 @@
 #![allow(unused_imports, dead_code)]
 
-pub use super::common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
+pub use super::common::{
+    console, drawn_once, id_of, near, point, rect_of, showing, solved, PLAUSIBLE, SMALLEST,
+};
 pub use karakuri_console::input::{claim, Claim};
 pub use karakuri_console::panel::Panel;
 pub use karakuri_console::room::{size, Room};
@@ -79,14 +81,6 @@ pub fn mock_strips() -> Vec<Strip> {
     ]
 }
 
-/// A panel at a viewport, solved, with a context that has drawn once — the pair
-/// every test here starts from, and `transport.rs`'s own opening.
-pub fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
-
 /// The bay, laid out with `strips`.
 pub fn bay<'a>(panel: &Panel, ctx: &egui::Context, strips: &'a [Strip]) -> Mixer<'a> {
     mixer(ctx, panel.layout(), strips).expect("the mixer bay draws its strips")
@@ -103,12 +97,6 @@ pub fn strips_row(region: Rect) -> egui::Rect {
         ),
         egui::vec2(region.w - size::STRIPS_PAD * 2.0, size::STRIP_H),
     )
-}
-
-/// A `karakuri_layout` point, from `egui`'s. Named for what it makes rather
-/// than for where it is, because `at` is a strip's box everywhere below.
-pub fn point(p: egui::Pos2) -> Point {
-    Point::new(p.x, p.y)
 }
 
 /// Collects all visual shapes rendered inside a specified rectangle.

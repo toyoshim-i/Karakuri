@@ -3,6 +3,9 @@
 //!
 //! Decomposed into submodules under `tests/hot_swap/`.
 
+#[path = "common/mod.rs"]
+mod engine_common;
+
 #[path = "hot_swap/common.rs"]
 pub mod common;
 

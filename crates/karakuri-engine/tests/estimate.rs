@@ -22,9 +22,8 @@
 //! chosen against are in `examples/small_draw.rs` and quoted in the module doc
 //! with the instrument that took them.
 
-// Every test here takes a device, so the whole file is one `mod gpu` — the
-// prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
-// that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+mod common;
+
 mod gpu {
     use karakuri_engine::estimate::{
         estimate, estimate_above_floor, rungs, sub_pixel_floor_rows, Floor, Unfit,
@@ -52,10 +51,7 @@ mod gpu {
         Gpu::headless().expect("no GPU available")
     }
 
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).expect("parse");
-        karakuri_ir::check::check(&proc).expect("check")
-    }
+    use super::common::compile;
 
     /// The smallest honest per-element pairing: one geometry, one sprite
     /// renderer, at a capacity that keeps this test a check rather than a

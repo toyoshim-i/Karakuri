@@ -280,20 +280,7 @@ pub fn wash_deck(gpu: &Gpu) -> Deck {
     deck
 }
 
-pub fn compile(src: &str) -> Checked {
-    let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked =
-        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    checked
-}
-
-pub fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+pub use crate::engine_common::{compile, f16, render};
 
 pub fn build(gpu: &Gpu, seed: u32, capacity: u32) -> Set {
     build_with(gpu, L4, seed, capacity)
@@ -452,30 +439,6 @@ pub fn readback(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u16> {
     drop(data);
     buffer.unmap();
     out
-}
-
-/// `f16` bits to `f32`, for the one test that has to do arithmetic on what it
-/// read back rather than compare it. Written out rather than pulled in as a
-/// dependency: it is fifteen lines and this is the only caller.
-pub fn f16(bits: u16) -> f32 {
-    let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
-    let exponent = (bits >> 10) & 0x1f;
-    let mantissa = bits & 0x03ff;
-    let magnitude = match exponent {
-        // Subnormal, including zero.
-        0 => f32::from(mantissa) * 2.0f32.powi(-24),
-        // Infinity or NaN, told apart by the mantissa. An HDR target may
-        // legitimately hold either; the tests that call this either assert it
-        // does not, or are about what happens when it does.
-        0x1f if mantissa == 0 => f32::INFINITY,
-        0x1f => f32::NAN,
-        e => (1.0 + f32::from(mantissa) / 1024.0) * 2.0f32.powi(i32::from(e) - 15),
-    };
-    if sign.is_sign_negative() {
-        -magnitude
-    } else {
-        magnitude
-    }
 }
 
 pub fn decode(pixels: &[u16]) -> Vec<f32> {

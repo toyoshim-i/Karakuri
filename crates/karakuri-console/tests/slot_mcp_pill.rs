@@ -3,13 +3,12 @@
 
 mod common;
 
-use common::{drawn_once, near, PLAUSIBLE};
-use karakuri_console::panel::Panel;
+use common::{near, PLAUSIBLE};
 use karakuri_console::room::size;
 use karakuri_console::view::{
     inspector, keep_pill, pane_count, slot_mcp_pill, Pane, SlotPolicy, PANES, SYNCS,
 };
-use karakuri_layout::{Point, Rect};
+use karakuri_layout::Point;
 use karakuri_operation::Sync;
 
 fn mock() -> Pane {
@@ -26,11 +25,7 @@ fn mock() -> Pane {
     }
 }
 
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
+use common::console;
 
 #[test]
 fn slot_mcp_pill_is_laid_out_to_the_left_of_keep_pill() {
