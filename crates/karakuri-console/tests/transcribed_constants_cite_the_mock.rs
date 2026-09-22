@@ -14,7 +14,14 @@ use std::path::{Path, PathBuf};
 /// transcribed sizes, and because a marker that drifts fails loudly here rather
 /// than quietly shrinking the scan.
 const SOURCES: &[(&str, &str)] = &[
-    ("crates/karakuri-console/src/room.rs", "pub mod size {"),
+    (
+        "crates/karakuri-console/src/room/size/base.rs",
+        "//! Base sizing constants transcribed from the stylesheet.",
+    ),
+    (
+        "crates/karakuri-console/src/room/size/bays.rs",
+        "//! Bay sizing constants transcribed from the stylesheet.",
+    ),
     (
         "crates/karakuri-console/src/lib.rs",
         "use karakuri_layout::{Layout, Spec};",
