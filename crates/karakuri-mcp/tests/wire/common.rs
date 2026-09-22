@@ -490,3 +490,59 @@ pub fn set_naming(server: &Server, id: &str, hash: Hash) {
         )
         .expect("set");
 }
+
+pub fn wiring_loop(
+    reporter: Reporter,
+) -> std::sync::Arc<std::sync::Mutex<Vec<(usize, karakuri_engine::set::Edge)>>> {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let kept = seen.clone();
+    std::thread::spawn(move || loop {
+        for request in reporter.saves() {
+            no_loop(request);
+        }
+        for request in reporter.wires() {
+            let WireRequest { slot, edge, reply } = request;
+            let said = format!(
+                "slot {slot}: `{}.{}` is bound to `{}`, and the slot is rebuilding",
+                edge.node, edge.slot, edge.to
+            );
+            kept.lock().expect("seen").push((slot, edge));
+            reply.settled(Ok(said));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    });
+    seen
+}
+
+#[allow(clippy::type_complexity)]
+pub fn wired(
+    watching: bool,
+) -> (
+    Server,
+    std::sync::Arc<std::sync::Mutex<Vec<(usize, karakuri_engine::set::Edge)>>>,
+) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let write = |name: &str, source: &str| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, source).expect("fixture");
+        path
+    };
+    let head = write("l1.kir", PROBE_L1);
+    let rest = vec![
+        write("warp.kir", PROBE_L2),
+        write("l4.kir", PROBE_L4),
+        write("blob.kir", PROBE_FIELD),
+    ];
+    let reporter = serve(
+        0,
+        Slots::of(vec![(head, rest)]),
+        store_root(&dir),
+        watching,
+        closed(),
+        policies(),
+    )
+    .expect("serve");
+    let port = reporter.port();
+    let seen = wiring_loop(reporter);
+    (Server { port, dir }, seen)
+}
