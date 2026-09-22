@@ -87,7 +87,7 @@ Modularize the 18 remaining files exceeding 1,300 lines down below 1,000 lines:
 | **P101** | `karakuri-engine::tests::binding` | 1,452 | Split pipeline resource binding and bind group layout integration tests | **COMPLETED** |
 | **P102** | `karakuri-console::tests::mixer` | 1,449 | Partition mixer bay fader, balance, and solo/mute test suites | **COMPLETED** |
 | **P103** | `karakuri-console::view::inspector::header` | 1,429 | Separate inspector header title rendering from chip buttons and target badges | **COMPLETED** |
-| **P104** | `karakuri-engine::set::layers` | 1,412 | Separate layer binding management from uniform buffer assignment | **PLANNED** |
+| **P104** | `karakuri-engine::set::layers` | 1,412 | Separate layer binding management from uniform buffer assignment | **COMPLETED** |
 | **P105** | `karakuri-engine::tests::master` | 1,402 | Partition master chain GPU pipeline and pass fusion tests | **PLANNED** |
 | **P106** | `karakuri-console::view::program` | 1,397 | Decompose program bay monitor rendering and aspect ratio calculations | **PLANNED** |
 | **P107** | `karakuri::bridge::handlers::apply` | 1,387 | Extract operation execution match arms into focused handler functions | **PLANNED** |
