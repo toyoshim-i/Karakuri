@@ -159,7 +159,7 @@ fn route_plugin(gfx: &mut Gfx, n: u8, on: bool) -> Option<String> {
     }
     let command = resolve_plugin_command(n);
     let (w, h) = CANVAS;
-    match crate::bridge::PluginSink::open(&gfx.gpu, &command, w, h) {
+    match crate::bridge::PluginSink::open(&gfx.gpu, &command, w, h, gfx.picture_format) {
         Ok(sink) => {
             let server_name = sink.server_name().to_string();
             gfx.plugin = Some(sink);
