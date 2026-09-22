@@ -4,9 +4,9 @@ This document records the architectural refactoring history and roadmap for **Ka
 
 ---
 
-## 1. Completed Phases Summary (P1–P155)
+## 1. Completed Phases Summary (P1–P116)
 
-All refactoring phases through Phase 20 (P1–P155) are complete, verified with full workspace tests and Clippy quality gates, and documented across crate-level `README.md` files:
+All refactoring phases through Phase 18 (P1–P116) are complete, verified with full workspace tests and Clippy quality gates, and documented across crate-level `README.md` files:
 
 - **Phases 1 & 2 (P1–P20)**: Transient render graph DAG, WGSL AST & pass fusion, machine-readable AI diagnostics, zero-allocation stream replay, and keymap convergence.
 - **Phase 3 (P21–P26)**: Subsystem decomposition, monolith extraction, layer type centralization, full crate-level `README.md` documentation, and Google Style comment standardization across all 16 crates.
@@ -25,8 +25,6 @@ All refactoring phases through Phase 20 (P1–P155) are complete, verified with 
 - **Phase 16 (P87)**: Documentation modernization, elimination of speculative/philosophical prose comments, CommonMark indentation restoration, and strict `clippy::doc_lazy_continuation` re-enforcement.
 - **Phase 17 (P88–P98)**: Near-monolith modularization (1,500–1,800 lines target) across 11 files (`karakuri::tests::view_interaction`, `karakuri-ir::ast`, `karakuri-cli::src::tests::parse`, etc.), lowering pre-commit hard gate to 1,500 lines.
 - **Phase 18 (P99–P116)**: Intermediate reduction (1,300–1,500 lines target) across 18 files (`karakuri-environment::mix::tests`, `karakuri-cli::live::interactive`, `karakuri-engine::tests::binding`, `karakuri-console::tests::mixer`, etc.), lowering pre-commit hard gate to 1,300 lines.
-- **Phase 19 (P117–P155)**: Final monolith elimination across all 39 files in the 1,000–1,300 line cohort across all crates (`karakuri-cli`, `karakuri`, `karakuri-console`, `karakuri-engine`, `karakuri-environment`, `karakuri-mcp`, `karakuri-midi`). All files across the entire workspace brought strictly under 1,000 lines.
-- **Phase 20**: Pre-commit hard gate lowered to 1,000 lines (`hard_limit=1000`) and 800-line warning threshold established in `.githooks/pre-commit`, achieving 100% compliance with ADR-0345 (1,000-line ceiling).
 
 ---
 
@@ -56,32 +54,70 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 4: Monolith Elimination Below 1,000 Lines (Phase 19) (COMPLETED)  │
-│ - All 39 files in 1,000–1,300 line range decomposed (P117–P155).        │
-│ - Exactly 0 files >= 1,000 lines remain across the entire codebase.     │
+│ Stage 4: Semantic Modernization & Test Consolidation (Phase 19)         │
+│ - Workspace test fixture & helper consolidation (Section 3.1).          │
+│ - Massive match expression extraction (Section 3.2).                    │
+│ - Domain substate decomposition (Section 3.3).                          │
+│ - Structured error handling (Section 3.4).                              │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 5: Final Architectural Ceiling (Phase 20) (COMPLETED)             │
+│ Stage 5: Final Architectural Ceiling (<1,000 Lines Polish) (Phase 20)   │
+│ - Final audit and submodule organization across all crates.             │
 │ - Lower pre-commit hard gate to 1,000 lines (hard_limit=1000).          │
-│ - Establish 800-line warning threshold in .githooks/pre-commit.         │
 │ - Complete compliance with ADR-0345 (1,000 lines single-file ceiling).  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Post-Ceiling Architecture & Maintenance
+## 3. Detailed Structural Initiatives (Phase 19)
 
-Now that all source and test files across all 16 crates are strictly under 1,000 lines and enforced by the git pre-commit hook:
+### 3.1 Workspace Test Fixture & Helper Consolidation
+Integration and unit tests currently duplicate significant setup boilerplate across multiple files:
+- **`compile(&str)`**: Duplicated across 28 distinct test files in `karakuri-engine::tests`.
+- **`render(&[IrError], &str)`**: Duplicated across 25 test files.
+- **`console(viewport: Rect)` / `console()`**: Repeated across 36 integration test files in `karakuri-console::tests`.
+- **`at(Pos2)` / `point(Pos2)`**: Coordinate transformation helpers duplicated in 28 test suites.
+- **`f16(bits: u16)`**: Bitcast conversion helpers copied into 15 test files.
 
-### 3.1 Maintenance Guidelines
-- **Ceiling Enforcement**: Any commit introducing a Rust file exceeding 1,000 lines is blocked by `.githooks/pre-commit`.
-- **Early Nudge Threshold**: Any commit expanding a file past 800 lines emits a warning nudge to encourage proactive modularization before reaching the hard ceiling.
-- **Submodule Organization**: New functionality should be structured into focused domain submodules (`common.rs`, `geometry.rs`, `controls.rs`, etc.) rather than appended onto existing files.
+**Action Plan**: Consolidate into per-crate `tests/common/` modules or a shared workspace test fixture crate, eliminating thousands of lines of duplicated test infrastructure.
 
-### 3.2 Future Initiatives
-- **Workspace Test Fixture & Helper Consolidation**: Consolidate repetitive test boilerplate (`compile`, `render`, `console`, `point`/`at`, `f16`) into shared test utilities.
+### 3.2 Massive Match Expression Function Extraction (Dispatch Clarity)
+Several central dispatcher functions contain monolithic `match` expressions where individual arms span hundreds of lines:
+- **`karakuri::app::mod::App::act` (L526)**: 379-line match with inline operation execution, journal logging, and error conversion.
+- **`karakuri::app::handler::pointer::dispatch` (L22)**: 303-line pointer event match.
+- **`karakuri::app::handler::key::dispatch` (L108)**: 291-line keyboard event match.
+- **`karakuri::bridge::handlers::apply::apply_operation` (L797)**: 234-line operation execution match.
+
+**Action Plan**: Extract arm logic into dedicated, named private functions (e.g. `handle_emitted_operation`, `dispatch_pointer_down`). Reduce top-level matches to clean, 20–40 line dispatch tables.
+
+### 3.3 Domain Substate Decomposition (Fat Struct Remediation)
+Several monolithic structs aggregate fields across unrelated UI or storage concerns:
+- **`karakuri_console::view::View` (835 lines)**: Holds flat state for mixer, inspector, library, transport, and modals simultaneously.
+- **`karakuri_store::record::Record` (1,006 lines)**: Monolithic record enumeration.
+
+**Action Plan**: Decompose `View` into domain substate structs (`MixerState`, `InspectorState`, `LibraryState`, `TransportState`) composed under `View`. Improves borrow checker ergonomics and enforces clear component boundaries.
+
+### 3.4 Structured Error Handling & Declarative Formatting
+- **`karakuri_engine::set::SetError` (239 lines)**: Contains manual string concatenation and formatting logic embedded inside error declarations.
+
+**Action Plan**: Modernize domain error hierarchies with declarative traits and structured metadata, eliminating manual string building logic.
+
+---
+
+## 4. Final Stage: Architectural Ceiling Polish (<1,000 Lines)
+
+### Phase 20: ADR-0345 Ceiling Enforcement — PLANNED
+Following the semantic refactorings in Phase 19:
+1. Re-evaluate file sizes and verify all files remain within the optimal ~500–800 line range.
+2. Finalize pre-commit hook hard limit at 1,000 lines (`hard_limit=1000` in `.githooks/pre-commit`) with 800-line warning threshold.
+3. Achieve 100% compliance with ADR-0345 across all crates.
+
+---
+
+## 5. Future Initiatives
+
 - **Dynamic Module Hot-Reloading Ergonomics**: Extend `.kir` hot-reloading abstractions across non-shader resource bundles.
 - **Unified Event Journal Introspection**: Standardize tooling for offline inspection and diffing of `.ndjson` session streams.
