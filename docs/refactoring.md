@@ -54,21 +54,39 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 4: Ultimate Architectural Target <1,000 Lines (Phase 19)          │
-│ - 48 remaining files in 1,000–1,300 range to be modularized.            │
-│ - Aligns fully with ADR-0345 (1,000 lines as single-file ceiling).     │
+│ Stage 4: Semantic Modernization & Test Fixture Consolidation (Phase 19) │
+│ - Common test helpers & fixture consolidation (Section 3.1).            │
+│ - Massive match expression extraction & fat struct remediation.         │
+│ - Natural line reduction across multiple test and source files.         │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Stage 5: Final Architectural Ceiling (<1,000 Lines Polish) (Phase 20)   │
+│ - Modularize remaining files in 1,000–1,300 line range.                 │
+│ - Lower pre-commit hard gate to 1,000 lines.                            │
+│ - Complete compliance with ADR-0345 (1,000 lines single-file ceiling).  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 19: Final Architectural Ceiling (<1,000 Lines Target) — PLANNED
+### Phase 19: Structural & Semantic Modernization — PLANNED
 
-Following the completion of Phase 18 and the enforcement of the 1,300-line pre-commit limit, 48 files currently reside in the 1,000–1,300 line range (24 source files, 24 test suites). Phase 19 will systematically modularize these files to bring the entire codebase into strict compliance with ADR-0345 (<1,000 lines).
+Rather than relying solely on file-splitting to hit line counts, Phase 19 directly attacks structural redundancy and cognitive complexity across the codebase. By eliminating widespread test boilerplate, decomposing monolithic dispatch matches, and refactoring fat state structs, many of the 48 files currently in the 1,000–1,300 line range will naturally shrink below 1,000 lines.
+
+#### Key Initiatives:
+1. **Workspace Test Fixture & Helper Consolidation** (see Section 3.1):
+   - Consolidate duplicated test utilities (`compile`, `render`, `console`, `point`/`at`, `f16`) into per-crate `tests/common/` modules or shared test fixtures.
+   - Drastically simplifies and reduces the 24 test suites currently in the 1,000–1,300 line cohort.
+2. **Massive Match Expression Extraction** (see Section 3.2):
+   - Extract sprawling `match` arms in central dispatchers (`App::act`, `pointer::dispatch`, `key::dispatch`, `apply_operation`) into focused handler functions.
+3. **Domain Substate Decomposition** (see Section 3.3):
+   - Break fat state structs (`View`, `Record`) into focused domain substates.
+4. **Structured Error Handling** (see Section 3.4):
+   - Modernize error types with structured formatting traits.
 
 ---
 
-## 3. Structural & Semantic Modernization Initiatives (Beyond File Splitting)
-
-While module splitting enforces file length constraints, true architectural clarity and maintainability require semantic refactorings. The following initiatives are queued for implementation across subsequent phases:
+## 3. Detailed Structural Initiatives
 
 ### 3.1 Workspace Test Fixture & Helper Consolidation
 Integration and unit tests currently duplicate significant setup boilerplate across multiple files:
@@ -103,9 +121,18 @@ Several monolithic structs aggregate fields across unrelated UI or storage conce
 
 ---
 
-## 4. Future Initiatives
+## 4. Final Stage: Architectural Ceiling Polish (<1,000 Lines)
 
-- **Stage 3 Gate Lowering (<1,300 Lines)**: Target secondary cohort of files (Phase 18).
-- **Stage 4 Architectural Ceiling (<1,000 Lines)**: Target remaining files to achieve full ADR-0345 alignment (Phase 19).
+### Phase 20: ADR-0345 Ceiling Enforcement — PLANNED
+Following the semantic refactorings in Phase 19:
+1. Re-evaluate remaining files exceeding 1,000 lines (which will be substantially fewer than the baseline 48).
+2. Decompose remaining files into clean submodules.
+3. Lower the pre-commit hook hard limit to 1,000 lines (`hard_limit=1000` in `.githooks/pre-commit`).
+4. Achieve 100% compliance with ADR-0345 across all crates.
+
+---
+
+## 5. Future Initiatives
+
 - **Dynamic Module Hot-Reloading Ergonomics**: Extend `.kir` hot-reloading abstractions across non-shader resource bundles.
 - **Unified Event Journal Introspection**: Standardize tooling for offline inspection and diffing of `.ndjson` session streams.
