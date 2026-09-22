@@ -25,6 +25,10 @@ All refactoring phases through Phase 18 (P1–P116) are complete, verified with 
 - **Phase 16 (P87)**: Documentation modernization, elimination of speculative/philosophical prose comments, CommonMark indentation restoration, and strict `clippy::doc_lazy_continuation` re-enforcement.
 - **Phase 17 (P88–P98)**: Near-monolith modularization (1,500–1,800 lines target) across 11 files (`karakuri::tests::view_interaction`, `karakuri-ir::ast`, `karakuri-cli::src::tests::parse`, etc.), lowering pre-commit hard gate to 1,500 lines.
 - **Phase 18 (P99–P116)**: Intermediate reduction (1,300–1,500 lines target) across 18 files (`karakuri-environment::mix::tests`, `karakuri-cli::live::interactive`, `karakuri-engine::tests::binding`, `karakuri-console::tests::mixer`, etc.), lowering pre-commit hard gate to 1,300 lines.
+- **Phase 19 (P117–P122)**: Semantic modernization, dispatch modularization & test infrastructure consolidation:
+  - Consolidating integration test fixtures into `karakuri-engine::tests::common` (`compile`, `render`) and `karakuri-console::tests::common` (`console`, `at`).
+  - Monolithic match expression decomposition across GUI event handlers (`App::handle_pointer_event`, `App::handle_keyboard_event`) and engine operation application (`apply` decomposed into `apply_strip_record`, `apply_param_record`, and `apply_engine_record`).
+  - Strict line ceiling enforcement (<1,000 lines across every single file in the workspace).
 
 ---
 
@@ -54,17 +58,15 @@ To maximize cognitive readability, prevent "God module" accumulation, and optimi
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Stage 4: Semantic Modernization & Test Consolidation (Phase 19)         │
+│ Stage 4: Semantic Modernization & Test Consolidation (Phase 19 - DONE)  │
 │ - Workspace test fixture & helper consolidation (Section 3.1).          │
 │ - Massive match expression extraction (Section 3.2).                    │
-│ - Domain substate decomposition (Section 3.3).                          │
-│ - Structured error handling (Section 3.4).                              │
+│ - Domain substate decomposition & error formatting audit (Sec 3.3-3.4). │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Stage 5: Final Architectural Ceiling (<1,000 Lines Polish) (Phase 20)   │
-│ - Final audit and submodule organization across all crates.             │
 │ - Lower pre-commit hard gate to 1,000 lines (hard_limit=1000).          │
 │ - Complete compliance with ADR-0345 (1,000 lines single-file ceiling).  │
 └─────────────────────────────────────────────────────────────────────────┘
