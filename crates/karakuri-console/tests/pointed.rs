@@ -63,11 +63,7 @@ const WHERE: &str = "/Users/somebody/sets/tour-2026/night-b";
 /// The other one, for the frames where a second folder is over the window.
 const OVER: &str = "/Volumes/stick/handover";
 
-fn console(viewport: Rect) -> Panel {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    panel
-}
+use common::console_panel as console;
 
 /// The bay with the mock's names, pointed at `at` or at nothing.
 fn bay(panel: &Panel, at: Option<Pointed<'_>>) -> LibraryBay {

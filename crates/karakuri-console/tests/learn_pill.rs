@@ -22,22 +22,16 @@
 
 mod common;
 
-use common::{at, drawn_once, PLAUSIBLE};
+use common::{at, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
-use karakuri_console::panel::Panel;
 use karakuri_console::room::Room;
 use karakuri_console::view::{arrangement, learn_pill, map_pill, MapPill, Transport, View};
-use karakuri_layout::Rect;
 
 fn mock() -> Transport {
     common::mock_transport()
 }
 
-fn console(viewport: Rect) -> (Panel, egui::Context) {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    (panel, drawn_once())
-}
+use common::console;
 
 /// A view with an engine behind it, and a surface in front of it or not.
 fn view(map: Option<MapPill>, armed: bool) -> View {

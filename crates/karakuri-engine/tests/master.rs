@@ -3,6 +3,9 @@
 //! Asserts parity between shipped L5 procedures (`feedback.kir`, `bloom.kir`, `rgb_shift.kir`)
 //! and legacy hand-written shader passes on real GPU readbacks (ADR-0340).
 
+#[path = "common/mod.rs"]
+mod engine_common;
+
 #[path = "master/common.rs"]
 mod common;
 

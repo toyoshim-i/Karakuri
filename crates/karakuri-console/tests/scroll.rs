@@ -8,7 +8,6 @@ use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     count_text, inspector, pane_count, InspectorPane, Node, NodeAuthority, Pane, Param, View, SYNCS,
 };
-use karakuri_layout::Rect;
 use karakuri_operation::{Authority, Layer, NodeAddress, ParamAt, Sync};
 
 /// A row over `[0, 1]` at the middle of it, so every knob in these panes is at
@@ -78,12 +77,7 @@ fn view_at(pane: &Pane, scroll: f32) -> View {
     view
 }
 
-/// A panel at a viewport, solved.
-fn console(viewport: Rect) -> karakuri_console::panel::Panel {
-    let mut panel = karakuri_console::panel::Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    panel
-}
+use common::console_panel as console;
 
 /// The laid-out pane, at the position the view is holding.
 fn laid(panel: &karakuri_console::panel::Panel, view: &View, pane: &Pane) -> InspectorPane {

@@ -1,10 +1,9 @@
-//! Tests for Deck channel strip SOLO, MUTE, and mix contribution logic.
+mod common;
 
 mod gpu {
     use karakuri_engine::deck::{Deck, DeckSlot};
     use karakuri_engine::swap::HotSwap;
     use karakuri_engine::{Gpu, Set};
-    use karakuri_ir::typed::Checked;
 
     const WIDTH: u32 = 64;
     const HEIGHT: u32 = 64;
@@ -50,12 +49,7 @@ proc soft_points {
 }
 "#;
 
-    fn compile(src: &str) -> Checked {
-        let proc = karakuri_ir::parse(src).expect("valid ir");
-        let checked = karakuri_ir::check::check(&proc).expect("typechecked ir");
-        karakuri_ir::cost::estimate(&checked).expect("estimated cost");
-        checked
-    }
+    use super::common::compile;
 
     fn test_deck(gpu: &Gpu, count: usize) -> Deck {
         let l1 = compile(L1);

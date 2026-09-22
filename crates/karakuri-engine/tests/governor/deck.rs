@@ -57,12 +57,7 @@ proc soft_points {
 }
 "#;
 
-fn compile(src: &str) -> Checked {
-    let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{e:?}"));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{e:?}"));
-    karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{e:?}"));
-    checked
-}
+use crate::engine_common::compile;
 
 fn swap_of(gpu: &Gpu, l1: &str, seed: u32, ms: Option<f32>) -> HotSwap {
     let mut set = Set::build(

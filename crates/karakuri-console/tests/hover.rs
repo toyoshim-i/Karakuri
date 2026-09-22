@@ -8,7 +8,6 @@ mod common;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use common::{drawn_once, PLAUSIBLE};
 use karakuri_console::hover::{
     elements, flat, Hover, Tip, Tips, TIPS, TIP_GAP, TIP_LINE, TIP_MAX_W, TIP_MIN_W, TIP_PAD_X,
     TIP_PAD_Y, TIP_RADIUS, TIP_SIZE,
@@ -46,13 +45,7 @@ const SILENT: [&str; 5] = [
 /// found 140 on 2026-09-09.
 const ELEMENTS_FLOOR: usize = 120;
 
-/// A panel at a plausible viewport, solved, with a context that has drawn once
-/// — every other test in this crate's opening.
-fn console() -> (Panel, egui::Context) {
-    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
-    panel.solve();
-    (panel, drawn_once())
-}
+use common::default_console as console;
 
 /// A console with an engine behind it, which is what draws a transport row.
 fn view() -> View {

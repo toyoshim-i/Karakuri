@@ -464,25 +464,7 @@ impl Hand {
     }
 }
 
-/// `tests/deck.rs`'s decoder, and it is a copy for that file's own reason:
-/// an `Rgba16Float` readback is bytes, and the workspace has no `f16` type
-/// in it.
-pub fn f16(bits: u16) -> f32 {
-    let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
-    let exponent = (bits >> 10) & 0x1f;
-    let mantissa = bits & 0x03ff;
-    let magnitude = match exponent {
-        0 => f32::from(mantissa) * 2.0f32.powi(-24),
-        0x1f if mantissa == 0 => f32::INFINITY,
-        0x1f => f32::NAN,
-        e => (1.0 + f32::from(mantissa) / 1024.0) * 2.0f32.powi(i32::from(e) - 15),
-    };
-    if sign.is_sign_negative() {
-        -magnitude
-    } else {
-        magnitude
-    }
-}
+pub use crate::engine_common::f16;
 
 pub fn channels(pixels: &[u8]) -> Vec<f32> {
     pixels

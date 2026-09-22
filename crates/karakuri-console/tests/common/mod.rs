@@ -126,6 +126,11 @@ pub fn console(viewport: Rect) -> (karakuri_console::panel::Panel, egui::Context
     (console_panel(viewport), drawn_once())
 }
 
+/// A solved panel paired with a context that has drawn once at `PLAUSIBLE`.
+pub fn default_console() -> (karakuri_console::panel::Panel, egui::Context) {
+    console(PLAUSIBLE)
+}
+
 /// Convert an `egui::Pos2` into a `karakuri_layout::Point`.
 pub fn point(p: egui::Pos2) -> karakuri_layout::Point {
     karakuri_layout::Point::new(p.x, p.y)

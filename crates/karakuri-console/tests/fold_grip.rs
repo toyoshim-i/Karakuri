@@ -66,12 +66,7 @@ use karakuri_console::room::size;
 use karakuri_console::view::{bay_grip, head_of, region, BAY_GRIPS, GRIP_W, REGIONS};
 use karakuri_layout::{Axis, Hit, NodeId, Point, Rect};
 
-/// A panel at `viewport`, solved.
-fn console(viewport: Rect) -> Panel {
-    let mut panel = Panel::new(viewport.w, viewport.h);
-    panel.solve();
-    panel
-}
+use common::console_panel as console;
 
 /// Whether a boundary grabs `p` — the same question `input`'s rule 3 asks, in
 /// the same terms and off the same call.

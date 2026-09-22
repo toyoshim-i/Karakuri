@@ -103,20 +103,7 @@ proc wants_normal {
 }
 "#;
 
-pub fn compile(src: &str) -> Checked {
-    let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked =
-        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    checked
-}
-
-pub fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+pub use crate::engine_common::{compile, render};
 
 /// A second renderer over the same geometry: bigger sprites, its own
 /// `exposure`. Declaring that name twice in one Set is the thing a flat
