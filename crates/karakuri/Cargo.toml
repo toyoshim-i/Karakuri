@@ -134,5 +134,12 @@ rfd = { version = "0.17.2", default-features = false }
 # the tree — `karakuri-store` and `karakuri-environment` already resolve it.
 serde_json.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+wgpu-hal = { version = "30.0.1", default-features = false, features = ["metal"] }
+objc2 = "0.6.4"
+objc2-metal = { version = "0.3.2", features = ["objc2-io-surface"] }
+objc2-io-surface = "0.3.2"
+core-foundation = "0.10.1"
+
 [lints]
 workspace = true
