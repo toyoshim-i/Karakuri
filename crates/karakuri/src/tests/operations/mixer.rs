@@ -244,7 +244,7 @@ fn a_move_on_a_fader_a_lane_holds_is_refused_and_said_as_a_decision() {
     // refusal that silently never happens.
     // Read with the whitespace taken out, so that a reformat of the file is
     // not a failing test and a line wrapped by `cargo fmt` is not a silence.
-    const APPLY: &str = include_str!("../../bridge/handlers/apply.rs");
+    const APPLY: &str = include_str!("../../bridge/handlers/apply/reading.rs");
     let apply: String = APPLY.split_whitespace().collect();
     for wanted in [
         "banks:&karakuri_pattern::Banks,",
