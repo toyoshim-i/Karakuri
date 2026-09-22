@@ -12,5 +12,8 @@ mod tools_and_save;
 #[path = "wire/library_and_sets.rs"]
 mod library_and_sets;
 
-#[path = "wire/routing_and_operations.rs"]
-mod routing_and_operations;
+#[path = "wire/routing.rs"]
+mod routing;
+
+#[path = "wire/operations.rs"]
+mod operations;
