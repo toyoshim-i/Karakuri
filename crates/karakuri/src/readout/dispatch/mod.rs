@@ -38,6 +38,14 @@ impl Readout {
         // whose `Some` widens the claim to the panel — see that arm.
         let mut claim = claim(&mut self.panel, ctx, &self.view, at);
         let mut did = Acted::Nothing;
+        if matches!(event, Pointer::Down)
+            && !self.panel.dragging()
+            && !self.view.has_modal_overlay()
+        {
+            if let Some(bay) = karakuri_console::focus::bay_at(self.panel.layout(), at) {
+                self.view.focus_bay(&self.panel, bay.name);
+            }
+        }
         match (event, claim) {
             // The panel learns where the pointer is either way — every
             // keyboard operation is addressed to it — and drags if something

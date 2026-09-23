@@ -571,3 +571,38 @@ fn the_ladder_descends_with_enter_and_ascends_with_esc() {
     // Further Esc at bay level returns false (declines gracefully)
     assert!(!view.focus_up(&p));
 }
+
+#[test]
+fn clicking_in_a_bay_locates_and_focuses_that_bay() {
+    let mut view = View::new(Room::Day);
+    let mut p = panel();
+    p.solve();
+
+    // Default focus starts on the first bay of the walk (transport).
+    assert_eq!(view.focused(&p).map(|b| b.name), Some("transport"));
+
+    // Every visible bay has an interior point that locates that bay via bay_at.
+    for name in WALK {
+        let id = p.layout().find(name).expect("bay exists in layout");
+        let rect = p.layout().rect(id);
+        // Interior point inside the bay head, clear of dividers
+        let head_pt = karakuri_layout::Point::new(rect.x + 20.0, rect.y + 10.0);
+
+        let hit = karakuri_console::focus::bay_at(p.layout(), head_pt);
+        assert_eq!(
+            hit.map(|b| b.name),
+            Some(*name),
+            "head point of {name} must locate {name}"
+        );
+
+        // focus_bay shifts active bay to that bay
+        view.focus_bay(&p, name);
+        assert_eq!(view.focused(&p).map(|b| b.name), Some(*name));
+        // Calling it again on the same bay returns false (didn't move)
+        assert!(!view.focus_bay(&p, name));
+    }
+
+    // Points on dividers or outside layout do not resolve to any bay.
+    let outside = karakuri_layout::Point::new(-10.0, -10.0);
+    assert_eq!(karakuri_console::focus::bay_at(p.layout(), outside), None);
+}

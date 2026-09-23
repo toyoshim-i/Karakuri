@@ -76,7 +76,7 @@
 
 use std::collections::BTreeMap;
 
-use karakuri_layout::{Layout, NodeId};
+use karakuri_layout::{Layout, NodeId, Point};
 use karakuri_operation::{
     Authority, BeatSource, BlendMode, ChainParam as ParamOfChain, Operation, Output, ParamValue,
     Revision, StepMode,

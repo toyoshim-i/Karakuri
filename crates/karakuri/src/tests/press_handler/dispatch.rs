@@ -523,3 +523,67 @@ fn startup_pointer_and_hover_events_do_not_panic_before_first_frame() {
     let tip = hover.left();
     assert_eq!(tip, karakuri_console::hover::Tip::Still);
 }
+
+/// The press handler switches active bay focus when the pointer clicks inside a bay.
+#[test]
+fn the_press_handler_selects_active_bay_on_mouse_click() {
+    let ctx = crate::tests::drawn_once();
+    let mut readout = Readout::new(1440.0, 900.0);
+    readout.panel.solve();
+
+    assert_eq!(
+        readout.view.focused(&readout.panel).map(|b| b.name),
+        Some("transport")
+    );
+
+    // Move to mixer bay and click
+    let mixer_id = readout
+        .panel
+        .layout()
+        .find("mixer")
+        .expect("mixer bay exists");
+    let mixer_rect = readout.panel.layout().rect(mixer_id);
+    let mixer_pt = Point::new(mixer_rect.x + 20.0, mixer_rect.y + 10.0);
+
+    readout.pointer(&ctx, Pointer::Moved(mixer_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(
+        readout.view.focused(&readout.panel).map(|b| b.name),
+        Some("mixer")
+    );
+    readout.pointer(&ctx, Pointer::Up);
+
+    // Move to library bay and click
+    let lib_id = readout
+        .panel
+        .layout()
+        .find("library")
+        .expect("library bay exists");
+    let lib_rect = readout.panel.layout().rect(lib_id);
+    let lib_pt = Point::new(lib_rect.x + 20.0, lib_rect.y + 10.0);
+
+    readout.pointer(&ctx, Pointer::Moved(lib_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(
+        readout.view.focused(&readout.panel).map(|b| b.name),
+        Some("library")
+    );
+    readout.pointer(&ctx, Pointer::Up);
+
+    // Move to inspector bay and click
+    let insp_id = readout
+        .panel
+        .layout()
+        .find("inspector")
+        .expect("inspector bay exists");
+    let insp_rect = readout.panel.layout().rect(insp_id);
+    let insp_pt = Point::new(insp_rect.x + 20.0, insp_rect.y + 10.0);
+
+    readout.pointer(&ctx, Pointer::Moved(insp_pt));
+    readout.pointer(&ctx, Pointer::Down);
+    assert_eq!(
+        readout.view.focused(&readout.panel).map(|b| b.name),
+        Some("inspector")
+    );
+    readout.pointer(&ctx, Pointer::Up);
+}

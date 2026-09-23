@@ -193,8 +193,19 @@ impl App {
             ElementState::Pressed => Pointer::Down,
             ElementState::Released => Pointer::Up,
         };
+        let prev_focus = self
+            .readout
+            .view
+            .focused(&self.readout.panel)
+            .map(|r| r.name);
         let ctx = gfx.egui.egui_ctx().clone();
         let (claim, acted) = self.readout.pointer(&ctx, which);
+        let focus_moved = self
+            .readout
+            .view
+            .focused(&self.readout.panel)
+            .map(|r| r.name)
+            != prev_focus;
         if claim == Claim::Egui {
             App::to_egui(gfx, &mut self.costs, event);
         }
@@ -274,7 +285,7 @@ impl App {
             println!("{line}");
         }
         let (acted, took) = self.handle_pointer_drop_load(gfx, acted);
-        let repaint = App::performed(
+        let mut repaint = App::performed(
             gfx,
             self.started,
             &mut self.readout,
@@ -284,6 +295,9 @@ impl App {
         )
         .repaint
         .soonest(took);
+        if focus_moved {
+            repaint = repaint.soonest(Change::Pointed(true).repaint());
+        }
         App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
     }
 
