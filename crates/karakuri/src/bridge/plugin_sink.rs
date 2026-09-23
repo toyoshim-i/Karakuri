@@ -204,6 +204,15 @@ pub(crate) struct PluginSink {
     plugin: OutputPlugin,
     #[cfg(target_os = "macos")]
     surface: macos::MacOsSurface,
+    #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
+    render_target: wgpu::Texture,
+    #[cfg(target_os = "macos")]
+    render_target_view: wgpu::TextureView,
+    #[cfg(target_os = "macos")]
+    flip_pipeline: wgpu::RenderPipeline,
+    #[cfg(target_os = "macos")]
+    flip_bind_group: wgpu::BindGroup,
     frame_index: u64,
     width: u32,
     height: u32,
@@ -223,9 +232,156 @@ impl PluginSink {
             let surface = macos::MacOsSurface::new(gpu, width, height, format)?;
             let plugin = OutputPlugin::open(command, "iosurface", width, height, "bgra8unorm")
                 .map_err(|e| format!("{e}"))?;
+
+            let shader = gpu
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("plugin sink flip shader"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        r#"
+@group(0) @binding(0) var src_tex: texture_2d<f32>;
+@group(0) @binding(1) var src_sampler: sampler;
+
+struct VsOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> VsOut {
+    let uv = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
+    var out: VsOut;
+    out.clip = vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+    // Invert vertical texture coordinate so Syphon clients (which follow OpenGL bottom-up
+    // conventions) display the frame right-side up.
+    out.uv = vec2<f32>(uv.x, uv.y);
+    return out;
+}
+
+@fragment
+fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    return textureSample(src_tex, src_sampler, in.uv);
+}
+"#
+                        .into(),
+                    ),
+                });
+
+            let bind_group_layout =
+                gpu.device
+                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("plugin sink flip bind group layout"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float {
+                                        filterable: true,
+                                    },
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false,
+                                },
+                                count: None,
+                            },
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 1,
+                                visibility: wgpu::ShaderStages::FRAGMENT,
+                                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                                count: None,
+                            },
+                        ],
+                    });
+
+            let pipeline_layout =
+                gpu.device
+                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("plugin sink flip pipeline layout"),
+                        bind_group_layouts: &[Some(&bind_group_layout)],
+                        immediate_size: 0,
+                    });
+
+            let flip_pipeline =
+                gpu.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("plugin sink flip pipeline"),
+                        layout: Some(&pipeline_layout),
+                        vertex: wgpu::VertexState {
+                            module: &shader,
+                            entry_point: Some("vs"),
+                            compilation_options: wgpu::PipelineCompilationOptions::default(),
+                            buffers: &[],
+                        },
+                        fragment: Some(wgpu::FragmentState {
+                            module: &shader,
+                            entry_point: Some("fs"),
+                            compilation_options: wgpu::PipelineCompilationOptions::default(),
+                            targets: &[Some(wgpu::ColorTargetState {
+                                format,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })],
+                        }),
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            cull_mode: None,
+                            ..Default::default()
+                        },
+                        depth_stencil: None,
+                        multisample: wgpu::MultisampleState::default(),
+                        multiview_mask: None,
+                        cache: None,
+                    });
+
+            let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("plugin sink flip sampler"),
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            let render_target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("plugin sink intermediate render target"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let render_target_view =
+                render_target.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let flip_bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("plugin sink flip bind group"),
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&render_target_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
             Ok(Self {
                 plugin,
                 surface,
+                render_target,
+                render_target_view,
+                flip_pipeline,
+                flip_bind_group,
                 frame_index: 0,
                 width,
                 height,
@@ -267,7 +423,7 @@ impl Sink for PluginSink {
     fn view(&self) -> &wgpu::TextureView {
         #[cfg(target_os = "macos")]
         {
-            &self.surface.view
+            &self.render_target_view
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -277,6 +433,35 @@ impl Sink for PluginSink {
 
     fn size(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    fn after_draw(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        #[cfg(target_os = "macos")]
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("output plugin flip pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.surface.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.flip_pipeline);
+            pass.set_bind_group(0, &self.flip_bind_group, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = encoder;
+        }
     }
 
     fn present(&mut self, _gpu: &Gpu) -> Result<(), String> {
@@ -376,6 +561,7 @@ mod tests {
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
             present.draw(&mut encoder, sink.view(), sink.size());
+            sink.after_draw(&mut encoder);
             gpu.queue.submit([encoder.finish()]);
 
             sink.acquire(&gpu).expect("acquire");
