@@ -93,6 +93,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
    - Cancelled for MVP: Live visual performance prioritizes immediate, expressive manual control via MIDI faders and real-time audio-reactive modulation over pre-scheduled, rigid bar/phrase-quantized transition queues. Direct fader sweeps, immediate wipe triggers, and live audio spectral onset modulation provide musical alignment without artificial quantization latency.
 4. **Live MIDI & Keyboard Surface Mapping & Profile Management** *(Keyboard Model Completed)*:
    - **Keyboard Architecture Hardened**: Global scope is strictly navigation-only (`Tab`, `Shift-Tab`, `Esc`, symmetric ladder descent via `Enter`), preventing misoperation in live performance.
+   - **Active Bay Selection on Mouse Click**: Clicking within any bay immediately sets it as the active/focused bay, pairing mouse selection with bay-scoped keyboard shortcuts.
    - **Bay-Scoped Operations**: All operational and mutation shortcuts are scoped to individual bays (`transport`, `mixer`, `inspector`, etc.) or `any bay` for region folding.
    - **Customizable Keymaps & Explicit Globalization**: Default mappings are provided and can be customized via keymap files (`<store>/keymaps/default.keymap`), with explicit user promotion to global (`globalize: true`) and permissive collision warning detection.
    - **Bidirectional Specification Sync**: Key column tests enforce 100% mutual consistency between keymap code, tooltips, and `docs/manual/operations.html`.

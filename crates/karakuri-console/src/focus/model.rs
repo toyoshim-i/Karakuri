@@ -65,6 +65,29 @@ fn descend(layout: &Layout, id: NodeId, bays: &mut Vec<&'static Region>) {
     }
 }
 
+/// The bay of `layout` that contains `p`, or `None` if `p` is outside all visible bays
+/// or on a divider grab margin.
+///
+/// Clicking inside a bay selects it as the active bay for keyboard shortcuts.
+/// Divider grab margins are excluded so that divider resize gestures do not change
+/// the focused bay.
+pub fn bay_at(layout: &Layout, p: Point) -> Option<&'static Region> {
+    if matches!(
+        layout.hit(p, crate::panel::GRAB),
+        karakuri_layout::Hit::Divider { .. }
+    ) {
+        return None;
+    }
+    for bay in ring(layout) {
+        if let Some(id) = layout.find(bay.name) {
+            if layout.visible(id) && layout.rect(id).contains(p) {
+                return Some(bay);
+            }
+        }
+    }
+    None
+}
+
 /// Where the dashed focus ring goes on `bay`, or `None` where the arrangement
 /// gives that bay no rectangle to put one on.
 ///

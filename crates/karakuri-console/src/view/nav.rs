@@ -138,6 +138,19 @@ impl View {
         moved
     }
 
+    /// Put focus on `bay`, closing any open cards if focus moved, and answer whether
+    /// focus moved — [`Focus::put`].
+    ///
+    /// Like `tab`, the bay it leaves keeps its remembered item address, and any open
+    /// cards belonging to the abandoned bay are shut.
+    pub fn focus_bay(&mut self, panel: &Panel, bay: &str) -> bool {
+        let moved = self.focus.put(panel.layout(), bay);
+        if moved {
+            focus::shut_cards(self);
+        }
+        moved
+    }
+
     /// `esc`: up one level of the focused bay's address, and `false` where there
     /// was no level to leave — [`Focus::up`].
     ///
