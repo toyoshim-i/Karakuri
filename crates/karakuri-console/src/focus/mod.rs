@@ -520,9 +520,27 @@ pub fn press(
             },
             Press::Enter,
         ) => under_enter(view, item, through, nth, control),
-        (Addressed::Bay | Addressed::Head, Press::Enter) => Asked::Nothing(
-            "nothing here performs — enter is the act the addressed control is for, and a bay \
-             is not one",
-        ),
+        (Addressed::Bay, Press::Enter) => {
+            if items > 0 {
+                let nth = remembered(view, bay.name, items);
+                name_item(view, bay.name, built, nth, items)
+            } else if !built.head.is_empty() {
+                address_into(view, bay.name, HEAD);
+                Asked::Moved
+            } else {
+                Asked::Nothing(
+                    "nothing here performs — enter is the act the addressed control is for, and a bay \
+                     is not one",
+                )
+            }
+        }
+        (Addressed::Head, Press::Enter) => {
+            if !built.head.is_empty() {
+                address_into(view, bay.name, 1);
+                Asked::Moved
+            } else {
+                Asked::Nothing("this head draws no controls")
+            }
+        }
     }
 }

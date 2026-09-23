@@ -334,7 +334,7 @@ pub fn walk(
 
 /// Which item a bay is remembering, one-based and inside what it is drawing —
 /// the solid ring, read where the walk needs somewhere to start.
-fn remembered(view: &View, bay: &str, items: usize) -> usize {
+pub(crate) fn remembered(view: &View, bay: &str, items: usize) -> usize {
     view.focus()
         .address(bay)
         .and_then(|address| address.remembered(&[]))

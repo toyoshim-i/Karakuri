@@ -116,34 +116,8 @@ pub const ANY_BAY: (&str, &str) = ("any bay", karakuri_console::focus::ANY);
 /// The rows are the page's headings byte for byte.
 pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // ------------------------------------------------------------------
-    // The globals: a letter whose operation has no operand for focus to
-    // supply, or whose only operand is the choice the key itself spells.
+    // The globals: navigation only
     // ------------------------------------------------------------------
-    // The room's colours. Nothing in the arrangement moves and no
-    // `Outcome` says so, which is why it is not an operation.
-    (None, "n", &[]),
-    (None, "r", &["Reset the arrangement"]),
-    // `Op::UnfoldAll` — the page carries the region and the everything
-    // under one heading, as `vocabulary.rs` does.
-    (None, "z", &["Bring back what is folded"]),
-    // **The three that need a room**, and they are the keys here that
-    // reach neither the arrangement nor the deck. `b` is a tap and `,`
-    // and `.` are the octave; each performs against the audio session
-    // this program opened, and each says so when there is none rather
-    // than doing nothing (`crate::tapped`, `crate::scaled`).
-    (None, "b", &["Tap the beat"]),
-    (None, ",", &["Halve or double the grid"]),
-    (None, ".", &["Halve or double the grid"]),
-    // **The save, whose operand is the deck selection.**
-    //
-    // **It is the key column and not the panel column that this makes
-    // `has`.** The Library bay draws no *keep* control, so the row's panel
-    // badge stays `plan` — a key is not a control, and a badge that named
-    // one would be a claim about something that is not drawn. **Which is
-    // also why it is still a letter**: ADR-0259 makes this *"an act on a
-    // control the Library bay does not draw yet"*, and a grammar key
-    // cannot be addressed to a control nobody draws.
-    (None, "k", &["Keep what a deck is playing"]),
     // **The two that move the address**, and neither names a row: focus is
     // a pointer this console owns and moving one is not an operation
     // (ADR-0332).
@@ -172,8 +146,21 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // the one route to this row from the keyboard alone, and it is why the
     // letter survived `f` (ADR-0343).
     (Some(ANY), "g", &["Fold a pane away"]),
+    // `Op::UnfoldAll` — the page carries the region and the everything
+    // under one heading, as `vocabulary.rs` does.
+    (Some(ANY), "z", &["Bring back what is folded"]),
     // ------------------------------------------------------------------
     // The Transport's grammar
+    // ------------------------------------------------------------------
+    // **The beat, tapped.**
+    (Some("transport"), "b", &["Tap the beat"]),
+    // **The grid, an octave either way.**
+    (Some("transport"), ",", &["Halve or double the grid"]),
+    (Some("transport"), ".", &["Halve or double the grid"]),
+    // **Reset the arrangement back to default.**
+    (Some("transport"), "r", &["Reset the arrangement"]),
+    // **Room theme cycle.**
+    (Some("transport"), "n", &[]),
     // ------------------------------------------------------------------
     // A headless row, so `0` names the row itself and a digit names one of
     // the controls left to right. Naming one asks for nothing — and a
@@ -312,6 +299,8 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
     // the act of the control the row draws: a parameter with nothing
     // holding it draws no sensitivity row at all.
     (Some("inspector"), "enter", &["Take a parameter back"]),
+    // **Keep what the selected deck is playing.**
+    (Some("inspector"), "k", &["Keep what a deck is playing"]),
     // ------------------------------------------------------------------
     // The Mixer's grammar
     // ------------------------------------------------------------------
@@ -443,10 +432,10 @@ pub const ROWS: &[(Option<&str>, &str, &[&str])] = &[
 
 /// Routes that reach no row in [`ROWS`], recorded in checked evaluation order.
 pub const NO_ROW: &[(Option<&str>, &str)] = &[
-    (None, "n"),
     (None, "esc"),
     (None, "tab"),
     (None, "backspace"),
+    (Some("transport"), "n"),
     (Some("transport"), DIGIT),
     (Some("library"), DIGIT),
     (Some("library"), "arrows"),

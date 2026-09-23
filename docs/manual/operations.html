@@ -116,26 +116,23 @@
       declares no value to return to.
     </p>
     <p>
-      <strong>A letter stays bare only where the operation it names has no
-      operand for focus to supply</strong>, or where its only operand is the
-      choice the key itself spells &mdash; <b>b</b>, <b>, .</b>, <b>r</b> and
-      <b>z</b>. <b>k</b> keeps one for a narrower reason: the act is decided
-      and the library bay draws no <em>keep</em> control for it to be addressed
-      to, so there is nothing yet for the grammar to land on. <b>f</b>, <b>s</b>
-      and <b>u</b> were bare until 2026&#8209;09&#8209;10 and are gone: each
-      took its region from the pointer, which is not a key that reaches an
-      operation from the keyboard alone, and the grammar reaches every row they
-      did. <strong>Two keys are the grammar's and name no row at all</strong>:
-      <b>tab</b> moves focus to the next bay and <b>shift-tab</b> to the one
-      before, and <b>esc</b> goes up one level of the focused bay's address.
-      Neither is an operation, so neither has a row here &mdash; and
-      <b>esc</b> is the one letter the design took back, from <em>Quit</em>, on
-      2026&#8209;09&#8209;09. <strong>An empty key column is a row no grammar
-      reaches</strong>, and the reason is never a letter that ran out: an
-      effect whose parameters have no spelling, an operand that is a name or a
-      path no key press can type, a way in that is a flag before the run or a
-      model's, or a scheduled move, which a real&#8209;time surface does not
-      author.
+      <strong>Global keys are navigation only</strong> &mdash; <b>tab</b>
+      moves focus to the next bay, <b>shift-tab</b> to the one before,
+      <b>esc</b> goes up one level of the focused bay's address, and <b>enter</b>
+      descends symmetrically into remembered items or controls. To prevent
+      accidental operation in live performance, <strong>every operational
+      shortcut is scoped to a specific bay</strong> and active only when that
+      bay has focus &mdash; <b>b</b>, <b>, .</b>, and <b>r</b> in the Transport,
+      <b>k</b> in the Inspector, and <b>m</b>, <b>s</b>, and <b>u</b> in the
+      Mixer. <b>g</b> and <b>z</b> operate in any bay on the enclosing pane or
+      folded regions. Neither navigation key is an operation, so neither has a
+      row here &mdash; and <b>esc</b> is the one letter the design took back,
+      from <em>Quit</em>, on 2026&#8209;09&#8209;09. <strong>An empty key column
+      is a row no grammar reaches</strong>, and the reason is never a letter
+      that ran out: an effect whose parameters have no spelling, an operand that
+      is a name or a path no key press can type, a way in that is a flag before
+      the run or a model's, or a scheduled move, which a real&#8209;time surface
+      does not author.
     </p>
     <p>
       <strong>The MIDI column is the instrument's map</strong>, on the key
@@ -166,7 +163,7 @@
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>tap</b></span>
-          <span class="rt has">key <b>b</b></span>
+          <span class="rt has">key <b>b &middot; in the Transport</b></span>
           <span class="rt has">MIDI <b>note &rarr; tap</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt-none"></span>
@@ -179,7 +176,7 @@
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>&frac12; &times;2</b></span>
-          <span class="rt has">key <b>, .</b></span>
+          <span class="rt has">key <b>, . &middot; in the Transport</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>operate</b></span>
           <span class="rt-none"></span>
@@ -794,7 +791,7 @@
         <span class="op-when">on a worker</span>
         <div class="rts">
           <span class="rt has">panel <b>keep</b></span>
-          <span class="rt has">key <b>k</b></span>
+          <span class="rt has">key <b>k &middot; in the Inspector</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt has">MCP <b>save_set</b></span>
           <span class="rt-none"></span>
@@ -1040,7 +1037,7 @@
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt gap">panel <b>&mdash;</b></span>
-          <span class="rt has">key <b>z</b></span>
+          <span class="rt has">key <b>z &middot; in any bay</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>
@@ -1066,7 +1063,7 @@
         <span class="op-when">immediate</span>
         <div class="rts">
           <span class="rt has">panel <b>transport</b></span>
-          <span class="rt has">key <b>r</b></span>
+          <span class="rt has">key <b>r &middot; in the Transport</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
           <span class="rt-none"></span>

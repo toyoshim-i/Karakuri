@@ -107,9 +107,20 @@ pub(crate) enum KeyAction {
     Focus(fn(&mut KeyCtx) -> bool),
 }
 
+impl std::fmt::Debug for KeyAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KeyAction::Panel(_) => write!(f, "Panel(fn)"),
+            KeyAction::Handled(_) => write!(f, "Handled(fn)"),
+            KeyAction::Focus(_) => write!(f, "Focus(fn)"),
+        }
+    }
+}
+
 /// One row of the window loop's own keyboard, checked against
 /// `docs/manual/operations.html` directly by `key_column`'s tests rather than
 /// through a second list nothing holds against the page.
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct KeyBinding {
     pub(crate) key: BoundKey,
     /// The word this key is bound under, both in `key_column::KEYS`'s legend and in
@@ -119,7 +130,7 @@ pub(crate) struct KeyBinding {
     /// Read only by `key_column`'s tests — dispatch itself never asks this table
     /// what a key is *called*, only which one `matches`.
     #[cfg_attr(not(test), allow(dead_code))]
-    legend: &'static str,
+    pub(crate) legend: &'static str,
     /// The bay a badge naming this key is addressed to — `Some(focus::ANY)` for the
     /// one key of this table that is not global, `None` for every other one. Read
     /// only by `key_column`'s tests, for `legend`'s reason.
@@ -130,8 +141,11 @@ pub(crate) struct KeyBinding {
     /// a name, the room's colours. Read only by `key_column`'s tests, for
     /// `legend`'s reason.
     #[cfg_attr(not(test), allow(dead_code))]
-    title: Option<&'static str>,
+    pub(crate) title: Option<&'static str>,
     pub(crate) action: KeyAction,
+    /// Whether this bay-scoped binding has been explicitly promoted by the user
+    /// to be active globally across all bays (with collision warnings).
+    pub(crate) globalize: bool,
 }
 
 /// Every key `window_event` binds outside the grammar guard.
@@ -142,9 +156,11 @@ pub(crate) struct KeyBinding {
 /// What each one reaches on `docs/manual/operations.html` is
 /// [`KeyBinding::title`], checked in `key_column` rather than assumed.
 mod actions;
+pub(crate) mod custom;
 #[cfg(test)]
 pub(crate) mod key_column;
 mod table;
 
 pub(crate) use actions::*;
+pub(crate) use custom::*;
 pub(crate) use table::*;
