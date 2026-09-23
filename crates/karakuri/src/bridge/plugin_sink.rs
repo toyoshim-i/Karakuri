@@ -12,6 +12,7 @@ mod macos {
     use std::ffi::c_void;
 
     use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
     use core_foundation::dictionary::CFDictionary;
     use core_foundation::number::CFNumber;
     use core_foundation::string::CFString;
@@ -30,7 +31,9 @@ mod macos {
             properties: core_foundation::dictionary::CFDictionaryRef,
         ) -> *mut IOSurfaceRef;
         fn IOSurfaceGetID(buffer: *const IOSurfaceRef) -> u32;
-        fn CFRelease(cf: *const c_void);
+        #[allow(dead_code)]
+        pub(crate) fn IOSurfaceLookup(csid: u32) -> *mut IOSurfaceRef;
+        pub(crate) fn CFRelease(cf: *const c_void);
     }
 
     pub struct MacOsSurface {
@@ -79,6 +82,7 @@ mod macos {
                 let k_bytes_per_row = CFString::new("IOSurfaceBytesPerRow");
                 let k_alloc_size = CFString::new("IOSurfaceAllocSize");
                 let k_pixel_format = CFString::new("IOSurfacePixelFormat");
+                let k_is_global = CFString::new("IOSurfaceIsGlobal");
 
                 let v_width = CFNumber::from(width as i32);
                 let v_height = CFNumber::from(height as i32);
@@ -89,6 +93,7 @@ mod macos {
                 let v_alloc_size = CFNumber::from(alloc_size as i32);
                 // 'BGRA' = 0x42475241
                 let v_pixel_format = CFNumber::from(0x42475241i32);
+                let v_is_global = CFBoolean::true_value();
 
                 let pairs = [
                     (k_width.as_CFType(), v_width.as_CFType()),
@@ -97,6 +102,7 @@ mod macos {
                     (k_bytes_per_row.as_CFType(), v_bytes_per_row.as_CFType()),
                     (k_alloc_size.as_CFType(), v_alloc_size.as_CFType()),
                     (k_pixel_format.as_CFType(), v_pixel_format.as_CFType()),
+                    (k_is_global.as_CFType(), v_is_global.as_CFType()),
                 ];
                 let dict = CFDictionary::from_CFType_pairs(&pairs);
                 let surface_ref = IOSurfaceCreate(dict.as_concrete_TypeRef());
@@ -309,6 +315,16 @@ mod tests {
             assert!(surface.surface_id > 0, "IOSurfaceID must be non-zero");
             assert_eq!(surface.width, 640);
             assert_eq!(surface.height, 480);
+
+            // Verify lookup by ID succeeds (cross-process lookup simulation)
+            unsafe {
+                let looked_up = macos::IOSurfaceLookup(surface.surface_id);
+                assert!(
+                    !looked_up.is_null(),
+                    "IOSurfaceLookup must succeed for globally shared IOSurface"
+                );
+                macos::CFRelease(looked_up as *const std::ffi::c_void);
+            }
         }
 
         #[test]
