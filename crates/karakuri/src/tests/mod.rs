@@ -36,6 +36,7 @@ pub(crate) use winit::event::WindowEvent;
 mod focus_keys;
 mod gpu;
 mod inspector_mcp;
+mod key_learn;
 mod mixer_solo_mute;
 mod outputs_row;
 mod press_handler;

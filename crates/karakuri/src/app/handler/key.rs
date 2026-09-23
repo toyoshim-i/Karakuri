@@ -45,6 +45,65 @@ impl App {
             if key.state != ElementState::Pressed {
                 return;
             }
+
+            // Interactive Tooltip Key Learn Mode: capture next key to bind to the active control.
+            if let Some(on) = self.hover.learning_key() {
+                if key.logical_key == Key::Named(NamedKey::Escape) {
+                    self.hover.set_learning_key(None);
+                    App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                    return;
+                }
+                let key_str = match &key.logical_key {
+                    Key::Character(s) => Some(s.as_str()),
+                    Key::Named(NamedKey::Space) => Some("space"),
+                    _ => None,
+                };
+                if let Some(key_str) = key_str {
+                    let desc = karakuri_console::hover::descriptor_at(on);
+                    let ctrl_id = karakuri_console::hover::control_id_at(on);
+                    let action_opt = ctrl_id.and_then(|id| {
+                        crate::keymap::ActionId::for_control(
+                            id,
+                            desc.and_then(|d| d.operation_title),
+                        )
+                    });
+                    if let Some(action_id) = action_opt {
+                        let bay = match desc.map(|d| d.eyebrow) {
+                            Some("TRANSPORT") => Some("transport"),
+                            Some("MIXER") => Some("mixer"),
+                            Some("INSPECTOR") => Some("inspector"),
+                            Some("LIBRARY") => Some("library"),
+                            Some("STAGING") => Some("staging"),
+                            _ => None,
+                        };
+                        let bay = if action_id == crate::keymap::ActionId::FoldEnclosing
+                            || action_id == crate::keymap::ActionId::UnfoldAll
+                        {
+                            Some("any")
+                        } else {
+                            bay
+                        };
+                        let globalize = self.hover.key_globalize();
+                        match self.keymap.bind_action(
+                            &self.store,
+                            action_id,
+                            bay,
+                            key_str,
+                            globalize,
+                        ) {
+                            Ok(notes) => {
+                                for note in notes {
+                                    eprintln!("keymap: {note}");
+                                }
+                            }
+                            Err(why) => eprintln!("keymap: failed to bind: {why}"),
+                        }
+                    }
+                }
+                self.hover.set_learning_key(None);
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                return;
+            }
             // **The one flow on this panel that asks for letters takes the
             // keyboard whole while it is asking.** Every key here is a
             // character, a rub-out, the commit or the abandonment, and none

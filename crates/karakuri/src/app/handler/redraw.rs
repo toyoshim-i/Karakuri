@@ -563,6 +563,13 @@ impl App {
             surface.bound(&target)
         });
         self.hover.assign(assignment);
+        let custom_hk = self.hover.resting().and_then(|(_, on)| {
+            karakuri_console::hover::descriptor_at(on)
+                .and_then(|d| d.operation_title)
+                .and_then(|t| self.keymap.find_binding_by_title(t))
+                .map(|b| b.legend.to_string())
+        });
+        self.hover.set_custom_hotkey(custom_hk);
 
         // -- the egui pass -------------------------------------
         let started = Instant::now();

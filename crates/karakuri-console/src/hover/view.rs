@@ -68,10 +68,23 @@ pub fn build_tooltip_job(
     assigned: Option<&str>,
     pal: &Palette,
 ) -> LayoutJob {
+    build_tooltip_card_job(on, words, assigned, None, false, pal)
+}
+
+/// Constructs a structured HUD card layout job with dynamic hotkey and key learn state.
+pub fn build_tooltip_card_job(
+    on: usize,
+    words: &str,
+    assigned: Option<&str>,
+    custom_hotkey: Option<&str>,
+    is_learning: bool,
+    pal: &Palette,
+) -> LayoutJob {
     let mut job = LayoutJob::default();
     let desc = descriptor_at(on);
     let tipped = flat().nth(on);
     let hotkey = hotkey_for_tip(on);
+    let active_hotkey = custom_hotkey.or(hotkey);
 
     // 1. Eyebrow: Subsystem domain tag (e.g. "TRANSPORT", "MIXER")
     if let Some(d) = desc {
@@ -113,13 +126,29 @@ pub fn build_tooltip_job(
         },
     );
 
-    if let Some(hk) = hotkey {
+    if let Some(hk) = active_hotkey {
+        let badge = if is_learning {
+            "[Press key...]".to_string()
+        } else {
+            format_hotkey_badge(hk)
+        };
         job.append(
-            &format!("  {}", format_hotkey_badge(hk)),
+            &format!("  {badge}"),
             0.0,
             TextFormat {
                 font_id: FontId::new(TIP_SIZE, FontFamily::Monospace),
-                color: pal.lav,
+                color: if is_learning { pal.sun } else { pal.lav },
+                line_height: Some((TIP_SIZE + 0.5) * 1.3),
+                ..Default::default()
+            },
+        );
+    } else if is_learning {
+        job.append(
+            "  [Press key...]",
+            0.0,
+            TextFormat {
+                font_id: FontId::new(TIP_SIZE, FontFamily::Monospace),
+                color: pal.sun,
                 line_height: Some((TIP_SIZE + 0.5) * 1.3),
                 ..Default::default()
             },
@@ -176,6 +205,41 @@ pub fn build_tooltip_job(
         if let Some(act) = action {
             job.append(
                 &format!("Action: {act}\n"),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
+                    color: pal.faint,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        }
+
+        if is_learning {
+            job.append(
+                "● Key: [press key to bind...] (Esc)\n",
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
+                    color: pal.sun,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        } else if let Some(hk) = active_hotkey {
+            job.append(
+                &format!("● Key: [{hk}] (click to rebind)\n"),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
+                    color: pal.lav,
+                    line_height: Some((TIP_SIZE - 1.0) * 1.4),
+                    ..Default::default()
+                },
+            );
+        } else if action.is_some() {
+            job.append(
+                "○ Key: unassigned (click to bind)\n",
                 0.0,
                 TextFormat {
                     font_id: FontId::new(TIP_SIZE - 1.0, FontFamily::Proportional),
