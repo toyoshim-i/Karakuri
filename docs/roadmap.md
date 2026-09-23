@@ -65,7 +65,6 @@ The remaining open work is structured into two sequential milestones: anchoring 
 │ - Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation (Done)│
 │ - External Output Plugin Sinks (Syphon completed on macOS, Spout/NDI)   │
 │ - Live MIDI Surface Mapping & Profile Persistence                       │
-│ - Bar- and Beat-Quantized Transition Scheduling                         │
 │ - Wipe Mask Geometry & Edge Softness Control                            │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
@@ -90,8 +89,8 @@ The remaining open work is structured into two sequential milestones: anchoring 
    - Low-latency real-time FFT processing with multi-band energy extraction (8 log-spaced semantic bands: `sub`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `air`) and transient `onset` detection feeding `.kir` shader parameter bindings.
 2. **Output Plugin Sinks** *(In Progress — Syphon completed on macOS)*:
    - Syphon on macOS implemented via standalone `karakuri-syphon` plugin using zero-copy `IOSurfaceID` IPC protocol, with global surface registration, client heartbeat handling, and vertical flip blit pass verified in external clients (e.g. OBS) (M8-2 completed for macOS; Spout/NDI pending beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md))).
-3. **Quantized Transition Engine**:
-   - Implement precise bar- and phrase-quantized execution for wipes, fades, and deck swaps, ensuring visual changes lock to musical drops and phrase boundaries.
+3. *(Cancelled)* **Quantized Transition Engine**:
+   - Cancelled for MVP: Live visual performance prioritizes immediate, expressive manual control via MIDI faders and real-time audio-reactive modulation over pre-scheduled, rigid bar/phrase-quantized transition queues. Direct fader sweeps, immediate wipe triggers, and live audio spectral onset modulation provide musical alignment without artificial quantization latency.
 4. **Live MIDI Surface Mapping & Profile Management**:
    - Provide an in-app interface to load, edit, and persist MIDI controller maps (`.map` files) dynamically during performance.
    - Support 14-bit high-resolution MIDI CC mappings for ultra-smooth parameter sweeps.
@@ -100,7 +99,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
 6. *(Cancelled)* **Ableton Link Out-of-Process Synchronization**:
    - Cancelled for MVP: Live DJ testing confirmed Pioneer rekordbox does not publish deck BPM over Ableton Link (link fader is independent and does not follow the playing track; see [manual.md](manual.md#with-rekordbox-this-is-much-less-useful-than-it-sounds-and-the-reason-is-rekordboxs)), making Link ineffective for unattended DJ tempo tracking without manual intervention. Real-time audio spectral/beat tracking is already operational and serves as the primary live tempo follower.
 
-**Exit Condition**: The console responds to hot-plugged MIDI hardware, modulates visuals via live audio spectral bus, outputs video to external sinks (Syphon/Spout), and triggers bar-quantized transitions synchronized to incoming audio beats.
+**Exit Condition**: The console responds to hot-plugged MIDI hardware, modulates visuals via live audio spectral bus, outputs video to external sinks (Syphon/Spout), and executes real-time transitions and wipes.
 
 ---
 
