@@ -88,8 +88,8 @@ The remaining open work is structured into two sequential milestones: anchoring 
 #### Key Deliverables:
 1. **Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation** *(Completed — M8-4)*:
    - Low-latency real-time FFT processing with multi-band energy extraction (8 log-spaced semantic bands: `sub`, `bass`, `low_mid`, `mid`, `high_mid`, `presence`, `brilliance`, `air`) and transient `onset` detection feeding `.kir` shader parameter bindings.
-2. **Output Plugin Sinks**:
-   - Syphon on macOS implemented via standalone `karakuri-syphon` plugin using zero-copy `IOSurfaceID` IPC protocol (M8-2 completed for macOS; Spout/NDI pending beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md))).
+2. **Output Plugin Sinks** *(In Progress — Syphon completed on macOS)*:
+   - Syphon on macOS implemented via standalone `karakuri-syphon` plugin using zero-copy `IOSurfaceID` IPC protocol, with global surface registration, client heartbeat handling, and vertical flip blit pass verified in external clients (e.g. OBS) (M8-2 completed for macOS; Spout/NDI pending beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md))).
 3. **Quantized Transition Engine**:
    - Implement precise bar- and phrase-quantized execution for wipes, fades, and deck swaps, ensuring visual changes lock to musical drops and phrase boundaries.
 4. **Live MIDI Surface Mapping & Profile Management**:
@@ -115,10 +115,13 @@ The remaining open work is structured into two sequential milestones: anchoring 
 2. **Library Search & Caching**:
    - Interactive free-text search filtering across set names, procedure types, and metadata tags.
    - Cached off-screen thumbnail previews for rapid visual identification in the library browser.
-3. **Comprehensive Live Rehearsal Stress Test**:
+3. **Session Last-State Recall & Slot Startup Initialization**:
+   - Persist and recall each slot's last-played set/procedure across sessions so the performer re-opens into their exact live setup.
+   - First-launch default starts with clean state, loading demo visuals per slot through the standard Load path, with Decks B–D muted under the unified Solo/Mute mixer architecture.
+4. **Comprehensive Live Rehearsal Stress Test**:
    - 4-hour continuous burn-in test running multi-slot decks, active audio input, periodic set hotswaps, and concurrent MCP generation.
    - Memory leak audit (`#[global_allocator]` allocation tracking) confirming zero unbounded heap growth.
-4. **Documentation Audit & Release Distribution**:
+5. **Documentation Audit & Release Distribution**:
    - Complete synchronization of `docs/manual/` with all implemented operations.
    - Production build packaging for macOS and Linux.
 
@@ -127,6 +130,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
 - A value ridden on a non-head slot before the press is not in the session head (needs a per-slot parameter table `karakuri-cli` does not hold); the GUI records the canvas at the press and never again.
 - The build worker's two rungs are taken on a host clock while the render thread draws, so an estimate can refuse under load and the slot falls to its measurement; a param write does not invalidate the estimate.
 - A channel fader does not say who is holding it (rule 02); lanes cannot be reordered; `Hover::owed` is asked before `paint` on the frame a card comes down.
+- Mixer channel control unified under Solo/Mute: prototype-era `Residency::Allocated` startup hack retired; Decks B–D default to muted on first launch with clean load-path participation.
 - Workspace clippy warnings (`doc_lazy_continuation` etc.) resolved; clean build across all targets with `-D warnings`.
 
 **Exit Condition**: Clean 4-hour rehearsal without crashes, memory leaks, or unhandled errors; 100% operation coverage across all implemented surfaces; clean workspace lint and test suite.
