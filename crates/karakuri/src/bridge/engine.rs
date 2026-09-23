@@ -315,42 +315,17 @@ impl Engine {
             aimed.push(aim);
         }
         let mut deck = Deck::new(&gpu.device, swaps, CANVAS.0, CANVAS.1);
-        // **Every slot but deck A rests at `Allocated`, which is what a
-        // channel nobody has asked anything of is.**
+        // **Every slot but deck A opens muted.**
         //
         // `Deck::new` brings every slot up Live, and that is right for a deck
-        // built to *play* what is in it — a deck of one is then a bare Set,
-        // bit for bit (ADR-0038). This deck is built **full** rather than
-        // built to play four, so leaving them Live would put three
-        // simulations nobody asked for on the render thread and three layers
-        // nobody asked for into the fold: the reading [`Costs::say`] prints
-        // would stop being one Set a frame, and every slot comes up under
-        // `Blend::Add` at unity, so what the Program bay drew would be four
-        // simulations summed — the same material at four times its exposure,
-        // which is a mixer set wrong rather than a mixer.
-        //
-        // `Residency::Allocated` is the state the engine already has for this,
-        // rather than one invented here — *off air, asked of nothing* — and
-        // `deck::Frame::render` reads the effective residency into the
-        // composite's `live` flag, so an allocated slot contributes nothing to
-        // the mix. It is drawn (ADR-0258) and it steps (ADR-0269), so what it
-        // costs is its buffers, its L1 and its L4, and what it does not cost is
-        // a term in the fold. The strip reads ALLOC and the cell reads material
-        // running. That is
-        // [P-0085](../../../docs/principles/0085-take-the-mechanism-that-exists-and-pay-the-bill-now.md):
-        // *a slot with nothing in it* is a residency this deck already has a
-        // word for.
-        //
-        // **It is the request that is written**, which is the operator's half
-        // and the same half [`Engine::ask_to_prime`] writes — see
-        // `Deck::set_residency`. So an operator brings a channel up by cycling
-        // its tally chip or by loading material into it, and nothing has to
-        // undo a decision this constructor made. The governor is told nothing
-        // by it either: a slot whose request is Allocated is `Reason::OffAir`,
-        // which is *the governor was not asked about this slot*.
+        // built to play what is in it. This deck is built full rather than
+        // built to play one, so leaving all four unmuted would put four
+        // simulations summed under `Blend::Add` at unity at startup.
+        // Slots other than `ON_AIR` start muted, so only deck A is on air in the
+        // composite mix initially, while the remaining slots can be brought in by unmuting.
         for slot in 0..SLOTS {
             if slot != ON_AIR {
-                deck.set_residency(EngineSlot(slot as u8), Residency::Allocated);
+                deck.set_mute(EngineSlot(slot as u8), true);
             }
         }
         // **The meters are on, and that is a decision rather than a default.**

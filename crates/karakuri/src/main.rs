@@ -55,7 +55,7 @@ pub(crate) const SEED_SALT: u32 = 7;
 
 /// Maximum slot capacity for the deck, matching [`MAX_SLOTS`] (ADR-0178).
 ///
-/// The deck opens with slot 0 Live and remaining slots idling at [`Residency::Allocated`].
+/// The deck opens with slot 0 on air and remaining slots muted.
 pub(crate) const SLOTS: usize = MAX_SLOTS;
 
 /// Slot index opened on air at launch.
