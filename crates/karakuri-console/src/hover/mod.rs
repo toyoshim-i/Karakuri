@@ -149,11 +149,26 @@ pub struct Hover {
     /// to and its assignment has not moved. A learn changes the last line of the
     /// tip that is on screen, and a cache keyed on the control alone would go on
     /// drawing the old one.
-    galley: Option<(usize, Option<String>, Room, Arc<Galley>)>,
+    galley: Option<CachedTipGalley>,
     /// Which knob the control under the pointer is on, as the host derived it from
     /// the live map — see [`Hover::assign`].
     assigned: Option<String>,
+    tip_box: Option<egui::Rect>,
+    key_badge_rect: Option<egui::Rect>,
+    key_global_rect: Option<egui::Rect>,
+    learning_key: Option<usize>,
+    key_globalize: bool,
+    custom_hotkey: Option<String>,
 }
+
+type CachedTipGalley = (
+    usize,
+    Option<String>,
+    Option<String>,
+    bool,
+    Room,
+    Arc<Galley>,
+);
 
 /// Where the pointer came to rest, when, and on what.
 #[derive(Debug, Clone, Copy)]
@@ -179,6 +194,12 @@ impl Hover {
             up: false,
             galley: None,
             assigned: None,
+            tip_box: None,
+            key_badge_rect: None,
+            key_global_rect: None,
+            learning_key: None,
+            key_globalize: false,
+            custom_hotkey: None,
         }
     }
 
@@ -198,6 +219,71 @@ impl Hover {
     /// timer in it.
     pub fn resting(&self) -> Option<(Point, usize)> {
         self.resting.map(|rest| (rest.at, rest.on))
+    }
+
+    /// Whether the hover layer is currently in Key Learn mode for a control.
+    pub fn learning_key(&self) -> Option<usize> {
+        self.learning_key
+    }
+
+    /// Sets or clears the active Key Learn mode control.
+    pub fn set_learning_key(&mut self, on: Option<usize>) {
+        self.learning_key = on;
+        self.galley = None;
+    }
+
+    /// Toggles the globalize flag for key learn.
+    pub fn toggle_globalize(&mut self) {
+        self.key_globalize = !self.key_globalize;
+        self.galley = None;
+    }
+
+    /// Whether key learn will promote binding to global.
+    pub fn key_globalize(&self) -> bool {
+        self.key_globalize
+    }
+
+    /// Explicitly sets the globalize flag for key learn.
+    pub fn set_key_globalize(&mut self, glob: bool) {
+        self.key_globalize = glob;
+        self.galley = None;
+    }
+
+    /// Sets the custom hotkey for the active control under hover.
+    pub fn set_custom_hotkey(&mut self, hk: Option<String>) {
+        if self.custom_hotkey != hk {
+            self.custom_hotkey = hk;
+            self.galley = None;
+        }
+    }
+
+    /// Whether `p` hits the active tooltip card bounding box.
+    pub fn hit_tip_box(&self, p: Point) -> bool {
+        self.up
+            && self
+                .tip_box
+                .is_some_and(|b| b.contains(egui::pos2(p.x, p.y)))
+    }
+
+    /// Whether `p` hits the key learning badge in the active tooltip, returning the control index if so.
+    pub fn hit_key_badge(&self, p: Point) -> Option<usize> {
+        if self.up
+            && self
+                .key_badge_rect
+                .is_some_and(|b| b.contains(egui::pos2(p.x, p.y)))
+        {
+            self.resting.map(|r| r.on).or(self.learning_key)
+        } else {
+            None
+        }
+    }
+
+    /// Whether `p` hits the globalize checkbox toggle in the active tooltip.
+    pub fn hit_global_toggle(&self, p: Point) -> bool {
+        self.up
+            && self
+                .key_global_rect
+                .is_some_and(|b| b.contains(egui::pos2(p.x, p.y)))
     }
 
     /// Which knob the control under the pointer is on, for the tip's last line —
@@ -270,6 +356,13 @@ impl Hover {
         if ctx.cumulative_pass_nr() == 0 {
             return Tip::Still;
         }
+        let pos = egui::pos2(p.x, p.y);
+        if self.up && self.tip_box.is_some_and(|b| b.contains(pos)) {
+            return Tip::Still;
+        }
+        if self.learning_key.is_some() {
+            return Tip::Still;
+        }
         let on = match claim == Claim::Panel && !panel.dragging() {
             true => resolve(panel, ctx, view, p),
             false => None,
@@ -294,6 +387,9 @@ impl Hover {
                     false => Tip::Still,
                 };
                 self.up = false;
+                self.tip_box = None;
+                self.key_badge_rect = None;
+                self.key_global_rect = None;
                 self.resting = on.map(|on| Rest {
                     at: p,
                     since: now,
@@ -307,11 +403,17 @@ impl Hover {
     /// The pointer left the window, which is not a move to anywhere: any tip goes
     /// and no dwell is running.
     pub fn left(&mut self) -> Tip {
+        if self.learning_key.is_some() {
+            return Tip::Still;
+        }
         let owed = match self.up {
             true => Tip::Gone,
             false => Tip::Still,
         };
         self.up = false;
+        self.tip_box = None;
+        self.key_badge_rect = None;
+        self.key_global_rect = None;
         self.resting = None;
         owed
     }
@@ -406,28 +508,49 @@ impl Hover {
             return;
         };
         let pal = view.room.palette();
+        let is_learning = self.learning_key == Some(rest.on);
+        let custom_hk = self.custom_hotkey.as_deref();
         let galley = match &self.galley {
-            Some((on, was, room, galley))
+            Some((on, was, was_hk, was_learn, room, galley))
                 if *on == rest.on
                     && was.as_deref() == self.assigned.as_deref()
+                    && was_hk.as_deref() == custom_hk
+                    && *was_learn == is_learning
                     && *room == view.room =>
             {
                 galley.clone()
             }
             _ => {
-                let job = build_tooltip_job(rest.on, words, self.assigned.as_deref(), &pal);
+                let job = build_tooltip_card_job(
+                    rest.on,
+                    words,
+                    self.assigned.as_deref(),
+                    custom_hk,
+                    is_learning,
+                    &pal,
+                );
                 let galley = ui.painter().layout_job(job);
-                self.galley = Some((rest.on, self.assigned.clone(), view.room, galley.clone()));
+                self.galley = Some((
+                    rest.on,
+                    self.assigned.clone(),
+                    self.custom_hotkey.clone(),
+                    is_learning,
+                    view.room,
+                    galley.clone(),
+                ));
                 galley
             }
         };
         self.up = true;
 
+        let key_pill_h = 20.0;
         let size = egui::vec2(
             galley.size().x.max(TIP_MIN_W - TIP_PAD_X * 2.0) + TIP_PAD_X * 2.0,
-            galley.size().y + TIP_PAD_Y * 2.0,
+            galley.size().y + TIP_PAD_Y * 2.0 + key_pill_h + 6.0,
         );
         let box_ = placed(to_egui(panel.layout().viewport()), rest.at, size);
+        self.tip_box = Some(box_);
+
         let painter = ui.painter();
         let radius = CornerRadius::same(TIP_RADIUS as u8);
         painter.add(TIP_SHADOW.as_shape(box_, radius));
@@ -442,6 +565,82 @@ impl Hover {
             box_.min + egui::vec2(TIP_PAD_X, TIP_PAD_Y),
             galley,
             pal.text,
+        );
+
+        // Draw interactive key learning / globalize bar at bottom
+        let pill_y = box_.max.y - TIP_PAD_Y - key_pill_h;
+        let pill_rect = egui::Rect::from_min_max(
+            egui::pos2(box_.min.x + TIP_PAD_X, pill_y),
+            egui::pos2(box_.max.x - TIP_PAD_X, pill_y + key_pill_h),
+        );
+        let global_w = 68.0;
+        let badge_rect = egui::Rect::from_min_max(
+            pill_rect.min,
+            egui::pos2(pill_rect.max.x - global_w, pill_rect.max.y),
+        );
+        let global_rect = egui::Rect::from_min_max(
+            egui::pos2(pill_rect.max.x - global_w + 4.0, pill_rect.min.y),
+            pill_rect.max,
+        );
+        self.key_badge_rect = Some(badge_rect);
+        self.key_global_rect = Some(global_rect);
+
+        // Render badge button
+        let pill_radius = CornerRadius::same(4);
+        let badge_bg = if is_learning { pal.well } else { pal.ground };
+        painter.rect_filled(badge_rect, pill_radius, badge_bg);
+        painter.rect_stroke(
+            badge_rect,
+            pill_radius,
+            Stroke::new(HAIRLINE, if is_learning { pal.sun } else { pal.line }),
+            StrokeKind::Inside,
+        );
+
+        let badge_text = if is_learning {
+            "● Press key (Esc)".to_string()
+        } else if let Some(hk) = custom_hk.or_else(|| hotkey_for_tip(rest.on)) {
+            format!("Key: [{hk}] ✎")
+        } else {
+            "Key: none +".to_string()
+        };
+        painter.text(
+            badge_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            badge_text,
+            egui::FontId::new(TIP_SIZE - 1.5, egui::FontFamily::Proportional),
+            if is_learning { pal.sun } else { pal.text },
+        );
+
+        // Render globalize toggle button
+        painter.rect_filled(global_rect, pill_radius, pal.ground);
+        painter.rect_stroke(
+            global_rect,
+            pill_radius,
+            Stroke::new(
+                HAIRLINE,
+                if self.key_globalize {
+                    pal.mint
+                } else {
+                    pal.line
+                },
+            ),
+            StrokeKind::Inside,
+        );
+        let glob_text = if self.key_globalize {
+            "[✓] Global"
+        } else {
+            "[ ] Global"
+        };
+        painter.text(
+            global_rect.center(),
+            egui::Align2::CENTER_CENTER,
+            glob_text,
+            egui::FontId::new(TIP_SIZE - 2.0, egui::FontFamily::Proportional),
+            if self.key_globalize {
+                pal.mint
+            } else {
+                pal.dim
+            },
         );
     }
 }

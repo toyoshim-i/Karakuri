@@ -193,6 +193,33 @@ impl App {
             ElementState::Pressed => Pointer::Down,
             ElementState::Released => Pointer::Up,
         };
+        if state == ElementState::Pressed {
+            let cursor = self.readout.panel.cursor();
+            if self.hover.hit_global_toggle(cursor) {
+                self.hover.toggle_globalize();
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                return;
+            }
+            if let Some(on) = self.hover.hit_key_badge(cursor) {
+                let next = if self.hover.learning_key() == Some(on) {
+                    None
+                } else {
+                    let is_glob = karakuri_console::hover::descriptor_at(on)
+                        .and_then(|d| d.operation_title)
+                        .and_then(|t| self.keymap.find_binding_by_title(t))
+                        .map(|b| b.globalize)
+                        .unwrap_or(false);
+                    self.hover.set_key_globalize(is_glob);
+                    Some(on)
+                };
+                self.hover.set_learning_key(next);
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, Repaint::Now);
+                return;
+            }
+            if self.hover.hit_tip_box(cursor) {
+                return;
+            }
+        }
         let prev_focus = self
             .readout
             .view

@@ -40,6 +40,49 @@ impl ActionId {
         }
     }
 
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            ActionId::TapBeat => "tap_beat",
+            ActionId::ScaleGridHalve => "scale_grid_halve",
+            ActionId::ScaleGridDouble => "scale_grid_double",
+            ActionId::Reset => "reset",
+            ActionId::Room => "room",
+            ActionId::FoldEnclosing => "fold_enclosing",
+            ActionId::UnfoldAll => "unfold_all",
+            ActionId::Save => "save",
+            ActionId::ToggleMute => "toggle_mute",
+            ActionId::ToggleSolo => "toggle_solo",
+            ActionId::ClearSolo => "clear_solo",
+        }
+    }
+
+    pub(crate) fn for_control(
+        id: karakuri_console::control::ControlId,
+        title: Option<&str>,
+    ) -> Option<Self> {
+        if let Some(t) = title {
+            match t {
+                "Tap the beat" => return Some(ActionId::TapBeat),
+                "Reset the arrangement" => return Some(ActionId::Reset),
+                "Keep what a deck is playing" => return Some(ActionId::Save),
+                "Fold a pane away" => return Some(ActionId::FoldEnclosing),
+                "Bring back what is folded" => return Some(ActionId::UnfoldAll),
+                "Mute a deck" => return Some(ActionId::ToggleMute),
+                "Solo a deck" => return Some(ActionId::ToggleSolo),
+                "Clear solo" => return Some(ActionId::ClearSolo),
+                "Halve or double the grid" => return Some(ActionId::ScaleGridHalve),
+                _ => {}
+            }
+        }
+        match id {
+            karakuri_console::control::ControlId::Tracker => Some(ActionId::TapBeat),
+            karakuri_console::control::ControlId::Arrangement => Some(ActionId::Reset),
+            karakuri_console::control::ControlId::InspectorPaneKeep => Some(ActionId::Save),
+            karakuri_console::control::ControlId::ProgramSolo => Some(ActionId::ToggleSolo),
+            _ => None,
+        }
+    }
+
     pub(crate) fn default_binding(self) -> KeyBinding {
         match self {
             ActionId::TapBeat => KeyBinding {
@@ -335,6 +378,96 @@ impl Keymap {
             .find(|b| b.key.matches(key) && b.bay.is_none())
     }
 
+    pub(crate) fn find_binding_by_title(&self, title: &str) -> Option<&KeyBinding> {
+        self.bindings.iter().find(|b| b.title == Some(title))
+    }
+
+    /// Dynamically binds a canonical action to a key and persists it to `<store>/keymaps/default.keymap`.
+    pub(crate) fn bind_action(
+        &mut self,
+        store: &Path,
+        action_id: ActionId,
+        bay: Option<&str>,
+        key_str: &str,
+        globalize: bool,
+    ) -> Result<Vec<String>, String> {
+        if key_str == "tab" || key_str == "esc" || key_str == "escape" {
+            return Err(format!(
+                "navigation grammar key '{key_str}' is fixed and cannot be remapped"
+            ));
+        }
+
+        let mut template = action_id.default_binding();
+        if let Some(b) = bay {
+            if b == "any" {
+                template.bay = Some(ANY);
+            } else {
+                template.bay = Some(Box::leak(b.to_string().into_boxed_str()));
+            }
+        }
+        template.legend = Box::leak(key_str.to_string().into_boxed_str());
+        template.key = BoundKey::Character(template.legend);
+        template.globalize = globalize;
+
+        // Replace existing binding for action or add new
+        if let Some(pos) = self
+            .bindings
+            .iter()
+            .position(|b| b.title == template.title && b.title.is_some())
+        {
+            self.bindings[pos] = template;
+        } else {
+            self.bindings.push(template);
+        }
+
+        let collisions = self.detect_collisions();
+
+        // Persist to store: <store>/keymaps/default.keymap
+        let keymaps_dir = store.join("keymaps");
+        if let Err(e) = fs::create_dir_all(&keymaps_dir) {
+            return Err(format!("failed to create keymaps directory: {e}"));
+        }
+        let file_path = keymaps_dir.join("default.keymap");
+        let existing = fs::read_to_string(&file_path).unwrap_or_default();
+
+        let action_name = action_id.name();
+        let mut lines: Vec<String> = existing
+            .lines()
+            .filter(|l| {
+                let trimmed = l.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    return true;
+                }
+                if let Some((_, rhs)) = trimmed.split_once("->") {
+                    if rhs.trim() == action_name {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|l| l.to_string())
+            .collect();
+
+        let bay_part = match bay {
+            Some(b) => format!("{b}: "),
+            None => String::new(),
+        };
+        let glob_part = if globalize { " global" } else { "" };
+        let new_line = format!("{bay_part}{key_str}{glob_part} -> {action_name}");
+        lines.push(new_line);
+
+        let mut content = lines.join("\n");
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+
+        if let Err(e) = fs::write(&file_path, content) {
+            return Err(format!("failed to write {}: {e}", file_path.display()));
+        }
+
+        Ok(collisions)
+    }
+
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn bindings(&self) -> &[KeyBinding] {
         &self.bindings
@@ -404,5 +537,32 @@ mod tests {
             "expected navigation refusal, got: {:?}",
             notes
         );
+    }
+
+    #[test]
+    fn bind_action_persists_and_updates_runtime_binding() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("karakuri_test_keymap_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let mut keymap = Keymap::default_keymap();
+        let res = keymap.bind_action(&temp_dir, ActionId::TapBeat, Some("transport"), "x", true);
+        assert!(res.is_ok());
+
+        // Check runtime binding updated
+        let key_x = Key::Character("x");
+        let b = keymap.find_binding(&key_x, Some("transport"));
+        assert!(b.is_some());
+        assert_eq!(b.unwrap().legend, "x");
+        assert!(b.unwrap().globalize);
+
+        // Check file was persisted
+        let file_path = temp_dir.join("keymaps/default.keymap");
+        assert!(file_path.is_file());
+        let content = std::fs::read_to_string(&file_path).unwrap();
+        assert!(content.contains("transport: x global -> tap_beat"));
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
