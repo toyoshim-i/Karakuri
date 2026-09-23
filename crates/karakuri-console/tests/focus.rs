@@ -533,3 +533,41 @@ fn the_arrangement_this_file_walks_has_the_bays_it_names() {
         );
     }
 }
+
+#[test]
+fn the_ladder_descends_with_enter_and_ascends_with_esc() {
+    let mut view = View::new(Room::Day);
+    four_strips(&mut view);
+    let mut p = panel();
+    p.solve();
+
+    // Focus starts on transport or we can tab to mixer
+    while view.focused(&p).map(|b| b.name) != Some("mixer") {
+        view.tab(&p, 1);
+    }
+    assert_eq!(view.focused(&p).map(|b| b.name), Some("mixer"));
+    assert!(view
+        .focus()
+        .address("mixer")
+        .is_none_or(|a| a.at().is_empty()));
+
+    // Press Enter at bay level -> descends to remembered item (Deck A / strip 1)
+    let asked = karakuri_console::focus::press(
+        &mut view,
+        &p,
+        karakuri_console::focus::Press::Enter,
+        |_| None,
+    );
+    assert!(matches!(asked, karakuri_console::focus::Asked::Emitted(_)));
+    assert_eq!(
+        view.focus().address("mixer").map(|a| a.at()),
+        Some(&[1][..])
+    );
+
+    // Ascend with focus_up (Esc) -> back to mixer bay
+    assert!(view.focus_up(&p));
+    assert_eq!(view.focus().address("mixer").map(|a| a.at()), Some(&[][..]));
+
+    // Further Esc at bay level returns false (declines gracefully)
+    assert!(!view.focus_up(&p));
+}

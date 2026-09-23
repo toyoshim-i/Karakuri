@@ -9,7 +9,7 @@ use karakuri_console::repaint::Change;
 use karakuri_operation::{Operation, Undecided};
 
 use super::super::*;
-use crate::keymap::{KeyAction, KeyCtx, KEY_BINDINGS};
+use crate::keymap::{KeyAction, KeyCtx};
 
 impl App {
     pub(crate) fn handle_keyboard_event(
@@ -192,16 +192,7 @@ impl App {
                         .view
                         .focused(&self.readout.panel)
                         .map(|b| b.name);
-                    match KEY_BINDINGS.iter().find(|binding| {
-                        if !binding.key.matches(&other) {
-                            return false;
-                        }
-                        match binding.bay {
-                            None => true,
-                            Some(focus::ANY) => true,
-                            Some(bay) => focused_bay == Some(bay),
-                        }
-                    }) {
+                    match self.keymap.find_binding(&other, focused_bay) {
                         Some(binding) => {
                             // **Disjoint fields, not `self`.** `gfx` is
                             // already a live `&mut` borrow out of `self.gfx`

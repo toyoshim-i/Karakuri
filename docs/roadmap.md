@@ -64,7 +64,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
 │ M8: Musical Synchronization & Hardware Integration (Active / In Prog)  │
 │ - Low-Latency Audio Signal Bus & Multi-Band Procedural Modulation (Done)│
 │ - External Output Plugin Sinks (Syphon completed on macOS, Spout/NDI)   │
-│ - Live MIDI Surface Mapping & Profile Persistence                       │
+│ - Live MIDI & Keyboard Surface Mapping & Profile Persistence            │
 │ - Wipe Mask Geometry & Edge Softness Control                            │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
@@ -91,7 +91,11 @@ The remaining open work is structured into two sequential milestones: anchoring 
    - Syphon on macOS implemented via standalone `karakuri-syphon` plugin using zero-copy `IOSurfaceID` IPC protocol, with global surface registration, client heartbeat handling, and vertical flip blit pass verified in external clients (e.g. OBS) (M8-2 completed for macOS; Spout/NDI pending beside the window, as [plugins.md](plugins.md) specifies ([ADR-0358](adr/0358-the-projector-is-fullscreened-by-the-operating-system-on-the-display-it-is-on-and-another-application-is-reached-through-a-plugin.md))).
 3. *(Cancelled)* **Quantized Transition Engine**:
    - Cancelled for MVP: Live visual performance prioritizes immediate, expressive manual control via MIDI faders and real-time audio-reactive modulation over pre-scheduled, rigid bar/phrase-quantized transition queues. Direct fader sweeps, immediate wipe triggers, and live audio spectral onset modulation provide musical alignment without artificial quantization latency.
-4. **Live MIDI Surface Mapping & Profile Management**:
+4. **Live MIDI & Keyboard Surface Mapping & Profile Management** *(Keyboard Model Completed)*:
+   - **Keyboard Architecture Hardened**: Global scope is strictly navigation-only (`Tab`, `Shift-Tab`, `Esc`, symmetric ladder descent via `Enter`), preventing misoperation in live performance.
+   - **Bay-Scoped Operations**: All operational and mutation shortcuts are scoped to individual bays (`transport`, `mixer`, `inspector`, etc.) or `any bay` for region folding.
+   - **Customizable Keymaps & Explicit Globalization**: Default mappings are provided and can be customized via keymap files (`<store>/keymaps/default.keymap`), with explicit user promotion to global (`globalize: true`) and permissive collision warning detection.
+   - **Bidirectional Specification Sync**: Key column tests enforce 100% mutual consistency between keymap code, tooltips, and `docs/manual/operations.html`.
    - Provide an in-app interface to load, edit, and persist MIDI controller maps (`.map` files) dynamically during performance.
    - Support 14-bit high-resolution MIDI CC mappings for ultra-smooth parameter sweeps.
 5. **Wipe Mask Geometry Control**:
@@ -130,6 +134,7 @@ The remaining open work is structured into two sequential milestones: anchoring 
 - The build worker's two rungs are taken on a host clock while the render thread draws, so an estimate can refuse under load and the slot falls to its measurement; a param write does not invalidate the estimate.
 - A channel fader does not say who is holding it (rule 02); lanes cannot be reordered; `Hover::owed` is asked before `paint` on the frame a card comes down.
 - Mixer channel control unified under Solo/Mute: prototype-era `Residency::Allocated` startup hack retired; Decks B–D default to muted on first launch with clean load-path participation.
+- Keyboard navigation model hardened: global scope restricted strictly to navigation (`Tab`, `Shift-Tab`, `Esc`, `Enter` descent) to prevent misoperation in live performance; operational shortcuts scoped to bays with customizable keymaps (`<store>/keymaps/default.keymap`), explicit globalization flag, and collision detection.
 - Workspace clippy warnings (`doc_lazy_continuation` etc.) resolved; clean build across all targets with `-D warnings`.
 
 **Exit Condition**: Clean 4-hour rehearsal without crashes, memory leaks, or unhandled errors; 100% operation coverage across all implemented surfaces; clean workspace lint and test suite.

@@ -92,6 +92,7 @@ pub(crate) struct App {
     /// `Context::input` answers from the last pass, so a `shift` pressed since the
     /// previous frame would be invisible there. One reader, one writer, one event.
     pub(crate) shift: bool,
+    pub(crate) keymap: crate::keymap::Keymap,
     pub(crate) readout: Readout,
     /// The console's hover layer, which is `karakuri-console`'s and is held here
     /// for the reason every other piece of console state is: this file owns the
@@ -354,6 +355,7 @@ impl App {
         let (save_tx, saves) = std::sync::mpsc::channel();
         let (send_tx, sends) = std::sync::mpsc::channel();
         let (keep_tx, keeps) = std::sync::mpsc::channel();
+        let keymap = crate::keymap::Keymap::load_or_default(&launch.store);
         App {
             gfx: None,
             sources: launch.sources,
@@ -368,6 +370,7 @@ impl App {
             // **Nothing held**, which is a window nobody has pressed a key on
             // and is also what `winit` reports the moment focus leaves it.
             shift: false,
+            keymap,
             readout,
             // **The manual is read here, before the window opens**, which is
             // where a 340 KB parse belongs: it is one walk of the page

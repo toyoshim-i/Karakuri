@@ -29,6 +29,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         bay: None,
         title: None,
         action: KeyAction::Focus(key_tab),
+        globalize: false,
     },
     // **`esc` goes up one level of the focused bay's address, and it does
     // not quit** (ADR-0259). Quitting follows the platform's own
@@ -53,6 +54,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         bay: None,
         title: None,
         action: KeyAction::Focus(key_escape),
+        globalize: false,
     },
     // **The one letter left that names a region, and it takes it from the
     // focus rather than from the pointer** (ADR-0259, ADR-0343). `g` folds
@@ -68,20 +70,23 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         bay: Some(focus::ANY),
         title: Some("Fold a pane away"),
         action: KeyAction::Panel(key_fold_enclosing),
+        globalize: false,
     },
     KeyBinding {
         key: BoundKey::Character("z"),
         legend: "z",
-        bay: None,
+        bay: Some(focus::ANY),
         title: Some("Bring back what is folded"),
         action: KeyAction::Panel(key_unfold_all),
+        globalize: false,
     },
     KeyBinding {
         key: BoundKey::Character("r"),
         legend: "r",
-        bay: None,
+        bay: Some("transport"),
         title: Some("Reset the arrangement"),
         action: KeyAction::Panel(key_reset),
+        globalize: false,
     },
     // **Keep what the selected deck is playing**, filed under a stamp
     // because a bare key press cannot type a name — see
@@ -99,9 +104,10 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
     KeyBinding {
         key: BoundKey::Character("k"),
         legend: "k",
-        bay: None,
+        bay: Some("inspector"),
         title: Some("Keep what a deck is playing"),
         action: KeyAction::Handled(key_save),
+        globalize: false,
     },
     // **The beat, tapped.** The one key on this panel that reaches the room
     // rather than the deck or the arrangement, and the first of three that
@@ -110,9 +116,10 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
     KeyBinding {
         key: BoundKey::Character("b"),
         legend: "b",
-        bay: None,
+        bay: Some("transport"),
         title: Some("Tap the beat"),
         action: KeyAction::Handled(key_tap_beat),
+        globalize: false,
     },
     // **The grid, an octave either way**, and the two keys the page
     // specifies for it. Refused where the result would leave the trackable
@@ -120,16 +127,18 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
     KeyBinding {
         key: BoundKey::Character(","),
         legend: ",",
-        bay: None,
+        bay: Some("transport"),
         title: Some("Halve or double the grid"),
         action: KeyAction::Handled(key_scale_grid_halve),
+        globalize: false,
     },
     KeyBinding {
         key: BoundKey::Character("."),
         legend: ".",
-        bay: None,
+        bay: Some("transport"),
         title: Some("Halve or double the grid"),
         action: KeyAction::Handled(key_scale_grid_double),
+        globalize: false,
     },
     // **The key that changes the screen without touching the pointer and
     // without touching the model.** The room is the view's: every colour on
@@ -139,9 +148,10 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
     KeyBinding {
         key: BoundKey::Character("n"),
         legend: "n",
-        bay: None,
+        bay: Some("transport"),
         title: None,
         action: KeyAction::Handled(key_room),
+        globalize: false,
     },
     KeyBinding {
         key: BoundKey::Character("m"),
@@ -149,6 +159,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         bay: Some("mixer"),
         title: Some("Mute a deck"),
         action: KeyAction::Handled(key_toggle_mute),
+        globalize: false,
     },
     KeyBinding {
         key: BoundKey::Character("s"),
@@ -156,6 +167,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         bay: Some("mixer"),
         title: Some("Solo a deck"),
         action: KeyAction::Handled(key_toggle_solo),
+        globalize: false,
     },
     KeyBinding {
         key: BoundKey::Character("u"),
@@ -163,6 +175,7 @@ pub(crate) const KEY_BINDINGS: &[KeyBinding] = &[
         bay: Some("mixer"),
         title: Some("Clear solo"),
         action: KeyAction::Handled(key_clear_solo),
+        globalize: false,
     },
 ];
 
