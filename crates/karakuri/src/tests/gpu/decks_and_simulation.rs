@@ -674,21 +674,25 @@ mod gpu {
             before
                 .iter()
                 .enumerate()
-                .all(|(slot, strip)| slot == ON_AIR || strip.tally == view::Tally::Allocated),
-            "a slot nobody asked anything of opened somewhere other than allocated, so this \
-         deck steps and folds material the operator never called for: {:?}",
-            before.iter().map(|strip| strip.tally).collect::<Vec<_>>()
-        );
-        assert_eq!(
-            engine.deck.live_slots(),
-            1,
-            "more than one slot is live before anything was asked for, so the picture is a \
-         sum of simulations nobody chose"
+                .all(|(slot, strip)| slot == ON_AIR || strip.is_muted),
+            "a slot other than ON_AIR opened unmuted: {:?}",
+            before
+                .iter()
+                .map(|strip| strip.is_muted)
+                .collect::<Vec<_>>()
         );
         assert!(
             before.iter().all(|strip| strip.pending().is_none()),
             "a strip was pending before anything had asked for anything"
         );
+
+        for slot in 0..SLOTS {
+            if slot != ON_AIR {
+                engine
+                    .deck
+                    .set_residency(EngineSlot(slot as u8), Residency::Allocated);
+            }
+        }
 
         let governed = engine.ask_to_prime(&gpu);
 

@@ -46,10 +46,11 @@ mod gpu {
         let count = deck.slot_count();
         assert!(count >= 2, "deck should have at least 2 slots");
 
-        // Ensure all test slots are Live with full opacity for mixing assertions
+        // Ensure all test slots are Live with full opacity and unmuted for mixing assertions
         for i in 0..count {
             let slot = EngineSlot(i as u8);
             deck.set_residency(slot, karakuri_engine::Residency::Live);
+            deck.set_mute(slot, false);
             deck.set_opacity(slot, 1.0);
         }
 
@@ -142,6 +143,9 @@ mod gpu {
         let deck = &mut engine.deck;
         let look = &mut engine.look;
         let mut chain = Vec::new();
+        for i in 0..deck.slot_count() {
+            deck.set_mute(EngineSlot(i as u8), false);
+        }
 
         // Apply Record::Mute
         let log = apply(
@@ -209,6 +213,9 @@ mod gpu {
     fn test_bridge_mixer_populates_strips_from_deck() {
         let (mut engine, _, _, _) = setup_test_engine();
         let deck = &mut engine.deck;
+        for i in 0..deck.slot_count() {
+            deck.set_mute(EngineSlot(i as u8), false);
+        }
         deck.set_mute(EngineSlot(0), true);
         deck.set_solo(EngineSlot(2), true);
 
@@ -237,6 +244,28 @@ mod gpu {
         assert_eq!(strips[3].name, "Delta");
         assert!(!strips[3].is_muted);
         assert!(!strips[3].is_soloed);
+    }
+
+    #[test]
+    fn test_initial_startup_slots_one_to_three_muted() {
+        let (engine, _, _, _) = setup_test_engine();
+        let deck = &engine.deck;
+        let count = deck.slot_count();
+        assert!(count >= 4);
+
+        // Deck A (slot 0) starts unmuted and online in mix
+        let slot0 = EngineSlot(0);
+        assert!(!deck.is_muted(slot0), "slot 0 should start unmuted");
+        assert!(deck.is_online(slot0), "slot 0 should start online");
+        assert!(deck.is_in_mix(slot0), "slot 0 should start in mix");
+
+        // Decks B, C, D (slots 1..3) start muted and offline
+        for i in 1..count {
+            let slot = EngineSlot(i as u8);
+            assert!(deck.is_muted(slot), "slot {i} should start muted");
+            assert!(!deck.is_online(slot), "slot {i} should start offline");
+            assert!(!deck.is_in_mix(slot), "slot {i} should not start in mix");
+        }
     }
 }
 
