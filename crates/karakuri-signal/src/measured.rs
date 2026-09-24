@@ -1,54 +1,13 @@
-//! Measured signals: one frame's worth of them, and the bus layer that answers
-//! from it.
+//! Measured audio signal payload and bus routing.
 //!
-//! Everything in [`bus`](crate::bus) is invented — a waveform in the local
-//! oscillator's `t`. This is the other half: values that came from something
-//! outside, carried as **plain data with a confidence**, so that the thing
-//! producing them (an audio analyser, a replayed record) is not visible from
-//! here and is not visible to a consumer either.
+//! Encapsulates external audio analysis features ([`AudioFrame`]) as plain data with
+//! associated confidence ratings. Audio frames are `Copy` and fixed-size (no allocations
+//! or locks).
 //!
-//! ## Why this is a value and not a provider object
-//!
-//! An [`AudioFrame`] is `Copy`, fixed-size, and holds no handle to anything. It
-//! is the payload of one `audio` record, field for field, the same way
-//! `karakuri-engine`'s `Binding` is a `Record::Bind` field for field. That is
-//! what puts audio inside the determinism invariant instead of beside it: the
-//! engine never talks to a device, it is *handed a frame* — derived from real
-//! input when live, read back off the record stream on replay — exactly as it
-//! is handed a `steps` count rather than measuring one. Nothing here reads a
-//! clock, allocates, or locks; a frame is about seventy bytes on the stack.
-//!
-//! ## What confidence means here
-//!
-//! - **1.0** — a device is open and a block of samples was analysed recently.
-//!   A silent room is this: `energy` at 0.0 with confidence 1.0 means *there is
-//!   silence*, which is a measurement and moves a bound parameter all the way
-//!   to the bottom of its range.
-//! - **falling** — the last block is going stale. Whoever assembled the frame
-//!   decides how fast (see `karakuri-audio`'s `staleness`), because that is a
-//!   measurement of elapsed real time and this crate never reads a clock.
-//! - **0.0** — nothing has arrived. The blend then writes the parameter's own
-//!   value, bit for bit, which is how an interface unplugged mid-set hands the
-//!   parameter back to the operator instead of freezing it at whatever the last
-//!   block happened to say.
-//!
-//! **No frame at all** is a fourth case and it is not the same as any of the
-//! three: with no audio configured, [`MeasuredBus`] is handed `None` and every
-//! name falls through to the synthesized bus, so a run without a microphone
-//! answers exactly what it answered before this module existed, bit for bit.
-//!
-//! ## What is measured, and what is not
-//!
-//! The names are the ones the bus already has — `energy`, `band0`, `band1`, …
-//! — because a measured `energy` and an invented one are the same signal from
-//! different sources, and a binding that has to be rewritten when a microphone
-//! appears would defeat the whole arrangement. One name is new, `onset`, and
-//! the synthesized bus deliberately does **not** invent a version of it: an
-//! invented onset would be `beat`'s pulse under a second name, and one name has
-//! to mean one thing. With no provider, `onset` answers 0.0 at confidence 0.0
-//! like any other name nobody provides, and a binding to it leaves its
-//! parameter alone. Bind `beat` if a pulse with no microphone behind it is what
-//! is wanted.
+//! ## Confidence Semantics
+//! - `1.0`: Active input with fresh analysis (including silence).
+//! - Falling: Aging analysis data past the measurement window.
+//! - `0.0`: Stale data or inactive input; fallback to base parameter values or synthesized bus.
 
 use crate::bus::SynthesizedBus;
 use crate::{Sample, SignalBus, SignalId};
@@ -71,21 +30,10 @@ pub const MID: &str = "mid";
 /// The signal name for high/air energy band (band 7, ~7.6-16 kHz).
 pub const AIR: &str = "air";
 
-/// How many spectrum bands a frame can carry.
-///
-/// Eight, log-spaced: enough that a kick, a snare and a hi-hat land in
-/// different ones, few enough that each band still has bins in it at a block
-/// size a transient survives. The count is part of the vocabulary rather than a
-/// dial — `band0`…`band7` are *names*, and a binding written against `band5`
-/// should not silently mean a different octave because someone retuned an
-/// analyser.
+/// Maximum spectrum bands supported in a single audio frame (log-spaced).
 pub const MAX_BANDS: usize = 8;
 
-/// One frame's worth of measured signals.
-///
-/// Fixed-size and `Copy` on purpose: this is handed across a thread boundary
-/// and installed on the session's signals once per frame, on the render thread,
-/// where an allocation is not allowed.
+/// One frame's worth of measured audio signals.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AudioFrame {
     /// Broadband level, `[0, 1]`. See `karakuri-audio` for what maps to 1.0.
@@ -161,12 +109,7 @@ impl AudioFrame {
         self.bands[Self::AIR]
     }
 
-    /// A frame that measured silence, at full confidence.
-    ///
-    /// This is what a live analyser produces from a block of zeroes, and it is
-    /// not the same value as [`AudioFrame::nothing`] — the difference between
-    /// a quiet room and a dead input is the whole reason confidence is a number
-    /// rather than a flag.
+    /// Returns a frame representing measured silence with full confidence (1.0).
     pub fn silent(band_count: u8) -> AudioFrame {
         AudioFrame {
             energy: 0.0,
@@ -215,12 +158,7 @@ impl AudioFrame {
         })
     }
 
-    /// Whether this frame is the one that answers `name`, and with what.
-    ///
-    /// The `Option` is a **provider's** question — "is this one of mine?" — and
-    /// never reaches a consumer: [`MeasuredBus::sample`] turns a `None` into
-    /// the layer beneath, and that layer answers every name. The bus is still
-    /// complete and still returns a `Sample` rather than an `Option`.
+    /// Evaluates whether this frame provides the named signal, returning its sample if present.
     pub fn provides(&self, name: &str) -> Option<Sample> {
         self.provides_id(SignalId::resolve(name))
     }

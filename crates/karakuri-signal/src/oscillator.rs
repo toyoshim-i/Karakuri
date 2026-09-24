@@ -16,21 +16,9 @@
 /// as provisional until a real time signature shows up in the format.
 pub const BEATS_PER_BAR: u32 = 4;
 
-/// Phase and tempo, advanced by simulation steps rather than by wall time.
+/// Phase and tempo state advanced deterministically by simulation steps.
 ///
-/// The only state is `t`, the elapsed simulation time (`sum(steps * dt)`
-/// across every [`advance`](Oscillator::advance) call). Everything derived
-/// from the oscillator — musical phase here, and every synthesized signal in
-/// [`bus`](crate::bus) — is a function of `t` and `bpm` alone, deliberately:
-/// two tick histories that reach the same elapsed time by a different route
-/// (one big step vs. several small ones) are the same point in the session as
-/// far as the oscillator is concerned. The IR spec's spawn accumulator agrees
-/// on the quantity — `spawn_rate * dt * float(steps)` is what a frame adds,
-/// however its steps were grouped — while differing on the grain: the engine
-/// advances it once per substep, because a batch of new elements has to land
-/// between two element passes rather than all of them before the first.
-/// Nothing here depends on that distinction, but it is the one place the two
-/// could be mistaken for saying the same thing.
+/// Derived signals are pure functions of simulation time `t` and tempo `bpm`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Oscillator {
     bpm: f32,
@@ -70,12 +58,7 @@ impl Oscillator {
         }
     }
 
-    /// Advance by `steps` simulation steps of `dt` seconds each.
-    ///
-    /// This mirrors a `tick` record exactly: `steps` is the field the engine
-    /// emits (from real time, live; read back verbatim on replay), and `dt` is
-    /// the fixed simulation step from the Set. Nothing here reads a clock —
-    /// both arguments are handed in.
+    /// Advances simulation time by `steps` of `dt` seconds each (`steps * dt`).
     pub fn advance(&mut self, steps: u8, dt: f32) {
         self.t += steps as f64 * dt as f64;
         self.steps_taken += u64::from(steps);
@@ -215,11 +198,7 @@ mod tests {
 
     #[test]
     fn one_step_of_double_dt_reaches_the_same_state_as_two_steps_of_dt() {
-        // Same total elapsed time, different tick history — and, by design,
-        // the same resulting phase: `t` (and everything derived from it) only
-        // ever sees the product `steps * dt`, never the call count. See the
-        // struct docs, and `bus::tests` for the same property carried through
-        // to the synthesized signals.
+        // Equivalent total elapsed time produces identical phase regardless of step splitting.
         let mut merged = Oscillator::new(90.0);
         merged.advance(1, 0.2);
 
@@ -247,11 +226,7 @@ mod correction_tests {
         osc
     }
 
-    /// The reason musical position is an accumulator: a tempo correction
-    /// changes the rate from now on and leaves the beat that is happening where
-    /// it is. Multiplying `t` by a new tempo would slide every beat that had
-    /// already happened, which on stage is the picture jumping when the tracker
-    /// merely sharpens its estimate.
+    /// Verifies that tempo changes do not cause instantaneous phase jumps.
     #[test]
     fn a_tempo_correction_does_not_move_the_phase_it_arrives_at() {
         let mut osc = run(10.0);
