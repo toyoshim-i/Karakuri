@@ -32,13 +32,7 @@ const BAND_LOW_HZ: f32 = 40.0;
 /// up there measures the room's noise floor rather than the music.
 const BAND_HIGH_HZ: f32 = 16_000.0;
 
-/// How much louder than usual a spectrum has to move to count as an onset.
-///
-/// Relative to a running mean rather than absolute, because "usual" is what a
-/// dense mix and a sparse one differ in. 2.5 was picked against the two tests
-/// that bracket it: a click has to fire and a sustained tone of the same level
-/// must not, and a sustained tone's flux is small but not zero — an off-bin
-/// partial's leakage breathes as the window slides.
+/// Minimum relative spectral flux increase required to detect a transient onset.
 const ONSET_SENSITIVITY: f32 = 2.5;
 
 /// An absolute floor under the threshold, in the same RMS units as a level.
@@ -139,14 +133,7 @@ impl Analyzer {
         HOP as f32 / self.sample_rate
     }
 
-    /// How old a block's *contents* are by the time it has been analysed,
-    /// counting from the middle of the window.
-    ///
-    /// Half a window, because the window is centred on what it describes: a
-    /// beat at the middle of a block is not measurable until the block is
-    /// complete. This is the first of the two lags a beat correction has to
-    /// lead by — the other is the device buffer, which the analyser cannot see
-    /// and [`crate::device`] adds.
+    /// Returns the effective content latency in seconds (half the analysis window).
     pub fn window_lag(&self) -> f32 {
         BLOCK as f32 / 2.0 / self.sample_rate
     }
@@ -240,35 +227,16 @@ pub fn level(rms: f32) -> f32 {
     ((db - FLOOR_DB) / (TOP_DB - FLOOR_DB)).clamp(0.0, 1.0)
 }
 
-/// Log-spaced band edges as `[low, high)` bin ranges.
+/// Computes log-spaced frequency band edges across 8 bands spanning 40 Hz to 16 kHz.
 ///
-/// Log-spaced across 8 bands spanning 40 Hz to 16 kHz:
-/// - Band 0: `sub` (~40–85 Hz, kick fundamental, sub-bass)
-/// - Band 1: `bass` (~85–180 Hz, bass line, snare body)
-/// - Band 2: `low_mid` (~180–380 Hz, vocal warmth, rhythm guitar)
-/// - Band 3: `mid` (~380–800 Hz, lead instruments, snare crack)
-/// - Band 4: `high_mid` (~800–1700 Hz, vocal definition, synth attack)
-/// - Band 5: `presence` (~1700–3600 Hz, clarity, vocal consonants)
-/// - Band 6: `brilliance` (~3600–7500 Hz, cymbals, snare sizzle)
-/// - Band 7: `air` (~7500–16000 Hz, hi-hat shimmer, acoustic sparkle)
-///
-/// Log-spaced to reflect auditory octaves. If high band edges exceed the Nyquist
-/// frequency for low sample rates (e.g. 8–16 kHz), upper bands collapse to single
-/// bins at the top of the spectrum rather than producing empty ranges.
+/// If upper band frequencies exceed Nyquist, bands collapse gracefully to single top bins.
 fn band_bins(sample_rate: f32) -> [(usize, usize); MAX_BANDS] {
     let bins = BLOCK / 2 + 1;
     let hz_per_bin = sample_rate / BLOCK as f32;
     let ratio = (BAND_HIGH_HZ / BAND_LOW_HZ).powf(1.0 / MAX_BANDS as f32);
 
     let mut edges = [(0usize, 0usize); MAX_BANDS];
-    // Walked in order rather than each band rounding its own two edges: at a
-    // high sample rate the low bands are narrower than a bin, and two bands
-    // that each rounded independently would overlap — one bin's energy counted
-    // twice, in two bands, with nothing to notice it.
-    //
-    // The low edge leaves room for one bin per band above it, so that a low
-    // edge landing near the top of the spectrum cannot leave a later band with
-    // nowhere to be.
+    // Computed sequentially to guarantee non-overlapping bins and at least one bin per band.
     let mut low = ((BAND_LOW_HZ / hz_per_bin).round() as usize).clamp(1, bins - MAX_BANDS);
     for (band, edge) in edges.iter_mut().enumerate() {
         let high_hz = BAND_LOW_HZ * ratio.powi(band as i32 + 1);
@@ -419,12 +387,7 @@ mod tests {
                 frame.bands
             );
         }
-        // Not *equally*, and that is not a defect to assert away: the bands
-        // are log-spaced, so the top one is two hundred times as wide as the
-        // bottom one and collects that much more of a flat spectrum. What has
-        // to hold is that no single band carries the signal — six of the eight
-        // are well lit, which a "one band answers everything" bug could not
-        // manage.
+        // Broadband noise excites multiple log-spaced bands across the spectrum.
         let lit = frame.bands.iter().filter(|b| **b > 0.3).count();
         assert!(lit >= 6, "only {lit} bands lit by noise: {:?}", frame.bands);
     }

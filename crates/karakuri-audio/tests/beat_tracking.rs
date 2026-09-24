@@ -1,15 +1,7 @@
-//! The whole chain, on synthesised audio: samples → analyser → tracker → lock →
-//! the local oscillator.
+//! End-to-end integration test for audio beat tracking, latency compensation, and phase lock.
 //!
-//! Every other test in this crate covers one link. This one covers the joins,
-//! which is where the lags live — the unit tests for [`karakuri_audio::lock`]
-//! hand it estimates that are correct by construction, and could not catch a
-//! device path that mislabels *when* an estimate refers to.
-//!
-//! Nothing here opens a device. Audio arrives on a simulated clock, an
-//! artificial input latency in front of it, and the assertion is what an
-//! audience would see: the oscillator's phase at the instant this frame becomes
-//! light, against the music at that same instant.
+//! Feeds synthetic audio streams into [`Analyzer`], [`Tracker`], and [`BeatLock`] to verify
+//! steady-state tempo convergence and accurate visual beat alignment.
 
 use karakuri_audio::analysis::{Analyzer, BLOCK, HOP};
 use karakuri_audio::lock::{wrap_beats, BeatLock};
@@ -164,19 +156,7 @@ fn a_click_train_puts_the_oscillators_beat_on_the_music_s_beat() {
     );
 }
 
-/// **The octave, end to end, in both of its halves.**
-///
-/// A 174 bpm track under a session started at 87 locks at 87 — *confidently*,
-/// because the grid does fit the music, every other pulse of it. Nothing
-/// automatic will move it and nothing here pretends otherwise: the tracker
-/// centres its one-octave window on the grid, so the grid is what decides which
-/// octave gets tracked, and it never disagrees with itself.
-///
-/// Then the operator presses ×2, and the second half of the test is the part
-/// that matters: the grid moves, the window moves with it, and ten seconds
-/// later it is *still* at 174 with the beat on the beat — rather than folding
-/// straight back the moment the next estimate arrives, which is what would
-/// happen if the window had not come along.
+/// Verifies manual octave scaling (*2) repositions tracking window without folding back.
 #[test]
 fn the_octave_key_moves_the_grid_and_the_window_and_tracking_continues_there() {
     let bpm = 174.0;
@@ -235,14 +215,7 @@ fn the_same_path_produces_measured_signals_at_full_confidence() {
     assert_eq!(peak_onset, 1.0, "no onset fired on a click train");
 }
 
-/// A smoke test against **real hardware**, ignored by default.
-///
-/// `cargo test -p karakuri-audio -- --ignored --nocapture` opens the default
-/// input, reads it for a second, and prints what came back. It is ignored
-/// because a test that needs a microphone is a test that gets skipped —
-/// everything above this line is the actual coverage, and it needs no device.
-/// What this catches is the half no synthesised test can: whether a device
-/// opens at all, at what rate, and whether frames arrive.
+/// Manual smoke test against real hardware audio input (ignored by default).
 #[test]
 #[ignore = "needs an audio input device"]
 fn the_default_input_opens_and_delivers() {
@@ -276,15 +249,7 @@ fn the_default_input_opens_and_delivers() {
     );
 }
 
-/// **An octave-low grid has to be steady as well as wrong.** Half of a click
-/// train's pulses are on that grid and half are between them, and the two sets
-/// are equally good beats — nothing in the novelty says which is the downbeat.
-/// Picking the other one on some later window would yank the picture half a
-/// beat, which is worse than the octave itself; the phase comes off the
-/// strongest hump of a folded profile, and the same hump has to keep winning.
-///
-/// Half a minute of it, measured as jumps rather than as a final position: a
-/// grid that ends where it started could still have gone round the houses.
+/// Verifies phase stability when locked to a sub-octave beat grid.
 #[test]
 fn a_grid_left_an_octave_low_does_not_change_its_mind_about_which_pulse_is_the_beat() {
     let bpm = 174.0;

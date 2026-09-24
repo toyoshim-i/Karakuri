@@ -338,16 +338,9 @@ fn an_even_click_train_is_not_read_at_half_tempo() {
     }
 }
 
-/// A kick with a quiet hat between every pair of beats. The hat is a beat
-/// *subdivision*, not a beat, so this must read the kick's tempo — and the
-/// wrong answer here is the expensive one: it is a confident double, not a
-/// shrug. It read 180 bpm at confidence 1.0 before the fold replaced the
-/// check that was supposed to prevent exactly that.
+/// Verifies that quiet offbeat subdivisions (e.g. hi-hats between kicks) do not double estimated tempo.
 ///
-/// Several window lengths and several hat levels, because the two
-/// interleaved sets of grid points used to be distinguishable only by which
-/// one the novelty was stronger at, and which of them a walk reached first
-/// depended on where the window happened to end.
+/// Sweeps across multiple window lengths and hat amplitude levels.
 #[test]
 fn a_quiet_offbeat_is_a_subdivision_and_not_a_doubled_tempo() {
     let bpm = 90.0_f32;

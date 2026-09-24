@@ -33,11 +33,7 @@ pub const FRESH_SECONDS: f32 = 0.05;
 /// the beat grid free-runs from wherever it was.
 pub const STALE_SECONDS: f32 = 0.5;
 
-/// How much to believe a measurement that was taken `age` ago.
-///
-/// Full until [`FRESH_SECONDS`], then linear to zero at [`STALE_SECONDS`]. A
-/// pure function of a duration, so the whole staleness policy is testable
-/// without a device and without waiting.
+/// Computes confidence attenuation factor in `[0.0, 1.0]` based on elapsed duration.
 pub fn staleness(age: Duration) -> f32 {
     let age = age.as_secs_f32();
     if age <= FRESH_SECONDS {
@@ -89,12 +85,7 @@ pub struct AudioInput {
 }
 
 impl AudioInput {
-    /// Open an input. `selector` is `"default"`, or any substring of a device's
-    /// description or id — case-insensitive, first match wins.
-    ///
-    /// `centre_bpm` is where the tempo tracker's window starts: the session
-    /// tempo, which is also what the oscillator free-runs at. See
-    /// [`crate::tempo`].
+    /// Opens an audio input stream matching `selector` with tracking centered at `centre_bpm`.
     pub fn open(selector: &str, centre_bpm: f32) -> Result<AudioInput, AudioError> {
         let host = cpal::default_host();
         let device = pick(&host, selector)?;
@@ -114,11 +105,7 @@ impl AudioInput {
         let mut tracker = Tracker::new(analyzer.hop_seconds(), window_lag, centre_bpm);
         let shared: Arc<Mutex<Option<Published>>> = Arc::new(Mutex::new(None));
         let publisher = Arc::clone(&shared);
-        // One `f32` in an atomic rather than a second mutex: the callback reads
-        // it on every hop and must never wait, and a torn read is impossible
-        // for a `u32`. Relaxed is enough — it orders nothing else, and a centre
-        // that arrives one hop late costs at most one re-measurement in the
-        // octave the grid was already in.
+        // Thread-safe atomic float communication for target tracking tempo.
         let centre_bpm = Arc::new(AtomicU32::new(centre_bpm.to_bits()));
         let follower = Arc::clone(&centre_bpm);
 
@@ -156,19 +143,7 @@ impl AudioInput {
                     tracker.push(analysis.novelty);
 
                     if let Ok(mut slot) = publisher.try_lock() {
-                        // **How much of this buffer arrived after the sample that
-                        // ends this block**, which is how old the analysis instant
-                        // already is when it is published. A hop can land anywhere
-                        // in a buffer, so this runs from a whole buffer down to
-                        // nothing; charging the buffer's *whole* duration every
-                        // time — which is what this did — over-stated `A` by up to
-                        // one buffer and by half of one on average, and the
-                        // correction then led by that much too much.
-                        //
-                        // What is left unaccounted is the delivery delay: the gap
-                        // between the last sample being captured and this callback
-                        // running. Nothing portable measures it, and it is one of
-                        // the terms the operator's offset exists to absorb.
+                        // Computes tail latency from the block boundary to the end of the driver buffer.
                         let after = (frames - 1 - index) as f32 / rate;
                         *slot = Some(Published {
                             frame: analysis.frame,
@@ -276,11 +251,7 @@ impl AudioInput {
     }
 }
 
-/// What one publish reads as, `since` after it was published.
-///
-/// Split out because everything above it needs a device and none of this does:
-/// it is the arithmetic that turns "how long ago" into "how much to believe"
-/// and into the lead the caller adds the output lag to.
+/// Evaluates a published measurement snapshot after elapsed duration `since`.
 fn aged(published: &Published, since: Duration) -> Reading {
     let believed = staleness(since);
     Reading {
