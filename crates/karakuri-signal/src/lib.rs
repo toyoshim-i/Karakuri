@@ -21,11 +21,7 @@ pub use measured::{AudioFrame, MeasuredBus, MAX_BANDS};
 pub use noise::{NoiseConfig, NoiseKind};
 pub use oscillator::Oscillator;
 
-/// A signal value and how much it should be trusted.
-///
-/// `confidence` is 1.0 for a real provider tracking well, and falls towards 0.0
-/// as a value becomes synthesised, stale, or extrapolated. It is never a flag:
-/// a consumer blends on it rather than testing it.
+/// A signal value paired with a confidence rating in `[0.0, 1.0]`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sample {
     pub value: f32,
@@ -51,11 +47,9 @@ impl Sample {
     }
 }
 
-/// Distributed to every layer. Never fails, never returns an option.
+/// Interface for querying signals without fallibility.
 pub trait SignalBus {
-    /// Sample a signal by name. An unknown name returns a synthesised value
-    /// rather than an error, because the alternative is consumers that branch
-    /// on existence.
+    /// Samples a signal by name, returning a synthesized fallback if unrecognized.
     fn sample(&self, name: &str) -> Sample {
         self.sample_id(SignalId::resolve(name))
     }

@@ -26,25 +26,11 @@ pub enum SignalId {
 }
 
 impl SignalId {
-    /// Resolve a signal name to a typed [`SignalId`].
+    /// Resolves a signal name string to a typed [`SignalId`].
     ///
-    /// Maps:
-    /// - `"bpm"` -> [`SignalId::Bpm`]
-    /// - `"beat"` -> [`SignalId::Beat`]
-    /// - `"bar"` -> [`SignalId::Bar`]
-    /// - `"energy"` or `"audio.energy"` -> [`SignalId::Energy`]
-    /// - `"onset"` or `"audio.onset"` -> [`SignalId::Onset`]
-    /// - `"sub"` or `"audio.sub"` -> [`SignalId::Band(0)`]
-    /// - `"bass"` or `"audio.bass"` -> [`SignalId::Band(1)`]
-    /// - `"low_mid"` / `"lowmid"` / `"audio.low_mid"` / `"audio.lowmid"` -> [`SignalId::Band(2)`]
-    /// - `"mid"` or `"audio.mid"` -> [`SignalId::Band(3)`]
-    /// - `"high_mid"` / `"highmid"` / `"audio.high_mid"` / `"audio.highmid"` -> [`SignalId::Band(4)`]
-    /// - `"presence"` or `"audio.presence"` -> [`SignalId::Band(5)`]
-    /// - `"brilliance"` or `"audio.brilliance"` -> [`SignalId::Band(6)`]
-    /// - `"air"` / `"high"` / `"audio.air"` / `"audio.high"` -> [`SignalId::Band(7)`]
-    /// - `"band"` or `"audio.band"` -> [`SignalId::Band(0)`]
-    /// - `"band0"`..`"band15"` (or with `"audio."` prefix) -> [`SignalId::Band(i)`]
-    /// - Unknown names -> [`SignalId::Custom(hash)`]
+    /// Recognizes transport signals (`bpm`, `beat`, `bar`), audio feature names
+    /// (`energy`, `onset`, frequency band names/indices with optional `audio.` prefix),
+    /// and hashes unknown names into [`SignalId::Custom`].
     pub fn resolve(name: &str) -> SignalId {
         let stripped = name.strip_prefix("audio.").unwrap_or(name);
         match stripped {

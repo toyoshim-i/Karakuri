@@ -16,11 +16,7 @@ use crate::{Sample, SignalBus, SignalId};
 /// so they carry full confidence.
 const CONFIDENCE_OSCILLATOR: f32 = 1.0;
 
-/// `energy` and `band*` have no provider behind them in V1 (audio input is out
-/// of scope); they are pure invention shaped to be useful defaults, not
-/// measurements. Low but nonzero: a consumer that blends on confidence should
-/// still be able to use them as a gentle ambient driver when nothing better is
-/// bound, without mistaking them for a real reading.
+/// Low confidence assigned to synthesized approximations (e.g. unmeasured energy/bands).
 const CONFIDENCE_INVENTED: f32 = 0.1;
 
 /// A signal bus synthesized entirely from a local [`Oscillator`].
@@ -72,20 +68,12 @@ fn oscillator_derived(value: f32) -> Sample {
     }
 }
 
-/// A percussive envelope from a `0..1` phase: `1.0` at the instant of the
-/// beat (or bar), decaying towards `0.0` as the next one approaches. Used to
-/// turn the oscillator's raw phase into a signal shaped like the pulse a beat
-/// detector would emit, so binding `beat` to a parameter looks like a hit
-/// rather than a sawtooth ramp.
+/// Shapes phase in `[0, 1]` into a decaying percussive pulse envelope `(1 - phase)^3`.
 fn pulse(phase: f32) -> f32 {
     (1.0 - phase).powf(3.0)
 }
 
-/// A slow, always-on "breathing" envelope in `0..1`, standing in for an audio
-/// energy signal V1 has no input for. Three incommensurate sine waves summed
-/// together avoid the single-frequency look of one `sin(t)`, while staying a
-/// pure function of simulation time — no seed needed, since this is a
-/// deterministic waveform rather than randomness.
+/// Generates a deterministic breathing envelope in `[0, 1]` from simulation time `t`.
 fn energy(t: f64) -> f32 {
     let raw = (t * 0.9).sin() + 0.5 * (t * 0.37 + 1.3).sin() + 0.25 * (t * 1.71 + 2.7).sin();
     (raw / 1.75) as f32 * 0.5 + 0.5
@@ -152,11 +140,7 @@ mod tests {
 
     #[test]
     fn colon_syntax_is_no_longer_special_cased() {
-        // Multi-stream noise now goes through `NoiseConfig` directly (see
-        // `noise::tests::distinct_streams_decorrelate`), not through a
-        // `"noise:<key>"` name string. A name using that old convention is
-        // just an unrecognized name now — still complete, still low
-        // confidence, not a guess at what the caller meant.
+        // Multi-stream noise uses NoiseConfig directly instead of "noise:<key>".
         let osc = Oscillator::new(120.0);
         let bus = SynthesizedBus::new(&osc);
 

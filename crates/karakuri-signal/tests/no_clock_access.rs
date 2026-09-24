@@ -1,13 +1,7 @@
-//! Reproducibility depends on this crate never reading a clock: the oscillator
-//! advances only by the `steps`/`dt` it is handed, and every noise sample is a
-//! pure function of an explicit seed plus the oscillator's own state. This
-//! test scans the crate's own source for the APIs that would break that —
-//! `Instant::now`, `SystemTime::now`, and friends — rather than just asserting
-//! it in a doc comment, so a future edit that sneaks one in fails the build.
+//! Static analysis test verifying `karakuri-signal` contains no system clock reads.
 //!
-//! It reads `src/` at test time via `CARGO_MANIFEST_DIR`, which is a build
-//! detail, not a clock read: the path is fixed at compile time and the
-//! contents are this crate's own checked-in source.
+//! Enforces deterministic replay by scanning `src/` for real-time clock APIs
+//! (`Instant::now`, `SystemTime::now`, etc.).
 
 use std::fs;
 use std::path::Path;

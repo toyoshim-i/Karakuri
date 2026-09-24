@@ -4,43 +4,21 @@
 
 use crate::oscillator::Oscillator;
 
-/// Which lattice-noise algorithm to use. All four take the same lattice
-/// coordinate and split it into an integer index and a fraction; they differ
-/// only in what they do with that split.
-///
-/// Names match the vocabulary the IR's noise builtins already use
-/// (`value_noise`, `perlin`, `fbm` in `docs/ir-spec.md`) rather than
-/// inventing a parallel set.
+/// Lattice-noise algorithm selection.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NoiseKind {
-    /// The hashed value at the lattice index, held constant across the whole
-    /// cell — no interpolation. This is what gives white noise a period at
-    /// all: instead of running at the fixed step rate, it now holds each
-    /// value for `1 / rate` beats before jumping to the next. Discontinuous
-    /// at every lattice boundary.
+    /// Discontinuous hashed lattice values held constant across each cell for `1 / rate` beats.
     White,
-    /// Hashed lattice values interpolated with a smoothstep. Continuous.
+    /// Hashed lattice values interpolated with a smoothstep curve.
     Value,
-    /// One-dimensional gradient noise: a hashed slope at each lattice point,
-    /// evaluated against the signed offset from that point and interpolated
-    /// with a smoothstep. Continuous, and exactly zero at every integer
-    /// lattice coordinate — the interpolation weight and the offset both
-    /// vanish there.
+    /// One-dimensional gradient noise interpolated with smoothstep curves.
     Perlin,
-    /// A sum of `octaves` perlin layers at doubling frequency and halving
-    /// amplitude, normalised by the total amplitude so the sum stays inside
-    /// roughly the same range as a single octave. `octaves` plays the role
-    /// the IR's `fbm` builtin gives its compile-time octave count — fixed
-    /// per configuration, not something that varies sample to sample — but
-    /// it is an ordinary field here: nothing on this side needs to unroll a
-    /// shader loop, so there is no reason to force it to a Rust constant.
+    /// Fractal Brownian Motion summing `octaves` of Perlin noise with doubling frequency.
     Fbm { octaves: u32 },
 }
 
 impl Default for NoiseKind {
-    /// Perlin. Art tooling assumes Perlin first, and it is the smooth
-    /// default — the useful one when a `bind` record does not ask for
-    /// anything more specific.
+    /// Perlin is the default smooth continuous noise algorithm.
     fn default() -> NoiseKind {
         NoiseKind::Perlin
     }
@@ -53,23 +31,9 @@ impl Default for NoiseKind {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NoiseConfig {
     pub kind: NoiseKind,
-    /// Cycles per beat. Tempo-relative rather than seconds-relative: the
-    /// lattice coordinate is `beats * rate`, where `beats = t * bpm / 60`, so
-    /// `rate = 1.0` advances one lattice cell per beat and `rate = 4.0`
-    /// advances four. The local oscillator is the single source of truth for
-    /// phase, so deriving noise phase from its `t`/`bpm` rather than from
-    /// seconds directly keeps there from being a second, independent notion
-    /// of "how fast" in the system. See the module docs for the one
-    /// consequence of this a non-musical consumer should know about.
+    /// Cycles per beat (lattice coordinate = `beats * rate`).
     pub rate: f32,
-    /// A caller-chosen id, folded into the hash alongside `seed` so two
-    /// `NoiseConfig`s that differ only in `stream` decorrelate completely.
-    /// This replaces an earlier `"noise:<key>"` name-string convention: that
-    /// syntax lived nowhere in the record format and risked colliding with
-    /// however signal names end up validated. A plain field the caller sets
-    /// is enough, and it is the caller's job to keep two streams that should
-    /// stay independent (e.g. one bound to `spawn_rate`, another to
-    /// `turbulence`) at different values.
+    /// Stream identifier mixed into the hash to decorrelate independent noise streams.
     pub stream: u64,
 }
 
