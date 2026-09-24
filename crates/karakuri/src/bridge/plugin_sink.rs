@@ -778,5 +778,73 @@ mod tests {
 
             drop(sink);
         }
+
+        #[test]
+        #[cfg(target_os = "windows")]
+        fn plugin_sink_integration_with_karakuri_spout_binary() {
+            let candidates = [
+                "../Karakuri-spout/target/debug/karakuri-spout.exe",
+                "../../Karakuri-spout/target/debug/karakuri-spout.exe",
+                "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
+            ];
+            let mut command = None;
+            for c in candidates {
+                let p = std::path::Path::new(c);
+                if p.exists() {
+                    command = Some(
+                        p.canonicalize()
+                            .unwrap_or_else(|_| p.to_path_buf())
+                            .to_string_lossy()
+                            .into_owned(),
+                    );
+                    break;
+                }
+            }
+            let Some(command) = command else {
+                return;
+            };
+
+            std::env::set_var("WGPU_BACKEND", "dx12");
+            let Ok(gpu) = Gpu::headless() else {
+                return;
+            };
+            if gpu.adapter.get_info().backend != wgpu::Backend::Dx12 {
+                eprintln!("DirectX 12 backend not available on this host; skipping");
+                return;
+            }
+
+            let mut sink = PluginSink::open(
+                &gpu,
+                &command,
+                1280,
+                720,
+                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
+            )
+            .expect("PluginSink::open");
+            assert!(sink.is_alive());
+            assert_eq!(sink.server_name(), "Karakuri");
+            assert_eq!(sink.size(), (1280, 720));
+
+            let present = karakuri_engine::Present::new(
+                &gpu.device,
+                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
+                1280,
+                720,
+            );
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            present.draw(&mut encoder, sink.view(), sink.size());
+            sink.after_draw(&mut encoder);
+            gpu.queue.submit([encoder.finish()]);
+
+            sink.acquire(&gpu).expect("acquire");
+            sink.present(&gpu).expect("present frame 0");
+
+            let t = sink.telemetry();
+            assert_eq!(t.host_dropped, 0);
+
+            drop(sink);
+        }
     }
 }

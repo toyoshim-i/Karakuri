@@ -656,6 +656,7 @@ fn a_dotdot_that_lands_back_inside_is_a_path_and_is_allowed() {
 /// since on macOS a temporary directory is itself reached through a symlink and
 /// a naive comparison would refuse everything.
 #[test]
+#[cfg(unix)]
 fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
     let elsewhere = tempfile::tempdir().expect("tempdir");
     let secret = elsewhere.path().join("secret.kir");
@@ -697,6 +698,7 @@ fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
 /// — or under any linked path anywhere — is refused as an escape. A wall that
 /// refuses everything is a wall somebody switches off.
 #[test]
+#[cfg(unix)]
 fn a_directory_reached_through_a_symlink_still_contains_its_own_parts() {
     let dir = tempfile::tempdir().expect("tempdir");
     let real = dir.path().join("real");
