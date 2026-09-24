@@ -138,17 +138,7 @@ fn unknown_records_survive_a_read_write_round_trip() {
     assert_eq!(contents, original);
 }
 
-/// **A Set file may say that it composites, and `Store::write_set` takes it.**
-///
-/// The record this test is about is the layering — the one thing a Set knew
-/// about itself that its file could not say, so a composited Set saved and
-/// loaded back overdrew and `Set::select_renderer` came back with nothing to
-/// select between.
-///
-/// **Written back byte for byte**, which is the claim the optional field
-/// makes: a Set nobody has selected in writes the bare `{"t":"merge"}`, and a
-/// `"live":null` on every one of them would be a changed file for a fact
-/// nobody stated.
+/// Verifies that writing and reading a set accepts and preserves `merge` records.
 #[test]
 fn write_set_accepts_a_merge_record() {
     let dir = tempdir().unwrap();
@@ -192,8 +182,7 @@ fn write_set_accepts_a_merge_record() {
         "the merge did not go to disk as the line the spec prints: {contents}"
     );
 
-    // And the same Set with nobody selected in it: the presence of the record
-    // is the whole statement, so the line carries nothing else.
+    // Unselected merge record without live field.
     let unselected = vec![
         Line::new(Record::Set {
             id: "morph_02".into(),
@@ -209,15 +198,7 @@ fn write_set_accepts_a_merge_record() {
     );
 }
 
-/// **A `merge` line carrying a key this build does not know reads back as
-/// itself and writes back with the key still on it.**
-///
-/// Both halves of the format's forward-compatibility rule, on the newest
-/// record: an unknown `t` is ignored, and so is an unknown key inside a record
-/// whose `t` *is* known. This record is the one that will meet the second
-/// half first — `gain`, `opacity`, `blend` and `mask` are named in its doc as
-/// the fields it does not have yet, so the build that grows them is the build
-/// whose files this one has to read.
+/// Verifies that unknown fields on known records survive serialization round-trips.
 #[test]
 fn a_merge_line_keeps_a_key_this_build_does_not_know() {
     let dir = tempdir().unwrap();
@@ -365,10 +346,7 @@ fn projection_folds_repeated_edits_last_write_wins() {
     assert_eq!(set[0].record(), &param("radius", 3.0));
 }
 
-/// The same rule for the two records audio added. A Set file carries no time,
-/// and both of these are what one frame measured or decided — so the writer
-/// refuses them for the same reason it refuses a tick, rather than for the
-/// narrower reason its error variant is named after.
+/// Verifies that Set files reject non-state records like audio frames and tempo corrections.
 #[test]
 fn write_set_rejects_an_audio_frame_and_a_tempo_correction() {
     let dir = tempdir().unwrap();
@@ -412,23 +390,7 @@ fn write_set_rejects_an_audio_frame_and_a_tempo_correction() {
     }
 }
 
-/// **A metadata record is refused from a Set file**, and refused in its own
-/// words.
-///
-/// `param_decl` and `param` are one letter apart in a hand-edited file and
-/// nothing alike in meaning: one says a knob exists and what it may be turned
-/// between, the other says what this Set turned it to. A Set file carrying the
-/// first would describe an artifact rather than a Set — and a *reader* meeting
-/// one would take a declaration for a value.
-///
-/// **The gate is [`Record::is_metadata`] and not `!is_set_state`**, which is
-/// what the separate error variant is here to pin: these records are not Set
-/// state and would fall through the older check, but the sentence it says is
-/// about time, and telling an operator a `capacity_decl` was rejected for
-/// carrying time sends them looking in the wrong place.
-///
-/// All four, because the refusal is about the group and a check written against
-/// one of them would pass while the other three went to disk.
+/// Verifies that Set files reject artifact metadata records (`Meta`, `ParamDecl`, `CapacityDecl`, `Emit`).
 #[test]
 fn write_set_rejects_an_artifacts_metadata() {
     let dir = tempdir().unwrap();
@@ -488,21 +450,7 @@ fn write_set_rejects_an_artifacts_metadata() {
     }
 }
 
-/// **An authoring file's `part` is refused from a Set file**, in a third
-/// sentence of its own, and nothing is written.
-///
-/// This is the check that makes `.kbset` mean something. Everything in
-/// `sets/` is already resolved — that is what lets a swap happen on a frame
-/// boundary with nothing left to look up — and a `part` names its `.kir` by a
-/// relative path, so a Set file carrying one would resolve the filesystem at
-/// the moment of the exchange, against a directory that may be somebody else's
-/// machine's. See ADR-0231.
-///
-/// **The gate is `Record::is_authoring`, not `!is_set_state`**, which is what
-/// the third error variant pins: a `part` falls through the older check too,
-/// and the sentence that check says is about time. An operator who wrote an
-/// authoring file into a store wants to be told which of the two forms they
-/// have, not sent looking for a `tick` they did not write.
+/// Verifies that Set files reject authoring `part` records.
 #[test]
 fn write_set_rejects_an_authoring_files_part() {
     let dir = tempdir().unwrap();
@@ -526,21 +474,12 @@ fn write_set_rejects_an_authoring_files_part() {
     }
     assert!(!dir.path().join("sets").join("authored.kbset").exists());
 
-    // And the sentence names both forms, because which one the file is is the
-    // whole of what the operator has to know.
     let said = store.write_set("authored", &lines).unwrap_err().to_string();
     assert!(said.contains(".kset"), "{said}");
     assert!(said.contains(".kbset"), "{said}");
 }
 
-/// **A `part` is dropped by the projection rather than passed through it.**
-///
-/// A session stream has no writer that puts one in, so meeting one means a
-/// hand-assembled stream — and passing it through would fail a whole save at
-/// `write_set` on a line that belongs to another file. Dropped, on the terms
-/// every other foreign record here is dropped, and *not* folded onto the
-/// `slot` at the same address: a fold that kept whichever came last would
-/// resolve half the time to an unresolved path claiming to be an address.
+/// Verifies that authoring `part` records are dropped during session projection.
 #[test]
 fn a_part_is_dropped_by_the_projection() {
     let hash = Hash::of(b"proc p { kind L1 }");
@@ -573,22 +512,7 @@ fn a_part_is_dropped_by_the_projection() {
     );
 }
 
-/// **Both halves of the metadata decoder's forward-compatibility rule**, on a
-/// file the store did not write.
-///
-/// `docs/ir-spec.md` states them for this file separately from the Set file's,
-/// because it is a separate list read by a separate decoder: an unknown `t` is
-/// ignored, and so is an unknown key inside a record whose `t` *is* known.
-///
-/// The second is the one a *removed* key needs, and the specification names the
-/// case — `perf` carried a `bytes_per_element` and does not any more. `perf`
-/// itself has no producer yet, so the removed key is put where a known `t` can
-/// hold it: a `param_decl` written by a build that recorded something this one
-/// does not. Reading it must yield the declaration and pass over the key,
-/// rather than failing the whole file over a field nobody asks for.
-///
-/// Ignoring costs nothing here because the file is derived: a key that still
-/// means something comes back on the next regeneration.
+/// Verifies that metadata files ignore unknown records and unrecognized fields on known records.
 #[test]
 fn a_metadata_file_survives_an_unknown_t_and_an_unknown_key() {
     let dir = tempdir().unwrap();
@@ -658,14 +582,7 @@ pub fn a_set() -> Vec<Line> {
     })]
 }
 
-/// **The order is by id, and it is the same order twice.**
-///
-/// `read_dir` hands entries back in whatever order the filesystem stored them,
-/// which on APFS is creation order and elsewhere is a hash bucket walk — so a
-/// listing that forwards it looks stable on the machine it was written on and
-/// reorders itself on someone else's. The ids here are written in an order that
-/// is neither sorted nor reverse-sorted, so an implementation that forgot to
-/// sort would have to be lucky twice to pass.
+/// Verifies that `list_sets` consistently orders results by ID.
 #[test]
 fn list_sets_orders_by_id_and_repeats_that_order() {
     let dir = tempdir().unwrap();
@@ -687,15 +604,7 @@ fn list_sets_orders_by_id_and_repeats_that_order() {
     assert_eq!(store.list_sets().unwrap(), store.list_sets().unwrap());
 }
 
-/// **The time reported is the file's, and it is the axis "the one I saved
-/// last" is asked along.**
-///
-/// The two mtimes are stamped rather than observed, because a test that writes
-/// two files and asserts the second is newer asserts nothing on a filesystem
-/// whose clock ticks once a second. Stamping also puts the recency order at
-/// odds with the id order, which is the point: the listing comes back by id,
-/// and one `sort_by_key` on the field turns it into the answer an operator
-/// wanted.
+/// Verifies that `list_sets` includes the modification time of each set file.
 #[test]
 fn list_sets_carries_the_time_the_file_was_written() {
     let dir = tempdir().unwrap();
@@ -731,12 +640,7 @@ fn list_sets_carries_the_time_the_file_was_written() {
     );
 }
 
-/// **Only `<id>.kbset` is a Set.** Everything else that can end up in that
-/// directory — a `.tmp` from a write that died, an editor's backup, a
-/// subdirectory — is somebody else's file, and reporting one as a Set means
-/// handing back an id [`Store::read_set`] cannot open. The `.tmp` case is not
-/// hypothetical: `write_atomic` puts one there under exactly that name for the
-/// length of every write.
+/// Verifies that non-`.kbset` files in the sets directory are ignored during listing.
 #[test]
 fn list_sets_skips_what_the_layout_does_not_claim() {
     let dir = tempdir().unwrap();
@@ -759,25 +663,7 @@ fn list_sets_skips_what_the_layout_does_not_claim() {
     assert_eq!(ids, ["drift_01"]);
 }
 
-/// **A file under `sets/` that does not carry `.kbset` has no id at all**, and
-/// an id is the only route a Set has to a deck: nothing can ask for what cannot
-/// be named.
-///
-/// That is the store's invariant rather than a tidiness rule. A swap happens on
-/// a frame boundary and an over-budget Set rolls back on its own (P-0094),
-/// which holds only because nothing is left to resolve at the moment of the
-/// swap — so the two files here are exactly the two that would break it: an
-/// authoring `.kset`, which names its parts by relative path and would send a
-/// load walking the filesystem mid-swap, and a Set written by a build that
-/// spelled the suffix `.set.ndjson`, whose contents nothing has ever checked
-/// against the claim the new name makes.
-///
-/// **The `.set.ndjson` half is the one worth writing down, because it is
-/// silent.** The file is still there, still readable text, and simply stops
-/// being listed — no error, nothing to notice but an id that used to be in the
-/// list. Nothing repairs it either, which this asserts: renaming a file the
-/// store did not write would be guessing that its contents are already
-/// resolved.
+/// Verifies that files in `sets/` without `.kbset` cannot be addressed as sets.
 #[test]
 fn a_file_without_the_suffix_has_no_id_and_no_route_to_a_deck() {
     let dir = tempdir().unwrap();

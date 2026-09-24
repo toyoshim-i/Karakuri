@@ -62,47 +62,22 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Header { .. } => Some(Key::Header),
         Record::Set { .. } => Some(Key::Set),
-        // Keyed by the node's **address and not by its name**: a `slot`
-        // record says which node it is about with `(layer, index)`, and the
-        // name is one of the things it says about it. So a session that named
-        // a node and then renamed it folds to one node with its later name,
-        // where a fold keyed by the name would keep both lines and describe
-        // two nodes that never existed.
+        // Keyed by node address (layer, index) so renames fold onto the existing node.
         Record::Slot { at, .. } => Some(Key::Slot(*at)),
-        // A node rather than a layer, so two geometries at two capacities
-        // survive the fold as the two facts they are. Keyed by layer alone
-        // they collapsed onto each other and the projection kept whichever
-        // line came last — a Set file that resizes the wrong source.
+        // Keyed by node address so distinct nodes on the same layer remain distinct.
         Record::Capacity { at, .. } => Some(Key::Capacity(*at)),
-        // Folded by the **address**, so a wildcard write and a write addressed
-        // at one node are two facts rather than one overwriting the other —
-        // which is what they are: "the Set's exposure" and "renderer 1's
-        // exposure" can both be true, and the engine resolves the overlap.
+        // Keyed by node address (or wildcard None) and parameter key.
         Record::Param { at, key, .. } => Some(Key::Param(*at, key.clone())),
         Record::Bind {
             layer, index, key, ..
         } => Some(Key::Bind(*layer, *index, key.clone())),
-        // By the node, so that two cameras described in one session survive
-        // the fold as the two producers they are — the same correction
-        // `capacity` and `seed` needed when a layer stopped holding one node.
         Record::Camera { index, .. } => Some(Key::Camera(*index)),
-        // **One L5, so one key.** A Set composites or it does not, and the
-        // last line to say so is what the Set ends up being — which is the
-        // same last-write-wins every other address here gets, over an address
-        // with nothing in it.
         Record::Merge { .. } => Some(Key::Merge),
-        // The same, and it is what a per-source salt *is*: two sources folded
-        // onto one seed is two geometries salted alike, which is the one thing
-        // salting exists to prevent.
         Record::Seed { stream, index, .. } => Some(Key::Seed(*stream, *index)),
-        // **By the input slot it fills and not by what fills it**, which is
-        // the same reason a `slot` record folds by its address rather than by
-        // its name: rebinding an input slot in a session is one input slot
-        // with a later answer, and a
-        // fold keyed by the far end would keep both and describe a node with
-        // two inputs it never had.
+        // Keyed by destination node and input port so rebindings overwrite.
         Record::Edge { node, slot, .. } => Some(Key::Edge(node.clone(), slot.clone())),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
+        // Non-Set-state or transient session records are excluded from Set projections.
         Record::Tick { .. }
         | Record::Audio { .. }
         | Record::Tempo { .. }
@@ -115,115 +90,23 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Residency { .. }
         | Record::Policy { .. }
         | Record::Look { .. }
-        // **Nothing to fold it onto, and it is not the deck's absence that
-        // says so.** A master out describes the whole fold rather than a
-        // member of it, so it has no address at all here — where a `gain`
-        // at least names a slot this file then refuses to write. It is the
-        // session's state for the same reason every record around it is:
-        // a Set file carrying one would set the level the *program* leaves
-        // at wherever that Set was next opened.
         | Record::MasterOut { .. }
-        // **The same, one pass along.** The master chain's settings describe
-        // what the fold's *output* goes through, so they have no address here
-        // either, and a Set file carrying them would reconfigure the master
-        // the moment that Set was loaded into any deck — which is
-        // `docs/adr/0227-…`'s own argument for why a chain setting is not a
-        // Set file's.
         | Record::MasterChain(_)
         | Record::Canvas { .. }
         | Record::Procedure { .. }
-        // **A node's address and still dropped**, which none of its neighbours
-        // here are. An authority names `(layer, index)` the way a `slot` does,
-        // so it looks foldable — and what it says is not about the Set at all:
-        // it is an arrangement between an operator and an agent, made during a
-        // performance, about the node a deck slot happened to be playing. A
-        // Set file that carried one would hand that node over wherever it was
-        // next loaded. See `Record::Authority`.
         | Record::Authority { .. }
-        // **A parameter value, which is the one thing this projection exists
-        // to fold, and still dropped.** A `ride` names a node and a key and a
-        // value, so `Key::Param` would take it without complaint — and it
-        // would be guessing. A `ride` names a *deck slot*, and nothing in a
-        // stream says which deck slot the Set at the head of it was played in,
-        // so folding one in cannot tell whether it is about the Set being
-        // folded or about one of the three others. That is `select`'s reason
-        // below, arriving at a record that has somewhere to go, and it is why
-        // this is the sharpest of the drops rather than the most obvious one:
-        // what is lost is a real value an operator set, and it is lost because
-        // the address it carries is one this file cannot check.
-        //
-        // **Nothing is lost by the path an operator actually saves through.**
-        // `Live::save_set` reads the live `Set`, which already holds every
-        // ridden value; this function is the session-to-Set-file fold, and it
-        // joins `gain`, `select` and `authority` in what that fold cannot say.
-        // When a session record says which deck slot the head was played in,
-        // this arm becomes a fold onto `Key::Param`.
         | Record::Ride { .. }
-        // **A `bind`'s address exactly, and still dropped**, which is the
-        // `ride` above read one field along. A `source` names a layer, an
-        // index and a key, so `Key::Bind` would take it — and it also names a
-        // *deck slot*, and nothing in a stream says which deck slot the Set at
-        // the head of it was played in. Folding one in would attach a signal
-        // to the Set being folded because somebody attached it to whatever was
-        // in slot 3. Nothing is lost by the path an operator saves through:
-        // `Live::save_set` reads the live `Set`, which already holds its
-        // bindings, and `setfile::save` writes them as `bind` records.
         | Record::Source { .. }
         | Record::Transport { .. }
         | Record::Transition { .. }
-        // **An event, like the `transition` above it, and still dropped — but
-        // no longer for the reason it used to be.** The layering *is* a Set
-        // file record now: `Record::Merge` says a Set composites, and its
-        // `live` field is where a Set records which renderer is the live one.
-        // What no *session* record carries is the layering. A `select` is
-        // addressed to a deck slot, and nothing in a stream says which slots
-        // composite, nor which deck slot the Set at the head of the stream was
-        // played in — `session_head` in `karakuri-cli` says as much when it
-        // writes one, that "a session stream cannot say what a deck held". So
-        // a projection meeting a selection cannot tell whether it is about the
-        // Set it is folding, and folding it in would be guessing that the head
-        // is the deck slot the record names. When a session record says which
-        // deck slot composites, this arm becomes a fold into that slot's
-        // `merge`.
         | Record::Select { .. }
         | Record::Mask { .. }
-        // **Nothing to fold, and nothing that could be.** A `save` names a Set
-        // file that already exists; folding a session down to a Set file is
-        // this function's job and it is not the job of the file it names. Two
-        // saves in a session are two files, not one with a later answer.
-        | Record::Save { .. } => None,
-        // **A fourth reason to drop, and it is not a fourth kind of state.** A
-        // metadata record describes what an *artifact* declares; a session
-        // stream is a performance and no writer here puts one in one. Meeting
-        // one means a hand-edited stream, and the answer is to drop it rather
-        // than to pass it through: passed through it would reach
-        // `Store::write_set`, which refuses it — so a whole save would fail on
-        // a line that says nothing about the Set being saved. There is also
-        // nothing to fold it onto, which is the same thing said from the other
-        // side. See `Record::is_metadata`.
-        Record::Meta { .. }
+        | Record::Save { .. }
+        | Record::Meta { .. }
         | Record::ParamDecl { .. }
         | Record::CapacityDecl { .. }
-        | Record::Emit { .. } => None,
-        // **A fifth reason, and it is the only one that is about the file this
-        // function *writes* rather than about the record.** A `part` is a node
-        // of a Set — the same node a `slot` is, named by relative path instead
-        // of by content address — so unlike everything above it there is
-        // something here to fold and an address to fold it onto. It is dropped
-        // all the same, because what this projection produces is the resolved
-        // form: `Store::write_set` refuses a `part` by name, so passing one
-        // through would fail a whole save on a line that belongs to a `.kset`.
-        //
-        // **Nor is it folded onto `Key::Slot`**, which is the tempting
-        // alternative and would be the worst of the three: a session holding a
-        // `part` and a `slot` at one address would then resolve to whichever
-        // came last, and half of the time that is an unresolved path claiming
-        // to be an address. A session stream has no writer that puts one here
-        // — resolution happens before a Set reaches a store — so meeting one
-        // means a hand-assembled stream, and the answer is the one every
-        // vocabulary error gets here: drop it, and let the reader that has the
-        // authoring file's own directory in hand be the one that resolves it.
-        Record::Part { .. } => None,
+        | Record::Emit { .. }
+        | Record::Part { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }
@@ -278,16 +161,7 @@ mod tests {
         assert!(set.iter().all(|l| l.record().is_set_state()));
     }
 
-    /// The mix is state and is dropped anyway, which is the one drop here that is
-    /// not "there was nothing to fold".
-    ///
-    /// A gain, a residency and a look describe the deck, and a Set file that
-    /// carried them would apply them to whatever deck slot it was next loaded into:
-    /// a Set opened into deck slot 0 would pull deck slot 2's fader down, and one
-    /// whose residency said `live` would go on air by being opened. The folding
-    /// machinery would happily key them and produce a stable projection — it is
-    /// *correct* folding into the wrong file — so nothing but this test stands
-    /// between the two scopes.
+    /// Verifies that session mix state (Gain, Residency, Look) is excluded from Set files.
     #[test]
     fn drops_the_mix_because_it_is_the_sessions_state_and_not_a_sets() {
         let session = vec![
@@ -326,10 +200,7 @@ mod tests {
         assert!(set.iter().all(|l| l.record().is_set_state()));
     }
 
-    /// A measurement and a correction are what a *frame* saw and decided, not what
-    /// anything is, so the projection drops them the way it drops ticks — including
-    /// the last one, which is the tempting thing to fold down and call the
-    /// session's state.
+    /// Verifies that transient audio analysis and tempo records are excluded.
     #[test]
     fn drops_audio_and_tempo_too() {
         let session = vec![
@@ -394,19 +265,7 @@ mod tests {
         );
     }
 
-    /// A `ride` is dropped, and a `param` at the same address is not — which is the
-    /// whole of why the two records are two records.
-    ///
-    /// This is the sharpest of the drops: a `ride` names a layer, an index, a key
-    /// and a value, so `Key::Param` would take it and fold it and the result would
-    /// look right. What it also names is a deck slot, and nothing in a stream says
-    /// which deck slot the Set at the head of it was played in — so folding one in
-    /// is guessing that the write was about the Set being written rather than about
-    /// one of the three others. `select`'s reason, arriving at a record that has
-    /// somewhere to go.
-    ///
-    /// Two rides at two slots, so a projection that folded them would fold them
-    /// onto each other as well as into the wrong file.
+    /// Verifies that deck-slot ride records are dropped rather than folded into Set parameters.
     #[test]
     fn a_ride_is_dropped_where_a_param_at_the_same_address_is_folded() {
         let session = vec![
@@ -460,19 +319,7 @@ mod tests {
         );
     }
 
-    /// Distinct on any of three dimensions: the key, whether a node is named at
-    /// all, and which node.
-    ///
-    /// The middle line used to differ from the first by `layer` alone — `L4` beside
-    /// `L1` — while both left `index` absent. That stopped being a distinguishing
-    /// dimension once `at`'s wildcard became `None` structurally: a `layer` written
-    /// beside no `index` is the placeholder every writer puts there and nobody
-    /// reads, on [`Record::Param`]'s own documentation, so two such wildcards are
-    /// one fact and not two regardless of what placeholder they happened to carry.
-    /// What still belongs in this test is the dimension that placeholder was
-    /// standing in for by accident: an address that names a node at all, which is a
-    /// fact a bare wildcard can never be confused with — "the Set's radius" and
-    /// "L1:0's radius" can both be true at once.
+    /// Verifies that parameters with differing keys or addresses remain distinct.
     #[test]
     fn distinct_keys_stay_distinct() {
         let session = vec![
@@ -545,11 +392,7 @@ mod tests {
         );
     }
 
-    /// Two geometries at two capacities are two records, which is the whole reason
-    /// the record gained an address. Keyed by layer alone they folded onto each
-    /// other and the projection kept whichever line came last: a session in which
-    /// the operator resized the second source saved as a Set file that resizes the
-    /// first, and nothing anywhere said so.
+    /// Verifies that distinct node capacities on the same layer do not overwrite each other.
     #[test]
     fn two_geometries_at_two_capacities_do_not_fold_together() {
         let session = vec![
@@ -607,10 +450,7 @@ mod tests {
         );
     }
 
-    /// A salt belongs to a source, and two sources salted alike is the one thing
-    /// salting exists to prevent: it is what makes two identical grids differ in
-    /// colour without being arranged to. A fold keyed by layer alone gave the pair
-    /// one seed record and so one randomness.
+    /// Verifies that seed records for distinct sources on the same layer remain distinct.
     #[test]
     fn each_source_keeps_its_own_salt() {
         let session = vec![
@@ -657,15 +497,7 @@ mod tests {
         );
     }
 
-    /// A node renamed is one node, not two.
-    ///
-    /// The address is what a `slot` record is folded *by*; the name is one of the
-    /// things it says *about* the node it addresses, exactly as `proc` is. So a
-    /// session that named a source and then renamed it projects to one line
-    /// carrying the later name. A fold keyed by the name would leave a Set file
-    /// describing two sources that never existed at once — and would move a name
-    /// between nodes when two of them were called the same thing at different
-    /// times.
+    /// Verifies that renaming a node updates its existing record rather than creating a second node.
     #[test]
     fn renaming_a_node_folds_onto_it_rather_than_forking_it() {
         let proc_hash = Hash::of(b"proc p { kind L1 }");
@@ -729,12 +561,7 @@ mod tests {
         );
     }
 
-    /// One L5, so one `merge` record, and a session that composited and then said
-    /// so again folds to the later line.
-    ///
-    /// The key carries no index because there is nothing for one to distinguish — a
-    /// Set has exactly one L5, the node its single `Texture` output comes out of —
-    /// so this is `capacity`'s fold over an address with nothing in it.
+    /// Verifies that subsequent merge records overwrite earlier ones.
     #[test]
     fn a_later_merge_folds_onto_the_earlier_one() {
         let session = vec![
@@ -756,21 +583,7 @@ mod tests {
         assert_eq!(set[1].record(), &Record::Merge { live: Some(1) });
     }
 
-    /// A selection is dropped even where the stream says the Set composites, which
-    /// is the drop this projection has to keep making and the one whose reason
-    /// moved.
-    ///
-    /// The layering is a Set file record now, so the old reason — "a folded
-    /// selection would describe a Set that loads back with every renderer folded
-    /// again" — is gone. What replaces it is that no session record carries the
-    /// layering: a `select` is addressed to a *deck slot*, and nothing in a stream
-    /// says which slots composite nor which deck slot the Set at the head of the
-    /// stream was played in. The `merge` line below is the head's, so this session
-    /// says as much as any session can, and it still does not say that deck slot 1
-    /// is the one this Set is in. Folding the selection would be guessing that.
-    ///
-    /// So the `merge` passes through as it was written — `live` still absent, every
-    /// input live — and the selection does not reach the file.
+    /// Verifies that deck selection events do not modify Set merge records.
     #[test]
     fn a_selection_is_dropped_even_where_the_stream_says_the_set_composites() {
         let session = vec![
