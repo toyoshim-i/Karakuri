@@ -250,20 +250,7 @@ proc bad {
     );
 }
 
-/// **`velocity` consumed and not emitted is now satisfied, and this test says
-/// the opposite of what it used to.**
-///
-/// It was a rejection test, and its reason was good while it held: the check
-/// pass had once accepted this shape on the strength of a derivation nothing
-/// implemented, so a procedure checked clean and then read zeros at runtime —
-/// the one failure "one severity" cannot allow. What changed is the second
-/// half. The engine writes a `velocity` slot from the step it already has, so
-/// the value is there and the acceptance is not a promise any more.
-///
-/// The rejection it becomes is the one that is still real: **`velocity` derives
-/// from `position`, and a procedure that emits neither cannot have it.** That
-/// is a question one file can answer, which is why it stayed in the checker
-/// while "does anybody emit this" moved to the Set.
+/// Verifies that consuming `velocity` is satisfied when `position` is emitted.
 #[test]
 fn a_consumed_velocity_is_satisfied_by_the_derivation_when_position_is_emitted() {
     check_ok(
@@ -350,16 +337,7 @@ proc bad {
     );
 }
 
-/// `check_consumes_emitted` only runs `if kind != Kind::L1 { return; }` — the
-/// module docs call this out as deliberate: an L4 procedure's `consumes` is a
-/// cross-proc question left for Set-composition time, outside this crate.
-/// `soft_points_checks_clean_with_expected_shape` already exercises this for
-/// `velocity` and `age`, but those two also happen to be the only attributes
-/// `is_derivable` recognizes, so that alone would not catch a regression that
-/// swapped the `kind != Kind::L1` guard for `!attr.is_derivable()` and
-/// otherwise left L4 behaving the same for those two names. `normal` has no
-/// derivation rule at all, so an L4 procedure consuming it must still check
-/// clean purely on the strength of the kind check.
+/// Verifies that L4 procedures consuming non-derivable attributes check clean.
 #[test]
 fn l4_consuming_an_unemitted_non_derivable_attribute_still_checks_clean() {
     let src = r#"
@@ -384,16 +362,7 @@ proc bad {
     assert!(checked.emit.is_empty());
 }
 
-/// A diagnostic points at the name that is wrong, and two of them come out in
-/// declaration order.
-///
-/// Both properties come from walking `consumes` as a list rather than as a
-/// set. The span matters because a caret under the whole procedure tells a
-/// reader — human or model — nothing they did not already know. The order
-/// matters because diagnostics are output, and the same source has to produce
-/// the same output: a regeneration loop reacting to a list that reshuffles
-/// between runs is reacting to noise. `HashSet` iteration order does exactly
-/// that, and it is stable often enough to look fine in a quick test.
+/// Verifies that consumes diagnostics point at the attribute span and preserve declaration order.
 #[test]
 fn a_consumes_diagnostic_points_at_the_attribute_and_keeps_declaration_order() {
     let src = r#"
@@ -436,14 +405,7 @@ proc probe {
     assert_eq!(text, "normal", "span covers `{text}`");
 }
 
-/// "`spawn` requires a spawn rate. Declare it as a parameter named
-/// `spawn_rate`" — ir-spec, "Blocks". Unenforced until now, and harmless
-/// while `spawn` was wired to nothing: with the lifecycle live, a `spawn`
-/// block without a rate compiles clean, builds a Set, and then creates zero
-/// elements every step forever, which reads as a procedure that draws
-/// nothing rather than as a mistake. That is exactly the shape this pass
-/// exists to refuse — see `docs/contributing.md` §3, *A test is watched to
-/// fail before it is kept*.
+/// Verifies that declaring a `spawn` block requires a `spawn_rate` parameter.
 #[test]
 fn a_spawn_block_without_a_spawn_rate_param_is_rejected() {
     let src = r#"
@@ -472,11 +434,7 @@ proc no_rate {
     assert!(text.starts_with("spawn"), "span covers `{text}`");
 }
 
-/// The same rule's other half: the engine reads `spawn_rate` as elements per
-/// second, so a `spawn_rate` of some other type is a rate the engine cannot
-/// read rather than a param it can. It is also the only param name whose
-/// type the engine depends on, which is why this is checked here and no
-/// other param name is.
+/// Verifies that non-float `spawn_rate` parameters are rejected.
 #[test]
 fn a_spawn_rate_that_is_not_a_float_is_rejected() {
     let src = r#"
@@ -524,14 +482,7 @@ proc with_rate {
     assert!(checked.block(BlockKind::Spawn).is_some());
 }
 
-/// A `capacity` range starting at zero is rejected at the declaration.
-///
-/// Not a nicety. `Compaction::new` asserts a non-zero capacity, and
-/// `Set::build` runs on the hot-swap worker thread — so a `.kir` declaring
-/// `[0, …]` built at 0 was an assert firing on a background thread, which the
-/// render thread sees as nothing at all. Catching it here means the diagnostic
-/// points at the declaration that is wrong, which is also the only place a
-/// regenerating model can fix it.
+/// Verifies that capacity ranges starting at zero are rejected.
 #[test]
 fn a_capacity_range_starting_at_zero_is_rejected() {
     let src = r#"

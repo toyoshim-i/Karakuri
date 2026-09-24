@@ -1,14 +1,4 @@
-//! `.kir` source to a flat token stream.
-//!
-//! Hand written on purpose: the grammar is small, and a table-driven or
-//! regex-based lexer would be more machinery than the language needs. Numbers
-//! carry enough precision to survive round-tripping (`i64`/`u64`/`f64`) even
-//! though the AST narrows them to `i32`/`u32`/`f32` — narrowing happens in the
-//! parser, where a span is available to report a value that does not fit.
-//!
-//! The lexer never hard-fails. An unrecognized character is one diagnostic and
-//! one skipped byte, not a stop — the parser, and whatever repair prompt reads
-//! its output, wants every problem in the file, not just the first.
+//! Lexical analyzer converting `.kir` source text into a token stream.
 
 use crate::error::IrError;
 use crate::span::Span;

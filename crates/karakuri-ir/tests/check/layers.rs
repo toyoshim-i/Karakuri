@@ -209,16 +209,7 @@ proc gen {
     );
 }
 
-/// **The mirror of the rule above, and it had the same failure mode.**
-/// `seed` is per-element identity, and a fullscreen L4 has no element: no
-/// element buffer is bound and the vertex stage is the engine's, not the
-/// procedure's. Read there it lowered to `in.seed` against a `VsOut` with no
-/// such field — valid `.kir`, invalid WGSL, and wgpu's uncaptured error handler
-/// took the process down before a frame was drawn.
-///
-/// Refused here rather than in `Ambient::available_in` for the reason `eye` and
-/// `ray` are: what makes an L4 a marcher is the *absence* of a `vertex` block,
-/// and a block does not know its siblings.
+/// Verifies that element identity ambients (`seed`, `copy`) are disallowed in fullscreen L4 procedures.
 #[test]
 fn per_element_identity_is_refused_in_a_fullscreen_l4() {
     for name in ["seed", "copy"] {
@@ -391,13 +382,7 @@ fn an_l2_checks_clean_and_carries_neither_topology_nor_blend() {
     assert_eq!(checked.consumes, vec![Attr::Position]);
 }
 
-/// **Vacuously closed form, and that is the decision the layer rests on.**
-///
-/// An L2 is stateless by rule, so it can never be the reason a Set has to be
-/// run forward to reach an instant — which keeps `closed_form` and priming
-/// questions the L1 alone answers, however long a chain gets. A `deform` that
-/// reported `false` here would drag every Set it appeared in into needing a
-/// warm-up.
+/// Verifies that L2 procedures are unconditionally classified as closed form.
 #[test]
 fn an_l2_is_closed_form_whatever_it_writes() {
     assert!(check_ok(WOBBLE).closed_form);
@@ -450,11 +435,7 @@ proc peek {
     );
 }
 
-/// **`kill()` is refused, and the reason is structural rather than a
-/// restriction.** Compaction runs once, after L1, and nothing downstream of a
-/// deformation reconsiders liveness — so an L2 removing an element would remove
-/// it from a range already decided. The hint has to say that rather than
-/// offering the `element` block an L2 does not have.
+/// Verifies that `kill()` is disallowed in L2 deform blocks.
 #[test]
 fn a_deform_cannot_kill_and_is_told_why_in_its_own_terms() {
     let src = r#"

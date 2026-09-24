@@ -108,13 +108,7 @@ proc peeks {
     );
 }
 
-/// **A renderer emits nothing**, and it was the one layer that did not say so.
-///
-/// An L3 and a field both refuse `emit` by name. An L4's was accepted, given no
-/// buffer, and then read back by `is_closed_form` — which states "vacuously
-/// true for L4" partly to stop a stray `emit` making a Set look accumulating
-/// and dragging it into needing to be primed. That is a compensation for a
-/// declaration that should not have parsed.
+/// Verifies that `emit` declarations are disallowed on L4 renderers.
 #[test]
 fn emit_is_refused_on_a_renderer() {
     let errs = check_err(
@@ -138,16 +132,7 @@ proc draws {
     );
 }
 
-/// **`seed` is per element, and a field has none** — the same sentence
-/// `attributes_are_refused_in_a_field_block` states, for the one per-element
-/// value that is not an attribute.
-///
-/// It needed its own test for the reason it needed its own rule: `seed` is
-/// available in every block *an element reaches*, and that sentence is
-/// falsified twice — by a fullscreen L4 and by a field. The first was found by
-/// running it; this one checked clean and reached `FieldResolver::read_seed`,
-/// which is an `unreachable!`, so a `.kir` nobody could see anything wrong with
-/// panicked the thread that compiled it.
+/// Verifies that the `seed` ambient is disallowed in Field blocks.
 #[test]
 fn seed_is_refused_in_a_field_block() {
     let errs = check_err(
@@ -242,13 +227,7 @@ proc wrong {
     );
 }
 
-/// **`is_static` asks whether anything ever moves an element between slots**,
-/// which is two questions and used to be one.
-///
-/// A `spawn` block allocates; `kill()` makes the next step's scan compact the
-/// survivors down. Either one and `seed` stops being the slot index — which is
-/// the property a caller wants it for, and which the `kill`-only case
-/// falsified while the answer stayed true.
+/// Verifies that procedures invoking `kill()` are not classified as static.
 #[test]
 fn a_procedure_that_kills_is_not_static() {
     let lattice = r#"
@@ -343,12 +322,7 @@ fn a_used_geometry_checks_clean_and_carries_its_name() {
     assert!(reads_far(&deform.stmts), "`far.position` is a far read");
 }
 
-/// **The base name is the procedure's own**, so a read through a name it did
-/// not declare resolves to nothing rather than to the second geometry.
-///
-/// This is the whole difference from the reserved `other` this replaced: a
-/// spelling means the far side because the header said so, not because the
-/// language reserved a word — which is what let there be only ever one.
+/// Verifies that reading an undeclared geometry slot name resolves to nothing.
 #[test]
 fn a_read_through_an_undeclared_name_is_refused() {
     let errs = check_err(&MORPH.replace("  uses far : Geometry\n", ""));
@@ -366,9 +340,7 @@ fn a_read_through_an_undeclared_name_is_refused() {
     );
 }
 
-/// **One `consumes` covers both sides.** The far geometry is an input edge, and
-/// a node reads the same attribute from each — so an attribute this node does
-/// not take is not readable on either side.
+/// Verifies that far geometry attributes must be declared in `consumes`.
 #[test]
 fn a_far_read_takes_only_what_the_node_consumes() {
     let errs = check_err(&MORPH.replace("far.position", "far.tint"));
@@ -379,13 +351,7 @@ fn a_far_read_takes_only_what_the_node_consumes() {
     );
 }
 
-/// **A geometry is not a value.** `far` alone is the whole second source, which
-/// this language has no type for and no way to pass — so the one thing that can
-/// be said about it is what one of its elements holds.
-///
-/// The complement of the read above: the new name appears in expression
-/// position, and every position it can appear in either produces a value or is
-/// refused with its own reason.
+/// Verifies that a geometry slot cannot be evaluated as an rvalue.
 #[test]
 fn a_used_geometry_is_not_a_value_on_its_own() {
     let errs = check_err(&MORPH.replace("far.position", "far"));
@@ -396,13 +362,7 @@ fn a_used_geometry_is_not_a_value_on_its_own() {
     );
 }
 
-/// **And it is not assignable.** The far side is an input edge: this node reads
-/// it and writes its own output, so a `.kir` that assigned to it would be
-/// asking to write another source's buffer.
-///
-/// Refused by the grammar rather than by the checker — an assignment target is
-/// a bare name — which is a refusal all the same, and the one that matters is
-/// that it never reaches the generator.
+/// Verifies that a geometry slot cannot appear on the left-hand side of an assignment.
 #[test]
 fn a_used_geometry_cannot_be_assigned_to() {
     let errs = refusals(&MORPH.replace(
@@ -456,12 +416,7 @@ proc dots {
     }
 }
 
-/// **A node takes one second geometry**, and a second `uses` is refused with a
-/// sentence rather than quietly overwriting the first.
-///
-/// One name would win and the other's reads would resolve against the wrong
-/// geometry — which is the shape this notation exists to end, arriving through
-/// the notation itself.
+/// Verifies that declaring more than one secondary geometry slot is rejected.
 #[test]
 fn a_second_used_geometry_is_refused() {
     let errs = check_err(&MORPH.replace(
@@ -475,12 +430,7 @@ fn a_second_used_geometry_is_refused() {
     );
 }
 
-/// **`Geometry` is what a slot can be**, and anything else is refused by name
-/// rather than accepted and ignored.
-///
-/// The type is written even though there is one of them, so that the slot that
-/// takes a camera or a field — which is what this notation is for next — does
-/// not have to grow a type incompatibly.
+/// Verifies that unrecognized slot types are rejected.
 #[test]
 fn an_unknown_slot_type_is_refused() {
     let errs = refusals(&MORPH.replace("uses far : Geometry", "uses far : Points"));
@@ -491,9 +441,7 @@ fn an_unknown_slot_type_is_refused() {
     );
 }
 
-/// **A slot shares one scope with everything else nameable here.** It is read
-/// the way a local is — `far.position` — so a slot called `position` would make
-/// one spelling mean two things depending on whether a dot follows it.
+/// Verifies that slot names cannot collide with attributes, parameters, or local bindings.
 #[test]
 fn a_slot_name_cannot_shadow_or_be_shadowed() {
     // An attribute.

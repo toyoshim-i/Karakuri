@@ -13,21 +13,10 @@ pub(crate) use crate::error::Stage;
 pub(crate) use crate::span::Span;
 pub(crate) use crate::typed::{TExpr, TExprKind, TStmt, Target, TexRef};
 
-/// The spelling [`Output::PointRate`] had before its unit stopped being pixels.
-///
-/// Kept as a name this pass still recognises so that a `.kir` written against
-/// the old language is refused with the new spelling rather than with "never
-/// declared". It is not a reserved word: nothing stops an author declaring a
-/// local or a param called `point_size`, and if one does the declaration wins —
-/// this only catches the name when nothing else claims it.
+/// Legacy identifier for `point_rate` recognized for user migration diagnostics.
 pub(super) const OLD_POINT_SIZE: &str = "point_size";
 
-/// What to do about it, in one sentence.
-///
-/// The division is deliberately not given a number. `point_rate` is a fraction
-/// of the render target's height, and which height a file's old pixel values
-/// were authored against is a fact about that file rather than about the
-/// language. Naming one here would make it an anchor.
+/// Diagnostic migration hint explaining the transition from pixel `point_size` to normalized `point_rate`.
 pub(super) const POINT_RATE_HINT: &str = concat!(
     "the output is now `point_rate`, a fraction of the render target's height ",
     "rather than a count of pixels — rename it and divide the old pixel value ",

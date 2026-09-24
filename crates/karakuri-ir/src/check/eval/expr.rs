@@ -49,49 +49,21 @@ impl<'a> Checker<'a> {
         }
         if let Some(attr) = Attr::from_name(name) {
             let available = match self.block {
-                // **A `spawn` block reads only what this procedure emits.**
-                // An attribute it merely `consumes` is one the engine derives,
-                // and every rule reads state an element does not have yet: the
-                // spawn instant is written after this block runs, and last
-                // step's position is a step this element has not lived. Read
-                // here, both would be whatever the slot held for the element
-                // that last occupied it.
-                //
-                // Refused rather than substituted, because there is no value to
-                // substitute. It is also refused rather than left to the
-                // lowering, which had no field to name and produced WGSL naga
-                // rejects — a `.kir` that checked clean and took the process
-                // down, which is the one shape this pass exists to prevent.
-                // Read side of the same rule: no element, no attributes.
+                // A `spawn` block reads only what this procedure emits.
                 Some(BlockKind::Field) => false,
                 Some(BlockKind::Spawn) => self.emit.contains(&attr),
                 Some(BlockKind::Element) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
-                // **Both lists, and they mean different things here.** A
-                // `deform` reads what it `consumes` from upstream and reads
-                // back what it `emit`s, because an L2 that widens the element —
-                // adding a `tint` nothing produced — has to be able to read the
-                // field it is writing. Same shape as an `element` block, for a
-                // different reason: there the two lists are one buffer, here
-                // they are the input edge and the output one.
+                // A `deform` block reads upstream consumed attributes and emitted attributes.
                 Some(BlockKind::Deform) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
-                // **`consumes` only, unlike the `deform` beside it.** A mask
-                // decides where the deformation applies, which is a question
-                // about what *reaches* this node — and an `emit`ted attribute
-                // has not been written yet when the mask runs, so reading one
-                // here would read the zero the pass-through left rather than a
-                // value. Refusing it is better than a rule an author has to
-                // remember.
+                // A `mask` block reads consumed upstream attributes only.
                 Some(BlockKind::Mask) => self.consumes.contains(&attr),
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => {
                     self.consumes.contains(&attr)
                 }
-                // An L3 has no element in hand — see `check_header`. Neither
-                // has an L5: what it is handed is the picture the elements
-                // already drew.
                 Some(BlockKind::Camera) | Some(BlockKind::Frame) | None => false,
             };
             if available {
@@ -143,18 +115,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         if let Some(ambient) = Ambient::from_name(name) {
-            // **`source` and a geometry slot cannot both be in one
-            // procedure**, and the read is where it is caught because the read
-            // is what is ambiguous.
-            //
-            // A pairing Set is *one* source made of two simulations: the far
-            // one feeds the slot and shares the near one's uniform, so there is
-            // one `seed_salt` for two geometries and `source` here would
-            // silently mean the near one. Refused rather than defined as the
-            // near side, because a value that quietly answers for one of two
-            // things is the shape this whole notation exists to remove — and
-            // the sentence names the slot, so the author is told *which*
-            // reading was ambiguous rather than left to infer a rule.
+            // `source` is ambiguous in a procedure that declares a paired geometry slot.
             if ambient == Ambient::Source {
                 if let Some(far) = self.paired {
                     self.err_hint(
@@ -185,12 +146,7 @@ impl<'a> Checker<'a> {
             if available {
                 return Some(TExpr::new(ambient.ty(), span, TExprKind::Ambient(ambient)));
             }
-            // A marcher's values get their own sentence, because "not available
-            // in this block" would send an author looking at the block when what
-            // is wrong is that the procedure has a `vertex` block at all.
-            // The converse sentence, for the converse mistake — and it names
-            // the `vertex` block too, because that is the thing to add rather
-            // than the thing to remove.
+            // Dedicated errors for fullscreen passes accessing per-element ambients.
             if matches!(ambient, Ambient::Seed | Ambient::Copy) && self.fullscreen {
                 self.err_hint(
                     Stage::Contract,
@@ -230,13 +186,7 @@ impl<'a> Checker<'a> {
                 );
                 return None;
             }
-            // **The eight an L5 refuses, each by name and each with its own
-            // sentence** — which is the whole of P-0083 at this layer: a
-            // refusal that names the fix beats one that names the rule.
-            //
-            // Before the three sentences below it, because every one of those
-            // is about a kind an L5 is not: `seed` here is not a fullscreen
-            // L4's `seed`, and `source` here is not a field's.
+            // Diagnostically distinct error hints for L5 ambient restrictions.
             if self.kind == Kind::L5 {
                 let hint = match ambient {
                     Ambient::Seed => {
@@ -320,17 +270,7 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
-        // **A geometry is not a value.** `far` on its own is the whole second
-        // source, which this language has no type for and no way to pass — the
-        // one thing that can be said about it is what one of its elements
-        // holds.
-        //
-        // **Before the stage outputs**, and that is not an ordering
-        // convenience: `near` and `far` are the camera's clip planes, so they
-        // are output names on an L3 and ordinary names everywhere else — which
-        // is exactly what `shadows_output` already says by asking about the
-        // kind. Asked in the other order, an L2 slot called `far` would be
-        // declarable and unreadable.
+        // A geometry slot name cannot be evaluated as an rvalue.
         if self.uses == Some(name) {
             self.err_hint(
                 Stage::Contract,
@@ -358,18 +298,7 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
-        // **A texture is not a value, and it is the one slot type that can
-        // never become one.** A geometry has no type for a whole source, a
-        // field has none until it is evaluated, a camera is six numbers — and
-        // each of those sentences is about a value this language could in
-        // principle have. This one is not: what a texture offers is a *fetch*,
-        // at this fragment or at a coordinate, and both of those are the two
-        // builtins rather than a value with parts.
-        //
-        // **Before the ambient arm and before the undefined fallthrough**, so
-        // that `src` reads as what it is rather than as a name nobody declared
-        // — which is the sentence an author of a `frame` block would find
-        // hardest to act on.
+        // A texture slot name cannot be evaluated as an rvalue.
         if let Some(tex) = self.texture(name) {
             let what = match tex {
                 TexRef::Src => "the incoming frame".to_string(),
@@ -390,11 +319,7 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
-        // **`held` named where nothing retains a frame.** Refused with a
-        // sentence about the *declaration* rather than about the name, because
-        // the name is right and the header is what is missing — and refused
-        // only in a `frame` block, since `held` is an ordinary word everywhere
-        // else and an author who calls a local that is not shadowing anything.
+        // `held` requires `retains` in frame blocks.
         if name == TEXTURE_HELD && self.block == Some(BlockKind::Frame) && !self.retains {
             self.err_hint(
                 Stage::Contract,
@@ -407,15 +332,7 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
-        // **A Source slot *is* a value, and it is the one that is.** The three
-        // refusals around it say the language has no type for a whole source,
-        // no function type and nothing for six numbers — all true, and none of
-        // them about this: what a Source slot binds is the assigned `uint` that
-        // identifies one geometry, and `uint` is a type the language has.
-        //
-        // **Before the camera arm and after the field one**, which is only
-        // where it reads best: the four slot names are checked against four
-        // disjoint lists, so the order between them decides nothing.
+        // A Source slot evaluates to the geometry instance's uint identifier.
         if self.sources.contains(&name) {
             return Some(TExpr::new(
                 Ty::Uint,
@@ -462,11 +379,7 @@ impl<'a> Checker<'a> {
             return None;
         }
 
-        // Truly unresolved. The signal bus accepts any name (see the module
-        // docs), so this is the only diagnosis available: either the author
-        // meant to read a signal directly, which IR cannot do, or made a
-        // typo, which the hint below will not fit as well but does not
-        // actively mislead either.
+        // Unresolved identifier: signal bus is not directly readable from IR.
         if self.block.is_some() {
             self.err_hint(
                 Stage::Contract,
@@ -607,26 +520,11 @@ impl<'a> Checker<'a> {
         components: &str,
         span: Span,
     ) -> Option<TExpr> {
-        // **`far.position` is not a swizzle**, and it arrives here because it
-        // is *shaped* like one — `expr . ident` is the grammar, and the parser
-        // is right not to decide which it is. Deciding here costs no new
-        // syntactic category, which is the whole reason a read of the second
-        // geometry is spelled this way: `uses` adds one header declaration and
-        // one name, and nothing else in the language moves.
-        //
-        // **The base name is the procedure's own**, so what reaches here is a
-        // comparison against what the header declared rather than against a
-        // reserved word. That is the difference the whole notation is: a file
-        // that had to spell it `other` could only ever have one.
+        // Delegate slot member access (`<geometry>.<attr>` or `<camera>.<member>`).
         if let Expr::Ident { name, .. } = value {
             if self.uses == Some(name.as_str()) {
                 return self.check_far(name, components, span);
             }
-            // **The same shape a third time, resolved a second way.** A
-            // geometry slot's members are attributes and a camera slot's are
-            // not, so this cannot go through `check_far`: what decides which
-            // members exist is the *type* the header declared, which is the
-            // whole of what the type on a slot is for.
             if self.camera == Some(name.as_str()) {
                 return self.check_camera_member(name, components, span);
             }

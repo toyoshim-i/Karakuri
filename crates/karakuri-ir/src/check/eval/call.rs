@@ -3,15 +3,7 @@
 use super::*;
 
 impl<'a> Checker<'a> {
-    /// What the header declared, before the table the language ships.
-    ///
-    /// A field is reached through a slot, so the name at a call site is the
-    /// procedure's own — and this branch is the whole of that. It is first for the
-    /// reason it is a branch at all: a call resolves against what the file said it
-    /// takes, and asking the builtin table first would make the language's
-    /// vocabulary quietly outrank the header. Nothing is hidden by the order, since
-    /// a slot named after a builtin is refused where it is declared — see
-    /// `check_slot_names`.
+    /// Resolves a call expression against declared fields, builtins, and constructors.
     pub(super) fn check_call(&mut self, name: &str, args: &[Expr], span: Span) -> Option<TExpr> {
         if self.fields.contains(&name) {
             return self.check_field_call(name, args, span);
@@ -22,12 +14,7 @@ impl<'a> Checker<'a> {
         if let Some(ty) = Ty::from_name(name) {
             return self.check_constructor(ty, args, span);
         }
-        // **`field` is an ordinary name now**, and this is the sentence the
-        // person migrating a file reads. It was the reserved word a field was
-        // reached through, and reserving one is exactly what capped a procedure
-        // at a single input — so it is gone rather than kept as an alias for
-        // "the one field, if there is exactly one", which is the rule the slot
-        // exists to remove.
+        // Provide migration hint for legacy `field(p)` syntax.
         let hint = (name == "field").then_some(
             "`field(p)` is no longer the way to evaluate one: declare which field this \
              procedure takes — `uses shape : Field` — and call it by that name, `shape(p)`. \
@@ -88,12 +75,7 @@ impl<'a> Checker<'a> {
         ))
     }
 
-    /// A fetch from a named texture — `texel(src)`, `tap(held, uv)`.
-    ///
-    /// The texture position takes a bare name and nothing else: not a local holding
-    /// one, because there is no type to hold it in, and not an expression, because
-    /// there is nothing to compute. Every other position is checked the ordinary
-    /// way, which today is `tap`'s `vec2`.
+    /// Validates texture fetch builtins (`texel`, `tap`) against a named texture target.
     fn check_texture_call(
         &mut self,
         b: Builtin,
@@ -136,11 +118,7 @@ impl<'a> Checker<'a> {
             Expr::Ident { name, .. } => match self.texture(name) {
                 Some(tex) => Some(tex),
                 None => {
-                    // `check_ident` owns every sentence about why a name is not
-                    // a texture — `held` without `retains`, an undeclared slot,
-                    // a param — so it is asked rather than second-guessed here.
-                    // It always reports, since a name that resolved to
-                    // something else is not a texture either.
+                    // Delegate identifier diagnosis to check_ident.
                     match self.check_ident(name, args_ast[tex_at].span()) {
                         Some(other) => {
                             self.err_hint(
@@ -215,13 +193,7 @@ impl<'a> Checker<'a> {
 
     fn check_builtin_call(&mut self, b: Builtin, args_ast: &[Expr], span: Span) -> Option<TExpr> {
         let sig = b.signature();
-        // **Refused by kind before it is refused by shape**, because the shape
-        // is not what is wrong: `frame_step(0.02)` types perfectly well in an
-        // L4 and lowers to a read of a `viewport` field no other module carries
-        // — which is a `.kir` that checks clean and comes up short at stage 5
-        // ([ADR-0032](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md)).
-        // Its two neighbours refuse themselves for want of a texture name, and
-        // they get this sentence anyway so that all three are one rule.
+        // Frame effect builtins require L5 procedures.
         if b.is_frame_effect() && self.kind != Kind::L5 {
             self.err_hint(
                 Stage::Contract,
@@ -239,10 +211,7 @@ impl<'a> Checker<'a> {
             }
             return None;
         }
-        // **A texture argument is a name and not an expression**, so it is
-        // resolved here rather than by `check_expr` below — see
-        // [`Shape::Texture`]. What comes back is which binding to fetch from,
-        // which is what the tree carries.
+        // Resolve texture argument identifiers before expression evaluation.
         if let Some(at) = b.texture_arg() {
             return self.check_texture_call(b, at, args_ast, span);
         }
@@ -436,14 +405,7 @@ impl<'a> Checker<'a> {
                     return None;
                 }
 
-                // General rule: any mix of `float`/`vec2`/`vec3`/`vec4`
-                // arguments whose component counts sum to exactly `n` —
-                // e.g. `vec4(position, 1.0)` concatenates a `vec3` and a
-                // `float`. This is GLSL's actual vector-constructor rule;
-                // the spec's prose ("one scalar per component, or a single
-                // scalar to broadcast") undersells it — the spec's own
-                // `soft_points` example uses `vec4(position, 1.0)`, which
-                // only this broader rule accepts. See the module docs.
+                // Any mix of scalar and vector arguments whose component counts sum to n.
                 let mut checked = Vec::with_capacity(args_ast.len());
                 let mut ok = true;
                 for a in args_ast {
@@ -526,16 +488,7 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(ty, span, TExprKind::Construct { args }))
     }
 
-    /// `<slot>.<attr>` — an attribute of the far element, from the geometry bound
-    /// to the slot this procedure declared.
-    ///
-    /// Only for something the node consumes. The far geometry is an input edge:
-    /// this node reads it and writes its own output, so what is readable there is
-    /// what the node declared it takes.
-    ///
-    /// `slot` is the name the header gave it, carried in only so the diagnostics
-    /// are written in the author's own spelling. Which node fills it is not decided
-    /// here and never can be — it is the Set's answer.
+    /// Validates far attribute access (`<slot>.<attr>`) on a declared geometry slot.
     pub(super) fn check_far(&mut self, slot: &str, name: &str, span: Span) -> Option<TExpr> {
         let Some(attr) = Attr::from_name(name) else {
             self.err_hint(
@@ -573,26 +526,7 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(attr.ty(), span, TExprKind::Far(attr)))
     }
 
-    /// `<slot>.<member>` — one part of the camera bound to the slot this procedure
-    /// declared.
-    ///
-    /// The second resolution path, and the reason a Camera slot cost the checker
-    /// anything at all. `far.position` resolves against the attribute table,
-    /// because a geometry's parts *are* attributes; a camera's are not parts of
-    /// anything else, so this asks the slot's *type* what it has. Three members,
-    /// and each is a value an L4 could already read — which is what makes this a
-    /// new spelling rather than a new capability, and why the L3's other five stay
-    /// unreadable
-    /// (`docs/adr/0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md`):
-    /// the unnamed forms are [`Ambient::Camera`], [`Ambient::Eye`] and
-    /// [`Ambient::Ray`], and they mean the Set's camera where no slot was declared.
-    ///
-    /// So the stage rules are the ambients' own, asked rather than restated:
-    /// `.clip` is readable wherever an L4 projects, and `.eye` and `.ray` only in
-    /// the fragment stage of a procedure that draws the whole frame — because they
-    /// are defined by the ray prologue such a stage opens with and by nothing else.
-    /// A second copy of those rules here would be a second place for them to be
-    /// wrong, and this one would be the copy nobody looks at.
+    /// Validates camera member access (`<slot>.clip`, `<slot>.eye`, `<slot>.ray`).
     pub(super) fn check_camera_member(
         &mut self,
         slot: &str,

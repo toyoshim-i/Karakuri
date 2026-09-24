@@ -269,11 +269,7 @@ impl Parser {
         expr
     }
 
-    /// `id` is a reserved word rather than an undefined name, so rejecting it here
-    /// is a lexical matter and a repair prompt gets the hint on the first pass.
-    /// Signal-bus names are not reserved and cannot be judged here: a procedure may
-    /// legally declare `param energy`, and whether a bare `energy` resolves is a
-    /// question about declarations, which is name resolution's job.
+    /// Parses a primary expression (parenthesized expression, literal, identifier, or unary op).
     fn parse_primary(&mut self) -> Expr {
         match self.peek().kind.clone() {
             TokKind::LParen => {

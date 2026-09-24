@@ -36,11 +36,7 @@ fn an_l3_checks_clean_and_carries_no_geometry() {
     assert!(checked.consumes.is_empty());
 }
 
-/// **`eye` and `target` are required and the other four are not.** Where the
-/// camera is and what it looks at are the whole of what makes one camera
-/// different from another; `up`, the field of view and the two planes have
-/// answers that are right far more often than not, and the lowering writes them
-/// before the block runs.
+/// Verifies that `eye` and `target` assignments are required in a camera block.
 #[test]
 fn a_camera_must_say_where_it_is_and_what_it_looks_at() {
     for missing in ["eye", "target"] {
@@ -285,14 +281,7 @@ proc march {
     assert!(rendered.contains("eye"), "{rendered}");
 }
 
-/// **A stage output is reserved in the layer that owns it, and nowhere else.**
-///
-/// `Output` went from four names to ten when the camera arrived, and a global
-/// reservation would have taken `up`, `target`, `near`, `far` and `fov_y` out of
-/// every layer's vocabulary at once — `let near = length(position)` in a
-/// marcher and `let up = vec3(0.0, 1.0, 0.0)` in an L1 were both legal and
-/// neither shadows anything reachable there. The diagnostic was worse than the
-/// refusal: it named a `camera` block the procedure does not have.
+/// Verifies camera stage outputs are not reserved words outside of camera blocks.
 #[test]
 fn a_camera_output_is_not_reserved_in_the_layers_that_have_no_camera() {
     check_ok(
@@ -382,18 +371,7 @@ proc grounded {
     assert!(rendered.contains("ambient"), "{rendered}");
 }
 
-/// **`eye` and `ray` belong to a marcher and to nothing else**, and reading
-/// either in a per-element L4 used to check clean and then panic.
-///
-/// The lowering defines both in the ray prologue a fullscreen fragment stage
-/// opens with. A procedure with a `vertex` block gets no prologue, so `ray`
-/// lowered to a bare identifier nothing declared: `generate_l4` produced WGSL
-/// naga refuses, and wgpu's uncaptured-error handler took down whichever thread
-/// built it — a `SetError::Panicked` on the swap worker, and the process at
-/// startup.
-///
-/// The diagnostic has to name the `vertex` block rather than the fragment one,
-/// because what is wrong is that the procedure has a vertex stage at all.
+/// Verifies that marching ambients `eye` and `ray` cannot be read in per-element renderers.
 #[test]
 fn a_per_element_renderer_cannot_read_a_marchers_ray() {
     for name in ["ray", "eye"] {

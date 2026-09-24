@@ -1,74 +1,7 @@
-//! How small a primitive this renderer can draw, read off the expression rather
-//! than measured.
+//! Conservative lower-bound estimation for `point_rate` output expressions.
 //!
-//! [`Output::PointRate`] is a fraction of the render target's height, so a
-//! primitive is `rate × height` pixels across and stops being a pixel at `1 /
-//! rate` rows.
-//! `docs/adr/0245-the-sub-pixel-compensation-is-paid-in-the-colour-because-alpha-is-coverage.md`
-//! says what happens under that height — the primitive is drawn at one pixel
-//! and dimmed in the colour — which is a different picture rather than a
-//! smaller one, and is why anything extrapolating a cost from a small draw has
-//! to know the height it stops being allowed to go below.
-//!
-//! The rate is a per-element vertex expression. Nothing outside the shader
-//! evaluates it, and nothing can enumerate the elements it would be evaluated
-//! over. What *can* be done is to bound it: every leaf is a literal, a param
-//! with a declared range, an integer whose width is a range, or something with
-//! no range at all — and interval arithmetic over those carries a bound to the
-//! root.
-//!
-//! ## Which end, and why it is that end
-//!
-//! The smallest rate the procedure can emit is what is wanted, so this computes
-//! a *lower* bound and an under-estimate is the safe error. The floor is `1 /
-//! rate`: a bound *below* the true smallest rate yields a floor *above* the
-//! true floor, which places a probe's rungs higher than they had to be and at
-//! worst refuses to place them at all. A bound *above* it yields a floor
-//! *below* the true one, which certifies a draw whose primitives are being
-//! rounded up to a pixel — the reading that makes a cost model under-state,
-//! which is the one direction ADR-0245's consumer forbids. So every rule below
-//! rounds outward, and anything it cannot bound is [`Bound::Unbounded`] rather
-//! than a guess.
-//!
-//! The upper end is computed and is not published. It exists because interval
-//! arithmetic needs both ends to carry either — `1 - x` needs `x`'s upper end
-//! to bound its lower one — and it is not offered because nothing asks how
-//! *large* a primitive can be.
-//!
-//! ## What a param contributes
-//!
-//! The declared range, never the value the Set is holding. A param is a fader's
-//! range, an agent's search range and a signal's normalisation basis
-//! ([`crate::ast::Param`]), so its value moves while the material is on air,
-//! and a floor read off the value would be wrong the moment somebody turned a
-//! knob. The declared range is a property of the *file*, so a bound taken from
-//! it holds for as long as that file is the material.
-//!
-//! Nothing clamps a write to the declared range — `karakuri_engine::Set`'s
-//! `carry_moved_from` says so outright — so a value written outside a
-//! declaration is outside what this bound covers. [`Bound::AtLeast::over`]
-//! names every declaration the bound leaned on, which is what lets a caller
-//! that can see the held values check them rather than assume them.
-//!
-//! ## What it does not attempt
-//!
-//! Correlation. Two reads of one param are two intervals here, so `p - p`
-//! bounds to `[min - max, max - min]` rather than to zero. That is sound in
-//! this direction and loses nothing the corpus needed.
-//!
-//! Attributes, ambients and field evaluations have no declared range and are
-//! [`Range::WHOLE`] — except at the integer widths, where the *type* is a range
-//! and `float(source % 3u) + 1.0` bounds because of it. `max(size, 1.0)` and
-//! `clamp(x, 0.001, 0.03)` are how the shipped material gets a bound anyway,
-//! and that is not a coincidence: an author who wants a primitive that stays
-//! visible writes the same guard.
-//!
-//! A matrix product, which is a sum of products rather than a product and would
-//! need a rule of its own. Nothing worth bounding is written through one.
-//!
-//! A second pass over a loop. A local a loop body assigns to is unknown for the
-//! whole body, because the value it holds at the top of an iteration is the one
-//! the iteration before left and this walks the body once.
+//! Uses interval arithmetic over parameter declarations and literals to establish
+//! a guaranteed minimum primitive size for renderer procedures.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -77,14 +10,7 @@ use crate::builtin::Builtin;
 use crate::span::Span;
 use crate::typed::{Checked, TExpr, TExprKind, TStmt, Target};
 
-/// What can be proved about the smallest `point_rate` a procedure emits, and
-/// what that proof rests on.
-///
-/// Carried with the procedure's name because a Set draws through several
-/// renderers and its floor is the least of theirs: a bound with no name on it
-/// cannot say which file is holding the floor down. That is `P-0095` at the
-/// same remove `karakuri_engine::estimate::Estimate` reads it at — a number
-/// travels with what it is a number *of*.
+/// Lower-bound estimate for `point_rate` emitted by a procedure.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RateBound {
     /// The procedure the vertex block was read from.
@@ -93,57 +19,29 @@ pub struct RateBound {
     pub bound: Bound,
 }
 
-/// The three answers [`point_rate_bound`] can give.
+/// The result of `point_rate_bound` analysis.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Bound {
-    /// The procedure has no `vertex` block, so it emits no rate and draws no
-    /// primitive — [`crate::ast::Topology::Fullscreen`], which [`crate::check`]
-    /// infers from exactly this absence.
-    ///
-    /// Not a bound of zero and not a refusal: there is nothing that can fall under
-    /// a pixel, so no height is out of bounds for it.
+    /// The procedure has no `vertex` block and emits no primitive.
     NoPrimitive,
-    /// Every rate this vertex block can emit is at least `rate`, over every value
-    /// its params can take inside their declarations and over every value of
-    /// everything the analysis could not see.
+    /// Minimum guaranteed `point_rate` over all parameter states.
     AtLeast {
-        /// Finite and greater than zero, always. A bound of zero is no bound — there is
-        /// no height at which a zero-rate primitive is a pixel across — so it is
-        /// reported as [`Bound::Unbounded`] instead.
+        /// Lower bound rate (strictly greater than zero).
         rate: f32,
-        /// Every param declaration the bound leaned on, by name, sorted. Empty where
-        /// the rate is a constant expression.
-        ///
-        /// This is the *what it is a bound of*: the bound holds while these
-        /// declarations hold, and nothing in the engine clamps a write to a declared
-        /// range. A caller holding the values can check them; a caller that cannot is
-        /// reading a bound over the file rather than over the run, and this list is how
-        /// it knows the difference.
+        /// Parameter names upon whose declarations this bound depends.
         over: Vec<String>,
     },
-    /// No positive lower bound could be proved, and where it was lost.
-    ///
-    /// A refusal rather than a degraded answer: a floor guessed too low certifies a
-    /// draw whose primitives are floored, which makes a cost model under-state —
-    /// see the module doc on which end is safe.
+    /// No positive lower bound could be statically proved.
     Unbounded {
-        /// The `point_rate` assignment that defeated the analysis. Where a vertex block
-        /// assigns on several paths this is the first one that could not be bounded,
-        /// which is not necessarily the smallest.
+        /// Location of the `point_rate` assignment that could not be bounded.
         at: Span,
-        /// What was proved there anyway, so a reader can tell the two failures apart: a
-        /// finite number at or below zero is an expression that genuinely reaches zero,
-        /// and `f32::NEG_INFINITY` is one nothing bounded below at all.
+        /// Computed lower bound at the failure point.
         lower: f32,
     },
 }
 
 impl RateBound {
-    /// The proved rate, or [`None`] where there is no primitive or no bound.
-    ///
-    /// A convenience for a caller that has already decided what it does about the
-    /// other two, and never a way to skip that decision: [`Bound::NoPrimitive`] and
-    /// [`Bound::Unbounded`] mean opposite things and both answer `None`.
+    /// Returns the bounded rate if positive, or `None` if unbounded or non-primitive.
     pub fn rate(&self) -> Option<f32> {
         match self.bound {
             Bound::AtLeast { rate, .. } => Some(rate),
@@ -152,52 +50,12 @@ impl RateBound {
     }
 }
 
-/// Bound the smallest `point_rate` `proc` can emit, from its vertex block and
-/// its params' declared ranges.
-///
-/// Pure — no device, no Set, no values. The answer is a property of the file,
-/// which is what makes it usable before anything is drawn.
-///
-/// Asked of an L4, which is the only kind with a `vertex` block to write a rate
-/// in. Any other kind answers [`Bound::NoPrimitive`] by the same route a
-/// fullscreen renderer does, and truthfully: it draws no primitive either.
-///
-/// Over the whole declared range of every param. That is the bound over the
-/// *file*, and it is the widest one there is. A caller holding the state a Set
-/// is actually in wants [`point_rate_bound_at`] — see there for why the state
-/// and not the file is what
-/// `docs/adr/0282-a-rebuild-inherits-the-values-somebody-moved-and-reads-the-rest-from-the-code.md`
-/// makes the reading.
+/// Bounds the minimum `point_rate` `proc` can emit across its parameter ranges.
 pub fn point_rate_bound(proc: &Checked) -> RateBound {
     point_rate_bound_at(proc, &HashMap::new())
 }
 
-/// [`point_rate_bound`], with named params pinned to the values they are
-/// holding.
-///
-/// `held` is read by the param's bare declared name; a name it does not carry
-/// keeps its declared range, and a name that is not a param of `proc` is
-/// ignored. A pinned param is the single point `[v, v]`, so the interval that
-/// comes back is over *this* state rather than over every state the file
-/// permits.
-///
-/// Which is the reading ADR-0282 settled. A declared value is the value in the
-/// untouched state — what the code says when nobody has moved anything — and
-/// where somebody moved one, the held value *is* the value. So a caller holding
-/// a Set's values passes all of them and gets the bound over the state as it
-/// stands; the whole-range bound above is what is left when nothing is known
-/// about the state at all.
-///
-/// It goes stale when a fader moves, and that is the design. The narrower bound
-/// is a claim about a state, so a write invalidates it and the estimate
-/// standing on it is taken again — rather than the wider bound's bargain, which
-/// is to stay true by covering states nobody is in.
-///
-/// A vector param is not pinned. The analysis carries one interval per
-/// declaration and a Set holds a value per *component key*, so pinning `glow`
-/// from `glow.x` would be claiming a bound over a value this map does not name.
-/// Nothing shipped writes a rate through a vector param; a caller that does
-/// gets the declared range and no worse.
+/// Bounds the minimum `point_rate` `proc` can emit with given parameters pinned to held values.
 pub fn point_rate_bound_at(proc: &Checked, held: &HashMap<String, f32>) -> RateBound {
     let bound = match proc.block(BlockKind::Vertex) {
         // A procedure with no vertex block emits no rate. `check` infers
@@ -231,19 +89,9 @@ pub fn point_rate_bound_at(proc: &Checked, held: &HashMap<String, f32>) -> RateB
     }
 }
 
-/// The least of what every assignment can emit, or the first one that could not
-/// be bounded.
-///
-/// Every assignment counts, whatever path it is on. Which branch a given
-/// element takes is not decidable here and does not need to be: the emitted
-/// rate is one of these, so the least of their lower bounds is a lower bound on
-/// all of them.
+/// Computes the minimal lower bound across all emitted assignments.
 fn settle(emitted: &[(Span, Value)], block: Span) -> Bound {
     if emitted.is_empty() {
-        // `check` requires `point_rate` on every path of a vertex block, so a
-        // checked procedure cannot reach this. Refused rather than asserted:
-        // an analysis that found no assignment has not proved a floor, and
-        // that is the whole of what it is asked.
         return Bound::Unbounded {
             at: block,
             lower: f32::NEG_INFINITY,
@@ -261,12 +109,7 @@ fn settle(emitted: &[(Span, Value)], block: Span) -> Bound {
         least = least.min(value.range.lo);
         over.extend(value.over.iter().cloned());
     }
-    // **Rounded down into `f32`, never across.** The bound is about to be
-    // handed to a reciprocal, and a value rounded *up* shortens the floor —
-    // the one direction this whole module refuses. `as f32` rounds to nearest,
-    // so a result that landed above the `f64` answer is stepped back one
-    // representable value, which for a positive float is one off the bit
-    // pattern.
+    // Round down into f32 so that the conservative lower bound is preserved.
     let mut rate = least as f32;
     if f64::from(rate) > least {
         rate = f32::from_bits(rate.to_bits() - 1);
@@ -283,12 +126,7 @@ fn settle(emitted: &[(Span, Value)], block: Span) -> Bound {
     }
 }
 
-/// A closed interval containing every component of a value, with either end
-/// allowed to be infinite.
-///
-/// One interval for a `vec3` rather than three, because every consumer here
-/// wants a scalar in the end and a swizzle out of a vector must not be able to
-/// escape the bound its source carried.
+/// Closed interval `[lo, hi]` containing all components of a value.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Range {
     pub lo: f64,
@@ -296,18 +134,13 @@ pub struct Range {
 }
 
 impl Range {
-    /// Nothing is known.
+    /// Unbounded range representing an unknown value.
     pub const WHOLE: Range = Range {
         lo: f64::NEG_INFINITY,
         hi: f64::INFINITY,
     };
 
-    /// The interval, or [`Range::WHOLE`] where the arithmetic that produced it did
-    /// not yield one — a `NaN` end, or an end pair that crossed.
-    ///
-    /// Every construction goes through here, so an operation that overflows into
-    /// `NaN` degrades to "not known" rather than propagating a comparison that is
-    /// false both ways.
+    /// Returns a validated interval, or [`Range::WHOLE`] if endpoints are invalid or inverted.
     pub fn new(lo: f64, hi: f64) -> Range {
         if lo.is_nan() || hi.is_nan() || lo > hi {
             Range::WHOLE
@@ -320,10 +153,7 @@ impl Range {
         Range::new(v, v)
     }
 
-    /// What a value of `ty` is known to be worth with nothing else said about it.
-    /// The integer widths are the only real answers: a `uint` is non-negative and
-    /// bounded by construction, which is the whole of why `float(source % 3u) +
-    /// 1.0` has a floor.
+    /// Default interval bounding values of type `ty`.
     fn of(ty: Ty) -> Range {
         match ty {
             Ty::Int => Range::new(f64::from(i32::MIN), f64::from(i32::MAX)),
@@ -368,13 +198,7 @@ impl Range {
         self.mul(Range::new(1.0 / o.hi, 1.0 / o.lo))
     }
 
-    /// `%`, at whichever family `ty` is.
-    ///
-    /// `float` takes the sign of the divisor — the IR's `%` lowers to `a - b *
-    /// floor(a / b)`, which is `mod` and not WGSL's remainder — so a positive
-    /// divisor makes the result non-negative whatever the dividend is. The integer
-    /// widths keep the native remainder, whose sign is the *dividend*'s, so a
-    /// `uint` is non-negative and an `int` is not.
+    /// Evaluates `%` according to whether `ty` is float (`mod`) or integer (remainder).
     fn rem(self, o: Range, ty: Ty) -> Range {
         let magnitude = o.lo.abs().max(o.hi.abs());
         if !magnitude.is_finite() || magnitude == 0.0 {
@@ -425,11 +249,7 @@ impl Range {
     }
 }
 
-/// One end times another, with `0 × ∞` read as `0`.
-///
-/// The convention is what makes the products of an interval touching zero and
-/// one reaching infinity come out right: `[0, 5] × [1, ∞)` is `[0, ∞)`, and
-/// `NaN` would have thrown the whole bound away.
+/// Multiplies interval endpoints with the convention `0 × ∞ = 0`.
 fn times(a: f64, b: f64) -> f64 {
     if a == 0.0 || b == 0.0 {
         0.0
@@ -446,11 +266,7 @@ fn most(xs: &[f64]) -> f64 {
     xs.iter().copied().fold(f64::NEG_INFINITY, f64::max)
 }
 
-/// An interval and which declarations it rests on.
-///
-/// The two travel together because a bound taken over a param's declaration is
-/// only worth what the declaration is worth, and a caller cannot check a
-/// declaration it was not told about.
+/// An evaluated interval range along with the parameter declarations it depends upon.
 #[derive(Debug, Clone, PartialEq)]
 struct Value {
     range: Range,
@@ -539,12 +355,7 @@ impl Analysis<'_> {
                 body,
                 ..
             } => {
-                // **Anything the body assigns is unknown for the whole of it.**
-                // The value a local holds at the top of iteration `n` is the one
-                // iteration `n-1` left, and this pass walks the body once —
-                // so the only sound reading of a mutated local is that it could
-                // be anything. A local *declared* in the body is rebound on
-                // every pass and keeps its real interval.
+                // Locals assigned inside loop bodies are conservative WHOLE intervals.
                 let saved = self.env.clone();
                 for name in assigned(body) {
                     self.env.insert(name, Value::of(Range::WHOLE));
@@ -555,8 +366,7 @@ impl Analysis<'_> {
                 );
                 self.stmts(body);
                 let after = std::mem::take(&mut self.env);
-                // **Joined with the state before the loop**, because the bounds
-                // are constants and `start >= end` is a body that never runs.
+                // Join with state before loop in case loop runs 0 iterations.
                 self.env = saved
                     .into_iter()
                     .map(|(name, before)| {
@@ -593,17 +403,7 @@ impl Analysis<'_> {
                     .unwrap_or_else(|| Range::of(e.ty)),
                 over: BTreeSet::from([name.clone()]),
             },
-            // **No declared range anywhere in here.** An attribute is whatever
-            // the simulation left in it, an ambient is the frame's, and a field
-            // is another file's arithmetic. `Range::of` still answers for the
-            // integer widths, which is not nothing: a `Source` identity is a
-            // `uint`, so `source % 3u` is bounded and `float` of it stays that
-            // way.
-            // **And a texture fetch is whatever was drawn into it**, which is
-            // the frame's own arithmetic several layers up and unbounded in
-            // linear HDR by construction — the pipeline runs unclamped and a
-            // texel above 1.0 is light the display cannot show rather than a
-            // mistake.
+            // Attributes, ambients, field samples, and texture fetches have unbounded dynamic ranges.
             TExprKind::Attr(_)
             | TExprKind::Far(_)
             | TExprKind::Ambient(_)
@@ -625,12 +425,7 @@ impl Analysis<'_> {
                 let range = match op {
                     BinOp::Add => a.range.add(b.range),
                     BinOp::Sub => a.range.sub(b.range),
-                    // **A matrix product is a sum of products and not a
-                    // product**, so an interval over the operands' components
-                    // does not bound the result's. `camera * vec4(position,
-                    // 1.0)` is the only shape the corpus writes and its matrix
-                    // is an ambient with no range anyway, so nothing is lost by
-                    // giving the whole line rather than a rule for it.
+                    // Matrix products are conservatively unbounded.
                     BinOp::Mul if matches!(lhs.ty, Ty::Mat3 | Ty::Mat4) => Range::WHOLE,
                     BinOp::Mul if matches!(rhs.ty, Ty::Mat3 | Ty::Mat4) => Range::WHOLE,
                     BinOp::Mul => a.range.mul(b.range),
@@ -676,12 +471,7 @@ impl Analysis<'_> {
     }
 }
 
-/// What a constructor does to the interval it was handed.
-///
-/// Only the narrowing conversions change it: `int` and `uint` truncate toward
-/// zero, which never decreases, so both ends move under the same function. A
-/// negative float converted to `uint` is not defined by WGSL, and the whole
-/// interval is given up rather than half of it kept.
+/// Transforms an interval under type conversion rules.
 fn convert(from: Range, to: Ty) -> Range {
     match to {
         Ty::Int => from.monotone(f64::trunc),
@@ -696,17 +486,7 @@ fn convert(from: Range, to: Ty) -> Range {
     }
 }
 
-/// What a builtin's result is worth, given its arguments'.
-///
-/// Everything not named here is [`Range::WHOLE`], which is the honest answer
-/// for a function whose range this file has no record of. The ones that are
-/// named are named from a record: `docs/ir-spec.md`'s built-in table states
-/// `hash1` at `0..1` and `value_noise` at `-1..1`, and the rest are the
-/// definitions of the functions themselves.
-///
-/// `perlin`, `simplex`, `fbm` and `curl` are deliberately absent. They are
-/// bounded in practice and the specification does not say by what, and a bound
-/// this file invented would be a claim no other file is holding to.
+/// Evaluates interval bounds for builtin functions given argument ranges.
 fn builtin_range(func: Builtin, args: &[Range]) -> Range {
     let arg = |i: usize| args.get(i).copied().unwrap_or(Range::WHOLE);
     match func {
@@ -769,13 +549,7 @@ fn builtin_range(func: Builtin, args: &[Range]) -> Range {
     }
 }
 
-/// `pow(x, y)`, at the corners.
-///
-/// `pow` is monotone in each argument separately — in `x` by the sign of `y`,
-/// in `y` by whether `x` is above or below one — so over a box its extremes are
-/// at the corners whenever the box stays in `x >= 0`, which is where WGSL
-/// defines it at all. A negative base or an infinite end gives the whole line
-/// rather than a corner that happens to evaluate.
+/// Evaluates interval bounds for `pow(x, y)` at box domain corners.
 fn power(x: Range, y: Range) -> Range {
     if x.lo < 0.0 || !x.hi.is_finite() || !y.lo.is_finite() || !y.hi.is_finite() {
         return Range::WHOLE;

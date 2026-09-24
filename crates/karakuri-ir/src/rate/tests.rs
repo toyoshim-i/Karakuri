@@ -199,13 +199,7 @@ proc wash {
     assert_eq!(checked.topology, Some(crate::ast::Topology::Fullscreen));
 }
 
-/// A `uint` is bounded by being a `uint`, and that is the whole of why this
-/// expression has a floor: `source` is an identity nothing declares a range
-/// for, `% 3u` puts it in `0..=2`, and the `+ 1.0` lifts it clear of zero.
-///
-/// The expression is the corpus's, verbatim from `SOURCE_L4` in
-/// `crates/karakuri-ir/tests/check.rs` — the one computed `point_rate` in that
-/// file, every other being a literal.
+/// Tests that integer modulus operations provide bounded intervals even without param declarations.
 #[test]
 fn an_integer_remainder_bounds_a_value_nothing_declared() {
     let src = r#"
@@ -237,11 +231,7 @@ proc lit
     }
 }
 
-/// A local a loop assigns to is unknown for the whole loop. This pass walks a
-/// body once, and the value a local holds at the top of an iteration is the one
-/// the iteration before left — so the only sound reading is that it could be
-/// anything, and a rate built from it is refused rather than bounded to what
-/// one pass happened to produce.
+/// Tests that locals mutated within a loop are conservatively treated as unbounded.
 #[test]
 fn a_local_a_loop_mutates_is_not_bounded_by_one_pass() {
     match bound(

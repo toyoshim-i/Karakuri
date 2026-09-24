@@ -2,13 +2,9 @@ use crate::span::Span;
 
 use super::*;
 
-/// `param <name> : <type> [<min>, <max>] = <default>`
+/// Parameter declaration: `param <name> : <type> [<min>, <max>] = <default>`.
 ///
-/// The range is mandatory: it is the fader range, the agent's search range, and
-/// the normalisation basis for signal binding all at once. For vector params it
-/// applies per component — one `[min, max]` covers `glow.x`, `glow.y` and
-/// `glow.z` alike, which is `docs/ir-spec.md`'s "param" section and is what
-/// `Set::build` writes into the range map under each of [`Param::keys`].
+/// Defines a tunable fader/control input. For vector types, `[min, max]` applies per component.
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
@@ -20,87 +16,12 @@ pub struct Param {
 }
 
 impl Param {
-    /// The declared default as a number, or `None` where the declaration is an
-    /// expression this does not fold.
-    ///
-    /// A negation is folded, because the parser does not fold it. `= -0.35` is
-    /// `Unary { Neg, Lit }` and not a literal, so matching [`Expr::Lit`] alone
-    /// silently dropped every negative default: the engine's param never entered
-    /// its uniform, its declared value was discarded, binding refused it, and the
-    /// shader got whatever the miss produced — a panic on the render thread before
-    /// that reader returned an `Option`, and a quiet `0.0` after. A `.kir`
-    /// declaring `param drift : float [-1.0, 1.0] = -0.35` is legal and none of
-    /// that is a reader's to decide.
-    ///
-    /// Not general constant folding, deliberately. A default is checked in an empty
-    /// scope, so it is *some* constant, but the useful set is one literal with an
-    /// optional sign in front of it. Widening it is a language question — what a
-    /// default may say — rather than a convenience for one caller, and it belongs
-    /// here where every caller gets the same answer.
-    ///
-    /// It lives here rather than in a reader, and that is the whole point. It was
-    /// private to `karakuri-engine`'s `Set`, with a note saying a second evaluator
-    /// elsewhere would agree with the shader only by coincidence. There is now a
-    /// second reader — `karakuri-environment`'s metadata writer records this number
-    /// in a `param_decl` — and a metadata file whose `default` disagreed with the
-    /// uniform the run actually loaded would be a card describing a procedure
-    /// nobody ran. One function, so they cannot differ.
-    ///
-    /// `None` is *"this default is not a number I can state"*, and never *"there is
-    /// no default"*: the grammar makes `= <expr>` mandatory. What a caller does
-    /// with that is the caller's — the engine leaves the param out of its value
-    /// map, so its uniform field is packed with the `0.0` a miss produces; the
-    /// metadata writer writes the declaration with no `default` key.
-    ///
-    /// A vector declaration answers `None` here and is not undeclarable. `=
-    /// vec3(0.4, 0.7, 1.0)` is three numbers and this returns one, so it is
-    /// [`Param::default_components`] that states them — the widening this paragraph
-    /// reserved, taken for the one case where the numbers are statable and the
-    /// width was the whole obstacle. A caller that wants *one* number still wants
-    /// this one.
+    /// Returns the declared default value as a scalar float if statically foldable, or `None`.
     pub fn default_scalar(&self) -> Option<f32> {
         fold_literal(&self.default)
     }
 
-    /// The declared default as one number per component, or `None` where the
-    /// declaration is an expression this does not fold.
-    ///
-    /// [`Param::default_scalar`] widened by exactly one step, and it is the step
-    /// that widening was always reserved for: that function's own documentation
-    /// says `None` means *"this default is not a number I can state"* and never
-    /// *"there is no default"*, and for a `vec3` the numbers are statable — the
-    /// language just needs more than one of them to state them in. A parameter is
-    /// driven one component at a time
-    /// ([ADR-0268](../../../docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md)),
-    /// so this is the shape every consumer of a default wants.
-    ///
-    /// What folds:
-    ///
-    /// - a float literal, or a negated one — one value, which is
-    ///   [`Param::default_scalar`]'s answer in a one-element vector;
-    /// - `vecN(a, b, …)` with `N` arguments, each a literal or a negated literal —
-    ///   `N` values, in the order they are written;
-    /// - `vecN(a)` with one such argument — the broadcast, `N` copies of it.
-    ///
-    /// `docs/ir-spec.md`, "Types": *"Vector constructors follow GLSL: any mix of scalars
-    /// and shorter vectors whose component counts sum to the target width, or a single scalar
-    /// to broadcast. `vec3(1.0, 0.0, 0.0)`, `vec3(0.0)`, and `vec4(position, 1.0)` are all
-    /// well formed"*.
-    ///
-    /// A nested constructor answers `None`, and it is said here rather than left to
-    /// be discovered. `vec3(vec2(0.1, 0.2), 0.3)` is legal by that same passage and
-    /// its component count reaches the target width through an inner constructor
-    /// rather than through this argument list, so the arity test above rejects it.
-    /// That is [`Param::default_scalar`]'s deliberate narrowness held to: the
-    /// useful set is literals with an optional sign, and widening it further is a
-    /// language question — what a default may say — rather than a convenience for
-    /// one caller.
-    ///
-    /// The arity is the declared type's and not the constructor's, so a list that
-    /// does not fill the declaration folds to nothing rather than to a short
-    /// vector. The checker already refuses such a default (`check.rs`, *"param `{}`
-    /// default has type `{}`, expected `{}`"*); this answers for a `Param` that has
-    /// not been through it.
+    /// Returns the declared default value unfolded per vector component, or `None`.
     pub fn default_components(&self) -> Option<Vec<f32>> {
         let width = self.ty.param_components()?;
         if width == 1 {
@@ -119,15 +40,9 @@ impl Param {
         }
     }
 
-    /// Every key this declaration is driven by, in `x`, `y`, `z` order.
+    /// Returns parameter key strings in component order (`x`, `y`, `z`).
     ///
-    /// One key for a `float` — the declared name itself, so nothing about a scalar
-    /// parameter changes — and one per component for a `vec2` or a `vec3`, spelled
-    /// by [`component_key`].
-    ///
-    /// The order is load-bearing: `Set::published` walks this to build the default
-    /// interface, and a control's *position* in that interface is what a MIDI
-    /// control is learned against.
+    /// Returns `[name]` for scalar float, or `[name.x, name.y, ...]` for vectors.
     pub fn keys(&self) -> Vec<String> {
         match self.ty.param_components() {
             Some(width) if width > 1 => (0..width).map(|i| component_key(&self.name, i)).collect(),
@@ -136,17 +51,7 @@ impl Param {
     }
 }
 
-/// A literal, or a negated literal, as a number.
-///
-/// One fold, because two would disagree. [`Param::default_scalar`] and
-/// [`Param::default_components`] are the same reading of the same declaration
-/// at two widths, and the engine's uniform and `karakuri-environment`'s
-/// `param_decl` are both packed from it — a second evaluator would agree with
-/// the shader only by coincidence.
-///
-/// A negation is folded, because the parser does not fold it. `= -0.35` is
-/// `Unary { Neg, Lit }` and not a literal, so matching [`Expr::Lit`] alone
-/// silently dropped every negative default.
+/// Folds a float literal or negated float literal expression to `f32`.
 fn fold_literal(expr: &Expr) -> Option<f32> {
     match expr {
         Expr::Lit {
@@ -168,36 +73,17 @@ fn fold_literal(expr: &Expr) -> Option<f32> {
     }
 }
 
-/// The component letters, in the order a vector parameter is addressed in.
-///
-/// Three, because [`Ty::param_components`] answers for the three types a
-/// `param` may declare and the widest is a `vec3` — `check.rs` refuses the
-/// rest: *"params may only be `float`, `vec2`, or `vec3`"*.
-///
-/// They are the language's own swizzle components — `check_swizzle` maps
-/// exactly `x`, `y`, `z`, `w` — so a component key reads as the `.kir` text
-/// that would name the same number.
+/// Swizzle component suffixes used for vector parameter names (`x`, `y`, `z`).
 pub const COMPONENTS: [&str; 3] = ["x", "y", "z"];
 
 /// Returns the parameter key for a vector component (e.g. `glow.y` for component 1 of `glow`).
-///
-/// Component index maps to `COMPONENTS` (`x`, `y`, `z`). Panics if component >= 3.
 pub fn component_key(name: &str, component: usize) -> String {
     let mut out = String::with_capacity(name.len() + 2);
     push_component_key(&mut out, name, component);
     out
 }
 
-/// [`component_key`] into a buffer the caller owns.
-///
-/// This exists for the render thread. `karakuri-engine`'s `node::write_params`
-/// composes a key per component of every vector param of every node, every
-/// frame, and `format!` there would be an allocation per component per frame.
-/// One reused buffer costs none after the first.
-///
-/// It is the same function so that the separator is written down once: two
-/// spellings of `.` in two crates is exactly the drift `docs/contributing.md`
-/// §4 is about.
+/// Appends a vector parameter component key into the given string buffer.
 pub fn push_component_key(out: &mut String, name: &str, component: usize) {
     out.push_str(name);
     out.push('.');
@@ -222,30 +108,10 @@ impl CapacityDecl {
     }
 }
 
-/// Elements per geometry where nothing else names one — neither `--capacity`
-/// nor the procedure's own [`CapacityDecl`].
-///
-/// A default of the language rather than of a flag, which is why it sits beside
-/// the grammar it completes rather than in whichever surface last needed a
-/// number. The order it is last in: `--capacity` overrides every source; below
-/// it a procedure runs at the default its own `capacity` declares; this is what
-/// is left when neither spoke.
-///
-/// Little should ever reach it. `check_header` requires a `capacity` on every
-/// L1, so a [`Checked`](crate::typed::Checked) that passed contract checking
-/// always carries one and the arm this fills is the one that says so:
-/// `capacity` is an `Option` on the seam type, and a caller holding a procedure
-/// that failed checking still needs a number rather than a panic.
+/// Default capacity limit per geometry when unspecified (262,144 elements).
 pub const DEFAULT_CAPACITY: u32 = 262_144;
 
-/// `amplify <factor>`
-///
-/// A compile-time constant, on the same terms as a loop bound, because the
-/// output buffer is sized from it and the cost is multiplied out by it —
-/// neither of which a runtime value could do. It is the one thing in the
-/// language that changes an element count, which is why it is a header
-/// declaration rather than anything a block can say: what a `deform` writes is
-/// decided before it runs.
+/// Amplification declaration: `amplify <factor>`.
 #[derive(Debug, Clone, Copy)]
 pub struct AmplifyDecl {
     pub factor: u32,
@@ -258,31 +124,14 @@ pub struct AmplifyDecl {
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub name: String,
-    /// The name alone, so a refusal about what it collides with points at it rather
-    /// than at the whole declaration.
     pub name_span: Span,
-    /// What the slot takes, as the header spelled it.
     pub ty: SlotTy,
     pub span: Span,
 }
 
-/// `retains` — a bare declaration and no operand.
+/// Retained frame input declaration: `retains`.
 ///
-/// It says *this procedure reads a retained frame*, and that is the whole of
-/// what it says: it makes [`TEXTURE_HELD`] readable in the `frame` block and
-/// decides nothing about which cut is held.
-///
-/// Which cut is the slot's answer, `mix` or `exit`, written where the procedure
-/// is instantiated rather than in the file — which is
-/// [P-0086](../../../docs/principles/0086-a-procedure-knows-only-what-it-declares.md)
-/// at the width of one declaration, and the same division `uses` and `edge`
-/// already draw. `retains mix` in the file would be two procedures where there
-/// is one, `feedback_mix.kir` and `feedback_exit.kir`, with the operator's
-/// choice spelled as a library swap.
-///
-/// A struct rather than a `bool` so the span survives: a refusal about
-/// `retains` on a kind that has no frames to retain has to point at the
-/// declaration.
+/// Indicates that an L5 procedure reads the previous frame via `held`.
 #[derive(Debug, Clone, Copy)]
 pub struct RetainsDecl {
     pub span: Span,
@@ -351,11 +200,7 @@ pub enum BlockKind {
     Vertex,
     /// L4: once per rasterised fragment.
     Fragment,
-    /// L5: once per texel of the frame it is handed, and never more.
-    ///
-    /// This is [`Topology::Fullscreen`]'s shape with the camera taken out, which is
-    /// what most of the rules about it are: there is no element, no viewpoint and
-    /// no geometry, and the whole of the procedure is this one body over `src`.
+    /// L5: once per texel of the input frame.
     Frame,
 }
 

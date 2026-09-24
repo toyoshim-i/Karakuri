@@ -16,12 +16,8 @@ pub enum Stmt {
         value: Expr,
         span: Span,
     },
-    /// `<target> = <expr>;` or `<target> op= <expr>;`
-    ///
-    /// The target is a bare name: whether it is a local, an attribute, or a stage
-    /// output is decided during resolution. Compound assignment (`op` is `Some`) is
-    /// legal on locals only — on an attribute it would look like accumulation while
-    /// re-reading the previous frame every time.
+    /// `<target> = <expr>;` or `<target> op= <expr>;`.
+    /// Target kind (local, attribute, output) is resolved during checking.
     Assign {
         target: String,
         op: Option<BinOp>,

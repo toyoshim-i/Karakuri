@@ -29,12 +29,7 @@ proc lens {
 }
 "#;
 
-/// **A declared Field slot is callable, and the call carries the slot's name.**
-///
-/// The name is the whole change. `field(p)` named the one field by being the
-/// one spelling there was; this resolves against what the header declared, so
-/// what reaches the lowering is a call that says *which* field — and a lowering
-/// that has the name can address a second one without any of this moving.
+/// Verifies that a declared Field slot is callable and retains the slot name in typed IR.
 #[test]
 fn a_declared_field_slot_is_called_and_carries_its_name() {
     let checked = check_ok(LENS);
@@ -72,14 +67,7 @@ fn a_declared_field_slot_is_called_and_carries_its_name() {
     );
 }
 
-/// **Several Field slots on one procedure are legal**, which is the rule a
-/// geometry slot does not follow.
-///
-/// A marcher wanting a shape and a cutter is the ordinary case, and it costs
-/// nothing: a field has no node and no buffer, so a second slot is one more
-/// body spliced under one more name. The count is a rule about *geometry* —
-/// a second bound element buffer per node is what is not built — which is why
-/// splitting the arity rule by type is what this notation needed.
+/// Verifies that multiple Field slots can be declared on a single procedure.
 #[test]
 fn two_field_slots_on_one_procedure_are_accepted() {
     let checked = check_ok(
@@ -192,14 +180,7 @@ proc look {
     }
 }
 
-/// **A field may not take a field**, and the reason is the one the recursion
-/// refusal it replaced carried: a field bound to itself is a function calling
-/// itself, which WGSL forbids outright.
-///
-/// Two fields naming each other is the same failure at one remove, and telling
-/// that apart from a legal chain of shapes is a walk over every edge in the
-/// Set. That is a graph question, answerable where the Set is built and nowhere
-/// in one file — so the whole thing is refused rather than half-checked here.
+/// Verifies that Field procedures cannot declare Field slots.
 #[test]
 fn a_field_refuses_a_field_slot() {
     let errs = check_err(
@@ -222,15 +203,7 @@ proc wrong {
     );
 }
 
-/// **`field(p)` no longer resolves**, and the sentence says what to write
-/// instead.
-///
-/// It was a reserved word, which is exactly what capped a procedure at one
-/// field: a second would have had nothing to be called. Keeping it as an alias
-/// for "the one field, if there is exactly one" would be that rule reinstated
-/// under a new spelling, so it is gone — and this is a breaking change to the
-/// language, which is why the refusal is written for the person migrating a
-/// file rather than for the compiler.
+/// Verifies that the legacy `field(p)` syntax is rejected with a migration hint.
 #[test]
 fn field_is_no_longer_a_reserved_word() {
     let errs = check_err(&LENS.replace("shape(p)", "field(p)"));
@@ -254,14 +227,7 @@ fn field_is_no_longer_a_reserved_word() {
     assert_eq!(checked.field_slots(), vec!["field"]);
 }
 
-/// **A Field slot's name is called, so it may not be a builtin's.**
-///
-/// `check_reserved` asks about names that are *read* — an attribute, an
-/// ambient, a stage output — and a builtin is none of those: `sin` was a
-/// perfectly good slot name while a slot was only ever read with a dot after
-/// it. A call resolves against the header first, so `sin(x)` would stop meaning
-/// the sine, and either resolution order is a spelling that quietly means
-/// something other than it says.
+/// Verifies that Field slot names cannot shadow builtins or type constructors.
 #[test]
 fn a_field_slot_may_not_be_named_after_a_builtin_or_a_type() {
     for (name, what) in [
@@ -326,14 +292,7 @@ proc march_through {
 }
 "#;
 
-/// **A declared Camera slot is read as a member, and the members are the
-/// ambients under another name.**
-///
-/// That is the whole of what this notation is: an L4 could already read the
-/// Set's camera as `camera`, `eye` and `ray`, and what it could not say was
-/// *which* camera. So the read resolves to the same three values — a new
-/// spelling for an old capability, which is why nothing below the checker had
-/// to move.
+/// Verifies that declared Camera slots expose camera members (.clip, .eye, .ray).
 #[test]
 fn a_declared_camera_slot_is_read_as_a_member() {
     let checked = check_ok(THROUGH);
@@ -379,13 +338,7 @@ fn a_declared_camera_slot_is_read_as_a_member() {
     );
 }
 
-/// **A Camera slot is L4's alone**, and each of the other four refuses it with
-/// a sentence about itself rather than about `uses`.
-///
-/// An L3 *is* a camera — every member is a derivation of the six numbers it
-/// writes — an L1 and an L2 work in world space and do not project, and a field
-/// is a function of space whose answer cannot depend on where it is watched
-/// from.
+/// Verifies that Camera slots can only be declared on L4 renderers.
 #[test]
 fn a_camera_slot_is_l4s_alone() {
     for src in [
@@ -448,13 +401,7 @@ proc blob {
     assert_eq!(check_ok(THROUGH).camera_slot(), Some("view"));
 }
 
-/// **A renderer draws from one camera.** Two slots would need two bind groups
-/// in one pipeline and two edges per Set, and neither is what anybody asked
-/// for: a frame drawn from two viewpoints is two renderers, which is exactly
-/// what an edge per renderer makes possible.
-///
-/// Refused rather than resolved by position, on the terms every other collision
-/// in a header is.
+/// Verifies that declaring multiple Camera slots on one renderer is rejected.
 #[test]
 fn two_camera_slots_on_one_renderer_are_refused() {
     let errs = check_err(
@@ -496,11 +443,7 @@ proc twice {
     );
 }
 
-/// **A camera's members are resolved against its type**, so a name that is not
-/// one of the three is refused with the three named — and with the five values
-/// an L4 still cannot read, which is unbuilt by decision rather than by
-/// oversight:
-/// `docs/adr/0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md`.
+/// Verifies that accessing invalid camera members is rejected with hints.
 #[test]
 fn a_member_a_camera_has_not_got_is_refused() {
     let errs = check_err(&THROUGH.replace("view.clip", "view.target"));
@@ -525,14 +468,7 @@ fn a_member_a_camera_has_not_got_is_refused() {
     );
 }
 
-/// **The members keep the stage rules the ambients have**, asked rather than
-/// restated: `.eye` and `.ray` are built by the ray prologue a fullscreen
-/// fragment stage opens with, and a per-element renderer has no such prologue.
-///
-/// A `.kir` that read them anyway used to check clean and lower to a bare
-/// identifier nothing declared — WGSL naga refuses it, and wgpu's uncaptured
-/// error handler takes the thread down. Reaching them through a slot must not
-/// be a way back to that.
+/// Verifies that camera members respect the stage restrictions of their underlying ambients.
 #[test]
 fn the_members_keep_the_ambients_stage_rules() {
     // **Per element, and in the `fragment` stage**, which is where the ambient
@@ -558,13 +494,7 @@ fn the_members_keep_the_ambients_stage_rules() {
     assert_eq!(check_ok(THROUGH).camera_slot(), Some("view"));
 }
 
-/// **A Camera slot's name goes through the same reserved-word check every slot
-/// name does**, and it is *not* checked against the builtins.
-///
-/// The builtin rule is Field-only by design — a slot that is *called* is the
-/// one with that collision, and `uses sin : Camera` is read `sin.clip`, which
-/// cannot be confused with the sine. The same reasoning a geometry slot
-/// already followed.
+/// Verifies that Camera slot names undergo standard shadowing checks.
 #[test]
 fn a_camera_slot_name_shares_the_scope_every_slot_name_does() {
     let errs = check_err(&THROUGH.replace("view", "position"));
