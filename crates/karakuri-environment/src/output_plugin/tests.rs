@@ -106,3 +106,35 @@ fn integration_with_karakuri_syphon_binary() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
+
+#[test]
+fn integration_with_karakuri_spout_binary() {
+    let candidates = [
+        "../Karakuri-spout/target/debug/karakuri-spout.exe",
+        "../../Karakuri-spout/target/debug/karakuri-spout.exe",
+        "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
+    ];
+    let mut command = None;
+    for c in candidates {
+        let p = std::path::Path::new(c);
+        if p.exists() {
+            command = Some(c.to_string());
+            break;
+        }
+    }
+    let Some(command) = command else {
+        return;
+    };
+    let plugin = OutputPlugin::open(&command, "dxgi", 1920, 1080, "bgra8unorm")
+        .expect("karakuri-spout binary opens successfully");
+
+    assert_eq!(plugin.name(), "spout");
+    assert_eq!(plugin.server_name(), "Karakuri");
+    assert!(plugin.is_alive());
+
+    for i in 0..5 {
+        let sent = plugin.send_frame(i, 100 + i, 1920, 1080);
+        assert!(sent || plugin.telemetry().host_dropped > 0);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
