@@ -6,22 +6,12 @@ use serde_json::{json, Value};
 use super::server::*;
 use super::*;
 
-/// A state with the loop's half of both channels missing, for the tests that
-/// are about what one method answers rather than about a render loop.
-///
-/// The save channel's receiver is dropped on the way out, which is exactly the
-/// "the loop is gone" case: anything that tried to ask for a save here would be
-/// told so rather than wait.
+/// Creates a mock test state with channels disconnected from a real render loop.
 pub(crate) fn state(events: mpsc::Receiver<Event>) -> State {
     State {
         slots: slots(),
-        // **A root, and nothing here opens it.** Only `read_set` does, on
-        // the call, which is what lets every test in this module build a
-        // state without a directory — see `serve`.
         store: "a/store".into(),
         watching: true,
-        // **Closed, all four classes**, which is the state a run starts in
-        // and the state every test in this module reasons under.
         opening: karakuri_environment::Opening::closed(),
         slot_policies: karakuri_environment::SlotPolicies::default(),
         events,
@@ -33,13 +23,7 @@ pub(crate) fn state(events: mpsc::Receiver<Event>) -> State {
     }
 }
 
-/// Two slots of a head and one more file, and none of these paths exists.
-///
-/// That is deliberate rather than lazy. A layer is read off a file's own `kind`
-/// line, and a file that cannot be read counts as a renderer — the fallback
-/// [`Slots::nodes`] shares with `history::seed`, asserted in
-/// [`an_unreadable_file_is_counted_as_a_renderer`] and relied on here, so these
-/// two slots are the L1-and-one-renderer pair they read as.
+/// Returns test slots configuration with mock file paths.
 pub(crate) fn slots() -> Slots {
     Slots::of(vec![
         ("a/l1.kir".into(), vec!["a/l4.kir".into()]),
@@ -47,23 +31,14 @@ pub(crate) fn slots() -> Slots {
     ])
 }
 
-/// Writes `name` declaring `kind`, and nothing that would compile.
-///
-/// A layer is scanned out of the text rather than parsed, so that this surface
-/// works on a file the checker would refuse — which is the file a model most
-/// needs to be able to read. A fixture that compiled would not say so.
+/// Creates a test fixture declaring a layer `kind` with invalid procedure content.
 pub(crate) fn declaring(dir: &std::path::Path, name: &str, kind: &str) -> std::path::PathBuf {
     let path = dir.join(name);
     std::fs::write(&path, format!("kind {kind}\nnot a procedure at all\n")).expect("fixture");
     path
 }
 
-/// The text under one `# ` heading of the rendered vocabulary.
-///
-/// The two halves of the test below ask opposite questions of one section each,
-/// and mixing sections silently weakens both — the "nothing invented" half went
-/// looking for `clip` in `Builtin::from_name` the moment stage outputs were
-/// added to the page, which is the failure working rather than a nuisance.
+/// Extracts the text under a specific `# ` heading from rendered vocabulary documentation.
 fn section<'a>(rendered: &'a str, heading: &str) -> &'a str {
     let start = rendered
         .find(heading)

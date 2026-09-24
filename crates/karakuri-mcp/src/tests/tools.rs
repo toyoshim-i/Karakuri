@@ -15,15 +15,7 @@ fn description(name: &str) -> String {
         .to_string()
 }
 
-/// What a clean write does not promise, said where a model reads it.
-///
-/// The description said a clean return meant the material compiled and so a
-/// non-compiling change never reached the screen. `compile::check` sees one
-/// procedure; everything between nodes is `Set::validate`, and one of the
-/// things it refuses — a `uses` slot nothing binds — is a state this surface
-/// can create and has no tool to undo. See
-/// [`super::wire_tests::a_write_that_needs_an_edge_still_returns_cleanly`] for
-/// the write that proves it.
+/// Verifies that `write_procedure` documentation accurately reflects validation boundaries.
 #[test]
 fn write_procedure_says_what_a_clean_write_does_not_promise() {
     let described = description("write_procedure");
@@ -40,11 +32,6 @@ fn write_procedure_says_what_a_clean_write_does_not_promise() {
         described.contains("`uses`") && described.contains("`edge`"),
         "a `uses` and the edge it needs are not mentioned: {described}"
     );
-    // **And it names the tool that binds it.** The description used to say
-    // there was no such tool and to offer *rewrite the procedure without
-    // it* as the only way out — a warning sign on a trap. There is a tool
-    // now, and a model reading this one is reading the sentence that has to
-    // point at it.
     assert!(
         described.contains("wire_input"),
         "the tool that writes the `edge` a `uses` needs is not named where a model \
@@ -52,14 +39,7 @@ fn write_procedure_says_what_a_clean_write_does_not_promise() {
     );
 }
 
-/// A schema states the constraints its tool enforces.
-///
-/// `slot: -1` was refused with "`slot` is required and is a number", which is a
-/// sentence about the wrong mistake — the same class of refusal [`kept`] argues
-/// about for `"id": null`, and one a client could have been told to avoid
-/// before it called. The bounds a schema *can* carry belong in it; the deck's
-/// upper bound cannot be one, because how many slots this run holds is not
-/// known when `tools/list` is answered.
+/// Verifies that tool schemas publish input constraints like minimum slot indices.
 #[test]
 fn a_schema_states_the_constraints_its_tool_enforces() {
     for tool in tools().as_array().expect("tools() is an array") {
@@ -107,13 +87,7 @@ fn a_schema_states_the_constraints_its_tool_enforces() {
     assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());
 }
 
-/// `save_set` names everything it writes.
-///
-/// It described the file as the hashes, the parameters, the capacities and the
-/// salts, and `setfile::save` writes the edges, the merge, the camera and the
-/// seeds as well — so a model was told a Set file carries less of its slot than
-/// it does, and the operations page's own row for this operation had already
-/// said otherwise.
+/// Verifies that `save_set` description mentions all elements it persists.
 #[test]
 fn save_set_names_everything_it_writes() {
     let described = description("save_set");
@@ -137,17 +111,7 @@ fn save_set_names_everything_it_writes() {
 
 // -- the edge ----------------------------------------------------------
 
-/// An edge is named at both ends and never addressed by a position.
-///
-/// This is the one tool whose arguments are not `{slot, layer, index}`, and the
-/// asymmetry is deliberate: `Record::Edge`'s reason is that *a position moves
-/// when the list is reordered, and reordering silently changing which geometry
-/// a morph blends towards is the exact failure this record exists to end*, and
-/// `NodeAddress`'s own documentation says the two spellings are not
-/// interchangeable. A tool given a `layer` and an `index` here because its
-/// neighbours have them would be that failure with a schema in front of it, and
-/// it is the kind of tidying that looks like consistency — so it is asserted
-/// against rather than left to a comment.
+/// Verifies that edge endpoints are addressed by names rather than numeric node indices.
 #[test]
 fn an_edge_is_named_at_both_ends_and_never_addressed_by_a_position() {
     let properties = tools()
@@ -171,10 +135,7 @@ fn an_edge_is_named_at_both_ends_and_never_addressed_by_a_position() {
              one thing `Record::Edge` exists to prevent"
         );
     }
-    // **And the deck's slot is still the deck's.** `Operation::WireInput`
-    // calls the declared input `slot` too, so the wire's `input` and the
-    // wire's `slot` must land on different fields — the mistake that reads
-    // as a working call and fails at the Set.
+    // Verify that the deck's slot number and the declared input slot map correctly.
     let asked = asked(
         "wire_input",
         &json!({"slot":0,"node":"morph","input":"far","to":"sphere_shell"}),
@@ -200,16 +161,7 @@ fn an_edge_is_named_at_both_ends_and_never_addressed_by_a_position() {
     assert_eq!(to, "sphere_shell");
 }
 
-/// `wire_input` says what it replaces and what it cannot take back.
-///
-/// Two facts a model cannot find out by calling it, and each is a way to wedge
-/// a slot. A second edge on a bound input would be `SetError::SlotBoundTwice`
-/// if it were appended rather than replaced, so *changing your mind is one
-/// call* has to be said or a model will not try; and an edge outlives the
-/// `uses` that needed it, so a procedure rewritten without that `uses` leaves
-/// an edge naming a slot nothing declares — a state this surface still cannot
-/// get out of, and the reason the missing half is named in the description
-/// rather than discovered.
+/// Verifies that `wire_input` description explains edge replacement semantics and limits.
 #[test]
 fn wire_input_says_what_it_replaces_and_what_it_cannot_take_back() {
     let described = description("wire_input");
@@ -235,13 +187,7 @@ fn wire_input_says_what_it_replaces_and_what_it_cannot_take_back() {
     );
 }
 
-/// An edge the render loop does not take ends, and says something true.
-///
-/// [`awaited`]'s three cases, for the wait that is not a save's — see
-/// [`applied`]. The first of them is the one that matters most here and is not
-/// hypothetical: a run whose loop never drains [`Reporter::wires`] reaches it
-/// on every call, and *nothing was rewired* is what such a run has to answer
-/// rather than a claim about a rebuild nobody started.
+/// Verifies that timeout handling for rewiring operations reports truthful error statuses.
 #[test]
 fn an_edge_the_loop_does_not_take_ends_and_says_something_true() {
     // Never taken. Nothing was rewired and saying so is safe.

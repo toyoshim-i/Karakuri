@@ -59,12 +59,7 @@ pub(crate) fn read_resource(request: &Value) -> Result<Value, String> {
     }))
 }
 
-/// The built-ins, rendered from [`karakuri_ir::builtin::Builtin::ALL`].
-///
-/// Generated, and that is the whole point. `docs/ir-spec.md` describes this
-/// language in prose and prose goes stale; this list is the one the checker
-/// matches against, so it cannot say a function exists that does not, or miss
-/// one that does.
+/// Renders built-in language functions, topologies, and outputs as markdown reference.
 pub(crate) fn vocabulary() -> String {
     use karakuri_ir::builtin::Builtin;
     use karakuri_ir::{Blend, Output, Topology};
@@ -100,12 +95,6 @@ pub(crate) fn vocabulary() -> String {
         ));
     }
 
-    // Generated for the same reason the table above is: these are closed
-    // vocabularies in the checker, so a hand-written list here could name a
-    // topology or an output that does not exist. What cannot be generated is
-    // which outputs are *required* — that is a rule in the check pass rather
-    // than a property of the enum — so the prose says it and the spec resource
-    // carries the detail.
     out.push_str(
         "\n# Topologies\n\nDeclared by an L1's `topology`. What a *renderer* draws \
                   is not declared: an L4 draws segments when its `vertex` block assigns \
@@ -115,11 +104,6 @@ pub(crate) fn vocabulary() -> String {
         let note = match topology {
             Topology::Points => "one sprite per element",
             Topology::Lines => "one segment per element, `clip` to `clip_b`",
-            // Listed with the rule it brings rather than only with what it
-            // draws, because `consumes` is checked rather than merely expected
-            // and a model that did not know would meet the refusal after
-            // writing the file. An earlier version of this arm said the engine
-            // could not run one at all, and stayed there after it could.
             Topology::Fullscreen => {
                 "the whole frame, from an L4 with **no `vertex` block**. It must \
                  `consumes` nothing — there is no element to read from — and it gets `eye` \
