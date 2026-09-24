@@ -1,10 +1,6 @@
-//! One long scripted session against the console's arrangement.
+//! Deterministic multi-step test session validating console layout invariants.
 //!
-//! The tests beside this one each put the layout in one state and check one
-//! thing about it. This drives it through several hundred states nobody chose,
-//! and checks everything after every step — because the failures that survive a
-//! hand-written test are the ones that need a particular viewport to arrive
-//! while a particular pane happens to be folded.
+//! Evaluates randomized viewport resizing, folding, dragging, and solo sequences.
 
 mod common;
 

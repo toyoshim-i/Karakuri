@@ -1,18 +1,7 @@
-//! The other reason a node is out of the layout: not the operator's fold, but
-//! whoever is drawing having put that region somewhere else or having nowhere
-//! to put it.
+//! Tests for ephemeral `set_aside` region omission.
 //!
-//! **Two bits, not one.** The solve treats them identically — a node that is
-//! out takes no extent and no divider whichever bit put it there — and
-//! everything else keeps them apart: they are set by different callers, they
-//! are cleared by different callers, and only one of them is written down.
-//! Every test here is aimed at a way of collapsing the two into one, because
-//! one bit for both is the cheaper thing to have built and every failure it
-//! causes arrives later, on a frame nobody was editing anything.
-//!
-//! Stated in this crate's own words throughout — a leaf is a view, an interior
-//! node is a split, and what a caller is drawing is its own business — because
-//! not knowing what any of these regions *is* is why the crate exists.
+//! Verifies that `set_aside` operates independently of user `collapse` state,
+//! solves identically to zero-extent nodes, and is excluded from serialization.
 
 mod common;
 
@@ -34,12 +23,7 @@ fn id(l: &Layout, name: &str) -> NodeId {
         .unwrap_or_else(|| panic!("no region named {name}"))
 }
 
-/// A column of two: a fixed split over a flexible view, where the split holds
-/// a flexible view over a fixed row. The shape the rule about what a node can
-/// use is stated on — see `claims.rs`, which folds it; this sets it aside.
-///
-/// At 530 high with a 10-thick divider: `stack` 378, `tail` 142; inside the
-/// stack, `head` 298 over an 8-thick divider over `foot` 72.
+/// Returns a layout consisting of a fixed column split (`stack`) over a flexible view (`tail`).
 fn stacked() -> Layout {
     let mut l = Layout::new(Spec::column(
         10.0,
@@ -62,12 +46,7 @@ fn stacked() -> Layout {
     l
 }
 
-/// The two bits are independent **in both directions**: each operation writes
-/// its own and reads its own, and a node carrying both needs both cleared.
-///
-/// This is the assertion the whole design is: one bit for both would make
-/// `is_collapsed` answer yes to a node nobody folded, and `set_aside(_, false)`
-/// undo a fold the operator made.
+/// Verifies that `is_collapsed` and `is_set_aside` maintain independent state flags.
 #[test]
 fn the_operators_fold_and_a_node_set_aside_are_two_bits_and_not_one() {
     let (mut l, _) = row();
@@ -183,13 +162,7 @@ fn a_node_set_aside_takes_no_extent_and_no_divider() {
     assert!(near(s.rect(stack).h, 378.0), "stack is {}", s.rect(stack).h);
 }
 
-/// The solve cannot tell the two apart, and that is the point: the difference
-/// is whose bit it is, not what the arrangement looks like afterwards.
-///
-/// Without this, "set aside" could quietly become a weaker fold — one that
-/// leaves a strip, or a divider, or a hit target behind — and every caller
-/// would have to know which of the two a region was out by in order to know
-/// what it would see.
+/// Verifies that `set_aside` produces solved rectangles and boundaries identical to `collapse`.
 #[test]
 fn setting_a_node_aside_lays_out_exactly_as_folding_it_does() {
     for name in ["left", "centre", "right"] {
@@ -294,17 +267,7 @@ fn centre_index(file: &serde_json::Value) -> usize {
         .expect("no node named centre in the saved arrangement")
 }
 
-/// **Writing the value a node already carries marks nothing dirty.**
-///
-/// This is what makes the bit safe to write every frame for every node, which
-/// is how it will be written: the caller derives it from the geometry it has
-/// and states it, whether or not it changed. A layout that went dirty on every
-/// frame would re-solve on every frame, and a still panel would cost what a
-/// moving one does.
-///
-/// `rect` refuses to answer from a dirty layout, so reading one **without a
-/// solve in between** is the assertion: if the second write had marked
-/// anything, the read below would fail rather than return.
+/// Verifies that writing an identical `set_aside` value does not set the dirty flag.
 #[test]
 fn writing_the_bit_a_node_already_carries_marks_nothing_dirty() {
     let (mut l, _) = row();
@@ -341,19 +304,7 @@ fn writing_the_bit_a_node_already_carries_marks_nothing_dirty() {
     assert_eq!(rects(&l), before, "a still arrangement moved");
 }
 
-/// **A solo saves and writes the operator's fold, and only that.**
-///
-/// What is set aside is not part of the arrangement, so a solo has nothing to
-/// snapshot and nothing to put back: it is a function of the geometry, and the
-/// geometry is exactly what a solo has just changed. Restoring a bit the
-/// caller has since re-derived would hand back an answer from before the solo,
-/// on the frame after the unsolo.
-///
-/// So a node that is set aside stays set aside across both — **including the
-/// soloed node itself**, which is left holding the viewport and still not laid
-/// out until whoever set it aside says otherwise. The crate does not guess
-/// that for it, and a solo that quietly laid it out would be this crate
-/// deciding something only the caller can know.
+/// Verifies that `solo` and `unsolo` only manipulate `collapse` state without altering `set_aside`.
 #[test]
 fn a_solo_neither_saves_nor_restores_what_it_does_not_own() {
     let (mut l, _) = row();

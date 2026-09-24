@@ -4,13 +4,10 @@ use super::types::{Node, NodeId};
 use super::Layout;
 use crate::Rect;
 
-/// The wire form. It exists so that a deserialised `Layout` arrives with its
-/// rectangle and scratch buffers already sized: leaving them out of the derive
-/// alone would leave them empty, and the first solve after a load would
-/// allocate. It is also where a saved arrangement is checked — for the name
-/// rule [`Layout::new`] states, and for being an arena that is a tree at all
-/// ([`check_structure`]). On this side both are a rejected file rather than a
-/// panic, because a file is data and a [`Spec`](crate::spec::Spec) is code.
+/// Intermediate deserialization format for [`Layout`].
+///
+/// Pre-sizes rectangles and scratch buffers to prevent allocations during subsequent solves,
+/// and validates structure and name uniqueness via [`check_structure`].
 #[derive(Deserialize)]
 pub(crate) struct Wire {
     pub(crate) nodes: Vec<Node>,

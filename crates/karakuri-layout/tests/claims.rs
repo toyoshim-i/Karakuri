@@ -1,30 +1,14 @@
-//! What a node claims of its parent, and the ceiling its own content puts on
-//! it.
+//! Tests for node extent claims and content ceiling calculation.
 //!
-//! **No node claims more than its visible content can use.** A view says what
-//! it can use directly — a flexible one any amount, a fixed one the size it
-//! stores — and a split's is the sum of its visible children's plus the
-//! dividers between them, so folding what is inside a split lowers what the
-//! split asks for. Two things are capped by it and they are the same sentence
-//! twice: a fixed node's claim, and its declared minimum.
-//!
-//! Stated in this crate's own words throughout — a leaf is a view and an
-//! interior node is a split — because not knowing what any of these regions
-//! *is* is why the crate exists.
+//! Verifies that nodes do not claim more extent than their visible content requires,
+//! and that nested folds or max constraints reduce the parent split's claim.
 
 mod common;
 
 use common::{assert_invariants, near};
 use karakuri_layout::{Layout, Rect, Spec};
 
-/// A column of two: a **fixed split** over a flexible view.
-///
-/// The split holds a flexible view over a fixed one, which is the shape of any
-/// bay whose content is one thing that stretches and one row that does not.
-/// It stores 378 and declares a minimum of 200, and the row under it is 72.
-///
-/// At 530 high with a 10-thick divider: `stack` 378, `tail` 142; and inside
-/// the stack, `head` 298 over an 8-thick divider over `foot` 72.
+/// Returns a layout consisting of a fixed column split (`stack`) over a flexible view (`tail`).
 fn stacked() -> Layout {
     Layout::new(Spec::column(
         10.0,
@@ -285,11 +269,7 @@ fn a_maximum_and_the_cap_are_one_ceiling() {
     assert_invariants(&l);
     assert!(near(h(&l, "stack"), 72.0), "stack is {}", h(&l, "stack"));
 
-    // And a maximum stated *inside* the split is a cap on what the split can
-    // use, because it is a cap on what the child can. A picture that will
-    // never be taller than 100 over a 72 row is a 180-tall split, and the 198
-    // that used to sit inside it as trailing space is now space the split
-    // never asked for — so a flexible sibling has it instead.
+    // Maximum constraint within a split caps the split's usable claim, freeing space for siblings.
     let mut inner = Layout::new(Spec::column(
         10.0,
         vec![
@@ -323,11 +303,7 @@ fn a_maximum_and_the_cap_are_one_ceiling() {
 
 #[test]
 fn a_split_laid_out_across_its_parents_axis_is_not_a_sum() {
-    // The cap is one number per node, stated along its *parent's* axis, and a
-    // split laid out the other way has nothing to say in it: its children's
-    // sizes are heights where its parent is handing out widths. So it claims
-    // its stored size like any other node, and the sum of what is inside it is
-    // arithmetic on the wrong question.
+    // Orthogonal child splits claim stored size along the parent's axis without summing child extents.
     let mut l = Layout::new(Spec::row(
         10.0,
         vec![

@@ -30,11 +30,7 @@ fn every(l: &Layout) -> Vec<NodeId> {
     out
 }
 
-/// `parent` is the split whose children list holds the node, for every node,
-/// and `None` for the root alone.
-///
-/// The route it exists for is the one a pointer cannot take: a hit resolves to
-/// a leaf, and *fold the split enclosing it* starts here.
+/// Verifies that `parent` accurately identifies the enclosing split for every non-root node.
 #[test]
 fn parent_is_the_split_whose_children_list_holds_the_node() {
     let l = solved();
@@ -74,13 +70,7 @@ fn parent_is_the_split_whose_children_list_holds_the_node() {
     );
 }
 
-/// `placed_children` is what a divider index counts, and folding the middle
-/// of three is what tells it apart from `children`.
-///
-/// Both halves matter. The list skips what is folded, **and** the index that
-/// list is read at addresses a different pair than the same index into
-/// `children` would — which is the mistake every caller that reconstructed
-/// this filter was one line away from.
+/// Verifies that `placed_children` filters out collapsed nodes and adjusts indexing accordingly.
 #[test]
 fn placed_children_skips_what_is_folded_and_that_is_what_an_index_counts() {
     let mut l = solved();
@@ -185,15 +175,7 @@ fn a_boundary_is_the_gap_between_the_pair_it_is_between() {
     assert_eq!(l.boundary(root, 2), None);
 }
 
-/// **A boundary needs both sides.** Folding the far side of one leaves no
-/// boundary at that index, and the answer is `None` rather than a position for
-/// something else.
-///
-/// This is the defect the console carried: it checked that visible child
-/// `index` existed and returned that child's far edge, so folding the far side
-/// mid-drag handed back the *split's* own far edge — a plausible number for a
-/// boundary that is not there, which is why `Released::Gone` was unreachable
-/// through it.
+/// Verifies that `boundary` returns `None` if either adjacent child is collapsed.
 #[test]
 fn folding_the_far_side_of_a_boundary_leaves_no_boundary_rather_than_a_position() {
     let root = solved().root();

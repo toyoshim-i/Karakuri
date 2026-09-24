@@ -1,20 +1,7 @@
-//! What a saved arrangement has to *be* to load, beyond parsing: the arena's
-//! structural invariants, one refusal each.
+//! Tests structural validation of saved arrangements during deserialization.
 //!
-//! Every test here takes the console's arrangement, saves it, breaks one thing
-//! about the file the way a truncation, a hand edit or an older writer would,
-//! and expects a refusal that says what is wrong with it. Three of the
-//! mutations are failures the loader used to pass on to the caller — an index
-//! out of bounds inside the first solve, a stack overflow inside it, and a walk
-//! up the parent pointers that never returns.
-//!
-//! **The negative control is [`saved`] itself**, which asserts that the
-//! unmodified file loads and solves to exactly the rectangles it was saved
-//! from. Every test below goes through it, so a loader that refused everything
-//! would fail all of them before it ever reached the mutation.
-//!
-//! **None of these tests can hang.** The refusal happens at load, so a file
-//! whose parent pointers loop is an `Err` before anything walks them.
+//! Verifies that corrupted indices, cycles, disconnected nodes, and out-of-range solos
+//! are rejected with specific error variants upon loading.
 
 mod common;
 
@@ -224,11 +211,7 @@ fn a_saved_arrangement_whose_node_records_no_parent_fails_to_load() {
 
 #[test]
 fn a_saved_arrangement_with_a_node_nothing_reaches_fails_to_load() {
-    // Not a crash and not a hang — a decision. The status row is still in the
-    // file, still named, still carrying its parent, and no children list
-    // mentions it: it solves to nothing, draws nothing, and no fold or solo
-    // above it can move it. A file that is a tree plus debris is refused
-    // rather than loaded with the debris quietly along for the ride.
+    // Unreachable nodes disconnected from the root are refused at load time.
     let mut file = saved();
     let status = node(&file, "status");
     let root = root(&file);
@@ -244,14 +227,7 @@ fn a_saved_arrangement_with_a_node_nothing_reaches_fails_to_load() {
     );
 }
 
-/// A solo is an index like any other, and one that addresses no node is
-/// refused rather than handed to a caller.
-///
-/// It is the newest of these and the easiest to write off, because a solo is
-/// "just a flag": it is not, it is a node, and `Layout::soloed` gives it to a
-/// status line that will ask for its name or its rectangle. An out-of-range
-/// one indexes past the arena at whatever later moment that happens, which is
-/// exactly the class of failure this loader exists to move to load time.
+/// Verifies that saved arrangements with out-of-range solo target indices fail validation.
 #[test]
 fn a_saved_arrangement_soloed_on_a_node_that_is_not_there_fails_to_load() {
     let mut file = saved();

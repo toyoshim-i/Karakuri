@@ -5,9 +5,7 @@ use crate::{Axis, Rect, Sizing};
 
 /// A handle into a [`Layout`]'s arena.
 ///
-/// Opaque on purpose: a name is resolved once by [`Layout::find`], at build or
-/// load time, and everything on the frame path carries the id. A name lookup
-/// per frame per region is a string comparison the panel never has to do.
+/// Resolves once via [`Layout::find`] to avoid per-frame string comparisons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub(crate) usize);
 
@@ -54,18 +52,11 @@ pub(crate) struct Node {
     /// Folded by the operator: what [`Layout::collapse`] writes, what a
     /// [`Spec`] can start a node with, and what a saved arrangement carries.
     pub(crate) collapsed: bool,
-    /// Indicates whether a fold on this node preserves its divider edge rather
+    /// Indicates whether collapsing this node preserves its divider edge rather
     /// than removing it from its parent's layout.
-    ///
-    /// Corresponds to [`Spec::keeps_its_edge`] and [`Layout::is_closed`]. This
-    /// property is structural and serialized alongside bounds constraints.
     #[serde(default)]
     pub(crate) edge: bool,
-    /// Set aside by whoever is drawing, because it has put that region
-    /// somewhere else or has nowhere to put it.
-    ///
-    /// Ephemeral state skipped during serialization. Derived dynamically from
-    /// caller geometry on the next solve rather than persisted across sessions.
+    /// Ephemeral visibility dismissal by caller. Skipped during serialization.
     #[serde(skip)]
     pub(crate) aside: bool,
     pub(crate) parent: Option<NodeId>,
@@ -108,12 +99,7 @@ mod unbounded {
 pub(crate) struct Arrangement {
     pub(crate) nodes: Vec<Node>,
     pub(crate) root: NodeId,
-    /// What [`Layout::solo`] is holding, and the collapsed flags it replaced.
-    /// Both are saved: an arrangement stored while soloed comes back soloed,
-    /// and [`Layout::unsolo`] still has something to restore.
-    ///
-    /// The node rather than a flag, because the flags a solo leaves behind do
-    /// not identify it — see [`Layout::soloed`].
+    /// Currently soloed node (if any) and backed-up collapsed flags for [`Layout::unsolo`].
     pub(crate) soloed: Option<NodeId>,
     pub(crate) saved: Vec<bool>,
 }
@@ -229,11 +215,7 @@ pub(crate) struct Solved {
     /// any child, so one buffer serves the whole recursion.
     pub(crate) sizes: Vec<f32>,
     pub(crate) frozen: Vec<bool>,
-    /// Usable extent per node along its parent's axis, computed bottom-up by
-    /// [`measure`] at the start of each solve.
-    ///
-    /// Stored in scratch buffers rather than on nodes to preserve immutability
-    /// of the arrangement during layout passes.
+    /// Usable extent per node along its parent's axis, computed bottom-up by [`measure`].
     pub(crate) usable: Vec<f32>,
 }
 

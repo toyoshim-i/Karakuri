@@ -4,12 +4,10 @@
 
 use crate::{Axis, Sizing};
 
-/// One node of an arrangement, before it is built.
+/// Node specification in an arrangement tree prior to arena compilation.
 ///
-/// The constraints on a node — [`Sizing`], `min`, `max`, `collapsed`,
-/// [`keeps_its_edge`](Spec::keeps_its_edge) — apply along its *parent's* axis,
-/// so they are set on the child rather than by the parent that arranges it.
-/// The root's are ignored: the root is the viewport.
+/// Constraints ([`Sizing`], `min`, `max`, `collapsed`, [`keeps_its_edge`](Spec::keeps_its_edge))
+/// apply along the parent container's axis. Root constraints are ignored as the root matches the viewport.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Spec {
     /// A leaf. Whatever draws the panel looks `name` up; nothing here knows
