@@ -32,11 +32,7 @@ const BINDING_SAMPLER: u32 = 3;
 /// The first `uses … : Texture` slot; the rest follow in header order.
 const BINDING_SLOT_BASE: u32 = 4;
 
-/// The WGSL name the incoming picture is declared under.
-///
-/// The same word the language uses, which is safe for the reason every fixed
-/// name this crate emits is: a procedure's own locals all carry
-/// [`mangle_local`]'s `usr_` prefix, so no `.kir` can spell this identifier.
+/// The WGSL binding identifier for the incoming source texture.
 const SRC: &str = "src";
 const HELD: &str = "held";
 const SAMPLER: &str = "samp";
@@ -45,12 +41,7 @@ const SAMPLER: &str = "samp";
 /// of the entry point, so a body with several `texel` calls computes it once.
 const TEXEL_AT: &str = "_at";
 
-/// The WGSL binding name for one declared Texture slot.
-///
-/// Prefixed for [`mangle_local`]'s reason and because the slot's name is
-/// `.kir` text: `uses src : Texture` is refused by the check pass, but `uses
-/// samp : Texture` is not, and a slot binding that could collide with the
-/// sampler would be a shader that compiles and fetches from the wrong thing.
+/// Returns the WGSL binding identifier for an auxiliary texture slot.
 pub fn slot_binding(slot: &str) -> String {
     format!("tex_{slot}")
 }
@@ -123,24 +114,9 @@ pub fn generate_l5(checked: &Checked) -> L5Shader {
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
     b.field("beats", "f32");
-    // **`dt` is here and is not on an L4**, which is the asymmetry the ambient
-    // table already draws: a frame effect that moves at a rate rather than to a
-    // position is written against a step, and the step comes from a record
-    // rather than from a clock.
     b.field("dt", "f32");
-    // **Carried though an L5 reads no `source`.** Every seeded builtin bottoms
-    // out in `hash1`, which reads `u.seed_salt` straight from the module-scope
-    // uniform — so a `frame` block that calls `hash1(uint(...))` for dither or
-    // grain needs the field in scope, exactly as every other module does. What
-    // is written into it is the chain's answer and not this crate's.
     b.field("seed_salt", "u32");
-    // **The frame's own size, and the only thing that reads it is
-    // `frame_step`.** No ambient carries it and none will: the render size is
-    // not part of the picture, and one frame is rendered at the largest enabled
-    // output's size and scaled into the rest — so a `.kir` that wanted a radius
-    // in texels would be writing a number that means a different distance on a
-    // second display. The conversion is performed without the number being
-    // handed over.
+    // Viewport dimensions for texel sizing.
     b.field("viewport", "vec2<f32>");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));

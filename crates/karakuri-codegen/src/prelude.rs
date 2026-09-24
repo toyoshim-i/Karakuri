@@ -1,56 +1,15 @@
-//! The builtin function library, emitted as WGSL source.
+//! Builtin function library emitted as WGSL source.
 //!
-//! Most builtins in `karakuri_ir::builtin` are WGSL builtins under the same
-//! name (`abs`, `pow`, `normalize`, `atan2`, …) and need no helper at all —
-//! [`crate::lower`] calls them by [`Builtin::name`] directly. This module
-//! only has to supply the ones WGSL does not have: hashing and noise, SDF,
-//! rotation, the distribution and colour functions, and the `mod` wrapper.
-//! Every one of those is written under the *same* name the IR builtin table
-//! uses, so call-site lowering never special-cases which kind of name it is
-//! emitting — with one exception, `mod` on floats, documented at
-//! [`mod_helper_name`].
-//!
-//! Only what a procedure actually calls is emitted, tracked via
-//! [`Requirements`] — see the `mod_helper_appears_only_when_used` test in
-//! `lib.rs` for why that matters.
-//!
-//! # The seed salt
-//!
-//! Every seeded builtin (`Builtin::is_seeded`) bottoms out in `hash1`, and
-//! `hash1` reads `u.seed_salt` straight from the module-scope uniform
-//! binding rather than taking it as a parameter. That works because both
-//! [`crate::l1`] and [`crate::l4`] name their uniform binding `u` and give
-//! it a `seed_salt: u32` field — the same trick `points.wgsl` already uses.
-//! It means salting never has to be threaded through call sites; it is
-//! simply in scope, exactly as the spec requires ("the salt must be in scope
-//! wherever they are emitted").
-//!
-//! # Noise fidelity
-//!
-//! `value_noise`, `perlin`, `simplex`, and `curl` are original, self
-//! consistent implementations built on one hashing primitive — deterministic
-//! given the seed stream, and syntactically/semantically valid WGSL, which
-//! is what this crate is checked against. They are not attempts at
-//! reference-quality noise (`simplex` in particular is gradient noise at an
-//! offset, not a real simplex lattice — see its doc comment). Getting the
-//! *visual* character of these right is future tuning work, not a lowering
-//! concern.
+//! Emits helper implementations for IR builtins not natively supported by WGSL (noise, SDF,
+//! rotations, color conversions, and float modulo). Helper functions are emitted on demand
+//! based on [`Requirements`]. Seeded builtins read `u.seed_salt` from the uniform buffer.
 
 use std::collections::HashSet;
 
 use karakuri_ir::builtin::Builtin;
 use karakuri_ir::Ty;
 
-/// Which optional helpers a generated shader needs, accumulated while
-/// lowering its blocks.
-///
-/// `HashSet` rather than `BTreeSet`: neither `Builtin` nor `Ty` implements
-/// `Ord` (they are plain enums in `karakuri-ir`, ordered only by identity),
-/// and adding it there is out of scope for this crate. Emission order below
-/// does not depend on set-iteration order — every helper is looked up by
-/// `contains`, not walked — so this costs nothing but determinism of
-/// incidental whitespace between two unrelated helpers, which no test here
-/// relies on.
+/// Tracks helper function dependencies required by lowered shader blocks.
 #[derive(Debug, Default)]
 pub struct Requirements {
     pub builtins: HashSet<Builtin>,
@@ -220,11 +179,7 @@ fn perlin(p: vec3<f32>) -> f32 {
 ";
 
 const SIMPLEX: &str = "\
-// A pragmatic stand-in, not a reference simplex lattice: real 3D simplex
-// noise needs a skewed lattice and a permutation table, machinery this
-// codegen path does not need to carry for correctness (naga validation is
-// the bar, not noise fidelity). Reuses perlin's gradient field at an offset
-// so `simplex` and `perlin` decorrelate rather than being the same curve.
+// Simplex approximation using offset gradient noise.
 fn simplex(p: vec3<f32>) -> f32 {
     return perlin(p * 1.3737 + vec3<f32>(19.19, 7.7, 3.3));
 }

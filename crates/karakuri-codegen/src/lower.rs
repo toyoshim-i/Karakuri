@@ -1,16 +1,7 @@
-//! Shared expression lowering: `TExpr` to a WGSL expression string.
+//! Shared expression lowering: converts `TExpr` into a WGSL expression string.
 //!
-//! Both L1 and L4 blocks share every expression form — literals, operators,
-//! builtins, constructors, swizzles — and differ only in how a *name*
-//! resolves: an attribute read is a prev-buffer index on L1 and an
-//! interpolated varying (or an instance-indexed storage read, in `vertex`)
-//! on L4. That one axis of difference is factored out as [`Resolver`]; this
-//! module is the axis that does not vary.
-//!
-//! Statement lowering (`let`/`var`/`if`/`for`/assignment) is *not* shared —
-//! L1 assigns to attributes and calls `kill()`, L4 assigns to stage outputs
-//! and does neither, and trying to unify the two targets was worse than two
-//! short, direct implementations in `l1.rs` and `l4.rs`.
+//! Handles expression forms common to all procedure stages (literals, operators, builtins,
+//! constructors, swizzles) using [`Resolver`] to handle stage-specific name resolutions.
 
 use karakuri_ir::builtin::Builtin;
 use karakuri_ir::typed::{TExpr, TExprKind, TexRef};
@@ -20,37 +11,7 @@ use crate::layout::{mangle_param, mangle_source_slot};
 use crate::prelude::{mod_helper_name, Requirements};
 use crate::ty::wgsl_ty;
 
-/// Mangles a user-chosen identifier — a `let`/`var` binding or a `for` loop
-/// variable — into the WGSL identifier this crate actually emits for it.
-///
-/// Every other identifier this crate writes (`u`, `prev_<attr>`,
-/// `next_<attr>`, `attr_<attr>`, entry-point locals like `seed`/`slot`/`i`,
-/// every helper function name) is a fixed string chosen by the generator,
-/// never by IR text. Locals are the one category that *is* IR text passed
-/// through — the language spec calls `let`/`var` lowering "a rename rather
-/// than a transformation" — and a rename that reuses the source spelling
-/// verbatim makes every fixed name above capturable: a procedure that opens
-/// its `spawn` block with `let u = hash1(seed);`, which is not a contrived
-/// example but the ir-spec's own `drift_shell`, shadows the generated
-/// `var<uniform> u` and every later `u.<param>` silently resolves to the
-/// local instead. Naga catches the resulting nonsense, but only because the
-/// mistake happens to produce a type error a few lines later — nothing
-/// stops the same shadowing from landing on a name whose reuse compiles
-/// clean and just computes the wrong thing.
-///
-/// The fix is not to rename the generator's own identifiers away from
-/// whatever a user local might plausibly be called — enumerating "plausible"
-/// is exactly the reasoning that missed `u` — it is to make the two
-/// namespaces disjoint by construction. Every local this crate ever writes
-/// carries this prefix; no fixed identifier this crate emits does or ever
-/// will start with it. That turns "no realistic procedure names a local
-/// this" into "no procedure's local can spell this," which does not depend
-/// on which names turn out to be realistic.
-///
-/// The prefix is kept short and the source name is kept intact after it
-/// specifically so a human reading generated WGSL can still tell which IR
-/// name a given local came from — `usr_radius` for `radius`, not a hash or
-/// a counter.
+/// Mangles user identifiers with a prefix (`usr_`) to prevent shadowing internal shader variables.
 pub fn mangle_local(name: &str) -> String {
     format!("usr_{name}")
 }
@@ -58,14 +19,7 @@ pub fn mangle_local(name: &str) -> String {
 /// How names resolve in the block currently being lowered. Implemented once
 /// per (kind, block) combination — see `l1::Resolver` and `l4::Resolver`.
 pub trait Resolver {
-    /// A read of `attr`. Per the state-semantics rule, this is the *only*
-    /// place an attribute read is ever produced, and it never depends on
-    /// whether that attribute was assigned earlier in the same block — the
-    /// generator has no "current value" register for attributes at all, only
-    /// a fixed expression pointing at the previous frame's buffer (L1) or the
-    /// value threaded in from the vertex stage (L4). That is what makes the
-    /// prev/next rule impossible to get wrong by construction rather than by
-    /// discipline.
+    /// Emits the expression to read `attr` from the appropriate stage-specific source.
     fn read_attr(&self, attr: Attr) -> String;
 
     /// A read of the **far** element, from the geometry bound to this node's
@@ -121,11 +75,7 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
         TExprKind::Far(attr) => resolver.read_far(*attr),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),
-        // **Not routed through the resolver**, unlike a param's read, and the
-        // difference is which module the value lives in. A field's body is
-        // spliced into a caller and reads the caller's uniform, which is why
-        // `read_param` exists at all — and a field may not declare a Source
-        // slot, so every module that can hold one holds it in its own `u`.
+        // Source slots read directly from module-level uniforms u.
         TExprKind::Source { slot } => format!("u.{}", mangle_source_slot(slot)),
         TExprKind::Unary { op, value } => {
             let v = lower_expr(value, resolver, req);
@@ -136,16 +86,7 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
         }
         TExprKind::Binary { op, lhs, rhs } => lower_binary(*op, lhs, rhs, resolver, req),
         TExprKind::Builtin { func, args } => lower_builtin(*func, args, expr.ty, resolver, req),
-        // **The call site's name is the caller's; the function's is this
-        // crate's**, and its body is spliced in from another procedure
-        // entirely. Not routed through the builtin table, which would also ask
-        // the prelude for a body it does not have.
-        //
-        // **The caller's own spelling of the clock, at the call site.** A field
-        // is one body spliced into several kinds of module and an L1 reads `t`
-        // from `step_args` where everything else reads `u.t`, so the answer
-        // comes from the resolver that is lowering this call — which is the
-        // resolver that would have written it inline.
+        // Spliced field procedure evaluation.
         TExprKind::Field { slot, point } => format!(
             "{}({}, {}, {})",
             crate::field::fn_name(slot),
@@ -153,18 +94,7 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
             resolver.read_ambient(Ambient::T),
             resolver.read_ambient(Ambient::Beats),
         ),
-        // **Two fetches, lowered at the call site rather than through the
-        // prelude**, because WGSL already has both and neither needs a wrapper:
-        // `texel` is a `textureLoad` at this fragment's own integer coordinate,
-        // unfiltered and unresampled, and `tap` is a `textureSampleLevel` at
-        // level zero through the chain's sampler.
-        //
-        // **The difference between them is the whole of why `texel` takes no
-        // coordinate.** At an amount just above zero a shift's outer taps land
-        // back on the centre, and a pass that resampled there would differ from
-        // one that did not run by what a filter did rather than by what the
-        // effect is. There is no coordinate to get wrong because there is no
-        // coordinate.
+        // Texture sampling operations: unfiltered integer load or filtered level-0 sample.
         TExprKind::Sample { func, texture, at } => {
             let tex = resolver.read_texture(texture);
             match func {
@@ -275,12 +205,7 @@ fn lower_builtin(
     format!("{}({})", func.name(), inner.join(", "))
 }
 
-/// Unrolls `fbm(p, octaves)` into a sum of `octaves` scaled `perlin` calls at
-/// generation time. WGSL has no preprocessor and no loop whose trip count is
-/// visible to a constant folder strong enough to unroll it for us, so this
-/// crate does the unrolling itself, in Rust, before any WGSL text exists —
-/// `octaves` is one of the check pass's `const_args`, guaranteed to be a
-/// literal `int` by the time a `Checked` tree reaches this crate.
+/// Unrolls `fbm(p, octaves)` into a compile-time sum of scaled `perlin` octaves.
 fn lower_fbm(args: &[TExpr], resolver: &dyn Resolver, req: &mut Requirements) -> String {
     let p = lower_expr(&args[0], resolver, req);
     let octaves = match &args[1].kind {

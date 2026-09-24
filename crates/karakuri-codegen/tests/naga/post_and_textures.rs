@@ -2,10 +2,6 @@
 
 use super::naga_common::*;
 
-// ---------------------------------------------------------------------------
-// L5 — the three shipped procedures, compiled from source
-// ---------------------------------------------------------------------------
-//
 // End-to-end compilation tests for shipped L5 procedures parsed directly from `.kir` files.
 
 /// Parse, check, cost and lower one of the shipped L5 procedures.
@@ -85,24 +81,7 @@ fn an_l5_lays_its_bind_group_out_the_way_the_chain_does() {
     );
 }
 
-/// **`feedback` is `master.wgsl`'s `fs_feedback` term for term.**
-///
-/// The hand-written body is `s.rgb + chain.feedback * h`, where `s` and `h` are
-/// both `textureLoad`s at this fragment's own texel and the source's alpha goes
-/// through unchanged. Both loads rather than samples: the retained frame is the
-/// same size as this one and lines up texel for texel, so there is nothing to
-/// interpolate and a filtered read would only cost precision.
-///
-/// **What is deliberately absent is `keepable`.** The retained frame is
-/// sanitised where it is *written* — at the copy, one step earlier than
-/// `master.wgsl` does it — so a `.kir` neither needs the guard nor can leave it
-/// out. A `keepable` here would be the language carrying an engine invariant.
-///
-/// **What this holds and what it does not.** It is an assertion about the
-/// expression tree, not about pixels: the same operands, the same operator, the
-/// same alpha. Two shaders computing the same expression on the same inputs
-/// produce the same texels, but *that* is a GPU test and it belongs with the
-/// chain that runs both — pass 2, where there is a frame to compare.
+/// Tests that feedback.kir lowers to exact textureLoad calls and alpha pass-through.
 #[test]
 fn feedbacks_body_is_the_hand_written_pass_term_for_term() {
     let src = shipped_l5("feedback").source;
@@ -130,13 +109,7 @@ fn feedbacks_body_is_the_hand_written_pass_term_for_term() {
     );
 }
 
-/// **`rgb_shift` is `master.wgsl`'s `fs_rgb_shift` term for term.**
-///
-/// Red and blue sampled apart along x by `SHIFT_MAX * amount` — 2% of the
-/// frame's height at full — and green where it was. The centre tap is a load
-/// for the reason `texel` takes no coordinate: at an amount just above zero the
-/// two outer taps land back on it, and the pass should differ from one that did
-/// not run by what the shift is rather than by what a filter did.
+/// Tests that rgb_shift.kir lowers to appropriate texture sample offsets and center tap.
 #[test]
 fn rgb_shifts_body_is_the_hand_written_pass_term_for_term() {
     let src = shipped_l5("rgb_shift").source;
@@ -170,14 +143,7 @@ fn rgb_shifts_body_is_the_hand_written_pass_term_for_term() {
     );
 }
 
-/// **`frame_step` performs the conversion without handing the number over.**
-///
-/// It is `master.wgsl`'s `step_uv` with the same arithmetic: `.y` is the
-/// fraction of the frame's height itself and `.x` is that fraction scaled by
-/// the aspect ratio, so the displacement is isotropic *in texels*. The size
-/// comes from the uniform's `viewport` and is reachable no other way — no
-/// ambient carries the render size, so a `.kir` has no way to write a radius in
-/// texels.
+/// Tests that frame_step emits viewport-based aspect-correct displacement helpers when called.
 #[test]
 fn frame_step_lowers_to_the_viewport_conversion_and_only_when_it_is_called() {
     let shift = shipped_l5("rgb_shift").source;

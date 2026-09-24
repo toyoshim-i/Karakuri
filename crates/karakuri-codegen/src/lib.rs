@@ -1,31 +1,13 @@
-//! WGSL code generation: stage 5 of the validation pipeline described in
-//! `docs/ir-spec.md`.
+//! WGSL code generation for checked `.kir` procedure ASTs.
 //!
-//! `karakuri-ir` gets a `.kir` procedure through parsing, type checking,
-//! contract checking, and cost estimation, producing a
-//! [`karakuri_ir::typed::Checked`] tree in which every node already carries
-//! its resolved type. This crate's only job is to turn that tree into WGSL
-//! text plus the binding metadata `karakuri-engine` needs to drive it —
-//! nothing here re-derives a type or re-validates a rule the earlier stages
-//! already enforce.
-//!
-//! One independent lowering per `Kind`:
-//!
-//! - [`l1::generate_l1`] — `spawn`/`element` as compute entry points. See
-//!   the module doc for the state model (prev/next double buffering) and
-//!   what is deliberately *not* generated (the compaction scan).
-//! - [`l3::generate_l3`] — `camera` as one compute invocation writing the
-//!   camera state. See the module doc for why a camera on the clock alone is
-//!   lowered to a GPU pass anyway.
-//! - [`l4::generate_l4`] — `vertex`/`fragment` as a render pipeline. See the
-//!   module doc for why `topology points` becomes a quad, not a point
-//!   primitive.
-//!
-//! [`layout`] is the contract between this crate's output and the engine
-//! that consumes it: group/binding numbers, the uniform struct's field
-//! order and byte offsets, and the workgroup size. Treat it as documentation
-//! with a compiler behind it, not an implementation detail — see that
-//! module's doc comment.
+//! Generates WGSL shaders and binding metadata from [`karakuri_ir::typed::Checked`]:
+//! - [`l1::generate_l1`]: Compute pipelines for element spawn and update.
+//! - [`l2::generate_l2`]: Deformation passes applied over element streams.
+//! - [`l3::generate_l3`]: Compute pass writing camera uniform matrices.
+//! - [`l4::generate_l4`]: Render pipelines for element rendering.
+//! - [`l5::generate_l5`]: Post-processing / master chain effects.
+//! - [`field::generate_field`]: Spliced WGSL functions for distance fields.
+//! - [`layout`]: Buffer layout, uniform alignment, and binding slot definitions.
 
 pub mod field;
 
@@ -52,13 +34,7 @@ pub(crate) fn evaluated_slots(checked: &karakuri_ir::typed::Checked) -> Vec<&str
 /// Resolved externally by the Set before shader generation.
 pub type Bound<'a> = &'a [(&'a str, &'a Checked)];
 
-/// The splices one caller needs: each bound field's body, once per slot the
-/// caller reaches it through.
-///
-/// One function per *slot* rather than per field, because the name at the call
-/// site is the caller's own. Two slots on one field are two identical bodies
-/// under two names in one module, which costs a few hundred bytes of WGSL and
-/// buys each of them its own params.
+/// Returns the field shader splices required for the given checked procedure.
 pub(crate) fn splices(
     checked: &karakuri_ir::typed::Checked,
     fields: Bound<'_>,
@@ -105,35 +81,18 @@ pub enum Shader {
     L5(L5Shader),
 }
 
-/// Lowers a checked procedure to WGSL, picking the L1 or L4 path by
-/// `checked.kind`. Prefer [`generate_l1`] / [`generate_l4`] directly when
-/// the kind is already known statically.
+/// Lowers a checked procedure to WGSL, selecting the pipeline generator by `checked.kind`.
 ///
-/// `elements` is the paired L1 procedure's [`ElementLayout`] — required on
-/// the `Kind::L4` path, since `generate_l4` compiles against it rather than
-/// deriving its own (see that function's doc). `None` there panics; the L1
-/// path ignores the argument, since `generate_l1` computes its own layout
-/// from `checked.emit`.
+/// `elements` provides the paired L1 procedure's [`ElementLayout`], which is required
+/// when lowering an L4 procedure.
 pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
     match checked.kind {
         Kind::L1 => Shader::L1(generate_l1(checked, &[], &[])),
-        // **Not reachable through this entry point.** An L2 is generated
-        // against the attributes available *where it sits* in a chain, which is
-        // a list rather than one upstream layout — `Set::build` has it and this
-        // signature does not. Call `generate_l2` directly.
+        // L2 procedures require chain context and must be generated via `generate_l2`.
         Kind::L2 => panic!("an L2 is generated against its position in a chain: call generate_l2"),
-        // **Not reachable through this entry point, and unlike an L2 it has no
-        // entry point of its own.** A field lowers to a WGSL *function* spliced
-        // into whichever procedures evaluate it, so it has no module, no
-        // bindings and no dispatch — there is nothing for a `Shader` to hold.
+        // Field procedures are spliced into callers and must be generated via `generate_field`.
         Kind::Field => panic!("a field lowers into its callers: call generate_field"),
         Kind::L3 => Shader::L3(generate_l3(checked, &[])),
-        // **Reachable through here, unlike the two above**, and it is the
-        // signature rather than a preference that decides: an L5 is generated
-        // against nothing but itself. It reads no element buffer, evaluates no
-        // field and sits in no chain this function would have to be told about
-        // — what it needs is the picture it is handed, which is a binding
-        // rather than an argument.
         Kind::L5 => Shader::L5(generate_l5(checked)),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
@@ -144,20 +103,7 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
 
 #[cfg(test)]
 mod tests {
-    //! End-to-end tests against hand-built `Checked` trees.
-    //!
-    //! The check pass (`karakuri-ir`'s stages 2-4) does not exist yet, so
-    //! these build `Checked` values directly — `typed.rs` is public exactly
-    //! so this is possible. That also means nothing here can rely on a
-    //! checker having rejected a malformed tree; every fixture is built to
-    //! already satisfy the rules (every emitted attribute assigned on every
-    //! path, etc.) by hand.
-    //!
-    //! Two tiers: the first asserts on the emitted text directly, for the
-    //! specific lowering rules the brief calls out by name. The second (in
-    //! `naga_test.rs`) feeds the output through a real WGSL front end,
-    //! because a generator whose output is never compiled will happily keep
-    //! emitting plausible nonsense forever.
+    //! Tests verifying code generation against hand-constructed `Checked` AST fixtures.
 
     use karakuri_ir::builtin::Builtin;
     use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
@@ -204,13 +150,8 @@ mod tests {
         }
     }
 
-    /// A minimal L1 procedure: emits `position` (`vec3`), and `element`
-    /// first assigns `position`, then immediately reads it back into a
-    /// `let`. This is the "read of an attribute after an assignment to that
-    /// same attribute still reads prev" test: if the generator ever cached
-    /// an attribute write in a local and reused it for the following read,
-    /// this fixture is built to catch it, because the second `let`'s value
-    /// would then differ textually from a `prev_position` reference.
+    /// Fixture verifying that an attribute read after an assignment in the same step
+    /// continues to reference the previous element state (`prev`).
     fn read_after_write_proc() -> Checked {
         let mut p = empty_checked("read_after_write", Kind::L1);
         p.emit = vec![Attr::Position];
@@ -331,11 +272,7 @@ mod tests {
         );
     }
 
-    /// A block calling `fbm(position, 3)` — the octave count must be
-    /// unrolled into three `perlin` terms at generation time, with no
-    /// runtime loop and no call to a function literally named `fbm` (WGSL
-    /// has no preprocessor to unroll one for us, so this crate must not
-    /// emit one).
+    /// Returns a fixture procedure invoking `fbm(position, 3)`.
     fn fbm_proc() -> Checked {
         let mut p = empty_checked("fbm_user", Kind::L1);
         p.emit = vec![Attr::Position, Attr::Age];
@@ -689,12 +626,7 @@ mod tests {
         // getting this backwards is the trap the brief calls out by name.
         assert!(src.contains("return srgb_to_linear(srgb);"), "{src}");
         assert!(!src.contains("return linear_to_srgb(srgb);"), "{src}");
-        // position is consumed but never read in fragment, so it must not
-        // become a varying. Asked of the *varying* rather than of the whole
-        // module: the `Element` struct declares `position: vec3<f32>` now that
-        // a slot is its attribute's own width, and a bare substring search
-        // finds that instead — which is the assertion passing for a reason
-        // that has nothing to do with what it is checking.
+        // `position` is consumed but not read in fragment, so it must not become a varying.
         assert!(!src.contains(") position: vec3<f32>,"), "{src}");
         // point_coord is fragment-only ambient and IS used in fragment.
         assert!(src.contains("in.point_coord"), "{src}");

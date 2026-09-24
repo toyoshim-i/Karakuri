@@ -1,78 +1,16 @@
-//! L4 lowering: `vertex` / `fragment` as a render pipeline.
+//! L4 lowering: compiles `vertex` and `fragment` blocks into a WebGPU render pipeline.
 //!
-//! # Quad expansion, not `PointList`
+//! # Execution Model
 //!
-//! WebGPU has no point size — `PrimitiveTopology::PointList` always
-//! rasterizes a single pixel — so every element becomes a quad: six
-//! vertices per instance (`@builtin(vertex_index)` 0..6, the corner) times
-//! one instance per element (`@builtin(instance_index)`). `point_rate`
-//! scales the quad in clip space so a sprite keeps its size relative to the
-//! frame at any depth and at any target size, and `point_coord` falls out of
-//! the corner directly. This is not a
-//! decision this crate made; it is `crates/karakuri-engine/src/shaders/points.wgsl`,
-//! which this module follows structurally (`corner_of`, the six-corner
-//! winding, the `viewport`-based clip-space offset).
-//!
-//! **Both topologies are that same quad**, which is why `lines` cost the
-//! engine nothing: `VERTICES_PER_ELEMENT` is six either way, the pipeline
-//! stays a `TriangleList`, and the indirect draw arguments are untouched.
-//! Only where the six corners land changes — around a point, or along the
-//! segment from `clip` to `clip_b`. See [`SEGMENT_EXPANSION`].
-//!
-//! One thing worth being suspicious of, per the brief: the spec's L4
-//! lowering section motivates quad expansion by saying "the corner in
-//! `@builtin(vertex_index)` **and the element in `@builtin(instance_index)`**",
-//! which is correct — but elsewhere the spec's ambient table and prose
-//! sometimes talk as though `seed`/element identity could be read off
-//! `vertex_index` directly. It cannot: with quad expansion, `vertex_index`
-//! is the corner (0..6, repeating every instance) and only
-//! `instance_index` identifies the element. Every attribute read in this
-//! module is indexed by `instance_index`, never `vertex_index`.
-//!
-//! # What decides which expansion
-//!
-//! `Checked::topology`, which for an L4 is **inferred by the check pass**
-//! from whether the `vertex` block assigns `clip_b`. It used to be `None`
-//! here — `topology` was an L1 header field and this generator had nothing to
-//! branch on even in principle, which was fine while there was one rendering
-//! strategy and a gap the moment there were two.
-//!
-//! What closed it is *not* a `topology` declaration on the L4 header. A
-//! procedure that writes a second endpoint is drawing a segment and there is
-//! nothing else it could be doing, so a header field would only be a second
-//! place for that fact to be stated and a first place for it to disagree with
-//! itself.
-//!
-//! **The L1's declaration is not consulted here, and nothing consults it.**
-//! An L1 declaring `lines` may be paired with a points L4 and the reverse, on
-//! purpose: a segment gets both of its ends from attributes the L4 consumes,
-//! so a renderer needs nothing from the geometry that Set composition does not
-//! already check. `examples/drift_shell.kir` says `topology points` and is
-//! paired with `drift_streaks.kir`, which draws segments. See the comment in
-//! `Set::build` for why that is allowed rather than overlooked.
-//!
-//! # Dead elements inside the draw range
-//!
-//! The draw's instance count is `counts.range`, which is how many slots the
-//! element buffer holds — not how many of them are alive. An element killed
-//! during the step that just ran keeps its slot until the *next* step's scan
-//! reclaims it, so it is inside the draw range for exactly one frame, and
-//! drawing it would show a particle that has already died.
-//!
-//! The vertex stage therefore reads the alive flag and collapses a dead
-//! element's quad to a single point, which rasterizes to nothing. Not a
-//! `discard` in the fragment stage: that would run the whole vertex stage,
-//! rasterize six vertices' worth of fragments, and pay the fragment block's
-//! cost per covered pixel only to throw the result away.
-//!
-//! # Varyings are minimal, not exhaustive
-//!
-//! `consumes` and `seed` are readable in both blocks, but only the ones
-//! `fragment` actually references need to survive interpolation — carrying
-//! every consumed attribute through regardless would waste varying slots on
-//! values `vertex` only used to compute `clip`. This module scans the
-//! fragment block once (see `used_in_fragment`) and gives exactly that set
-//! `@interpolate(flat)` varyings, in `consumes` order.
+//! - **Quad expansion**: Every element generates six vertices forming a camera-facing quad
+//!   (`TriangleList`), supporting both point sprite and line segment rendering without changing
+//!   primitive topology.
+//! - **Topology inference**: The check pass infers point vs. segment expansion based on assignments
+//!   to `clip_b`.
+//! - **Dead element handling**: Dead instances inside `counts.range` are collapsed to zero-area quads
+//!   in the vertex stage to avoid rasterization overhead.
+//! - **Varyings optimization**: Only attributes referenced in the fragment block are emitted as
+//!   varying outputs from the vertex stage.
 
 use std::collections::HashSet;
 
@@ -112,13 +50,7 @@ pub(super) enum L4Block {
 
 pub(super) struct L4Resolver {
     block: L4Block,
-    /// Set when the body reads something that lives in the camera's bind group,
-    /// so the caller knows whether to declare one at all.
-    ///
-    /// A `Cell` because [`Resolver::read_ambient`] takes `&self` — a resolver
-    /// answers "how is this spelled", and the other half of the lowering's state
-    /// travels in `Requirements`, which is about the prelude rather than about
-    /// bindings.
+    /// Tracks whether camera bindings are accessed in shader code.
     camera_used: std::cell::Cell<bool>,
 }
 
@@ -152,11 +84,7 @@ impl Resolver for L4Resolver {
 
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
-            // **The same shape as `seed`, and for the same reason**: a
-            // per-element identity value, read from the element in the vertex
-            // stage and carried to the fragment as a flat varying. Where no
-            // amplifier ran the vertex prologue binds it to `0u`, so this
-            // spelling is correct whether or not the element has the slot.
+            // Copy index read in vertex stage and forwarded to fragment as flat varying.
             Ambient::Copy => match self.block {
                 L4Block::Vertex => "copy".to_string(),
                 L4Block::Fragment => "in.copy".to_string(),
@@ -165,11 +93,7 @@ impl Resolver for L4Resolver {
                 unreachable!("`point` is a field's only input and appears in no other block")
             }
             Ambient::T => "u.t".to_string(),
-            // **`source` is the salt, and the salt is already here.**
-            // `docs/ir-spec.md` settles that the value identifying a geometry
-            // *is* its salt rather than a dense index beside it, and
-            // `Set::prepare` has been writing it into this field all along —
-            // so the read is one arm and no new plumbing.
+            // Geometry source identity is represented by seed_salt.
             Ambient::Source => "u.seed_salt".to_string(),
             Ambient::Beats => "u.beats".to_string(),
             // The camera is its own bind group, written on the GPU by
@@ -304,11 +228,7 @@ fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<At
         // The point handed over, and nothing behind it: a field reads no
         // element of its caller's.
         TExprKind::Field { point, .. } => scan_expr(point, seed, copy, attrs),
-        // **Unreachable, and it stays a walk rather than a panic.** The check
-        // pass refuses `texel`, `tap` and `frame_step` outside a `kind L5`
-        // procedure, so no L4 tree holds one — but this scan decides which
-        // varyings a shader carries, and a scan that got that wrong by panicking
-        // would be a worse failure than one that got it right by recursing.
+        // Recurses on optional sampling coordinate if present.
         TExprKind::Sample { at, .. } => {
             if let Some(a) = at {
                 scan_expr(a, seed, copy, attrs);
@@ -431,25 +351,12 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
         ));
         loc += 1;
     }
-    // After every conditional varying, so that adding it left each of theirs
-    // where it was. **Interpolated rather than flat**, and that is the whole
-    // reason it is a varying at all: perspective-correct interpolation of `w`
-    // is exactly the view depth at the fragment, because the hardware's own
-    // divide is what makes it so. Only `blend weighted` needs it — see
-    // [`WEIGHTED_FS_EPILOGUE`].
+    // View depth varying used by weighted blended rendering.
     if depth {
         out.push_str(&format!("    @location({loc}) view_depth: f32,\n"));
         loc += 1;
     }
-    // **What the one-pixel floor took, so the fragment stage can give it
-    // back.** A primitive smaller than a pixel is drawn at one pixel and its
-    // colour multiplied by the coverage it should have had; the size is known
-    // here and the colour is written there, so the factor has to travel. Flat,
-    // because it is one number per element — all six corners computed it from
-    // the same `point_rate` — and 1.0 at or above a pixel, which is what makes
-    // the whole mechanism inert for material that was never sub-pixel. See
-    // `docs/ir-spec.md`, *A sprite smaller than a pixel is drawn at one pixel
-    // and dimmed to compensate*.
+    // Coverage factor compensating for sub-pixel size clamping to one pixel.
     out.push_str(&format!(
         "    @location({loc}) @interpolate(flat) coverage: f32,\n"
     ));
@@ -469,22 +376,13 @@ fn vertex_entry(
     out.push_str("@vertex\n");
     out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
     out.push_str("    let seed = elements[elem].seed;\n");
-    // **Bound whether or not anything reads it, and bound to a literal where
-    // the geometry has no such slot.** An element that reached this renderer
-    // without passing an amplifier is copy zero of itself — that is the answer,
-    // not the absence of one, and giving it here is what lets the lowering emit
-    // one spelling for `copy` regardless of what the chain above did.
+    // Default copy index to 0u when geometry has no copy slot.
     out.push_str(if id.has_copy_slot {
         "    let copy = elements[elem].copy;\n"
     } else {
         "    let copy = 0u;\n"
     });
-    // **The one place a derived attribute differs from a stored one**, and it
-    // is a different right-hand side rather than a different anything else:
-    // past this prologue every read is of a local named after the attribute,
-    // and nothing downstream in this file knows or needs to know which kind it
-    // was. That is what makes the contract a contract — a consumer names what
-    // it wants and the position it sits at decides where the value comes from.
+    // Bind derived attributes or read directly from element storage buffer.
     for &a in consumes {
         if derived.contains(&a) {
             out.push_str(&derived_binding(a));
@@ -506,34 +404,14 @@ fn vertex_entry(
     match topology {
         Topology::Points => {
             out.push_str("    let corner = corner_of(corner_idx) * 2.0 - 1.0;\n");
-            // **The side in pixels first, because the floor below is a pixel.**
-            // `point_rate` is a fraction of the target's height, so the side a
-            // sprite covers is that fraction times `viewport.y` — in both axes,
-            // since the sprite is square in pixels rather than in NDC.
+            // Quad extent in pixels clamped to minimum 1.0 px to prevent disappearing sub-pixel sprites.
             out.push_str("    let _side_px = _point_rate * u.viewport.y;\n");
-            // **Never smaller than a pixel.** A quad below a pixel produces no
-            // fragment at all unless it happens to cover a pixel centre, so
-            // material at a small target does not dim, it disappears in
-            // whatever pattern the sample grid picks.
             out.push_str("    let _drawn_px = max(_side_px, 1.0);\n");
-            // `corner` spans 2.0 and NDC spans 2.0 over each axis of the
-            // target, so a side of `_drawn_px` is `_drawn_px / u.viewport` in
-            // NDC — one term per axis, which is what makes the sprite square in
-            // pixels and makes a change of aspect ratio move the frame's edges
-            // rather than the sprite's. The `* _clip.w` is untouched and does
-            // what it always did: cancel the rasterizer's perspective divide,
-            // so the extent is a fraction of the *frame* rather than of
-            // anything in the world.
             out.push_str("    let _rate_ndc = _drawn_px / u.viewport;\n");
             out.push_str("    let ndc_offset = corner * _rate_ndc * _clip.w;\n");
             out.push_str("    out.clip = vec4<f32>(_clip.xy + ndc_offset, _clip.zw);\n");
             out.push_str("    out.point_coord = corner_of(corner_idx);\n");
-            // **Squared, because a sprite is short of coverage in both axes.**
-            // `clamp` rather than a ratio against `_drawn_px`: it is 1.0 at or
-            // above a pixel, which is the inert case, and it is 0.0 for a
-            // non-positive rate, which is the one behaviour this floor would
-            // otherwise invent — a negative side clamps up to a full pixel, and
-            // without the clamp its square would light it.
+            // Compensate sub-pixel coverage via squared area factor.
             out.push_str("    let _cov = clamp(_side_px, 0.0, 1.0);\n");
             out.push_str("    out.coverage = _cov * _cov;\n");
             // The whole sprite is at one depth, because a billboard is: all six
@@ -565,17 +443,9 @@ fn vertex_entry(
     for &a in attrs_used {
         out.push_str(&format!("    out.{} = {};\n", a.name(), a.name()));
     }
-    // A dead element still occupies its slot until the next step's scan
-    // reclaims it — see the module doc. Every corner collapsing to the same
-    // clip-space point makes both triangles zero-area, so the rasterizer
-    // drops it without the fragment stage running at all. Written as an
-    // override of `out.clip` rather than folded into the expression above so
-    // that the live path's arithmetic is textually unchanged.
+    // Dead elements collapse to zero-area quads to skip rasterization.
     let dropped = match topology {
         Topology::Points => "alive[elem] == 0u",
-        // Plus both endpoints being in front of the eye — see
-        // [`SEGMENT_EXPANSION`] for why a segment that straddles the eye is
-        // dropped rather than clipped.
         Topology::Lines => "alive[elem] == 0u || _clip.w <= 0.0 || _clip_b.w <= 0.0",
         Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
     };
@@ -609,12 +479,7 @@ const SEGMENT_EXPANSION: &str = "\
     out.coverage = clamp(_width_px, 0.0, 1.0);
 ";
 
-/// The two targets a [`Blend::Weighted`] fragment stage writes, and the signature
-/// that says so.
-///
-/// The engine builds the pipeline against exactly this pair — `Rgba16Float` for
-/// the accumulation and `R16Float` for the revealage — with a different blend
-/// state on each. See `Set::draw`.
+/// Fragment output structure for weighted blended order-independent transparency.
 const WEIGHTED_FS_OUT: &str = "struct FsOut {
     @location(0) accum: vec4<f32>,
     @location(1) reveal: f32,
@@ -658,29 +523,7 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
     }
     out.push_str("    var _color: vec4<f32>;\n");
     out.push_str(body);
-    // **The colour, and the alpha is left alone.** Both are exact for the
-    // light: `additive` blends with `SrcAlpha, One`, so what reaches the slot
-    // target is `rgb * a` either way, and `weighted` divides its accumulation
-    // back through `a` in the resolve. They differ in what else moves.
-    //
-    // A slot target's alpha is **coverage** — `1 - prod(1 - a_i)`, what
-    // `composite.wgsl`'s `over` hides behind, what survives the mix into the
-    // master chain, and the only thing anything outside the present pass can
-    // key on. Paying the compensation there would put a size-rounding
-    // correction into a channel that means *there is material at this texel*,
-    // and every later consumer of it would inherit that silently. Under
-    // `weighted` it would not even stay a coverage claim: `_a` also builds the
-    // depth weight in [`WEIGHTED_FS_EPILOGUE`], so a rounded-up sprite would
-    // lose weight against its neighbours at the same depth.
-    //
-    // **What that costs is stated rather than avoided**: the coverage is the
-    // one a full pixel would have claimed, so under `over` a sub-pixel sprite
-    // hides what is behind it as though it filled the texel. Its own colour is
-    // right; its occlusion is a texel's worth.
-    //
-    // Above a pixel `coverage` is 1.0 and this line changes nothing. Written as
-    // a whole-vector assignment because WGSL has no assignable multi-component
-    // swizzle. See [`write_vsout_struct`].
+    // Scale RGB by sub-pixel coverage factor while leaving alpha intact.
     out.push_str("    _color = vec4<f32>(_color.rgb * in.coverage, _color.a);\n");
     if weighted {
         out.push_str(WEIGHTED_DEPTH);
@@ -692,22 +535,7 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
     out
 }
 
-/// Lowers a `Checked` L4 procedure to WGSL against `elements`, the paired L1
-/// procedure's [`ElementLayout`]. Panics if `checked.kind` is not `Kind::L4`
-/// or either block is missing — preconditions a real check pass already
-/// guarantees.
-///
-/// `elements` is a parameter rather than something this function derives
-/// from `checked.consumes`, because L4 reads the *same physical buffer* L1
-/// wrote: its `Element` struct has to be byte-identical to L1's, not merely
-/// wide enough to hold what this procedure happens to consume. Deriving a
-/// separate slot list from `consumes` (the old behaviour) could silently
-/// disagree with L1's `emit` — different attribute order, or a struct sized
-/// for fewer fields — and nothing here would catch it; the mismatch would
-/// only show up as a shader reading another attribute's bytes. `Set::build`
-/// has both checked procedures, so it is what passes the L1 side's layout
-/// through. L4 still only *reads* the slots it `consumes`, plus `seed` — it
-/// just declares the full struct so its layout matches.
+/// Lowers a `Checked` L4 procedure to WGSL against upstream `ElementLayout`.
 pub fn generate_l4(
     checked: &Checked,
     elements: &ElementLayout,
@@ -718,28 +546,18 @@ pub fn generate_l4(
         Kind::L4,
         "generate_l4 called on a non-L4 procedure"
     );
-    // Inferred by the check pass from whether `vertex` assigns `clip_b`. It is
-    // **the L4's own answer and the only one that reaches lowering** — the
-    // paired L1's declaration is never read, here or anywhere, and the two are
-    // allowed to differ. See the module doc.
+    // Topology is inferred by the check pass from whether vertex assigns clip_b.
     let topology = checked
         .topology
         .expect("a checked L4 procedure always carries an inferred topology");
-    // Declared, never inferred — the two modes differ in how the results of
-    // identical assignments are combined, so there is nothing an L4 could write
-    // that would imply one. See `karakuri_ir::Blend`.
+    // Declared blend mode (e.g. weighted order-independent transparency).
     let weighted = checked.blend == Some(Blend::Weighted);
 
     let fragment_blk = checked
         .block(BlockKind::Fragment)
         .expect("an L4 procedure must have a fragment block");
 
-    // **A fullscreen procedure has no vertex block to lower**, so it takes an
-    // entirely separate path: the vertex stage is generated, there are no
-    // element bindings to declare, and no varyings to choose because the only
-    // one is the screen position. Returning early keeps the per-element path
-    // below textually unchanged rather than threading a condition through it,
-    // and keeps `viewport` and `camera` out of a uniform that never reads them.
+    // Fullscreen procedures bypass vertex processing and use screen-quad shaders.
     if topology == Topology::Fullscreen {
         return generate_fullscreen(checked, fragment_blk, elements, weighted, fields);
     }
@@ -748,33 +566,16 @@ pub fn generate_l4(
     b.field("t", "f32");
     b.field("beats", "f32");
     b.field("seed_salt", "u32");
-    // **One `u32` per declared Source slot**, holding the identity of the
-    // geometry an edge bound to it. A comparison against `source` is then two
-    // uniform loads — the same value in every lane, which is the branch a GPU
-    // costs least.
+    // Emits one u32 per declared source slot.
     for slot in checked.source_slots() {
         b.source_slot_field(slot);
     }
-    // Not an IR ambient: converting `point_rate` (a fraction of the target's
-    // height) into a clip-space offset needs the render target's dimensions,
-    // which is engine state, not a value any procedure computes. The rate
-    // needs them for a second reason the old pixel size did not — the two
-    // axes are scaled differently, so a sprite stays square whatever the
-    // aspect ratio is. Present in `points.wgsl` today for the same reason.
+    // Viewport dimensions for point_rate to clip-space conversion.
     b.field("viewport", "vec2<f32>");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
-    // **A spliced field's params live here**, under a prefix of their own so
-    // that this procedure and the field it evaluates may both declare
-    // `exposure` — see `layout::mangle_field_param`.
-    //
-    // **One set per slot, and only for the slots the procedure evaluates.** The
-    // field used to be spliced into every module in the Set, so a renderer that
-    // never mentions one still carried its params and still failed to compile
-    // if the field's body did — a `.kir` taking down shaders that have nothing
-    // to do with it. The slot is in the name because two fields in one caller
-    // are two independent sets of values.
+    // Spliced field parameters, prefixed with the slot name to avoid naming collisions.
     let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
@@ -829,11 +630,7 @@ pub fn generate_l4(
     if let Some(g) = camera_group {
         write_camera_binding(&mut src, g);
     }
-    // **The field's helpers before its body, and its body before every entry
-    // point.** A spliced field lives in this module, so this module's prelude
-    // has to carry what it calls — the prelude is demand-driven, and a field
-    // calling `sd_torus` in a caller that does not would otherwise produce a
-    // call to a function nothing emitted, in a shader that checked clean.
+    // Absorb prelude requirements and functions needed by spliced fields.
     for f in &splices {
         req.absorb(&f.requirements);
     }
