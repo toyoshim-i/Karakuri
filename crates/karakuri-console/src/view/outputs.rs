@@ -41,7 +41,17 @@ const PROJECTOR: &str = "projector";
 /// explaining that the thing it would switch is not installed* is a state, and
 /// a row that simply did not mention Syphon would leave an operator wondering
 /// whether this program has heard of it.
-const PLUGIN_SINKS: [&str; 2] = ["Syphon · no plugin", "NDI · no plugin"];
+#[cfg(target_os = "macos")]
+const PLUGIN_0_NAME: &str = "Syphon";
+#[cfg(not(target_os = "macos"))]
+const PLUGIN_0_NAME: &str = "Spout";
+
+#[cfg(target_os = "macos")]
+const PLUGIN_0_ABSENT: &str = "Syphon · no plugin";
+#[cfg(not(target_os = "macos"))]
+const PLUGIN_0_ABSENT: &str = "Spout · no plugin";
+
+const PLUGIN_SINKS: [&str; 2] = [PLUGIN_0_ABSENT, "NDI · no plugin"];
 
 /// One chip in the Outputs row that is not the program view.
 ///
@@ -208,7 +218,11 @@ impl Outputs {
             chip.on = on;
             chip.present = present;
             if index == 0 {
-                chip.name = if present { "Syphon" } else { PLUGIN_SINKS[0] };
+                chip.name = if present {
+                    PLUGIN_0_NAME
+                } else {
+                    PLUGIN_SINKS[0]
+                };
             }
         }
         self
@@ -325,7 +339,7 @@ pub fn outputs_with(
             1 => PROJECTOR,
             2 => {
                 if plugin_available {
-                    "Syphon"
+                    PLUGIN_0_NAME
                 } else {
                     PLUGIN_SINKS[0]
                 }
@@ -367,7 +381,7 @@ pub fn outputs_with(
                 0 => PROJECTOR,
                 1 => {
                     if plugin_available {
-                        "Syphon"
+                        PLUGIN_0_NAME
                     } else {
                         PLUGIN_SINKS[0]
                     }

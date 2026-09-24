@@ -173,44 +173,98 @@ fn route_plugin(gfx: &mut Gfx, n: u8, on: bool) -> Option<String> {
 
 fn resolve_plugin_command(n: u8) -> String {
     if n == 0 {
-        if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_SYPHON") {
-            return cmd;
-        }
-        if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_0") {
-            return cmd;
-        }
-        let candidates = [
-            "../Karakuri-syphon/target/debug/karakuri-syphon",
-            "../Karakuri-syphon/target/release/karakuri-syphon",
-            "../../Karakuri-syphon/target/debug/karakuri-syphon",
-            "../../Karakuri-syphon/target/release/karakuri-syphon",
-            "../../../Karakuri-syphon/target/debug/karakuri-syphon",
-            "../../../Karakuri-syphon/target/release/karakuri-syphon",
-        ];
-        for candidate in candidates {
-            if let Ok(canon) = std::fs::canonicalize(candidate) {
-                return canon.to_string_lossy().into_owned();
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_SYPHON") {
+                return cmd;
             }
-        }
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(parent) = exe.parent() {
-                let p1 = parent.join("karakuri-syphon");
-                if p1.exists() {
-                    return p1.to_string_lossy().into_owned();
-                }
-                let p_debug = parent.join("../../../Karakuri-syphon/target/debug/karakuri-syphon");
-                if let Ok(canon) = p_debug.canonicalize() {
-                    return canon.to_string_lossy().into_owned();
-                }
-                let p_release =
-                    parent.join("../../../Karakuri-syphon/target/release/karakuri-syphon");
-                if let Ok(canon) = p_release.canonicalize() {
+            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_0") {
+                return cmd;
+            }
+            let candidates = [
+                "../Karakuri-syphon/target/debug/karakuri-syphon",
+                "../Karakuri-syphon/target/release/karakuri-syphon",
+                "../../Karakuri-syphon/target/debug/karakuri-syphon",
+                "../../Karakuri-syphon/target/release/karakuri-syphon",
+                "../../../Karakuri-syphon/target/debug/karakuri-syphon",
+                "../../../Karakuri-syphon/target/release/karakuri-syphon",
+            ];
+            for candidate in candidates {
+                if let Ok(canon) = std::fs::canonicalize(candidate) {
                     return canon.to_string_lossy().into_owned();
                 }
             }
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(parent) = exe.parent() {
+                    let p1 = parent.join("karakuri-syphon");
+                    if p1.exists() {
+                        return p1.to_string_lossy().into_owned();
+                    }
+                    let p_debug =
+                        parent.join("../../../Karakuri-syphon/target/debug/karakuri-syphon");
+                    if let Ok(canon) = p_debug.canonicalize() {
+                        return canon.to_string_lossy().into_owned();
+                    }
+                    let p_release =
+                        parent.join("../../../Karakuri-syphon/target/release/karakuri-syphon");
+                    if let Ok(canon) = p_release.canonicalize() {
+                        return canon.to_string_lossy().into_owned();
+                    }
+                }
+            }
+            return "karakuri-syphon".to_string();
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_SPOUT") {
+                return cmd;
+            }
+            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_0") {
+                return cmd;
+            }
+            let candidates = [
+                "../Karakuri-spout/target/debug/karakuri-spout.exe",
+                "../Karakuri-spout/target/release/karakuri-spout.exe",
+                "../../Karakuri-spout/target/debug/karakuri-spout.exe",
+                "../../Karakuri-spout/target/release/karakuri-spout.exe",
+                "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
+                "../../../Karakuri-spout/target/release/karakuri-spout.exe",
+                "../Karakuri-spout/target/debug/karakuri-spout",
+                "../Karakuri-spout/target/release/karakuri-spout",
+                "../../Karakuri-spout/target/debug/karakuri-spout",
+                "../../Karakuri-spout/target/release/karakuri-spout",
+                "../../../Karakuri-spout/target/debug/karakuri-spout",
+                "../../../Karakuri-spout/target/release/karakuri-spout",
+            ];
+            for candidate in candidates {
+                if let Ok(canon) = std::fs::canonicalize(candidate) {
+                    return canon.to_string_lossy().into_owned();
+                }
+            }
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(parent) = exe.parent() {
+                    for name in ["karakuri-spout.exe", "karakuri-spout"] {
+                        let p = parent.join(name);
+                        if p.exists() {
+                            return p.to_string_lossy().into_owned();
+                        }
+                    }
+                    for name in [
+                        "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
+                        "../../../Karakuri-spout/target/release/karakuri-spout.exe",
+                    ] {
+                        let p = parent.join(name);
+                        if let Ok(canon) = p.canonicalize() {
+                            return canon.to_string_lossy().into_owned();
+                        }
+                    }
+                }
+            }
+            return "karakuri-spout".to_string();
         }
     }
-    "karakuri-syphon".to_string()
+    "karakuri-plugin".to_string()
 }
 
 pub(crate) fn is_plugin_available(n: u8) -> bool {
@@ -230,7 +284,25 @@ pub(crate) fn is_plugin_available(n: u8) -> bool {
             }
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        if n == 0 {
+            let cmd = resolve_plugin_command(n);
+            if cmd != "karakuri-spout" && cmd != "karakuri-spout.exe" {
+                return std::path::Path::new(&cmd).exists();
+            }
+            if let Ok(path) = std::env::var("PATH") {
+                for dir in std::env::split_paths(&path) {
+                    if dir.join("karakuri-spout.exe").exists()
+                        || dir.join("karakuri-spout").exists()
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = n;
     false
 }

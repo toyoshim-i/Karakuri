@@ -101,7 +101,7 @@ fn integration_with_karakuri_syphon_binary() {
     assert!(plugin.is_alive());
 
     for i in 0..5 {
-        let sent = plugin.send_frame(i, 100 + i as u32, 1920, 1080);
+        let sent = plugin.send_frame(i, 100 + i, 1920, 1080);
         assert!(sent || plugin.telemetry().host_dropped > 0);
         std::thread::sleep(std::time::Duration::from_millis(5));
     }

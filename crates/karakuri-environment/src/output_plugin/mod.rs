@@ -262,7 +262,7 @@ impl OutputPlugin {
     ///
     /// Never blocks the caller (*the window never waits*). If the child process is busy
     /// or the buffer is full, the frame is dropped immediately and counted.
-    pub fn send_frame(&self, index: u64, surface_id: u32, width: u32, height: u32) -> bool {
+    pub fn send_frame(&self, index: u64, surface_id: u64, width: u32, height: u32) -> bool {
         if !self.alive.load(Ordering::Acquire) {
             return false;
         }
