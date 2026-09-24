@@ -17,12 +17,7 @@ use winit::event_loop::EventLoopProxy;
 use crate::bridge::asked_layer;
 use crate::gfx::Gfx;
 
-/// And it opens something rather than nothing, which is the choice that
-/// matters for what this instrument is: material that moves with the room is
-/// what the panel looks like, and an instrument that listens only after being
-/// asked comes up looking like one that cannot. `default` is what a machine
-/// answers when nobody has chosen, which is exactly the state a program that
-/// has just started is in.
+/// Default audio input device identifier to open at startup.
 pub(crate) const LISTEN_ON: &str = "default";
 
 /// One simulation step, which is what the audio path has to be told a frame
@@ -92,10 +87,6 @@ pub(crate) fn surfaced(
     map: Option<&std::path::Path>,
     waker: EventLoopProxy<()>,
 ) -> (Option<midi::Surface>, String) {
-    // **The wake, and it is the whole of what this closure is.** `send_event`
-    // is called on the MIDI thread once per message; `()` says *ask again* and
-    // [`App::user_event`] is what asks. The error is dropped because it means
-    // the loop has gone, which means the run is ending.
     match midi::Surface::first(map, move || {
         let _ = waker.send_event(());
     }) {
@@ -113,14 +104,7 @@ pub(crate) fn surfaced(
     }
 }
 
-/// What the legend says about an open surface, and it is a function of four
-/// facts and nothing else — so it is checkable on a machine with no MIDI on it
-/// at all, which is every machine a test runs on here.
-///
-/// The map's path is printed beside its name because the name alone cannot say
-/// which of the two tiers answered: `default` under the store and `surface` in
-/// the preset library are two different files and an operator who has just
-/// learned one wants to know which of them is loaded.
+/// Formats a startup diagnostic string describing the connected MIDI surface, loaded map, and mapping count.
 pub(crate) fn surface_line(
     port: &str,
     map_name: Option<&str>,
@@ -143,42 +127,16 @@ pub(crate) fn surface_line(
     line
 }
 
-/// Where a learned map is written — `<store>/maps/default.map`, the first of
-/// `karakuri_environment::midi::map_for`'s two tiers.
-///
-/// It is always this file, whatever map the run loaded: a run playing the
-/// shipped `examples/surface.map` and learning a control writes into the store,
-/// which is
-/// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
-/// held rather than argued. `default` is the name a program with no way to ask
-/// uses; naming another is the `map` pill, which is a readout.
+/// Returns the path to the store's default learned MIDI mapping file (`<store>/maps/default.map`).
 pub(crate) fn learned_map(store: &std::path::Path) -> std::path::PathBuf {
     store
         .join(midi::MAPS)
         .join(format!("{}.{}", midi::DEFAULT_MAP, midi::MAP_SUFFIX))
 }
 
-/// What a press on the control under the pointer would ask for, or `None` where
-/// the pointer is on no control at all.
+/// Returns the [`Operation`] associated with the control located at point `p`, or `None` if no control was hit.
 ///
-/// This is learn's half of the pointer question, and it is deliberately the
-/// *press* derivation rather than a new one: a control's identity is what a
-/// press on it asks the deck for, so a knob learned against it moves exactly
-/// what a click moves. The hover layer answers *which* control
-/// ([`karakuri_console::hover::Hover::resting`]) and this answers *what it is*,
-/// and the two walk the same `view::` derivations — a second geometry here
-/// would be a second answer that could disagree with the tip the operator is
-/// reading while they learn.
-///
-/// The value is a placeholder and is thrown away. What learn wants is the
-/// *address*, which is an operation with its value elided — `LaneTarget`'s own
-/// sentence one route along (ADR-0321). `Knob::operation` is the only way to
-/// get one out of the console, so this asks it at zero and [`target_of`] reads
-/// past the value.
-///
-/// The order is the hover layer's, which is the press order: the controls
-/// inside a container before the container. It matters in the Mixer, where a
-/// strip's chips sit inside the strip.
+/// Walks the active UI layout (look row, tracker, mixer, and inspector) in press order.
 pub(crate) fn asked_at(
     panel: &Panel,
     ctx: &egui::Context,
@@ -234,35 +192,7 @@ pub(crate) fn asked_at(
     None
 }
 
-/// The right-hand side of the map line that reaches this control, or the
-/// sentence saying why there is none.
-///
-/// # It is `karakuri_midi`'s own list, read the other way
-///
-/// The eight arms are exactly `Target::spelled`'s eight, which is what makes
-/// this safe: every string it returns is a string that crate's parser accepts,
-/// and `a_learned_target_is_one_the_grammar_accepts` is what holds that. A
-/// ninth spelling invented here would be a line an operator's file could not
-/// hold.
-///
-/// # The parameter arm is the whole reason this function exists
-///
-/// Every other operation carries its own address — a slot number, a word from a
-/// closed list. `WriteParam` carries a name, and a map line holds a position
-/// (ADR-0268): *knob 3 is knob 3 whatever Set is loaded*, and binding to the
-/// name would make the mapping a cost paid again on every swap. So this is
-/// where the name goes back to being a position, against the Set that is in the
-/// deck — `Set::published()` in order, counting from one, which is the number
-/// the Inspector draws beside the row and the same reading
-/// `karakuri_environment::midi::Decks` makes in the other direction.
-///
-/// # A refusal is a sentence and not a silence
-///
-/// A control a map line cannot name is most of this panel, and the operator
-/// pointing at one is owed the reason —
-/// [P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md).
-/// The reasons are the console page's, one control at a time, and this points
-/// at the tooltip rather than repeating forty of them.
+/// Translates a given [`Operation`] into its MIDI map target string representation, or errors if unmappable.
 pub(crate) fn target_of(operation: &Operation, deck: &Deck) -> Result<String, String> {
     let named = |what: &str| {
         Err(format!(
@@ -301,22 +231,14 @@ pub(crate) fn target_of(operation: &Operation, deck: &Deck) -> Result<String, St
             });
             match at {
                 Some(at) => Ok(format!("param {slot} {}", at + 1)),
-                // **A control off the published interface**, which the pane
-                // draws with its number and its fader gone (`view::Param::ord`
-                // is `None` for one). A position is exactly what a knob
-                // counts, so there is nothing to bind — and the answer is to
-                // publish it, which is a press in the same pane.
+                // Unmapped if the parameter is not exposed on the published interface.
                 None => named(
                     "that deck's Set does not publish it, so it has no position to count \
                      to — put it on the interface and learn it again",
                 ),
             }
         }
-        // **A mask's shape is the sharp one and it is not an oversight.** A
-        // map line can say a slot, a word from a closed list or a range, and
-        // this operation carries an angle as well as a kind — so a pad naming
-        // the kind would have to invent the angle beside it (ADR-0202,
-        // ADR-0209).
+        // Mask shape operations cannot be bound directly to a MIDI CC because they carry an orientation angle (ADR-0202).
         Operation::SetMaskShape { .. } => {
             named("a map line has no way to write an angle, so the shape has no spelling")
         }
@@ -324,15 +246,7 @@ pub(crate) fn target_of(operation: &Operation, deck: &Deck) -> Result<String, St
     }
 }
 
-/// What to say about a surface that did not open, and which of the two kinds of
-/// nothing it was — [`unopened`]'s shape one door along, and split out for its
-/// reason.
-///
-/// The empty case is not apologetic. A machine with nothing plugged in is the
-/// ordinary state of this program and always has been; saying it as a failure
-/// would read as one. A machine that *has* inputs and would not open the first
-/// is somebody's other program holding the port, and the message
-/// `karakuri-midi` came back with is the only thing that knows which.
+/// Formats a diagnostic message explaining why no MIDI control surface could be initialized.
 pub(crate) fn unsurfaced(why: &str) -> String {
     if why.contains("there are no MIDI inputs") {
         return String::from(
@@ -344,42 +258,14 @@ pub(crate) fn unsurfaced(why: &str) -> String {
     )
 }
 
-/// What the `audio-in` pill reads, out of the session this program opened.
-///
-/// One line, and it is a function rather than an assignment for the reason
-/// [`transport`] is one: it is the seam, and there is exactly one place the
-/// answer is derived. The card's list is not here — it is read on the press
-/// that opens the card and nowhere else (P-0091), so a reading taken every
-/// frame would be a directory read on the frame path with a microphone in place
-/// of the directory.
+/// Derives the current [`AudioIn`] UI state from the active audio session.
 pub(crate) fn told(open: Option<&audio::Audio>) -> AudioIn {
     let mut told = AudioIn::NONE;
     told.device = open.map(|open| open.description().to_owned());
     told
 }
 
-/// A press on one of the `audio-in` card's rows, performed, and what this file
-/// says about it. `None` for every operation that is not it, exactly as
-/// [`arrangement`] and [`pointed`] answer `None` for everything that is not
-/// theirs.
-///
-/// This is the second of [`listening`]'s three cases and the only one that can
-/// arrive during a set: the card lists what the host had at the press that
-/// opened it, and an interface unplugged between that press and this one is a
-/// name the operator picked that is not there any more. P-0094 — the refusal is
-/// printed with the list as it is *now*, and the input that was already open
-/// stays open: dropping it would answer a mistyped pick by taking away the
-/// room, which is the one thing nobody asked for.
-///
-/// `AttachBeatSource` writes no record (`written` answers `Silent(NoRecord)`:
-/// no session-stream variant carries what the beat is taken from), so nothing
-/// downstream of this moves the deck. What moves is this program's own audio
-/// session and the pill that reads it.
-///
-/// A `BeatSource::Process` reaches here and is declined in one sentence: the
-/// panel has no control that names one and `--tempo-source` is
-/// `karakuri-cli`'s. It is answered rather than ignored, because an operation
-/// that arrives and does nothing at all is the failure P-0094 is about.
+/// Handles an [`Operation::AttachBeatSource`] request, opening the selected audio input and updating the UI state.
 pub(crate) fn attached(
     open: &mut Option<audio::Audio>,
     session_bpm: f32,
@@ -398,10 +284,6 @@ pub(crate) fn attached(
             ))
         }
     };
-    // The offset the operator has already dialled in survives the change of
-    // device: it is a property of this room's outputs and not of its input,
-    // which is the whole of what `LATENCY_OFFSET_RANGE`'s documentation is
-    // about. A new session at the default would silently undo it.
     let offset = open
         .as_ref()
         .map(|open| open.latency_offset_ms())
@@ -420,8 +302,6 @@ pub(crate) fn attached(
             *told_pill = Some(told(open.as_ref()));
             Some(line)
         }
-        // **The one that was open stays open**, and the pill goes on naming
-        // it: what failed is the pick, not the room.
         Err(why) => Some(format!(
             "  attach: {} — {}",
             selector,
@@ -433,32 +313,13 @@ pub(crate) fn attached(
     }
 }
 
-/// What the offset keys say on a panel with no input attached.
-///
-/// `docs/manual/console.html` is the specification and it is plain about it:
-/// *"It only means anything with an audio input attached, and the audio-in pill
-/// is what says whether there is one."* So the press changes nothing, says why,
-/// and names the control that would fix it — [`tapped`]'s and [`scaled`]'s
-/// sentence for the same state, one row along.
+/// Diagnostic message returned when attempting to adjust latency offset with no audio input active.
 pub(crate) const NO_ROOM_FOR_AN_OFFSET: &str =
     "offset: no audio input — the offset is the delay between \
                                      what a room hears and what it sees, and there is no room. \
                                      open one on the transport row's `audio-in` pill";
 
-/// What to say about an offset that moved, out of what was asked for and
-/// what the session came back with.
-///
-/// A function of two numbers and nothing else, so that both halves of
-/// `console.html`'s contract are checkable without a device:
-///
-/// - The sign, in words. *"Negative and the picture waits for the music,
-///   positive and it leads"* — the page says it in words rather than leaving
-///   `−15 ms` to be interpreted, and so does this.
-/// - The bound, when it bit. The value is *"held inside 200 ms either
-///   way"*, which `karakuri_environment::audio` enforces and this reports: a
-///   press that asked for 205 and got 200 is a control at the end of its
-///   travel, and a control that answers the same number twice with nothing
-///   said is indistinguishable from a broken one (P-0094).
+/// Formats an informational readout string describing the applied audio latency offset.
 pub(crate) fn offset_said(asked: f32, now: f32) -> String {
     let sense = match now < 0.0 {
         true => "the picture waits for the music",
@@ -474,29 +335,7 @@ pub(crate) fn offset_said(asked: f32, now: f32) -> String {
     format!("  offset: {now:+.0} ms — {sense}{held}")
 }
 
-/// The latency offset, performed against the session this program opened, and
-/// `None` for every operation that is not it — [`attached`]'s shape, one
-/// control along, and beside it in [`App::performed`] for the same reason.
-///
-/// `SetLatencyOffset` writes no record (`written` answers `Silent(NoRecord)`:
-/// nothing in the session stream carries a delay between two outputs, which is
-/// a property of a room and not of a performance), so nothing downstream of
-/// this moves the deck. What moves is the lead every beat correction is applied
-/// with — `Audio::output_lag` — and the frame the picture is drawn on relative
-/// to it.
-///
-/// The operation is absolute and this is where it lands. It is applied through
-/// `Audio::nudge_latency_offset`, which is the only way in and is the one that
-/// clamps: the offset is held inside `LATENCY_OFFSET_RANGE` there, so this file
-/// states no bound of its own and cannot state a different one. A *setting*
-/// becomes the step that reaches it, which is what lets a fader emit this
-/// operation the day one exists without a second application path.
-///
-/// With nothing open there is nothing to offset, and the key arm says so before
-/// an operation is built — see [`NO_ROOM_FOR_AN_OFFSET`]. This arm answers the
-/// case an operation arrives from anywhere else in that state, because an
-/// operation that arrives and does nothing at all is the failure P-0094 is
-/// about.
+/// Adjusts the audio latency offset for the active session, clamping within supported boundaries.
 pub(crate) fn nudged(open: &mut Option<audio::Audio>, operation: &Operation) -> Option<String> {
     let Operation::SetLatencyOffset { ms } = *operation else {
         return None;
@@ -521,32 +360,7 @@ pub(crate) fn retargeted(open: &mut Option<audio::Audio>, operation: &Operation)
     ))
 }
 
-/// One frame's worth of audio: read the room, and hand the session what it
-/// said.
-///
-/// The same three lines `karakuri-cli`'s `measure_audio` is, minus the two
-/// halves this program does not have — there is no session recorder to hand the
-/// record to, and no tempo source to yield the grid to, so the grid is always
-/// this tracker's ([`audio::Grid::Owned`]).
-///
-/// The signals are copied out of the deck and back in, which is what
-/// `Deck::signals` and `set_signals` are for: the bus is a `Copy` value and the
-/// deck is the model of record for it, so an `AudioFrame` reaching a binding
-/// goes through the deck rather than round it.
-///
-/// `interval` is how fast frames are actually arriving, which is half the
-/// output lag a beat correction leads by, and `steps` is how much session this
-/// frame is worth. Both are [`App::clock`]'s one measurement, which is
-/// `karakuri-cli`'s arrangement of the same call: the interval the step count
-/// was derived from is the interval the lag is built from, so the two cannot
-/// disagree about how long this frame was.
-///
-/// It is not the transport row's rate inverted: [`Costs::rate`] is an average
-/// over half a second, and the lag uses the interval between this frame and the
-/// last one, which is the number the clock takes for the `tick`.
-/// `Audio::frame` still ignores an interval outside `(0, 1)`: the smoothed
-/// value holds, which is the right answer for the first frame of a run and for
-/// one that followed a stall.
+/// Processes one audio frame: updates signal metrics, estimates tempo, and records audio stream data.
 pub(crate) fn measure_audio(
     open: &mut Option<audio::Audio>,
     deck: &mut Deck,
@@ -566,22 +380,7 @@ pub(crate) fn measure_audio(
     );
     deck.set_signals(signals);
 
-    // **Into the session, where one is being recorded**, and this is the half
-    // this program did not have when the paragraph above was written.
-    //
-    // **Swapped, not cloned**, which is `karakuri-cli`'s own line: the record
-    // carries a `Vec` of bands and this is the frame path, so `push_audio`
-    // takes this one and leaves an empty shell behind. Nothing allocates. A
-    // frame with no shell free is counted rather than dropped silently — see
-    // `session::Recorder::push_audio`.
-    //
-    // **The measurement and the correction are both pushed, in that order**,
-    // because that is the order they happened in: a replay reading the stream
-    // applies the tempo the frame decided after the audio the frame heard.
-    //
-    // **After the sentence below rather than before it**, which costs nothing
-    // and keeps that reading the way it was written: the report matches on the
-    // record and this consumes it.
+    // Append audio frame metrics to the session recorder if recording is active.
     let recorder = match recorder {
         Some(recorder) => {
             recorder.push_audio(open.record_mut());
@@ -652,16 +451,7 @@ pub(crate) fn tapped(
     }
 }
 
-/// The grid, an octave up or down, performed against the same session, and what
-/// to say about it.
-///
-/// [`tapped`]'s note about `written` word for word: `ScaleGrid` is the other
-/// half of that `Owed(NotSettled)` arm, and for the same reason.
-///
-/// Refused where the result would leave the trackable range, which is the
-/// lock's call and not this file's — 60 to 200 BPM is under two octaves wide,
-/// so at most one of the two directions is ever live and a control that undid
-/// itself two seconds later would be worse than one that says no.
+/// Scales the beat tracker grid by an octave (halve or double), clamping to the supported BPM range.
 pub(crate) fn scaled(open: &mut Option<audio::Audio>, deck: &mut Deck, by: GridScale) -> String {
     let (factor, word) = match by {
         GridScale::Halve => (0.5, "half"),
