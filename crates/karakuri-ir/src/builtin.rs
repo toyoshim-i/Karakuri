@@ -1,14 +1,4 @@
-//! The builtin function table.
-//!
-//! Three passes need this and they need it to agree: the check pass types calls
-//! against it, cost estimation weighs them, and code generation lowers them. A
-//! builtin whose signature is described in three places will eventually be
-//! described three different ways, so it is described here.
-//!
-//! Signatures are described rather than enumerated. Most of these functions are
-//! componentwise over `float` and the vector widths — `abs` is four overloads
-//! written once — so a signature names a shape and the domain that shape ranges
-//! over, and the check pass unifies. See `docs/ir-spec.md`, Built-in functions.
+//! Builtin function signatures and shapes across IR validation, cost estimation, and code generation.
 
 use crate::ast::Ty;
 
@@ -23,19 +13,7 @@ pub enum Shape {
     /// `float`, whatever the generic type is. `length` and `dot` are this: vector
     /// in, scalar out.
     Scalar,
-    /// A texture this procedure is handed, named rather than computed: `src`,
-    /// `held` under `retains`, or a `uses … : Texture` slot.
-    ///
-    /// Not a [`Ty`], and it must not become one. A texture is not a value this
-    /// language can hold — there is nothing to construct, nothing to swizzle and
-    /// nothing to pass — so what this position accepts is a *name* the check pass
-    /// resolves against what the header and the kind make available, and never an
-    /// expression. That is what makes `let x = src;` a refusal at the read rather
-    /// than a type error two lines later, and it is why [`Builtin::texture_arg`]
-    /// exists beside the ordinary unification.
-    ///
-    /// Only [`Builtin::Texel`] and [`Builtin::Tap`] use it, and only in their first
-    /// argument.
+    /// A texture name (`src`, `held`, or a slot) rather than an expression value.
     Texture,
 }
 
@@ -162,26 +140,7 @@ builtins! {
     OpSubtract     => "op_subtract",     [Exact(Float), Exact(Float)] -> Exact(Float), Concrete, [];
     OpIntersect    => "op_intersect",    [Exact(Float), Exact(Float)] -> Exact(Float), Concrete, [];
 
-    // **There is no `field` here, and its absence is the point.** A field used
-    // to be reached through this table — one reserved word, so one field, since
-    // a second would have had nothing to be called. It is reached through a
-    // slot the header declares now, resolved in `check_call` before this table
-    // is consulted at all, and what a builtin cannot be is *bound*.
-
-    // Frame effects: L5's three, and the language change is exactly these.
-    //
-    // **`texel` takes no coordinate on purpose.** A coordinate is an invitation
-    // to resample, and a centre tap that resamples makes a pass at an amount
-    // just above zero differ from one that did not run by what a filter did
-    // rather than by what the effect is.
-    //
-    // **`frame_step` is the load-bearing one.** A displacement across a frame
-    // is the one thing a frame effect cannot express without the render size,
-    // and no ambient carries it — `Ambient::ALL` has no `viewport` on purpose,
-    // because the render size is not part of the picture and one frame is
-    // rendered at the largest enabled output's size and scaled into the rest.
-    // So the conversion is a builtin that performs it **without handing the
-    // number over**, and a `.kir` has no way to write a radius in texels.
+    // Frame effects (L5)
     Texel     => "texel",      [Texture] -> Exact(Vec4), Concrete, [];
     Tap       => "tap",        [Texture, Exact(Vec2)] -> Exact(Vec4), Concrete, [];
     FrameStep => "frame_step", [Exact(Float)] -> Exact(Vec2), Concrete, [];
@@ -196,8 +155,7 @@ builtins! {
     SpherePoint => "sphere_point", [Exact(Float), Exact(Float)] -> Exact(Vec3), Concrete, [];
     DiscPoint   => "disc_point",   [Exact(Float), Exact(Float)] -> Exact(Vec2), Concrete, [];
 
-    // Colour. `hsv_to_rgb` returns linear RGB: it converts internally so that
-    // authors get the hue they expect without thinking about colour space.
+    // Colour
     HsvToRgb     => "hsv_to_rgb",     [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
     RgbToHsv     => "rgb_to_hsv",     [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
     SrgbToLinear => "srgb_to_linear", [Exact(Vec3)] -> Exact(Vec3), Concrete, [];
@@ -205,25 +163,12 @@ builtins! {
 }
 
 impl Builtin {
-    /// Whether this builtin is an L5's, and so is refused in every other kind
-    /// rather than left to fail at lowering.
-    ///
-    /// Two of the three refuse themselves — there is no texture name in scope
-    /// anywhere but a `frame` block, so `texel(x)` has nothing to name — but
-    /// `frame_step` would type-check anywhere and lower to a read of a `viewport`
-    /// field no other module carries. That is a `.kir` checking clean and coming up
-    /// short at [stage
-    /// 5](../../../docs/adr/0032-nothing-checks-clean-and-comes-up-short-at-runtime.md),
-    /// so all three are refused in one place with one sentence.
+    /// Returns true if this builtin is an L5 frame effect.
     pub fn is_frame_effect(self) -> bool {
         matches!(self, Builtin::Texel | Builtin::Tap | Builtin::FrameStep)
     }
 
-    /// Which argument position takes a texture name, or `None` for a builtin that
-    /// takes none.
-    ///
-    /// Read off [`Signature::args`] rather than written out, so a fourth texture
-    /// builtin reaches the check pass's special case by existing.
+    /// Returns the argument index taking a texture operand, or `None`.
     pub fn texture_arg(self) -> Option<usize> {
         self.signature()
             .args

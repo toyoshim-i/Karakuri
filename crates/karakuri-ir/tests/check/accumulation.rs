@@ -1,15 +1,6 @@
 use super::common::*;
 
-// ---------------------------------------------------------------------------
-// Closed form versus accumulating.
-//
-// The property the engine's governor uses to decide that a Set needs no
-// priming. Nothing is rejected either way, so there is no diagnostic to assert
-// on and no way for a mistake here to be loud: these are the only thing
-// standing between a wrong answer and a slot going on air showing an unwarmed
-// image while claiming it needed no warming. Every case below is written so
-// that the *permissive* direction is what fails it.
-// ---------------------------------------------------------------------------
+// Closed form versus accumulating procedure tests.
 
 /// A procedure whose position is a function of `seed` and `t` alone is closed
 /// form: any `t` can be evaluated directly, so it needs no priming.
@@ -63,11 +54,7 @@ proc accumulator {
     );
 }
 
-/// **The read is found wherever it is.** Buried in the condition of an `if`
-/// inside a `for`, bound to a local, and used two statements later — a
-/// classifier that only looked at the right-hand side of an attribute
-/// assignment, or that only walked the top level of a block, would miss every
-/// one of these and call this procedure seekable.
+/// Verifies that reading an emitted attribute within nested control flow marks the procedure accumulating.
 #[test]
 fn a_read_inside_a_nested_if_in_a_for_still_counts() {
     let src = r#"
@@ -203,19 +190,7 @@ fn drift_shell_is_accumulating() {
     assert!(!checked.closed_form);
 }
 
-/// **L4 is vacuously closed form, and nothing an L4 file can say changes it.**
-///
-/// The property is about per-element state and an L4 has none: it reads what
-/// reached it and throws the result at a target. Classifying by "reads an
-/// attribute it emits" would make a renderer that consumes what it draws look
-/// accumulating, and since a Set is closed form only when every procedure in it
-/// is, one renderer would make a whole seekable Set look like it needed
-/// priming.
-///
-/// `emit` on an L4 is refused outright now — see
-/// [`emit_is_refused_on_a_renderer`] — which is the same fact said once instead
-/// of compensated for here. This stays because the short-circuit is what makes
-/// the answer independent of what the file says.
+/// Verifies that L4 renderers are treated as closed form regardless of consumed attributes.
 #[test]
 fn an_l4_is_vacuously_closed_form() {
     let src = r#"

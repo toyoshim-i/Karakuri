@@ -338,11 +338,7 @@ proc uses_id {
     );
 }
 
-/// `topology lines` is a distinct value and not a spelling of `points`.
-///
-/// Paired with the `points` assertion in
-/// `drift_shell_parses_with_expected_shape`: a parser that mapped every
-/// topology name to one variant would satisfy either test alone.
+/// Verifies `topology lines` parses as lines.
 #[test]
 fn topology_lines_parses_as_lines() {
     let src = r#"
@@ -396,11 +392,7 @@ proc guessed {
     );
 }
 
-/// `blend weighted` is a distinct value and not a spelling of `additive`.
-///
-/// The mirror of `topology_lines_parses_as_lines`, and it exists for the same
-/// reason: a parser that mapped every blend name to one variant would satisfy
-/// `soft_points_parses_to_expected_shape` alone.
+/// Verifies `blend weighted` parses as weighted blend mode.
 #[test]
 fn blend_weighted_parses_as_weighted() {
     let src = r#"
@@ -432,14 +424,7 @@ proc glassy {
     assert_eq!(proc.blend, Some(karakuri_ir::ast::Blend::Weighted));
 }
 
-/// An unknown blend mode is refused, and the hint names both of the ones that
-/// exist *and* what separates them.
-///
-/// Same argument as `an_unknown_topology_is_refused_and_names_the_ones_that_exist`:
-/// this is the diagnostic a model reads after guessing `over` or `screen` from
-/// the L5 vocabulary, where those names are real. What the hint lists is what it
-/// tries next, so listing the names without the distinction would send it back
-/// with a coin flip.
+/// Verifies unknown blend modes are rejected with candidate suggestions.
 #[test]
 fn an_unknown_blend_is_refused_and_names_the_ones_that_exist() {
     let src = r#"
@@ -507,12 +492,7 @@ proc over {
     );
 }
 
-/// **`retains` carries no operand**, so a file that writes one is a file with a
-/// stray word after the declaration — refused where it is written rather than
-/// read as something.
-///
-/// The cut is the slot's answer, and putting it here would be two procedures
-/// where there is one.
+/// Verifies that `retains` takes no operand.
 #[test]
 fn retains_with_an_operand_is_refused() {
     let src = r#"

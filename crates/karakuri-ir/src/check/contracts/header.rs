@@ -7,11 +7,7 @@ use crate::ast::{BlockKind, Kind, Proc, SlotTy, Topology, Ty};
 use crate::error::IrError;
 use crate::span::Span;
 
-/// A `uses … : Texture` slot on a kind that is handed no picture.
-///
-/// One function rather than five copies, because the refusal is one sentence
-/// with one clause that varies: a texture is what an L5 folds, and every other
-/// kind is handed elements or a position. `why` is that clause.
+/// Creates an error for invalid `uses … : Texture` declarations on non-L5 procedures.
 pub(crate) fn texture_slot_is_l5s(span: Span, why: &str) -> IrError {
     IrError::contract(span, "`uses … : Texture` is L5 only").with_hint(format!(
         "remove it, or change `kind` to `L5`: {why}. A Texture slot is one input of a nested \
@@ -27,13 +23,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     proc.span,
                     "L1 procedures require a `capacity` declaration",
                 )),
-                // The range is what a Set is allowed to be built at, so a
-                // minimum of zero says a Set of no elements is legal. It is
-                // not: the compaction scan has no level pyramid to build over
-                // an empty buffer, and it asserts rather than degrading. That
-                // assert is inside `Set::build`, which runs on the swap
-                // worker — an internal panic on a background thread, where the
-                // contract calls for a diagnostic against the declaration.
+                // Capacity minimum must be >= 1 for compaction pyramid allocation.
                 Some(cap) if cap.min == 0 => errors.push(
                     IrError::contract(
                         cap.span,
@@ -48,10 +38,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     proc.span,
                     "L1 procedures require a `topology` declaration",
                 )),
-                // The value exists because an L1's declaration and an L4's
-                // inferred answer share one field, not because geometry can be
-                // fullscreen. Refused where it is written rather than left to
-                // mean something arbitrary downstream.
+                // Fullscreen topology applies to renderers, not geometry generators.
                 Some(Topology::Fullscreen) => errors.push(
                     IrError::contract(proc.span, "`fullscreen` describes a renderer, not geometry")
                         .with_hint(
@@ -93,12 +80,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              no projection here for a camera to be the origin of",
                         ),
                     ),
-                    // **Legal here, and on L2 and L4** — the three kinds a Set
-                    // instantiates per source, which is exactly where `source`
-                    // is readable. What a Source slot binds is a `u32` in the
-                    // uniform this module already has, so it adds an input to
-                    // the file and no buffer, no bind group and nothing to the
-                    // chain.
+                    // Source slots bind a uniform identity without buffer allocation.
                     SlotTy::Source => {}
                     SlotTy::Texture => errors.push(texture_slot_is_l5s(
                         u.span,
@@ -113,14 +95,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     "L1 procedures require an `element` block",
                 ));
             }
-            // "`spawn` requires a spawn rate. Declare it as a parameter named
-            // `spawn_rate`" — ir-spec, "Blocks". The engine reads that one
-            // param specially and has nowhere else to get a count from, so a
-            // `spawn` block without it is not a procedure that spawns slowly,
-            // it is one that never spawns at all: it compiles, builds a Set,
-            // and renders an empty frame forever. That is exactly the shape
-            // this pass exists to refuse — checking clean and then coming up
-            // short at runtime.
+            // Procedures with a spawn block must declare a spawn_rate parameter.
             if let Some(spawn) = proc.block(BlockKind::Spawn) {
                 match proc.spawn_rate() {
                     None => errors.push(
@@ -145,19 +120,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 }
             }
         }
-        // **An L2 is stateless by rule, and this is the rule.**
-        //
-        // It is the decision the whole layer rests on — `docs/ir-spec.md`, "L2
-        // and L3". A stateless modulator is freely stackable, keeps
-        // `closed_form` and priming questions the L1 alone answers, and is
-        // legal for a graph compiler to fuse rather than merely plausible to.
-        // A stateful one would make every one of those a question about the
-        // chain, and there would be no way back.
-        //
-        // Stateless has a precise meaning here and each half is checked below:
-        // a `deform` may not read back what it wrote *from the previous frame*
-        // — there is no previous frame, since its output is rebuilt each time —
-        // and it may not `kill()`.
+        // L2 procedures are stateless modulators without frame carry or kill capabilities.
         Kind::L2 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
@@ -182,10 +145,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("remove `blend`: an L2 rewrites geometry and draws nothing"),
                 );
             }
-            // **`weight` is read by the lowering**, on the same terms
-            // `spawn_rate` is read by the engine: a name the layer gives a
-            // meaning to, stated here so that a procedure declaring it as
-            // something else is refused rather than silently scaled.
+            // `weight` parameter is read by code generation as the modulation scaling factor.
             if let Some(p) = proc.params.iter().find(|p| p.name == "weight") {
                 if p.ty != Ty::Float {
                     errors.push(
@@ -195,7 +155,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         )
                         .with_hint(
                             "an L2's `weight` is how much of the deformation applies, and the \
-                             lowering multiplies the whole modulation by it",
+                              lowering multiplies the whole modulation by it",
                         ),
                     );
                 }
@@ -206,19 +166,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
                 );
             }
-            // **Not both at once.** The two break the endomorphism on different
-            // axes and each is a change to what the invocation index *means*:
-            // an amplifier's index walks the input while the output is
-            // `factor` times as long, and a pairing node's index has to be the
-            // slot both sources share. A node that did both would need one
-            // index to be two things.
-            //
-            // Refused rather than resolved, because nothing wants it yet and a
-            // rule invented for no case is a rule nobody can check against one.
-            // **A geometry slot specifically.** What the two break is the
-            // meaning of the invocation index, and a Field slot does not touch
-            // it: a field has no elements to walk, so an amplifier that
-            // evaluates one is an ordinary amplifier.
+            // Geometry slot usage and amplification are mutually exclusive on L2.
             if let (Some(u), Some(_)) = (
                 proc.uses.iter().find(|u| u.ty == SlotTy::Geometry),
                 &proc.amplify,
@@ -265,17 +213,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     );
                 }
             }
-            // **A factor below two is refused, and the two cases are refused
-            // for different reasons.** Zero is a stage that discards every
-            // element, and liveness is the one thing the layer is not permitted
-            // to decide — it is settled by the compaction that runs once after
-            // L1, and nothing below a deformation reconsiders it. One is the
-            // endomorphism, which is what an L2 already is without the
-            // declaration: it would allocate a second buffer, a second set of
-            // liveness flags and a second `Counts` to produce, element for
-            // element, exactly what reached it. A spelling whose presence
-            // changes nothing observable is a spelling that will be read as
-            // meaning something.
+            // Amplify factor must be at least 2 (factor 0 discards elements, 1 is identity).
             if let Some(amp) = &proc.amplify {
                 if amp.factor < 2 {
                     let (why, hint) = if amp.factor == 0 {
@@ -358,28 +296,14 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // Legal: a camera that frames a shape evaluates a field,
                     // and evaluating one is not producing geometry.
                     SlotTy::Field => {}
-                    // **An L3 produces a viewpoint and has no use for one.**
-                    // Every value a camera slot offers is a *derivation* of the
-                    // six numbers this procedure is being asked to write, so a
-                    // camera reading one would be reading its own output — last
-                    // frame's, since there is no other, which is the frame
-                    // ordering an L3 is deliberately not given a way to depend
-                    // on.
+                    // L3 produces a camera viewpoint and cannot bind camera slots.
                     SlotTy::Camera => errors.push(
                         IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
                             "remove it: an L3 *is* a camera — it writes `eye` and `target`, \
                              and `clip`, `eye` and `ray` are derived from what it writes",
                         ),
                     ),
-                    // **The same refusal `source` itself gets here, one level
-                    // up.** A Source slot exists to be compared against
-                    // `source`, and an L3 has no `source` to compare: it runs
-                    // once a frame over nothing, and the identity is a property
-                    // of a Set's geometry, which a camera is not. Refused at
-                    // the declaration rather than left to the read, so that a
-                    // camera which declares one and never reads it is turned
-                    // away too — the Set would otherwise bind an edge to a
-                    // value nothing here could ever use.
+                    // L3 viewpoints are independent of source element geometries.
                     SlotTy::Source => errors.push(
                         IrError::contract(
                             u.span,
@@ -407,13 +331,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         ),
                 );
             }
-            // **Refused rather than ignored, and it will not always be.**
-            // `docs/ir-spec.md` settles that an L3 may read geometry — a camera
-            // that follows an element is the first thing anyone asks a camera to
-            // do — and what it reads is a *reduction* or element zero rather
-            // than a per-element attribute, which is syntax this language does
-            // not have yet. Until it does, `consumes position` would check
-            // clean and lower to a camera that ignores it.
+            // L3 cannot currently consume element attributes.
             if !proc.consumes.is_empty() {
                 errors.push(
                     IrError::contract(proc.span, "an L3 cannot consume attributes yet").with_hint(
@@ -477,24 +395,14 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              itself is a function calling itself",
                         ),
                     ),
-                    // **A field is a function of space and knows nothing about
-                    // where it is watched from.** It is spliced into every
-                    // procedure that declares a slot for it, and two of those
-                    // may draw from two different cameras — so a distance that
-                    // varied with the viewpoint would be two different shapes
-                    // in one frame.
+                    // Field distance functions are camera-invariant.
                     SlotTy::Camera => errors.push(
                         IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
                             "remove it: a field is handed `point` and returns a distance, and \
-                             the same point has the same distance from wherever it is seen",
+                              the same point has the same distance from wherever it is seen",
                         ),
                     ),
-                    // **And a field has no `source` either**, for the reason it
-                    // has no `seed`: it is spliced into every procedure that
-                    // declares a slot for it, and two of those may be running
-                    // over two different geometries — so a distance that varied
-                    // with the source would be two shapes in one frame, out of
-                    // one body.
+                    // Field functions are independent of source geometry identities.
                     SlotTy::Source => errors.push(
                         IrError::contract(
                             u.span,
@@ -592,14 +500,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     )),
                 }
             }
-            // **A renderer looks from one place.** Two would each need their
-            // own bind group in one pipeline and their own edge per Set,
-            // neither of which is built — but the reason to refuse rather than
-            // build is that nothing has asked for the picture it would make: a
-            // frame drawn twice from two viewpoints is two renderers, which is
-            // exactly what this commit makes possible. Refused with a sentence
-            // so that a file asking for it is turned away at the declaration
-            // rather than drawn from whichever slot happened to be first.
+            // A renderer draws from a single camera slot.
             let mut cameras = proc.uses.iter().filter(|u| u.ty == SlotTy::Camera);
             if let Some(first) = cameras.next() {
                 for u in cameras {
@@ -614,15 +515,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     );
                 }
             }
-            // **A `vertex` block is what makes an L4 per-element**, and an L4
-            // without one draws the whole frame instead — see
-            // `Topology::Fullscreen`. So its absence is a declaration rather
-            // than an omission, and what it declares brings one rule with it:
-            // with no vertex block there is nowhere to read an element from, so
-            // `consumes` must be empty. Stated as a rule rather than left as a
-            // consequence, because it is what lets the engine skip the paired
-            // L1's simulation — an optimisation that is provable with this and
-            // merely plausible without it.
+            // Fullscreen L4 procedures without vertex blocks cannot consume element attributes.
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex) && !proc.consumes.is_empty()
             {
                 errors.push(
@@ -644,13 +537,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     "L4 procedures require a `fragment` block",
                 ));
             }
-            // **A renderer emits nothing**, and this was the one layer where
-            // saying so was left out. An L3 and a field both refuse `emit` by
-            // name; an L4's was accepted, given no buffer, and read back by
-            // `is_closed_form` — which had to state "vacuously true for L4"
-            // partly to stop a stray `emit` dragging a Set into needing to be
-            // primed. Refusing it is the same fact said once instead of
-            // compensated for downstream.
+            // Renderers draw pixels and cannot emit element attributes.
             if let Some((_, span)) = proc.emit.first() {
                 errors.push(
                     IrError::contract(*span, "`emit` is not an L4 declaration").with_hint(
@@ -661,17 +548,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 );
             }
         }
-        // **An L5 is handed a picture and declares nothing about the material
-        // that made it.** Every geometry declaration is refused at the header,
-        // on the terms every misplaced declaration is refused: an L5 counts
-        // nothing, spawns nothing, kills nothing and stores nothing.
-        //
-        // **There is no `vertex` block to refuse here**, and that is the
-        // block-owner check below rather than an omission: `vertex` belongs to
-        // L4, so a `frame` procedure that declares one is turned away with a
-        // sentence about which kind owns it. The absence of a vertex stage is
-        // not a *declaration* on an L5 the way it is on an L4 — an L5 has no
-        // per-element form for it to be a declaration against.
+        // L5 procedures operate on textures and have no element geometry or vertex stages.
         Kind::L5 => {
             for (present, what, hint) in [
                 (
@@ -708,18 +585,9 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             for u in &proc.uses {
                 match u.ty {
-                    // **The one kind that may declare one**, and this is the
-                    // nested role's fan-in: several pictures folded into the
-                    // one `Texture` a Set outputs, each bound by an `edge`.
-                    // Any number of them — a fold of three is as ordinary as a
-                    // fold of two, and each costs one texture binding.
+                    // L5 can fold any number of texture inputs.
                     SlotTy::Texture => {}
-                    // **All three are element-level, and an L5 is handed a
-                    // picture rather than the material that made it.** One
-                    // sentence for the three because it is one sentence: by the
-                    // time a frame exists, the elements that drew it are gone
-                    // and the camera they were seen from is one of possibly
-                    // several.
+                    // L5 processes frame textures and cannot access element-level slots.
                     SlotTy::Geometry => {
                         errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
                             "remove it: an L5 is handed a picture, and the elements that drew \
@@ -745,12 +613,7 @@ pub(crate) fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              mask upstream, in a node that runs over one geometry",
                         ),
                     ),
-                    // **The one refusal here that has to be argued rather than
-                    // followed.** The four kinds that may evaluate a field are
-                    // the four that have a position in space to evaluate it at.
-                    // An L5 has a frame coordinate; `eye` and `ray` are refused
-                    // above; and a field marched from a viewpoint an L5 cannot
-                    // name would be a shape drawn against nothing.
+                    // L5 operates on screen coordinates rather than 3D spatial points.
                     SlotTy::Field => errors.push(
                         IrError::contract(u.span, "`uses … : Field` is not an L5\u{2019}s")
                             .with_hint(

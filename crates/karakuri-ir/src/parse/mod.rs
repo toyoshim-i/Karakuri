@@ -1,22 +1,4 @@
-//! `.kir` source to [`Proc`].
-//!
-//! Syntax only. Undefined names, type errors, and contract violations are not
-//! this pass's business — it should accept anything shaped like the grammar and
-//! leave meaning to the check pass, so that a single malformed expression does
-//! not mask every later diagnostic.
-//!
-//! Two exceptions, both required by the calling convention rather than by the
-//! grammar: the value of `kind`/`topology`/`blend` has to resolve to an AST
-//! enum variant right here (there is nowhere else to put "unknown kind `L9`"),
-//! and the `id` / signal-bus-name mistakes are common enough that a hint at
-//! parse time saves a full round trip through type checking. See the module
-//! docs on those two call sites below for more.
-//!
-//! Recovery happens at two granularities: a broken header declaration or block
-//! is skipped up to the next recognized keyword (or `}`), and a broken
-//! statement is skipped up to the next `;` or `}`. Everything else — a missing
-//! token inside an otherwise-recognizable construct — is patched with a
-//! placeholder so a single mistake doesn't swallow the rest of the file.
+//! Syntactic parsing of `.kir` source code into an unresolved [`Proc`] AST.
 
 use crate::ast::{
     AmplifyDecl, Attr, Blend, Block, BlockKind, CapacityDecl, Kind, Param, Proc, RetainsDecl,
@@ -28,11 +10,7 @@ use crate::lexer::{self, TokKind, Token};
 use crate::span::Span;
 mod expr;
 
-/// Parse one `.kir` file.
-///
-/// Returns every syntax error found, not just the first: a generated procedure
-/// with four mistakes should produce four diagnostics so a repair prompt can
-/// fix them in one pass.
+/// Parses a `.kir` source string into an unresolved [`Proc`] AST, collecting all syntax errors.
 pub fn parse(src: &str) -> IrResult<Proc> {
     let (tokens, lex_errors) = lexer::lex(src);
     let mut parser = Parser {
@@ -527,12 +505,7 @@ impl Parser {
         }
     }
 
-    /// `amplify <factor>` — a bare literal, unlike `capacity`'s range.
-    ///
-    /// There is no range because there is nothing to override it with. A Set turns
-    /// `capacity` because how much material to make is the operator's question; how
-    /// many copies a kaleidoscope has is the procedure's own, and making it
-    /// adjustable would resize a buffer from a fader.
+    /// Parses `amplify <factor>`.
     fn parse_amplify(&mut self) -> AmplifyDecl {
         let start = self.advance().span; // "amplify"
         let factor = self.parse_u32_literal();
@@ -542,26 +515,11 @@ impl Parser {
         }
     }
 
-    /// `uses <name> : Geometry` / `uses <name> : Field` / `uses <name> : Camera` —
-    /// one named input this node takes.
-    ///
-    /// The name is the procedure's and the binding is the Set's. So this
-    /// declaration says what the file needs and never which node supplies it: a
-    /// `.kir` that named a node would be a procedure coupled to one Set, and it
-    /// would stop being a library part. See [`UsesDecl`].
-    ///
-    /// The type is carried rather than checked and dropped, because every rule
-    /// downstream is about *which* one — an L3 refuses a geometry slot because an
-    /// L3 makes no geometry, and accepts a Field slot because evaluating a field is
-    /// not making geometry. See [`SlotTy`].
+    /// Parses `uses <name> : <type>`.
     fn parse_uses(&mut self) -> Option<UsesDecl> {
         let start = self.advance().span; // "uses"
         let (name, name_span) = self.expect_ident("a name for the input this procedure takes")?;
         self.expect(TokKind::Colon, ":");
-        // **A refused type recovers as `Geometry`**, and a missing one too.
-        // Both have already reported, so neither reaches the check pass;
-        // carrying on with one of the types there are lets the rest of the
-        // header be parsed and its own mistakes reported in the same run.
         let ty = match self.expect_ident("`Geometry`, `Field`, `Camera`, `Source` or `Texture`") {
             Some((spelling, ty_span)) => SlotTy::from_name(&spelling).unwrap_or_else(|| {
                 self.error_with_hint(
@@ -603,13 +561,7 @@ impl Parser {
         }
     }
 
-    /// `param <name> : <type> [<min>, <max>] = <default>`.
-    ///
-    /// The range is mandatory per spec, but a missing `[` is a mistake real
-    /// generations make, so this recovers instead of losing the rest of the
-    /// declaration: if `[` is absent it looks straight for `=` and parses the
-    /// default with a placeholder `0.0..0.0` range, reporting exactly one error
-    /// rather than cascading into the default-value expression.
+    /// Parses `param <name> : <type> [<min>, <max>] = <default>`.
     fn parse_param(&mut self) -> Option<Param> {
         let start = self.advance().span; // "param"
         let (name, _) = self.expect_ident("a parameter name")?;

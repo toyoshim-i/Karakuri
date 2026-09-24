@@ -1,13 +1,6 @@
 //! Cost estimation tests (stage 4).
 //!
-//! `check.rs` (stages 2-3) is still a stub as of this writing, so there is no
-//! `parse` + `check` pipeline yet to hand this module real `Checked` values.
-//! Every fixture below is therefore built by hand from the public types in
-//! `typed.rs`. Once the check pass lands, these are good candidates to
-//! rebuild on top of `parse(src)` + `check(&proc)` instead — real `.kir`
-//! source is easier to read than a tree of `TExpr::new` calls — but the
-//! assertions (the numbers themselves) should carry over unchanged, since
-//! they are hand-computed against `cost.rs`'s documented weights below.
+//! Hand-constructs typed AST fixtures and verifies cost calculations and budget limits.
 
 use karakuri_ir::ast::{Attr, BinOp, BlockKind, Kind, Topology, Ty};
 use karakuri_ir::builtin::Builtin;
@@ -133,11 +126,7 @@ fn checked(emit: Vec<Attr>, blocks: Vec<TBlock>) -> Checked {
 fn trivial_procedure_costs_little() {
     // element { position = position + velocity * dt; }
     //
-    // Every leaf read and every operator/statement is one unit in this
-    // module's accounting:
-    //   velocity * dt         = 1 (op) + 1 (velocity) + 1 (dt)        = 3
-    //   position + (v * dt)   = 1 (op) + 1 (position) + 3             = 5
-    //   assign                = 1 (statement) + 5                     = 6
+    // Expected cost breakdown: 1 op + 1 statement + operands = 6.
     let value = binary(
         BinOp::Add,
         Ty::Vec3,
@@ -168,24 +157,7 @@ fn trivial_procedure_costs_little() {
 
 #[test]
 fn nested_loops_multiply_the_body_cost() {
-    // element {
-    //   for i in 0..2 {
-    //     for i in 0..3 {
-    //       let x = abs(velocity.x);
-    //     }
-    //   }
-    // }
-    //
-    // Body: velocity.x = 1 (swizzle) + 1 (velocity)        = 2
-    //       abs(velocity.x) = 1 (weight) + 2                = 3
-    //       let x = 1 + 3                                   = 4
-    // Inner loop (3 iterations): 3 * (4 + 1)                = 15
-    // Outer loop (2 iterations): 2 * (15 + 1)                = 32
-    //
-    // A model that *added* iteration counts instead of nesting them would
-    // land nowhere near 32 (e.g. flattening to a single 6-iteration loop
-    // gives 6 * (4 + 1) = 30, a different number, for a different program) —
-    // the exact value pins down that nesting multiplies.
+    // Nested loops multiply costs: outer (2) * (inner (3) * (body (4) + 1) + 1) = 32.
     let body = vec![let_stmt(
         "x",
         call(
@@ -297,22 +269,7 @@ fn fbm_scales_with_octave_count() {
 
 #[test]
 fn rejection_message_carries_the_estimate_and_the_ceiling() {
-    // element {
-    //   for i in 0..8 {
-    //     for i in 0..8 {
-    //       let x = curl(position);
-    //     }
-    //   }
-    // }
-    //
-    // Body: curl(position) = 96 (weight) + 1 (position) = 97
-    //       let x           = 1 + 97                      = 98
-    // Inner loop (8): 8 * (98 + 1)                         = 792
-    // Outer loop (8): 8 * (792 + 1)                         = 6344
-    //
-    // 6344 > MAX_OPS_PER_ELEMENT (4096), so this must be rejected, and the
-    // message must say both 6344 and 4096 — "over budget" alone would tell a
-    // repair prompt nothing about how much to cut.
+    // Exceeds MAX_OPS_PER_ELEMENT (6344 > 4096): error message must report both figures.
     let body = vec![let_stmt(
         "x",
         call(Builtin::Curl, Ty::Vec3, vec![attr_expr(Attr::Position)]),
@@ -440,17 +397,7 @@ fn fragment_cost_is_reported_separately_from_vertex_cost() {
     );
 }
 
-/// **An amplifying stage's per-element figure is a product, and this is where
-/// the multiplication is charged.**
-///
-/// A `deform` in a node of factor `n` runs `n` times for each element that
-/// reaches it, so its cost is `n` times its block cost — otherwise a stage of
-/// factor 64 running an expensive body sails through the ceiling at a
-/// sixty-fourth of what it really costs, which is the one thing this ceiling
-/// exists to prevent.
-///
-/// Measured against the same procedure with no declaration rather than against
-/// a constant, so the assertion stays true when the op weights change.
+/// Amplifying stages multiply their per-element cost by the amplification factor.
 #[test]
 fn an_amplifying_l2s_per_element_cost_is_multiplied_by_its_factor() {
     let body = vec![block(
@@ -482,13 +429,7 @@ fn an_amplifying_l2s_per_element_cost_is_multiplied_by_its_factor() {
     );
 }
 
-/// **A field's cost is on its own axis, and the three beside it stay zero.**
-///
-/// What a field scales with is *how often its caller calls it* — once per
-/// element in a `vertex`, forty-eight times in a march loop — which is a
-/// property of the caller. Charging it to `ops_per_element` would put a rate
-/// against a quantity a field does not have, and would give it a ceiling that
-/// says nothing about what evaluating it costs anybody.
+/// A field procedure charges only `ops_per_evaluation`.
 #[test]
 fn a_fields_cost_is_per_evaluation_and_not_per_element() {
     let mut c = checked(
@@ -522,11 +463,7 @@ fn check_l5(src: &str) -> Checked {
         .unwrap_or_else(|errs| panic!("expected this fixture to check clean: {errs:?}"))
 }
 
-/// **An L5 is priced on `ops_per_fragment` and is zero on the other two axes.**
-///
-/// It has no element and no spawn, so there is nothing for the other rates to
-/// be rates *against* — the `Field`'s shape rather than a new one, and
-/// [ADR-0013]'s three axes still never summed.
+/// L5 procedures charge `ops_per_fragment` and zero for elements/spawns.
 #[test]
 fn an_l5_is_priced_on_one_axis_and_zero_on_the_others() {
     let checked = check_l5(
@@ -667,13 +604,7 @@ proc too_much {
     );
 }
 
-/// **The three shipped procedures fit**, and the figures are recorded here
-/// rather than left to be rediscovered.
-///
-/// `bloom` is the one worth watching: 81 filtered taps against a ceiling
-/// calibrated for a raymarcher. `docs/adr/0340-…` owes it a measurement, and
-/// this assertion is a band rather than an equality so that a weight changing
-/// by one does not fail a test about whether a shipped part is affordable.
+/// Verifies shipped L5 procedures stay within the fullscreen fragment budget.
 #[test]
 fn the_three_shipped_procedures_are_within_the_fullscreen_ceiling() {
     for (name, floor, ceiling) in [

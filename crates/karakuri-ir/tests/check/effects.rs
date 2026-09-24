@@ -4,13 +4,7 @@ use super::common::*;
 // kind L5 — the frame effect
 // ---------------------------------------------------------------------------
 
-/// The shortest legal L5, and the negative control every refusal below is
-/// measured against.
-///
-/// It is here rather than repeated in each test because a refusal test that
-/// carries no positive is a test that passes when the whole kind is broken:
-/// `kind L5` refused outright would make every "is it refused" assertion below
-/// green.
+/// Baseline legal L5 procedure fixture.
 const LEGAL_FRAME: &str = r#"
 proc dim {
   kind L5
@@ -74,12 +68,7 @@ proc speckle {
     check_ok(LEGAL_FRAME);
 }
 
-/// The other seven, each by name and each with its own sentence.
-///
-/// Together with `seed` above they are the eight `docs/ir-spec.md` lists, and
-/// the assertion is that none of them falls through to *"not available in this
-/// block"* — which would send an author looking at the block when what is
-/// wrong is the kind.
+/// Verifies that all ambients disallowed in L5 return specific, explanatory hints.
 #[test]
 fn every_ambient_an_l5_refuses_gets_its_own_sentence() {
     for (name, expr, because) in [
@@ -125,11 +114,7 @@ proc probe {{
     }
 }
 
-/// **`held` is refused with a sentence about the *declaration*, not the name.**
-///
-/// The name is right and the header is what is missing, so the refusal points
-/// at `retains` — and the negative control beside it is the same file with the
-/// declaration added, which checks clean and carries the flag.
+/// Verifies that reading `held` requires a `retains` header declaration.
 #[test]
 fn held_outside_retains_is_refused_and_retains_makes_it_readable() {
     let without = r#"
@@ -197,12 +182,7 @@ proc drift {
     );
 }
 
-/// **The one refusal that has to be argued rather than followed.**
-///
-/// The four kinds that may evaluate a field are the four with a position in
-/// space to evaluate it at. An L5 has a frame coordinate, `eye` and `ray` are
-/// refused, and a field marched from a viewpoint it cannot name would be a
-/// shape drawn against nothing.
+/// Verifies that Field slots are disallowed on L5 procedures while Texture slots are allowed.
 #[test]
 fn a_field_slot_on_an_l5_is_refused_and_a_texture_slot_is_not() {
     let field = r#"
@@ -439,15 +419,7 @@ fn an_l5_without_a_frame_block_is_refused() {
     );
 }
 
-/// **`color` is written in `frame` on an L5 and in `fragment` on an L4**, one
-/// name because it is one value at the next node down — and being an output
-/// *here* is what makes it reserved here.
-///
-/// `shadows_output` is scoped to the layer, so before an L5 owned `color` a
-/// procedure could declare `param color` and have the param silently outrank
-/// the output in an assignment target. That is exactly the class of bug the
-/// shadowing rule exists to prevent, and this is the assertion that it reaches
-/// the sixth kind.
+/// Verifies that output name `color` is reserved in L5 frame blocks against param declarations.
 #[test]
 fn color_is_reserved_in_an_l5() {
     let src = r#"

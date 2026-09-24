@@ -79,11 +79,7 @@ fn only(params: &str) -> Param {
     declared(params).into_iter().next().expect("one param")
 }
 
-/// The whole of what a vector default was missing. Before
-/// [`Param::default_components`] the only fold was [`Param::default_scalar`],
-/// which answers `None` for every `vec3`, so the three numbers a `.kir` writes
-/// down were unreachable and the engine packed zeroes. `docs/ir-spec.md`'s own
-/// `param` example is this declaration.
+/// Tests that vector defaults fold to component scalars and keys.
 #[test]
 fn a_vector_default_folds_to_one_number_per_component() {
     let glow = only("  param glow : vec3 [0.0, 4.0] = vec3(0.4, 0.7, 1.0)");
@@ -141,11 +137,7 @@ fn a_scalar_default_is_one_component_under_the_declared_name() {
     assert_eq!(radius.keys(), vec!["radius"]);
 }
 
-/// `None` is *this default is not a number I can state*. Both cases are legal
-/// `.kir` that the checker accepts: an argument that is an expression rather
-/// than a literal, and a nested constructor whose component count reaches the
-/// width through an inner `vec2`. The fold says so rather than inventing a
-/// number, and the engine leaves those keys out of its value map.
+/// Tests that expressions that cannot be folded statically return `None`.
 #[test]
 fn a_default_this_cannot_state_folds_to_nothing() {
     assert_eq!(

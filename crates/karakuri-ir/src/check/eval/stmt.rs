@@ -117,12 +117,7 @@ impl<'a> Checker<'a> {
             );
             return;
         }
-        // **The two reserved names of a `frame` block**, on the terms `color`
-        // is reserved in a `fragment` one: a local called `src` would make one
-        // spelling mean two things — the incoming frame in one line and a
-        // binding in the next — and `held` the same under `retains`. Refused
-        // only where they name something, so an L4 local called `src` stays
-        // legal.
+        // Prevent shadowing reserved frame textures `src` and `held`.
         if self.block == Some(BlockKind::Frame)
             && (name == TEXTURE_SRC || (name == TEXTURE_HELD && self.retains))
         {
@@ -181,17 +176,10 @@ impl<'a> Checker<'a> {
         }
         if let Some(attr) = Attr::from_name(name) {
             let available = match self.block {
-                // **A field has no element**, so no attribute is writable in
-                // one. It is a function of space, and the material that happens
-                // to be at a point is not something it is given.
+                // Field blocks have no element attributes.
                 Some(BlockKind::Field) => false,
                 Some(BlockKind::Spawn) | Some(BlockKind::Element) => self.emit.contains(&attr),
-                // **A `deform` writes what it consumes as well as what it
-                // emits**, and rewriting is the more common of the two:
-                // `position = position + …` is what a modulator is for. An L1
-                // has one buffer and one list; an L2 has an input edge and an
-                // output one, and it may write anything that reaches the output
-                // — which is everything it was given, plus everything it adds.
+                // A `deform` block may rewrite consumed attributes or write emitted ones.
                 Some(BlockKind::Deform) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
@@ -230,13 +218,7 @@ impl<'a> Checker<'a> {
             }
             return TargetRes::Attr(attr);
         }
-        // **In a `camera` block, `eye` is the output rather than the ambient.**
-        // The two name one thing — where the camera is — written here and read
-        // in a marching fragment stage, the same way `position` is written by
-        // an L1 and read by an L4. Ambients are tried first below, which is
-        // right everywhere else and wrong in exactly this block: without this,
-        // the one word an L3 author writes most reports "cannot assign to an
-        // ambient value".
+        // In a `camera` block, `eye` resolves as output rather than ambient.
         if self.block == Some(BlockKind::Camera) {
             if let Some(output) = Output::from_name(name) {
                 if output.block() == BlockKind::Camera {
@@ -253,9 +235,7 @@ impl<'a> Checker<'a> {
             return TargetRes::Invalid;
         }
         if let Some(output) = Output::from_name(name) {
-            // **The block that writes it, asked of the kind** — `color` is a
-            // `fragment` block's on an L4 and a `frame` block's on an L5. See
-            // [`output_block`].
+            // Validate that the output belongs to the current block.
             let owner = output_block(output, self.kind);
             if self.block != Some(owner) {
                 self.err_hint(
@@ -268,12 +248,7 @@ impl<'a> Checker<'a> {
             }
             return TargetRes::Output(output);
         }
-        // **The renamed output gets its own refusal rather than the generic
-        // one.** `point_rate` was the spelling until the unit changed from
-        // pixels to a fraction of the target's height, and a file still
-        // written against the old one is not a typo and not an undeclared
-        // name: it is a file that needs one edit and one division. Reporting
-        // it as "never declared" would leave the author guessing at both.
+        // Provide migration hint for legacy point size spelling.
         if name == OLD_POINT_SIZE {
             self.err_hint(
                 Stage::Contract,
@@ -470,12 +445,7 @@ impl<'a> Checker<'a> {
 
     fn check_kill(&mut self, span: Span) -> Option<TStmt> {
         if !(self.kind == Kind::L1 && self.block == Some(BlockKind::Element)) {
-            // **An L2 gets its own reason**, because "move it into the `element`
-            // block" names a block an L2 does not have and would send an author
-            // looking for one. The rule there is structural: compaction runs
-            // once, after L1, and nothing downstream of a deformation
-            // reconsiders liveness — so a `kill()` here would remove an element
-            // from a buffer whose live range had already been decided.
+            // L2 deforms do not compact or remove elements; kill is restricted to L1 element blocks.
             let hint = if self.kind == Kind::L2 {
                 "an L2 rewrites elements and never removes them: compaction runs once, after L1, \
                 so liveness is settled before a `deform` sees anything. Fade it out instead — \

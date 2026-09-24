@@ -1,18 +1,4 @@
-//! **The rate bound against the material this instrument ships**, which is the
-//! only place its worth can be settled.
-//!
-//! `karakuri_ir::rate`'s own tests ask whether each rule is right. This file
-//! asks the question a rule cannot answer about itself: **how much of
-//! `examples/` does it answer for**, and what exactly does it leave refused.
-//! The answers are written out one procedure at a time rather than counted,
-//! because a count that moved would say nothing about which way.
-//!
-//! **The floors are not asserted as good.** Several of them are far above the
-//! reference target's half height, which is a fact about the material and about
-//! `karakuri_engine::estimate`'s rung placement rather than about this
-//! analysis — `docs/adr/0285-a-renderers-floor-is-bounded-from-its-declared-ranges-or-refused.md`
-//! says what that leaves owed. What is asserted is that the number is the one
-//! the file's own declarations imply.
+//! Integration tests verifying static point rate bounds against example `.kir` files.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -49,12 +35,7 @@ fn renderers() -> BTreeMap<String, Checked> {
     found
 }
 
-/// **What every shipped renderer's rate bounds to**, written out.
-///
-/// The floor in the third column is
-/// `karakuri_engine::estimate::sub_pixel_floor_rows` of the second — `1 / rate`
-/// rounded up — and is here because it is the number the estimate acts on, not
-/// because this crate computes it.
+/// Verifies rate bounding on every shipped renderer example.
 #[test]
 fn every_shipped_renderer_is_bounded_or_named_as_refused() {
     // (procedure, rate bounded to, floor in rows)

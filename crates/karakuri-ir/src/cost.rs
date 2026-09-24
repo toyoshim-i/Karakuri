@@ -1,12 +1,4 @@
-//! Stage 4: cost estimation.
-//!
-//! Produces per-element static cost estimations (`ops_per_element`, `ops_per_spawn`,
-//! `ops_per_fragment`). Rejects procedures that exceed predefined computational
-//! budget ceilings.
-//!
-//! Evaluates static instruction counts multiplied through constant loop bounds and
-//! weighted builtin costs. Cross-procedure costs (such as field evaluations) are
-//! counted as call sites scaled by loop multipliers and resolved during Set composition.
+//! Stage 4: static cost estimation for compute budget bounds.
 
 use crate::ast::{BlockKind, Kind, Lit};
 use crate::builtin::Builtin;
@@ -14,67 +6,19 @@ use crate::error::{IrError, IrResult};
 use crate::span::Span;
 use crate::typed::{Checked, Cost, TExpr, TExprKind, TStmt};
 
-/// Per-element ceiling on [`Cost::ops_per_element`]. Anything estimated above
-/// this is rejected at stage 4.
-///
-/// The number is ordinal, chosen rather than measured, and lives here as one
-/// tunable constant precisely because it will need retuning once real probe
-/// data (stage 7) exists to compare against. It was calibrated against the two
-/// worked examples in `docs/ir-spec.md`: `drift_shell` (spawn + element,
-/// including a `curl` call) estimates at a little under 200 ops/element under
-/// this module's weights, and the `curl`-in-a-4-iteration-loop snippet under
-/// [Statements and
-/// expressions](../../../docs/ir-spec.md#statements-and-expressions) at a
-/// little under 500. `4096` leaves roughly an order of magnitude of headroom
-/// above both — enough for a procedure with a few small loops of noise calls —
-/// while still catching the pattern the spec calls out explicitly as dangerous:
-/// loops nested a few levels deep, each multiplying the estimate rather than
-/// adding to it.
+/// Maximum estimated ops per element per frame in L1 or L2 stages.
 pub const MAX_OPS_PER_ELEMENT: u64 = 4096;
 
-/// Ceiling on [`Cost::ops_per_spawn`]. Looser than the per-frame figure because
-/// spawning happens once in an element's life and then never again: the work
-/// per frame is `spawn_rate * dt` elements' worth, which at any sane rate is a
-/// small fraction of what the population costs. Charging spawn against the
-/// per-frame ceiling would reject a procedure that seeds an expensive initial
-/// state and then coasts, which is a shape worth allowing.
+/// Maximum estimated ops per element in the spawn block.
 pub const MAX_OPS_PER_SPAWN: u64 = 16_384;
 
-/// Ceiling on [`Cost::ops_per_fragment`] for a per-element renderer. Tighter
-/// than either of the above, because a fragment is evaluated far more often
-/// than an element: one soft sprite covers tens of pixels, they overlap, and
-/// there are `capacity` of them. Like the others this is ordinal and untested —
-/// stage 7's probe is what actually knows.
+/// Maximum estimated ops per fragment for per-element renderers.
 pub const MAX_OPS_PER_FRAGMENT: u64 = 512;
 
-/// Ceiling on [`Cost::ops_per_fragment`] for a fullscreen renderer.
-///
-/// Higher because the fragment count is known here and unknown there, which is
-/// the whole reason the two differ. The number above is a stand-in for an
-/// unbounded quantity: `capacity` sprites times their area times whatever they
-/// overlap. A fullscreen procedure covers the canvas exactly once and nothing
-/// overdraws, so the stand-in has nothing to stand in for — and applying it
-/// anyway forbids the one thing the mode exists for. A raymarch is thirty-odd
-/// iterations of a distance function by construction; at 512 there is no
-/// marcher that fits, which is a ceiling saying no to the feature rather than
-/// to an excess.
-///
-/// Set to [`MAX_OPS_PER_ELEMENT`] deliberately: a fullscreen fragment is the
-/// analogue of an element — one evaluation per thing drawn — so it is priced
-/// like one rather than given a number of its own to drift.
+/// Maximum estimated ops per fragment for fullscreen or post-processing passes.
 pub const MAX_OPS_PER_FULLSCREEN_FRAGMENT: u64 = MAX_OPS_PER_ELEMENT;
 
-/// Which fragment ceiling this procedure is held to. See
-/// [`MAX_OPS_PER_FULLSCREEN_FRAGMENT`] for why there are two.
-///
-/// It asks the kind as well as the topology, and the second question is not a
-/// widening of the first: an L5 covers the frame exactly once with nothing
-/// overdrawing, which is the whole of what the fullscreen ceiling is *about* —
-/// and it never declares a topology, because it has no per-element form for the
-/// absence of a `vertex` block to be an answer against. Asking only about
-/// `topology` held every L5 to 512, which is the per-element stand-in for
-/// `capacity` sprites times their area times whatever they overlap, applied to
-/// a pass that has none of those.
+/// Returns the fragment stage cost ceiling applicable to `checked`.
 fn fragment_ceiling(checked: &Checked) -> u64 {
     if checked.kind == Kind::L5 || checked.topology == Some(crate::ast::Topology::Fullscreen) {
         MAX_OPS_PER_FULLSCREEN_FRAGMENT
@@ -83,33 +27,8 @@ fn fragment_ceiling(checked: &Checked) -> u64 {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Builtin weights
-// ---------------------------------------------------------------------------
-//
-// Ordinal, not measured — see the module doc. The rough tiers, from cheapest
-// to most expensive:
-//
-// - `1`: componentwise selects/compares (`abs`, `floor`, `min`, `step`, ...) —
-//   about one ALU instruction.
-// - `2`-`4`: a handful of multiply-adds (`dot`, `cross`) or a single
-//   reciprocal-square-root-shaped op (`sqrt`).
-// - `8`-`10`: transcendentals (`exp`, `log`, `pow`, trig) — GPUs implement
-//   these via range reduction plus a polynomial or rational approximation,
-//   commonly cited as several times the cost of a multiply-add.
-// - low double digits: integer hashes (a handful of bit-mixing ops each,
-//   `hash3` costing roughly three `hash1`s) and the noise functions built on
-//   them (`value_noise`, `perlin`, `simplex` — multiple lattice-corner hashes
-//   plus interpolation).
-// - `curl`: "several noise evaluations" per the task brief — a numerical curl
-//   needs the underlying field sampled at multiple offset points (or an
-//   analytic gradient with a comparable number of terms), so it is weighted
-//   as six `perlin` calls.
-// - `fbm`: exactly `octaves` `perlin`-equivalent evaluations plus a per-octave
-//   combine, since that is literally what the lowering unrolls it into.
-// - SDF primitives, rotations, and distributions: composed from the above
-//   (a couple of trig calls plus vector arithmetic for a rotation, a `dot` or
-//   `length` plus a few ALU ops for an SDF primitive), weighted accordingly.
+// Relative ordinal weights for builtins (ALU/selects: 1, vectors/roots: 2-4,
+// transcendentals: 8-10, hashes/noise: low double digits, composite/unrolled: scaled).
 
 const W_CHEAP: u64 = 1; // abs/floor/ceil/round/fract/sign/min/max/step/mod
 const W_SELECT3: u64 = 2; // clamp/mix: two selects/lerps worth of blending
@@ -151,21 +70,7 @@ const W_ROT_AXIS: u64 = 2 * W_TRIG + 10; // Rodrigues' formula: more vector term
 const W_SPHERE_POINT: u64 = 2 * W_TRIG + W_SQRT + 4;
 const W_DISC_POINT: u64 = W_TRIG + W_SQRT + 2;
 
-// **A fetch is priced as a fetch and not as arithmetic**, and these three are
-// the most ordinal numbers in this file. A texture read costs latency rather
-// than issue slots, and how much of that latency is hidden is a property of
-// occupancy rather than of the shader — so what is encoded here is only the
-// ordering: an unfiltered load is cheaper than a filtered one, and a filtered
-// one is about a `sqrt`.
-//
-// **The consequence is visible and is worth stating rather than hiding.**
-// `examples/bloom.kir` is 81 filtered taps and lands within a few hundred ops
-// of [`MAX_OPS_PER_FULLSCREEN_FRAGMENT`], which was calibrated against a
-// raymarcher — thirty-odd iterations of a distance function — rather than
-// against a blur. A tap weighted at a transcendental's 8 would refuse a 9x9
-// kernel outright, which is a ceiling saying no to a shape every
-// post-processing stack ships. `docs/adr/0340-…` owes that pass a measurement,
-// and the measurement is what should replace these three.
+// Relative weight estimations for texture sampling.
 const W_TEXEL: u64 = 2; // address arithmetic and an unfiltered load
 const W_TAP: u64 = 4; // the same, plus the filter the texture unit does
 const W_FRAME_STEP: u64 = 2; // a divide and a multiply against the viewport
@@ -243,11 +148,7 @@ fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
 /// combine, so its cost is exactly that multiplication rather than a fixed
 /// weight.
 fn fbm_weight(args: &[TExpr]) -> u64 {
-    // `octaves` is `const_args[0]` on `fbm`'s signature (see builtin.rs), so
-    // the check pass guarantees this is a constant int literal by the time
-    // cost estimation runs — it has to be, since lowering unrolls it. Falling
-    // back to a single octave if that invariant is ever violated is a
-    // defensive underestimate, not an expected path.
+    // `octaves` is validated as a constant integer literal during type checking.
     let octaves = match args.get(1).map(|a| &a.kind) {
         Some(TExprKind::Lit(Lit::Int(n))) => (*n).max(0) as u64,
         _ => 1,
@@ -385,12 +286,7 @@ fn expr_cost(
             }
             expr_cost(point, mult, block, hot, calls)
         }
-        // **Weighed like the builtin it is, because it is one.** The texture
-        // itself costs nothing to name — it is a binding rather than a load —
-        // so what is charged is the fetch and whatever computing the coordinate
-        // took. It goes through the hot-spot tracker for the reason every
-        // builtin does: 81 taps under two loops is exactly the shape a
-        // rejection has to be able to name.
+        // Texture fetches are weighted by the sampling builtin plus coordinate calculation cost.
         TExprKind::Sample {
             func,
             texture: _,
@@ -474,11 +370,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
                 }
             }
             // **The same axis, and the same rate against the same quantity.**
-            // A `frame` block runs once per texel of the frame it is handed and
-            // never more — which is what `ops_per_fragment` counts — and an L5
-            // is zero on the other two, having no element and no spawn. The
-            // `Field`'s shape rather than a new one: a kind whose figure lives
-            // on one axis and whose other figures are zero.
+            // Fragment and frame blocks scale with rasterized fragment/texel counts.
             BlockKind::Fragment | BlockKind::Frame => {
                 ops_per_fragment = ops_per_fragment.saturating_add(block_cost);
                 for (slot, n) in &block_calls {
@@ -486,39 +378,14 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
                     entry.per_fragment = entry.per_fragment.saturating_add(*n);
                 }
             }
-            // **Charged to nothing, because it scales with nothing.** A
-            // `camera` block runs once per frame, in one invocation, whatever
-            // the capacity and whatever the frame size — the only block in this
-            // language of which that is true. Every ceiling here is a rate
-            // against a quantity that multiplies, so there is no ceiling this
-            // could exceed: a thousand operations once a frame is free next to
-            // one operation per element.
-            //
-            // It is still *costed* above, so `block_totals` names it in a
-            // rejection message about some other block, and a future ceiling
-            // has a number to use.
+            // Camera blocks run once per frame and are not subject to per-element/fragment ceilings.
             BlockKind::Camera => {}
-            // **Charged per *evaluation*, on its own axis.** A field runs
-            // wherever it is called and as often as the caller calls it — once
-            // per element in a `vertex`, forty-eight times in a march loop — so
-            // it scales with nothing the caller does not decide. Its figure is
-            // what a caller multiplies, and the multiplication happens where
-            // the Set is built, which is the first point holding both.
-            //
-            // Not charged to `ops_per_element`: that would be a rate against a
-            // quantity a field does not have, and would put a ceiling on a
-            // field that says nothing about what evaluating it costs anybody.
+            // Field procedures are charged per evaluation.
             BlockKind::Field => ops_per_evaluation = ops_per_evaluation.saturating_add(block_cost),
         }
     }
 
-    // **Amplification is a product, and it is charged here rather than
-    // anywhere downstream.** A `deform` in a node of factor `n` runs `n` times
-    // for each element that reaches it, so its per-element figure is `n` times
-    // its block cost — which is what makes the ceiling mean the same thing for
-    // an amplifying stage as for any other, and what makes a stage of factor 64
-    // running an expensive body get refused for the reason it deserves rather
-    // than sailing through at a sixty-fourth of its true cost.
+    // Amplification multiplies deformation cost per input element.
     let amplify = u64::from(checked.amplify.unwrap_or(1));
     let ops_per_element = ops_per_element.saturating_mul(amplify);
 
@@ -550,43 +417,17 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     Ok(cost)
 }
 
-/// A caller and one of the fields it evaluates, over a ceiling together.
-///
-/// Carries the *slot*, because the caller of this function has to say which
-/// field is the expensive one and a procedure may declare several. It is the
-/// slot rather than the field's own name for the reason the whole notation is
-/// spelled this way: the file knows what it called the input, and which node
-/// fills it is the Set's answer.
+/// Error report when a procedure combined with field evaluation exceeds budget.
 pub struct OverBudget {
     pub slot: String,
     pub errors: Vec<IrError>,
 }
 
-/// Re-check a caller with the fields it evaluates multiplied in.
-///
-/// A field call weighs nothing where the caller is estimated, because what one
-/// evaluation costs lives in another file. So the ceiling a caller passed was a
-/// ceiling applied to an incomplete figure, and this is where it is completed —
-/// at the Set, which is the first point holding every procedure at once.
-///
-/// Not a nicety. `examples/field_lens.kir` marches thirty-four steps; a field
-/// of 48 ops/evaluation adds 1632 to a 4096 fragment ceiling. A Set that
-/// skipped this would run a shader nobody had costed, and the number it is over
-/// by would be invisible.
-///
-/// `per_evaluation` is asked per slot, and the answers are *added*. A procedure
-/// taking a shape and a cutter pays for both on the same axis, so checking each
-/// slot against the ceiling on its own would let a pair through that neither
-/// half is over with — the same shape of failure this function exists to close,
-/// one level up. What the slot decides is *attribution*: the refusal names
-/// whichever slot contributes most, since that is the one worth cutting first.
+/// Evaluates static budget compliance for `caller` including dynamically spliced field costs.
 pub fn check_with_field(
     caller: &Checked,
     per_evaluation: &dyn Fn(&str) -> u64,
 ) -> Result<(), OverBudget> {
-    // **Estimated, not read.** `Checked::cost` is never filled by anything —
-    // see its own doc — so taking it from there made this function a no-op that
-    // reported success.
     let cost = match estimate(caller) {
         Ok(cost) => cost,
         // Over on its own terms, before any field is multiplied in. There is no

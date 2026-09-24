@@ -5,50 +5,13 @@ pub enum Kind {
     /// Geometry modulation: `Geometry -> Geometry`. Stateless by rule, compute. See
     /// `docs/ir-spec.md`, "L2 and L3".
     L2,
-    /// The camera: `() -> Camera`, and `Geometry -> Camera` once one can read
-    /// geometry. Compute, one invocation.
-    ///
-    /// It produces state, not a matrix, because the reason it exists at all is
-    /// multiplicity: a weighted blend of two trajectories is meaningful on six
-    /// numbers and meaningless on the matrices derived from them. See
-    /// `docs/ir-spec.md`, "L2 and L3".
+    /// The camera: `() -> Camera`, producing camera viewpoint state for rendering.
     L3,
     /// Rendering. Stateless, a render pipeline.
     L4,
-    /// A spatial function: `vec3 -> float`. Code rather than data, and the only
-    /// kind that lowers to no pass of its own.
-    ///
-    /// A `kind` is what a procedure *lowers to*, and an L5 has no `kind` because it
-    /// has no code to lower — `docs/ir-spec.md`, "kind". This is the mirror: a
-    /// field has *only* code to lower, so it has a file and no node. What it lowers
-    /// to is a WGSL function spliced into whichever procedures evaluate it, which
-    /// is why it needs no buffer, no pass and no position in the chain.
-    ///
-    /// One per Set no longer, and on the same terms as the camera: a Set holds as
-    /// many fields as its files declare, each a node with a name an edge can point
-    /// at. The cap was the missing notation rather than the language — a caller
-    /// reaches one through a slot its own procedure declares, `uses shape : Field`
-    /// called `shape(p)` — which is the fan-in multiple L1 sources arrived with.
-    /// See `docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md`.
+    /// A spatial function: `vec3 -> float`, spliced into caller procedures.
     Field,
-    /// A frame effect: `[Texture] -> Texture`. One required block,
-    /// [`BlockKind::Frame`], which is a fullscreen fragment body over the incoming
-    /// texture.
-    ///
-    /// One kind with two roles, and what differs between them is only whether a
-    /// surface is attached: a master chain slot is this signature with one input,
-    /// and a nested merge is the same with several, bound by `edge`s to as many
-    /// `uses … : Texture` slots as the header declares. See
-    /// `docs/adr/0098-l5-is-one-node-kind-with-two-roles.md`.
-    ///
-    /// The absence this ends was a condition rather than a principle. A `kind` says
-    /// what a procedure *lowers to*, and while the compositing was fixed there was
-    /// nothing for a `kind L5` file to contain. Somebody wrote the compositing down
-    /// —
-    /// `docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md`
-    /// — so there is code to lower and the layer algebra gains a line rather than
-    /// an exception. `crate::node::Merge` keeps its place beside this kind exactly
-    /// where the built-in orbit camera keeps its place beside [`Kind::L3`].
+    /// A frame effect: `[Texture] -> Texture`, executed in fullscreen fragment pass.
     L5,
 }
 
@@ -60,39 +23,13 @@ pub enum Topology {
     /// One sprite per element.
     Points,
     /// One segment per element, from [`Output::Clip`] to [`Output::ClipB`].
-    ///
-    /// The connectivity is deliberately not a graph. An element nominating *another
-    /// element* as its far end would be an index into the element buffer, and
-    /// compaction moves elements between steps — so the one shape that would
-    /// express a strip is also the one that spawning material invalidates. A
-    /// segment whose two ends both belong to one element has no such dependency: a
-    /// polyline is *n* segments, a trail is one segment per particle, and both
-    /// survive compaction because neither refers to anything outside itself.
-    ///
-    /// It costs the duplication of shared endpoints — a strip of *n* samples stores
-    /// 2*n* points rather than *n*+1. That is the price of the primitive being
-    /// smaller than the gesture.
     Lines,
-    /// The whole frame, once, with no geometry at all.
-    ///
-    /// Inferred for an L4 that has no `vertex` block, because a procedure with no
-    /// per-element position has nothing for one to do. Refused on an L1: geometry
-    /// cannot be fullscreen, and the value exists on this enum only because an L4's
-    /// answer and an L1's declaration share a field.
-    ///
-    /// Such a procedure consumes nothing — there is nowhere to read an element from
-    /// — which is what lets the engine skip the paired L1's simulation entirely
-    /// rather than run it for a reader that does not exist.
+    /// Fullscreen pass without per-element geometry.
     Fullscreen,
 }
 
 impl Kind {
-    /// Every kind, in the order a Set addresses them.
-    ///
-    /// Here rather than spelled out at each site: four separate loops in
-    /// `karakuri-engine` carried this list, and `Field` was added to none of them —
-    /// so a field's `param` could be written but not bound, published, read back or
-    /// saved. One list, and the next kind reaches every one of them by existing.
+    /// All pipeline layer kinds supported by the runtime.
     pub const ALL: [Kind; 6] = [
         Kind::L1,
         Kind::L2,
@@ -153,19 +90,10 @@ impl std::str::FromStr for Kind {
     }
 }
 
-/// The incoming texture an L5 is handed, reserved in a `frame` block the way
-/// [`Output::Color`] is reserved in a `fragment` one.
-///
-/// Implicit rather than declared: what supplies it is the chain slot's position
-/// or the Set's `edge`s, and a procedure that named its own supplier would be
-/// coupled to one arrangement.
+/// Incoming texture identifier passed to L5 procedures (`src`).
 pub const TEXTURE_SRC: &str = "src";
 
-/// The retained cut of the previous frame, readable only where the header
-/// declares `retains`.
-///
-/// *Which* cut is not the procedure's to know — the slot answers that with
-/// `mix` or `exit` — which is the same division `uses` and `edge` already draw.
+/// Retained frame texture identifier passed to L5 procedures (`held`).
 pub const TEXTURE_HELD: &str = "held";
 
 impl Topology {
@@ -178,42 +106,12 @@ impl Topology {
     }
 }
 
-/// How the fragments that land on one texel are combined, declared on the L4
-/// header.
-///
-/// Unlike [`Topology`] this is a declaration and not an inference, and the
-/// reason is worth keeping beside the enum: the two modes differ in how the
-/// results of *identical* assignments are combined, not in what is assigned, so
-/// there is nothing an L4 could write that would imply one over the other.
-///
-/// The two read `color`'s alpha differently, which is the part an author has to
-/// know. Under [`Blend::Additive`] alpha is emission strength and is allowed
-/// past 1.0 — it scales what a fragment adds. Under [`Blend::Weighted`] it is
-/// *opacity*, and opacity above 1.0 is not a thing: the revealage a weighted
-/// pass accumulates is `prod(1 - a)`, which stops meaning "what is still
-/// visible behind this" the moment a term goes negative. The generated shader
-/// clamps it, so the value an author can usefully write is `[0, 1]`.
+/// Blend mode for rasterized fragments in L4 rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Blend {
-    /// Colour adds and nothing occludes. Needs no sorting, which is why it is where
-    /// v0.2 started — and it is why everything this project rendered before
-    /// `weighted` glowed.
+    /// Additive blending: color output adds to the framebuffer without occlusion.
     Additive,
-    /// Weighted blended OIT: order-independent transparency, approximated.
-    ///
-    /// Each fragment contributes to a colour accumulation weighted by how near the
-    /// eye it is, and to a running `prod(1 - a)` revealage; a resolve pass divides
-    /// the first by its own weight sum and composites it against the second. Order
-    /// independent, so it does not interact with compaction — which is the whole
-    /// reason it is the successor to `additive` rather than depth sorting, at
-    /// `capacity` elements per frame.
-    ///
-    /// It is an approximation, and where it is coarse is stated rather than hidden:
-    /// the weight is a function of where a fragment sits between the camera's near
-    /// and far planes, so material occupying a thin slice of a wide frustum gets
-    /// near-equal weights and the result approaches a plain alpha-weighted average.
-    /// That degradation is graceful — what still separates it from `additive` is
-    /// that a weighted layer *occludes*.
+    /// Weighted blended order-independent transparency (WBOIT).
     Weighted,
 }
 
@@ -280,15 +178,8 @@ impl Ty {
         })
     }
 
-    /// How many `f32` values a `param` of this type is driven as, or `None` for a
-    /// type no `param` may declare.
-    ///
-    /// Deliberately narrower than [`Ty::components`], and the narrowness is the
-    /// point: that one answers for every type in the language, where this answers
-    /// the checker's own list — *"params may only be `float`, `vec2`, or `vec3`"*
-    /// (`check.rs`). A `vec4` param does not exist, so a caller spelling out its
-    /// components would be spelling out a declaration nothing can make; `None` says
-    /// that rather than inventing a fourth key.
+    /// Returns the number of `f32` components if this type is permitted for a `param`
+    /// (`float`, `vec2`, `vec3`), or `None` otherwise.
     pub fn param_components(self) -> Option<usize> {
         Some(match self {
             Ty::Float => 1,
@@ -299,13 +190,7 @@ impl Ty {
     }
 }
 
-/// Type of input dependency bound to a `uses` slot.
-///
-/// Enforces layer compatibility and cardinality constraints:
-/// - `Geometry`: L2 only, at most one per node.
-/// - `Field`: L1-L4, multiple allowed.
-/// - `Camera`: L4 only, at most one per node.
-/// - `Source`: multiple allowed across supported chain layers.
+/// Input dependency type bound to a `uses` slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotTy {
     /// The elements of an L1, read beside the ones this node runs over.
@@ -321,9 +206,7 @@ pub enum SlotTy {
 }
 
 impl SlotTy {
-    /// The spelling a header uses, on [`Attr::from_name`]'s terms: one place that
-    /// knows which words are types, so a third type is a line here and nothing in
-    /// the parser.
+    /// Parses a slot type from its header identifier.
     pub fn from_name(s: &str) -> Option<SlotTy> {
         Some(match s {
             "Geometry" => SlotTy::Geometry,
@@ -335,8 +218,7 @@ impl SlotTy {
         })
     }
 
-    /// The spelling, back — for a refusal that has to name the type the header was
-    /// written with rather than the one it is talking about.
+    /// Returns the header identifier corresponding to this slot type.
     pub fn name(self) -> &'static str {
         match self {
             SlotTy::Geometry => "Geometry",
