@@ -72,51 +72,29 @@ pub(crate) const SAMPLE: usize = 240;
 /// change somebody remembered is precisely the figure that goes stale in
 /// silence, and re-taking it needs a window, three still seconds and several
 /// runs, none of which is reachable from `cargo test`.
+#[allow(dead_code)]
 pub(crate) const WRITTEN_ALLOCS: u64 = 1518;
+#[allow(dead_code)]
 pub(crate) const WRITTEN_KB: f64 = 1781.6;
+#[allow(dead_code)]
 pub(crate) const WRITTEN_ON: &str = "2026-08-31";
 
 /// How far a run may sit from [`WRITTEN_ALLOCS`] before the reading says the
 /// sentence quoting it has gone stale.
-///
-/// A factor, and a generous one, because an allocation count is not a constant:
-/// a hard equality here would be a guard nobody could keep passing. The nine
-/// runs behind 2026-08-26's figure disagreed by 14 allocations; the nine behind
-/// the current one agreed to the allocation, and one machine's nine agreeing is
-/// not a promise the next machine's will. Two is the smallest factor that still
-/// catches what actually happened — 184 to the mixer bay's 456 is 2.5x, so a
-/// band of two would have said so on the first run after that bay landed, and a
-/// band of ten would not have. It is also what caught 525 going to 1518.
-///
-/// Two figures are held and the bytes are not, which is a distinction rather
-/// than an omission: the bytes move with the allocation count, so a verdict on
-/// them would be the same verdict twice. The second is [`PANEL_PASS`] — what
-/// one update of a live region costs, declared under
-/// [P-0091](../../../docs/principles/0091-cost-is-known-before-it-is-paid.md)
-/// and read by `tests/schedulable.rs` rather than by anything at runtime. It is
-/// a different claim from an allocation count and it is the one a
-/// schedulability condition is asserted against, so it gets its own verdict.
+#[allow(dead_code)]
 pub(crate) const DRIFT: f64 = 2.0;
 
 /// Has the reading moved away from the sentence that quotes it? `Some` is the
 /// factor between them, where that factor is past [`DRIFT`] in either
 /// direction.
-///
-/// Either direction on purpose: a pass that got cheaper makes the sentence
-/// exactly as untrue as one that got dearer, and only one of those two is ever
-/// noticed by accident.
+#[allow(dead_code)]
 pub(crate) fn drifted(measured: u64, written: u64) -> Option<f64> {
     let factor = measured.max(written) as f64 / measured.min(written).max(1) as f64;
     (factor > DRIFT).then_some(factor)
 }
 
 /// [`drifted`] for a figure in milliseconds, which is what a cost is.
-///
-/// The same band and the same both-directions rule, said again for `f64`
-/// because the two numbers are of different kinds and neither is convertible
-/// into the other without saying something untrue about it. A run that read
-/// nothing at all cannot divide, and a zero-length sample never reaches here —
-/// the caller is inside `if !self.frames.is_empty()`.
+#[allow(dead_code)]
 pub(crate) fn drifted_ms(measured: f64, written: f64) -> Option<f64> {
     let factor = measured.max(written) / measured.min(written).max(f64::MIN_POSITIVE);
     (factor > DRIFT).then_some(factor)
@@ -256,6 +234,7 @@ pub(crate) struct Cost {
     /// is 12% of the truth, and the missing 88% is this doing nothing on purpose.
     /// Switching to `PresentMode::Immediate`, which this adapter does offer, moves
     /// it and nothing else.
+    #[allow(dead_code)]
     pub(crate) wait: Duration,
     /// What the frame cost the window: the wall clock from the top of one
     /// `RedrawRequested` to the top of the next, and the one number here with the
@@ -373,6 +352,7 @@ impl Cost {
     /// the four stretches are read from four separate clocks and a residue of a few
     /// microseconds either side of zero is those clocks and not a negative
     /// duration.
+    #[allow(dead_code)]
     pub(crate) fn elsewhere(&self) -> Option<Duration> {
         Some(
             self.period?

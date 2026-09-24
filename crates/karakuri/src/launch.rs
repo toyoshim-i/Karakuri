@@ -166,11 +166,7 @@ pub(crate) fn working_copies(
 /// A free function over the copies so it can be asserted without a window; see
 /// `the_startup_print_names_one_file_per_deck`.
 pub(crate) fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String {
-    let mut said = format!(
-        "scratch: {} — every deck runs from its OWN copy here, so the two paths you named \
-         are not written to and editing them moves nothing. Point an editor at these:",
-        dir.display()
-    );
+    let mut said = format!("scratch: {} (source paths not written to)", dir.display());
     for (slot, pair) in copies.iter().enumerate() {
         let name = |path: &std::path::Path| {
             path.file_name()
@@ -184,11 +180,6 @@ pub(crate) fn running_from(dir: &std::path::Path, copies: &[Sources]) -> String 
             name(&pair.l4)
         ));
     }
-    said.push_str(
-        "\nthe same pair in every slot is one file per deck per node, and that is the point \
-         rather than a duplicate: an edit moves the deck whose file it is and no other, so \
-         one save puts one candidate in the Staging lane.",
-    );
     said
 }
 
