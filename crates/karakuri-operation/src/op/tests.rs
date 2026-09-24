@@ -28,17 +28,7 @@ fn no_two_operations_share_a_title() {
     }
 }
 
-/// A floor, not a count: the point is that the list cannot come back empty. The
-/// exact number is the manual's to state and is asserted against the page
-/// itself in `tests/`. It read 46 when this landed, 45 once two residency rows
-/// became one (ADR-0186), 46 again since the look split into a tone map and an
-/// exposure (ADR-0192), and 48 since the mask took a row for its shape and a
-/// row for its position (ADR-0201); it moves with the page and is never lowered
-/// to make a shorter list pass. It was 49 once the arrangement gained a reset
-/// (ADR-0208), 50 since a node gained an authority (ADR-0211), 52 since the
-/// staging lane gained a keep and a put-back, 54 since the arrangement's reset
-/// stopped being the only member of its family (ADR-0221), and is 55 since the
-/// master out became a level something can name (ADR-0224).
+/// Verifies that the vocabulary count meets or exceeds the minimum floor.
 #[test]
 fn the_vocabulary_is_not_empty() {
     assert!(

@@ -28,12 +28,7 @@ fn bind_at() -> crate::BindAt {
     }
 }
 
-/// One of every operation in the vocabulary, in the manual's order.
-///
-/// It is checked against [`Operation::TITLES`] rather than counted, so an
-/// operation added to the vocabulary and forgotten here is a failing test
-/// rather than a fixture that is quietly one short — which is what would let
-/// the split assertions below go on passing over a row nobody classed.
+/// One of every operation in the vocabulary, in manual order.
 fn every_operation() -> Vec<Operation> {
     vec![
         Operation::TapBeat,
@@ -288,22 +283,7 @@ fn the_fixture_holds_one_of_every_operation() {
     );
 }
 
-/// A sixty-fifth operation cannot be added without somebody saying which class
-/// it is in.
-///
-/// The property itself is the compiler's: [`standing`] is a `match` over
-/// `Operation` with no wildcard arm, so a new variant is a `non-exhaustive
-/// patterns` error and this crate does not build. A test cannot assert that — a
-/// test only runs on a build that succeeded, so a green suite is evidence of
-/// nothing here. What a test can do is hold the *shape* the compiler needs: the
-/// day somebody silences that error with `_ => Standing::Open` the build goes
-/// green again and the mechanism is gone silently, and this is what makes that
-/// loud.
-///
-/// It reads this file's own text, which is
-/// `karakuri::key_column::the_keys_this_file_lists_are_the_keys_the_window_loop_binds`'s
-/// method and its reason: the thing being checked is the source, so the source
-/// is what is read.
+/// Asserts that `standing` contains no wildcard arms, maintaining exhaustiveness across the vocabulary.
 #[test]
 fn a_wildcard_arm_would_end_the_exhaustiveness() {
     let source = include_str!("rules.rs");
@@ -325,25 +305,7 @@ fn a_wildcard_arm_would_end_the_exhaustiveness() {
     }
 }
 
-/// 42 closed, 27 open, 69 total — ADR-0235's count less the one row ADR-0240
-/// retired, plus the one ADR-0299 added, plus ADR-0338's four, plus *Remove a
-/// lane* on the closed side with the sequencer's other five. It is still the
-/// one number that says the classification was applied to the whole vocabulary
-/// rather than to the rows somebody remembered: the record read 41, 23, 64,
-/// *Choose what the output shows* leaving the vocabulary took one off the
-/// closed side and off the total, *Star a Set, or take the star off* put one
-/// back on the open side and on the total, and ADR-0338 adds *Load a procedure
-/// over a layer* to the closed side and *Filter the library by kind*, *Keep a
-/// node's procedure* and *Point an Inspector pane at a deck* to the open one.
-///
-/// Counted with the deck the two loads name live, because that is how the
-/// record counts it: `LoadSet`'s row is listed under *what a live deck is
-/// drawing* and the closed count includes it, and `LoadProcedure` is the same
-/// predicate over the same slot. Those two are the only rows whose standing is
-/// not a function of the operation alone, so the split is a split *given a
-/// reading* — and the reading that makes it 41 is the one the class was drawn
-/// for. With nothing live it is 40 and 29, which is the same classification and
-/// not a second one.
+/// Asserts the open/closed partition counts across the entire vocabulary (ADR-0235).
 #[test]
 fn the_classification_is_the_split_adr_0235_states() {
     let running = Running::live(DECK_0_IS_LIVE);
@@ -480,11 +442,7 @@ fn opening_one_class_opens_no_other() {
     }
 }
 
-/// A closed operation is refused in the one sentence, asserted by The one class
-/// whose pill is not in a bay head says so, because the Outputs row has none —
-/// a refusal that sent an operator looking for a head would be worse than one
-/// that named no place at all, since a model repeats it to the person sitting
-/// there.
+/// Verifies that refusal messages accurately distinguish headless rows from bay heads.
 #[test]
 fn the_class_with_no_bay_head_does_not_send_anyone_looking_for_one() {
     let operation = Operation::RecordSession {

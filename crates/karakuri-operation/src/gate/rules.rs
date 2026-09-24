@@ -3,11 +3,7 @@ use crate::Operation;
 
 use super::types::{Allowed, Class, Open, Reading, Running, Standing, Unclassed};
 
-/// The gate. One operation, the opening the operator has set, and what has been
-/// read of what is running — a yes, or the one sentence it is refused in.
-///
-/// Called once, over the operation, after the call is named and before it acts.
-/// Strongly-typed structured audit verifying whether an operation is allowed by active gate policy.
+/// Performs structured policy audit verifying whether an operation is allowed (ADR-0235).
 pub fn audit_detail<'a>(
     operation: &'a Operation,
     open: Open,
@@ -22,8 +18,7 @@ pub fn audit_detail<'a>(
     }
 }
 
-/// In `karakuri_environment::mcp` that is between `asked` and `perform`, which
-/// is the only seam every tool crosses.
+/// Checks whether an operation is permitted under active gate rules, returning error text on refusal.
 pub fn audit<'a>(
     operation: &'a Operation,
     open: Open,
@@ -98,28 +93,7 @@ pub fn refusal_detail(operation: &Operation, standing: Standing) -> Option<Refus
     }
 }
 
-/// The one sentence a refused call is answered in, and `None` where there is
-/// nothing to refuse.
-///
-/// A free function, because
-/// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-/// says a refusal a person can reach from two surfaces is one sentence — and
-/// this one will be reachable from a second automatic route the day a lane
-/// exists (ADR-0222). Asserted by equality against this function rather than by
-/// a `contains`.
-///
-/// It says three things because
-/// [P-0083](../../../docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md)
-/// asks for the constraint and not only the fact: which operation, which class
-/// it is in, and that the operator can open that class, and where. A model told
-/// only *no* reports the instrument as incapable; one told this can hand the
-/// person sitting there something to do.
-///
-/// [`Operation::LoadSet`] names its deck, because its class turns on the deck
-/// being live: two identical calls are answered differently a minute apart, and
-/// a refusal that only said *closed* would be unfixable by the model that got
-/// it. [`Operation::LoadProcedure`] is the same class and names its deck for
-/// the same reason.
+/// Formats the single-sentence human-readable refusal message for an operation (P-0083, P-0090).
 pub fn refusal(operation: &Operation, standing: Standing) -> Option<String> {
     refusal_detail(operation, standing).map(|d| d.message)
 }
@@ -136,17 +110,7 @@ fn because(operation: &Operation, class: Class) -> String {
     }
 }
 
-/// Where every operation in the vocabulary stands, per operation and
-/// exhaustively.
-///
-/// No wildcard arm. See the module documentation: a sixty-fifth operation stops
-/// the build here until somebody says which class it is in, which is
-/// `karakuri_operation_record::written`'s discipline and its reason.
-///
-/// The split ADR-0235 states is held by a test rather than restated here:
-/// `the_classification_is_the_split_adr_0235_states` walks every operation
-/// through this match and asserts the closed, open and total counts, so the
-/// figures move when this match does and a sentence cannot go stale beside it.
+/// Exhaustively evaluates the policy standing of an operation against runtime state (ADR-0235).
 pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
     match operation {
         // ----- The clock ---------------------------------------------------
@@ -204,18 +168,9 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::Wipe { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetMaskShape { .. } => Standing::Closed(Class::MixFaders),
         Operation::SetMaskPosition { .. } => Standing::Closed(Class::MixFaders),
-        // **A level and not an effect**, which is why it is filed here rather
-        // than with the master chain (ADR-0224): one number at the entry to the
-        // master chain that blacks out the whole fold.
         Operation::SetMasterOut { .. } => Standing::Closed(Class::MixFaders),
 
         // ----- The master effects -------------------------------------------
-        //
-        // Every one acts on the composited frame after the mix has run and
-        // immediately. The first three are the chain itself — a slot's values,
-        // a slot added and a slot taken out — and an added slot is the one of
-        // them that changes what a frame costs. All three are shut against a
-        // model until an operator opens them.
         Operation::SetChainParam { .. } => Standing::Closed(Class::MasterEffects),
         Operation::AddChainEffect { .. } => Standing::Closed(Class::MasterEffects),
         Operation::RemoveChainEffect { .. } => Standing::Closed(Class::MasterEffects),
@@ -223,14 +178,6 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SetExposure { .. } => Standing::Closed(Class::MasterEffects),
 
         // ----- The sequencer's lanes ----------------------------------------
-        //
-        // *"The route that would defeat it is a lane, not a tool."* All six
-        // carry `Undecided` today; they are classed now so that the pattern
-        // arriving is not also the day the audit acquires a hole.
-        //
-        // `RemoveLane` is here with the other five and not with the master
-        // chain's remove: what it takes out is a row of a pattern, so the route
-        // it would open is a lane.
         Operation::SetStep { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
         Operation::SetLaneMute { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
         Operation::PointLane { .. } => Standing::ClosedUnclassed(Unclassed::Lanes),
@@ -245,47 +192,14 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::Quit => Standing::ClosedUnclassed(Unclassed::Quitting),
 
         // ----- Open by default ----------------------------------------------
-        //
-        // **Twenty-three rows, and `WriteProcedure` is the case that decides
-        // how the classes are drawn.** It rewrites the contents of a deck that
-        // is in live mode and it stays open, because the class is not the noun:
-        // it is P-0094's question with the noun as its subject, and a procedure
-        // rewrite is priced by the check pass, compiled off the frame path,
-        // installed at a frame boundary, measured for thirty frames and rolled
-        // back to the parked previous version if it costs too much. *"Its worst
-        // case is the picture it replaced, coming back."* `WireInput`,
-        // `RestoreProcedure`, `KeepCandidate` and `WatchFiles` land through the
-        // same rebuild.
         Operation::SetTransition { .. } => Standing::Open,
         Operation::WireInput { .. } => Standing::Open,
         Operation::SaveSet { .. } => Standing::Open,
-        // **A library write beside `SaveSet` and for `SaveSet`'s reason.** It
-        // puts one node's source in a file beside the library and moves no
-        // deck, no fader and no pixel; at its worst, on the frame it goes
-        // wrong, what it has done is written a `.kir` under the store.
         Operation::KeepProcedure { .. } => Standing::Open,
         Operation::ListSets { .. } => Standing::Open,
-        // **A narrowing of what one bay is drawing.** P-0094's question comes
-        // back empty on every count: it changes which rows an operator is
-        // looking at and nothing about what any deck is doing, which is
-        // `SelectScope`'s answer arrived at from the other side.
         Operation::FilterLibrary { .. } => Standing::Open,
-        // **Open where `SelectDeck` is closed, and the difference is what a
-        // wrong one costs.** The deck selection is
-        // `ClosedUnclassed(Unclassed::Selection)` because it decides where
-        // every later keyed operation lands, so a wrong one puts the next
-        // press on the wrong deck. A pane's target addresses nothing — every
-        // operation the Inspector emits names its deck outright — so a wrong
-        // one redraws a pane.
         Operation::PointPane { .. } => Standing::Open,
         Operation::SelectScope { .. } => Standing::Open,
-        // **A star changes nothing that is on air.** P-0094's question asked
-        // of it comes back empty on every count: at its worst, on the frame it
-        // goes wrong, with the operator's attention on the room, it has written
-        // one line into a small file beside the library and moved no deck, no
-        // fader and no pixel. It is `SelectScope`'s neighbour for the same
-        // reason it is on the page — both are about which Sets an operator is
-        // looking at, and neither is about what any of them is doing.
         Operation::SetFavourite { .. } => Standing::Open,
         Operation::ReadSet { .. } => Standing::Open,
         Operation::TransferSet { .. } => Standing::Open,
@@ -296,12 +210,6 @@ pub fn standing(operation: &Operation, running: Running<'_>) -> Standing {
         Operation::SwapOutcome => Standing::Open,
         Operation::KeepCandidate { .. } => Standing::Open,
         Operation::RestoreProcedure { .. } => Standing::Open,
-        // **The nine that arrange the console are the closest call on this
-        // side.** Folding away the bay holding the fader an operator is
-        // reaching for is a real hazard, and it is P-0094's third answer with
-        // the controls intact: it is the largest visible change the panel can
-        // make, and it is undone by one key the operator's hand is already
-        // near.
         Operation::MoveBoundary { .. } => Standing::Open,
         Operation::FoldBay { .. } => Standing::Open,
         Operation::FoldPane { .. } => Standing::Open,

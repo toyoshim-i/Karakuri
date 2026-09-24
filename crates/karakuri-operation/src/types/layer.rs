@@ -1,12 +1,9 @@
 //! Layer definitions and parsers for Karakuri Set layers.
 
-/// Which layer of a Set a node sits on.
+/// Layer of a Set on which a node resides.
 ///
-/// `Field` addresses no node in the rendering sense — it has no pass and no
-/// buffers, and lowers into whoever evaluates it — but its params are declared
-/// and addressable, which is why it is here at all. That paragraph is
-/// `karakuri_store::record::Layer`'s, and this is a third spelling of that list
-/// beside `karakuri_ir::ast::Kind`.
+/// Includes rendering passes (`L1`–`L4`), spatial coordinate transforms (`Field`),
+/// and post-processing frame effects (`L5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layer {
     L1,

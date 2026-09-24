@@ -2,16 +2,7 @@
 
 use crate::types::*;
 
-/// Define [`Operation`] and the list of headings it must match, from one
-/// source, so the two cannot drift.
-///
-/// This is the whole reason there is a macro here. The test that gives this
-/// crate its point compares a list of titles against the manual, and a
-/// hand-written list beside a hand-written enum is exactly the "two lists
-/// agreeing" this type exists to abolish — a variant added without a title
-/// would leave the test passing over an operation nobody specified. Through
-/// this, a variant cannot be added except with its title, and the title cannot
-/// be added except with a variant.
+/// Defines [`Operation`] and enforces single-source synchronization with specification headings.
 macro_rules! operations {
     (
         $(
@@ -20,31 +11,23 @@ macro_rules! operations {
                 => $title:literal,
         )+
     ) => {
-        /// Every operation Karakuri can perform, named once.
+        /// Every operation Karakuri can perform.
         ///
-        /// One variant per `<h3>` of `docs/manual/operations.html`, in that page's
-        /// order, carrying what the operation acts on. See the crate documentation for
-        /// what that means and what it deliberately leaves out.
+        /// Exactly one variant per `<h3>` in `docs/manual/operations.html`.
         #[derive(Debug, Clone, PartialEq)]
         pub enum Operation {
             $( $(#[$attr])* $name $( { $( $(#[$field_attr])* $field : $ty ),+ } )? , )+
         }
 
         impl Operation {
-            /// The heading this operation is specified under, verbatim.
-            ///
-            /// Verbatim matters: the test compares these against the page's own `<h3>`
-            /// text, so a title edited here to read better is a failing test rather than a
-            /// silent divergence. The manual is the specification; a title that reads badly
-            /// is fixed on the page first.
+            /// The exact specification heading for this operation.
             pub fn title(&self) -> &'static str {
                 match self {
                     $( Operation::$name { .. } => $title, )+
                 }
             }
 
-            /// Every heading, in the manual's order. What the test checks the page against,
-            /// and what a surface enumerating the vocabulary reads.
+            /// All operation specification headings in manual order.
             pub const TITLES: &'static [&'static str] = &[ $( $title, )+ ];
         }
     };
@@ -54,36 +37,21 @@ operations! {
     // ----- Transport and tempo -----------------------------------------
 
     /// Three taps or more set the tempo; any tap sets the phase.
-    ///
-    /// No payload: a tap is an instant, and the instant is when the operation
-    /// arrives.
     TapBeat => "Tap the beat",
 
     /// Moves the tracker's octave window with it.
     ScaleGrid { by: GridScale } => "Halve or double the grid",
 
-    /// The delay between what a room hears and what it sees, signed.
-    ///
-    /// Absolute, though the heading says nudge. `--latency-offset-ms MS` is
-    /// absolute, an absolute value can express every nudge and a nudge cannot
-    /// express a setting, and a fader has to be able to reach it. `o` and `p` are
-    /// two translations that read the current value and add five.
+    /// Sets the signed latency offset in milliseconds between audio and video display.
     SetLatencyOffset { ms: f32 } => "Nudge the latency offset",
 
-    /// A mode the deck's material cannot honour is skipped with a reason, which is
-    /// a refusal and not a payload.
+    /// Sets a deck's clock sync mode (Free, Tempo, Beat).
     SetSync { deck: u8, sync: Sync } => "Set a deck's sync mode",
 
-    /// The one relative operation here, and it is relative because nothing in this
-    /// instrument can set a position.
-    ///
-    /// Scrubbing moves closed-form material by an amount; the manual is explicit
-    /// that accumulating material cannot be moved to a position at all. An absolute
-    /// `at_beat` would be inventing an operation that does not exist for two thirds
-    /// of the material — see the report.
+    /// Scrubs a deck forward or backward by the given beat offset.
     ScrubDeck {
         deck: u8,
-        /// How far, in beats. A quarter beat is what a key press asks for.
+        /// How far, in beats.
         beats: f64,
     } => "Scrub a deck a quarter beat",
 
@@ -113,11 +81,7 @@ operations! {
     /// Takes the target deck index and store Set identifier.
     LoadSet { deck: u8, set: String } => "Load material into a deck",
 
-    /// Composite a deck's renderers rather than overdrawing them.
-    ///
-    /// A `bool` although `--merge N` can only turn it on, because the manual's gap
-    /// section names un-compositing as one of the things reachable from nothing at
-    /// all. Naming it is what makes it a gap rather than an absence.
+    /// Enables or disables compositor blending across a deck's renderers.
     SetCompositing { deck: u8, compositing: bool } => "Composite a deck's renderers",
 
     // ----- Mixing -------------------------------------------------------
@@ -147,42 +111,21 @@ operations! {
     /// -> blend 0 over` is that mapping.
     SetBlendMode { deck: u8, blend: BlendMode } => "Blend mode",
 
-    /// Starts at the current quantum and lasts the current length, both of which
-    /// are [`Operation::SetTransition`]'s and not this one's — the manual is
-    /// explicit that they are a console setting deciding what the *next* fade
-    /// means.
+    /// Fades a deck's opacity towards the target value over the current transition duration.
     FadeDeck {
         deck: u8,
-        /// Where the opacity ends up. Opacity only: a gain fade is in the record
-        /// vocabulary and has no control.
+        /// Target opacity value in [0.0, 1.0].
         to: f32,
     } => "Fade a deck out or in",
 
-    /// One gesture, four records: `to` is silenced and put on air at once, and the
-    /// two fades land on the grid.
-    ///
-    /// Both decks named. *The next deck* is the keyboard's translation of this, not
-    /// the operation.
+    /// Crossfades between two decks on the musical grid.
     Crossfade { from: u8, to: u8 } => "Crossfade to the next deck",
 
-    /// A mask at position 0 on the incoming deck, put on air under `over`, and one
-    /// scheduled move carrying the front to 1. Refused with no shape chosen.
-    ///
-    /// The put-on-air and the `over` are written only where they change something,
-    /// which is the one part of that sentence that is a condition rather than a
-    /// record. A deck the operator has moved off the mode a deck starts in keeps
-    /// the mode: a wipe under `add` or `max` is a wipe *on* rather than a wipe
-    /// *over*, a different picture and one they may have chosen, and a gesture is
-    /// not where an operator's choice is taken back
-    /// (`docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md`).
-    /// A deck already live is not told so again. What decides it is a reading of
-    /// where the deck already sits in the mix, which is
-    /// `karakuri_operation_record::Current::mix`, so the condition is one sentence
-    /// in one place rather than each surface's.
+    /// Initiates a mask wipe transition from one deck to another (ADR-0192, P-0094).
     Wipe {
         /// The deck being covered.
         from: u8,
-        /// The deck arriving over it.
+        /// The incoming deck arriving over it.
         to: u8,
     } => "Wipe the next deck in",
 
@@ -201,17 +144,14 @@ operations! {
         position: f32,
     } => "Set a deck's mask position",
 
-    /// These change nothing you can see and write nothing to the stream. They
-    /// decide what the *next* fade, crossfade or wipe means.
+    /// Configures transition parameters (wipe shape, quantum, length) for upcoming fades.
     SetTransition { setting: TransitionSetting }
         => "Choose the wipe shape, the quantum, the length",
 
-    /// Only where the deck composites and holds two or more. One-way: no position
-    /// in the cycle folds them all back in.
+    /// Selects active renderer for a multi-renderer deck slot.
     SelectRenderer {
         deck: u8,
-        /// Which renderer, in draw order — the numbering `--param L4:1:…` and a
-        /// `select` record use.
+        /// Renderer index in draw order.
         renderer: u32,
     } => "Choose which renderer of a deck is live",
 
@@ -224,39 +164,23 @@ operations! {
     ///
     /// Addressed by slot position index between master out and exposure input.
     SetChainParam {
-        /// Where the slot sits, counted from the mix's output: 0 is the slot the
-        /// mix's frame is handed to.
+        /// Slot index counted from mix output (0 is first stage).
         at: u32,
-        /// What is set.
+        /// Parameter value to set.
         param: ChainParam,
     } => "Set a chain effect's parameter",
 
-    /// One `kind L5` procedure appended to the end of the master chain.
-    ///
-    /// Appends: the chain has no operation that inserts and none that reorders,
-    /// so what a surface can say is *this procedure, at the end*.
-    ///
-    /// The slot arrives at the values its procedure declares, and it costs what
-    /// its procedure costs from the frame it is added on
-    /// (`docs/principles/0091-cost-is-known-before-it-is-paid.md`).
+    /// Appends an L5 post-processing effect procedure to the master chain (ADR-0340, P-0091).
     AddChainEffect {
-        /// The content address of the procedure's source, spelled the way a record
-        /// spells one — `sha256:…`. An address nothing holds is refused where the
-        /// chain is built, with the address in the message.
+        /// Content address (e.g. `sha256:...`) of the procedure source.
         procedure: String,
-        /// Which retained frame the slot reads. `Some` exactly where the procedure
-        /// declares `retains`; the two disagreeing is refused where the slot is
-        /// built, rather than defaulted.
+        /// Frame retention buffer slot read by the procedure, if any.
         cut: Option<Cut>,
     } => "Add an effect to the master chain",
 
-    /// One slot taken out of the master chain, addressed by its position.
-    ///
-    /// [`Operation::SetChainParam`]'s address and its answer to a position the
-    /// chain has not got. The slots after it move up, so a position names a
-    /// different slot once one before it has gone.
+    /// Removes an effect slot from the master chain by position index (ADR-0352).
     RemoveChainEffect {
-        /// Where the slot sits, counted from the mix's output.
+        /// Slot position index counted from mix output.
         at: u32,
     } => "Remove an effect from the master chain",
 
@@ -272,22 +196,8 @@ operations! {
     SetExposure { exposure: f32 } => "Exposure",
 
     // ----- The sequencer ------------------------------------------------
-    //
-    // **A lane is a fifth route into this vocabulary and not a binding**
-    // (`docs/adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md`),
-    // which is why this section is five rows and not more: a lane emits
-    // operations on the beat the way the pointer, the keys, a map and a model
-    // emit them, so the three lanes the console draws first are deck faders
-    // emitting [`Operation::SetOpacity`] and the fourth writes a Set
-    // parameter, which is [`Operation::WriteParam`]. **A lane needs no new
-    // operation to drive anything.** These five are the other half — what a
-    // hand does to the pattern — and every one of them carried [`Undecided`]
-    // until 2026-09-09 because **nothing in this program held a pattern**.
-    // Where one is kept was already settled (ADR-0227: library data in two
-    // tiers, on the arrangement's shape); what one *is* is ADR-0320, and
-    // `karakuri_pattern` is what holds it. **Each names the bank it acts on**,
-    // which is [`Operation::SelectDeck`]'s rule: implying the armed one is the
-    // shape that record refuses.
+    // Sequencer pattern operations act on pattern banks and emit parameter/fader
+    // operations on the musical grid (ADR-0222, ADR-0320).
 
     /// Sets a step state (on/off) in a sequencer pattern lane.
     ///
@@ -300,61 +210,10 @@ operations! {
     /// The pattern continues advancing its playhead but emits no writes while muted.
     SetLaneMute { pattern: u8, lane: u8, muted: bool } => "Mute a lane",
 
-    /// The foot's `+ lane`, and the target is the whole of what is being added: a
-    /// lane with nothing to drive emits nothing, so there is no moment at which a
-    /// lane exists and its target does not.
-    ///
-    /// What a target may *be* is answered by the rest of this vocabulary — anything
-    /// on it a lane can emit — which is why the console draws three deck faders and
-    /// a Set parameter side by side and calls all four lanes. What a target is
-    /// spelled as is [`LaneTarget`]: an operation of this vocabulary with its value
-    /// left out, which reaches all four where a slot number reaches three and a
-    /// node address reaches one
-    /// (`docs/adr/0321-a-lanes-target-is-an-operation-with-its-value-elided.md`).
-    /// It was [`Undecided`] until 2026-09-09 because *"a deck fader is a slot
-    /// number and a Set parameter is a [`NodeAddress`] and a [`ParamAt`], and
-    /// nothing here spells both"* — the spelling that reaches both is the one this
-    /// vocabulary already uses to reach either.
-    ///
-    /// It appends, so there is no lane index. The panel draws no control for
-    /// re-pointing a lane that already exists, so this row is where a target is
-    /// chosen; if it turns out to be two operations it will be because a control
-    /// was drawn for the second. Taking one away is [`Operation::RemoveLane`],
-    /// which names the lane by index because by then there is a row to point at.
-    ///
-    /// The two levels are not here, and that is a decision taken when the chooser
-    /// was drawn
-    /// (`docs/adr/0327-the-lane-chooser-lists-one-decks-keys-and-the-bank-pills-are-the-four-banks.md`).
-    /// A lane carries an `on` and an `off`, filled in *at the press* from the range
-    /// the surface was published, because a pattern outlives the Set it was written
-    /// against — and the surface that appends the lane is where that reading
-    /// already is, so carrying them here would put two floats in a payload only one
-    /// caller could supply meaningfully. A map line and a model can name neither,
-    /// which is ADR-0192's rule read the other way.
+    /// Appends a new sequencer lane pointing to the target address (ADR-0321, ADR-0327).
     PointLane { pattern: u8, target: LaneTarget } => "Point a lane at what it drives",
 
-    /// The minus at the end of a lane's row, which takes that lane out of the
-    /// pattern. Its steps go with it: there is nothing left to unmute onto, which
-    /// is what separates it from [`Operation::SetLaneMute`].
-    ///
-    /// A bank and a lane, addressed the way [`Operation::SetStep`] and
-    /// [`Operation::SetLaneMute`] are addressed and for their reason. **A lane
-    /// index is a position and not an identity**: the lanes after the removed one
-    /// move up, so every index above it names a different lane once this has been
-    /// applied (`karakuri_pattern::Pattern::remove`). A slot of the master chain is
-    /// addressed on the same terms
-    /// (`docs/adr/0352-the-chains-list-is-the-master-bays-items-and-a-slot-is-taken-out-by-a-glyph-on-its-row.md`),
-    /// and a glyph on the row is where that record puts the control.
-    ///
-    /// A lane index the pattern does not hold is refused and the refusal says what
-    /// there was to name
-    /// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
-    ///
-    /// Removing the lane that drives a control a hand is also on is allowed and
-    /// needs no refusal: a lane's writes are its whole record
-    /// (`docs/adr/0322-the-sequencer-is-polled-like-a-transition-live-only-and-its-writes-are-its-record.md`),
-    /// so they stop at the removal and the control keeps the value the last step
-    /// wrote it.
+    /// Removes a sequencer lane by index within the pattern bank (ADR-0322).
     RemoveLane { pattern: u8, lane: u8 } => "Remove a lane",
 
     /// Sets the step subdivision grid mode (sixteenth or eighth) for a pattern bank.
@@ -368,8 +227,7 @@ operations! {
 
     // ----- Inside a Set -------------------------------------------------
 
-    /// The sharpest gap: a model can rewrite a whole procedure and cannot turn one
-    /// knob.
+    /// Writes a scalar or vector parameter value on a deck's node.
     WriteParam { deck: u8, param: ParamAt, value: ParamValue } => "Write a parameter",
 
     /// Attaches an audio or analysis signal bus to modulate a parameter.
@@ -390,32 +248,18 @@ operations! {
     /// Detaches an automated or modulated signal binding from a parameter (ADR-0286, ADR-0319).
     TakeParamBack { deck: u8, param: BindAt } => "Take a parameter back",
 
-    /// The one operation addressed by name at both ends, which is `Record::Edge`'s
-    /// decision and its reason: a position moves when the list is reordered, and
-    /// reordering silently changing which geometry a morph blends towards is the
-    /// exact failure that record exists to end.
-    ///
-    /// So the workspace really does spell a node address two ways, and the two are
-    /// not a drift to be resolved — [`NodeAddress`] is positional because a param
-    /// write wants a wildcard and a position is what a `.kir` gives, and this is by
-    /// name because an edge must survive a reorder.
+    /// Wires a source procedure output into a named input slot on a node (ADR-0268).
     WireInput {
         deck: u8,
-        /// The node that declares the slot: `morph` in `--edge morph.far=…`.
+        /// Target node declaring the input slot.
         node: String,
-        /// What that node's procedure calls it: `far`.
+        /// Input slot identifier on the target node.
         slot: InputPort,
-        /// The node bound to it: `sphere_shell`.
+        /// Source node supplying the input geometry or texture.
         to: String,
     } => "Wire a procedure's input to a node",
 
-    /// What the console shows, and — since a knob binds to a position in it — what
-    /// a MIDI control counts.
-    ///
-    /// The whole ordered list, not one entry. A MIDI control is bound to a position
-    /// in the published interface, so adding one entry at a time would renumber
-    /// every binding after it; and an interface that publishes nothing publishes
-    /// everything, which is a statement about the list and not about an entry.
+    /// Replaces the published control list for the deck's exposed interface.
     Publish { deck: u8, controls: Vec<Control> } => "Narrow the published interface",
 
     /// Each comes from a Set file or a declared default.
@@ -470,14 +314,7 @@ operations! {
     /// Stars or unstars a Set in the library, toggling favourite status (ADR-0299).
     SetFavourite { id: String, favourite: bool } => "Star a Set, or take the star off",
 
-    /// Every knob with its range and default, the element count, the attributes
-    /// emitted — each read off the artifact's own card, so those three fetch no
-    /// source and compile nothing.
-    ///
-    /// What a node's element storage comes to is the figure that is not a card's.
-    /// It needs every source in the Set fetched and checked before anything can be
-    /// sized, and it pays for that. The panel draws the three that cost nothing; a
-    /// model asking over MCP is offered the fourth as well.
+    /// Reads parameter definitions, element counts, and emitted attributes for a Set.
     ReadSet { id: String } => "Read what one Set holds and declares",
 
     /// Send a Set to somebody, and take one in.
@@ -491,46 +328,17 @@ operations! {
 
     // ----- Procedures ---------------------------------------------------
 
-    /// Addressed by deck, layer and index. Read before writing.
+    /// Reads source code for a procedure node.
     ReadProcedure { deck: u8, node: NodeAddress } => "Read one node's source",
 
-    /// Checked as you write it; built on a worker and swapped at a frame boundary.
-    /// The source's own `kind` line must name the same layer as the address, which
-    /// is a refusal and not a payload.
+    /// Validates, compiles, and live-swaps source code for a node at a frame boundary.
     WriteProcedure { deck: u8, node: NodeAddress, source: String }
         => "Check and write one node's source",
 
-    /// This row names an event, not an operation, and that is the undecided part.
-    ///
-    /// Somebody editing a file in another program is not something a surface
-    /// performs. The only operation nearby is *watch these files, or stop* — and
-    /// `--watch` takes no argument, cannot be turned off, and does not say which
-    /// files it would take if it could. Whether the row is that operation, or
-    /// belongs on the page at all, is a decision about the manual.
-    ///
-    /// So this payload is the row's marker for one flag, and that is what it is
-    /// for: `--watch` is the only thing in this program that turns the watching on,
-    /// it takes no argument and nothing turns it off, so there is no state for a
-    /// payload to name until somebody decides the row is an operation. It stays
-    /// [`Undecided`] rather than becoming a `bool` nothing can set.
-    ///
-    /// A model has no route here, and nothing is owed for one. A model does not
-    /// edit a file in another program: it calls `write_procedure`, which is its
-    /// edit — checked, written and swapped at a frame boundary — so there is
-    /// nothing a model would say on this row that the write does not already say.
-    /// That is
-    /// `docs/adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md`'s
-    /// kind of answer rather than a missing route, and it is why the page's MCP
-    /// badge is `gap` and not `plan`
-    /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
+    /// Observes external file system changes to update running procedures.
     WatchFiles { watching: Undecided } => "Edit the file instead",
 
-    /// Landed, overloaded for costing too much, or failed to build. A write
-    /// returning cleanly means it compiled, not that it is on screen.
-    ///
-    /// The middle word is a state and not an outcome, since ADR-0316: the version
-    /// is in the slot and the slot has stopped updating, holding the frame it last
-    /// drew, and nothing ends that on its own.
+    /// Queries the compilation or swap outcome of a recent procedure write (ADR-0316).
     SwapOutcome => "Find out what a write did",
 
     /// Promotes a staging lane candidate to a persistent library procedure (ADR-0228, ADR-0316, ADR-0326).
@@ -547,37 +355,16 @@ operations! {
     /// (ADR-0259, ADR-0315, ADR-0342).
     MoveBoundary { boundary: Undecided } => "Move a boundary",
 
-    /// A folded bay takes no space at all and no divider is drawn beside it; what
-    /// it had goes to the bay that takes height back in that pane.
-    ///
-    /// Addressed by name, which is available: `karakuri_layout::Layout::find`
-    /// resolves one, and `Layout::new` refuses an arrangement that uses a name
-    /// twice, so *"the answer here is the only node that could be meant."*
+    /// Folds a named UI bay into collapsed state.
     FoldBay { bay: String } => "Fold a bay away",
 
-    /// The whole left or right pane, with everything in it, and the centre takes
-    /// the width.
-    ///
-    /// Same payload as [`Operation::FoldBay`] and a separate row, because the
-    /// manual describes two different consequences. Whether they are one operation
-    /// over two kinds of region is a question for the page — see the report.
+    /// Folds an entire left or right UI pane.
     FoldPane { pane: String } => "Fold a pane away",
 
-    /// A folded region has no rectangle, so a pointer cannot reach it — the one
-    /// operation on this page a mouse cannot be the only way into.
-    ///
-    /// `None` brings back everything folded, which is what reaches a fold nobody
-    /// has a name for; a name brings back that region and whatever stands between
-    /// it and the screen. That is `panel::Op`'s `Unfold` and `UnfoldAll`, two of
-    /// its variants under one heading.
+    /// Restores folded bays and panes to visible state.
     Unfold { region: Option<String> } => "Bring back what is folded",
 
-    /// Everything that is not this region, on the way to it, or inside it folds
-    /// away, and it holds the window.
-    ///
-    /// `None` undoes the solo and restores what was folded before, including
-    /// whatever was already folded. Explicit rather than a toggle: the caller says
-    /// which way.
+    /// Solos a layout region by folding away surrounding regions, or restores prior layout if `None`.
     Solo { region: Option<String> } => "Solo a region",
 
     /// Resets UI window arrangement to default layout (ADR-0175, ADR-0221).
