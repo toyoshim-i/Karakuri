@@ -1,48 +1,11 @@
-//! Field lowering: a `kind Field` procedure as one WGSL function.
+//! Field lowering: lowers a `kind Field` procedure into a WGSL function.
 //!
-//! # The only kind that lowers to no pass
+//! Unlike pass-generating procedures, a field lowers to a pure function and a parameter
+//! list without its own bindings, entry points, or uniform struct.
 //!
-//! Every other generator in this crate produces a module: bindings, a uniform
-//! struct, an entry point. A field produces **a function and a list of
-//! params**, and nothing else — no bindings, because it reads none; no uniform
-//! struct, because its params live in the uniform of whoever calls it; no
-//! entry point, because it is not dispatched.
-//!
-//! A `kind` says what a procedure *lowers to*, and an L5 has no `kind` because
-//! it has no code to lower — `docs/ir-spec.md`, "kind". This is the
-//! mirror — only code, so a file and no node.
-//!
-//! # One splice per slot, named by the slot
-//!
-//! A caller reaches a field through a slot its own header declared — `uses
-//! shape : Field`, called `shape(p)` — so the function this generates is named
-//! for that slot and not for the field. Two callers naming one field
-//! differently get one function each in their own modules, which costs nothing:
-//! a field is spliced per caller already, and the module boundary is what makes
-//! two names for one body harmless.
-//!
-//! **The names are per slot even while a Set holds one field**, and that is
-//! deliberate. Nothing about a slot's spelling depends on how many fields there
-//! are, so getting it right now costs a parameter and getting it right later
-//! would cost a rename sweep through every line of generated WGSL and every
-//! test that reads one.
-//!
-//! # Its params are the caller's uniform, under a prefix of their own
-//!
-//! A spliced body reads `u.field_shape_radius`, in the caller's `Uniforms`
-//! struct. The prefix is not decoration: a renderer declaring `exposure` beside
-//! a field declaring `exposure` would otherwise be one uniform field with two
-//! meanings, and prefixing them apart removes a refusal that would otherwise
-//! have to exist. **The slot is in the prefix too**, so a procedure reaching two
-//! fields addresses each one's params separately — one shape's `radius` is not
-//! the other's. See [`crate::layout::mangle_field_param`].
-//!
-//! # What it may not read
-//!
-//! No attribute, and no ambient but `point` — refused in the check pass, with
-//! the reason rather than with advice to declare something. A field is handed a
-//! position and the material that happens to be at it is not something it can
-//! see.
+//! Field functions are named per slot (via [`fn_name`]) rather than per procedure,
+//! allowing multiple slots referencing the same field to coexist without collision.
+//! Field parameters are prefixed with the slot name inside the caller's `Uniforms` struct.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};
@@ -51,24 +14,12 @@ use crate::layout;
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::Requirements;
 
-/// The WGSL name of the function a field lowers to, **under the slot that
-/// reached it**.
-///
-/// It used to be one constant, `_field_at`, because there was one field per Set
-/// and the language named it with a reserved word — which is the same fact said
-/// twice: a single name is what caps fan-in at one. The name is the caller's
-/// own now, so a procedure that takes a shape and a cutter calls two functions
-/// and nothing about either spelling has to be arbitrated.
+/// Returns the WGSL function name generated for a field reached via `slot`.
 pub fn fn_name(slot: &str) -> String {
     format!("_field_{slot}_at")
 }
 
-/// The parameter the body reads as `point`.
-///
-/// Not spelled `point`: a WGSL identifier chosen by this crate should never be
-/// one an author could also have chosen, and the same argument that mangles
-/// every `param` applies to a function parameter that shares a scope with the
-/// body's locals.
+/// The WGSL parameter name representing the input point to the field.
 const POINT: &str = "_field_p";
 
 /// The clock, passed as a parameter rather than read globally.
@@ -136,12 +87,7 @@ pub fn generate_field(checked: &Checked, slot: &str) -> FieldShader {
     }
 }
 
-/// Reads resolve to the function parameter and to the caller's uniform; there
-/// is nothing else in scope.
-///
-/// It holds the slot because a param read is addressed under it: the same field
-/// reached through two slots is two independent sets of values in one caller's
-/// uniform, which is what makes them separately drivable.
+/// Resolves reads within a field body to the function parameters or the caller's uniform.
 struct FieldResolver<'a> {
     slot: &'a str,
 }

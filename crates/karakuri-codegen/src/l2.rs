@@ -49,23 +49,15 @@ pub struct L2Shader {
     pub amplify: Option<u32>,
 }
 
-/// Generate the compute shader for one L2, against the attributes available
-/// where it sits.
+/// Generates the compute shader for one L2 procedure against available upstream attributes.
 ///
-/// `upstream` is what reaches this node — the L1's `emit`, widened by every L2
-/// between. It is passed in rather than derived for the same reason
-/// `generate_l4` takes an `ElementLayout`: the input buffer is somebody else's
-/// and this shader has to address it with the identical struct.
+/// `upstream` represents attributes produced by L1 and preceding L2 passes.
+/// `far` provides attributes emitted by an external geometry when `uses` is declared.
 pub fn generate_l2(
     checked: &Checked,
     upstream: &[Attr],
     synthetic: Synthetic,
     derived: &[Attr],
-    // What the **far** geometry emits, for an L2 that declares a `uses` slot.
-    // `None` for every other L2, and `Some` exactly when the procedure
-    // declares a geometry slot —
-    // passed rather than derived because it is another source's list and this
-    // procedure cannot know it.
     far: Option<&[Attr]>,
     fields: crate::Bound<'_>,
 ) -> L2Shader {
@@ -107,37 +99,20 @@ pub fn generate_l2(
     let out_layout = ir_layout::generate_element_layout(&emits, out_synthetic, derived);
 
     let mut b = UniformLayoutBuilder::new();
-    // **`t` and `beats` are here rather than in `StepArgs`.** An L1 is
-    // substepped and each substep lands on its own instant, so its clock has to
-    // be per substep. An L2 runs once, after the simulation has reached the
-    // frame's last instant — there is one `t` for it, and reading a per-substep
-    // buffer would mean choosing which substep a node that ran after all of
-    // them belongs to.
+    // Clocks and step interval are stored in uniforms since L2 runs once per frame.
     b.field("t", "f32");
     b.field("beats", "f32");
     b.field("dt", "f32");
     b.field("capacity", "u32");
     b.field("seed_salt", "u32");
-    // **One `u32` per declared Source slot**, holding the identity of the
-    // geometry an edge bound to it. A comparison against `source` is then two
-    // uniform loads — the same value in every lane, which is the branch a GPU
-    // costs least.
+    // One u32 per declared source slot to identify connected geometries.
     for slot in checked.source_slots() {
         b.source_slot_field(slot);
     }
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
-    // **A spliced field's params live here**, under a prefix of their own so
-    // that this procedure and the field it evaluates may both declare
-    // `exposure` — see `layout::mangle_field_param`.
-    //
-    // **One set per slot, and only for the slots the procedure evaluates.** The
-    // field used to be spliced into every module in the Set, so a renderer that
-    // never mentions one still carried its params and still failed to compile
-    // if the field's body did — a `.kir` taking down shaders that have nothing
-    // to do with it. The slot is in the name because two fields in one caller
-    // are two independent sets of values.
+    // Spliced field parameters, prefixed with the slot name to avoid naming collisions.
     let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
@@ -215,12 +190,7 @@ pub fn generate_l2(
     if let Some(layout) = &far_layout {
         src.push('\n');
         layout::write_element_struct_named(&mut src, "ElementFar", layout);
-        // **`far` and not the slot's name.** A generated identifier is this
-        // module's, and the author's spelling has already done its work in the
-        // checker — naming the buffer after the slot would put a name a `.kir`
-        // chose into WGSL, where it could collide with anything the generator
-        // emits. User names are mangled for exactly that reason; see
-        // `lower::mangle_local`.
+        // The far buffer uses a fixed identifier to avoid collisions with user symbols.
         src.push_str(&format!(
             "@group({}) @binding({}) var<storage, read> far: array<ElementFar>;\n",
             group::PREV,
@@ -232,13 +202,7 @@ pub fn generate_l2(
         group::NEXT,
         binding::ELEMENT,
     ));
-    // **Only an amplifier writes liveness, and it writes rather than decides
-    // it.** A node that keeps the element count shares the very alive buffer
-    // its input came with, so there is nothing for it to bind. An amplifier
-    // cannot share one — its buffer has `factor` times the entries — so it
-    // needs its own, and what it puts there is each parent's flag repeated.
-    // That is not an L2 deciding liveness, which is refused: it is the same
-    // decision, re-indexed onto a longer buffer.
+    // Amplifiers replicate input liveness flags across output copies in a new alive buffer.
     if checked.amplify.is_some() {
         src.push_str(&format!(
             "@group({}) @binding({}) var<storage, read_write> dst_alive: array<u32>;\n",
@@ -247,11 +211,7 @@ pub fn generate_l2(
         ));
     }
     src.push('\n');
-    // **The field's helpers before its body, and its body before every entry
-    // point.** A spliced field lives in this module, so this module's prelude
-    // has to carry what it calls — the prelude is demand-driven, and a field
-    // calling `sd_torus` in a caller that does not would otherwise produce a
-    // call to a function nothing emitted, in a shader that checked clean.
+    // Absorb prelude requirements and functions needed by spliced fields.
     for f in &splices {
         req.absorb(&f.requirements);
     }
@@ -322,31 +282,18 @@ impl Resolver for L2Resolver {
 
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
-            // **Read from the element, not from a loop variable.** In an
-            // amplifying node the two agree only for the copy this invocation
-            // is on and only after the write above; below one they do not agree
-            // at all, since the value there is a composed index and there is no
-            // loop. One spelling for both is the element's own slot.
+            // Copy index is read directly from dst[i].copy.
             Ambient::Copy if self.has_copy => "dst[i].copy".to_string(),
             Ambient::Copy => "0u".to_string(),
             Ambient::Point => {
                 unreachable!("`point` is a field's only input and appears in no other block")
             }
             Ambient::Capacity => "u.capacity".to_string(),
-            // **`source` is the salt, and the salt is already here.**
-            // `docs/ir-spec.md` settles that the value identifying a geometry
-            // *is* its salt rather than a dense index beside it, and
-            // `Set::prepare` has been writing it into this field all along —
-            // so the read is one arm and no new plumbing.
+            // Geometry source identity is represented by seed_salt.
             Ambient::Source => "u.seed_salt".to_string(),
             Ambient::T => "u.t".to_string(),
             Ambient::Beats => "u.beats".to_string(),
-            // **The uniform, unscaled.** An L1 substitutes a birth-fraction
-            // corrected `dt` on an element's first update, which exists so that
-            // a frame's worth of new elements do not all start at one phase.
-            // Nothing here integrates — a `deform` cannot accumulate at all —
-            // so there is no first update to correct and nothing for the
-            // correction to apply to.
+            // Unscaled step delta dt.
             Ambient::Dt => "u.dt".to_string(),
             Ambient::Seed => unreachable!("read_seed handles this"),
             Ambient::Camera | Ambient::PointCoord | Ambient::Eye | Ambient::Ray => {
@@ -356,11 +303,7 @@ impl Resolver for L2Resolver {
     }
 }
 
-/// Statement lowering, on the same terms `l1` and `l4` have their own: the
-/// assignment target is what differs between layers, and unifying three targets
-/// was worse than three short direct versions. An L2 assigns to the output
-/// element and to locals, and to nothing else — `kill()` is refused in the
-/// checker and a stage output has no meaning here.
+/// Lowers IR statements into WGSL, writing to element fields in `dst` or local variables.
 fn emit_stmts(
     stmts: &[TStmt],
     r: &L2Resolver,
@@ -440,20 +383,12 @@ fn deform_entry(
     gate: Option<&str>,
     amplify: Option<u32>,
 ) -> String {
-    // **`src` is indexed by the input element and `dst` by the output one, and
-    // an amplifier is where those stop being the same number.** Without one they
-    // are both `i` and the generated text is exactly what it was before
-    // amplification existed; with one, `_e` walks the input and `i` is
-    // `_e * factor + _c`, so every read site the lowering produces — all of
-    // which address `dst[i]` — needs no knowledge of any of this.
+    // When amplifying, `_e` walks inputs while `i` indexes into output copies.
     let src_i = if amplify.is_some() { "_e" } else { "i" };
     let mut copy = String::new();
     for slot in &out_layout.slots {
         if slot.name == "copy" {
-            // Written below rather than copied: this node either *is* the
-            // amplifier, in which case the value is being made here, or it is
-            // downstream of one, in which case the pass-through belongs to the
-            // `in_layout.slots` branch and this arm is not reached.
+            // Handled separately below when amplifying.
             if amplify.is_some() {
                 continue;
             }
@@ -461,10 +396,7 @@ fn deform_entry(
         if in_layout.slots.iter().any(|s| s.name == slot.name) {
             copy.push_str(&format!("    dst[i].{0} = src[{src_i}].{0};\n", slot.name));
         } else {
-            // **Zeroed, not left as it was.** A slot this node adds has no
-            // input to come from, and whatever the buffer holds there is this
-            // node's own output from the previous frame — which is exactly the
-            // accumulation an L2 is not allowed to have.
+            // Newly added attributes are zero-initialized to prevent cross-frame leakage.
             copy.push_str(&format!(
                 "    dst[i].{} = {}(0);\n",
                 slot.name,
@@ -472,12 +404,7 @@ fn deform_entry(
             ));
         }
     }
-    // **Stacked amplifiers compose the index rather than overwrite it.** A node
-    // of factor `n` under a parent that already carried a `copy` turns it into
-    // `copy * n + c`, which is the mixed-radix numbering of the whole chain: it
-    // stays unique, and the parent's own index is still recoverable by dividing.
-    // Overwriting would make two elements of one parent indistinguishable the
-    // moment a second amplifier ran, which is the whole of what `copy` is for.
+    // Composes nested copy index using mixed-radix: copy * factor + c.
     if let Some(factor) = amplify {
         let parent = if in_layout.slots.iter().any(|s| s.name == "copy") {
             format!("src[{src_i}].copy")
@@ -486,17 +413,7 @@ fn deform_entry(
         };
         copy.push_str(&format!("    dst[i].copy = {parent} * {factor}u + _c;\n"));
     }
-    // **The gate is computed before the body and applied after it**, over a copy
-    // of what reached this node. Two consequences, and both are the point: the
-    // mask reads the *input* — `dst` holds it, the pass-through having just run
-    // — and every slot the body wrote is blended back toward that input rather
-    // than being written or not written.
-    //
-    // Only the slots carrying an attribute are blended. `seed` is a `u32` and
-    // has no meaningful midpoint; the birth fraction is the engine's and no
-    // `deform` can write it; `copy` is an index and mixing two of them names a
-    // third element. All were copied and none can have moved, so blending them
-    // would be a no-op spelled as arithmetic.
+    // Blends written attribute slots with the original input using the calculated gate strength.
     let (gate_decl, gate_apply) = match gate {
         None => (String::new(), String::new()),
         Some(mask) => {
@@ -511,20 +428,10 @@ fn deform_entry(
                 format!(
                     "    let _input = dst[i];\n\
                      \x20   var strength = 1.0;\n\
-                     \x20   // **The mask's locals get a scope of their own.** Two\n\
-                     \x20   // blocks are spliced into one WGSL function here, and\n\
-                     \x20   // a local is mangled by its name alone — so a `let d`\n\
-                     \x20   // in both would be a redefinition, from a `.kir` the\n\
-                     \x20   // checker accepted. It checks each block in its own\n\
-                     \x20   // scope, and this is that scope made real. `strength`\n\
-                     \x20   // is declared outside it and assigned from within,\n\
-                     \x20   // which is what a scope is for.\n\
+                     \x20   // Isolates mask declarations in an inner scope.\n\
                      \x20   {{\n\
                      {mask}\
                      \x20   }}\n\
-                     \x20   // Clamped, because `mix` extrapolates: a strength\n\
-                     \x20   // of 2 would apply the deformation twice over, and\n\
-                     \x20   // one of -1 would apply its inverse.\n\
                      \x20   let _gate = clamp(strength, 0.0, 1.0);\n"
                 ),
                 blend,
@@ -539,10 +446,6 @@ fn deform_entry(
              \x20   if (i >= counts.range) {{\n\
              \x20       return;\n\
              \x20   }}\n\
-             \x20   // A dead slot is skipped rather than deformed. Its output is\n\
-             \x20   // never read: a reader takes its alive flags from the buffer\n\
-             \x20   // this node's input came with, and the flag is what a vertex\n\
-             \x20   // stage tests per instance.\n\
              \x20   if (src_alive[i] == 0u) {{\n\
              \x20       return;\n\
              \x20   }}\n\
@@ -552,20 +455,7 @@ fn deform_entry(
              {gate_apply}}}\n"
         );
     };
-    // **The invocation still walks the *input*, and the copies are a loop.**
-    // Dispatching `factor` times as many invocations would need a second
-    // indirect argument computed before this pass could run; looping needs
-    // nothing, and `factor` is a compile-time constant so the loop bound is one
-    // too. What it costs is that a node of a large factor is `factor` times the
-    // work in one invocation rather than spread over more of them — which
-    // matters only when the element count is already too small to fill the
-    // device, and a Set with too few elements to fill a GPU is not the case this
-    // engine is sized for.
-    //
-    // **Liveness is written before the early return**, and that ordering is the
-    // whole of why dead parents do not leave stale copies behind: the flags for
-    // every copy of a dead element have to say dead, and a `return` above the
-    // write would leave whatever the buffer held from the frame before.
+    // Loops over output copies per input element, propagating liveness flags before processing.
     format!(
         "@compute @workgroup_size({WORKGROUP_SIZE})\n\
          fn deform(@builtin(global_invocation_id) gid: vec3<u32>) {{\n\

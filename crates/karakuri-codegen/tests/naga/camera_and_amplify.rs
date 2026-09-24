@@ -72,20 +72,7 @@ fn a_camera_shader_parses_and_validates() {
     validate(&karakuri_codegen::generate_l3(&sweep(), &[]).source);
 }
 
-/// **The four an author did not write are written anyway**, before the block
-/// runs — which is what makes them defaults rather than requirements, and what
-/// keeps the simplest camera anyone writes four lines shorter.
-///
-/// **The values are checked, not only their presence.** Zeroing them leaves a
-/// shader that still writes all six and still validates — and produces a camera
-/// with no field of view, no depth range and no up vector, which is a blank
-/// frame with no diagnostic. Defect injection found exactly that hole in an
-/// earlier version of this test.
-///
-/// The numbers are `Orbit::default`'s, so replacing the built-in camera with an
-/// L3 does not quietly change the field of view underneath the picture. That
-/// they *are* `Orbit::default`'s is checked in `karakuri-engine`, where both
-/// exist; here they are held against the values that struct documents.
+/// Tests that unassigned camera outputs receive standard defaults in the emitted WGSL.
 #[test]
 fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
     let src = karakuri_codegen::generate_l3(&sweep(), &[]).source;
@@ -156,17 +143,7 @@ fn a_camera_uniform_carries_the_clock_and_its_params() {
     );
 }
 
-/// **Two blocks, one function, and a local name may appear in both.**
-///
-/// `mask` and `deform` are spliced into one WGSL entry point and a local is
-/// mangled by its name alone, so `let d` in each would be a redefinition — from
-/// a `.kir` the checker accepted, since it checks each block in its own scope.
-/// The mask's statements get a WGSL scope to make that true, and this is the
-/// test that would have caught the shader failing to compile at build time.
-///
-/// The names are not exotic: `examples/late_bloom.kir`'s `deform` declares `out`
-/// and `away`, and a mask written against the same geometry reaches for the same
-/// words.
+/// Tests that local variables with identical names across mask and deform blocks do not collide.
 #[test]
 fn a_mask_and_a_deform_may_declare_the_same_local() {
     let src = r#"
@@ -248,12 +225,7 @@ proc plain {
     assert!(!plain.source.contains("dst_alive"), "{}", plain.source);
 }
 
-/// **Stacked amplifiers compose the index rather than overwrite it.** A node of
-/// factor `n` under a parent that already carried a `copy` writes
-/// `copy * n + c`, which is the mixed-radix numbering of the whole chain: it
-/// stays unique, and the parent's index is still recoverable by dividing.
-/// Overwriting would make two elements of one parent indistinguishable the
-/// moment a second amplifier ran, which is the whole of what `copy` is for.
+/// Tests that stacked amplification passes compose copy indices via mixed-radix multiplication.
 #[test]
 fn a_second_amplifier_composes_the_copy_index_rather_than_replacing_it() {
     // The first has nothing above it, so it starts the numbering from the
@@ -408,11 +380,7 @@ proc tinted {
     );
 }
 
-/// **The same L4 over geometry no amplifier touched still compiles**, and reads
-/// zero. A renderer is compiled against whatever chain it was given and cannot
-/// know whether one had an amplifier in it, so the answer where the slot is
-/// absent has to be a value rather than a refusal — and copy zero of itself is
-/// the true one.
+/// Tests that an L4 shader referencing copy compiles cleanly to 0u when geometry is unamplified.
 #[test]
 fn an_l4_reading_copy_over_unamplified_geometry_reads_zero() {
     let src = r#"

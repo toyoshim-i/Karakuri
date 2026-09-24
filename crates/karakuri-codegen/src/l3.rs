@@ -1,40 +1,10 @@
-//! L3 lowering: `camera` as one compute entry point that writes the camera
-//! state.
+//! L3 lowering: lowers a `camera` procedure into a single compute entry point writing `CameraState`.
 //!
-//! # One invocation, and that is the whole shape of the layer
+//! Evaluates camera parameters once per frame on the GPU with `@workgroup_size(1)`,
+//! enabling direct access to simulation geometry without host readbacks.
 //!
-//! Every other block in this language runs over a quantity — elements, spawns,
-//! fragments. A `camera` block runs *once*, and produces six numbers. That is
-//! why the dispatch below is `@workgroup_size(1)` with no index, no bounds
-//! check and no alive flag: there is nothing to be at index `i` of.
-//!
-//! It is a compute pass rather than host arithmetic for one reason, and it is
-//! not this one. A camera on the clock alone could be evaluated on the host and
-//! written with a `queue.write_buffer` — that is exactly what the built-in
-//! `Orbit` does. But `docs/ir-spec.md` settles that an L3 may **read geometry**,
-//! and an element's position lives in a buffer this architecture never reads
-//! back. Lowering every L3 to a pass means the camera that follows an element
-//! joins as a second thing this shader can do, rather than as a second place a
-//! camera can be computed.
-//!
-//! # Four of the six are defaulted, not required
-//!
-//! The entry point opens by writing `up`, `fov_y`, `near` and `far`, then runs
-//! the block over them. So an author overrides what they mean to change and
-//! restates nothing — the same shape as an L2's pass-through, and the reason
-//! `required_keys` asks only for `eye` and `target`.
-//!
-//! **The defaults are `Orbit::default`'s**, deliberately: replacing the built-in
-//! camera with the simplest L3 anyone would write should not change the field of
-//! view underneath the picture.
-//!
-//! # What it cannot do yet
-//!
-//! **Hold state.** `docs/ir-spec.md` allows an L3 to, and gives the reason —
-//! *a camera's craft is mostly smoothing, and smoothing is lag, and lag is
-//! state*. Nothing here has a previous frame's value to read: the state buffer
-//! is written and never read by the shader that writes it. What that costs is
-//! damping, which is the next thing this layer will want.
+//! Output parameters (`eye`, `target`, `up`, `fov_y`, `near`, `far`) default to orbit camera
+//! settings and are overridden by procedure statements.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, BlockKind, Kind, Output};
@@ -68,30 +38,12 @@ pub fn generate_l3(checked: &Checked, fields: crate::Bound<'_>) -> L3Shader {
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
     b.field("beats", "f32");
-    // **Present although nothing can use it yet.** An L3 is allowed to hold
-    // state and a damped follow is written against a step; the field costs four
-    // bytes in a buffer written once a frame, and leaving it out would make
-    // adding state a change to the wire format rather than to the body.
     b.field("dt", "f32");
-    // **Because the prelude's hashes read it**, and a camera that cuts on the
-    // beat is the first thing anyone writes here — `hash1(floor(beats))` is how
-    // a cut is chosen without state. Salting it means two Sets running one
-    // camera procedure cut to different places, which is the same argument the
-    // salt makes for geometry: an instance of a procedure is not the procedure.
     b.field("seed_salt", "u32");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
-    // **A spliced field's params live here**, under a prefix of their own so
-    // that this procedure and the field it evaluates may both declare
-    // `exposure` — see `layout::mangle_field_param`.
-    //
-    // **One set per slot, and only for the slots the procedure evaluates.** The
-    // field used to be spliced into every module in the Set, so a renderer that
-    // never mentions one still carried its params and still failed to compile
-    // if the field's body did — a `.kir` taking down shaders that have nothing
-    // to do with it. The slot is in the name because two fields in one caller
-    // are two independent sets of values.
+    // Spliced field parameters, prefixed with the slot name to avoid naming collisions.
     let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
@@ -123,11 +75,7 @@ pub fn generate_l3(checked: &Checked, fields: crate::Bound<'_>) -> L3Shader {
         group::STATE,
         binding::UNIFORM,
     ));
-    // **The field's helpers before its body, and its body before every entry
-    // point.** A spliced field lives in this module, so this module's prelude
-    // has to carry what it calls — the prelude is demand-driven, and a field
-    // calling `sd_torus` in a caller that does not would otherwise produce a
-    // call to a function nothing emitted, in a shader that checked clean.
+    // Absorb prelude requirements and functions needed by spliced fields.
     for f in &splices {
         req.absorb(&f.requirements);
     }
@@ -146,13 +94,7 @@ pub fn generate_l3(checked: &Checked, fields: crate::Bound<'_>) -> L3Shader {
     }
 }
 
-/// The local each camera output accumulates into before the entry point writes
-/// the six of them out together.
-///
-/// Locals rather than direct stores into `cam`, for the same reason the L4 path
-/// uses them: a block may assign an output more than once, or on one arm of an
-/// `if`, and a store per assignment would make the buffer's contents depend on
-/// the order the passes happened to write it.
+/// Returns the local variable name used to accumulate each camera output before writing to `CameraState`.
 fn output_local(o: Output) -> &'static str {
     match o {
         Output::Eye => "_eye",

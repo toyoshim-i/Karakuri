@@ -1,81 +1,9 @@
-//! L1 lowering: `spawn` and `element` as separate compute entry points.
+//! L1 lowering: compiles `spawn` and `element` into WGSL compute entry points.
 //!
-//! # What this crate generates, and what it does not
-//!
-//! The ir-spec's L1 lowering section also describes an order-preserving
-//! compaction scan — a prefix sum over the previous frame's alive flags that
-//! produces each survivor's destination index, run once per frame ahead of
-//! `element`. That scan is **not generated here**. It operates purely on the
-//! alive-flag buffer's geometry (a length and a set of 0/1 values) and never
-//! touches a procedure's own attributes or statements, so it is generic
-//! compute infrastructure — the same shader regardless of which `.kir`
-//! produced the buffers it is compacting — not a per-procedure lowering
-//! target. Folding it into this crate would mean every `Checked` tree
-//! carries an identical multi-pass reduction shader as dead weight.
-//!
-//! What this crate does generate is the half of compaction that *is*
-//! per procedure: the index substitution at the point `element` writes. An
-//! earlier revision of this doc predicted that substitution would be a
-//! one-line change, and it was — `let out = dest[i];` in place of `let out =
-//! i;`, plus the skip for an element that is already dead. The scan's shape
-//! did not reach this file at all.
-//!
-//! # Compacted and static procedures
-//!
-//! A procedure with no `spawn` block and no `kill()` never changes its live
-//! set: `capacity` elements are live at frame zero and the same `capacity`
-//! elements are live forever. Compaction for it is pure cost — a scan whose
-//! answer is always the identity permutation — so [`L1Shader::compacted`]
-//! says which shape a procedure is, and the engine skips the scan, the
-//! spawn dispatch and the `advance` pass entirely for a static one.
-//!
-//! The two shapes differ in `element` by three lines. A compacted procedure
-//! returns early when `prev_alive[i]` is zero (its slot is being reclaimed
-//! this step) and writes to `dest[i]`; a static one writes to `i`, does not
-//! read `prev_alive`, and — the point of the distinction — does not bind or
-//! read `dest` at all. Everything else, including how any block lowers, is
-//! identical between them.
-//!
-//! # Where the live range lives
-//!
-//! `element` dispatches indirectly over `counts.range` and bounds-checks
-//! against it, and `spawn` writes at `counts.survivors + i`. Both of those
-//! numbers are produced on the GPU by the scan and by `advance`; the host
-//! never learns them and never needs to. See
-//! [`crate::layout::counts`] for the buffer they live in.
-//!
-//! # The birth-fraction substitution
-//!
-//! [Spawn timing](../../../docs/ir-spec.md#spawn-timing) asks for an
-//! element's *first* `element` pass to scale `dt` by its birth fraction, and
-//! for nothing else to change. Rather than carrying an extra "is this my
-//! first update" flag, `birth_frac` does double duty: `spawn` writes the
-//! real fraction in `(0, 1]`, `element` reads it, computes `_dt = u.dt *
-//! birth_frac`, uses `_dt` everywhere the block reads the `dt` ambient, and
-//! then always writes `1.0` back. The next frame reads `1.0`, and `_dt`
-//! becomes `u.dt` unscaled — the correction expires itself by construction,
-//! with no branch and no second piece of state.
-//!
-//! # What is per frame and what is per substep
-//!
-//! The spec's WGSL lowering section says `param` values "pack into a single
-//! uniform buffer along with `t`, `dt`, `capacity`, and the layer's seed
-//! salt". Three of those four do. **`t` does not**, and the split is the
-//! useful thing to understand about this file.
-//!
-//! A `param`, a signal binding, and the camera are *input*: external control,
-//! genuinely sampled once per frame, held constant across that frame's
-//! substeps. `t` is not input, it is the simulation's own clock, and a frame
-//! of two steps has to leave the simulation exactly where two frames of one
-//! step would — that invariance is the entire reason substepping exists. Hold
-//! `t` constant across substeps and both passes run at the same instant, which
-//! any procedure reading `t` can see. So `t` is per substep, alongside the
-//! spawn count and the seed base, in [`crate::layout::step_args`].
-//!
-//! Where the live range ends is neither: it is GPU state after compaction,
-//! in [`crate::layout::counts`]. Putting it in the uniform buffer (which an
-//! earlier revision did) meant a `live_count` field nothing could write
-//! truthfully.
+//! Handles:
+//! - Double-buffered element updates (`prev` / `next` storage bindings).
+//! - Static vs compacted procedures (supporting optional prefix-sum survivor compaction).
+//! - Substep parameters (`step_args`) and birth-fraction time delta scaling.
 
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
@@ -246,11 +174,7 @@ fn emit_stmts(
     }
 }
 
-/// The engine-state bindings that share [`group::UNIFORMS`] with the uniform
-/// buffer: the counts buffer both entry points read, and — for a compacted
-/// procedure only — the scan's destination indices. A static procedure must
-/// not declare `dest`, or naga would require the engine to bind a buffer
-/// that has no reason to exist.
+/// Writes engine-state storage buffer bindings (`Counts` and optional prefix scan `dest`).
 fn write_engine_bindings(out: &mut String, compacted: bool) {
     out.push_str(layout::counts::WGSL);
     out.push_str(&format!(
@@ -322,12 +246,7 @@ fn spawn_derivations(derived: &[Attr]) -> String {
     out
 }
 
-/// The same slots, on every step.
-///
-/// `velocity` is the one place this crate divides by the step, and it is
-/// deliberate: see `karakuri_ir::Derivation::is_stored`. It uses `_dt` rather
-/// than `u.dt`, so an element on its first update is differenced against the
-/// fraction of a step it actually lived — the same correction the body gets.
+/// Emits statements calculating derived attributes such as `birth_t` or `velocity`.
 fn element_derivations(derived: &[Attr]) -> String {
     let mut out = String::new();
     if derived.contains(&Attr::Age) {
@@ -366,18 +285,10 @@ fn spawn(@builtin(global_invocation_id) gid: vec3<u32>) {{
     )
 }
 
-/// The whole of compaction, as it reaches a lowered block: read `prev[i]`,
-/// write `next[dest[i]]`. `dest[i] <= i` always, but that is not why this is
-/// safe to do in one pass — `prev` and `next` are different buffers, so an
-/// invocation's write can never land on any invocation's read.
-///
-/// A static procedure gets `out = i` and no `prev_alive` read, because its
-/// alive flags are all 1 and its scan would be the identity.
+/// Emits the compute entry point for element update, compacting dead slots if enabled.
 fn element_entry(body: &str, compacted: bool, derivations: &str) -> String {
     let skip_dead = if compacted {
-        // Its slot is being reclaimed by this step's scan; `dest[i]` for a
-        // dead element is some survivor's destination, so writing through it
-        // would corrupt that survivor.
+        // Skip dead elements to prevent overwriting compacted survivors.
         "    if prev_alive[i] == 0u { return; }\n"
     } else {
         ""

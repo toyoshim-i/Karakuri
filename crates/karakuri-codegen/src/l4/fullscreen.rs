@@ -31,12 +31,7 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
 
 ";
 
-/// The ray, built once at the top of a fullscreen fragment stage.
-///
-/// `cam.right` and `cam.up` arrive pre-scaled by the field of view and the
-/// aspect ratio — see `camera::State::basis` — so this is an interpolation and a
-/// normalize rather than a projection. Everything about *which* projection is
-/// on the engine's side of the seam, where the camera is.
+/// Reconstructs view ray in world space for fullscreen fragment stage.
 const FULLSCREEN_RAY: &str =
     "    let _ndc = vec2<f32>(in.point_coord.x * 2.0 - 1.0, 1.0 - in.point_coord.y * 2.0);
     let ray = normalize(cam.fwd + cam.right * _ndc.x + cam.up * _ndc.y);
@@ -46,13 +41,7 @@ const FULLSCREEN_RAY: &str =
 /// path leaves free by consuming no attribute.
 const FULLSCREEN_CAMERA_GROUP: u32 = group::ATTRS;
 
-/// The whole of a [`Topology::Fullscreen`] shader.
-///
-/// Split out rather than branched into `generate_l4` because almost nothing is
-/// shared: no element buffer is bound, no attribute is read, no varying is
-/// chosen, and the vertex stage is [`FULLSCREEN_VS`] rather than anything the
-/// procedure wrote. What *is* shared is the uniform — the same `t`, `beats` and
-/// params every L4 gets — plus the four fields the ray needs.
+/// Lowers an L4 procedure with [`Topology::Fullscreen`] to a fullscreen vertex/fragment pipeline.
 pub(super) fn generate_fullscreen(
     checked: &Checked,
     fragment_blk: &TBlock,
@@ -64,10 +53,7 @@ pub(super) fn generate_fullscreen(
     b.field("t", "f32");
     b.field("beats", "f32");
     b.field("seed_salt", "u32");
-    // **One `u32` per declared Source slot**, holding the identity of the
-    // geometry an edge bound to it. A comparison against `source` is then two
-    // uniform loads — the same value in every lane, which is the branch a GPU
-    // costs least.
+    // Emits one u32 per declared source slot.
     for slot in checked.source_slots() {
         b.source_slot_field(slot);
     }
@@ -76,16 +62,7 @@ pub(super) fn generate_fullscreen(
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
-    // **A spliced field's params live here**, under a prefix of their own so
-    // that this procedure and the field it evaluates may both declare
-    // `exposure` — see `layout::mangle_field_param`.
-    //
-    // **One set per slot, and only for the slots the procedure evaluates.** The
-    // field used to be spliced into every module in the Set, so a renderer that
-    // never mentions one still carried its params and still failed to compile
-    // if the field's body did — a `.kir` taking down shaders that have nothing
-    // to do with it. The slot is in the name because two fields in one caller
-    // are two independent sets of values.
+    // Spliced field parameters, prefixed with the slot name to avoid naming collisions.
     let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
@@ -105,17 +82,9 @@ pub(super) fn generate_fullscreen(
     let mut src = String::new();
     layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
     src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
-    // **Unconditionally, unlike the per-element path.** [`FULLSCREEN_RAY`] is
-    // emitted whether or not the procedure names `ray`, so this binding is
-    // always read — a marcher with no ray in it would be a fullscreen quad, and
-    // the one that draws a flat colour still pays for a basis it computes and
-    // discards.
+    // Camera basis buffer is bound unconditionally for ray calculation.
     write_camera_binding(&mut src, FULLSCREEN_CAMERA_GROUP);
-    // **The field's helpers before its body, and its body before every entry
-    // point.** A spliced field lives in this module, so this module's prelude
-    // has to carry what it calls — the prelude is demand-driven, and a field
-    // calling `sd_torus` in a caller that does not would otherwise produce a
-    // call to a function nothing emitted, in a shader that checked clean.
+    // Absorb prelude requirements and functions needed by spliced fields.
     for f in &splices {
         req.absorb(&f.requirements);
     }
@@ -137,13 +106,7 @@ pub(super) fn generate_fullscreen(
     src.push_str("    var _color: vec4<f32>;\n");
     src.push_str(&body);
     if weighted {
-        // **A frame is not at a depth**, so there is nothing to normalise
-        // against the camera's planes and no `depth_range` in the uniform above.
-        // Every fragment weighs the same, which for one layer per texel makes
-        // the resolve the identity — and that is exactly why `Set::build`
-        // refuses this pairing rather than paying two targets and a pass for it.
-        // The generator stays total anyway: a rule about what a *Set* is worth
-        // building is not a hole in what this function can lower.
+        // Fullscreen passes have constant zero depth.
         src.push_str("    let _depth01 = 0.0;\n");
         src.push_str(WEIGHTED_FS_EPILOGUE);
         src.push_str("}\n");
@@ -151,10 +114,7 @@ pub(super) fn generate_fullscreen(
         src.push_str("    return _color;\n}\n");
     }
 
-    // Echoed back unchanged, as the per-element path does. Nothing here reads
-    // an element — the check pass refuses a fullscreen `consumes` — but the
-    // caller's contract is that an `L4Shader` says what buffer it expects, and
-    // "the one its L1 wrote, and it reads none of it" is the honest answer.
+    // Retain element layout contract for compatibility with pipeline binding expectations.
     L4Shader {
         source: src,
         uniform_layout,

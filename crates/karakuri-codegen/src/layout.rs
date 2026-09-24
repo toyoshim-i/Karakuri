@@ -1,96 +1,10 @@
-//! The binding layout contract.
+//! Pipeline binding layout specifications and buffer contracts.
 //!
-//! This module is documentation with a compiler behind it. `karakuri-engine`
-//! drives whatever WGSL `karakuri-codegen` emits by creating buffers, bind
-//! groups, and pipelines that match these group/binding numbers, this
-//! uniform field order, and this workgroup size exactly — none of it is
-//! meant to be rediscovered by reading the generated WGSL text. Treat it as
-//! an API, not an implementation detail: a change here is a breaking change
-//! for the engine.
-//!
-//! # Per-element state: placed elsewhere, bound here
-//!
-//! Where an element's bytes go is not this module's rule any more. All
-//! per-element state that lives in the *same* buffer as everything else of its
-//! own direction packs into one generated `Element` struct — one slot per
-//! entry, each at its own width and at the offset WGSL's layout rules give it —
-//! and `alive` leaves the struct entirely for its own tight `array<u32>` at
-//! [`karakuri_ir::layout::ALIVE_BYTES`] per element. Both rules live in
-//! [`karakuri_ir::layout`], whose module doc argues them; they moved there
-//! because stage 4's cost estimate has to charge what the engine allocates and
-//! cannot call a crate that depends on it, so it kept a second copy of the
-//! arithmetic and the copy drifted.
-//!
-//! What is left here is what a *binding* is: [`binding::ELEMENT`] is the
-//! `array<Element>` of that layout, [`binding::ALIVE`] is the flag array beside
-//! it, and the group numbers below say where each is bound.
-//!
-//! # The counts buffer: engine state the entry points cannot work without
-//!
-//! Neither entry point can know how far the live range extends, and since
-//! compaction moved that number onto the GPU nothing host-side knows it
-//! either. One storage buffer — [`counts`] — carries it, alongside the
-//! indirect arguments derived from it, and is bound read-only to both L1
-//! entry points at group [`group::UNIFORMS`], binding [`binding::COUNTS`].
-//! It is engine state neither entry point can compute, exactly like `dt` and
-//! `capacity` in the uniform buffer beside it, which is why it shares that
-//! group rather than getting one of its own — but unlike them it is written
-//! on the GPU and changes once per *step*, not once per frame. The per-step
-//! quantities the host does still own are in [`step_args`].
-//!
-//! # L1 (compute)
-//!
-//! - Group [`group::UNIFORMS`], binding [`binding::UNIFORM`]: the uniform
-//!   buffer. Binding [`binding::COUNTS`]: the [`counts`] buffer, read-only
-//!   storage. Binding [`binding::DEST`]: `array<u32>`, the scan's
-//!   destination indices, read-only storage — **present only for a
-//!   compacted procedure**, since a static one's `element` writes in place
-//!   and must not pay for a buffer read it cannot need.
-//! - Group [`group::PREV`]: binding [`binding::ELEMENT`] is `array<Element>`
-//!   read-only, the previous frame's values; binding [`binding::ALIVE`] is
-//!   `array<u32>` read-only, the previous frame's alive flags.
-//! - Group [`group::NEXT`]: the same two bindings, holding the next frame's
-//!   values, both read-write.
-//! - Group [`group::STEP`], binding [`binding::UNIFORM`]: the
-//!   [`step_args`] uniform, bound at a per-substep offset. `spawn` only.
-//!
-//! Double buffering is not a binding-number swap: the two groups keep fixed
-//! roles ("prev" / "next") in the shader, and the engine swaps which physical
-//! buffer backs each group's bind group between frames. This is the standard
-//! ping-pong idiom and it means the generated WGSL never has to change to
-//! participate in it.
-//!
-//! Both `spawn` and `element` use [`WORKGROUP_SIZE`]. `element` dispatches
-//! indirectly over `counts.range` and writes each survivor at `dest[i]` (or
-//! at `i`, for a static procedure); `spawn` dispatches over the frame's
-//! new-element count and writes at `counts.survivors + invocation`. The
-//! prefix-sum scan that fills `dest` is engine infrastructure this crate
-//! does not generate — see the module doc on `l1.rs` for why.
-//!
-//! # L4 (render)
-//!
-//! - Group [`group::UNIFORMS`], binding [`binding::UNIFORM`]: the
-//!   `L4Uniforms` uniform buffer (see [`crate::l4`]).
-//! - Group [`group::ATTRS`], binding [`binding::ELEMENT`]: `array<Element>`
-//!   read-only, indexed by `@builtin(instance_index)`. This is the L1 side's
-//!   [`group::PREV`] element buffer from the frame just computed — L4 never
-//!   sees "next", only the current, already-swapped state. Binding
-//!   [`binding::ALIVE`]: the matching alive flags, also read-only. L4 draws
-//!   `counts.range` instances, which is not the alive count: elements killed
-//!   during the step that just ran are scattered anywhere through
-//!   `[0, counts.survivors)` — compaction placed them by their pre-kill
-//!   position, and the kill only cleared a flag — and still occupy those
-//!   slots until the next step's scan reclaims them. So the vertex stage has
-//!   to read the flag per instance and skip them, not trim a tail.
-//!
-//! L4's `Element` struct must be **byte-identical** to the L1 procedure it is
-//! paired with, because it reads the same physical buffer L1 wrote — see
-//! [`karakuri_ir::layout::generate_element_layout`] and
-//! [`crate::l4::generate_l4`]'s signature, which takes the layout rather than
-//! deriving its own.
-//!
-//! Six vertices per instance (`@builtin(vertex_index)` 0..6), no vertex
-//! buffers: see the L4 module doc for the quad-expansion this exists for.
+//! Defines the group and binding slot layout shared between `karakuri-codegen`
+//! and `karakuri-engine`:
+//! - Compute (L1/L2/L3): Uniforms, counts buffers, and ping-pong state bindings (`PREV`, `NEXT`).
+//! - Render (L4): Uniforms, element attribute buffers, and camera bindings.
+//! - Post-process (L5): Texture samplers and input/output framebuffer textures.
 
 use karakuri_ir::layout::{align_up, ElementLayout, StorageElemTy};
 
@@ -150,22 +64,7 @@ pub mod binding {
     pub const DEST: u32 = 2;
 }
 
-/// The engine's per-frame count state, and the indirect arguments derived
-/// from it, in one buffer.
-///
-/// One buffer rather than three because every consumer of one of these
-/// numbers is a consumer of another: the scan writes `survivors`, `advance`
-/// turns that into `range` and rewrites the two argument blocks from it, and
-/// `element` reads `range` in the same step that the scan wrote `survivors`.
-/// Splitting them would mean three buffers whose contents can only ever be
-/// read together.
-///
-/// The two argument blocks are at fixed offsets because the GPU reads them
-/// as arguments, not as struct fields: `dispatch_workgroups_indirect` wants
-/// three `u32`s at [`counts::ELEM_XYZ`] and `draw_indirect` wants four at
-/// [`counts::DRAW`], both in wgpu's own argument order. `range` sits in the
-/// fourth word of the dispatch block precisely because that word is not part
-/// of the dispatch arguments and is therefore free.
+/// Buffer offsets and WGSL declarations for engine-state counters and indirect dispatch arguments.
 pub mod counts {
     /// `dispatch_workgroups_indirect` arguments for `element`: three `u32`s.
     pub const ELEM_XYZ: u64 = 0;
@@ -228,12 +127,10 @@ struct CameraState {
 };
 ";
 
-    /// What the derivation writes and every L4 reads.
+    /// WGSL definition of the Camera uniform struct.
     ///
-    /// `right` and `up` arrive **pre-scaled** by the field of view and the
-    /// aspect ratio, so a marching fragment's ray is an interpolation and a
-    /// normalize rather than a projection — see `karakuri_engine::camera::Basis`.
-    /// `depth_range` is `(near, 1 / (far - near))`, so the shader multiplies.
+    /// `right` and `up` are pre-scaled by FOV and aspect ratio.
+    /// `depth_range` contains `(near, 1 / (far - near))`.
     pub const WGSL: &str = "\
 struct Camera {
     view_proj: mat4x4<f32>,
@@ -251,35 +148,14 @@ struct Camera {
 ";
 }
 
-/// Per-substep spawn parameters: the one piece of engine state that differs
-/// between the substeps of a single frame.
-///
-/// Per-substep state, as against the per-frame state in the uniform buffer.
-///
-/// The dividing line is **input versus simulation state**. A `param`, a signal
-/// binding, and the camera are external control, genuinely sampled once per
-/// frame, and they stay in the uniform. `t` and the spawn count are the
-/// simulation's own clock, and they advance once per step or substepping does
-/// not do the one thing it exists for: a frame of two steps has to put the
-/// simulation exactly where two frames of one step would. Holding `t` constant
-/// across substeps runs both passes at the same instant, which any procedure
-/// reading `t` can see; batching a frame's spawns into its first substep puts
-/// two frames of elements in before the second `element` pass.
-///
-/// A `queue.write_buffer` cannot be interleaved between commands already in an
-/// encoder, so the engine writes every substep's entry up front, at
-/// [`step_args::STRIDE`] apart, and binds the right one per substep.
+/// Per-substep spawn parameters differing between substeps of a single frame.
 pub mod step_args {
     /// Byte size of one entry.
     pub const SIZE: u64 = 20;
-    /// Distance between consecutive substeps' entries. 256 is the WebGPU
-    /// default `min_uniform_buffer_offset_alignment` and a multiple of every
-    /// smaller value an adapter may report, so a binding at `k * STRIDE` is
-    /// always legally aligned.
+    /// Distance between consecutive substeps' entries, aligned to 256-byte WebGPU offset.
     pub const STRIDE: u64 = 256;
 
-    /// The WGSL declaration, shared with the engine's `advance` pass for the
-    /// same reason [`super::counts::WGSL`] is.
+    /// The WGSL declaration shared with engine passes.
     pub const WGSL: &str = "\
 struct StepArgs {
     spawn_count: u32,
@@ -291,19 +167,12 @@ struct StepArgs {
 ";
 }
 
-/// Writes `struct Element { ... };` for `layout`. Shared by [`crate::l1`]
-/// and [`crate::l4`] so the two crate-internal call sites can never drift —
-/// the whole point of L4 taking an [`ElementLayout`] instead of deriving one
-/// from `consumes` is that this text has to be byte-identical between the
-/// two, since they address the same physical buffer.
+/// Writes `struct Element { ... };` for `layout`.
 pub fn write_element_struct(out: &mut String, layout: &ElementLayout) {
     write_element_struct_named(out, "Element", layout);
 }
 
-/// The same, under a chosen name. An L2 addresses **two** element buffers of
-/// different shapes — what reached it and what it writes — so it needs two
-/// structs in one module, and neither can be called `Element` without the other
-/// being called something else. See [`crate::l2`].
+/// Writes a named element struct definition from an `ElementLayout`.
 pub fn write_element_struct_named(out: &mut String, name: &str, layout: &ElementLayout) {
     out.push_str(&format!("struct {name} {{\n"));
     for s in &layout.slots {
@@ -312,56 +181,22 @@ pub fn write_element_struct_named(out: &mut String, name: &str, layout: &Element
     out.push_str("};\n");
 }
 
-/// One field of a generated uniform struct, with the byte offset it was
-/// placed at. Offsets follow WGSL's own uniform-address-space layout rules
-/// (`vec3` aligns to 16 despite being 12 bytes, etc.) — this struct records
-/// what the generator computed, it does not invent a different layout than
-/// the WGSL text it emits.
+/// Metadata describing one field in a generated uniform buffer struct.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UniformField {
-    /// The semantic name: a declared `param`'s own name verbatim, or one of
-    /// this crate's fixed engine fields (`t`, `dt`, `capacity`, …). This is
-    /// what `karakuri-engine`'s uniform packer looks a field up by — a Set
-    /// record names a param by its declared `.kir` name
-    /// (`{"t":"param","key":"radius",...}`), never by `wgsl_name`, so the
-    /// packer's lookups have to key on this field, not on the WGSL spelling.
+    /// Semantic identifier (e.g., parameter or engine variable name).
     pub name: String,
-    /// The identifier actually written in the WGSL struct declaration and
-    /// at every `u.<field>` read site. Equal to `name` for this crate's own
-    /// fixed fields, since it always chooses those itself and they are
-    /// never a WGSL reserved word by construction. For a `param`, always
-    /// [`mangle_param`]`(name)` — see there for why every param is mangled,
-    /// not only the ones that happen to collide with a reserved word today.
+    /// Mangled WGSL field identifier.
     pub wgsl_name: String,
-    /// WGSL type spelling, e.g. `"f32"`, `"vec3<f32>"`, `"mat4x4<f32>"`.
+    /// WGSL type string (e.g. `"f32"`).
     pub wgsl_ty: &'static str,
+    /// Byte offset within uniform buffer.
     pub offset: u32,
+    /// Field byte size.
     pub size: u32,
 }
 
-/// Mangles a `param`'s declared name into the identifier this crate writes
-/// for its uniform struct field, at both the declaration site and every
-/// `u.<field>` read.
-///
-/// Unconditionally — for every param, not only the ones that happen to
-/// collide with a WGSL reserved word today. WGSL reserves a long list of
-/// identifiers `.kir` does not (`array`, `struct`, `loop`, `switch`,
-/// `return`, `discard`, `const`, `override`, `enable`, `bitcast`, `fn`,
-/// `atomic`, `ptr`, `sampler`, and more), and a generator that only mangled
-/// names it recognised from a blocklist would need to track the WGSL
-/// specification forever to stay correct as it grows. That is exactly the
-/// reasoning that made blanket mangling the right call for `let`/`var`
-/// locals rather than trying to enumerate which spellings a procedure might
-/// plausibly reach for — `param array : float ...` is not contrived, a
-/// generator writing a procedure about a particle array reaches for exactly
-/// that word.
-///
-/// A different prefix from [`crate::lower::mangle_local`]'s (`param_` here,
-/// `usr_` there) purely so a human reading generated WGSL can tell at a
-/// glance which kind of `.kir` declaration a name came from. It does not
-/// matter for correctness: a param is always read through `u.` field
-/// access and a local is always a bare identifier, so the two namespaces
-/// cannot collide with each other even sharing one prefix.
+/// Prefixes user parameter identifiers with `param_` to avoid WGSL keyword collisions.
 pub fn mangle_param(name: &str) -> String {
     format!("param_{name}")
 }
@@ -380,14 +215,7 @@ pub fn field_param_key(slot: &str, name: &str) -> String {
     format!("field\u{1}{slot}\u{1}{name}")
 }
 
-/// The WGSL spelling of a **Source slot's** identity, in the uniform of the
-/// procedure that declared it.
-///
-/// A prefix of its own, on [`mangle_param`]'s terms: the slot name is `.kir`
-/// text, so `uses param_x : Source` beside `param x : float` would otherwise be
-/// two fields of one WGSL name. A different prefix from a param's and from a
-/// field param's purely so a human reading generated WGSL can tell at a glance
-/// which kind of declaration a name came from.
+/// Returns the WGSL uniform identifier for a declared Source slot.
 pub fn mangle_source_slot(slot: &str) -> String {
     format!("source_{slot}")
 }
@@ -399,19 +227,11 @@ pub fn source_slot_key(slot: &str) -> String {
     format!("source\u{1}{slot}")
 }
 
-/// The complete field order and size of a generated uniform struct. This is
-/// the other half of the "byte offsets" contract alongside
-/// [`karakuri_ir::layout::ElementSlot`] —
-/// `karakuri-engine` packs the CPU-side struct that gets uploaded to this
-/// binding by walking `fields` in order, not by guessing at WGSL's layout
-/// rules independently.
+/// Memory layout of a generated uniform struct, walked in order by the engine to pack data.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UniformLayout {
     pub fields: Vec<UniformField>,
-    /// Always a multiple of 16. A uniform buffer binding whose size is not
-    /// is a validation error reported nowhere near this function, so the
-    /// layout builder pads to it unconditionally rather than leaving it to
-    /// chance — see the `total_size_is_sixteen_byte_aligned` test.
+    /// Total uniform buffer size, aligned to a multiple of 16 bytes per WGSL rules.
     pub total_size: u32,
 }
 
@@ -502,11 +322,7 @@ impl UniformLayoutBuilder {
         self
     }
 
-    /// Finishes the layout, padding to a 16-byte multiple. Returns the
-    /// layout plus the number of trailing `f32` pad slots to declare in
-    /// WGSL — see [`write_uniform_struct`] for how those are spelled
-    /// (omitted from `fields` either way: it is wire padding, not a value
-    /// the engine ever sets).
+    /// Finishes the layout, padding to a 16-byte multiple. Returns the layout and trailing pad count.
     pub fn finish(self) -> (UniformLayout, u32) {
         let total_size = align_up(self.offset, 16);
         let pad_bytes = total_size - self.offset;
@@ -527,18 +343,7 @@ impl Default for UniformLayoutBuilder {
     }
 }
 
-/// Writes `struct Uniforms { ... };` for `layout`, plus `pad_f32` trailing
-/// pad fields. Shared by [`crate::l1`] and [`crate::l4`] — both build a
-/// [`UniformLayout`] and need identical WGSL for it.
-///
-/// Padding is emitted as individually named scalar fields (`_pad0`,
-/// `_pad1`, …; just `_pad` when there is exactly one), never as
-/// `array<f32, N>`. WGSL requires array elements inside a uniform-address-
-/// space struct to have a stride that is itself a multiple of 16 — true of
-/// every *attribute* array this crate emits (`array<vec4<f32>>`, by
-/// design), but `array<f32, N>` has a 4-byte stride and fails validation
-/// the moment `pad_f32` is 2 or 3, which single-field padding never
-/// triggers because a lone scalar field is not an array at all.
+/// Emits `struct Uniforms { ... };` in WGSL, adding explicit scalar padding fields as needed.
 pub fn write_uniform_struct(out: &mut String, layout: &UniformLayout, pad_f32: u32) {
     out.push_str("struct Uniforms {\n");
     for f in &layout.fields {
@@ -596,12 +401,8 @@ mod tests {
 
     #[test]
     fn padding_of_two_or_three_f32_never_becomes_an_array() {
-        // WGSL requires array elements inside a uniform-address-space struct
-        // to have a stride that is itself a multiple of 16; `array<f32, N>`
-        // has a 4-byte stride and fails validation for N >= 2, so multi-slot
-        // padding must be individually named scalar fields instead. A single
-        // pad field (N == 1) was already covered before this was caught by
-        // an end-to-end naga run, which is exactly the gap this locks shut.
+        // WGSL requires uniform array elements to have a 16-byte aligned stride.
+        // `array<f32, N>` has a 4-byte stride, so multi-slot padding uses scalar fields.
         for param_count in 0..6 {
             let mut b = UniformLayoutBuilder::new();
             b.field("t", "f32");

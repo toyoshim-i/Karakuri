@@ -36,16 +36,7 @@ fn compiled(src: &str) -> karakuri_ir::typed::Checked {
     karakuri_ir::check::check(&parsed).expect("checks")
 }
 
-/// **Every caller kind, through a real WGSL front end.**
-///
-/// The engine's own tests reach one shape — a fullscreen L4 — so three of the
-/// five splice sites had no coverage at any level, and deleting the splice from
-/// any of them left the whole workspace green. What breaks is not subtle: a
-/// module that names `_field_shape_at` and does not define it.
-///
-/// The field above reads `t` and `beats`, which each caller spells its own way,
-/// and calls `fbm`, whose unrolled `perlin` requirement belongs to the field and
-/// has to reach the caller's prelude.
+/// Tests that spliced field functions and requirements validate across all caller kinds.
 #[test]
 fn a_spliced_field_validates_in_every_kind_of_caller() {
     let field = spliced();
@@ -262,14 +253,7 @@ proc marcher {
 // Compares host-side `ElementSlot::offset` against Naga type layout offsets.
 // ---------------------------------------------------------------------------
 
-/// naga's own placement for one generated struct: each member's name and byte
-/// offset in declaration order, and the stride it gives `array<name>`.
-///
-/// **The array stride rather than the struct's span**, because the stride is
-/// the number the engine actually multiplies a capacity by. WGSL rounds a
-/// struct's size up to its own alignment to get it, so the two agree — and the
-/// caller asserts that they do, since a front end that disagreed with itself
-/// there would make every other assertion here meaningless.
+/// Extracts member byte offsets and array stride from parsed Naga WGSL AST for a struct.
 fn naga_placement(source: &str, name: &str) -> (Vec<(String, u32)>, u32, u32) {
     let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
         panic!(
@@ -357,24 +341,14 @@ proc placed {{
     ))
 }
 
-/// **The one case the whole saving comes from: a `vec3` followed by a scalar.**
-///
-/// `position` is 16-byte aligned and 12 bytes long, so 28..32 is addressable
-/// and `size` is placed there rather than at 32 — one 16-byte block for the
-/// pair rather than two. That is the packing rule this project relies on, and
-/// the assertion is that WGSL agrees it is a rule and not a hope: get it wrong
-/// and every element after the first reads four bytes into its predecessor.
+/// Tests that Naga packs a scalar attribute into the 4-byte padding trailing a vec3.
 #[test]
 fn naga_agrees_a_scalar_lands_in_the_padding_a_vec3_leaves() {
     let l1 = l1_emitting("position, size");
     let shader = karakuri_codegen::generate_l1(&l1, &[], &[]);
     validate(&shader.source);
     assert_naga_agrees(&shader.source, "Element", &shader.element_layout);
-    // **And the number itself, because agreement is not enough on its own.**
-    // The struct's *text* is written from the same slots the offsets are, so a
-    // wrong element type — `size` declared as a `vec3` — moves the declaration
-    // and the offset together and naga agrees about the wrong thing. These two
-    // are what says which packing was agreed on.
+    // Verify explicit offset and stride values.
     assert_eq!(shader.element_layout.offset_of("size"), 28);
     assert_eq!(shader.element_layout.stride, 32);
 }
@@ -409,12 +383,7 @@ fn naga_agrees_with_the_element_layout_in_a_renderer() {
     assert_naga_agrees(&shader.source, "Element", &layout);
 }
 
-/// **Both of an L2's structs, which are different shapes in one module.**
-///
-/// The output carries `copy` where the input does not, so the two disagree
-/// about everything after the first eight bytes — and a single struct checked
-/// twice would not notice a generator that emitted the input's shape under the
-/// output's name.
+/// Tests that Naga validates both ElementIn and ElementOut layouts in deforming compute shaders.
 #[test]
 fn naga_agrees_with_both_element_layouts_in_a_deform() {
     let shader = compiled_l2(
@@ -437,11 +406,7 @@ fn naga_agrees_with_both_element_layouts_in_a_deform() {
     );
 }
 
-/// **A derived attribute's stored slot is placed by the same rules**, and it is
-/// the one slot no `emit` list mentions: `velocity` exists here because a
-/// downstream consumer named it, with the `velocity_lived` flag beside it in
-/// the four bytes that `vec3` leaves. A slot nothing declares is exactly where
-/// a placement rule is easiest to get wrong unnoticed.
+/// Tests that derived attribute slots (e.g. velocity_lived) match Naga layout rules.
 #[test]
 fn naga_agrees_about_a_slot_no_procedure_declared() {
     let l1 = l1_emitting("position");
@@ -451,16 +416,7 @@ fn naga_agrees_about_a_slot_no_procedure_declared() {
     assert_naga_agrees(&shader.source, "Element", &shader.element_layout);
 }
 
-/// **`source` and a Source slot both lower to a uniform read, in every kind
-/// that has one**, and the result is WGSL a front end accepts.
-///
-/// The two halves are one claim about where the value lives. `source` is
-/// `u.seed_salt` — the field `Set::prepare` has been writing the geometry's
-/// salt into all along, which is why the read needed no new plumbing — and a
-/// declared slot is a `u32` of its own beside it, holding whatever geometry an
-/// edge named. Neither is per element: nothing lands in a varying, nothing
-/// lands in the element struct, and a fullscreen renderer with no element at
-/// all reads both.
+/// Tests that source ambient and source slots lower to valid uniform reads across procedure kinds.
 #[test]
 fn source_and_a_source_slot_lower_to_uniform_reads() {
     let layout = karakuri_ir::layout::generate_element_layout(

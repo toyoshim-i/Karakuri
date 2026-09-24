@@ -1,21 +1,6 @@
 #![allow(unused_imports, dead_code)]
 
-//! Feeds generated WGSL through a real front end.
-//!
-//! Everything in `src/lib.rs`'s unit tests asserts on the emitted *text*,
-//! which only proves the generator produced what it meant to produce — not
-//! that a GPU driver would accept it. `naga` is already in the dependency
-//! tree via `wgpu` (`karakuri-engine`); pulling it in directly here lets
-//! these tests parse and validate the output instead of trusting that it
-//! merely looks right. A generator whose output is never fed to a compiler
-//! emits plausible nonsense, and this is the test that would have caught
-//! this crate doing that.
-//!
-//! The two fixtures below are hand-built `Checked` trees shaped like the
-//! ir-spec's own `drift_shell` (L1) and `soft_points` (L4) examples, close
-//! enough to exercise hashing, noise, curl, an `if`/`kill()` branch, `mat4`
-//! multiplication, and `hsv_to_rgb` together — not just the narrow feature
-//! one unit test isolates.
+//! Helper fixtures and assertions for validating generated WGSL using naga.
 
 pub use karakuri_ir::builtin::Builtin;
 pub use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
@@ -411,19 +396,7 @@ pub fn soft_points() -> Checked {
     }
 }
 
-/// An L1 procedure whose `let`s are named after every bare identifier this
-/// crate's L1 lowering emits: the uniform binding (`u`), the engine-state
-/// bindings (`counts`, `dest`, `step_args`) and their fields (`range`,
-/// `survivors`, `spawn_count`, `seed_base`), entry-point locals (`seed`,
-/// `i`, `out`, `slot`, `gid`, `birth_frac`), ambient-backed uniform fields
-/// (`t`, `dt`, `capacity`), and helper function names (`hash1`,
-/// `sphere_point`, `curl`, `mod_f32`). None of these are contrived: `u` is
-/// the ir-spec's own `drift_shell` (see `drift_shell` above); the rest are
-/// exactly as plausible for an LLM to reach for, since none of them is a
-/// reserved word in the `.kir` grammar. The block still exercises `hash1`,
-/// `sphere_point`, `curl`, and `%` on a float for real afterwards — the
-/// point is that declaring a local of the same name earlier must not have
-/// broken any of them.
+/// Returns an L1 fixture with locals named identically to internal shader keywords.
 pub fn shadowing_locals_l1() -> Checked {
     let adversarial_lets = [
         "u",
@@ -546,13 +519,7 @@ pub fn shadowing_locals_l1() -> Checked {
     }
 }
 
-/// The L4 counterpart: `let`s named after `vertex`/`fragment`'s bare
-/// identifiers — the uniform binding (`u`), the storage bindings
-/// (`elements`, `alive`), the vertex/fragment builtin parameter names
-/// (`elem`, `in`, `out`, `corner`, `corner_idx`), the storage buffer name
-/// for a consumed attribute (`attr_position`), the fragment-only ambient
-/// (`point_coord`), and two helper function names (`hash1`, `hsv_to_rgb`,
-/// `corner_of`).
+/// Returns an L4 fixture with locals named identically to internal shader keywords.
 pub fn shadowing_locals_l4() -> Checked {
     let vertex_adversarial = [
         "u",
@@ -654,14 +621,7 @@ pub fn shadowing_locals_l4() -> Checked {
     }
 }
 
-/// An L1 procedure whose `param`s are named after WGSL reserved words that
-/// are ordinary, unremarkable identifiers in `.kir` — `array` is the one
-/// that was actually caught reaching a real GPU (see the bug report this
-/// test locks in), the rest are here because WGSL reserves a great many
-/// more than IR does and a generator has no reason to avoid any of them.
-/// Every one of these is exactly the kind of word a procedure *about*
-/// something would reach for: a particle `array`, a `loop` count, a `switch`
-/// threshold.
+/// Returns an L1 fixture with parameter names matching WGSL reserved words.
 pub fn reserved_word_params_l1() -> Checked {
     let names = [
         "array", "struct", "loop", "switch", "fn", "discard", "const", "override", "ptr", "sampler",
@@ -704,12 +664,7 @@ pub fn reserved_word_params_l1() -> Checked {
     }
 }
 
-/// Every field `layout` declares must appear in `source` spelled exactly
-/// `wgsl_name`, and `karakuri-engine`'s uniform packer keys its lookups on
-/// `name` — so this also pins the two names apart: `name` must survive
-/// unmangled (Set records address a param by its declared `.kir` name, and
-/// the packer's lookups have to match that), while `wgsl_name` is what
-/// actually appears in the WGSL text.
+/// Asserts that all fields in `layout` appear with their mangled WGSL names in `source`.
 pub fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::UniformLayout) {
     for f in &layout.fields {
         let decl = format!("{}: {},", f.wgsl_name, f.wgsl_ty);
