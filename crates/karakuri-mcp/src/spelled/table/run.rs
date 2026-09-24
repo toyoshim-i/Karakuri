@@ -13,15 +13,6 @@ pub(crate) const RUN: &[Spelled] = &[
                 json!({ "output": "projector", "index": 0, "on": true }),
             )
         },
-        // **A word from a closed list and never the label on a chip**, which
-        // is the operation's own rule: a projector chip carries the display it
-        // is on and that changes when the cable does. The index is the
-        // projector's or the plugin's place in the list, and the picture has
-        // none — one output, no number.
-        //
-        // **`plugin` is taken and refused by the performer**, which is a built
-        // route rather than a missing one: there is no manifest to read a sink
-        // out of, and the refusal is where that is said.
         make: Some(|with, _| {
             let named = text_of(with, "output")?;
             let numbered = with.get("index").is_some_and(|at| !at.is_null());
@@ -83,13 +74,6 @@ pub(crate) const RUN: &[Spelled] = &[
                 json!({ "recording": "start" }),
             )
         },
-        // **No id on the wire, and the vocabulary's `Option` is always
-        // `None`.** Each start takes a fresh stamp (ADR-0289) — a second head
-        // written into a stream that already exists is read back as edits —
-        // and `crates/karakuri`'s performer refuses a named one in as many
-        // words. A key this table accepted and the frame then refused would be
-        // exactly the `ok` for work that did not happen this surface is
-        // arranged against, so the key is not offered.
         make: Some(|with, _| {
             let recording = match text_of(with, "recording")? {
                 "start" => karakuri_operation::Recording::Start { id: None },

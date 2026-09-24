@@ -29,14 +29,7 @@ fn the_vocabulary_is_the_checkers_own_table() {
     }
 }
 
-/// The same claim about the two other closed vocabularies a procedure is
-/// written against — the topologies and the stage outputs.
-///
-/// A model that is told the wrong set here writes a file the checker refuses,
-/// which is the cheap failure; one that is told *too few* never discovers a
-/// whole rendering mode, which is not cheap at all. `clip_b` is the case in
-/// point: it is the only way to draw a segment, and a page that omitted it
-/// would leave the language looking exactly as it did before lines existed.
+/// Verifies that the vocabulary documentation lists all topologies, blend modes, and stage outputs.
 #[test]
 fn the_vocabulary_lists_every_topology_every_blend_and_every_stage_output() {
     let rendered = vocabulary();
@@ -140,14 +133,7 @@ fn a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused() {
     assert!(none_held.contains("optional"), "{none_held}");
 }
 
-/// The index counts within a layer, keeping file order — the rule
-/// `history::seed` files a snapshot under, so an address that reaches the
-/// second renderer here reaches the second renderer's versions there.
-///
-/// The fixture interleaves the layers on purpose. Counting a file's position in
-/// the slot instead would hand back a real procedure at every address and the
-/// wrong one at most of them, which is the failure that reads as the language
-/// being confusing rather than as a resolver being wrong.
+/// Verifies that nodes are indexed within their own layer and maintain declaration order.
 #[test]
 fn a_node_is_indexed_within_its_own_layer() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -246,15 +232,7 @@ fn a_layer_this_language_does_not_have_is_refused_with_the_list() {
     );
 }
 
-/// A renderer is addressed by index, and an index past the stack is refused
-/// rather than folded to the first.
-///
-/// This surface used to hand back renderer 0 for any `L4` and say so in a
-/// comment, which was honest and useless: a model told to rewrite the streaks
-/// of a slot that draws sprites *and* streaks would have rewritten the sprites.
-/// The refusal names the range, because a model that can read the range can fix
-/// its own call — the same reason the checker's diagnostics come back through
-/// this surface rather than going to a terminal nobody is watching.
+/// Verifies that renderer index addressing refuses out-of-range indices with range diagnostics.
 #[test]
 fn a_renderer_is_addressed_by_index_and_a_bad_one_names_the_range() {
     let stacked = Slots::of(vec![(

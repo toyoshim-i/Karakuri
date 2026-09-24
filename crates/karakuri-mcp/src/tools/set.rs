@@ -48,18 +48,7 @@ pub fn check_set_configuration(store_path: &std::path::Path, id: &str) -> Diagno
     }
 }
 
-/// `save_set`'s arguments as the operation they name.
-///
-/// `slot` is required and `id` is not, which is [`slot_layer_index`]'s
-/// convention and its reason: an argument a client says nothing about should
-/// mean the obvious thing, and the obvious thing here is the name a key press
-/// gets. Unlike `index` there is no default written down — the loop stamps it,
-/// and stamping it here would be a second answer to what a nameless save is
-/// called, which is why [`Operation::SaveSet`]'s `id` is an `Option` as well.
-///
-/// The slot is checked before the id is read, because that is the order this
-/// tool refused in before it routed. See [`Slots::holds`] on why this is not
-/// [`Slots::nodes`].
+/// Parses `save_set` arguments into an `Operation::SaveSet`.
 pub(crate) fn kept(args: &Value, slots: &Slots) -> Result<Operation, String> {
     let slot = args
         .get("slot")
@@ -67,14 +56,6 @@ pub(crate) fn kept(args: &Value, slots: &Slots) -> Result<Operation, String> {
         .ok_or("`slot` is required and is a number")? as usize;
     let deck = deck_named(slot, slots)?;
     let id = match args.get("id") {
-        // **`null` is absent, not a bad string.** A client that builds its
-        // arguments from a record with an empty field sends `"id": null`, and
-        // that is a caller saying nothing about the id rather than one getting
-        // its type wrong — "`id` is a string" is a refusal about a mistake it
-        // did not make. Every other optional argument here reads an absent one
-        // as its default; `null` is the second spelling of absent and gets the
-        // same answer. It is *not* the same as `""`, which is a caller naming a
-        // file with no name and is still refused — see [`checked_id`].
         None | Some(Value::Null) => None,
         Some(id) => Some(checked_id(
             id.as_str()
@@ -84,16 +65,7 @@ pub(crate) fn kept(args: &Value, slots: &Slots) -> Result<Operation, String> {
     Ok(Operation::SaveSet { deck, id })
 }
 
-/// `read_set`'s argument as the operation it names.
-///
-/// The same check `save_set` puts a name through, and the reason is the same
-/// one. This id becomes `<store>/sets/<id>.kbset`, so `../../../somewhere/else`
-/// is a path, and paths never cross this protocol — see [`checked_id`] and
-/// [`Slots`]. A read is not the harmless half of that rule: it is the half that
-/// hands a file's contents back to the caller.
-///
-/// It runs here rather than in the tool because an id that is a path is not an
-/// id, and an operation carries what it acts on.
+/// Parses `read_set` arguments into an `Operation::ReadSet`.
 pub(crate) fn named_set(args: &Value) -> Result<Operation, String> {
     let id = args
         .get("id")
@@ -104,11 +76,7 @@ pub(crate) fn named_set(args: &Value) -> Result<Operation, String> {
     })
 }
 
-/// `list_sets`'s arguments as the operation they name.
-///
-/// The caller's spelling of `holds` is carried, not a folded one. The match is
-/// case-insensitive and that is [`list_sets`]'s decision about matching; an
-/// operation carries what it was asked for.
+/// Parses `list_sets` arguments into an `Operation::ListSets`.
 pub(crate) fn listing(args: &Value) -> Result<Operation, String> {
     let holds = match args.get("holds") {
         // `null` is absent, for the reason [`kept`]'s `id` says: a client
@@ -251,49 +219,10 @@ pub(crate) fn read_set(id: &str, state: &State) -> Result<String, String> {
     Ok(out)
 }
 
-/// How many Sets one answer renders, however many matched.
-///
-/// A library is not bounded by anything: a run that presses `k` between takes
-/// keeps a Set a minute, and a store two thousand deep is an ordinary end state
-/// rather than a broken one. A protocol answer is read into a context window,
-/// so the choice is between a fixed ceiling and an answer whose size is the
-/// user's own filing habits — and twenty is about what a reader can weigh in
-/// one go. What must never happen is the ceiling being reached silently, which
-/// is why [`list_sets`] says the total and the shown count in the same
-/// sentence.
+/// Maximum number of Sets returned in a single list response.
 pub const LISTED: usize = 20;
 
-/// What this store holds — every Set saved into it, most recent first, with
-/// what each one is made of.
-///
-/// The listing `read_set` needed and did not have. `read_set` takes an id and
-/// its own description ends by telling a model to use it to choose between
-/// things it has kept — which was unreachable, because nothing said what was
-/// kept. A model could read a Set it had just saved, in the same conversation,
-/// and nothing else; an operator had `ls` on a directory of `.kbset`. This is
-/// the other half, and it is the half the milestone is named for.
-///
-/// Most recent first, and the tie-break is why this sorts at all.
-/// `Store::list_sets` orders by id, which is total and repeatable and is the
-/// right order for the store to promise; *what did I just save* is the question
-/// this surface is mostly asked, so it sorts on the write time and breaks ties
-/// by id. The tie-break is not decoration: two Sets written within one tick of
-/// a coarse filesystem clock carry the same mtime, and a sort whose keys tie
-/// falls back to whatever order the entries arrived in — which is not an order,
-/// and would differ between two calls on an unchanged store. A model asking
-/// twice must not be told two different things about a library nobody touched.
-///
-/// What it does not say is what any of it declares. That needs a card per
-/// artifact and, for the element storage, a compile pass over the whole Set —
-/// which is what `read_set` is for, on one Set a caller has chosen. A listing
-/// that did it for a library would compile a thousand procedures to print a
-/// thousand lines. The per-node cards this *does* read are only the ones a name
-/// needs: a node the file named costs nothing to name here.
-///
-/// The summary comes from [`crate::setfile::summarise`], which `--list-sets`
-/// renders too. One derivation, two renderings — an operator's line and this —
-/// so the two surfaces cannot come to disagree about what a store holds or
-/// about what a node in it is called.
+/// Lists Sets stored in the library, ordered by modification time descending.
 pub(crate) fn list_sets(
     holds: Option<&str>,
     layer: Option<karakuri_operation::Layer>,

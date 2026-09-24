@@ -5,24 +5,10 @@ use serde_json::{json, Value};
 
 use crate::*;
 
-/// Serve MCP on `port`, loopback only, until the process ends.
+/// Serves MCP on `port` over loopback until the process ends.
 ///
-/// Returns the [`Reporter`] the render loop keeps. The listener and everything
-/// behind it live on threads of their own; nothing here is ever called from a
-/// frame.
-///
-/// `store` is a root and not an open [`Store`], which is the same decision
-/// [`Slots`] makes about a path and for a milder version of the same reason.
-/// Opening here would fail a whole run for a library nothing has asked for yet,
-/// and would hold one answer to "where is the store" against a directory the
-/// operator is free to move; opening per call is four `create_dir_all`s off a
-/// frame path, on a surface where the expensive thing is already a compile.
-///
-/// `slots` is a live handle and is *shared* rather than moved, exactly as
-/// `opening` beside it is: the host goes on writing it every time it re-points
-/// a slot, and this server resolves through it on every call. A run that hands
-/// this a layout taken at launch and then loads a Set onto a deck answers a
-/// model about the material it stopped running — see [`Slots`].
+/// Returns the [`Reporter`] handle for the render loop to send notifications and events.
+/// The server runs on dedicated threads decoupled from frame rendering.
 pub fn serve(
     port: u16,
     slots: Slots,
@@ -104,16 +90,7 @@ pub fn serve(
 
 // -- the transport ---------------------------------------------------------
 
-/// One connection: read requests, answer them, keep it open.
-///
-/// Hand-rolled, and what that costs is worth stating rather than assuming. The
-/// first version argued it was fine because this is "loopback, from one
-/// client". Loopback is not a boundary — any process on the machine reaches it,
-/// and so does a `fetch()` from any web page the operator happens to have open,
-/// because a POST with a plain content type needs no preflight. "One client"
-/// was an assumption about the *good* client and nothing enforced it. What
-/// enforces anything now: an `Origin` check, a body cap before any allocation,
-/// a read timeout, and a thread per connection.
+/// Handles an incoming TCP connection, processing HTTP POST JSON-RPC requests.
 fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Result<(), String> {
     stream.set_nodelay(true).ok();
     stream.set_read_timeout(Some(IDLE)).ok();
@@ -269,29 +246,7 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
 
 // -- the protocol ----------------------------------------------------------
 
-/// A reply, or the one step of a reply that must happen with [`State`]
-/// unlocked.
-///
-/// This type is the whole of the concurrency design, so it is worth stating
-/// plainly what it buys. `handle` locks the state around [`dispatch`], and
-/// there is a thread per connection: anything waited for under that lock is
-/// waited for by every other client too. Five of the six tools are a file read
-/// or a file write and finish under it — `list_sets` is the widest of them, a
-/// directory read plus a set file each and a card for each node those files
-/// left unnamed, which is a bounded count of reads off the store rather than a
-/// wait on anybody else's thread, and is why it is capped and why it compiles
-/// nothing; `read_set` is the same shape over one set. `save_set` waits for a
-/// render loop and then for a disk, which is unbounded in the only sense that
-/// matters — it depends on somebody else's frame rate.
-///
-/// So the send happens under the lock, where the channel is, and the *wait*
-/// comes back out here. Returning a value that still has work in it is the
-/// smallest thing that makes the boundary visible: a comment saying "do not
-/// wait here" would be a comment.
-///
-/// `wire_input` is the second thing that waits, and it waits for a frame rather
-/// than for a disk — which is shorter and is still somebody else's thread, so
-/// it belongs out here for exactly the same reason.
+/// A JSON-RPC reply or pending asynchronous operation to be awaited with [`State`] unlocked.
 pub(crate) enum Pending {
     /// Nothing left to do. `None` is a notification, which is answered with no body
     /// at all.

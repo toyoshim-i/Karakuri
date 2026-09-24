@@ -157,17 +157,7 @@ fn every_workflow_tool_is_published_by_tools() {
     }
 }
 
-/// A tool with no row is an operation nobody specified.
-///
-/// The page is the specification for which operations exist — that is what
-/// `karakuri-operation`'s own manual test is built on — so a tool reaching
-/// something the page does not name would be this surface inventing an
-/// operation, with no prose and no other three routes.
-///
-/// The row is matched on the operation's title, which comes from [`asked`]
-/// rather than from a table here, and on the badge's own text, which has to
-/// name the tool: a row marked `has` that named a different tool would be a
-/// route the page describes and nobody can call.
+/// Verifies that every published MCP tool corresponds to an operation documented on the manual page.
 #[test]
 fn every_tool_this_server_publishes_has_a_route_on_the_page() {
     let routes = mcp_routes();
@@ -318,56 +308,18 @@ fn every_operation_operate_takes_stands_where_the_page_says_it_does() {
     }
 }
 
-/// Not one of the seven writes a record where it is asked, which is why none of
-/// them routes through `Live::operate` and why this module performs its own.
-///
-/// And one of them writes no record at all, which is a hole this test pins
-/// rather than blesses. `wire_input` answers `NoRecord` because `Record::Edge`
-/// is a Set file's record with no `slot` to carry the deck `WireInput` names —
-/// so a rewiring during a set is the one thing a model can do on this surface
-/// that a replay does not reconstruct. It is asserted here so that the day
-/// `Record::Edge` grows a `slot` and `written` answers with it, this fails and
-/// names the tool whose answer has changed.
-///
-/// Asserted against `karakuri-operation-record` rather than against this file,
-/// in the shape ADR-0198 gave the key handler's owed list: the day one of these
-/// conversions changes — a `read_set` that logged, a `save_set` whose record
-/// moved off the landing frame — the failure names the tool that is due to move
-/// rather than leaving this surface performing something the record layer has
-/// since taken over.
+/// Verifies that published tools follow expected recording behavior (Silent, OnLanding, NoRecord).
 #[test]
 fn no_tool_writes_a_record_where_it_is_asked() {
     use karakuri_operation_record::{Current, Silent, Written};
     for (name, operation) in published() {
         let written = karakuri_operation_record::written(&operation, &Current::default());
         let expected = match name.as_str() {
-            // It asks rather than changes, and a question writes no record.
-            //
-            // **`walk_history` is here on the day it arrived**, which is
-            // the whole of why it is a tool: what it does is a listing of
-            // the store, and `written` says so rather than this file
-            // asserting it (`docs/adr/0342-…`). Landing one of the rows it
-            // returns is `RestoreProcedure`, which is `OnLanding` two arms
-            // down and reaches the frame through `operate`.
             "read_procedure" | "read_set" | "list_sets" | "walk_history" | "swap_outcome" => {
                 Silent::Question
             }
-            // Its record is written where the work lands: `Record::Save` at
-            // the frame the save landed, `Record::Procedure` when a swap
-            // lands.
             "save_set" | "write_procedure" => Silent::OnLanding,
-            // **Nothing carries it**, which is the hole named above and not
-            // a question this tool asks or work it lands.
             "wire_input" => Silent::NoRecord,
-            // **`operate` is the tool this claim is not about**, and saying
-            // so is the point rather than an exception. The seven perform
-            // themselves *because* they write nothing where they are asked;
-            // `operate` performs nothing and hands the operation to the
-            // frame the panel performs presses on, so whatever it writes is
-            // written there, by the same `written` this asserts against, at
-            // the same instant a press of it would write. The sample here is
-            // `RestoreProcedure`, whose `Record::Procedure` lands at the
-            // swap.
             "operate" => Silent::OnLanding,
             other => {
                 panic!("`{other}` is published and this test does not know what it writes")
@@ -376,9 +328,7 @@ fn no_tool_writes_a_record_where_it_is_asked() {
         assert_eq!(
             written,
             Written::Silent(expected),
-            "`{name}` names `{}`, and what it writes is no longer `{expected:?}` — this \
-             surface performs it here because there was no record to route into, and \
-             that is what has changed",
+            "`{name}` names `{}`, and what it writes is no longer `{expected:?}`",
             operation.title()
         );
     }

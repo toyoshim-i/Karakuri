@@ -67,11 +67,7 @@ pub(crate) const MASTER: &[Spelled] = &[
                 json!({ "procedure": "sha256:0000000000000000000000000000000000000000000000000000000000000000" }),
             )
         },
-        // A slot costs what its procedure costs from the frame it is added on,
-        // however its parameters are set: a chain's price is the sum over its
-        // slots and not a function of the values in them (`docs/adr/0340-…`,
-        // §5). This is the one chain call that changes what a frame costs, and
-        // the audit stands in front of it.
+        // Chain costs are the sum over slot procedures.
         make: Some(|with, _| {
             Ok(Operation::AddChainEffect {
                 procedure: address_of(with, "procedure")?,

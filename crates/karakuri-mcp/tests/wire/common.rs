@@ -1,11 +1,6 @@
 #![allow(unused_imports, dead_code)]
 
-//! **Over a socket, because everything else here passed with the server
-//! deleted.** A review mutated this module twelve ways — `handle` returning
-//! immediately, `serve` never binding, `respond` writing nothing,
-//! `read_procedure` returning a constant, `tools()` returning `[]` — and the
-//! suite was green for all twelve. A socket server whose tests never open a
-//! socket is not tested.
+//! Wire protocol integration tests over TCP sockets.
 
 pub use karakuri_ir::typed::Checked;
 pub use karakuri_ir::Kind;
@@ -23,22 +18,12 @@ pub struct Server {
     pub dir: tempfile::TempDir,
 }
 
-/// **Under the fixture's own temporary directory and beside the procedure
-/// files, which is where a real run's is not.** A run's store is
-/// `--store DIR` and its procedures are wherever the operator keeps them;
-/// what matters to these tests is that the server and the test reach one
-/// root, and that a test that never writes a set leaves an empty store
-/// rather than reading one somebody else's run left behind.
+/// Helper returning the store directory within a test temporary directory.
 pub fn store_root(dir: &tempfile::TempDir) -> std::path::PathBuf {
     dir.path().join("store")
 }
 
-/// **What a run starts with: all four classes closed.**
-///
-/// Every fixture in this module serves under it, which is what makes
-/// `the_seven_tools_still_work_with_every_class_closed` a property of the
-/// whole file rather than of one test: if the gate had caught any of the
-/// seven, this module would be red from end to end.
+/// Opening state with all classes closed.
 pub fn closed() -> karakuri_environment::Opening {
     karakuri_environment::Opening::closed()
 }
@@ -54,18 +39,7 @@ impl Server {
     }
 }
 
-/// **The pair these tests serve, written out rather than copied from
-/// `examples/`.**
-///
-/// It was a copy, and the examples are the files this very surface exists
-/// to rewrite — so the day a model renamed `soft_points` to something else
-/// over MCP, a test of *reading a procedure* failed on the new name. The
-/// comment inside `a_procedure_can_be_read_and_rewritten_over_the_wire`
-/// already recorded that lesson about the *write* half and the *read* half
-/// went on depending on the same file anyway.
-///
-/// Minimal on purpose: nothing here is about what a procedure can express,
-/// only that one goes over the wire intact and comes back.
+/// Minimal L1 test procedure.
 pub const PROBE_L1: &str = r#"
 proc probe_l1 {
 kind     L1
@@ -407,15 +381,7 @@ pub fn set_of(server: &Server, id: &str, nodes: &[(Layer, u32, Option<&str>, Has
     server.store().write_set(id, &lines).expect("set");
 }
 
-/// **Say when a Set was written**, so a test of the order does not depend on
-/// how fast a machine writes two files.
-///
-/// A Set file carries no time — that is what `StoreError::TickInSet` exists
-/// to enforce — so the mtime is the only record there is of when one was
-/// saved, and setting it is how a fixture states the fact the listing sorts
-/// on. Two Sets given the *same* second is the case worth building on
-/// purpose: it is what a coarse filesystem clock produces, and it is the
-/// case the tie-break exists for.
+/// Helper setting the modified timestamp on a saved Set file for ordering tests.
 pub fn written_at(server: &Server, id: &str, secs: u64) {
     let path = store_root(&server.dir)
         .join("sets")
@@ -437,14 +403,7 @@ pub fn at(said: &str, id: &str) -> usize {
         .unwrap_or_else(|| panic!("`{id}` is not in the listing at all: {said}"))
 }
 
-/// **A stored artifact, its card, and one Set naming it** — the fixture the
-/// card tests share.
-///
-/// It puts the source and writes the card through [`karakuri_environment::meta::card`]
-/// rather than by hand, because what these tests are about is that the
-/// numbers a model reads are the numbers the *source* declared: a card
-/// assembled in the test would only prove this module can render a record
-/// it was handed.
+/// Saves an artifact into the test store with optional metadata card and Set mapping.
 pub fn kept(server: &Server, id: &str, source: &str, card: bool) -> Hash {
     let store = server.store();
     let hash = store.put_artifact(source.as_bytes()).expect("put");
@@ -458,12 +417,7 @@ pub fn kept(server: &Server, id: &str, source: &str, card: bool) -> Hash {
     hash
 }
 
-/// A Set file naming one node, plus a record that is not a `slot`.
-///
-/// The `param` is there so the reader has something to pass over: it is a
-/// value this Set holds, which is a different question from what the
-/// artifact declares, and a reader folding the two together would render it
-/// as a knob.
+/// Helper creating a minimal Set file naming a single artifact hash.
 pub fn set_naming(server: &Server, id: &str, hash: Hash) {
     server
         .store()

@@ -1,11 +1,6 @@
 use super::*;
 
-/// A save the render loop does not answer ends, and says something true.
-///
-/// Three ways a model can be left waiting, and none of them may end in a call
-/// that never returns or in a claim nobody can support. Over the channel rather
-/// than over a socket for the reason `drained_saves` is tested that way: the
-/// bound is the whole point and a render loop is not needed to see it.
+/// Verifies that timeout handling for save operations reports truthful and bound-checked errors.
 #[test]
 fn a_save_the_loop_does_not_answer_ends_and_says_something_true() {
     // Never taken. Nothing was saved and saying so is safe.
@@ -139,11 +134,7 @@ fn a_set_id_from_a_client_is_one_path_component() {
     }
     assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());
 
-    // **The over-length refusal counts what it measures.** `str::len` is
-    // bytes and the message said "characters", which agree for everything
-    // that would get past the charset check and disagree for exactly the
-    // caller this message exists for. Thirty-three two-byte characters is
-    // sixty-six bytes, so the two readings cannot both be right here.
+    // The over-length refusal measures byte length.
     let multibyte = "é".repeat(33);
     let refusal = checked_id(&multibyte).expect_err("66 bytes is past the cap");
     assert!(

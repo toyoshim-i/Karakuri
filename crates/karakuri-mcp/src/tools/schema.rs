@@ -3,11 +3,7 @@ use serde_json::{json, Value};
 use crate::{layer_name, operate_tool, ID_PATTERN, LAYERS, MAX_ID};
 
 pub(crate) fn tools() -> Value {
-    // The layers, from [`LAYERS`] rather than written out beside it. A client
-    // is offered exactly what [`layer_named`] accepts and what [`Slots::path`]
-    // resolves, because it is the same list — the drift this closes is the one
-    // that left three of a slot's five layers unaddressable while the files
-    // were sitting right there.
+    // Retrieve available layer names from the shared `LAYERS` registry.
     let layers: Vec<&str> = LAYERS.iter().map(|layer| layer_name(*layer)).collect();
     json!([
         {
@@ -298,16 +294,6 @@ pub(crate) fn tools() -> Value {
             },
         },
         {
-            // **The eighth, and it is one of the seven's kind rather than
-            // `operate`'s**: it reads the store — `history::list` walks
-            // `<store>/history/` newest first and opens no file — which is
-            // what `list_sets` and `read_set` do and what nothing on the
-            // render loop's frame can do without paying for a directory walk
-            // on the path that must not wait
-            // ([ADR-0199](../../../docs/adr/0199-mcp-names-its-operations-and-performs-them-itself.md),
-            // `docs/adr/0342-…`). The reply is the listing, which is where a
-            // read's answer goes: back to the surface that asked
-            // ([P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)).
             "name": "walk_history",
             "description":
                 "Every version of one Set's material that compiled, most recent first. \
@@ -342,11 +328,7 @@ pub(crate) fn tools() -> Value {
                 "required": ["set"],
             },
         },
-        // **The ninth, and it is generated** — see [`operate_tool`] and
-        // [`SPELLED`]. The eight above are written out because each of them
-        // performs something only this server can; this one is the vocabulary,
-        // and a hand-written copy of it beside the vocabulary is the drift
-        // `karakuri-operation` exists to end.
+        // Automatically generated schema for the vocabulary's `operate` tool.
         operate_tool(),
         // **Agent workflow & co-performance tools (M7, ADR-0363)**
         {

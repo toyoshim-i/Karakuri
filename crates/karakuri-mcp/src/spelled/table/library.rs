@@ -55,11 +55,6 @@ pub(crate) const LIBRARY: &[Spelled] = &[
                 json!({ "set": "a_set", "favourite": true }),
             )
         },
-        // **Taken, and answered with a refusal.** `Standing::Open` and the
-        // gate are untouched (ADR-0301): a model's star is refused by the
-        // *performer*, in a sentence that names the id and says where the Set
-        // is, so what a model gets is an answer it can hand to the person
-        // sitting there rather than a name this tool does not know.
         make: Some(|with, _| {
             Ok(Operation::SetFavourite {
                 id: checked_id(text_of(with, "set")?)?,
@@ -122,16 +117,6 @@ pub(crate) const LIBRARY: &[Spelled] = &[
                 json!({ "deck": 0, "procedure": "orbit_wide" }),
             )
         },
-        // **`LoadSet`'s spelling with the name in the other tier**, which is
-        // what this operation is: a deck, and one procedure of the library
-        // written over the layer it declares (ADR-0338). `checked_id` for the
-        // same reason that row takes it — a procedure is filed under its name,
-        // so the name becomes a file name and a separator is refused here
-        // rather than resolved anywhere.
-        //
-        // **Which node it lands on is not in the payload and is not missing
-        // from it**: a procedure declares one kind and the load takes the
-        // first node of that kind, which is the limit the page writes down.
         make: Some(|with, slots| {
             Ok(Operation::LoadProcedure {
                 deck: deck_of(with, "deck", slots)?,
