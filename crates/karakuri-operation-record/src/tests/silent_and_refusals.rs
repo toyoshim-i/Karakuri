@@ -1,15 +1,6 @@
 use super::*;
 
-/// A file is not a record, and the whole arrangement family says so the
-/// same way.
-///
-/// Saving one writes `arrangements/<name>.arrangement.json` and nothing
-/// into the session stream, which is the answer that is easy to get wrong
-/// in two directions: `Silent::OnLanding` would promise a `Record` that
-/// arrives when the write lands and none ever does, and `Silent::NoRecord`
-/// would call the decision a gap. Asserted for all three members together,
-/// because what makes the answer right is that they are one family — a
-/// restore is a reset with a name in it.
+/// Verifies that arrangement lifecycle operations write surface files and emit Written::Silent(Surface) (ADR-0221).
 #[test]
 fn keeping_an_arrangement_writes_a_file_and_no_record() {
     for operation in [
@@ -33,24 +24,7 @@ fn keeping_an_arrangement_writes_a_file_and_no_record() {
     }
 }
 
-/// Editing a pattern writes a file's worth of nothing, exactly as keeping
-/// an arrangement does.
-///
-/// The first five answered `Owed(Undecided)` until 2026-09-09, and the objection
-/// at the arm was that `Silent::Surface` *"would call a pattern the
-/// console's own state, where ADR-0227 makes it library data under the
-/// store."* The test above is the refutation: an arrangement is library
-/// data under the store on the same terms and answers `Silent(Surface)`,
-/// and the sentence that pins it transfers word for word. So this asserts
-/// the second family of the same kind, all six together, because what
-/// makes the answer right is that they are one family — a step, a mute, a
-/// target, a lane taken out by `RemoveLane`, a mode and a bank are six
-/// edits to one pattern.
-///
-/// What a lane *does* is not silent and is not asserted here: a lane emits
-/// `Operation::SetOpacity` and `Operation::WriteParam`, whose records are
-/// `Record::Opacity` and `Record::Ride`, and those are what a replay reads
-/// back (ADR-0322).
+/// Verifies that pattern configuration operations write library files and emit Written::Silent(Surface) (ADR-0227, ADR-0320).
 #[test]
 fn editing_a_pattern_writes_a_file_and_no_record() {
     for operation in [
@@ -123,11 +97,7 @@ fn nothing_written_is_never_the_same_as_nothing_decided() {
 /// names the Set it is a walk of
 /// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
 ///
-/// Landing is the other row and is not silent in this way.
-/// `Operation::RestoreProcedure` is `Silent(OnLanding)` — a procedure
-/// change whose `Record::Procedure` is written where the swap lands — so a
-/// walk answering `Question` cannot be read as the store's history being
-/// outside the stream.
+/// Verifies that query operations (e.g. WalkHistory) emit Written::Silent(Question) (ADR-0342).
 #[test]
 fn a_walk_asks_and_a_landing_writes() {
     for set in [None, Some("night01".to_string())] {
@@ -194,14 +164,7 @@ fn a_scheduled_move_on_a_held_control_is_refused_and_writes_no_record() {
     );
 }
 
-/// The same four asks with the lane muted, and with no lanes read at all,
-/// write exactly the records they write with no sequencer in the room.
-///
-/// A muted lane is dropped from the reading where the pattern is read
-/// (`karakuri_pattern::Pattern::held`), so *muted* arrives here as *absent*:
-/// this is what makes the mute the operator's take-back. `lanes: None` is a
-/// reading that was not taken and refuses nothing, which is what every
-/// surface that has no sequencer relies on.
+/// Verifies that muted lanes or unread lane states do not trigger move refusals (ADR-0323).
 #[test]
 fn a_muted_lane_and_a_reading_nobody_took_refuse_nothing() {
     let over = Current {
@@ -236,13 +199,7 @@ fn a_muted_lane_and_a_reading_nobody_took_refuse_nothing() {
     }
 }
 
-/// A selection is not a move on a control, so a lane holding the deck's
-/// fader does not reach it (ADR-0323).
-///
-/// `Operation::SelectRenderer` schedules a `Record::Select` — which renderer
-/// a slot draws with, at an instant — and no lane target names it. Refusing
-/// it would be a fourth operation taken away from an operator for a
-/// collision that cannot happen.
+/// Verifies that SelectRenderer is unaffected by lanes holding channel faders (ADR-0323).
 #[test]
 fn a_renderer_choice_is_untouched_by_a_lane_on_the_same_deck() {
     let current = Current {

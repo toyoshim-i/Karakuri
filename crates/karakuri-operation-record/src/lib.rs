@@ -198,15 +198,8 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             None => Written::Owed(Owed::NotRead(Reading::Tempo)),
         },
 
-        // ----- What it schedules, given the surface's settings -------------
-        //
         // Scheduled transitions requiring timing and curve from Current::transition.
-        //
-        // **A lane of the armed pattern holding one of the faders a move
-        // writes refuses that move before any record is written**, which is
-        // the clause a replay depends on (ADR-0323, and [`Refusal`] for why it
-        // is taken here). The check is ahead of the readings because what is
-        // refused is the ask, whether or not the settings were handed over.
+        // Refuses the move if an unmuted lane in the armed pattern controls the target fader (ADR-0323).
         Operation::FadeDeck { deck, to } => match held_fader(current, *deck) {
             Some(refusal) => Written::Refused(refusal),
             None => match current.transition {
@@ -244,13 +237,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             }),
             None => Written::Owed(Owed::NotRead(Reading::Transition)),
         },
-        // **The deck arriving, whose fader a wipe writes.** The move a wipe
-        // schedules is on the mask front, which no lane target names — but the
-        // records it writes put that deck's fader at full for the front to
-        // reveal, and a lane holding that fader writes it back within one step.
-        // So the wipe is refused on the same lane a fade onto that deck is
-        // (ADR-0323). The deck covered is not asked about: a wipe writes
-        // nothing about it.
+        // The arriving deck's opacity is brought to 1.0; refused if held by an active pattern lane.
         Operation::Wipe { from: _, to } => match held_fader(current, *to) {
         Some(refusal) => Written::Refused(refusal),
         None => match (current.transition, current.mask, current.mix) {
@@ -373,11 +360,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
     }
 }
 
-/// The refusal for `deck`'s channel fader, where the lanes were read and one
-/// holds it.
-///
-/// `None` covers both *no lanes were read* and *no lane holds it*, which are
-/// one answer to the caller: nothing is refused (ADR-0323).
+/// Returns a [`Refusal`] if an active pattern lane holds `deck`'s fader (ADR-0323).
 fn held_fader(current: &Current, deck: u8) -> Option<Refusal> {
     let lane = current
         .lanes

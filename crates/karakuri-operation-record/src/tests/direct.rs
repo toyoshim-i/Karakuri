@@ -45,16 +45,7 @@ fn the_faders_records_need_no_reading() {
     );
 }
 
-/// An authority converts with no reading, and carries the node it names.
-///
-/// Its own test rather than a fourth assertion in
-/// [`the_faders_records_need_no_reading`], because what it pins is not the
-/// absence of a reading but the address: this is the only conversion here
-/// that turns a `karakuri_operation::NodeAddress` into a
-/// `karakuri_store::record::NodeAddress`, and `store_layer` is a second
-/// spelling of a list that has to stay in step. A conversion that dropped
-/// the index would put every renderer's authority on the first one; one
-/// that mistranslated the layer would put an L4's on an L1.
+/// Verifies that SetAuthority translates directly with node address and layer preserved.
 #[test]
 fn an_authority_carries_the_node_it_names_and_needs_no_reading() {
     assert_eq!(
@@ -107,17 +98,7 @@ fn an_authority_carries_the_node_it_names_and_needs_no_reading() {
     );
 }
 
-/// An attachment writes a record, and the take-back is the same record with
-/// nothing in it.
-///
-/// Both answered `Silent(NoRecord)` until
-/// `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`,
-/// and the reason was the one `WriteParam` had: `Record::Bind` is a Set
-/// file's and has no `slot`. So what is asserted here is the deck arriving
-/// in the record — an attachment made on slot 3 that came back saying
-/// nothing about slot 3 is the whole defect back — and that the two
-/// operations write one `t` rather than two, which is what makes them one
-/// fact for the projection to drop.
+/// Verifies that AttachSignal and DetachSignal emit Record::Source with and without target source (ADR-0319).
 #[test]
 fn an_attachment_and_a_take_back_are_one_record_with_and_without_a_source() {
     let attached = records(written(
@@ -145,12 +126,7 @@ fn an_attachment_and_a_take_back_are_one_record_with_and_without_a_source() {
                 signal: "energy".to_string(),
                 curve: "pow2".to_string(),
                 range: [0.1, 2.4],
-                // **Absent means the default generator and not the absence
-                // of one**, which is what a `bind` naming `noise` and
-                // saying nothing else has always meant. The operation does
-                // not carry a generator, because kind, rate, stream and
-                // octaves describe the *source* rather than the
-                // attachment.
+                // None denotes the default noise generator configuration.
                 noise: None,
             }),
         }],
@@ -208,15 +184,7 @@ fn an_attachment_and_a_take_back_are_one_record_with_and_without_a_source() {
     );
 }
 
-/// A knob turn writes a record, and it needs no reading either.
-///
-/// This operation answered `Silent(NoRecord)` until
-/// `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`,
-/// and the reason given was never that a knob is unworthy of one: it was
-/// that `Record::Param` is a Set file's and has no `slot`. So what is
-/// asserted here is the deck arriving in the record — a write on slot 2
-/// that came back saying nothing about slot 2 would be the whole defect
-/// back again.
+/// Verifies that WriteParam emits Record::Ride specifying target deck slot (ADR-0280).
 #[test]
 fn a_knob_turn_carries_the_deck_the_set_is_playing_in() {
     assert_eq!(
@@ -248,19 +216,7 @@ fn a_knob_turn_carries_the_deck_the_set_is_playing_in() {
     );
 }
 
-/// A bare key crosses as an absence and never as an invented address.
-///
-/// `ParamAt::node` is `None` for a wildcard, which means it names no layer
-/// either — and `Record::Ride`'s `at` is the same `Option`, which is the
-/// whole reason that record carries a `NodeAddress` rather than
-/// `Record::Param`'s `layer` beside an `index`. A conversion that filled a
-/// layer in here would be writing a placeholder that a reader then has to
-/// be told to ignore, which is exactly the wart `Record::Param` is still
-/// living with.
-///
-/// And a wide value crosses whole. A `vec3` is one line a person or a model
-/// writes and the reader with the Set in hand expands it, on `param`'s
-/// terms exactly (ADR-0268); nothing here invents `glow.x`.
+/// Verifies that wildcard writes omit node address and pass multi-dimensional values intact (ADR-0268).
 #[test]
 fn a_wildcard_write_names_no_node_and_therefore_no_layer() {
     assert_eq!(
@@ -285,15 +241,7 @@ fn a_wildcard_write_names_no_node_and_therefore_no_layer() {
     );
 }
 
-/// The wire spellings, which are the cost the vocabulary pays.
-///
-/// `karakuri-operation` owns copies of lists `karakuri-engine` already
-/// holds, and a record carries the *name*: a mode, a level or an operator
-/// spelled differently here from the way the engine reads it back is a
-/// record that decodes to a refusal on replay and to nothing at all in the
-/// mix. The engine is not reachable from this crate, so this asserts the
-/// literals and `karakuri-cli` — the one crate that sees both lists — is
-/// where they are checked against the engine's own.
+/// Verifies that wire spelling names match store deserialization expectations.
 #[test]
 fn a_record_carries_the_name_the_store_is_read_back_with() {
     assert_eq!(BlendMode::Add.name(), "add");

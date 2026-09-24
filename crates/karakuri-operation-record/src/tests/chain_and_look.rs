@@ -1,13 +1,6 @@
 use super::*;
 
-/// The whole reason this is not a `From` impl.
-///
-/// `-`, `=` and a MIDI control change turn the exposure alone;
-/// `Record::Look` carries the operator and the white point beside it
-/// because a replay reconstructs a session from the record and *"a stream
-/// that set the exposure without saying which operator it applies to would
-/// be describing a look nobody can reconstruct"* (ADR-0192). The operator
-/// is filled in from the look that is running, and this is what says so.
+/// Verifies that SetExposure preserves active tonemap and white point from Current::look (ADR-0192).
 #[test]
 fn an_exposure_keeps_the_operator_that_is_running() {
     let current = Current {
@@ -205,13 +198,7 @@ fn a_chain_operation_with_no_chain_read_is_owed_it_rather_than_given_a_default()
     }
 }
 
-/// A reading that was not taken is said, never defaulted.
-///
-/// This is the failure ADR-0192 rejected `cc 20 -> exposure aces` for: a
-/// conversion that filled the operator in from a default would have every
-/// exposure nudge silently overwrite a tone map somebody chose a moment
-/// earlier, sixty times a second. `Current::default()` means *I read
-/// nothing*, and the answer to it is a question rather than a record.
+/// Verifies that missing context in Current returns Written::Owed rather than inventing defaults.
 #[test]
 fn a_reading_that_was_not_taken_is_owed_rather_than_guessed() {
     assert_eq!(
@@ -237,22 +224,7 @@ fn a_reading_that_was_not_taken_is_owed_rather_than_guessed() {
     );
 }
 
-/// The master out is a function of the operation and nothing else, and this
-/// is the property that keeps it out of the group above.
-///
-/// It is the arm most likely to be written as a completion by whoever adds
-/// the second thing to the master chain: it sits between the look pair and
-/// the mask pair in every list, and both of those are records written whole
-/// out of an operation that names a part of one. `Record::MasterOut`
-/// carries one number and the operation carries it, so a reading here would
-/// be a value nobody asked about — and a `Current::default()` that answered
-/// `Owed` would make the console's only route to this level a question
-/// printed instead of a level moved.
-///
-/// And nothing is clamped, which is this crate's rule at `SetGain`:
-/// `Deck::set_out` floors at zero and is deliberately open above 1.0
-/// because the mix is HDR, so a level of 3.0 arrives on disk as 3.0 and the
-/// engine is the one place that range is decided.
+/// Verifies that SetMasterOut translates directly from operation arguments without external state.
 #[test]
 fn a_master_out_is_written_from_the_operation_alone() {
     assert_eq!(
