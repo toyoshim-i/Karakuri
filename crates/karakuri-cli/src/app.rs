@@ -43,24 +43,11 @@ impl ApplicationHandler for App {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            // The format above already carries the transfer function, and
-            // `Auto` is the one value that leaves the presentation engine
-            // interpreting the swapchain exactly as it always has: sRGB for an
-            // `*Srgb` format, and never a wide-gamut or HDR space picked
-            // behind the pipeline's back. See P-0064 — sRGB is encoded once,
-            // at final output, and that is here.
+            // Present surface in sRGB at final output (P-0064).
             color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width.max(1),
             height: size.height.max(1),
-            // **Chosen, not taken.** This was `caps.present_modes[0]`, which is
-            // whatever order the backend happened to list — so the pacing of a
-            // run was a property of the driver, invisible and unsettable, and
-            // the same session ran differently on two machines with nothing
-            // saying so. `Fifo` is supported on every platform and is
-            // `PresentMode`'s own default, so naming it costs nothing and makes
-            // the answer the same everywhere. It is also the right answer for
-            // this output: tearing across a projected image is worse than a
-            // frame of latency.
+            // Explicitly use Fifo present mode for tear-free output and cross-platform consistency.
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
@@ -68,24 +55,11 @@ impl ApplicationHandler for App {
         };
         surface.configure(&gpu.device, &config);
 
-        // **The canvas, not the window.** These two were the same number until
-        // the window was named a preview: what is drawn is the session's and
-        // what it is looked at through is not, so a window that opened at an
-        // odd size no longer decides what a run renders — and dragging one no
-        // longer reallocates every slot's target on the render thread.
+        // Canvas dimensions are decoupled from preview window sizing.
         let (canvas_w, canvas_h) = self.args.canvas;
         check_canvas(&gpu.device, canvas_w, canvas_h);
         let present = Present::new(&gpu.device, format, canvas_w, canvas_h);
-        // **Opened before the deck, because a watcher needs it.** A rebuilt
-        // procedure has to reach the store from the worker thread that built
-        // it; by the time the swap lands on a frame, the file may have changed
-        // again and the render thread is the wrong place for file I/O.
-        //
-        // **Whenever the run is editable**, rather than only when a session is
-        // being recorded. Two things read these hashes now — the `procedure`
-        // records and `Live::save_set` — and the second is wanted in the
-        // ordinary `--watch` case, which records nothing. See
-        // `watch::Watch::stored`.
+        // Prepare store and rebuild channel for watcher in editable sessions.
         let (rebuilds, rebuild_rx) = match editable(&self.args) {
             true => {
                 let store = std::sync::Arc::new(open_store(&self.args));
@@ -105,13 +79,7 @@ impl ApplicationHandler for App {
             rebuilds,
             self.snapshots.clone(),
         );
-        // Here and nowhere else: before the first frame, where the stall it
-        // costs is free. Nothing else measures the Sets a run starts with —
-        // only the build worker measures, and at startup it has built nothing
-        // — and **one unmeasured live slot makes the whole deck's committed
-        // cost unknown**, which parks every priming request there is with
-        // `Reason::CommittedUnknown`. Without this call the governor below is
-        // an elaborate way of saying no.
+        // Measure initial Sets ahead of the first frame to establish committed costs.
         deck.measure_slots(&gpu.device, &gpu.queue);
 
         eprintln!(
@@ -122,12 +90,7 @@ impl ApplicationHandler for App {
             self.args.bpm,
             gpu.adapter.get_info().name
         );
-        // What the deck costs and what it is allowed, printed once at startup
-        // so the numbers a park is later explained by are not the first the
-        // operator sees. Every millisecond in that line is a cold Set measured
-        // at a reference resolution — comparable between slots, not a
-        // prediction of this machine's frame time. The line says which clock
-        // it came off, which is the part that changes between machines.
+        // Log deck costs and budget limit at startup.
         eprintln!("  {}", deck.govern());
         if self.args.watch {
             for (slot, (l1, l4s)) in self.args.sets.iter().enumerate() {
@@ -210,14 +173,7 @@ impl ApplicationHandler for App {
         // exactly like one whose client is connected and idle.
         let mcp = match self.args.mcp {
             Some(port) => {
-                // **Built once and never written again, and that is this
-                // program rather than a shortcut.** `mcp::Slots` is a live
-                // handle because the panel re-points a slot when the operator
-                // loads a Set onto a running deck; nothing here does — the only
-                // Set this run names is `--load-set`'s, settled before the deck
-                // is built, and `Aiming::re_aim` restates the files it is
-                // already pointed at. So the launch pairs are what this deck is
-                // running for the whole run.
+                // Configure MCP slots for initial launched sets.
                 let slots = mcp::Slots::of(
                     self.args
                         .sets
@@ -318,13 +274,9 @@ impl ApplicationHandler for App {
         // Opened before the first frame like every other channel here, and
         // never on one. Nothing is spawned until a key is pressed.
         let (save_tx, saves) = std::sync::mpsc::channel();
-        // **Before the first frame, and for every windowed run.** This is what
-        // makes "what is this slot running" a hash from the outset rather than
-        // a path some later state contradicts. No I/O and nothing that can
-        // fail: the addresses come off the bytes the compile read — see
-        // [`Running::at_launch`].
+        // Compute initial slot hashes before rendering the first frame.
         let running = Running::at_launch(&self.placed, slot_count);
-        // **Before the first frame, because it spawns a thread**, and one per
+        // Before the first frame, because it spawns a thread, and one per
         // run: the chain is the master's and there is one master.
         let chain_swap = karakuri_engine::ChainSwap::new(&gpu.device, &gpu.queue);
         let live = Live {
@@ -343,16 +295,11 @@ impl ApplicationHandler for App {
             rebuilds: rebuild_rx,
             pending_builds: std::collections::HashMap::new(),
             running,
-            // **Cloned rather than moved**, because `self.placed` is what
-            // `session_head` above was handed and `App` outlives this. It is a
-            // handful of paths per slot, once, at startup.
             startup: self.placed.clone(),
             loaded_set: self.args.load_set.clone(),
             edges: self.args.edges.clone(),
             aims,
             store_root: self.args.store.clone(),
-            // The store a chain slot's address is resolved against, opened at
-            // the start of the run.
             store: open_store(&self.args),
             save_tx,
             saves,
@@ -371,13 +318,7 @@ impl ApplicationHandler for App {
             recorder,
             demo_started: Instant::now(),
         };
-        // **The canvas and the look are the head's, and there is no second
-        // writer of either.** They used to be pushed here as records, which
-        // was the only way a session could carry them before a head could say
-        // what the deck held; `session::head` writes both now, so pushing them
-        // again would put a second `canvas` in the stream — and a replay
-        // reports every `canvas` after the first, because the canvas is fixed
-        // for a run.
+        // Canvas and look are defined in session head; avoid duplicate stream records.
         self.live = Some(live);
     }
 
@@ -422,11 +363,7 @@ impl ApplicationHandler for App {
                 match recorder.finish() {
                     Ok(w) => {
                         eprintln!("session: {} records written", w.records);
-                        // **Named rather than counted quietly**, and named
-                        // apart: a lost batch is a second of everything and a
-                        // lost audio frame is one frame's measurement, and an
-                        // operator deciding what to do about a stream needs to
-                        // know which it has.
+                        // Report dropped disk batches separately from audio frame drops.
                         if w.dropped_batches > 0 {
                             eprintln!(
                                 "  {} batch{} lost because the disk could not keep up — \

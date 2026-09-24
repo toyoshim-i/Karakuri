@@ -25,11 +25,7 @@ pub(crate) struct Live {
     /// see `docs/plugins.md`, where the others hang.
     pub(crate) sink: frame::WindowSink,
     pub(crate) present: Present,
-    /// Where the master chain is compiled and where the chain it replaces is
-    /// freed. A press on the Master rows asks this for a build and the frame
-    /// loop installs the result at a frame boundary; nothing on this thread
-    /// compiles a shader, creates a pipeline or allocates a chain target
-    /// (ADR-0354).
+    /// Asynchronously compiles master chains and manages chain swaps at frame boundaries (ADR-0354).
     pub(crate) chain_swap: karakuri_engine::ChainSwap,
     /// Every Set, whatever is being built to replace any of them, and the mix.
     /// Without `--watch` every slot is a `HotSwap::fixed` and there is no worker at
@@ -40,18 +36,11 @@ pub(crate) struct Live {
     /// on every change and marked in the status line.
     pub(crate) focus: usize,
     pub(crate) clock: Clock,
-    /// The audio input, the beat lock, and the operator's latency offset. `None`
-    /// without `--audio-in`, and then nothing in the frame path below changes at
-    /// all — which is the property the whole slice is about.
+    /// Audio input processor, beat lock, and operator latency offset.
     pub(crate) audio: Option<audio::Audio>,
-    /// The control surface, when `--midi-in` asked for one. Every operation it
-    /// produces ends in the same record a key press ends in — see [`crate::midi`] —
-    /// so nothing in the frame path below changes at all when this is `None`.
+    /// Control surface handler when `--midi-in` is enabled.
     pub(crate) midi: Option<midi::Surface>,
-    /// The tempo source, when `--tempo-source` asked for one. `None` and nothing in
-    /// the frame path below changes at all — the grid comes from `--bpm`, the
-    /// tracker and the tap keys, exactly as it did before this existed. That is the
-    /// same property `audio` and `midi` have and it is the one worth keeping.
+    /// External tempo source when `--tempo-source` is specified.
     pub(crate) tempo_source: Option<tempo_source::Source>,
     /// What each slot's watcher built, by build id, until the swap that build
     /// produced lands. Not a log: an entry is taken when its build lands or dropped
@@ -62,29 +51,9 @@ pub(crate) struct Live {
     /// compile read, so there is exactly one way to answer the question a live save
     /// asks — see [`Running`].
     pub(crate) running: Running,
-    /// Where each slot's files were at launch, one entry per node, in the order
-    /// they were spelled.
-    ///
-    /// The names, and the bytes each node was compiled from. A name belongs to the
-    /// use rather than to the procedure, so `--set veil=shell.kir` is a fact about
-    /// the command line that no rebuild restates and no hash carries, and
-    /// `Live::save_set` zips these onto the hashes by position.
-    ///
-    /// Not the paths, which is the distinction that matters. This used to answer
-    /// "what is this slot running" by re-reading `named.path`, and that was a
-    /// second answer to a question [`Running`] already held. What is here now is
-    /// [`Placed::source`] — the text the compile read — and it is not a second
-    /// answer but the *first*: every hash in `Running` was derived from it, and a
-    /// save hands the same buffer to the store so the file it writes resolves.
-    /// There is one derivation, and this is where its input lives.
-    ///
-    /// Empty for a slot filled straight from a Set file without `--watch` or
-    /// `--mcp`, which has no files behind it at all — see where `placed` is built.
+    /// Startup file mappings and source text for each slot node, used during Set saves.
     pub(crate) startup: Vec<Vec<Placed>>,
-    /// The Set file this run was loaded from, for the one refusal that has to name
-    /// it: a slot filled from a file with nothing watching it has no sources to
-    /// save, and an operator asking why is owed the id and the flag that would
-    /// change the answer.
+    /// Set file identifier if loaded from a store Set file.
     pub(crate) loaded_set: Option<String>,
     /// Declared input slot wiring edges for the run.
     ///
@@ -96,18 +65,9 @@ pub(crate) struct Live {
     /// `HotSwap::fixed`. See [`Aiming`]: this is how an edge written over MCP
     /// reaches the thing that rebuilds with it.
     pub(crate) aims: Vec<Option<Aiming>>,
-    /// The store root a live save writes into. The *root* and not the open store
-    /// below: every part of a save that touches a disk happens on the thread that
-    /// does it — see [`Save::run`].
+    /// Store root directory for live Set saves.
     pub(crate) store_root: PathBuf,
-    /// The store this run resolves a chain slot's address against.
-    ///
-    /// Opened when the run starts. The shipped three resolve without a store at
-    /// all; every other address resolves out of this one
-    /// (`karakuri_environment::mix::resolve_procedure`).
-    ///
-    /// `Store::open` creates the directories under the root, so a run creates the
-    /// store whether or not it ever writes to it.
+    /// Opened store handle used for resolving procedure and chain slot addresses.
     pub(crate) store: karakuri_store::store::Store,
     /// Where a save reports back. One thread per save writes into the sender's
     /// clone; the frame loop drains the receiver, which is the shape `rebuilds`
@@ -157,38 +117,12 @@ pub(crate) struct Live {
 }
 
 impl Live {
-    /// The window changed size. Nothing that is rendered changes.
-    ///
-    /// This used to resize the HDR target and every deck slot as well, because the
-    /// window's size *was* the canvas. Two things came of that, and both are gone
-    /// with it: dragging a window reallocated every slot's target once per frame of
-    /// the drag — a GPU allocation on the render thread, which is the one thing
-    /// this engine's frame path forbids — and what a run rendered depended on how
-    /// big its window happened to be, so the same session replayed at a different
-    /// size with nothing saying which was the performance. All that is left here is
-    /// the swapchain, which has to follow the window because it *is* the window.
+    /// Handles window resize events by reconfiguring the swapchain sink.
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
         self.sink.resize(&self.gpu.device, width, height);
     }
 
-    /// Resize the window so the canvas lands in it one texel to one texel.
-    ///
-    /// The preview is fitted, so an OBS window capture of it would otherwise pick
-    /// up the bars and a scale — and a capture that is neither the canvas nor a
-    /// clean crop of it is worse than useless downstream. After this the window
-    /// contains the canvas exactly, and `letterbox` becomes the identity.
-    ///
-    /// A request, not a guarantee, and the difference is printed. A 1080-tall
-    /// canvas cannot get a 1080-tall content window on a 1080-tall display — there
-    /// is a menu bar or a taskbar in the way — so the manager clamps it, and an
-    /// operator setting up a capture has to be told that rather than told "1:1".
-    ///
-    /// `request_inner_size` returns the granted size immediately on the platforms
-    /// where the manager decides and `None` where a `Resized` event will follow.
-    /// Taking the returned value matters on the first kind: no event arrives, so
-    /// nothing else would ever reconfigure the swapchain, and a swapchain that
-    /// disagrees with its window does not fail — `set_viewport` is not validated
-    /// against the attachment — it just draws the wrong picture, silently.
+    /// Resizes the window to match the internal render canvas dimensions exactly.
     pub(super) fn snap_to_canvas(&mut self) {
         let (w, h) = self.present.size();
         match self
@@ -212,58 +146,12 @@ impl Live {
         }
     }
 
-    /// Whatever the control surface did since the last frame, as the same
-    /// operations a key press and a console fader name.
-    ///
-    /// The whole of the MIDI connection, and there is almost nothing in it: a
-    /// mapped message *is* an [`Operation`], so this hands each one to
-    /// [`Live::operate`] and that is the connection. A surface can do nothing a key
-    /// cannot because both end in the same record, and a session recorded from one
-    /// replays with neither attached.
-    ///
-    /// This used to be a match over eight `Action`s claiming that a control added
-    /// to one and not the other does not compile. Against a fifty-variant
-    /// vocabulary that claim would be false — a router arm nobody wrote is a
-    /// wildcard nobody notices. The guarantee is now where it is true:
-    /// `karakuri_operation_record::written` is one exhaustive match over all fifty,
-    /// so an operation nobody has said what to do with stops the build there.
-    ///
-    /// [`Operation::TapBeat`] is handled here and it is the only one, for a reason
-    /// that is visible rather than incidental: a tap moves the beat tracker rather
-    /// than writing a value, `written` answers `Owed::NotSettled` for it, and
-    /// `Live::operate` would print that gap instead of tapping. `Live::tap` is what
-    /// owns the tracker and what the `b` key reaches, so `note -> tap` goes on
-    /// doing exactly what it did. The day the record a tap owes is settled, this
-    /// arm is what goes.
-    ///
-    /// Nothing here prints. The old arms ended in `set_gain` and its neighbours,
-    /// each of which reports what it did — which on a fader sweep is an `eprintln!`
-    /// per MIDI message inside a frame, several hundred a second, and is the
-    /// blocking write per message `crate::midi`'s own "once per control" rule
-    /// exists to prevent. What a surface moved is read back from the deck (`s`),
-    /// not narrated per message.
-    ///
-    /// Before the tick, so a fader move lands on the frame it arrived for rather
-    /// than the one after — the same placement `run_demo` has, and for the same
-    /// reason.
+    /// Drains MIDI events from control surfaces and dispatches corresponding operations.
     fn run_surface(&mut self) {
         let Some(surface) = &mut self.midi else {
             return;
         };
-        // Into the owned scratch, then out of `self`'s borrow, so the calls
-        // below can take `&mut self`. Nothing allocates: both vectors are
-        // reused and `take` clears rather than replaces.
         let mut operations = std::mem::take(&mut self.operations);
-        // The slot check is the router's — it is where the "say it once"
-        // machinery already is, and once per *message* would be a blocking
-        // write per message on this thread. See `crate::midi`.
-        //
-        // **And the deck, for the one target the map cannot finish on its
-        // own**: `cc -> param N M` names a *position* in a deck's published
-        // interface, which becomes a key only against the Set that is in the
-        // deck (ADR-0268, ADR-0336). `midi::Decks` is that reading, and it is
-        // the same one the panel makes — a map file means one thing in both
-        // programs or it means nothing.
         surface.take(
             self.deck.slot_count(),
             &karakuri_environment::midi::Decks(&self.deck),
@@ -276,19 +164,7 @@ impl Live {
             }
         }
         self.operations = operations;
-        // **And the surface is shown where the deck ended up** — MIDI out, on
-        // the frame the change lands and after the frame's operations have
-        // been applied, so a motorised fader follows the value the deck holds
-        // rather than the one it was asked for.
-        //
-        // **It does not wait**: `Surface::show` queues into a bounded channel
-        // and drops when it is full rather than blocking this thread, which is
-        // the same rule every other thing this frame does (P-0094,
-        // `crate::midi`). A run with no output port costs one branch.
-        //
-        // **Every source is shown, not just the surface's own.** A key press,
-        // a model over `--mcp` and a transition move the deck too, and the
-        // whole point of MIDI out is that two things can move a fader.
+        // Non-blocking update of motorized faders and LED feedback to mirror current deck state.
         if let Some(surface) = &mut self.midi {
             surface.show(&karakuri_environment::midi::Lit {
                 deck: &self.deck,
@@ -335,24 +211,7 @@ impl Live {
         }
     }
 
-    /// Every edge asked for since the last frame, written and answered here, on
-    /// this frame.
-    ///
-    /// The decisions are [`rewired`]'s and are written there, because none of them
-    /// needs a `Live`. What is here is the two things that do: the deck's own slot
-    /// count, which is the only thing that knows how many slots there are, and the
-    /// answer going back to whoever asked.
-    ///
-    /// Answered once, at the frame it was applied on, which is
-    /// [`mcp::WireRequest`]'s third point. Not at the swap: what the *build* made
-    /// of the edge is `swap_outcome`'s answer, as it is for every other rebuild,
-    /// and a tool that waited for thirty judged frames would hold a connection open
-    /// across a transition.
-    ///
-    /// One sentence for both audiences, which is [`refused`]'s rule: what the
-    /// terminal is told and what the client is handed are the same words, so the
-    /// second cannot be right on the day it is written and wrong at the next
-    /// correction.
+    /// Applies requested edge wiring updates and returns outcomes to callers.
     fn rewire(&mut self, asked: Vec<mcp::WireRequest>) {
         if asked.is_empty() {
             return;
@@ -377,23 +236,9 @@ impl Live {
         }
     }
 
+    /// Records an operation and applies its effects to the live deck mix.
     pub(crate) fn record(&mut self, record: karakuri_store::record::Record) {
         if let Some(recorder) = &mut self.recorder {
-            // Cloned, which allocates for the records that carry a name —
-            // `look`, `mask`, `blend`, `residency`, `transport` — and for no
-            // other. This was written when the only way in was a key press. A
-            // mapped MIDI fader reaches it from `Live::run_surface` inside
-            // `Live::frame`, so on `exposure` and `mask-position` it was a
-            // small heap touch per control-change message on the render
-            // thread, which is the first rule this repository has. It is now
-            // **once a frame per control**: `crate::midi`'s router keeps the
-            // last value a continuous control sent within a frame and drops
-            // the ones before it, so a sweep of several hundred messages
-            // reaches here once
-            // (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`;
-            // the program's `mix.rs` carries the measurement, which is why the
-            // coalescer is
-            // there).
             recorder.push(record.clone());
         }
         match mix::change(&record, self.deck.slot_count()) {
@@ -423,10 +268,6 @@ impl Live {
                 let t = schedule_from(&self.deck, slot, control, to, start, beats, curve);
                 self.deck.schedule(t);
             }
-            // **Checked against the Set on screen**, which is the only place
-            // the answer is: the decoder knows the deck's size and not what is
-            // in it. A record from a session recorded against a Set with three
-            // renderers and replayed against one with two lands here.
             mix::Change::Select {
                 slot,
                 renderer,
@@ -443,18 +284,7 @@ impl Live {
                     Err(refusal) => eprintln!("{refusal}"),
                 }
             }
-            // **The one change that reaches inside a Set.** Every arm around
-            // it moves the deck the Sets are playing on; this writes a number
-            // into the Set in one slot, and `Deck::write_param` is the public
-            // road to it. It compiles nothing — the value is packed into the
-            // uniform by the next `Set::prepare`, which is the next frame.
-            //
-            // **A rebuild does not carry it**, and that is not settled here:
-            // what a `--watch` rebuild restates is `swap::Request::params`, and
-            // nothing puts a live write there. See
-            // `docs/adr/0280-a-parameter-written-to-a-live-set-is-a-session-record.md`,
-            // which names it as the open question and why it is a bigger one
-            // than the record was.
+            // Writes parameter values directly to the active Set on the current deck.
             mix::Change::Ride { slot, writes } => {
                 for write in &writes {
                     match self.deck.write_param(EngineSlot(slot as u8), write) {
@@ -464,16 +294,7 @@ impl Live {
                     }
                 }
             }
-            // **The other change that reaches inside a Set**, beside the
-            // ride above: this one says what a parameter blends *towards*
-            // rather than what it blends *from*. `Deck::bind` and
-            // `Deck::unbind` are the public roads, and neither compiles
-            // anything — a binding is resolved by the next `Set::prepare`.
-            //
-            // **A rebuild does not carry it**, on the ride's own terms and for
-            // the same reason: `swap::Request::bindings` is restated from
-            // `Watch::bindings`, which only a re-point writes. See
-            // `docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`.
+            // Binds or unbinds parameter drivers in the live Set.
             mix::Change::Source {
                 slot,
                 layer,
@@ -496,9 +317,6 @@ impl Live {
                     }
                 }
             },
-            // **Who may move one node**, and it changes what one knob may do
-            // from the next press: a bare-name write over nodes that are not
-            // all under one authority is refused whole by `Set::write_param`.
             mix::Change::Authority {
                 slot,
                 layer,
@@ -520,52 +338,17 @@ impl Live {
             }
             mix::Change::Residency { slot, level } => {
                 self.deck.set_residency(EngineSlot(slot as u8), level);
-                // A slot arriving or leaving changes what is committed, and the
-                // deck's headroom with it: a slot that could not be admitted a
-                // moment ago may fit now, and one that fitted may not. Requests
-                // are untouched by the pass, so a park recovers on its own the
-                // moment there is room.
                 self.govern("residency");
             }
-            // **Stored and not applied.** `frame::compose` writes the tone map
-            // uniform every frame from the look the committing closure hands
-            // it, so writing it here as well would be a second writer of one
-            // value — the shape this whole module set out to remove, in
-            // miniature. `Live::apply_look` is gone with it.
             mix::Change::Look(look) => self.look = look,
-            // **The level at the chain's entry, applied where the mix writes
-            // the composited frame** — `Deck::set_out`, which names no slot
-            // because it acts on what the fold produced (ADR-0224).
             mix::Change::MasterOut(value) => self.deck.set_out(value),
-            // **And the chain itself, applied and not stored, which is the
-            // opposite of the look one arm up and for a stated reason.** The
-            // `Present` is where a chain lives — it owns the targets its slots
-            // read and write — so there is nowhere else to put it, and a copy
-            // on this struct beside it would be the second writer the look arm
-            // refuses (ADR-0317, and `Present::chain_spec` is how it is read
-            // back).
-            //
-            // **What it costs is now two things and the record decides
-            // which**: a list whose shape is the shape already running is a
-            // uniform write per slot here, and any other is a build asked of
-            // `karakuri-chain` and installed at the frame boundary in
-            // [`Live::frame`]. See `mix::apply_chain`.
-            //
-            // **A refusal is said and the chain that is running stays.** An
-            // address the store does not hold is a record this build cannot
-            // obey, which is reported at the operation rather than drawn as a
-            // wrong picture. A source that compiles and refuses as a chain slot
-            // is said where the build lands instead, for the same reason and a
-            // frame or two later.
+            // Applies master post-processing chain changes to Present (ADR-0224, ADR-0317).
             mix::Change::MasterChain(slots) => {
                 if let Err(refusal) = mix::apply_chain(
                     &mut self.chain_swap,
                     &mut self.present,
                     &self.gpu.queue,
                     &slots,
-                    // The shipped three first and then this run's store, which
-                    // is the order `mix::resolve_procedure` states. The refusal
-                    // names the address it could not find.
                     &|address| mix::resolve_procedure(Some(&self.store), address),
                 ) {
                     eprintln!("  {refusal} — the chain keeps what it had");
@@ -577,11 +360,6 @@ impl Live {
                 anchor_bpm,
                 scrub_beats,
             } => {
-                // The refusal is reported and nothing moves. It cannot happen
-                // from a key press — `cycle_sync` only offers modes the Set
-                // allows — but a session recorded against one Set and replayed
-                // against another is exactly where it can, and a slot silently
-                // left free would be a performance replayed wrong.
                 if let Err(refusal) =
                     self.deck
                         .set_transport(EngineSlot(slot as u8), sync, anchor_bpm, scrub_beats)
@@ -595,50 +373,11 @@ impl Live {
     pub(crate) fn frame(&mut self) {
         self.run_demo();
         self.run_surface();
-        // **Both halves of the save path, and both above the GPU work below.**
-        // Taking the request here is [`Live::run_requests`]'s own reasoning: a
-        // client asking to keep what is playing should not be waiting on a
-        // swapchain, and nothing a request reaches needs the GPU. The drain
-        // used to sit under `frame::compose`, which implemented half of that
-        // and quietly withheld the other: a window latched to `Skip::Fault`, or
-        // returning `Outdated` every frame, returned before it — so the request
-        // was taken, the save thread wrote the file, and the
-        // client waited out `SAVE_REPLY` to be told the outcome was neither
-        // success nor failure about a save that had already landed. The
-        // terminal never said "saved as set X" either, and the `save` record
-        // was withheld from the stream until the run quit. A save's outcome has
-        // nothing to do with whether there is a surface to draw on, which is
-        // exactly what the two calls being here rather than there says.
+        // Process model requests and complete pending saves before composition.
         self.run_requests();
         self.finished_saves();
 
-        // **The ordering that used to be a comment is still the shape of the
-        // call, and what it orders has changed.** A `tick` is a promise that
-        // the deck advanced by that many steps, and what makes it honest is
-        // that `frame::compose` calls the closure below and renders the deck
-        // with nothing between them. It is no longer that a frame with nowhere
-        // to draw records nothing: it is that there is no such frame. The
-        // defect this all came from is unchanged and is
-        // `docs/adr/0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md`
-        // — the loop read the clock, wrote the `tick`, measured the audio, and
-        // *then* found the swapchain had nothing, and `Outdated` arrives on
-        // every resize, so resizing during a recorded session made the replay
-        // diverge from the performance.
-        //
-        // **The window is one sink and does not gate the frame.** A frame it
-        // refuses is composed anyway — the clock is read, the audio is
-        // measured, the `tick` is written, the deck advances — and the only
-        // thing the refusal costs is the picture, which is what an output being
-        // off has to mean before there is a second one. So `Clock::last` now
-        // moves on every frame this function runs and no interval is carried
-        // between frames: the gap that still has to survive is the one where
-        // this function does not run at all, and `MAX_STEPS` is the anti-spiral
-        // clamp on it however long it was.
-        // **The frame boundary the chain lands on**, before the encoder
-        // `frame::compose` opens below: a chain arriving mid-frame would move
-        // what the mix writes into after the mix had decided. Nothing here
-        // waits — a build still running is not collected, and the chain that is
-        // running draws this frame (ADR-0354).
+        // Chain swap boundary: commit any pending master chain compilations before frame composition (ADR-0354).
         self.chain_swap
             .begin_frame(&mut self.present, &self.gpu.device, &self.gpu.queue);
         for event in self.chain_swap.events() {
@@ -656,24 +395,12 @@ impl Live {
             tempo_source,
             ..
         } = self;
-        // One sink today, and the slice is the whole of what a second one — a
-        // projector, a plugin — costs this function. See `docs/plugins.md`.
         let mut sinks: [&mut dyn frame::Sink; 1] = [sink];
         let outcome = frame::compose(
             gpu,
             deck,
             present,
             &mut sinks,
-            // A `Fault` is printed unconditionally, because it is already at
-            // most one per condition: the sink latches it — see `frame::Skip`.
-            // The latch used to be here, which meant the message was *built*
-            // every frame and thrown away, an allocation on the frame path for
-            // as long as the window stayed broken.
-            //
-            // `Transient` is the swapchain being remade and the next frame
-            // asking again; there is nothing to say about it sixty times a
-            // second. The index says which sink refused, and there is one, so
-            // nothing here reads it yet.
             &mut |_at, skip| {
                 if let frame::Skip::Fault(why) = skip {
                     eprintln!("surface: {why}");
@@ -681,63 +408,26 @@ impl Live {
             },
             |deck| {
                 let steps = clock.steps(Instant::now());
-                // **The source first, and it takes the grid with it.** Both end in
-                // a `tempo` record and `Oscillator::correct` is last-writer-wins,
-                // so running the source first and letting the tracker follow would
-                // have meant the tracker winning — it returns a trim on every
-                // frame once locked, against the source's four a second. The order
-                // is not what settles it: `Grid::Followed` is, by telling the
-                // tracker to keep tracking and keep quiet.
                 let grid = follow_tempo_source(tempo_source, deck, recorder);
-                // **Everything this frame decided, and only then the `tick` that
-                // closes it.** A tick is a terminator rather than a header:
-                // `session::split` files each record into the frame of the *next*
-                // tick, so a record written after this frame's tick belongs to the
-                // next frame. The audio was on the wrong side of that line, which
-                // showed a replay frame N what frame N−1 heard.
                 measure_audio(audio, deck, recorder, clock.interval(), steps, grid);
                 if let Some(recorder) = recorder {
                     recorder.push(karakuri_store::record::Record::Tick { steps });
                 }
                 frame::Committed { steps, look: *look }
             },
-            // The window's frame is its sinks and nothing else — there is no
-            // panel over the top of it here. See `frame::compose`.
             |_| {},
         );
 
-        // **Said and not returned on.** A present that failed costs this frame's
-        // picture; it does not cost the frame, which has already committed and
-        // advanced the deck. Everything below is about the frame rather than
-        // about the window — the builds that landed while it ran, the governor
-        // that has to hear about them, and the status line that says how many
-        // frames a second are arriving — and a run whose window has stopped
-        // taking them is exactly when an operator needs to be told the rest.
         if let Err(e) = outcome {
             eprintln!("surface: {e}");
         }
 
-        // A build landing replaces the Set in a slot, and with it the
-        // measurement the deck is budgeting against. **A swap is the whole of
-        // that list since ADR-0316**: a verdict against stops the slot with the
-        // Set the swap installed and moves nothing. Collected here and governed
-        // after the drain, because `Deck::events` borrows the deck for as long
-        // as it is being read.
+        // Process deck swap events, report status to terminal/MCP, and trigger governor check on changes.
         let mut set_changed = false;
-        // Collected rather than recorded inside the loop: `Deck::events`
-        // borrows the deck for as long as it is read, and writing a record
-        // needs the recorder.
         let mut procedures: Vec<(usize, u64)> = Vec::new();
         for slot in 0..self.deck.slot_count() {
             for event in self.deck.events(EngineSlot(slot as u8)) {
                 set_changed |= matches!(event, Event::Swapped { .. });
-                // **The same words, to whoever is not at the terminal.** A
-                // model that wrote a procedure has no other way to learn that
-                // its slot was stopped for cost, and "it compiled" is not the
-                // same news as "it is on screen and running".
-                //
-                // Formatted once and only when there is somebody to tell: a run
-                // with no `--mcp` used to pay for a `String` it then dropped.
                 match &self.mcp {
                     Some(mcp) => {
                         let said = event.to_string();
@@ -746,11 +436,6 @@ impl Live {
                     }
                     None => eprintln!("slot {slot}: {event}"),
                 }
-                // **What a session says it played, at the moment it changed.**
-                // The material used to be written once, before the first frame,
-                // so a run in which a procedure was rewritten replayed as
-                // though it never had — and with a model at the other end of
-                // `--mcp` that is the common case rather than a corner.
                 if let Event::Swapped { id, .. } = event {
                     procedures.push((slot, id));
                 }

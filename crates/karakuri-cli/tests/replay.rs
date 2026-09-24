@@ -1,19 +1,4 @@
-//! What a replay actually reproduces, driven through the binary.
-//!
-//! Everything else in this workspace tests a decoder, a deck or a shader. The
-//! claim a replay makes is larger than any of them and lives in none of them:
-//! *what drove the engine live and what drives it on replay are the same
-//! function, so they cannot come apart.* The only place that is observable is
-//! the far end — a session in, a PNG out — so this is the one test that runs
-//! the program.
-//!
-//! **Every test here is a pair with a control.** Two sessions that differ in
-//! exactly one record, replayed, and the question is whether the pixels differ.
-//! On its own that proves nothing: this material moves on `t`, so "the frames
-//! are different" is the answer whatever the code does. The control is the same
-//! session replayed twice — which must come back byte for byte, because an
-//! offscreen run is documented to be a function of its inputs. Without it, a
-//! renderer with any run-to-run noise at all would pass every assertion below.
+//! Subprocess integration tests verifying replay reproducibility, state restoration, and frame equivalence.
 
 // Subprocess GPU integration tests for `karakuri-cli`.
 // Placed in `mod gpu` to align with workspace GPU test suite conventions.
@@ -21,10 +6,7 @@ mod gpu {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    /// The workspace root. Integration tests run with the *package* as the working
-    /// directory, and the default `.kir` pair is named relative to the workspace —
-    /// so without this every run here fails on a missing example rather than on
-    /// anything it means to test.
+    /// Returns the workspace root path for locating fixtures and examples.
     fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -86,10 +68,7 @@ mod gpu {
     const CANVAS: &str = r#"{"t":"canvas","width":256,"height":256}"#;
     const TICK: &str = r#"{"t":"tick","steps":1}"#;
 
-    /// **The control.** An offscreen run is a function of its inputs, so the same
-    /// session replayed twice is the same bytes. Every other test in this file
-    /// reads a *difference* as evidence, and a difference means nothing unless
-    /// sameness is possible.
+    /// Verifies deterministic reproduction of PNG renders across repeated replay runs.
     #[test]
     fn the_same_session_replays_to_the_same_bytes() {
         let dir = scratch("control");
@@ -102,13 +81,7 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The store addresses the saved Set names, by layer, so a hand-written head
-    /// can put the same material in a second slot.
-    ///
-    /// Read out of the Set file rather than computed here: the address a record
-    /// names has to be the one the store actually holds, and hashing the `.kir`
-    /// again would be a second derivation of it that is right until the compiler
-    /// changes what it stores.
+    /// Extracts procedure addresses from a saved Set head definition.
     fn addresses(head: &str) -> (String, String) {
         let of = |layer: &str| {
             head.lines()
@@ -173,19 +146,7 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A `master_chain` in the head is the chain frame 0 renders through.**
-    ///
-    /// A Set file carries nothing for the chain
-    /// ([ADR-0340](../../../docs/adr/0340-kind-l5-is-written-and-the-master-chain-is-an-ordered-list-of-them.md)),
-    /// so the head's own record is the only thing that can put one back. A replay
-    /// used to start with an empty chain whatever the head said and take the first
-    /// `master_chain` record as a *change* — which replayed a session performed
-    /// through a chain as one performed through none until an operator happened to
-    /// touch it.
-    ///
-    /// Two frames only, and the difference must be on the first: the chain is
-    /// handed to the driver before any frame renders, so a replay that seeded it
-    /// from nothing would draw frame 0 through an empty chain.
+    /// Verifies that a master_chain defined in the session head applies to frame 0 (ADR-0340).
     #[test]
     fn a_master_chain_in_the_head_reaches_the_first_frame() {
         let dir = scratch("chain");
@@ -211,25 +172,12 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A `look` record part-way through a session changes what the rest of it
-    /// renders as.
-    ///
-    /// It did not. The offscreen renderer took a `Look` argument and applied it
-    /// once before the loop, while the replay driver wrote every decoded `look`
-    /// into a variable nothing read again — so `t`, `-`, `=` and `` ` `` moved the
-    /// output live and moved nothing on replay, and a session replayed under the
-    /// look it *started* with however many times the operator changed it. The
-    /// exposure keys are the ones that matter here: this project deliberately has
-    /// no automatic gain, so the exposure is a control an operator is expected to
-    /// ride during a set.
+    /// Verifies that a mid-session `look` record updates tone mapping across subsequent frames.
     #[test]
     fn a_look_record_reaches_the_frames_after_it() {
         let dir = scratch("look");
         let (store, head) = store_with_a_set(&dir);
 
-        // Identical but for one record, and it sits after the first frame — so the
-        // two runs share their material, their tick count and their step counts,
-        // and the only thing that can separate their last frames is the look.
         write_session(&store, "plain", &head, &[CANVAS, TICK, TICK, TICK]);
         write_session(
             &store,
@@ -254,26 +202,7 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A `source` record reaches the frames after it, and a take-back gives
-    /// the parameter back** — which is what
-    /// [P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)
-    /// asks of an attachment made live: *a binding attached during a
-    /// performance must be in the stream*, or a session that recorded an
-    /// operator attaching a signal at the second chorus replays without it.
-    ///
-    /// **Three sessions differing by one record apiece**, on the `look`
-    /// test's terms: the same material, the same tick count and the same step
-    /// counts, so the only thing that can separate the last frames is the
-    /// attachment. The range is constant so the picture does not depend on the
-    /// phase the frame was taken at.
-    ///
-    /// **The take-back is asserted against the untouched run and not merely
-    /// against the attached one.** That is the decision it carries: a
-    /// take-back removes the attachment rather than suspending it, so what the
-    /// parameter is left at is its own value — and a `retain` that dropped the
-    /// binding while the last value it wrote stayed in the uniform would
-    /// pass an "it changed back" test and fail this one
-    /// (`docs/adr/0319-an-attachment-is-a-session-record-and-taking-a-parameter-back-removes-it.md`).
+    /// Verifies that mid-session source bindings affect playback and taking them back restores parameter values (ADR-0319).
     #[test]
     fn an_attachment_reaches_the_frames_after_it_and_a_take_back_gives_the_param_back() {
         let dir = scratch("source");
@@ -313,12 +242,7 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The canvas comes out of the stream, and the flag cannot overrule it.
-    ///
-    /// Two sessions that differ only in their `canvas` render at different sizes,
-    /// and `--canvas` on top of a stream that carries one is refused rather than
-    /// obeyed — because a replay at a size the performance never ran at is not a
-    /// replay of it.
+    /// Verifies that canvas size defined in the session stream governs replay rendering and cannot be overridden by CLI flags.
     #[test]
     fn the_stream_decides_what_a_replay_renders_at() {
         let dir = scratch("canvas");
@@ -328,8 +252,7 @@ mod gpu {
             &store,
             "odd",
             &head,
-            // Not a multiple of 64, which used to be an assertion inside the PNG
-            // path — so this session was recordable and unreplayable at once.
+            // Non-64 multiple canvas dimensions.
             &[r#"{"t":"canvas","width":300,"height":200}"#, TICK, TICK],
         );
 
@@ -367,41 +290,18 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A procedure rewritten mid-session replays as the rewrite.**
-    ///
-    /// The thing that was false until there was a record for it: the material was
-    /// written once, before the first frame, so a set in which a procedure changed
-    /// at minute ten replayed as though it never had. With `--mcp` at the other end
-    /// that is the ordinary case rather than a corner, which is why it stopped
-    /// being acceptable.
-    ///
-    /// Paired with a control, as everything here is: the same stream without the
-    /// one record, so "the pixels differ" is about the record and not about
-    /// material that moves on `t` anyway.
+    /// Verifies that hot-swapped procedures recorded mid-session are replayed correctly.
     #[test]
     fn a_procedure_record_changes_what_the_rest_of_the_session_renders() {
         let dir = scratch("procedure");
         let (store, head) = store_with_a_set(&dir);
 
-        // **A fixture of this test's own, not one of `examples/`.** This used to
-        // derive a different L4 by substituting a phrase out of the example, and it
-        // broke the first time somebody rewrote that example through MCP — which is
-        // a thing this program exists to let them do. A fixture the product can
-        // rewrite is not a fixture. `flat.kir` is grey dots and consumes only
-        // `position`, so it composes with any L1 and cannot be confused with what
-        // the head was playing.
         let root = workspace();
         let drained =
             std::fs::read_to_string(root.join("crates/karakuri-cli/tests/fixtures/flat.kir"))
                 .expect("the flat fixture");
 
-        // Both procedures into the store, which is where a `procedure` record
-        // points. The L1 is unchanged and named anyway: a Set is built from all of them.
         let l1 = std::fs::read_to_string(root.join("examples/drift_shell.kir")).expect("L1");
-        // Through the store's own API rather than by writing a file with a name
-        // this test guessed: the record spells a hash one way and the filename
-        // another, and a test that reproduces the layout by hand is testing its own
-        // reproduction.
         let opened = karakuri_store::store::Store::open(&store).expect("store");
         let put = |source: &str| -> String {
             opened
@@ -447,8 +347,7 @@ mod gpu {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Width and height out of a PNG header, which is fixed-layout: an 8-byte
-    /// signature, then a length and `IHDR`, then the two dimensions big-endian.
+    /// Extracts width and height from standard PNG headers (bytes 16..24).
     fn png_size(bytes: &[u8]) -> (u32, u32) {
         let at = |i: usize| u32::from_be_bytes(bytes[i..i + 4].try_into().expect("4 bytes"));
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "not a PNG");
@@ -492,11 +391,6 @@ mod gpu {
                 .exists(),
             "a replay wrote a Set file"
         );
-        // **The whole sentence, not two substrings of it.** Asserting only that
-        // "save" and the id appear is an assertion the in-frame and after-the-last-
-        // tick spellings could drift apart under: both would keep passing while
-        // saying different things about the same event. The words below are one
-        // function's — `skipped_save` — and this is the reader that holds it still.
         assert!(
             said.contains(&format!(
                 "a `save` of slot 0 was skipped: a replay writes no Set files. \
