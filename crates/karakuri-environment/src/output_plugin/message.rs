@@ -29,8 +29,8 @@ pub enum HostMessage {
         index: u64,
         /// Platform-native shareable surface identifier:
         /// - On macOS: `IOSurfaceID` (u32) resolvable via `IOSurfaceLookup`
-        /// - On Windows: DXGI shared handle (u32 or u64)
-        surface_id: u32,
+        /// - On Windows: DXGI shared handle (`HANDLE`, 64-bit integer)
+        surface_id: u64,
         /// Current frame width in pixels.
         width: u32,
         /// Current frame height in pixels.

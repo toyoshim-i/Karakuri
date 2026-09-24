@@ -199,6 +199,152 @@ mod macos {
     }
 }
 
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::Gpu;
+    use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
+    use windows::Win32::Graphics::Direct3D12::*;
+    use windows::Win32::Graphics::Dxgi::Common::*;
+
+    pub struct WindowsSurface {
+        pub handle: HANDLE,
+        pub surface_id: u64,
+        #[allow(dead_code)]
+        pub texture: wgpu::Texture,
+        pub view: wgpu::TextureView,
+        #[allow(dead_code)]
+        pub width: u32,
+        #[allow(dead_code)]
+        pub height: u32,
+    }
+
+    impl WindowsSurface {
+        pub fn new(
+            gpu: &Gpu,
+            width: u32,
+            height: u32,
+            format: wgpu::TextureFormat,
+        ) -> Result<Self, String> {
+            unsafe {
+                let hal_device = gpu
+                    .device
+                    .as_hal::<wgpu_hal::api::Dx12>()
+                    .ok_or_else(|| {
+                        "wgpu device does not have Dx12 HAL backend (Spout output plugin requires DirectX 12 backend)".to_string()
+                    })?;
+                let d3d12_device = hal_device.raw_device();
+
+                let dxgi_format = match format.remove_srgb_suffix() {
+                    wgpu::TextureFormat::Bgra8Unorm => DXGI_FORMAT_B8G8R8A8_UNORM,
+                    wgpu::TextureFormat::Rgba8Unorm => DXGI_FORMAT_R8G8B8A8_UNORM,
+                    other => {
+                        return Err(format!("unsupported format for output plugin: {other:?}"))
+                    }
+                };
+
+                let heap_properties = D3D12_HEAP_PROPERTIES {
+                    Type: D3D12_HEAP_TYPE_DEFAULT,
+                    CPUPageProperty: D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                    MemoryPoolPreference: D3D12_MEMORY_POOL_UNKNOWN,
+                    CreationNodeMask: 0,
+                    VisibleNodeMask: 0,
+                };
+
+                let resource_desc = D3D12_RESOURCE_DESC {
+                    Dimension: D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                    Alignment: 0,
+                    Width: width as u64,
+                    Height: height,
+                    DepthOrArraySize: 1,
+                    MipLevels: 1,
+                    Format: dxgi_format,
+                    SampleDesc: DXGI_SAMPLE_DESC {
+                        Count: 1,
+                        Quality: 0,
+                    },
+                    Layout: D3D12_TEXTURE_LAYOUT_UNKNOWN,
+                    Flags: D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
+                        | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+                };
+
+                let mut raw_resource: Option<ID3D12Resource> = None;
+                d3d12_device
+                    .CreateCommittedResource(
+                        &heap_properties,
+                        D3D12_HEAP_FLAG_SHARED,
+                        &resource_desc,
+                        D3D12_RESOURCE_STATE_COMMON,
+                        None,
+                        &mut raw_resource,
+                    )
+                    .map_err(|e| format!("CreateCommittedResource failed: {e}"))?;
+
+                let raw_resource = raw_resource
+                    .ok_or_else(|| "CreateCommittedResource produced null resource".to_string())?;
+
+                let handle = d3d12_device
+                    .CreateSharedHandle(&raw_resource, None, GENERIC_ALL.0, None)
+                    .map_err(|e| format!("CreateSharedHandle failed: {e}"))?;
+
+                let surface_id = handle.0 as usize as u64;
+
+                let size = wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                };
+
+                let hal_texture = wgpu_hal::dx12::Device::texture_from_raw(
+                    raw_resource,
+                    format,
+                    wgpu::TextureDimension::D2,
+                    size,
+                    1,
+                    1,
+                );
+
+                let texture_desc = wgpu::TextureDescriptor {
+                    label: Some("output plugin DXGI shared texture"),
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                };
+
+                let texture = gpu.device.create_texture_from_hal::<wgpu_hal::api::Dx12>(
+                    hal_texture,
+                    &texture_desc,
+                    wgpu::TextureUses::UNINITIALIZED,
+                );
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+                Ok(Self {
+                    handle,
+                    surface_id,
+                    texture,
+                    view,
+                    width,
+                    height,
+                })
+            }
+        }
+    }
+
+    impl Drop for WindowsSurface {
+        fn drop(&mut self) {
+            unsafe {
+                if !self.handle.is_invalid() {
+                    let _ = CloseHandle(self.handle);
+                }
+            }
+        }
+    }
+}
+
 /// An output plugin sink feeding composited frames to an out-of-process helper.
 pub(crate) struct PluginSink {
     plugin: OutputPlugin,
@@ -213,6 +359,8 @@ pub(crate) struct PluginSink {
     flip_pipeline: wgpu::RenderPipeline,
     #[cfg(target_os = "macos")]
     flip_bind_group: wgpu::BindGroup,
+    #[cfg(target_os = "windows")]
+    surface: windows::WindowsSurface,
     frame_index: u64,
     width: u32,
     height: u32,
@@ -387,10 +535,27 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
                 height,
             })
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            let surface = windows::WindowsSurface::new(gpu, width, height, format)?;
+            let plugin = OutputPlugin::open(command, "dxgi", width, height, "bgra8unorm")
+                .map_err(|e| format!("{e}"))?;
+
+            Ok(Self {
+                plugin,
+                surface,
+                frame_index: 0,
+                width,
+                height,
+            })
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             let _ = (gpu, command, width, height, format);
-            Err("output plugin sinks currently require macOS (IOSurface)".to_string())
+            Err(
+                "output plugin sinks currently require macOS (IOSurface) or Windows (DXGI)"
+                    .to_string(),
+            )
         }
     }
 
@@ -425,9 +590,13 @@ impl Sink for PluginSink {
         {
             &self.render_target_view
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         {
-            unreachable!("non-macos plugin sink view")
+            &self.surface.view
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            unreachable!("unsupported plugin sink platform")
         }
     }
 
@@ -466,6 +635,16 @@ impl Sink for PluginSink {
 
     fn present(&mut self, _gpu: &Gpu) -> Result<(), String> {
         #[cfg(target_os = "macos")]
+        {
+            self.plugin.send_frame(
+                self.frame_index,
+                u64::from(self.surface.surface_id),
+                self.width,
+                self.height,
+            );
+            self.frame_index += 1;
+        }
+        #[cfg(target_os = "windows")]
         {
             self.plugin.send_frame(
                 self.frame_index,
@@ -510,6 +689,33 @@ mod tests {
                 );
                 macos::CFRelease(looked_up as *const std::ffi::c_void);
             }
+        }
+
+        #[test]
+        #[cfg(target_os = "windows")]
+        fn windows_surface_creates_and_allocates_dxgi_shared_handle() {
+            std::env::set_var("WGPU_BACKEND", "dx12");
+            let Ok(gpu) = Gpu::headless() else {
+                eprintln!("headless GPU initialization failed; skipping");
+                return;
+            };
+            if gpu.adapter.get_info().backend != wgpu::Backend::Dx12 {
+                eprintln!("DirectX 12 backend not available on this host; skipping");
+                return;
+            }
+            let surface = windows::WindowsSurface::new(
+                &gpu,
+                640,
+                480,
+                wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
+            )
+            .expect("WindowsSurface");
+            assert!(
+                surface.surface_id > 0,
+                "DXGI shared handle must be non-zero"
+            );
+            assert_eq!(surface.width, 640);
+            assert_eq!(surface.height, 480);
         }
 
         #[test]
