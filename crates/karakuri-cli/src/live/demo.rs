@@ -1,19 +1,6 @@
 use super::*;
 
-/// A demonstration that drives itself, as a list of `(seconds, key)`.
-///
-/// Every entry goes through [`Live::key`], the same function a keyboard
-/// reaches, so what a watcher sees is what pressing those keys does and not a
-/// second path that resembles it. Nothing here can do anything a person could
-/// not.
-///
-/// It exists because a window is the only honest demonstration of a transport —
-/// the scrub is a motion, and a still frame of it is a still frame — and
-/// whoever is *describing* the feature is often not the one at the keyboard.
-///
-/// The order is the argument: engage first and let it sit, so it is clear that
-/// engaging changes nothing; then scrub back a long way, hold, and let it run
-/// back onto the grid.
+/// Scripted key actions for automated transport demonstration as `(seconds, key)`.
 pub(crate) const DEMO_SCRIPT: &[(f32, char)] = &[
     // Four seconds of the material as it is, for a before.
     (4.0, 'y'), // beat sync — the picture does not move, deliberately
@@ -74,38 +61,7 @@ pub(crate) const DEMO_SCRIPT: &[(f32, char)] = &[
 /// than as something new.
 pub(crate) const DEMO_LOOP_SECONDS: f32 = 27.0;
 
-/// The two topologies, over geometry that does not change, as a list of
-/// `(seconds, key)` on the same terms as [`DEMO_SCRIPT`].
-///
-/// The deck holds one L1 file paired with a sprite renderer in slot 0 and a
-/// stroke renderer in slot 1, so showing each slot without the other is the
-/// demonstration. What a watcher sees is the same cloud, in the same places, at
-/// the same instant, drawn two ways.
-///
-/// It fades a slot out rather than auditioning the other one, and that is the
-/// one thing here that changed. This script pressed `v` three times — the mix,
-/// each slot alone, the mix again — until ADR-0240 retired *Choose what the
-/// output shows*. The output is the mix now and always, so the way to see one
-/// slot without the other is to take the other out of the mix: `F` on the
-/// focused slot's fader, `G` to bring it back, with a digit before each to say
-/// which slot. That is `Operation::FadeDeck` where it used to be `SetPreview`,
-/// and it isolates a slot exactly as the audition did.
-///
-/// What it costs is that a fade is scheduled and an audition was not. A press
-/// lands on the current grid rather than in the frame it arrives, so the
-/// picture changes a beat or two after the entry that asked for it — which is
-/// the same gap [`DEMO_SCRIPT`]'s `F` and `G` already have and say is worth
-/// watching for. The seconds below leave room for it.
-///
-/// The mix comes first and last on purpose. Both slots composited is the state
-/// that shows they are the same geometry — the strokes lie along the dots — and
-/// each slot alone is what shows how different the two look when the other is
-/// not there to anchor it.
-///
-/// Nothing here presses a key that only means something to someone who was told
-/// what to expect. Each fade produces a visibly different frame on its own,
-/// which is the property [`DEMO_SCRIPT`]'s first entry deliberately does not
-/// have and has to say so.
+/// Scripted key actions demonstrating dual topology rendering over identical geometry.
 pub(crate) const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
     // Five seconds of the mix: strokes and sprites over each other. Then slot
     // 1's fader out, leaving slot 0 alone — sprites *and* strokes, from one
@@ -124,12 +80,7 @@ pub(crate) const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
 /// the last press before it starts over.
 pub(crate) const DEMO_LINES_LOOP_SECONDS: f32 = 20.0;
 
-/// Which demonstration `--demo` runs.
-///
-/// A named script rather than a flag, because there is now more than one thing
-/// worth showing and a single `--demo` would have to pick. Each is a
-/// demonstration harness and not a feature: both drive [`Live::key`], so
-/// neither can do anything a person at the keyboard could not.
+/// Available automated demonstration modes for `--demo`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Demo {
     /// The transport: beat sync engaged, scrubbed two bars back, held, and run
@@ -162,30 +113,11 @@ impl Demo {
         }
     }
 
-    /// The deck this demonstration needs, for a run that named no material.
-    ///
-    /// A demonstration that requires the operator to assemble the scene is not one.
-    /// `--demo lines` is about two renderers over one geometry, and a watcher
-    /// handed a one-slot deck sees the script fade the only thing in the mix out
-    /// and back. Overridden the moment any `--set` is given, so this supplies a
-    /// scene rather than imposing one.
+    /// Returns default deck setup required for the demonstration if not provided.
     pub(crate) fn deck(self) -> Vec<(Named, Vec<Named>)> {
         match self {
             Demo::Transport => Vec::new(),
-            // **Two slots, and it has to stay two.** A stack — one slot with
-            // both renderers over one simulation — is what several renderers
-            // over one geometry now costs, and it is the wrong shape *here*:
-            // `DEMO_LINES_SCRIPT` fades one slot's fader out at a time so the
-            // other is seen alone, and a fader is per **slot**. A one-slot
-            // deck has nothing to take away, so the script would show the same
-            // picture and then an empty frame, and the demonstration would
-            // run, look like it worked, and demonstrate nothing — which is the
-            // defect the doc above already names.
-            //
-            // Slot 0 carries the stack anyway, so what the demonstration shows
-            // is the mix, then one simulation drawn both ways, then strokes
-            // alone. `--set drift_shell.kir,soft_points.kir,drift_streaks.kir`
-            // is the plain way to ask for a stack and needs no demonstration.
+            // Two-slot deck enables fading individual slots to demonstrate line/stroke variations.
             Demo::Lines => vec![
                 (
                     Named::bare("examples/drift_shell.kir"),
@@ -204,13 +136,7 @@ impl Demo {
 }
 
 impl Live {
-    /// Press whatever [`DEMO_SCRIPT`] is due, if this run is driving itself.
-    ///
-    /// Wall clock rather than frame count, because what is being demonstrated is a
-    /// performance and a performance happens in seconds. That makes the demo *not*
-    /// reproducible frame for frame, which is fine and is worth saying: it is a
-    /// thing to look at, not a thing to diff. Everything it presses goes through
-    /// [`Live::key`], so it can do nothing a person at the keyboard could not.
+    /// Dispatches scheduled demo key inputs based on wall-clock time.
     pub(super) fn run_demo(&mut self) {
         let Some((demo, next)) = self.demo else {
             return;

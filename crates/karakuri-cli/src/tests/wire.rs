@@ -1,10 +1,5 @@
 use super::*;
 
-/// replace keyed on the input, re-aim the slot so it rebuilds, and answer once
-/// at the frame it was applied on. Everything below [`rewired`] needs is a list
-/// of edges and a channel — no window, no GPU and no `Deck` — which is why that
-/// function is not a method; the one test here that goes through the socket is
-/// the one about the *answer*, because only a real client can be told anything.
 #[cfg(test)]
 mod wire_tests {
     use super::*;
@@ -18,9 +13,7 @@ mod wire_tests {
         }
     }
 
-    /// A watcher's worth of aim, with nothing in it that matters here except the
-    /// edges: what these tests read off a re-point is the wiring it carries and
-    /// whether one arrived at all.
+    /// Creates test Aim state holding only edges.
     fn aimed(edges: Vec<karakuri_engine::set::Edge>) -> watch::Aim {
         watch::Aim {
             head: Named::bare("head.kir"),
@@ -54,15 +47,7 @@ mod wire_tests {
         )
     }
 
-    /// An edge is replaced on the input it binds, and no other edge moves.
-    ///
-    /// The replacement is keyed on `(node, slot)` — the node that declares the
-    /// input and what its procedure calls it — so a second `uses` on the *same
-    /// node* is a different entry, and so is the same input name on a different
-    /// node. A key that were only the node would silently unbind `morph.near` when
-    /// `morph.far` was rewired; one that were only the input name would do it
-    /// across nodes. Both are here, because both would build a Set nobody asked for
-    /// and neither shows up on the call that did it.
+    /// Verifies that rewiring an edge replaces existing binding for (node, slot) without affecting others.
     #[test]
     fn a_wire_replaces_the_edge_on_the_input_it_binds_and_leaves_every_other_alone() {
         let mut edges = vec![
@@ -108,13 +93,7 @@ mod wire_tests {
         assert_eq!(sent.edges, edges, "the re-aim carried a different wiring");
     }
 
-    /// A second wire on one input replaces rather than appends.
-    ///
-    /// `SetError::SlotBoundTwice` refuses two edges on one input where the Set is
-    /// built, so an append would make the *second* call on an input a refusal — a
-    /// model that changed its mind would have wired the slot into a state it cannot
-    /// build and cannot leave. The two calls are separate frames here, which is the
-    /// ordinary case; the same thing on one frame is the test below.
+    /// Verifies that sequential wire requests on an input replace existing edges rather than creating duplicates.
     #[test]
     fn a_second_wire_on_one_input_replaces_rather_than_appends() {
         let mut edges = vec![edge("morph", "far", "sphere_shell")];
@@ -133,9 +112,6 @@ mod wire_tests {
              `SlotBoundTwice` and the second call is where a model loses its way back",
             edges.len()
         );
-        // Both frames re-aimed the slot, and the second one carries the second
-        // edge — the first would leave the picture on the wiring the model
-        // changed its mind about.
         let sent: Vec<watch::Aim> = aims.try_iter().collect();
         assert_eq!(
             sent.len(),
@@ -191,14 +167,7 @@ mod wire_tests {
         assert_eq!(sent[0].edges, vec![edge("morph", "far", "lattice_shell")]);
     }
 
-    /// A slot this deck does not hold is refused, and nothing is rewired.
-    ///
-    /// The MCP server checks the number against its `Slots` before it sends, so a
-    /// model meets the refusal there — this is the guard that does not depend on
-    /// the surface that asked having one, which is exactly what `Live::save_set`
-    /// says about the same check. The run's wiring is the part worth asserting: a
-    /// refusal that had already edited the list would leave the deck wired by a
-    /// call it said it had refused.
+    /// Verifies that attempts to wire non-existent slots are rejected without modifying edge configuration.
     #[test]
     fn a_wire_naming_a_slot_this_deck_does_not_hold_is_refused_and_nothing_is_rewired() {
         let mut edges = vec![edge("morph", "far", "sphere_shell")];
@@ -244,14 +213,7 @@ mod wire_tests {
         assert_eq!(sent[0].edges, vec![edge("morph", "far", "lattice_shell")]);
     }
 
-    /// A slot with no watcher is not a failure, and the reply says what did not
-    /// happen.
-    ///
-    /// A run without `--watch` has nothing that rebuilds. The edge is still the
-    /// run's — a `save_set` records it — so a refusal would be false; and a bare
-    /// "wired" would let a model wait for a picture that is never going to change.
-    /// `mcp::wire_input` adds the same fact from its side, where it is the only
-    /// thing that knows how the run was started.
+    /// Verifies that rewiring a slot without a watcher updates session edges while noting absence of rebuilds.
     #[test]
     fn a_wire_on_a_slot_with_no_watcher_is_applied_and_says_nothing_rebuilds() {
         let mut edges = Vec::new();
@@ -274,19 +236,7 @@ mod wire_tests {
         assert_eq!(edges, vec![edge("morph", "far", "drift_shell")]);
     }
 
-    /// The frame drains the edges, and not only the saves.
-    ///
-    /// This is the failure the whole surface was in when `wire_input` landed: the
-    /// tool was finished, the channel was there, and the render loop answered none
-    /// of it — so every call waited out `WIRE_REPLY` and came back with a true
-    /// sentence saying nothing had been rewired. Everything else here tests what
-    /// [`rewired`] decides; nothing else tests that a frame ever asks it.
-    /// `Live::run_requests` needs a window and a GPU, so this is read off the
-    /// source, which is
-    /// `a_frame_attends_to_its_saves_before_anything_can_stop_them`'s own technique
-    /// and for its reason: asserting where a statement is beats asserting nothing
-    /// and calling it untestable. Comment lines are dropped first, so prose about
-    /// draining cannot stand in for a drain.
+    /// Verifies statically that `Live::run_requests` processes both saves and wire updates.
     #[test]
     fn a_frame_takes_the_edges_a_client_asked_for_and_not_only_the_saves() {
         let source = include_str!("../live/mod.rs");
@@ -367,20 +317,7 @@ mod wire_tests {
         )
     }
 
-    /// A `wire_input` call is answered at the frame the edge was applied on, and
-    /// the run is wired with it.
-    ///
-    /// End to end: the call goes over the socket, the request crosses
-    /// `mcp::Reporter::wires`, a stand-in frame loop applies it with the same
-    /// [`rewired`] the real one calls, and the answer comes back down the
-    /// connection the model is holding open. Without the drain this is exactly the
-    /// failure that was here: the tool waits out `WIRE_REPLY` and says *the render
-    /// loop had not taken this edge*, which is true, is loud, and is not a
-    /// rewiring.
-    ///
-    /// The frame loop is a thread rather than a `Live` because a `Live` needs a
-    /// window and a GPU. What it stands in for is the drain and the answer, and
-    /// those are the whole of `Live::rewire`.
+    /// Verifies end-to-end that an MCP `wire_input` request is applied and answered at frame execution.
     #[test]
     fn a_wire_request_is_answered_at_the_frame_it_was_applied_on() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -460,11 +397,7 @@ mod wire_tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let l1 = dir.path().join("l1.kir");
         std::fs::write(&l1, "proc probe { kind L1 }").expect("fixture");
-        // **One class open, and it is the fader's.** A `SetGain` the audit
-        // refused would never reach the drain at all, and what is under test
-        // here is the answer a call gets *after* the audit has passed it — the
-        // star needs nothing opened, because `Standing::Open` is its whole
-        // audit (ADR-0301, ADR-0341).
+        // Gate MixFaders open for testing post-audit tool dispatch (ADR-0301, ADR-0341).
         let opening = karakuri_environment::Opening::closed();
         opening.set(
             karakuri_operation::gate::Open::CLOSED

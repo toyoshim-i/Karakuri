@@ -1,28 +1,7 @@
 use super::*;
 pub(crate) use karakuri_environment::audio::{apply_tempo, Audio, Grid, LATENCY_OFFSET_STEP_MS};
 
-/// Put the session's grid where the tempo source says the shared grid is.
-///
-/// The subtraction happens here and not in the source, for the reason
-/// `schedule_from` reads a transition's `from` end here: the two numbers — the
-/// shared beat and this session's beat — are only both in hand at this moment.
-/// A source that sent a shift would be sending a difference from a grid it
-/// cannot see.
-///
-/// That subtraction is the whole of what a shared grid adds. A beat tracker can
-/// find how fast beats go and where they are, and cannot find which one is beat
-/// one; a number every peer agrees on can, and putting `beats()` onto that
-/// number is what makes `bar` the room's bar rather than one counted from
-/// whenever this program started.
-///
-/// How far it is allowed to move is [`tempo_source::Source::correction`]'s, and
-/// that bound is not optional: the source is another program, from another
-/// repository, released on its own schedule. This used to apply whatever
-/// arrived, whole and instantly, which made a helper with a wrong clock able to
-/// throw the grid thousands of beats.
-///
-/// Returns whether the grid is being followed, which is what takes the
-/// authority to move it away from the beat tracker.
+/// Synchronizes the session grid with an external tempo source.
 pub(crate) fn follow_tempo_source(
     source: &mut Option<tempo_source::Source>,
     deck: &mut Deck,
@@ -74,24 +53,7 @@ pub(crate) fn follow_tempo_source(
     audio::Grid::Followed
 }
 
-/// This frame's measurement, and what it does to the session.
-///
-/// Before the frame is rendered and never inside it. The measured frame and the
-/// tempo correction are latched here, exactly where `steps` is measured, so
-/// that everything drawn this frame reads one set of values — two bindings
-/// sampling `energy` in one frame have to get one answer, or the record saying
-/// what this frame saw is a record of neither.
-///
-/// The session's signals are taken by value, given this frame's measurement,
-/// and handed back. `Signals` is `Copy` and the copy carries the phase, so this
-/// is not the "restart the session clock" that `Deck::set_signals` warns about
-/// — it is the same clock with one frame's input attached.
-///
-/// A free function rather than a method on `Live`, for the reason [`Clock`] is
-/// its own type: it is called from inside the closure that commits a frame,
-/// which already holds the deck, so a `&mut self` here would borrow the whole
-/// of `Live` a second time. Taking the three pieces it actually touches is also
-/// a fair description of what it touches.
+/// Samples audio metrics for the current frame and applies them to deck signals and recorder.
 pub(crate) fn measure_audio(
     audio: &mut Option<audio::Audio>,
     deck: &mut Deck,

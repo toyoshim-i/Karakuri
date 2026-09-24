@@ -1,10 +1,6 @@
 use super::*;
 
-/// The real entry point: reads the process's own arguments, then hands them to
-/// [`parse_args_from`] and turns its `Result` into the exit this binary
-/// actually makes. Kept this thin so the parsing logic itself takes any
-/// iterator of strings and returns rather than exits — which is what makes it
-/// possible to drive adversarial input through it in a test.
+/// Entry point that parses CLI arguments and executes immediate actions or exits.
 pub(crate) fn parse_args() -> Args {
     match parse_args_from(std::env::args().skip(1)) {
         Ok(ParseOutcome::Run(args)) => *args,
@@ -12,10 +8,7 @@ pub(crate) fn parse_args() -> Args {
             print!("{USAGE}\n{BINDINGS}");
             std::process::exit(0);
         }
-        // **Nothing is built to answer this.** The store is opened, the `sets/`
-        // directory is read, each file in it is read, and the process ends —
-        // see [`listed_sets`]. On stdout, because it is the answer to the
-        // question that was asked rather than a note about a run.
+        // Prints store sets to stdout and exits.
         Ok(ParseOutcome::ListSets(root)) => match listed_sets_at(&root) {
             Ok(said) => {
                 print!("{said}");
@@ -26,13 +19,7 @@ pub(crate) fn parse_args() -> Args {
                 std::process::exit(1);
             }
         },
-        // **To standard output, so a shell can redirect it.** What packaging
-        // produces is a thing you *send somebody* — a single self-contained
-        // file that works in their store — rather than something the library
-        // keeps, so it goes where `> patch.ndjson` puts it and needs no naming
-        // rule of its own in `sets/`. The store already holds this Set under an
-        // id; a second copy of it there under some derived name would be a
-        // second answer to which file is the Set.
+        // Write package contents directly to stdout for redirection.
         Ok(ParseOutcome::Package { store, id }) => match packaged_set(&store, &id) {
             Ok(said) => {
                 print!("{said}");
@@ -60,23 +47,7 @@ pub(crate) fn parse_args() -> Args {
     }
 }
 
-/// The whole of argument parsing, as a pure function: no I/O, no exit, just
-/// strings in and either an [`Args`] or an error message out. Every message a
-/// person can act on is produced here rather than by falling back to a default
-/// that hides a typo — `--set` and `--tonemap` already worked this way;
-/// `--exposure` now validates on the same terms rather than silently keeping
-/// 1.0 for a negative, zero, or unparsable value. The value belonging to
-/// `flag`, refused rather than defaulted.
-///
-/// Two silences this removes. A flag at the end of the line with nothing after
-/// it used to take `None` and fall back — `--render` with the path forgotten
-/// opened a *window*, so a batch script with a typo hung waiting for one
-/// instead of failing. And a flag whose value was missing used to swallow the
-/// next flag: `--set --render out.png` read `--render` as a pair of paths and
-/// then blamed `--render` for not being one.
-///
-/// A leading `-` is treated as another option unless the whole token parses as
-/// a number, so a negative value is still a value.
+/// Extracts the next string value for `flag`, refusing options or missing values.
 pub(crate) fn value_for(
     flag: &str,
     it: &mut impl Iterator<Item = String>,
@@ -90,13 +61,7 @@ pub(crate) fn value_for(
     }
 }
 
-/// A number for `flag`, refused rather than defaulted.
-///
-/// `--frames`, `--capacity` and `--budget-ms` used to keep their default on
-/// anything unparsable, so `--frames 24O` (a letter O) rendered 240 frames and
-/// said nothing. A run that quietly used the default is indistinguishable from
-/// one that honoured what was typed, which is the same failure this codebase
-/// keeps finding in other clothes.
+/// Parses a typed number for `flag`, refusing unparsable values.
 pub(crate) fn number_for<T: std::str::FromStr>(
     flag: &str,
     what: &str,
@@ -108,12 +73,7 @@ pub(crate) fn number_for<T: std::str::FromStr>(
         .map_err(|_| format!("`{flag} {value}` — expected {what}"))
 }
 
-/// A `WIDTHxHEIGHT` pair for `flag`.
-///
-/// Zero is refused rather than clamped, which is the difference between a typo
-/// and a picture: everything downstream takes `max(1)` to keep a texture
-/// descriptor legal, so `--canvas 1920x0` would have rendered a one-texel-tall
-/// frame and reported the size it was asked for.
+/// Parses a `WIDTHxHEIGHT` dimension pair for `flag`, refusing zero dimensions.
 pub(crate) fn extent(flag: &str, value: String) -> Result<(u32, u32), String> {
     let bad = || format!("`{flag} {value}` — expected `WIDTHxHEIGHT`");
     let (w, h) = value.split_once('x').ok_or_else(bad)?;
@@ -171,12 +131,7 @@ pub(crate) fn parse_bind(value: &str) -> Result<Binding, String> {
     // to know one was given.
     let mut noise = NoiseConfig::default();
     let mut noise_given = false;
-    // Kept as what was written rather than folded into `noise.kind` as it is
-    // read. `NoiseKind` carries the octave count inside the `fbm` variant, so
-    // assigning either field as it arrives lets the later one decide the
-    // other: `noise.octaves` would turn a `white` that was asked for into an
-    // `fbm` that was not. Both are resolved once, after the loop, where the
-    // pair can be checked against each other.
+    // Accumulate noise fields to validate kind and octave consistency after parsing.
     let mut noise_kind: Option<&str> = None;
     let mut noise_octaves: Option<u32> = None;
 
@@ -261,20 +216,7 @@ pub(crate) fn parse_bind(value: &str) -> Result<Binding, String> {
     // would be an aesthetic decision made by the argument parser.
     let range = range.ok_or_else(|| bad("no `range=LOW..HIGH`"))?;
 
-    // **Built as the record and decoded back**, so the flag is what its
-    // documentation always claimed: a way to write a `bind` record. Every
-    // semantic rule — the `bpm` refusal, `octaves` needing `fbm`, a generator
-    // needing `signal=noise` — lives in `setfile::binding_from_record` and
-    // cannot differ between a command line and a Set file. That debt against
-    // the decoder is paid by having one rule rather than two copies of it —
-    // see `docs/adr/0066-a-flag-becomes-a-record-writer.md`.
-    //
-    // The one check that stays here is the one the record cannot express.
-    // `BindNoise::octaves` has a serde default, deliberately — "a generator
-    // omitted field by field is under-specified, not refused" — so a record
-    // cannot say whether `octaves` was *named*. The flag knows, and an
-    // `octaves` named beside a kind that has no octaves is an operator
-    // expecting a generator they did not ask for.
+    // Convert into a bind record to share validation logic with the store decoder.
     if noise_octaves.is_some() && noise_kind != Some("fbm") {
         return Err(bad(&format!(
             "`noise.octaves` needs `noise.kind=fbm`, and this asks for `{}`",
@@ -308,16 +250,7 @@ pub(crate) fn record_layer(kind: karakuri_ir::Kind) -> Layer {
     karakuri_environment::meta::layer_of(kind)
 }
 
-/// `--publish name=L4:0:exposure[0.2..0.8]`, or `--publish
-/// level=exposure[0..2]` for every node that declares it.
-///
-/// The address is the `--param` one and the range is the `--bind` one, which is
-/// why neither half needed a grammar of its own: what a published control is,
-/// is a name in front of an address and a range behind it — and the address is
-/// `layer:index:` present or absent as a unit, meaning the same thing it means
-/// there. The range is mandatory: publishing without one would mean "over the
-/// declared range", and spelling that as an absence would make the common
-/// narrowing case look like the exception.
+/// Parses `--publish name=L4:0:exposure[0.2..0.8]` or wildcard forms.
 pub(crate) fn parse_publish(value: &str) -> Result<karakuri_engine::set::Published, String> {
     let bad = || {
         format!(
@@ -430,13 +363,7 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
             "--help" | "-h" => return Ok(ParseOutcome::Help),
             "--set" => {
                 let value = value_for("--set", &mut it)?;
-                // **The first is the L1 and the rest are renderers**, drawn in
-                // the order given. A third part used to be refused: it could
-                // only be a typo when a Set was a pair, and taking `b,c` as one
-                // literal filename would have blamed a missing file for a stray
-                // comma. It is now what asking for two renderers looks like, and
-                // there is no new syntax for it — one comma-separated list, read
-                // as one L1 and however many L4s.
+                // Parse L1 simulation followed by one or more L4 renderers.
                 let parts: Vec<&str> = value.split(',').collect();
                 match parts.split_first() {
                     Some((l1, l4s))
@@ -444,9 +371,6 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
                             && !l4s.is_empty()
                             && l4s.iter().all(|p| !p.is_empty()) =>
                     {
-                        // **Each part may carry a name** — `near=lattice.kir`.
-                        // A name is what everything downstream addresses the
-                        // node by; see `Named`.
                         let head = Named::parse(l1)?;
                         let rest: Vec<Named> = l4s
                             .iter()
@@ -466,11 +390,6 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
             "--render" => args_out.render_to = Some(PathBuf::from(value_for("--render", &mut it)?)),
             "--seq" => args_out.seq_to = Some(PathBuf::from(value_for("--seq", &mut it)?)),
             "--param" => {
-                // A malformed override used to be dropped in silence, which
-                // looks exactly like a parameter that was applied and had no
-                // visible effect. A name that no procedure declares is still
-                // only a warning at build time — that one is a question about
-                // the `.kir`, not about the command line.
                 let value = value_for("--param", &mut it)?;
                 args_out.overrides.push(parse_param(&value)?);
             }
@@ -484,11 +403,7 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
             }
             "--bpm" => {
                 let value = value_for("--bpm", &mut it)?;
-                // Refused rather than clamped here, on the same terms as
-                // `--exposure`: the oscillator clamps a bad tempo so that a
-                // zero cannot freeze every noise signal at once, but a tempo
-                // typed at the command line and quietly changed is a run that
-                // did not do what it was told.
+                // Require finite positive tempo.
                 match value.parse::<f32>() {
                     Ok(v) if v.is_finite() && v > 0.0 => args_out.bpm = v,
                     _ => return Err(format!("`--bpm {value}` — expected a positive number")),
@@ -501,16 +416,7 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
             }
             "--exposure" => {
                 let value = value_for("--exposure", &mut it)?;
-                // Validated rather than defaulted on failure — a negative,
-                // zero, NaN, infinite, or unparsable exposure used to be
-                // silently swapped for 1.0, which reads as "the flag was
-                // ignored" rather than "the value was wrong". `--tonemap` and
-                // `--set` already fail loudly on a bad value; this does the
-                // same. **What it does not do is clamp**: `100` is accepted and
-                // lands at 100, well outside what `-`/`=` reach, because a
-                // batch render is allowed to ask for something extreme. See
-                // `exposure_positive_is_accepted_unclamped` and
-                // [`EXPOSURE_MIN`], whose comment claimed the opposite.
+                // Require finite positive exposure without clamping.
                 match value.parse::<f32>() {
                     Ok(v) if v.is_finite() && v > 0.0 => args_out.look.exposure = v,
                     _ => return Err(format!("`--exposure {value}` — expected a positive number")),
@@ -568,14 +474,7 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
                 })?);
             }
             "--store" => args_out.store = PathBuf::from(value_for("--store", &mut it)?),
-            // Read into a local rather than onto `Args`: a listing is not a
-            // run, and the answer is returned below once the whole command line
-            // has been seen — `--list-sets --store DIR` and `--store DIR
-            // --list-sets` are the same request.
             "--list-sets" => list_sets = true,
-            // Locals rather than `Args` fields, for `--list-sets`'s reason:
-            // neither is a run, and both are answered below once the whole
-            // command line has been seen, so `--store` may be on either side.
             "--package" => package = Some(value_for("--package", &mut it)?),
             "--take-in" => take_in = Some(PathBuf::from(value_for("--take-in", &mut it)?)),
             "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
@@ -600,26 +499,15 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
                 args_out.canvas = extent("--canvas", value_for("--canvas", &mut it)?)?;
                 args_out.canvas_given = true;
             }
-            // An unknown option used to become a path, so `--wtach` looked
-            // like a `.kir` that did not exist and the error blamed the file.
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             _ => positional.push(PathBuf::from(arg)),
         }
     }
 
-    // **Answered before a word is said about material**, and above every rule
-    // below: none of them is about a listing. A `.kir` pair this run will not
-    // read, a default pair nobody asked for, a refusal about two ways of naming
-    // material — all of it belongs to a run, and refusing `--list-sets
-    // --load-set x` for "two descriptions of the material" would be a refusal
-    // about a Set nothing here is going to build.
+    // Handle early non-rendering actions.
     if list_sets {
         return Ok(ParseOutcome::ListSets(args_out.store));
     }
-    // The same, and above the material rules for the same reason. Answered in
-    // a fixed order rather than refused as a pair: each of the three prints and
-    // stops, so the only thing a second one could change is which answer is
-    // printed, and none of them is a run whatever the other says.
     if let Some(id) = package {
         return Ok(ParseOutcome::Package {
             store: args_out.store,
@@ -633,8 +521,6 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
         });
     }
 
-    // The bare positional pair still means what it always meant, and now it is
-    // simply the last slot: `--set a,b c.kir d.kir` is a deck of two.
     match positional.len() {
         0 => {}
         2 => args_out.sets.push((
@@ -647,11 +533,6 @@ pub(crate) fn parse_args_from(args: impl Iterator<Item = String>) -> Result<Pars
             ))
         }
     }
-    // The default pair, for a run that named no material at all. **Not when a
-    // Set file is loaded**: that file *is* the material, and adding the default
-    // beside it would put a second Set on the deck nobody asked for — which is
-    // not merely extra, it is a `--bind` from the file landing on material that
-    // has no such parameter and saying so.
     validate_args(&mut args_out, size_given)?;
     Ok(ParseOutcome::Run(Box::new(args_out)))
 }

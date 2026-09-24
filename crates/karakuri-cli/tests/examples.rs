@@ -126,11 +126,7 @@ fn compile(file: &str) -> karakuri_ir::typed::Checked {
     checked
 }
 
-/// Parse, check and cost. All three, because they refuse different things: the
-/// parser knows the grammar, the check pass knows the contracts and the types,
-/// and cost estimation is what a ceiling refuses — the last of which has already
-/// turned an example away once, when a raymarcher met a budget calibrated for
-/// sprites.
+/// Validates that all examples parse, type-check, and pass cost estimates.
 #[test]
 fn every_example_parses_checks_and_costs() {
     let files = kir_files();
@@ -146,15 +142,7 @@ fn every_example_parses_checks_and_costs() {
     }
 }
 
-/// **A Set names its parts by relative path, so the check a hand-written list
-/// could never make is that the paths are real.**
-///
-/// It is the whole difference between the pairing living in prose and living in
-/// a file: prose that names a file that was renamed reads exactly as well as
-/// prose that does not, and this does not. The layer is checked against the
-/// procedure's own `kind` for the same reason — a `.kset` saying `L2` over a file
-/// declaring `L4` is a Set that will not build, and finding that out here names
-/// the line rather than the driver.
+/// Validates that every .kset file references existing source files with matching layer declarations.
 #[test]
 fn every_set_names_parts_that_are_there() {
     let sets = ksets();
@@ -203,33 +191,14 @@ fn every_set_names_parts_that_are_there() {
     }
 }
 
-/// **And the other direction: a part in this directory that no Set names.**
-///
-/// The list this replaced could not ask it, being a list — it knew what it held
-/// and nothing about what it left out, so a `.kir` added beside it joined the
-/// suite as a file that parses and was in no Set anybody built. Every part here
-/// is documented with a command line in its own header, which is what a `.kset`
-/// now carries; a part that is genuinely in no Set belongs in the list below
-/// **with the reason**, rather than in a Set invented to hold it.
+/// Ensures every .kir source file in examples belongs to at least one .kset, or is explicitly exempted.
 #[test]
 fn every_part_is_in_some_set() {
     let named: Vec<String> = ksets()
         .iter()
         .flat_map(|s| s.parts.iter().map(|p| p.path.clone()))
         .collect();
-    // **Three, and all three for one reason.** A `kind L5` is a frame effect: it
-    // runs in the **master chain**, which sits one level out from every Set, so
-    // a `.kset` holding one would be a Set reaching outside itself — the same
-    // failure `record.rs` names for a Set carrying its gain
-    // (`docs/adr/0227-…`, `docs/adr/0340-…`). There is nothing to write here
-    // even when the chain gains its slots; what would put one in a Set is the
-    // *nested* role, folding several renderers into the one `Texture` a Set
-    // outputs, and nothing builds that either.
-    //
-    // A list rather than a rule about the kind, deliberately: a nested L5 *is*
-    // a Set's node, so "an L5 is never in a Set" would be the wrong sentence to
-    // teach this test, and the day one is written it belongs in a `.kset` like
-    // every other part.
+    // Frame effects operating in the master chain rather than inside Sets.
     let in_no_set: [(&str, &str); 3] = [
         (
             "feedback.kir",
@@ -259,28 +228,12 @@ fn every_part_is_in_some_set() {
     }
 }
 
-// `Set::build` needs a device, so the composition check does; parsing, checking
-// and costing every example does not, and that is the half worth running
-// anywhere. See `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`.
 mod gpu {
     use super::*;
 
-    /// **The Sets shipped beside the parts actually compose.** `Set::build` is
-    /// where `consumes ⊆ emit` is decided, and it is also where the rules a
-    /// single file cannot express live — `blend weighted` on a fullscreen L4,
-    /// for one. A `.kset` is a claim about a combination, not about a directory
-    /// of files, and this is where the claim is judged.
-    ///
-    /// **With the edges the file carries.** A node that declares a geometry,
-    /// field or camera slot is refused unless the Set says which node fills it,
-    /// so the wiring is as much a part of the Set as the part list is — and one
-    /// built without it here would be a file this test says composes and an
-    /// operator cannot load.
+    /// Verifies that all bundled .kset definitions successfully compile and compose on GPU.
     #[test]
     fn the_sets_beside_the_parts_compose() {
-        // Not a silent skip on a machine with no GPU: a test that passes by not
-        // running is worse than one that fails, and every other GPU test in this
-        // workspace says the same thing this way.
         let gpu = karakuri_engine::Gpu::headless().expect("no GPU available");
 
         for set in ksets() {
@@ -297,9 +250,6 @@ mod gpu {
                 of.sort_by_key(|(p, _)| p.index);
                 of.iter().map(|(_, c)| c).collect()
             };
-            // **Every L1, each at the capacity its own file declares** — which is
-            // what the documented command line does, and what a pairing Set
-            // needs two of.
             let l1s: Vec<(&karakuri_ir::typed::Checked, u32)> = on("L1")
                 .into_iter()
                 .map(|l1| (l1, l1.capacity.expect("an L1 declares a capacity").default))
@@ -316,11 +266,6 @@ mod gpu {
                 })
                 .collect();
 
-            // **A pair is still built the way a pair is built.** `Set::build` is
-            // the entry the documented two-file command line reaches and the one
-            // `Sources::default()` uses, so a Set that is one geometry and one
-            // renderer goes through it rather than through the general form it
-            // delegates to.
             let built = if l1s.len() == 1
                 && l4s.len() == 1
                 && l2s.is_empty()
