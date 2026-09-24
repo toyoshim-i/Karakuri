@@ -81,18 +81,11 @@ impl Port {
                 &ports[index],
                 "karakuri-in",
                 |_stamp, bytes, back: &mut Callback| {
-                    // Parsed here rather than in the frame, so what crosses the
-                    // channel is a message rather than a buffer — no allocation
-                    // on the frame side, and nothing to reassemble.
-                    //
-                    // The send's error is dropped: it means the receiver is
-                    // gone, which means the run is ending, and a MIDI callback
-                    // is the last place to report that.
+                    // Parsed on the MIDI thread to avoid per-frame allocations.
+                    // Dropped send errors indicate receiver shutdown.
                     if let Some(message) = Message::parse(bytes) {
                         let _ = back.messages.send(message);
-                        // **After the send and never before it**, so the loop
-                        // this wakes finds the message already queued rather
-                        // than draining nothing and going back to sleep.
+                        // Wake after enqueueing so the consumer thread finds the message ready.
                         if let Some(wake) = back.wake.as_ref() {
                             wake();
                         }
@@ -109,11 +102,9 @@ impl Port {
         })
     }
 
-    /// Every message that has arrived since the last call. Never waits.
+    /// Drains all messages received since the last call into `into` without blocking.
     ///
-    /// Drains rather than taking one, because a fader sweep delivers several
-    /// between two frames and acting on one of them a frame would put the
-    /// fader where the operator's hand was rather than where it is.
+    /// Clears `into` before populating it with queued messages.
     pub fn drain(&self, into: &mut Vec<Message>) {
         into.clear();
         while let Ok(message) = self.messages.try_recv() {
@@ -141,14 +132,9 @@ pub struct Out {
 const QUEUE: usize = 256;
 
 impl Out {
-    /// Open the output whose name contains `wanted`, case-insensitively, or
-    /// `Err` naming every output there was.
+    /// Opens the first output matching `wanted` case-insensitively.
     ///
-    /// A substring for [`Port::open`]'s reason exactly, and it matters more
-    /// here: a device's input and output ports are named by the manufacturer
-    /// and often differ past the first word — "nanoKONTROL2 SLIDER/KNOB" in
-    /// and "nanoKONTROL2 CTRL" out — so whoever pairs an output with an input
-    /// hands in as much of the name as the two share.
+    /// Accepts partial substrings because device input/output port names often differ.
     pub fn open(wanted: &str) -> Result<Out, String> {
         let (ready, opened) = mpsc::channel::<Result<String, String>>();
         let (to, from) = mpsc::sync_channel::<[u8; 3]>(QUEUE);
@@ -163,11 +149,7 @@ impl Out {
                     if ready.send(Ok(name)).is_err() {
                         return;
                     }
-                    // **The only place in this process that writes MIDI.**
-                    // `recv` blocks, which is the point: this thread waits so
-                    // that the frame never does. A send that fails is a port
-                    // that has gone, and a MIDI callback is the last place to
-                    // report that — the drop count is what says so.
+                    // Dedicated output writer thread. Blocks on `recv` to keep callers non-blocking.
                     while let Ok(bytes) = from.recv() {
                         let _ = connection.send(&bytes);
                     }

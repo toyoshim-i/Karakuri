@@ -32,11 +32,7 @@ fn parse_key(from: &str) -> Result<(Key, Option<u8>), String> {
     if number > 127 {
         return Err(format!("`{kind} {number}` is past 127"));
     }
-    // **The LSB half, and both numbers are on the line.** The convention pairs
-    // `n` with `n + 32` and controllers exist that do not honour it, so what a
-    // line means is the two numbers it names rather than a convention plus
-    // arithmetic — and every refusal below can then name both of them, which
-    // is what an operator checks against their device's manual.
+    // Explicitly parse paired LSB controller for cc14 lines.
     let mut lsb = None;
     let mut after = words.next();
     if kind == "cc14" {
@@ -126,12 +122,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
         "exposure" => Target::Exposure {
             range: range.unwrap_or(EXPOSURE_RANGE),
         },
-        // **The mask's front, and the mask's front only.** Hyphenated rather
-        // than a bare `mask`, which is the word the shape would want — the two
-        // are halves of one record and a grammar that spent the short word on
-        // one of them would have nothing left for the other. Why the shape has
-        // no line here at all is the module documentation and
-        // `docs/adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md`.
+        // Mask position along the transition axis (ADR-0202).
         "mask-position" => Target::MaskPosition {
             slot: slot(&mut words)?,
             range: range.unwrap_or(MASK_POSITION_RANGE),
@@ -163,11 +154,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
             }
         }
         "tap" => Target::Tap,
-        // **A deck and a place in its published interface**, which is the one
-        // target whose second number is not a slot: positions count from one
-        // because that is the number the Inspector draws beside the row, and a
-        // learned line an operator cannot check against the pane is a line
-        // they cannot fix by hand.
+        // Published Set parameter index (1-indexed matching the Inspector UI).
         "param" => {
             let slot = slot(&mut words)?;
             let n = words
@@ -188,13 +175,7 @@ fn parse_target(to: &str) -> Result<Target, String> {
                 range,
             }
         }
-        // **The two words that were affordances, refused by name.** A file
-        // holding one is a file written against the old grammar, where
-        // `on-air 0` meant *flip slot 0*; loading it and reading it as *put
-        // slot 0 live* is the same line doing something else mid-set, which
-        // is the one outcome this format must not have. The complaint carries
-        // the line to write instead, because a complaint with a line number is
-        // a line an operator can fix — see the module documentation.
+        // Reject deprecated relative-toggle keywords (`on-air`, `prime`) with actionable migration guidance.
         "on-air" | "prime" => {
             let n = words.next().unwrap_or("N");
             let (flipped, asked) = if name == "on-air" {

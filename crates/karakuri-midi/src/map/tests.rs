@@ -432,21 +432,12 @@ fn a_mask_front_reaches_both_ends_exactly_and_moves_in_equal_steps() {
     };
     assert_eq!(at(0), 0.0, "the front could not be sent back to hidden");
     assert_eq!(at(127), 1.0, "the front could not be carried all the way");
-    // Equal steps in position, which is what separates this from
-    // exposure's ratio: the middle of the fader is the middle of the
-    // travel, and the step at the bottom is the step at the top. The
-    // second is to within a float's last place rather than exactly —
-    // `lo + t*(hi - lo)` rounds per step and a ratio scale is out by two
-    // orders of magnitude here, not by an ulp.
+    // Linear scaling: verify middle travel and uniform step size across ends.
     let middle = at(63) + (at(64) - at(63)) / 2.0;
     assert!((middle - 0.5).abs() < 1e-6, "{middle}");
     let (bottom, top) = (at(1) - at(0), at(127) - at(126));
     assert!((bottom - top).abs() < 1e-6, "{bottom} against {top}");
-    // A written range is the operator's, exactly as a gain's is — a fader
-    // that only crosses the middle of the frame is a line somebody will
-    // write. It buys less here than on a gain, because the engine clamps a
-    // mask to the unit interval on apply and a gain above unity is a real
-    // place to be.
+    // Custom written ranges override the default [0.0, 1.0] range.
     let m = map("cc 9 -> mask-position 2 [0.25, 0.75]");
     assert_eq!(
         m.operation(cc(9, 0)),
