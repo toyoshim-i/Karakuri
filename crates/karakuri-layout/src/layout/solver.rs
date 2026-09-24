@@ -1,12 +1,10 @@
 use super::types::{Arrangement, Solved};
 use crate::{Axis, Sizing};
 
-/// Computes the usable extent for node `i` bottom-up along `parent` axis,
-/// writing the result into `s.usable[i]` and returning it.
+/// Computes the usable extent for node `i` bottom-up along `parent` axis, writing to `s.usable[i]`.
 ///
-/// Flex leaves are unbounded; fixed leaves use their stored size; splits sum
-/// the usable sizes and dividers of visible children. If a split runs orthogonal
-/// to its parent's axis, it is treated as unbounded (`f32::INFINITY`).
+/// Fixed leaves report their size; flex leaves are unbounded. Splits sum child extents
+/// along matching axes, or report unbounded when orthogonal.
 pub(crate) fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f32 {
     let content = match a.split_of(i) {
         None => match a.nodes[i].sizing {

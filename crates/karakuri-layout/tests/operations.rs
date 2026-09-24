@@ -127,11 +127,7 @@ fn solo_then_unsolo_restores_the_arrangement_including_what_was_already_collapse
     assert!(!l.visible(ids.left) && !l.visible(ids.right));
     assert!(l.visible(program));
 
-    // Soloing again aims elsewhere without saving again, so one unsolo is
-    // still the way back. The right pane is capped at 480, and soloing
-    // something inside it leaves it at 480 with the rest of the window empty:
-    // a maximum is honoured rather than overridden by there being nobody else
-    // on screen.
+    // Subsequent solo targets replace active focus without overwriting saved backup state.
     l.solo(l.find("mixer").unwrap());
     l.solve();
     assert_invariants(&l);
@@ -242,22 +238,7 @@ fn hit_finds_a_nested_divider_and_nothing_outside_the_viewport() {
     assert_eq!(l.hit(Point::new(12.0, 100.0), 3.0), Hit::View(program));
 }
 
-/// **A node that is not laid out is not hit-testable, and the root is a node.**
-///
-/// [`Layout::hit`] descends from the root and filters *children* by
-/// `out_of_layout`, so the one node it never asked about was the one node with
-/// nobody to ask on its behalf. With the root folded, every rectangle under it
-/// solves exactly as it did before — a fold empties a node by taking its
-/// extent out of its *parent*, and the root's rect is the viewport whatever
-/// its own bits say — so the pointer went on resolving to bays and to dividers
-/// on a panel that draws nothing at all,
-/// since a view's plan skips every node [`Layout::visible`] says no to and
-/// `visible` walks up to the root.
-///
-/// The rule is P-0073's and ADR-0193's on the pointer axis: a region that is
-/// not laid out declares nothing, claims nothing, and is touched by nothing.
-/// **Both bits**, because it is the disjunction that decides it (ADR-0183) —
-/// a root somebody set aside is as absent as a root somebody folded.
+/// Verifies that collapsing or setting aside the root node disables hit-testing across the entire layout.
 #[test]
 fn a_folded_root_is_not_a_hit_target() {
     let mut l = console();
@@ -304,13 +285,7 @@ fn a_folded_root_is_not_a_hit_target() {
     );
 }
 
-/// **And it stops at the root**, which is the whole of what the rule above
-/// changes: a folded *bay* leaves everything else exactly as reachable as it
-/// was, and the space it gave up belongs to whoever took it.
-///
-/// Without this, *not laid out is not hit-testable* could be read as *nothing
-/// is hit-testable while anything is folded* — a panel that stops answering
-/// the pointer the moment an operator folds one bay away.
+/// Verifies that collapsing an individual view preserves hit-testability of remaining visible regions.
 #[test]
 fn folding_a_bay_leaves_everything_else_hit_testable() {
     let mut l = console();

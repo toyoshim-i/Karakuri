@@ -1,37 +1,14 @@
-//! **A fold that leaves the node's edge behind**, and what the rest of the
-//! crate does about it.
+//! Tests for nodes configured with `keeps_its_edge`.
 //!
-//! An ordinary fold takes a region's extent *and* the divider beside it, so
-//! there is nothing left of it on screen and no pointer can reach it. A node
-//! that declares `Spec::keeps_its_edge` folds to zero extent and stays one of
-//! the children its parent tiles, so the gap beside it is still drawn, still
-//! answers `Hit::Divider`, and is still what a drag takes hold of. That gap is
-//! the way back into a region that has no rectangle
-//! ([ADR-0300](../../../docs/adr/0300-a-pane-folds-by-dragging-its-boundary-out-and-comes-back-by-dragging-it-in.md)).
-//!
-//! Six things:
-//!
-//! 1. That a closed node takes no extent and its divider is still there.
-//! 2. That its neighbour takes the extent and **not** the divider — which is
-//!    what the edge costs, said as a number.
-//! 3. That the gap is hit-testable, at the split's own outer edge.
-//! 4. That the fold is `is_collapsed` like any other, so `expand` brings back
-//!    exactly the size it was storing.
-//! 5. **That a solo takes the edge with everything else**, and an unsolo puts
-//!    it back.
-//! 6. That `set_divider` refuses to move a boundary beside a closed node, so
-//!    the size a fold left untouched stays untouched.
+//! Verifies that closed nodes retain their divider gaps and hit targets
+//! without occupying extent, and that solos suppress preserved edges during isolation.
 
 mod common;
 
 use common::{assert_invariants, near, EPS};
 use karakuri_layout::{Hit, Layout, NodeId, Point, Rect, Sizing, Spec};
 
-/// A row of three at 1000 wide with 10-thick dividers, where the two side
-/// panes keep their edge and the centre does not: `left` 100, `centre` 780,
-/// `right` 100.
-///
-/// The console's own shape, cut down to numbers that can be checked on paper.
+/// Returns a 3-pane layout (`left`, `centre`, `right`) where side panes declare `keeps_its_edge`.
 fn panes() -> Layout {
     let mut layout = Layout::new(Spec::row(
         10.0,
@@ -202,12 +179,7 @@ fn a_closed_fold_is_a_fold_and_expand_restores_the_size() {
     assert_eq!(l.sizing(node), Sizing::Fixed(100.0));
 }
 
-/// **A solo takes every edge with it, and the unsolo puts them back.**
-///
-/// A solo promises one region holding the *whole* viewport, and a divider left
-/// behind for each pane is a strip of that viewport it does not hold — on a
-/// window somebody is about to record. So a node that keeps its edge is folded
-/// the ordinary way while a solo is in force, whatever it declares.
+/// Verifies that a solo collapses all sibling edges to give the soloed node the entire viewport.
 #[test]
 fn a_solo_leaves_no_edges_behind_and_the_unsolo_puts_them_back() {
     let mut l = panes();
@@ -247,13 +219,7 @@ fn a_solo_leaves_no_edges_behind_and_the_unsolo_puts_them_back() {
     assert!(!l.is_collapsed(id(&l, "right")));
 }
 
-/// **A boundary beside a closed node does not move**, and the size the fold
-/// left untouched stays untouched.
-///
-/// The arithmetic in `set_divider` would otherwise write a size the solve caps
-/// straight back to zero — and the size it overwrote is the one `expand` exists
-/// to restore, so a drag against a closed pane would quietly forget how wide
-/// that pane used to be.
+/// Verifies that dragging a boundary adjacent to a closed node is refused, preserving stored sizes.
 #[test]
 fn a_drag_against_a_closed_node_moves_nothing_and_forgets_nothing() {
     let mut l = panes();

@@ -1,16 +1,10 @@
-//! Two hand-built arrangements, and the invariants that hold of any solve.
-//!
-//! Small on purpose: an arrangement whose rectangles can be worked out on paper
-//! is one where a failing assertion names a defect rather than starting an
-//! investigation.
+//! Test fixtures and layout invariant verification helpers.
 
 #![allow(dead_code)] // Each test file uses a subset.
 
 use karakuri_layout::{Axis, Layout, NodeId, Rect, Spec};
 
-/// Float comparisons here are on pixel coordinates in the hundreds, where a
-/// single-precision sum accumulates well under a thousandth of a pixel. Nothing
-/// this crate promises is finer than that.
+/// Float comparison epsilon for pixel coordinates.
 pub const EPS: f32 = 1e-3;
 
 pub fn near(a: f32, b: f32) -> bool {
@@ -44,12 +38,7 @@ pub fn stack() -> Layout {
     ))
 }
 
-/// The console's arrangement: a transport row of fixed height, a row holding a
-/// left pane, a centre and a right pane, and a status row of fixed height —
-/// where each pane holds its own stack of views.
-///
-/// Nothing in the crate knows this; it is one value built from the same pieces
-/// as the two above.
+/// Returns the standard console layout tree (unnamed splits).
 pub fn console() -> Layout {
     Layout::new(Spec::column(
         4.0,
@@ -96,13 +85,7 @@ pub fn console() -> Layout {
     ))
 }
 
-/// The console's arrangement again, with the row of panes and each pane
-/// **named**.
-///
-/// The same tree and the same numbers as [`console`] — naming a node changes
-/// nothing about where it solves to — so a test may use either and compare
-/// rectangles across them. It exists because a pane is a split, and folding a
-/// pane away is an operation something has to be able to ask for by name.
+/// Returns the standard console layout tree with named split containers.
 pub fn named_console() -> Layout {
     Layout::new(Spec::column(
         4.0,
@@ -153,11 +136,7 @@ pub fn named_console() -> Layout {
     ))
 }
 
-/// The row of panes, and the three panes in it. [`console`] leaves its splits
-/// unnamed — most splits are structure nobody addresses — so a caller that
-/// wants to address one keeps the id it resolved when it built the arrangement,
-/// which is what this stands in for. [`named_console`] is the same arrangement
-/// with the panes named, where `find` answers instead.
+/// Node handles for primary pane splits within the console layout.
 pub struct Console {
     pub panes: NodeId,
     pub left: NodeId,
@@ -191,11 +170,7 @@ fn collect(l: &Layout, id: NodeId, out: &mut Vec<Rect>) {
     }
 }
 
-/// Assert everything that must be true of any solve, at any viewport.
-///
-/// Called after every step of every test that changes anything, because the
-/// failures worth catching here are the ones that only appear at one particular
-/// combination of viewport and collapsed state.
+/// Verifies core geometric invariants (non-negative bounds, viewport containment, tiling consistency).
 pub fn assert_invariants(l: &Layout) {
     check(l, l.root());
 }
@@ -229,13 +204,7 @@ fn check(l: &Layout, id: NodeId) {
     }
 }
 
-/// Children exactly tile their parent: none of them overlaps, the gaps between
-/// them are the divider and are only between the children the split **places**,
-/// and together they account for the parent exactly.
-///
-/// **A closed child is one of them and takes no extent**, which is the edge a
-/// node that `keeps_its_edge` keeps when it folds: it is out of the layout by
-/// its own bit and still tiled, so the gap beside it is still one of these.
+/// Verifies that placed children tile their parent without overlap, accounting for divider gaps.
 fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
     let parent = l.rect(id);
     let declared = l.divider(id).unwrap();
@@ -335,11 +304,7 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
     }
 }
 
-/// Whether a child takes extent and a divider of its own, which is the
-/// question every geometric assertion below is about: **not** whether the
-/// operator folded it. A node the caller has set aside is out of the layout by
-/// the other bit and is out of it just as completely, so asking `is_collapsed`
-/// here would assert the tiling of one of the two ways a region leaves.
+/// Returns true if `id` is active in layout (neither collapsed nor set aside).
 pub fn laid_out(l: &Layout, id: NodeId) -> bool {
     !l.is_collapsed(id) && !l.is_set_aside(id)
 }

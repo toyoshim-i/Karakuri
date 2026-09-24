@@ -138,12 +138,7 @@ fn shrinking_below_the_minima_and_growing_back_reproduces_the_arrangement() {
     at(&mut l, 1280.0, 720.0);
     let before = rects(&l);
 
-    // Anchored to what the arrangement *declares*, not only to what it
-    // happened to solve to. A layout that clamped its model to the space it
-    // had would have done so during its very first solve, at the empty
-    // viewport it is built with — before any baseline taken here — and a
-    // round trip against that baseline would then agree with itself all the
-    // way down.
+    // Verify layout respects declared sizes rather than clamping to temporary viewport constraints.
     assert_eq!(l.rect(ids.left).w, 240.0);
     assert_eq!(l.rect(ids.right).w, 320.0);
 
@@ -201,14 +196,7 @@ fn a_collapsed_child_takes_no_space_and_its_siblings_take_all_of_it() {
 
 #[test]
 fn the_solve_is_a_function_of_the_state_and_not_of_the_route_to_it() {
-    // Determinism is worth little if the state itself remembers where it has
-    // been. These two layouts are in the same state by different routes — one
-    // of them through viewports nothing fits in and a drag that was undone —
-    // and a solve is a function of the state alone, so they are the same
-    // layout. The drag happens while there is something to drag: a drag is an
-    // edit wherever it is made, and one made at a viewport showing nothing is
-    // an edit to nothing, which is a different state and not a different
-    // route.
+    // Solved layout depends strictly on current model configuration rather than transition history.
     let mut long = console();
     at(&mut long, 1000.0, 700.0);
     let ids = console_ids(&long);
@@ -283,12 +271,7 @@ fn a_layout_of_one_view_is_the_viewport() {
 
 #[test]
 fn a_split_with_no_children_is_an_empty_region_rather_than_a_special_case() {
-    // `Spec::row(_, vec![])` is expressible, so the question is what it means
-    // rather than whether to refuse it — and the solve already answers: a
-    // childless split claims its extent like any other node, hands none of it
-    // on, and hits as nothing. There is no divider to draw, which is why every
-    // count of gaps here is `visible - 1` saturated at zero rather than a
-    // subtraction that would go negative on exactly this arrangement.
+    // A childless split claims extent without propagating to children or rendering dividers.
     let mut l = Layout::new(karakuri_layout::Spec::row(
         4.0,
         vec![

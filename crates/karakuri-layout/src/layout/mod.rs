@@ -1,16 +1,8 @@
 //! The arena, the solve, and the operations that change what is stored.
 //!
-//! Read the crate documentation first: **solving never writes back into the
-//! model**, and everything below is arranged so that it cannot.
-//!
-//! The arrangement — the nodes, the root, and what a [`Layout::solo`] saved —
-//! is one struct, [`Arrangement`]; the buffers a solve writes are another,
-//! [`Solved`]. [`Layout::solve`] destructures itself into the two, which gives
-//! it disjoint borrows, and hands the solve `&Arrangement` with `&mut Solved`.
-//! So the solve is a pair of free functions that *cannot* write a node: there
-//! is no `&mut` to one anywhere in the call, and an edit that tried to store a
-//! solved size is a borrow error rather than a slow leak nobody sees. Writing
-//! a node needs [`Layout::node_mut`], and every caller of it is an operation.
+//! Separates [`Arrangement`] model storage from solved [`Solved`] layout state.
+//! Solving borrows [`Arrangement`] immutably, ensuring layout passes never write back
+//! to node definitions.
 
 mod solver;
 mod types;
@@ -29,13 +21,8 @@ use crate::{Axis, Point, Rect, Sizing};
 /// An arrangement of regions, and the rectangles it currently solves to.
 ///
 /// Transient states like [`set_aside`](Layout::set_aside) are excluded from
-/// serialization. Saved arrangements preserve operator intentions, while
-/// transient layout omissions are re-evaluated by callers upon display.
-///
-/// Any arrangement that deserializes successfully is structurally validated to
-/// form a well-formed tree suitable for solving, hit-testing, and interaction.
-/// Structural errors (such as cycles or broken parent links) are rejected during
-/// deserialization with descriptive errors. See `check_structure`.
+/// serialization. Saved arrangements preserve persistent user collapse states.
+/// Validates tree structure and identifier uniqueness upon deserialization.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "Wire")]
 pub struct Layout {
@@ -100,11 +87,7 @@ impl Layout {
         self.arrangement.root
     }
 
-    /// Resolve a name to its id. A view always has one; a split has one where
-    /// the arrangement gave it one.
-    ///
-    /// Names are the caller's, and [`Layout::new`] refuses an arrangement that
-    /// uses one twice, so the answer here is the only node that could be meant.
+    /// Resolves a node name to its [`NodeId`].
     pub fn find(&self, name: &str) -> Option<NodeId> {
         self.arrangement
             .nodes
@@ -119,10 +102,7 @@ impl Layout {
         self.node(id.0).name()
     }
 
-    /// A split's children in order, or an empty slice for a view. A child
-    /// that is out of the layout — folded, or
-    /// [`set_aside`](Layout::set_aside) — is still here: it has a zero-extent
-    /// rectangle, not no rectangle.
+    /// Returns a split's children in declaration order, or an empty slice for leaf views.
     pub fn children(&self, id: NodeId) -> &[NodeId] {
         match &self.node(id.0).kind {
             Kind::Split { children, .. } => children,
@@ -153,12 +133,7 @@ impl Layout {
         self.arrangement.split_of(id.0).map(|(axis, _)| axis)
     }
 
-    /// Whether `id` is a view — a leaf, the thing something paints. Everything
-    /// else is a split, whose gaps are what is visible between its children.
-    ///
-    /// The same answer as `axis(id).is_none()`, said as what it means: a
-    /// caller drawing regions is asking what kind of node this is, not which
-    /// way it lays its children out.
+    /// Returns true if `id` is a leaf view.
     pub fn is_view(&self, id: NodeId) -> bool {
         self.arrangement.split_of(id.0).is_none()
     }
@@ -170,25 +145,14 @@ impl Layout {
         self.arrangement.split_of(id.0).map(|(_, divider)| divider)
     }
 
-    /// A node's `[min, max]` along its parent's axis. `max` is
-    /// `f32::INFINITY` where it is unbounded.
+    /// Returns `[min, max]` size constraints of `id` along its parent's axis.
     ///
-    /// Exposed because a caller that has just been told by
-    /// [`set_divider`](Layout::set_divider) that a drag landed somewhere other
-    /// than where it was aimed has no other way to say which constraint
-    /// stopped it.
+    /// Unbounded maxima are represented as `f32::INFINITY`.
     pub fn bounds(&self, id: NodeId) -> (f32, f32) {
         (self.node(id.0).min, self.node(id.0).max)
     }
 
-    /// How `id` claims extent along its parent's axis: a size it keeps, or a
-    /// share of what is left.
-    ///
-    /// Exposed for the same reason [`bounds`](Layout::bounds) is, and it is
-    /// the other half of that answer. *Why does this region keep its size when
-    /// the window widens?* is half of what a person asks the panel, and
-    /// `bounds` cannot answer it — a [`Sizing::Fixed`] region with no maximum
-    /// still does not grow.
+    /// Returns the [`Sizing`] rule for `id` along its parent's axis.
     pub fn sizing(&self, id: NodeId) -> Sizing {
         self.node(id.0).sizing
     }
@@ -238,24 +202,13 @@ impl Layout {
         self.node(id.0).collapsed
     }
 
-    /// Whether `id` itself has been [`set_aside`](Layout::set_aside),
-    /// regardless of its ancestors and of whether it is also folded.
-    ///
-    /// The mirror of [`is_collapsed`](Layout::is_collapsed), and read for the
-    /// same narrow purpose: to report the bit, or to decide whether to clear
-    /// the one you set. A caller working out what to draw wants
-    /// [`visible`](Layout::visible).
+    /// Returns true if `id` is currently set aside via [`set_aside`](Layout::set_aside).
     pub fn is_set_aside(&self, id: NodeId) -> bool {
         self.node(id.0).aside
     }
 
-    /// Whether `id` is one of the children its parent **tiles** — the
-    /// question [`placed_children`](Layout::placed_children) filters on, asked
-    /// of one node.
-    ///
-    /// A folded node is normally not placed. One that
-    /// [`keeps_its_edge`](Layout::keeps_its_edge) still is while it is closed,
-    /// which is what leaves a divider beside a region that has no rectangle.
+    /// Returns true if `id` is placed in its parent's tiling layout (non-collapsed,
+    /// or closed while preserving its edge).
     pub fn is_placed(&self, id: NodeId) -> bool {
         self.arrangement.placed(id.0)
     }
@@ -269,12 +222,7 @@ impl Layout {
         self.arrangement.is_closed(id.0)
     }
 
-    /// Whether a fold on `id` leaves its edge behind — the declaration
-    /// [`Spec::keeps_its_edge`] made, read back.
-    ///
-    /// It says what a fold on this node **will** do, where
-    /// [`is_closed`](Layout::is_closed) says what one has done. A caller about
-    /// to fold asks this; a caller drawing asks that.
+    /// Returns true if `id` is configured to preserve its divider edge when collapsed.
     pub fn keeps_its_edge(&self, id: NodeId) -> bool {
         self.node(id.0).edge
     }
@@ -409,24 +357,17 @@ impl Layout {
         axis.far(self.solved.rects[a])
     }
 
-    /// Write a drag's two sizes into the model. This is an explicit operation,
-    /// so it may write; a solve may not.
+    /// Writes resized sizes into child nodes following a divider drag.
     ///
-    /// A [`Sizing::Fixed`] child simply stores the new size. A
-    /// [`Sizing::Flex`] one stores a weight chosen so the next solve reproduces
-    /// that size exactly, which is what makes a drag out and back land where it
-    /// started rather than a little off each time.
+    /// Fixed children store the size directly; flexible children adjust weights
+    /// to preserve proportion on subsequent solves.
     fn resize_pair(&mut self, split: usize, a: usize, b: usize, sa: f32, sb: f32, span: f32) {
         match (self.node(a).sizing, self.node(b).sizing) {
             (Sizing::Fixed(_), Sizing::Fixed(_)) => {
                 self.node_mut(a).sizing = Sizing::Fixed(sa);
                 self.node_mut(b).sizing = Sizing::Fixed(sb);
             }
-            // Two flexible neighbours: hold the pair's total weight and split
-            // it in the new proportion. The pool and the split's total weight
-            // are then both unchanged, so the pair keeps its combined extent
-            // and divides it as dragged — exactly, and with no reference to
-            // any sibling.
+            // Distribute total flexible weight between the two neighbours proportionally.
             (Sizing::Flex(wa), Sizing::Flex(wb)) => {
                 let total = wa.max(0.0) + wb.max(0.0);
                 if span > f32::EPSILON && total > 0.0 {
@@ -477,45 +418,16 @@ impl Layout {
 
     // -- the solve -------------------------------------------------------
 
-    /// Recompute every rectangle, if anything has changed since the last one.
+    /// Recomputes region rectangles if dirty flags indicate modifications.
     ///
-    /// Allocates nothing: the rectangle buffer and the per-split scratch were
-    /// sized when the layout was built. Clean is a flag test, so calling this
-    /// once a frame costs nothing on a frame where nothing moved.
-    ///
-    /// One split, given the extent it has along its axis:
-    ///
-    /// 1. Collapsed children take **zero** extent. There is no handle strip —
-    ///    re-opening a pane is a named operation, not a mouse target.
-    /// 2. Dividers sit only *between visible children*, so what is left to
-    ///    distribute is `extent - divider * (visible - 1)`, floored at zero.
-    /// 3. [`Sizing::Fixed`] children claim their stored size — or what they
-    ///    can use, whichever is smaller. See [`measure`]: **no node claims
-    ///    more than its visible content can use**, so a fixed split whose
-    ///    content has been folded down claims what is left of it rather than
-    ///    the size it stores, and its siblings get the difference.
-    ///    [`Sizing::Flex`] children share what is left in proportion to their
-    ///    weights.
-    /// 4. Each child is clamped to `[min, max]`, where `min` is capped to
-    ///    usable content extent. If bounds are hit, constrained children freeze
-    ///    and remaining extent is redistributed iteratively. If no flexible
-    ///    children remain unfrozen, discrepancies are distributed proportionally
-    ///    across fixed children scaled from stored sizes (ADR-0157).
-    /// 5. If the viewport is smaller than the sum of minima, layout scales
-    ///    down proportionally, floored at zero. Rectangles are never negative.
-    ///
-    /// If all visible children are constrained by maxima and leftover space remains,
-    /// trailing space is left empty to preserve maximum bounds.
-    ///
-    /// Solvers access the arrangement strictly via immutable references,
-    /// ensuring that solving never mutates model definitions.
+    /// Solves layout in two phases:
+    /// 1. Bottom-up [`measure`] computes usable extent per node along its parent axis.
+    /// 2. Top-down `solve_subtree` assigns rectangles based on sizes, weights, and constraints.
     pub fn solve(&mut self) {
         if !self.dirty {
             return;
         }
-        // The split borrow that makes P-0082 a compiler error. `arrangement`
-        // is re-borrowed as `&` here and stays that way for the whole solve,
-        // so a line that stored a solved size into a node would not compile.
+        // Destructure to borrow `arrangement` immutably alongside mutable scratch in `solved`.
         let Layout {
             arrangement,
             viewport,
@@ -523,10 +435,7 @@ impl Layout {
             dirty,
         } = self;
         let arrangement: &Arrangement = arrangement;
-        // Bottom-up first, top-down after: what each node can use is a
-        // question about its content, and step 3 is a question about its
-        // parent's extent. The first is finished for the whole tree before
-        // the second starts, so no split reads a stale one.
+        // Compute usable extents bottom-up across all nodes before assigning rectangles top-down.
         measure(arrangement, solved, arrangement.root.0, None);
         solved.rects[arrangement.root.0] = *viewport;
         solve_subtree(arrangement, solved, arrangement.root.0);
