@@ -180,7 +180,10 @@ fn apply_chain_builds_nothing_on_the_callers_thread() {
         .find("pub fn apply_chain(")
         .expect("mix::apply_chain has moved or been renamed");
     let body = &code[at..];
-    let end = body.find("\n}\n").expect("mix::apply_chain has no end");
+    let end = body
+        .find("\n}\n")
+        .or_else(|| body.find("\r\n}\r\n"))
+        .expect("mix::apply_chain has no end");
     let body = &body[..end];
     for spelling in ["build_chain(", "Slot::build(", "set_chain("] {
         assert!(
