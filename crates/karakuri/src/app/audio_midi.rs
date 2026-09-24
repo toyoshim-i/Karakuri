@@ -131,20 +131,12 @@ pub(crate) fn surface_line(
     let mut line = format!("midi in: `{port}`");
     match (map_name, map_path) {
         (Some(name), Some(path)) => line.push_str(&format!(
-            ", map `{name}` from {} — {mappings} mapping{}",
+            ", map `{name}` from {} — {mappings} mapping{}.",
             path.display(),
             if mappings == 1 { "" } else { "s" }
         )),
-        // **No map is a state and the sentence is the one the operator needs
-        // next**, which is `karakuri-environment`'s own words for it: a
-        // surface with no map still reports what it sends.
-        _ => line.push_str(
-            ", no map — turn a knob and this will print the line that would map it, once per              control",
-        ),
+        _ => line.push_str(", no map — turn a knob to map it."),
     }
-    line.push_str(
-        ". every mapped message becomes the operation the map names and is performed on the          frame it arrives on, where a press on the mixer's fader is performed — so a knob and          a hand write one record and a session recorded from this surface replays with          neither the surface nor the map attached. nothing on this panel names the map: the          transport row's `map` pill is one of the two controls the mock draws and this          console does not.",
-    );
     for note in notes {
         line.push_str(&format!("\n  midi map: {note}"));
     }

@@ -45,6 +45,7 @@ pub(crate) use readout::*;
 pub(crate) const CANVAS: (u32, u32) = (1280, 720);
 
 /// Which profile this binary was built with, for the legend's own reading.
+#[allow(dead_code)]
 pub(crate) const PROFILE: &str = match cfg!(debug_assertions) {
     true => "debug profile with dependencies at opt-level 3",
     false => "release profile",
