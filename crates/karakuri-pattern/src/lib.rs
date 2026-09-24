@@ -136,14 +136,7 @@ impl Pattern {
         self.lanes.push(lane);
     }
 
-    /// Removes the lane at `at` and returns it, or `None` for an index this
-    /// pattern does not hold.
-    ///
-    /// A lane's index is its position in [`Pattern::lanes`] and not an identity:
-    /// the lanes after `at` move up one, so every index above it names a
-    /// different lane after this call. `Operation::SetStep`,
-    /// `Operation::SetLaneMute` and `Operation::RemoveLane` address whichever
-    /// lane holds that position at the moment they are applied.
+    /// Removes and returns the lane at `at`, shifting subsequent lane indices left, or `None` if out of bounds.
     pub fn remove(&mut self, at: usize) -> Option<Lane> {
         (at < self.lanes.len()).then(|| self.lanes.remove(at))
     }
@@ -171,16 +164,7 @@ impl Pattern {
             .map(move |lane| lane.operation_at(step, mode))
     }
 
-    /// Returns the lanes that hold a control, as `(lane index, target)` pairs in
-    /// lane order.
-    ///
-    /// A muted lane holds nothing, because it drives nothing, and is not in this
-    /// list. That is the one place the mute is applied to the question *is this
-    /// control held*; which lane holds a given control is then
-    /// `karakuri_operation_record::Lanes::holder` over this list, at the
-    /// operation-to-records boundary where a scheduled move on a held control is
-    /// refused (ADR-0323). The index is the lane's own, because a refusal names
-    /// the lane to mute.
+    /// Returns an iterator yielding `(lane_index, target)` pairs for all unmuted lanes (ADR-0323).
     pub fn held(&self) -> impl Iterator<Item = (usize, &LaneTarget)> + '_ {
         self.lanes
             .iter()
@@ -472,11 +456,7 @@ mod tests {
         );
     }
 
-    /// Verifies that muted lanes hold no control and unmuted ones hold what they drive.
-    ///
-    /// A fader lane and a parameter lane, each muted and unmuted: the reading a
-    /// scheduled move is refused against is this list, so a muted lane appearing
-    /// in it is a fade refused against a lane that drives nothing (ADR-0323).
+    /// Verifies that unmuted lanes report as held targets while muted lanes do not (ADR-0323).
     #[test]
     fn a_muted_lane_holds_no_control_and_an_unmuted_one_holds_what_it_drives() {
         let twist = LaneTarget::Param {

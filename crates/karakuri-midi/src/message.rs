@@ -1,17 +1,11 @@
-//! What arrived on the wire, as the three things this engine acts on.
+//! MIDI message parsing for control surfaces.
 //!
-//! Deliberately not a general MIDI parser. A control surface sends control
-//! changes and notes; everything else on the wire — pitch bend, aftertouch,
-//! program change, clock, sysex — is recognised well enough to be *ignored*
-//! rather than misread, and that is the whole requirement. A parser that
-//! understood more would have more to be wrong about.
+//! Handles control changes, note-on, and note-off messages while ignoring
+//! unhandled status bytes (pitch bend, aftertouch, clock, sysex, etc.).
 
-/// One message this engine has a use for.
+/// One message this engine acts on.
 ///
-/// Channel is `0..16` as it is on the wire, not the `1..17` a controller's
-/// front panel prints. The two spellings are one off from each other and both
-/// are ubiquitous, so the wire's is the one kept and [`crate::map`] is where the
-/// operator's is translated — once, where a human writes it.
+/// Channel numbers are 0-indexed (`0..16`) matching the wire protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Message {
     /// A knob or a fader. `value` is `0..=127`.

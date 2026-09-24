@@ -53,13 +53,7 @@ pub struct Map {
 }
 
 impl Map {
-    /// Parse a map file. Every line is reported on its own terms: one bad line
-    /// is a line an operator can fix, and refusing the file for it would make a
-    /// typo cost a whole surface mid-set.
-    ///
-    /// Returns the map and the complaints, and **both are meant to be used**:
-    /// a caller that dropped the second would leave an operator pressing a pad
-    /// that was never mapped, with nothing said.
+    /// Parses a map file into a [`Map`], collecting warnings for invalid or overridden lines.
     pub fn parse(text: &str) -> (Map, Vec<String>) {
         let mut map = Map::default();
         let mut notes = Vec::new();
@@ -92,12 +86,7 @@ impl Map {
                 Err(message) => notes.push(format!("line {}: {message}", i + 1)),
             }
         }
-        // **A controller cannot be a line of its own and half of a pair**, and
-        // which of the two the file meant is not something the order of the
-        // lines should decide. `entries` wins, because a plain line is the
-        // whole of what it says; the pair keeps its coarse half and loses its
-        // fine one, which is a fader at 128 positions rather than a fader that
-        // went quiet — and it is said here rather than discovered.
+        // If a controller is mapped standalone and as a cc14 LSB, standalone wins and the pair stays 7-bit.
         for key in map.fine.keys() {
             if map.entries.contains_key(key) {
                 notes.push(format!(
@@ -162,11 +151,7 @@ impl Map {
                     controller,
                 })
             })?;
-        // **The pair is checked from the other end**, so a knob whose MSB half
-        // was re-learned as a plain `cc` line does not go on being refined by
-        // a controller that is no longer its LSB. `learn` writes into
-        // `entries` and leaves `fine` alone, which is what makes this a
-        // question rather than an assumption.
+        // Verify pair validity bidirectionally in case MSB was remapped standalone.
         (self.entry(channel, msb)?.lsb == Some(controller)).then_some(Wide {
             control: msb,
             half: Half::Lsb,
@@ -250,12 +235,7 @@ impl Map {
 
     /// Returns true if `message` maps to a continuous control (fader/dial).
     pub fn is_continuous(&self, message: crate::Message) -> bool {
-        // **Either half of a pair is the fader it is half of.** An LSB is not
-        // in `entries` — a pair is one mapping — so asking `target` alone
-        // answered `false` for it, and a caller coalescing a frame's messages
-        // read the fine half of a sweep as a *press* and emitted it beside the
-        // coarse one. Still one predicate and not a list: `Target::continuous`
-        // is asked about the same target either way round.
+        // True if either the direct target or the 14-bit pair target is continuous.
         self.target(message)
             .or_else(|| self.wide_target(message))
             .is_some_and(Target::continuous)
@@ -344,20 +324,14 @@ fn operating(target: Target, at: Option<f32>) -> Option<Operation> {
                 blend,
             }),
             (Target::Tap, None) => Some(Operation::TapBeat),
-            // **The one target this cannot finish**, and it is answered by
-            // [`Map::parameter`] instead. A published control is addressed by
-            // its *position*, and a position becomes a `ParamAt` only against
-            // the Set that is in the deck — which is a readback, and this
-            // function has none by charter. Whoever holds the deck completes
-            // it; see `karakuri_environment::midi::Router`.
+            // Param targets require Set context held by callers (e.g. router); see `Map::parameter`.
             (Target::Param { .. }, _) => None,
             _ => None,
         }
     }
 }
 
-/// [`operating`] for the one target it cannot finish — the `param` line's
-/// address and where the knob is on its span.
+/// Resolves parameter address and normalized position for `param` mapping targets.
 fn parametered(target: Target, at: Option<f32>) -> Option<Parameter> {
     let Target::Param {
         slot,
@@ -393,11 +367,7 @@ fn scale(t: f32, range: [f32; 2], shape: Shape) -> f32 {
     let [lo, hi] = range;
     match shape {
         Shape::Linear => lo + t * (hi - lo),
-        // `t` of 0 and 1 give `lo * 1` and `lo * (hi/lo)`, so the bottom is
-        // exact and the top is exact wherever the division and the power are —
-        // the default `[0.25, 4]` among them. `parse_target` refuses a ratio
-        // range with a zero or a negative in it, which is what makes the
-        // logarithm defined at all.
+        // Logarithmic/exponential interpolation: lo * (hi / lo)^t.
         Shape::Ratio => lo * (hi / lo).powf(t),
     }
 }
