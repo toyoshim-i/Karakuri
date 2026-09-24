@@ -12,17 +12,10 @@ use karakuri_operation::Operation;
 /// The specification, relative to the workspace root.
 const PAGE: &str = "docs/manual/operations.html";
 
-/// **What marks an operation on that page.** Every row opens with this div and
-/// nothing else on the page uses it; sections are `<h2>` and the legend is
-/// neither. Matching the marker rather than the heading is what lets
-/// [`headings`] tell an operation from a heading somebody added for looks —
-/// see [`every_heading_on_the_page_is_an_operation`].
+/// HTML opening tag marking the start of an operation definition block in the manual.
 const ROW: &str = r#"<div class="op-head">"#;
 
 fn workspace() -> PathBuf {
-    // Fixed at compile time, and what it reads is this workspace's own
-    // checked-in documentation — the same move
-    // `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` makes.
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -39,12 +32,7 @@ fn page() -> String {
     })
 }
 
-/// Every `<h3>` that opens an operation row, in the page's order.
-///
-/// The text is taken verbatim and never decoded, which is deliberate: an
-/// entity in a heading would be a title the type could not spell the same way,
-/// and [`every_title_is_plain_text`] fails on one rather than letting a
-/// mismatch read as a missing operation.
+/// Extracts verbatim text of every `<h3>` opening an operation row, preserving document order.
 fn headings(html: &str) -> Vec<String> {
     let mut found = Vec::new();
     for row in html.split(ROW).skip(1) {
@@ -94,14 +82,7 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
     );
 }
 
-/// **Every `<h3>` on the page opens a row.** A heading added for looks would
-/// otherwise be an operation this test never asks about — it would be missing
-/// from the vocabulary and the check above would not notice, because that
-/// check only ever looks at headings inside a row.
-///
-/// A separate test because it fails apart from the one above: this one says
-/// the page grew a heading that is not an operation, and that one says the
-/// page and the type disagree about which operations there are.
+/// Verifies that every `<h3>` heading in the manual opens an operation row.
 #[test]
 fn every_heading_on_the_page_is_an_operation() {
     let html = page();
@@ -133,17 +114,7 @@ fn every_title_is_plain_text() {
     }
 }
 
-/// **The type is in the page's order**, which is what makes the enum readable
-/// against the specification: the sections — transport, decks, mixing, inside
-/// a Set, the library, procedures, arranging the console, output — are the
-/// only grouping either document has, and an enum in a different order is one
-/// nobody can review against the page it is copied from.
-///
-/// It fails beside the membership test rather than instead of it. A row that
-/// moved fails only here; a title reworded on one side fails here *and* there,
-/// and the two messages say different halves of it — which is why this one
-/// names both spellings and does not claim a reordering it cannot tell from a
-/// rewording.
+/// Verifies that `Operation::TITLES` strictly follows the document order in the manual.
 #[test]
 fn the_vocabulary_is_in_the_manuals_order() {
     let rows = headings(&page());

@@ -1,14 +1,6 @@
 use crate::Operation;
 
-/// A class of operations the operator can open, and the bay whose head opens
-/// it. ADR-0235 names four and each has a bay.
-///
-/// The classes are drawn off P-0094's question — *what does this do at its
-/// worst, on the frame it goes wrong, while the operator's attention is on the
-/// room?* — and not off the nouns. That is why [`Operation::WriteProcedure`] is
-/// open although it rewrites what a live deck is drawing: it is priced before
-/// it is built, lands at a frame boundary and rolls back on its own, so it
-/// fails to be an *unpriced, immediate, irreversible* write on every count.
+/// A protected operation class unlockable by an operator at a specific console bay (ADR-0235).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
     /// What a deck that is live is drawing. Opened at the head of the Program bay,
@@ -55,20 +47,7 @@ impl Class {
         }
     }
 
-    /// Where the operator finds the pill, in the words the refusal says it in — and
-    /// three of the four are *the head of the … bay* while one is not.
-    ///
-    /// The Outputs row has no head to put an indicator in. `karakuri-console` says
-    /// so outright of `Kind::Outputs`: it is a label *"inside a row that has no
-    /// head at all (ADR-0159), so it is that typography and none of that structure:
-    /// no hairline under it, no pills or grip beside it."* So the pill sits beside
-    /// the word that stands in for a head, and `docs/manual/console.html` specifies
-    /// it there and says why.
-    ///
-    /// A refusal naming a place that does not exist is worse than one naming none,
-    /// because a model repeats it to the person sitting there and sends them
-    /// looking for a head. That is the whole reason this is a second function
-    /// rather than a format string over [`Class::bay`].
+    /// Display location where the operator toggles this class pill in the UI.
     pub fn opened_at(self) -> &'static str {
         match self {
             Class::LiveDeck => "the head of the Program bay",
@@ -131,54 +110,36 @@ pub enum Reading {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Running<'a> {
-    /// The decks whose slot is live, as somebody read them from the engine.
-    ///
-    /// `None` is *nobody read it*, and a row that turns on it is then refused
-    /// rather than guessed — the reading is missing, the safe answer is the closed
-    /// one, and [`refusal`] says which reading was missing rather than saying
-    /// *closed* and leaving the caller nothing to act on.
+    /// Active live deck indices read from the engine, or `None` if unread.
     pub live: Option<&'a [u8]>,
 }
 
 impl<'a> Running<'a> {
-    /// Nothing read. See [`Running::live`].
+    /// Constructs a `Running` state indicating live decks were unread.
     pub fn unread() -> Running<'a> {
         Running { live: None }
     }
 
-    /// The decks that are live, read.
+    /// Constructs a `Running` state with known live deck indices.
     pub fn live(decks: &'a [u8]) -> Running<'a> {
         Running { live: Some(decks) }
     }
 }
 
-/// Where one operation stands with the audit, before the operator's opening is
-/// consulted.
-///
-/// [`standing`] answers this; [`audit`] is what turns it and an [`Open`] into a
-/// yes or a sentence.
+/// The policy standing of an operation before consulting operator authorizations (ADR-0235).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Standing {
-    /// Open by default — twenty-three rows. Nothing gates it and nothing ever did.
+    /// Open by default without gating.
     Open,
-    /// Closed by default, and the operator opens this class at the head of
-    /// [`Class::bay`].
+    /// Closed by default unless the specified class is explicitly opened.
     Closed(Class),
-    /// Closed by default, and no bay opens it. See [`Unclassed`].
+    /// Closed by default and cannot be unlocked (see [`Unclassed`]).
     ClosedUnclassed(Unclassed),
-    /// Closed, because the reading its class turns on was not taken. See
-    /// [`Running`].
+    /// Refused because a prerequisite runtime state reading was missing.
     Unread(Reading),
 }
 
-/// Which classes the operator has opened.
-///
-/// The fields are private and every one is `false`, so closed by default is the
-/// type's own `Default`: there is no way to write down an `Open` that starts
-/// open, and the only route to one is [`Open::with`], which has to name the
-/// class.
-///
-/// [`Unclassed`] groups have no field here on purpose — see that type.
+/// Operator authorizations opening protected operation classes (ADR-0235).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Open {
     live_deck: bool,
@@ -188,7 +149,7 @@ pub struct Open {
 }
 
 impl Open {
-    /// All four closed, which is what a run starts with.
+    /// All classes closed (default state).
     pub const CLOSED: Open = Open {
         live_deck: false,
         mix_faders: false,
@@ -196,11 +157,7 @@ impl Open {
         inputs_and_outputs: false,
     };
 
-    /// This opening with one class set. Names a state and never a direction, which
-    /// is
-    /// [P-0090](../../../docs/principles/0090-a-surface-offers-it-never-decides.md)
-    /// applied to a setting the vocabulary does not own: a bay-head pill can be a
-    /// toggle, and what it writes still says which state it means.
+    /// Returns a new `Open` configuration with the specified class set to `open`.
     pub fn with(self, class: Class, open: bool) -> Open {
         let mut next = self;
         match class {
@@ -212,7 +169,7 @@ impl Open {
         next
     }
 
-    /// Whether the operator has opened this class.
+    /// Returns `true` if the operator has opened the specified class.
     pub fn holds(self, class: Class) -> bool {
         match class {
             Class::LiveDeck => self.live_deck,
@@ -223,13 +180,9 @@ impl Open {
     }
 }
 
-/// An operation that has been through the audit, and the only thing a performer
-/// will take.
+/// A validated operation that has passed the gate audit.
 ///
-/// The field is private and [`audit`] is the only function that builds one, so
-/// a caller in another crate has no way to perform an operation that was not
-/// checked. That is the structural half of *"an audit skipped on one path is
-/// the whole mechanism gone"*.
+/// Can only be constructed via [`super::rules::audit`].
 #[derive(Debug, Clone, Copy)]
 pub struct Allowed<'a>(pub(crate) &'a Operation);
 
