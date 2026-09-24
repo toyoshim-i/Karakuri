@@ -64,9 +64,7 @@ fn a_procedure_carries_when_it_was_written_and_is_read_back_whole() {
     );
 }
 
-/// **A keep writes the file, under the name it was given and nowhere else** —
-/// the act that makes the operator's tier exist at all
-/// (`docs/principles/0096-…`, ADR-0338 decision 4).
+/// Verifies that writing a procedure saves the file in the procedures directory under the given name.
 #[test]
 fn a_keep_writes_the_procedure_under_the_name_it_was_given() {
     let dir = tempdir().unwrap();
@@ -97,13 +95,7 @@ fn a_keep_writes_the_procedure_under_the_name_it_was_given() {
     );
 }
 
-/// **A name already kept is refused and never overwritten**, which is where a
-/// procedure differs from a Set id and an arrangement's name: those two are
-/// instructions to replace what is under them, and this one would replace a
-/// part of somebody's library with a different node's source.
-///
-/// The refusal carries the name back, which is the whole of what the next
-/// attempt needs (P-0083).
+/// Verifies that writing a procedure with an existing name fails with `ProcedureTaken`.
 #[test]
 fn a_keep_never_overwrites_a_name_already_there() {
     let dir = tempdir().unwrap();
@@ -122,10 +114,7 @@ fn a_keep_never_overwrites_a_name_already_there() {
     );
 }
 
-/// **A model's keep lands in the sandbox**, which is a Set save's own division
-/// one file kind along: the operator's library is written by an operator's own
-/// act, and what a model keeps is a file with a sandbox form to land in
-/// (ADR-0261, ADR-0301).
+/// Verifies that model-generated procedures are written to the sandbox directory.
 #[test]
 fn a_models_keep_lands_in_the_sandbox_and_not_in_the_library() {
     let dir = tempdir().unwrap();
@@ -144,18 +133,13 @@ fn a_models_keep_lands_in_the_sandbox_and_not_in_the_library() {
         store.list_procedures().unwrap().is_empty(),
         "a model's keep turned up in the listing the operator's library is read from"
     );
-    // And it refuses a taken name there too, on the library's terms: a stamp
-    // met twice is a clock that has not moved, and overwriting would lose the
-    // earlier of the two.
     assert!(matches!(
         store.write_sandbox_procedure("20260910-120000", b"x"),
         Err(StoreError::ProcedureTaken(_))
     ));
 }
 
-/// A store with nothing in it lists nothing — including the three
-/// subdirectories `Store::open` just made, which sit in the artifact root and
-/// are not artifacts.
+/// Verifies that listing an empty store returns empty collections without error.
 #[test]
 fn listing_an_empty_store_is_empty_and_not_an_error() {
     let dir = tempdir().unwrap();
@@ -165,11 +149,7 @@ fn listing_an_empty_store_is_empty_and_not_an_error() {
     assert_eq!(store.list_artifacts().unwrap(), []);
 }
 
-/// **A store whose directory went away is an error, not an empty library.**
-///
-/// The two answers look alike and mean opposite things: one says nothing is
-/// kept, the other says we could not find out. An operator who is told the
-/// first will generate the thing they already had.
+/// Verifies that listing a non-existent or removed directory returns an IO error.
 #[test]
 fn listing_a_removed_directory_is_an_error() {
     let dir = tempdir().unwrap();

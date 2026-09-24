@@ -250,20 +250,7 @@ fn open_establishes_the_arrangements_directory_beside_the_other_three() {
     assert!(root.join("arrangements").is_dir());
 }
 
-/// **A Set written into the sandbox lands there and nowhere else**, and the
-/// library is written by the other method.
-///
-/// The store half of
-/// `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`:
-/// `sets/` is the operator's library, so a save asked for over MCP is written
-/// with `write_sandbox_set` and the library is left exactly as it was.
-///
-/// **The negative control is the second half.** A test that only checked the
-/// sandbox file appeared would pass against a writer that wrote both, which is
-/// the failure that matters here — the operator's preset gone. So this asserts
-/// what is *not* in `sets/` and then that the same id put through
-/// `write_set` does land there, which is what stops the whole thing passing
-/// against a store that writes everything into one directory.
+/// Verifies that sandbox set saves write to the sandbox directory and leave the library intact.
 #[test]
 fn a_sandbox_set_is_written_to_sandbox_and_the_library_is_untouched() {
     let dir = tempdir().unwrap();
@@ -288,21 +275,12 @@ fn a_sandbox_set_is_written_to_sandbox_and_the_library_is_untouched() {
         "the library answered for a set only the sandbox holds"
     );
 
-    // The control: the same id, the same lines, through the library's own
-    // writer. Without this the test above would pass against a store whose two
-    // writers were one.
+    // Negative control: verify normal write_set lands in sets directory.
     store.write_set("night01", &lines).unwrap();
     assert!(dir.path().join("sets").join("night01.kbset").exists());
 }
 
-/// **The sandbox refuses what the library refuses**, because what may be in a
-/// Set file is a property of the format and not of the directory.
-///
-/// One of the three is enough to check that the shared scan is reached — the
-/// three sentences and the order they are asked in are `write_set`'s own tests
-/// above — and a `part` is the one chosen because it is the check that makes
-/// `.kbset` mean *already resolved*, which a sandbox file claims by carrying
-/// the extension.
+/// Verifies that sandbox sets reject authoring `part` records just like library sets.
 #[test]
 fn a_sandbox_set_refuses_a_part_the_way_the_library_does() {
     let dir = tempdir().unwrap();
@@ -328,11 +306,7 @@ fn a_sandbox_set_refuses_a_part_the_way_the_library_does() {
     assert!(!dir.path().join("sandbox").join("night01.kbset").exists());
 }
 
-/// **A store nobody has starred in answers with nothing, and is not an error.**
-///
-/// `favourites.json` is not established by `Store::open` the way the four
-/// directories are, because an empty file and no file say the same thing and
-/// only one of them is a write into a store somebody only wanted to read.
+/// Verifies that an unconfigured store returns empty favourites without creating a file.
 #[test]
 fn an_unstarred_store_has_no_favourites_and_no_file() {
     let dir = tempdir().unwrap();
@@ -342,12 +316,7 @@ fn an_unstarred_store_has_no_favourites_and_no_file() {
     assert!(!dir.path().join(Store::FAVOURITES_FILE).exists());
 }
 
-/// **A star round-trips, and a second press of the same state writes nothing.**
-///
-/// The `false` back is the state already being the one asked for, which is what
-/// keeps `Operation::SetFavourite` a state rather than a toggle: pressing
-/// *star this* twice says the same thing twice, and the second one must not
-/// touch the file.
+/// Verifies that setting favourites round-trips and repeated calls with identical state are no-ops.
 #[test]
 fn a_star_round_trips_and_the_same_state_twice_writes_nothing() {
     let dir = tempdir().unwrap();
@@ -380,9 +349,7 @@ fn a_star_round_trips_and_the_same_state_twice_writes_nothing() {
     );
 }
 
-/// **Starring a Set this store does not hold is refused with the id back**, and
-/// nothing is written — the star is a control on a row, and a row is a Set the
-/// store holds.
+/// Verifies that starring a non-existent set is rejected without writing favourites.
 #[test]
 fn starring_a_set_the_store_does_not_hold_is_refused() {
     let dir = tempdir().unwrap();
@@ -395,13 +362,7 @@ fn starring_a_set_the_store_does_not_hold_is_refused() {
     assert!(!dir.path().join(Store::FAVOURITES_FILE).exists());
 }
 
-/// **A stale mark survives the Set leaving and can be taken off**, which is the
-/// whole of what happens to one.
-///
-/// Nothing in this program deletes or renames a Set, so a mark goes stale only
-/// when a hand removes the file — and the answer is that the id stays, a
-/// listing that intersects it with `list_sets` draws no row for it, and the
-/// star can still be taken off without the Set coming back first.
+/// Verifies that favourites persist even if the underlying set file is deleted, and can be removed.
 #[test]
 fn a_star_outlives_the_set_and_can_still_be_taken_off() {
     let dir = tempdir().unwrap();
@@ -434,9 +395,7 @@ fn a_star_outlives_the_set_and_can_still_be_taken_off() {
     assert!(store.favourites().unwrap().is_empty());
 }
 
-/// **A favourites file that will not parse is said out loud**, because a
-/// silently empty answer reads exactly like a library nobody has starred in and
-/// the whole of `my sets` would go quiet with nothing to notice.
+/// Verifies that an unparseable favourites file returns a Favourites error.
 #[test]
 fn a_favourites_file_that_is_not_a_list_of_ids_is_an_error() {
     let dir = tempdir().unwrap();

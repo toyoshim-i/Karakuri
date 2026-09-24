@@ -1,17 +1,7 @@
-//! Generic ndjson line I/O shared by Set files and session streams.
+//! Generic newline-delimited JSON (NDJSON) line reader and writer.
 //!
-//! `Record::Unknown` is the format's forward-compatibility escape hatch — an
-//! unrecognised `t` deserialises to it rather than failing — but the variant
-//! carries no data. Serialising it back out would not reproduce the line that
-//! produced it; it would produce `{"t":"unknown"}`, discarding whatever the
-//! original line actually said. That is worse than dropping the line outright,
-//! because it looks like fidelity while corrupting the record.
-//!
-//! [`Line`] fixes this without touching `record.rs`: it carries the exact
-//! source text alongside the parsed [`Record`], and writing always emits that
-//! text back verbatim. A record built in memory (never read from a file) has no
-//! "original" text, so [`Line::new`] serialises it once, at construction, and
-//! that becomes its text from then on.
+//! Preserves original on-disk text alongside parsed [`Record`]s so unrecognized
+//! lines ([`Record::Unknown`]) round-trip without data corruption.
 
 use std::fs;
 use std::path::Path;
@@ -28,14 +18,7 @@ pub struct Line {
 }
 
 impl Line {
-    /// Wrap a record constructed in memory. Serialises it immediately to fix its
-    /// on-disk text.
-    ///
-    /// Do not use this for [`Record::Unknown`] — that variant only ever arises from
-    /// parsing a line the store does not understand, and serialising it fresh would
-    /// fabricate a `{"t":"unknown"}` line that never existed. Round trip unknown
-    /// lines through [`read`] and [`write`] instead, which preserve their original
-    /// text.
+    /// Wraps an in-memory record, serializing it immediately to capture its canonical text.
     pub fn new(record: Record) -> Line {
         let raw = serde_json::to_string(&record).expect("Record serialises to ndjson");
         Line { record, raw }
@@ -57,12 +40,7 @@ impl Line {
         &self.record
     }
 
-    /// The record, taken back out.
-    ///
-    /// For a writer that has serialised a line and wants the record's own buffers
-    /// back rather than freeing them — `karakuri-environment`'s session recorder
-    /// returns an audio record's band `Vec` to the frame path this way, so nothing
-    /// allocates one per frame.
+    /// Consumes the line, returning the underlying [`Record`].
     pub fn into_record(self) -> Record {
         self.record
     }
@@ -121,10 +99,7 @@ mod tests {
 
     #[test]
     fn new_line_serialises_immediately() {
-        // The `index` a seed gained addresses the node it salts, and 0 is
-        // written as nothing — so this assertion is the same bytes it always
-        // was, which is the whole claim the field's `skip_serializing_if`
-        // makes, seen from the layer that writes the lines out.
+        // Verifies default index 0 is omitted under skip_serializing_if.
         let line = Line::new(Record::Seed {
             stream: Layer::L1,
             index: 0,

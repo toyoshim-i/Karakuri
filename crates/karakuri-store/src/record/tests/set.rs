@@ -1,18 +1,6 @@
 use super::*;
 
-/// A `part` round-trips through the line the spec prints, bytes and all, and
-/// answers all three questions the way the authoring form needs.
-///
-/// `round_trip_verbatim` for [`Record::Select`]'s reason and one more: an
-/// `index` or a `name` acquiring a serde default here would put a field into
-/// every authoring file anybody hand-writes, and the whole of what a `.kset` is
-/// for is being a file a person writes by hand.
-///
-/// The three assertions are the classification, and they are what keeps this
-/// record out of a store: it is not Set state (so `Store::write_set` refuses
-/// it), it is not an artifact's metadata (so it is refused by the question that
-/// says *which* form the file is, not by the one that says it declares
-/// something), and it *is* the authoring form's.
+/// Verifies that part records round-trip verbatim and are classified as authoring format.
 #[test]
 fn a_part_round_trips_through_the_line_the_spec_prints() {
     let line = r#"{"t":"part","layer":"L1","path":"drift_shell.kir"}"#;
@@ -30,8 +18,7 @@ fn a_part_round_trips_through_the_line_the_spec_prints() {
     assert!(!rec.is_metadata());
     assert!(rec.is_authoring());
 
-    // And the addressed spelling, which is the same record about the
-    // second renderer of a stack with a name this Set gave it.
+    // Addressed form with explicit layer, index, and name.
     let named =
         r#"{"t":"part","layer":"L4","index":1,"name":"veil","path":"parts/soft_points.kir"}"#;
     assert_eq!(
@@ -45,15 +32,7 @@ fn a_part_round_trips_through_the_line_the_spec_prints() {
     );
 }
 
-/// `Record::Edge`'s `slot` is `InputPort` in Rust and a bare string on the
-/// wire, which is the whole claim
-/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`
-/// makes about it: the Rust identifier gets a type that cannot be confused with
-/// a deck member or a Set-node address, and a `.kbset` file or a session stream
-/// written before this change parses exactly as it did — `round_trip_verbatim`
-/// is what catches `InputPort` serialising as `{"0":"far"}` or any other shape
-/// a naive newtype wrapper could produce instead of the plain `"far"` this
-/// asserts.
+/// Verifies that edge records serialize slot as a bare string on the wire.
 #[test]
 fn an_edge_round_trips_with_slot_as_a_bare_string() {
     let line = r#"{"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}"#;
@@ -68,15 +47,7 @@ fn an_edge_round_trips_with_slot_as_a_bare_string() {
     );
 }
 
-/// `Record::Gain`'s `slot` is `DeckSlot` in Rust and a bare number on the wire,
-/// which is the whole claim
-/// `docs/adr/0344-slot-is-disambiguated-into-three-types-and-adr-0049s-wait-is-over.md`
-/// makes about the deck sense: the Rust identifier gets a type that cannot be
-/// confused with a Set-node address or a declared input, and a `.kbset` file or
-/// a session stream written before this change parses exactly as it did —
-/// `round_trip_verbatim` is what catches `DeckSlot` serialising as `{"0":2}` or
-/// any other shape a naive newtype wrapper could produce instead of the plain
-/// `2` this asserts.
+/// Verifies that gain records serialize deck slot as a bare integer.
 #[test]
 fn a_gain_round_trips_with_slot_as_a_bare_number() {
     let line = r#"{"t":"gain","slot":2,"value":0.8}"#;
@@ -90,12 +61,7 @@ fn a_gain_round_trips_with_slot_as_a_bare_number() {
     );
 }
 
-/// `Record::Procedure` carries two of `slot`'s three senses at once — its own
-/// `slot: DeckSlot` beside `at: NodeAddress` — which is the case the module
-/// documentation's whole point rests on: two fields named and typed for two
-/// unrelated addresses, on one record, and neither reads as the other.
-/// `round_trip_verbatim` on [`Record::Procedure`]'s own compatibility terms: an
-/// absent `index` stays absent.
+/// Verifies that procedure records serialize slot beside a node address.
 #[test]
 fn a_procedure_round_trips_with_slot_as_a_bare_number_beside_a_node_address() {
     let hash = "sha256:486779000000000000000000000000000000000000000000000000000000abcd";
@@ -114,14 +80,7 @@ fn a_procedure_round_trips_with_slot_as_a_bare_number_beside_a_node_address() {
     );
 }
 
-/// `slot` and `part` are two tags and not one tag with two shapes, which is
-/// what `docs/contributing.md` §4 asks of a name and what a decoder dispatching
-/// on `t` alone depends on.
-///
-/// The failure this defends against is silent: give a `slot` an optional `path`
-/// instead, and the authoring line above parses as a `slot` with no `proc` — a
-/// node with no procedure, in a file that says it is resolved. Here it cannot
-/// parse at all, which is the whole difference.
+/// Verifies that part records and slot records have disjoint syntax.
 #[test]
 fn a_part_is_not_a_slot_with_a_path_where_the_address_goes() {
     let part = r#"{"t":"part","layer":"L1","path":"drift_shell.kir"}"#;
@@ -130,26 +89,14 @@ fn a_part_is_not_a_slot_with_a_path_where_the_address_goes() {
         serde_json::from_str::<Record>(part).expect("a part parses"),
         Record::Part { .. }
     ));
-    assert!(
-        serde_json::from_str::<Record>(r#"{"t":"slot","layer":"L1","path":"drift_shell.kir"}"#)
-            .is_err(),
-        "a `slot` carrying a path instead of an address is not a record this vocabulary has"
-    );
-    assert!(
-        serde_json::from_str::<Record>(slot).is_err(),
-        "and the address a `slot` does carry is a hash, so this fixture is a bad one \
-         rather than a second shape"
-    );
+    assert!(serde_json::from_str::<Record>(
+        r#"{"t":"slot","layer":"L1","path":"drift_shell.kir"}"#
+    )
+    .is_err());
+    assert!(serde_json::from_str::<Record>(slot).is_err());
 }
 
-/// `procedure` names a node, and `index` is what says which.
-///
-/// A deck slot draws with one L1 and however many L4s, so a layer alone stopped
-/// being enough. The compatibility claim is the whole point of the field being
-/// optional: a stream recorded before stacks existed carries no `index`, must
-/// parse as index 0, and must come back byte for byte — `round_trip` alone
-/// would not notice `"index":0` appearing in every `procedure` line of every
-/// session ever recorded.
+/// Verifies that procedure records round-trip and an absent node index defaults to zero.
 #[test]
 fn a_procedure_round_trips_and_an_absent_index_stays_absent() {
     let hash = "sha256:486779000000000000000000000000000000000000000000000000000000abcd";
@@ -157,35 +104,16 @@ fn a_procedure_round_trips_and_an_absent_index_stays_absent() {
     let Record::Procedure { at, slot, .. } = round_trip_verbatim(&old) else {
         panic!("not a procedure");
     };
-    assert_eq!(
-        (slot, at.index),
-        (DeckSlot(0), 0),
-        "an absent index is the first node"
-    );
+    assert_eq!((slot, at.index), (DeckSlot(0), 0));
 
     let stacked = format!(r#"{{"t":"procedure","slot":2,"layer":"L4","index":1,"proc":"{hash}"}}"#);
     let Record::Procedure { at, slot, .. } = round_trip_verbatim(&stacked) else {
         panic!("not a procedure");
     };
-    assert_eq!(
-        (slot, at.index),
-        (DeckSlot(2), 1),
-        "the second renderer of slot 2"
-    );
+    assert_eq!((slot, at.index), (DeckSlot(2), 1));
 }
 
-/// A `source` round-trips both ways round, bytes and all — with an attachment
-/// and without one — and it is the session's rather than any Set's.
-///
-/// `round_trip_verbatim` rather than `round_trip`, on [`Record::Authority`]'s
-/// terms: `index` is absent for a wildcard and `source` is absent for a
-/// take-back, and a field appearing where nothing wrote one is exactly the
-/// failure this catches — a `"source":null` on the take-back line would
-/// round-trip by value and be a different line on the wire.
-///
-/// The `is_set_state` assertion is what this record exists to make: a Set file
-/// carrying one would attach a signal wherever that file was next loaded, and
-/// into whatever deck slot it landed in.
+/// Verifies that source records round-trip with and without attachments.
 #[test]
 fn a_source_round_trips_with_an_attachment_and_without_one() {
     let attached = r#"{"t":"source","slot":0,"layer":"L1","key":"turbulence","source":{"signal":"energy","curve":"pow2","range":[0.1,2.4]}}"#;
@@ -203,19 +131,12 @@ fn a_source_round_trips_with_an_attachment_and_without_one() {
                 range: [0.1, 2.4],
                 noise: None,
             }),
-        },
-        "an absent index is every node of that layer declaring the key, which is \
-         `Record::Bind`'s rule and not `Record::Slot`'s"
+        }
     );
-    assert!(
-        !rec.is_set_state(),
-        "a `source` is the session's: it names a deck slot, and a Set file carrying \
-         one would attach a signal wherever it was next loaded"
-    );
+    assert!(!rec.is_set_state());
     assert!(!rec.is_metadata());
 
-    // **The take-back, and the absence is on the wire.** A `"source"`
-    // written as `null` would be a second spelling of nothing.
+    // Take-back: source field is absent.
     let taken = r#"{"t":"source","slot":2,"layer":"L4","index":1,"key":"exposure"}"#;
     assert_eq!(
         round_trip_verbatim(taken),
@@ -225,13 +146,10 @@ fn a_source_round_trips_with_an_attachment_and_without_one() {
             index: Some(1),
             key: "exposure".to_string(),
             source: None,
-        },
-        "a take-back is this record with its attachment absent"
+        }
     );
 
-    // **A generator rides on the attachment**, field for field with
-    // `Record::Bind`'s — `stream` is written even at 0, which is that
-    // record's own shape and is why it is on the line here.
+    // Generator attachment with noise.
     let noisy = r#"{"t":"source","slot":1,"layer":"L1","key":"spawn_rate","source":{"signal":"noise","curve":"lin","range":[0.0,600.0],"noise":{"kind":"fbm","rate":0.5,"stream":0,"octaves":3}}}"#;
     let Record::Source {
         source: Some(source),
@@ -251,22 +169,7 @@ fn a_source_round_trips_with_an_attachment_and_without_one() {
     );
 }
 
-/// An authority round-trips through its wire name, bytes and all, and is the
-/// session's rather than any Set's.
-///
-/// `round_trip_verbatim` rather than `round_trip`, on [`Record::Procedure`]'s
-/// terms: the address is `(layer, index)` with the index absent at zero, so a
-/// field appearing where nothing wrote one is the failure this catches and a
-/// value comparison cannot see it.
-///
-/// The word is carried, not interpreted. `manual`, `suggesting` and `automatic`
-/// are `karakuri_operation::Authority::name`'s, and a level this build does not
-/// know reaches the engine's diagnostic rather than this decoder's refusal —
-/// which is why the third line here parses at all.
-///
-/// The `is_set_state` assertion is the one this record exists to make: a Set
-/// does not know which agent is watching it, so a Set file carrying an
-/// authority would hand a node over every time it was loaded.
+/// Verifies that authority records round-trip and omit zero index.
 #[test]
 fn an_authority_round_trips_and_an_absent_index_stays_absent() {
     let first = r#"{"t":"authority","slot":0,"layer":"L1","authority":"manual"}"#;
@@ -359,15 +262,7 @@ fn tick_round_trips() {
     );
 }
 
-/// A capacity names a geometry, and `index` is what says which.
-///
-/// A Set holds more than one source, each at the default its own procedure
-/// declares, so a layer alone stopped being able to say which of them is being
-/// resized — two geometries at two capacities were inexpressible however they
-/// were spelled on the way in. The line the specification prints carries no
-/// index and is every capacity record ever written, so it has to come back byte
-/// for byte; `round_trip` alone would not notice `"index":0` appearing in all
-/// of them.
+/// Verifies that capacity records round-trip and an absent node index defaults to zero.
 #[test]
 fn a_capacity_addresses_a_geometry_and_an_absent_index_stays_absent() {
     assert_eq!(
@@ -380,8 +275,7 @@ fn a_capacity_addresses_a_geometry_and_an_absent_index_stays_absent() {
             value: 524288
         }
     );
-    // The thing that could not be said at all before: a second geometry,
-    // at its own capacity, in the same file as the first.
+    // Explicit secondary index.
     assert_eq!(
         round_trip_verbatim(r#"{"t":"capacity","layer":"L1","index":1,"value":65536}"#),
         Record::Capacity {
@@ -415,12 +309,7 @@ fn a_seed_addresses_a_source_and_an_absent_index_stays_absent() {
     );
 }
 
-/// A `param` round-trips through the flat wire shape `layer`/`index` always
-/// had, bytes and all, in both of its shapes: addressed, and the wildcard — and
-/// this is the one that exercises [`mod@node_or_every_node`], since a bare
-/// `#[serde(flatten)]` on `Option<NodeAddress>` would read the wildcard line
-/// below as addressed to node 0 instead (`layer` is present on it, same as
-/// every wildcard `param` ever written).
+/// Verifies that param records round-trip addressed and as wildcards.
 #[test]
 fn a_param_round_trips_addressed_and_as_a_wildcard() {
     // Addressed: `at` is `Some`, and `index` is written because it says
@@ -607,18 +496,7 @@ fn a_tempo_correction_round_trips() {
     );
 }
 
-/// The wire line the spec prints, parsed and written back.
-///
-/// Byte for byte, with the `hash` filled in: the specification prints this line
-/// with the address elided — `"sha256:a3f2c1…"` — so the one value that cannot
-/// be copied off the page is the artifact's identity, and it is built here the
-/// way `karakuri-store`'s metadata tests build it. The order of the keys around
-/// it is the specification's.
-///
-/// The head of a card is the record with the most to lose by drifting: it says
-/// *which* artifact everything below it describes, so a reordered field is a
-/// file every reader still parses and no reader can match against the `.kir` it
-/// was read off.
+/// Verifies that metadata records round-trip through JSON serialization verbatim.
 #[test]
 fn a_meta_round_trips_through_the_line_the_spec_prints() {
     let hash = Hash::of(b"proc drift_shell { kind L1 }");
@@ -637,13 +515,7 @@ fn a_meta_round_trips_through_the_line_the_spec_prints() {
     assert!(!rec.is_set_state());
 }
 
-/// The wire line the spec prints, parsed and written back.
-///
-/// Byte for byte, because a metadata file is written by one build and read by
-/// another: `round_trip` compares the parsed values and would not notice the
-/// keys coming back in a different order, which is a different file for every
-/// card ever regenerated. Nothing optional here, so the whole line is the
-/// record.
+/// Verifies that param_decl records round-trip through JSON serialization verbatim.
 #[test]
 fn a_param_decl_round_trips_through_the_line_the_spec_prints() {
     let line =
@@ -659,18 +531,11 @@ fn a_param_decl_round_trips_through_the_line_the_spec_prints() {
             default: Some(2.0),
         }
     );
-    // A declaration and not a value: it is the artifact's vocabulary, so a
-    // Set file must not carry it and `Store::write_set` asks this.
     assert!(rec.is_metadata());
     assert!(!rec.is_set_state());
 }
 
-/// The wire line the spec prints, parsed and written back.
-///
-/// Byte for byte, for the reason above — and this is the record with the most
-/// to lose by it: three bare numbers under three interchangeable keys, where a
-/// reordered field produces a file that still parses everywhere and says a
-/// capacity nobody declared.
+/// Verifies that capacity_decl records round-trip through JSON serialization verbatim.
 #[test]
 fn a_capacity_decl_round_trips_through_the_line_the_spec_prints() {
     let line = r#"{"t":"capacity_decl","min":65536,"max":1048576,"default":262144}"#;
@@ -687,11 +552,7 @@ fn a_capacity_decl_round_trips_through_the_line_the_spec_prints() {
     assert!(!rec.is_set_state());
 }
 
-/// The wire line the spec prints, parsed and written back.
-///
-/// Byte for byte, which for one field is the key and the order of the list
-/// inside it: the attributes are written in declaration order, so a card that
-/// reordered them would describe a struct the procedure does not write.
+/// Verifies that emit records round-trip through JSON serialization verbatim.
 #[test]
 fn an_emit_round_trips_through_the_line_the_spec_prints() {
     let line = r#"{"t":"emit","attrs":["position","velocity","age"]}"#;

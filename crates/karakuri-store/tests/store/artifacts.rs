@@ -103,13 +103,7 @@ fn list_artifacts_orders_by_hash_and_repeats_that_order() {
     );
 }
 
-/// **An artifact without a card is an ordinary artifact.**
-///
-/// `read_meta` already says so, and this is the same statement made in bulk:
-/// the uncarded one is listed, not skipped and not an error, and the flag is
-/// the difference. A caller that had to discover this by calling `read_meta`
-/// per artifact would be reading an ordinary answer out of an error variant,
-/// once per artifact, opening a file each time to do it.
+/// Verifies that artifact listings distinguish between artifacts with and without metadata.
 #[test]
 fn list_artifacts_flags_the_carded_and_the_uncarded() {
     let dir = tempdir().unwrap();
@@ -142,14 +136,7 @@ fn list_artifacts_flags_the_carded_and_the_uncarded() {
     assert!(!flag(bare), "an artifact with no card was reported carded");
 }
 
-/// **A card is not an artifact, and neither is a directory.**
-///
-/// Both live under the same root as the `.kir` files, so both are in front of
-/// any implementation that lists that directory. The stray card is the case
-/// `write_meta` documents — it writes one without checking the artifact exists
-/// — and counting it would put a hash in the library that `get_artifact` cannot
-/// serve. The directory is named `<hash>.kir` on purpose: the suffix and the
-/// hash both check out, and it is still not an artifact.
+/// Verifies that directories and stray metadata cards are excluded from artifact listings.
 #[test]
 fn list_artifacts_reports_neither_a_stray_card_nor_a_directory() {
     let dir = tempdir().unwrap();
@@ -172,14 +159,7 @@ fn list_artifacts_reports_neither_a_stray_card_nor_a_directory() {
     );
 }
 
-/// **A name this store would not have written is not an artifact**, and none
-/// of these may panic on the way to being ignored.
-///
-/// The uppercase case is the subtle one: it parses to a valid address, whose
-/// `.kir` path is then the lowercase spelling — so listing it would report a
-/// hash `get_artifact` immediately fails to find. The non-UTF-8 name is the one
-/// that punishes an `unwrap` on `to_str`, and nothing stops a user from
-/// creating it.
+/// Verifies that invalid artifact filenames (non-hex, wrong length, etc.) are skipped during listing.
 #[test]
 fn list_artifacts_skips_names_this_store_would_not_have_written() {
     let dir = tempdir().unwrap();
