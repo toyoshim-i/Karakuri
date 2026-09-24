@@ -28,13 +28,7 @@ fn a_shape_keeps_the_front_where_it_is() {
     );
 }
 
-/// The other half, and it fails apart from the first: a control change
-/// carries a position and says nothing about a shape, so the shape and the
-/// angle come from the reading.
-///
-/// This is the row that exists because a control change can only set — a
-/// conversion that reset the shape here would turn every fader move into a
-/// layer silently unmasked.
+/// Verifies that SetMaskPosition preserves existing mask shape and angle from Current::mask.
 #[test]
 fn a_front_keeps_the_shape_that_is_running() {
     let current = Current {
@@ -62,14 +56,7 @@ fn a_front_keeps_the_shape_that_is_running() {
     );
 }
 
-/// A mask that was not read is said, never defaulted.
-///
-/// Its own test rather than a third assertion beside the look and the
-/// transport, because the failure it names is the mask's: a conversion that
-/// defaulted would answer `none` for a shape nobody chose, and a
-/// `Record::Mask` saying `none` takes the mask off the layer — so a caller
-/// that read nothing would not get a refusal, it would get a wipe silently
-/// undone.
+/// Verifies that missing Current::mask returns Written::Owed rather than defaulting.
 #[test]
 fn a_mask_that_was_not_read_is_owed_rather_than_defaulted() {
     assert_eq!(
@@ -134,16 +121,7 @@ fn a_scrub_adds_to_the_scrub_the_slot_is_at() {
     );
 }
 
-/// Engaging a mode is the sibling of a scrub and reads nothing of the slot,
-/// which is what this asserts by giving it a slot to read.
-///
-/// `ScrubDeck` above adds to the position the deck holds; `SetSync`
-/// replaces the whole transport, because that is what
-/// `karakuri_engine::transport::Transport::engaged` decides engaging a mode
-/// *means* — anchor at the session tempo, scrub cleared, *"a slot brought
-/// back to the grid should be on the grid, not on wherever it was scrubbed
-/// to a song ago"*. So a reading of a slot that is at -1.5 beats against an
-/// anchor of 128 must not leak into a record written at 126.
+/// Verifies that SetSync anchors at session tempo and resets scrub offset without inheriting prior transport state.
 #[test]
 fn engaging_a_mode_anchors_at_the_session_tempo_and_clears_the_scrub() {
     let current = Current {
@@ -178,11 +156,7 @@ fn engaging_a_mode_anchors_at_the_session_tempo_and_clears_the_scrub() {
     );
 }
 
-/// The tempo is a reading and not a default, on
-/// [`a_reading_that_was_not_taken_is_owed_rather_than_guessed`]'s terms
-/// exactly: a conversion that anchored at 120 because that is a common
-/// tempo would put a slot on a grid the room was never on, silently, and a
-/// replay would reproduce it faithfully.
+/// Verifies that SetSync without session tempo in Current returns Written::Owed.
 #[test]
 fn a_sync_mode_with_no_tempo_read_is_owed_rather_than_anchored_at_a_guess() {
     assert_eq!(

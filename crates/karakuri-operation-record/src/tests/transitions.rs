@@ -22,19 +22,7 @@ fn a_fade_lands_on_the_instant_and_the_length_the_surface_chose() {
     );
 }
 
-/// A crossfade is four records and both halves share the move.
-///
-/// The order is the picture and not a preference: the arriving deck is
-/// silenced *before* it is put on air, because a deck comes up at full
-/// opacity and going off air does not lower it — putting one on air first
-/// shows it at full immediately, up to a bar before the fade it is supposed
-/// to arrive on. And a fade to something that is not composited is a fade
-/// to black, so it does have to go on air.
-///
-/// The two moves share a start and a length, which is what makes this one
-/// gesture without being one type. A conversion that read the settings
-/// twice could not be caught by an equality on one record; it is caught by
-/// asserting the pair.
+/// Verifies that Crossfade produces 4 records (silencing and making live arriving deck, then fading both).
 #[test]
 fn a_crossfade_is_four_records_and_both_halves_share_the_move() {
     let current = Current {
@@ -76,12 +64,7 @@ fn a_crossfade_is_four_records_and_both_halves_share_the_move() {
     );
 }
 
-/// A selection is a cut, so it reads the instant and nothing else.
-///
-/// `Record::Select` has no length and no curve because *"half way to
-/// renderer 2" does not name a picture*, and this is what says the
-/// conversion agrees: the same operation against two readings that differ
-/// in every field but the start writes the same record.
+/// Verifies that SelectRenderer translates as an instant cut reading only the transition start instant.
 #[test]
 fn a_selection_is_a_cut_and_reads_the_instant_alone() {
     let select = Operation::SelectRenderer {
@@ -124,17 +107,7 @@ fn a_selection_is_a_cut_and_reads_the_instant_alone() {
     );
 }
 
-/// A cut is an instant that is now and a length of zero, and both halves of
-/// it arrive rather than being invented.
-///
-/// `karakuri_engine::transition::quantise` documents a quantum of 0 as
-/// *"now"* and hands the beat count straight back, so a surface asking for
-/// a cut has nothing to say that the grid does not already spell: the start
-/// is the beat the session is on. This crate never sees the quantum — that
-/// is `karakuri_environment::mix`'s
-/// `a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on`, in the
-/// crate that owns the grid — and what it must not do is round, floor or
-/// otherwise improve the instant it was handed.
+/// Verifies that cuts retain the exact requested start beat and zero duration.
 #[test]
 fn a_cut_is_the_instant_it_was_handed_and_a_length_of_zero() {
     let current = Current {
@@ -163,24 +136,7 @@ fn a_cut_is_the_instant_it_was_handed_and_a_length_of_zero() {
     );
 }
 
-/// A wipe is six records, in the order the picture needs, and this is the
-/// whole of what settling that conversion decided: the shape its front
-/// takes is the transition row's and arrives beside the instant and the
-/// length, and the soft edge is read off the mask that is running.
-///
-/// Every field is asserted against a fixture nothing else here is, so a
-/// value taken from the wrong side is visible: the shape and the angle are
-/// [`transition`]'s and *not* [`mask`]'s, and the softness is [`mask`]'s
-/// and is on no surface at all. A conversion that read the shape off the
-/// deck would write `radial` at 1.25 here, which is the losing answer
-/// spelled out as a failure.
-///
-/// The two `Record::Mask` are not one, and the first is not redundant: it
-/// is `SetMaskShape`'s record — the shape asked for and the front left
-/// where the deck had it — and the second is `SetMaskPosition`'s, restating
-/// that shape with the front at 0. That is the pair `karakuri-cli`'s `c`
-/// wrote through two `operate` calls, and what this holds is that the
-/// change of route did not change a record.
+/// Verifies that Wipe emits 6 records (mask setup, opacity, blend, residency, and transition move).
 #[test]
 fn a_wipe_is_a_mask_at_the_front_and_one_move_carrying_it_across() {
     let current = Current {
@@ -234,12 +190,7 @@ fn a_wipe_is_a_mask_at_the_front_and_one_move_carrying_it_across() {
     );
 }
 
-/// The deck being covered is read for nothing, which is what makes a
-/// two-deck operation write about one of them.
-///
-/// Everything a wipe writes is the arriving deck's: the covered one is
-/// revealed away from rather than moved, and a record naming it would be a
-/// change to a deck the gesture does not touch.
+/// Verifies that Wipe only writes records targeting the arriving deck, leaving the covered deck untouched.
 #[test]
 fn a_wipe_writes_about_the_deck_arriving_and_never_the_one_covered() {
     let current = Current {
@@ -266,14 +217,7 @@ fn a_wipe_writes_about_the_deck_arriving_and_never_the_one_covered() {
     }
 }
 
-/// A wipe with the settings but no mask is told it is the mask, which is
-/// the second of its two readings and the one that is read off the deck.
-///
-/// The softness is the value at stake: no operation names one, so a
-/// conversion with no mask in front of it would have to invent a soft edge
-/// for a front somebody else chose — which is
-/// [`a_mask_that_was_not_read_is_owed_rather_than_defaulted`] arriving at
-/// the gesture that moves the front rather than at the two that set it.
+/// Verifies that Wipe requires Current::mask for softness configuration, returning Written::Owed if missing.
 #[test]
 fn a_wipe_with_no_mask_read_is_owed_the_soft_edge_rather_than_given_one() {
     let current = Current {
@@ -289,22 +233,7 @@ fn a_wipe_with_no_mask_read_is_owed_the_soft_edge_rather_than_given_one() {
     );
 }
 
-/// A wipe onto a deck that is already there writes neither the blend mode
-/// nor the put-on-air, which is the affordance `m` in front of `c` is, said
-/// as a test.
-///
-/// The mode is the operator's: a wipe under `max` — or under `add` — is a
-/// wipe *on* rather than a wipe *over*, a different picture and a
-/// legitimate one, and a gesture that forced `over` every time would take
-/// it back from the hand that chose it
-/// ([P-0094](../../../docs/principles/0094-the-show-does-not-stop-it-does-not-go-quiet-and-it-does-not-leave-the-operators-hands.md)).
-/// The put-on-air is the same shape with nothing at stake but the byte: a
-/// deck already live is told so again.
-///
-/// Four records rather than six, in the same order. What the list drops it
-/// drops from the middle, and the front is still at 0 before the move that
-/// carries it across — which is the sentence [`Written::Records`] gained
-/// when the wipe stopped being one length.
+/// Verifies that Wipe preserves pre-existing blend mode and live residency on arriving deck.
 #[test]
 fn a_wipe_leaves_a_mode_the_operator_chose_and_a_deck_already_on_air() {
     let current = Current {
@@ -397,16 +326,7 @@ fn a_wipe_writes_the_put_on_air_alone_for_a_deck_already_under_over() {
     );
 }
 
-/// A wipe with no mix read is owed it rather than given the records it
-/// would have left out, which is [`Current`]'s every-field-optional rule
-/// meeting the one reading taken so that a record can be omitted.
-///
-/// The failure this catches is quiet in a way the other four are not: a
-/// default of *the deck is at `add` and off air* is a perfectly plausible
-/// `Mix` and a wipe built on it writes six perfectly plausible records —
-/// one of which is a blend mode nobody chose, written over one somebody
-/// did. There is nothing in the stream afterwards that says a reading was
-/// missing, which is why this answers rather than assumes.
+/// Verifies that Wipe requires Current::mix and returns Written::Owed if unread.
 #[test]
 fn a_wipe_with_no_mix_read_is_owed_it_rather_than_writing_over_a_chosen_mode() {
     let current = Current {
@@ -429,21 +349,7 @@ fn a_wipe_with_no_mix_read_is_owed_it_rather_than_writing_over_a_chosen_mode() {
     );
 }
 
-/// A surface that handed in no settings is told which reading it forgot,
-/// rather than getting a cut it did not ask for.
-///
-/// This is [`a_reading_that_was_not_taken_is_owed_rather_than_guessed`] on
-/// the reading that is not read off anything: a default of zero would be a
-/// perfectly plausible `Transition` — a start of 0 is in the past and a
-/// length of 0 is a cut — so a surface that forgot its settings would get
-/// every fade as an instant jump and nothing anywhere would say so. All
-/// four are asserted, because the failure is the conversion's and not one
-/// operation's.
-///
-/// The wipe is the fourth and is the one that could answer two things. It
-/// reads the settings and the mask, and with neither handed in it names the
-/// settings — the reading a caller is holding rather than one it would have
-/// had to look up.
+/// Verifies that scheduled operations return Written::Owed(Reading::Transition) when transition settings are missing.
 #[test]
 fn a_surface_that_handed_in_no_settings_is_told_which_reading_it_forgot() {
     for operation in [
