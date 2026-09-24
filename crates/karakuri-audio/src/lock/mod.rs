@@ -1,93 +1,24 @@
-//! The beat lock: what the estimate is allowed to do to the local oscillator.
+//! Phase-locked loop for synchronizing the local oscillator with audio beat estimates.
 //!
-//! The invariant this is written under is that *rendering reads only
-//! the local oscillator, never an external clock*. Nothing here becomes the
-//! clock. It produces a [`Correction`]: a tempo and a phase shift, handed to
-//! `Oscillator::correct`, recorded as a `tempo` record, and read back verbatim
-//! on replay. The analyser never runs twice on the same session, which matters
-//! because the analyser is allowed to improve and a session recorded today has
-//! to replay the same way after it does.
+//! Evaluates incoming [`Estimate`] values and produces [`Correction`] recommendations
+//! (tempo adjustment and phase shift) for [`karakuri_signal::Oscillator`].
 //!
-//! ## A grid that is predicted, not chased
+//! ## Design & Invariants
 //!
-//! The tempo is stable for essentially all of a set, and steps a few times an
-//! hour when one track replaces another. So the loop is deliberately **stiff**:
-//! once locked, the oscillator runs the grid on its own and the estimate is
-//! allowed only a slow trim ([`TRIM_TAU_PHASE`]) against small errors. It is
-//! not asked to find each beat. A soft loop tuned to follow a wandering tempo
-//! would be jittery in the state that matters in exchange for agility in a
-//! transient nobody is judging — during a blend there are two tempi in the room
-//! and no correct answer anyway.
-//!
-//! Distinguishing **"one estimate disagreed"** from **"the tempo has changed"**
-//! is where this kind of system usually goes wrong, so it is explicit:
-//!
-//! - A disagreeing estimate moves the grid *not at all*.
-//! - Disagreements are counted per **revision** — one per re-measurement,
-//!   about four a second — and they have to agree *with each other* to count.
-//!   [`RELOCK_EVIDENCE`] of them, roughly two seconds of a consistent new
-//!   opinion, before the grid is re-acquired.
-//! - Being a beat slow to notice a real change costs nothing anyone will see,
-//!   because the change is already inside a transition. One spurious
-//!   re-acquire costs a visibly wrong bar.
-//!
-//! ## The lead, and why a loop that merely tracks is visibly late
-//!
-//! Two delays sit either side of the correction and they do not cancel:
-//!
-//! - **A, analysis lag.** A beat in the room at wall time `T` cannot be
-//!   measured until the buffer holding it has been delivered and the window
-//!   covering it is complete: `A = input latency + half an analysis window`.
-//!   `crate::device` publishes it.
-//! - **D, output lag.** A frame prepared at `P` is not light until `P + D`:
-//!   render, queue depth, present, and the display's own pipeline.
-//!
-//! A loop that drives the oscillator's phase *now* to the music as it was at
-//! `now − A`, and then shows it `D` later, is late by `A + D` — consistently,
-//! which reads as wrong rather than as jitter. So the target is not the
-//! estimate's phase but the grid's phase **`A + D` further on**:
-//!
-//! > at wall time `P`, the oscillator's phase should be the phase the music
-//! > will have at `P + D`, given an estimate describing the music at `P − A`.
-//!
-//! That is [`BeatLock::update`]'s `ahead` argument, and it is feed-forward: it
-//! is computed from durations, not tuned against the error it removes. The
-//! caller sums it, because the caller is the only one that knows how old the
-//! estimate is by now.
-//!
-//! ## Confidence gates everything
-//!
-//! Below [`GATE_CONFIDENCE`] nothing happens at all — no trim, no evidence, no
-//! re-acquire. An interface unplugged mid-set leaves a grid running at the
-//! tempo it had, which is the only acceptable behaviour: the picture keeps its
-//! tempo rather than stopping or lurching.
-//!
-//! **Confidence says how well the grid fits the novelty and nothing else.** It
-//! used to carry octave uncertainty as well, which meant a tempo read an octave
-//! out arrived here looking like an absent one and the grid simply never
-//! locked — a bug that read as silence. [`crate::tempo`] settles the octave by
-//! folding now, so what reaches this gate is only ever "is there a beat and
-//! does this grid sit on it".
-//!
-//! ## What a person can say that a measurement cannot
-//!
-//! Two controls here are **instructions rather than evidence**, and both are
-//! applied in full and immediately: [`BeatLock::tap`], and [`BeatLock::octave`]
-//! for the one thing the estimator cannot infer — which octave the operator
-//! wants. See [`crate::tempo`] for why that decision is a person's.
+//! - **Oscillator Decoupling**: The engine renders exclusively from the local oscillator;
+//!   corrections trim or acquire tempo without overriding clock autonomy.
+//! - **Stiff Phase Lock**: Once locked, minor phase drift is gently trimmed via [`TRIM_TAU_PHASE`];
+//!   large discrepancies require sustained evidence ([`RELOCK_EVIDENCE`]) before re-locking.
+//! - **Feed-Forward Delay Compensation**: Computes overall lead (`ahead = analysis_lag + output_lag`)
+//!   to ensure visual beats align precisely with audience acoustic perception.
+//! - **Confidence Gating**: Estimates below [`GATE_CONFIDENCE`] produce no corrections, allowing
+//!   the oscillator to free-run seamlessly during audio dropouts.
 
 use karakuri_signal::Oscillator;
 
 use crate::tempo::{Estimate, BPM_RANGE};
 
-/// Below this, an estimate is not evidence of anything.
-///
-/// It sits in a wide empty gap rather than on a slope, which is why it did not
-/// have to move when [`crate::tempo`]'s confidence stopped carrying the octave.
-/// Measured on synthesised material: broadband noise reads 0.01, a swell 0.01,
-/// a sustained tone 0.18 — and everything with a pulse in it, including a grid
-/// deliberately left an octave out, reads above 0.98. The gate separates "is
-/// there a beat" from "there is not", and nothing lands in between.
+/// Minimum estimate confidence required to update phase or tempo.
 pub const GATE_CONFIDENCE: f32 = 0.35;
 
 /// Consecutive agreeing revisions before a free-running grid locks. Three is
@@ -121,11 +52,7 @@ pub const TRIM_TAU_TEMPO: f32 = 12.0;
 const TAP_MEMORY: usize = 4;
 const TAP_TIMEOUT_SECONDS: f64 = 3.0;
 
-/// What the oscillator is told this frame.
-///
-/// Field for field a `tempo` record: live, this is computed and emitted; on
-/// replay it is decoded and applied, and the oscillator cannot tell which
-/// happened.
+/// Recommended phase and tempo adjustment emitted by [`BeatLock`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Correction {
     /// The tempo from now on.
@@ -212,13 +139,9 @@ impl BeatLock {
         self.reason
     }
 
-    /// One frame. Returns what to tell the oscillator, or `None` for "leave it
-    /// alone", which is most frames.
+    /// Evaluates the current estimate against the oscillator and returns a [`Correction`] if needed.
     ///
-    /// `ahead` is the lead: how far past the instant the estimate describes the
-    /// correction should aim — the estimate's age by now, plus the output lag.
-    /// See the module doc. `step` is how much simulation time this frame
-    /// advances, which is what makes the trim rates frame-rate independent.
+    /// `ahead` specifies the feed-forward lead time (analysis latency plus output display lag).
     pub fn update(
         &mut self,
         estimate: &Estimate,
@@ -292,8 +215,7 @@ impl BeatLock {
                             confidence: estimate.confidence,
                         })
                     } else {
-                        // **One estimate disagreeing moves the grid not at
-                        // all.** This is the branch the design is about.
+                        // Disagreeing estimate without sufficient evidence leaves the grid untouched.
                         None
                     }
                 }
@@ -301,14 +223,9 @@ impl BeatLock {
         }
     }
 
-    /// A performer tapping the beat. Authoritative — a tap is an instruction,
-    /// not evidence, so it is applied in full.
+    /// Records a manual tap, adjusting phase immediately and updating tempo on repeated taps.
     ///
-    /// One tap sets the phase; three or more consistent taps set the tempo as
-    /// well. `at` is a wall-clock instant in seconds, `output_lag` is the same
-    /// `D` [`BeatLock::update`] leads by: a performer taps in time with what
-    /// they hear, and what they want is the *picture* on the beat, so the
-    /// oscillator has to be `D` ahead of the tap rather than on it.
+    /// Leads by `output_lag` to align visual presentation with acoustic beats.
     pub fn tap(&mut self, at: f64, output_lag: f32, oscillator: &Oscillator) -> Correction {
         if self.tap_count > 0 && at - self.taps[self.tap_count - 1] > TAP_TIMEOUT_SECONDS {
             // A tap after a long gap starts a new count rather than averaging
@@ -366,73 +283,9 @@ impl BeatLock {
         })
     }
 
-    /// A performer naming the grid's tempo outright, rather than by a factor
-    /// or by tapping it — `Operation::SetFreeRunTempo`, which is *what the grid
-    /// runs at with nothing driving it*.
+    /// Updates the target tempo for free-running operation without forcing state changes.
     ///
-    /// # It moves nothing, which is why it hands back no [`Correction`]
-    ///
-    /// [`BeatLock::octave`] beside it computes a tempo and returns one, because
-    /// the factor is all the operator gave it. Here the operator gave the
-    /// number, and that number reaches the oscillator as a `tempo` record
-    /// through `audio::apply_tempo` — the one road, live and on replay. What is
-    /// left for this lock is the state the *record* does not carry, and this is
-    /// it.
-    ///
-    /// # The run of evidence goes, for [`BeatLock::octave`]'s own reason
-    ///
-    /// `agreement` and `disagreement` count consecutive
-    /// estimates saying one thing about the grid that was there. The grid has
-    /// moved, and the tracker goes on publishing from the window it had for up
-    /// to one `ESTIMATE_INTERVAL` afterwards — so a [`RELOCK_EVIDENCE`] run
-    /// part-served by opinions formed before the press would take the grid back
-    /// in less than the two seconds that number is built on, and the operator
-    /// would watch the control undo itself. Cleared, a room that really is at
-    /// another tempo pays a whole fresh run for it: the tracker deciding,
-    /// rather than a count left over from before anybody pressed anything.
-    ///
-    /// `candidate_bpm` becomes what was named, so the first
-    /// estimate after the press starts a run of its own rather than continuing
-    /// one about a tempo nobody is asking for.
-    ///
-    /// # The state is left exactly as it is, and that is the one place this
-    /// parts company with a tap and an octave
-    ///
-    /// Both of those set `State::Locked`, and both are a performer saying
-    /// what the grid is locked *to*: a tap is the room's beat, and an octave is
-    /// a tracked grid being corrected. This says what the grid **runs at**, and
-    /// says nothing about whether anything is driving it — so the lock goes on
-    /// answering that question from what it has measured:
-    ///
-    /// - **Not `Locked`.** [`BeatLock::locked`] is a readout — it is drawn on
-    ///   the panel every frame and printed — and *locked* about a room with no
-    ///   beat in it is the confident wrong judgement
-    ///   `docs/principles/0084-a-confident-wrong-automatic-judgement-is-worse-than-not-judging.md`
-    ///   refuses. It would also cost the operator the thing they set the tempo
-    ///   *for*: a beat arriving afterwards would need [`RELOCK_EVIDENCE`]'s
-    ///   eight revisions to take a grid that [`ACQUIRE_EVIDENCE`]'s three would
-    ///   have taken from a free-running one, so naming a rough tempo before the
-    ///   music started would make the music slower to lock than saying nothing.
-    /// - **Not `Free` either.** A room that *is* being tracked stays tracked:
-    ///   dropping to `Free` would let the next three agreeing estimates
-    ///   **jump** the grid — acquisition is allowed to jump, because nothing
-    ///   was locked — where a locked grid trims towards them over
-    ///   [`TRIM_TAU_TEMPO`].
-    ///
-    /// # No band and no range, and that is not an omission
-    ///
-    /// What a tempo may be is not this lock's to say — [`BPM_RANGE`] says of
-    /// itself that it is not the range of answers, and a grid at 240 is a
-    /// perfectly good grid. The ±15% a *hand* is held to is a guard against a
-    /// mis-click and lives where the press becomes an operation, which is the
-    /// console; a band written here would sit in the path every estimate
-    /// travels, and a grid that cannot follow the music is a worse failure than
-    /// a hand that can ask for anything
-    /// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
-    ///
-    /// What is refused is a number that is not a tempo at all: `candidate_bpm`
-    /// is compared against on every estimate and a NaN compares false with
-    /// everything, so a run could never be counted again.
+    /// Resets accumulated agreement/disagreement evidence and zeros the displayed error.
     pub fn retarget(&mut self, bpm: f32) {
         if !bpm.is_finite() || bpm <= 0.0 {
             return;
@@ -440,12 +293,7 @@ impl BeatLock {
         self.agreement = 0;
         self.disagreement = 0;
         self.candidate_bpm = bpm;
-        // The phase does not move — [`BeatLock::octave`]'s sentence, and the
-        // reason is the same one line along: `Oscillator::correct` takes a
-        // shift of zero for this record, so the beat the performer can see
-        // stays where it is. What is zeroed is the *reading*: the error on the
-        // panel was measured against a tempo that is gone, and in a room below
-        // `GATE_CONFIDENCE` nothing would ever overwrite it.
+        // Reset displayed phase error measured against previous tempo.
         self.error = 0.0;
     }
 

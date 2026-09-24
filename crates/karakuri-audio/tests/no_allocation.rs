@@ -1,23 +1,7 @@
-//! The one property of the audio callback that cannot be argued, only counted.
+//! Integration test verifying zero heap allocations in the real-time audio hot path.
 //!
-//! `analysis` and `tempo` both claim to allocate nothing after construction,
-//! because the callback runs them and an allocation on a real-time thread is a
-//! lock in disguise — the allocator's, taken behind your back, for as long as
-//! it feels like. Every buffer is planned in `Analyzer::new` and `Tracker::new`
-//! and nothing in the hot path grows; the claim is worth something only if
-//! something checks it, since `rustfft`'s per-call path is not this crate's
-//! code and the day one of these buffers gains a `push` nothing else would
-//! notice.
-//!
-//! A counting global allocator, armed around exactly the work one callback
-//! does. It has to be its own integration test rather than a `#[test]` in the
-//! crate: a `#[global_allocator]` is per-binary, and installing a counting one
-//! under the whole unit test suite would count every other test's allocations
-//! on whatever thread happened to be running.
-//!
-//! Counting is on from the first call rather than after a warm-up, so a
-//! first-use allocation inside the transform — which would land on the audio
-//! thread the first time a real stream produced a block — is caught too.
+//! Uses a custom [`GlobalAlloc`] counting allocator to verify that [`Analyzer`] and [`Tracker`]
+//! perform no allocations after initialization during steady-state block processing.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -43,8 +27,6 @@ unsafe impl GlobalAlloc for Counting {
     }
 
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        // A `Vec` that grows shows up here rather than in `alloc`, which is the
-        // shape this test is most likely to catch.
         if COUNTING.load(Ordering::Relaxed) {
             ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
         }
@@ -55,16 +37,7 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static ALLOCATOR: Counting = Counting;
 
-/// **Music, not a still image.** A click train at 128 bpm on a broadband bed:
-/// content in every bin so no branch inside the transform is skipped for being
-/// lucky, *and a novelty curve that moves*, which is what actually gets the
-/// estimator to run.
-///
-/// This is not a detail. Feeding one identical block over and over — which is
-/// what this test used to do — leaves the spectral flux at zero, and an
-/// estimator handed nothing but zeroes returns "no tempo" from its first few
-/// lines and never reaches the autocorrelation, the fold, or the profile at
-/// all. The test passed and covered none of `tempo`.
+/// Synthesizes a broadband click train at 128 BPM to exercise spectral analysis and tempo paths.
 fn signal(hops: usize) -> Vec<f32> {
     let mut x: u32 = 0x9e37_7911;
     let period = (60.0 / 128.0 * 48_000.0) as usize;
