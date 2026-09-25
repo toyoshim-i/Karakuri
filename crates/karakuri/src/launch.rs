@@ -88,7 +88,7 @@ pub(crate) fn seeded(store: &std::path::Path, copies: &[Sources]) -> history::Sh
 
 /// CLI usage help text displayed for `-h`, `--help`, or syntax errors.
 pub(crate) const USAGE: &str = "\
-usage: karakuri [--presets DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERER.kir]
+usage: karakuri [--presets DIR] [--plugins DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERER.kir]
 
   The console, with a deck behind it. Both paths or neither: a Set is an L1 and
   an L4, and with neither the pair that ships in the preset library is played.
@@ -100,6 +100,10 @@ usage: karakuri [--presets DIR] [--store DIR] [--mcp PORT] [GEOMETRY.kir RENDERE
                   the workspace this binary was compiled in. Which one answered
                   is printed at startup. With none, there is no default pair
                   and the two paths have to be given.
+  --plugins DIR   where external output plugins (Spout, Syphon, etc.) live.
+                  Given, it is used and a directory that is not there is refused.
+                  Not given, it is looked for beside this binary, in the install
+                  prefix, or in the workspace root.
   --store DIR     where the Library bay reads Sets and arrangements from, where
                   a save goes, and where the scratch each deck runs from is
                   written. Defaults to .karakuri beside the session.
@@ -123,6 +127,8 @@ pub(crate) struct Launch {
     pub(crate) store: std::path::PathBuf,
     /// Discovered preset library root directory, if available.
     pub(crate) presets: Option<karakuri_environment::places::Presets>,
+    /// Discovered plugin directory root, if available.
+    pub(crate) plugins: Option<karakuri_environment::places::Plugins>,
     /// Optional MCP server port specified via `--mcp PORT`.
     pub(crate) mcp: Option<u16>,
 }
@@ -130,14 +136,15 @@ pub(crate) struct Launch {
 /// Parses command-line arguments into a [`Launch`] configuration.
 ///
 /// Accepts up to two KIR file paths (geometry L1 and renderer L4) or falls back to shipped presets.
-/// Also parses `--presets`, `--store`, and `--mcp` options in any argument order.
+/// Also parses `--presets`, `--plugins`, `--store`, and `--mcp` options in any argument order.
 pub(crate) fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Launch, String> {
     let args: Vec<String> = args.into_iter().collect();
     if args.iter().any(|a| a == "-h" || a == "--help") {
         return Err(String::new());
     }
     // Parse flags and positional file arguments regardless of order.
-    let mut named: Option<std::path::PathBuf> = None;
+    let mut named_presets: Option<std::path::PathBuf> = None;
+    let mut named_plugins: Option<std::path::PathBuf> = None;
     let mut store: Option<std::path::PathBuf> = None;
     let mut mcp: Option<u16> = None;
     let mut paths: Vec<String> = Vec::new();
@@ -145,7 +152,10 @@ pub(crate) fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<La
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--presets" => {
-                named = Some(std::path::PathBuf::from(value_for("--presets", &mut rest)?))
+                named_presets = Some(std::path::PathBuf::from(value_for("--presets", &mut rest)?))
+            }
+            "--plugins" => {
+                named_plugins = Some(std::path::PathBuf::from(value_for("--plugins", &mut rest)?))
             }
             "--store" => store = Some(std::path::PathBuf::from(value_for("--store", &mut rest)?)),
             "--mcp" => mcp = Some(number_for("--mcp", "a port number", &mut rest)?),
@@ -154,7 +164,8 @@ pub(crate) fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<La
         }
     }
 
-    let presets = karakuri_environment::places::presets(named.as_deref())?;
+    let presets = karakuri_environment::places::presets(named_presets.as_deref())?;
+    let plugins = karakuri_environment::places::plugins(named_plugins.as_deref())?;
     let sources = match paths.as_slice() {
         [] => match &presets {
             Some(presets) => Sources::under(&presets.dir),
@@ -181,6 +192,7 @@ pub(crate) fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<La
         store: store
             .unwrap_or_else(|| std::path::PathBuf::from(karakuri_environment::places::STORE)),
         presets,
+        plugins,
         mcp,
     })
 }

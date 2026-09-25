@@ -131,6 +131,13 @@ pub(crate) struct Gfx {
     /// disk on a press and is handed nothing but a device, and the shipped tier is
     /// one of the two places a library row's file can be (ADR-0227, ADR-0338).
     pub(crate) presets: Option<std::path::PathBuf>,
+    /// Where the plugins root is, copied from [`App::plugins`] when the device was made.
+    #[allow(dead_code)]
+    pub(crate) plugins: Option<std::path::PathBuf>,
+    /// Out-of-process output plugins discovered in the plugins directory.
+    pub(crate) discovered_plugins: Vec<karakuri_environment::output_plugin::DiscoveredPlugin>,
+    /// Self-reported display name of the primary plugin (e.g. "Spout"), interned as static.
+    pub(crate) plugin_name: Option<&'static str>,
     /// Where the library is, copied from [`App::store`] when the device was made.
     ///
     /// It is on both because the two readers are on both sides of the window:

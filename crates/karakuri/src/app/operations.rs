@@ -77,7 +77,7 @@ pub(crate) fn routed(
     if gfx.projector.is_some() {
         return Some(format!("outputs: projector {n} is already on"));
     }
-    let mut attrs = Window::default_attributes()
+    let attrs = Window::default_attributes()
         .with_title("Karakuri — projector")
         // **The session canvas**, which is the size an output starts at when
         // nothing else says (ADR-0246). The operator resizes it, or makes it
@@ -141,13 +141,20 @@ pub(crate) fn routed(
     ))
 }
 
+#[cfg(target_os = "windows")]
+pub(crate) const REQUIRED_SURFACE: &str = "dxgi";
+#[cfg(target_os = "macos")]
+pub(crate) const REQUIRED_SURFACE: &str = "iosurface";
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+pub(crate) const REQUIRED_SURFACE: &str = "unknown";
+
+pub(crate) fn is_plugin_available(gfx: &Gfx, n: u8) -> bool {
+    gfx.discovered_plugins
+        .get(n as usize)
+        .is_some_and(|p| p.supports_surface(REQUIRED_SURFACE))
+}
+
 fn route_plugin(gfx: &mut Gfx, n: u8, on: bool) -> Option<String> {
-    if n != 0 {
-        return Some(format!(
-            "outputs: plugin {n} is not loaded — there is no plugin manifest to read a \
-             sink out of, and `docs/plugins.md` is the specification nothing implements"
-        ));
-    }
     if !on {
         return Some(match gfx.plugin.take() {
             Some(_) => format!("outputs: plugin {n} is off"),
@@ -157,154 +164,33 @@ fn route_plugin(gfx: &mut Gfx, n: u8, on: bool) -> Option<String> {
     if gfx.plugin.is_some() {
         return Some(format!("outputs: plugin {n} is already on"));
     }
-    let command = resolve_plugin_command(n);
+    let plugin_info = match gfx.discovered_plugins.get(n as usize) {
+        Some(p) => p,
+        None => {
+            return Some(format!(
+                "outputs: plugin {n} is not loaded — no compatible plugin discovered in places"
+            ));
+        }
+    };
+    if !plugin_info.supports_surface(REQUIRED_SURFACE) {
+        return Some(format!(
+            "outputs: plugin {n} ({}) does not support required surface `{REQUIRED_SURFACE}`",
+            plugin_info.name
+        ));
+    }
+    let command = plugin_info.path.to_string_lossy().into_owned();
     let (w, h) = CANVAS;
     match crate::bridge::PluginSink::open(&gfx.gpu, &command, w, h, gfx.picture_format) {
         Ok(sink) => {
             let server_name = sink.server_name().to_string();
             gfx.plugin = Some(sink);
             Some(format!(
-                "outputs: plugin {n} is on — streaming {w} x {h} via {server_name}"
+                "outputs: plugin {n} ({}) is on — streaming {w} x {h} via {server_name}",
+                plugin_info.name
             ))
         }
         Err(e) => Some(format!("outputs: plugin {n} failed to open: {e}")),
     }
-}
-
-fn resolve_plugin_command(n: u8) -> String {
-    if n == 0 {
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_SYPHON") {
-                return cmd;
-            }
-            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_0") {
-                return cmd;
-            }
-            let candidates = [
-                "../Karakuri-syphon/target/debug/karakuri-syphon",
-                "../Karakuri-syphon/target/release/karakuri-syphon",
-                "../../Karakuri-syphon/target/debug/karakuri-syphon",
-                "../../Karakuri-syphon/target/release/karakuri-syphon",
-                "../../../Karakuri-syphon/target/debug/karakuri-syphon",
-                "../../../Karakuri-syphon/target/release/karakuri-syphon",
-            ];
-            for candidate in candidates {
-                if let Ok(canon) = std::fs::canonicalize(candidate) {
-                    return canon.to_string_lossy().into_owned();
-                }
-            }
-            if let Ok(exe) = std::env::current_exe() {
-                if let Some(parent) = exe.parent() {
-                    let p1 = parent.join("karakuri-syphon");
-                    if p1.exists() {
-                        return p1.to_string_lossy().into_owned();
-                    }
-                    let p_debug =
-                        parent.join("../../../Karakuri-syphon/target/debug/karakuri-syphon");
-                    if let Ok(canon) = p_debug.canonicalize() {
-                        return canon.to_string_lossy().into_owned();
-                    }
-                    let p_release =
-                        parent.join("../../../Karakuri-syphon/target/release/karakuri-syphon");
-                    if let Ok(canon) = p_release.canonicalize() {
-                        return canon.to_string_lossy().into_owned();
-                    }
-                }
-            }
-            return "karakuri-syphon".to_string();
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_SPOUT") {
-                return cmd;
-            }
-            if let Ok(cmd) = std::env::var("KARAKURI_PLUGIN_0") {
-                return cmd;
-            }
-            let candidates = [
-                "../Karakuri-spout/target/debug/karakuri-spout.exe",
-                "../Karakuri-spout/target/release/karakuri-spout.exe",
-                "../../Karakuri-spout/target/debug/karakuri-spout.exe",
-                "../../Karakuri-spout/target/release/karakuri-spout.exe",
-                "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
-                "../../../Karakuri-spout/target/release/karakuri-spout.exe",
-                "../Karakuri-spout/target/debug/karakuri-spout",
-                "../Karakuri-spout/target/release/karakuri-spout",
-                "../../Karakuri-spout/target/debug/karakuri-spout",
-                "../../Karakuri-spout/target/release/karakuri-spout",
-                "../../../Karakuri-spout/target/debug/karakuri-spout",
-                "../../../Karakuri-spout/target/release/karakuri-spout",
-            ];
-            for candidate in candidates {
-                if let Ok(canon) = std::fs::canonicalize(candidate) {
-                    return canon.to_string_lossy().into_owned();
-                }
-            }
-            if let Ok(exe) = std::env::current_exe() {
-                if let Some(parent) = exe.parent() {
-                    for name in ["karakuri-spout.exe", "karakuri-spout"] {
-                        let p = parent.join(name);
-                        if p.exists() {
-                            return p.to_string_lossy().into_owned();
-                        }
-                    }
-                    for name in [
-                        "../../../Karakuri-spout/target/debug/karakuri-spout.exe",
-                        "../../../Karakuri-spout/target/release/karakuri-spout.exe",
-                    ] {
-                        let p = parent.join(name);
-                        if let Ok(canon) = p.canonicalize() {
-                            return canon.to_string_lossy().into_owned();
-                        }
-                    }
-                }
-            }
-            return "karakuri-spout".to_string();
-        }
-    }
-    "karakuri-plugin".to_string()
-}
-
-pub(crate) fn is_plugin_available(n: u8) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        if n == 0 {
-            let cmd = resolve_plugin_command(n);
-            if cmd != "karakuri-syphon" {
-                return std::path::Path::new(&cmd).exists();
-            }
-            if let Ok(path) = std::env::var("PATH") {
-                for dir in std::env::split_paths(&path) {
-                    if dir.join("karakuri-syphon").exists() {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if n == 0 {
-            let cmd = resolve_plugin_command(n);
-            if cmd != "karakuri-spout" && cmd != "karakuri-spout.exe" {
-                return std::path::Path::new(&cmd).exists();
-            }
-            if let Ok(path) = std::env::var("PATH") {
-                for dir in std::env::split_paths(&path) {
-                    if dir.join("karakuri-spout.exe").exists()
-                        || dir.join("karakuri-spout").exists()
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let _ = n;
-    false
 }
 
 /// Dispatches UI focus responses, handling in-process operations and refusals (P-0083).

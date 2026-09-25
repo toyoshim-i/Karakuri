@@ -649,17 +649,19 @@ impl Readout {
         ctx: &egui::Context,
         at: Point,
     ) -> Acted {
-        let sink = outputs_with(
+        let sink = outputs_with_plugin_name(
             ctx,
             self.panel.layout(),
             self.view.opening,
             self.view.plugin_available,
+            self.view.plugin_name,
         )
         .map(|row| {
-            row.told(self.view.projector).told_plugin(
+            row.told(self.view.projector).told_plugin_name(
                 0,
                 self.view.plugin,
                 self.view.plugin_available,
+                self.view.plugin_name,
             )
         })
         .and_then(|row| row.chip_at(at).map(|output| (row, output)));

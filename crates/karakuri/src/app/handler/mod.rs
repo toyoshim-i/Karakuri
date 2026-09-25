@@ -14,9 +14,6 @@ use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 
-use crate::engine_bridge::*;
-use crate::gfx::*;
-use crate::readout::*;
 use crate::{MAPPED, SERVED, WINDOW};
 
 use super::*;
@@ -379,9 +376,16 @@ impl ApplicationHandler for App {
             budget,
             &governed,
             self.presets.as_ref(),
+            self.plugins.as_ref(),
+            self.discovered_plugins.len(),
             &self.store,
             mcp_port,
         );
+
+        let plugin_name = self.discovered_plugins.first().map(|p| {
+            let s: &'static str = Box::leak(p.display_name().into_boxed_str());
+            s
+        });
 
         // The first frame is owed to the window appearing, not drawn on a
         // still panel.
@@ -399,6 +403,9 @@ impl ApplicationHandler for App {
             budget_ms: budget,
             launch: self.sources.material(),
             presets: self.presets.as_ref().map(|presets| presets.dir.clone()),
+            plugins: self.plugins.as_ref().map(|plugins| plugins.dir.clone()),
+            discovered_plugins: self.discovered_plugins.clone(),
+            plugin_name,
             material,
             store: self.store.clone(),
             window,
