@@ -1,5 +1,6 @@
 /target
 /library
+/plugins
 .DS_Store
 /.claude/
 .karakuri/
