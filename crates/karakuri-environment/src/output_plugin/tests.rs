@@ -2,11 +2,38 @@ use super::*;
 
 fn try_fake(lines: &str, surface_kind: &str) -> (Result<OutputPlugin, Refusal>, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("tempdir");
-    let script = dir.path().join("plugin.sh");
-    std::fs::write(&script, lines).expect("write script");
-    let command = format!("sh {}", script.display());
-    let plugin = OutputPlugin::open(&command, surface_kind, 1920, 1080, "bgra8unorm");
-    (plugin, dir)
+    #[cfg(windows)]
+    {
+        let script = dir.path().join("plugin.bat");
+        let mut bat = String::from("@echo off\r\n");
+        for line in lines.lines() {
+            let t = line.trim();
+            if t.starts_with("echo ") {
+                let text = t.strip_prefix("echo ").unwrap();
+                let clean = text.trim_matches('\'');
+                bat.push_str(&format!("echo {clean}\r\n"));
+            } else if t.starts_with("read ") {
+                bat.push_str("set /p dummy=\r\n");
+            } else if t.starts_with("while read") || t.starts_with("done") || t == ":" {
+                // skip
+            }
+        }
+        if lines.contains("while read") {
+            bat.push_str(":loop\r\nset /p dummy=\r\ngoto loop\r\n");
+        }
+        std::fs::write(&script, bat).expect("write bat");
+        let command = format!("cmd.exe /c {}", script.display());
+        let plugin = OutputPlugin::open(&command, surface_kind, 1920, 1080, "bgra8unorm");
+        (plugin, dir)
+    }
+    #[cfg(not(windows))]
+    {
+        let script = dir.path().join("plugin.sh");
+        std::fs::write(&script, lines).expect("write script");
+        let command = format!("sh {}", script.display());
+        let plugin = OutputPlugin::open(&command, surface_kind, 1920, 1080, "bgra8unorm");
+        (plugin, dir)
+    }
 }
 
 #[test]
