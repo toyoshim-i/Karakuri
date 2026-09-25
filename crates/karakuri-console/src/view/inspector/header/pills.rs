@@ -1,4 +1,3 @@
-use super::super::super::*;
 use super::super::*;
 
 /// The `keep` pill in a pane's head, laid out — the capsule at the right of

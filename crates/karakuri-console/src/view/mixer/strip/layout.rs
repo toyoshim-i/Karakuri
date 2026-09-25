@@ -2,7 +2,6 @@
 
 use egui::{Pos2, Rect};
 
-use super::super::super::*;
 use super::super::*;
 use super::paint::reach;
 use super::state::*;

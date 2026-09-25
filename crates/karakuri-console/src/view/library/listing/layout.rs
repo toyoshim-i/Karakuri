@@ -1,7 +1,6 @@
 use egui::{Color32, FontFamily, FontId, Pos2, Rect};
 use karakuri_operation::Operation;
 
-use super::super::super::*;
 use super::*;
 
 // ---------------------------------------------------------------------------

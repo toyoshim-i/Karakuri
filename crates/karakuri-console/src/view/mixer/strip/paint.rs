@@ -4,7 +4,6 @@ use egui::text::LayoutJob;
 use egui::{Color32, CornerRadius, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_operation::{BlendMode, Residency, WipeKind};
 
-use super::super::super::*;
 use super::super::*;
 use super::layout::*;
 use super::state::*;
