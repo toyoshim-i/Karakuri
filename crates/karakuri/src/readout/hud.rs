@@ -87,6 +87,7 @@ impl Readout {
     // -- the legend -----------------------------------------------------
 
     /// What this program is, said once at startup.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn print_legend(
         &mut self,
         budget_ms: Option<f32>,

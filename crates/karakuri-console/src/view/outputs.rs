@@ -565,6 +565,6 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     };
     chip_into(row.sink, row.dot, PROGRAM_VIEW, row.on, true);
     for c in &row.more {
-        chip_into(c.chip, c.dot, &c.name, c.on, c.present);
+        chip_into(c.chip, c.dot, c.name, c.on, c.present);
     }
 }
