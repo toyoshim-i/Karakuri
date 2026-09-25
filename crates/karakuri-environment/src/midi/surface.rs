@@ -7,49 +7,24 @@ use super::{appended, Feedback, Interface, Router};
 /// An open surface: a [`Router`] with a port in front of it.
 pub struct Surface {
     port: Port,
-    /// The same device's output port, where it has one — what makes a surface's
-    /// LEDs and motorised faders follow the deck.
-    ///
-    /// `None` is a surface that only sends: a controller with no output port, one
-    /// whose output another program holds, or a device whose two ports are named so
-    /// differently that [`paired_out`] could not match them. Every one of those is
-    /// a state and not a fault — MIDI in is what a map is for, and the run goes on
-    /// exactly as it did before this existed.
+    /// Paired output port for LED/motor fader feedback, or `None` if input-only.
     out: Option<Out>,
-    /// Whether a dropped message has been said out loud yet. A full queue is worth
-    /// one sentence a run and not one a frame — the same rule the router's own
-    /// notices keep, for the same reason.
+    /// Whether an output drop warning has been logged in this session.
     said_dropped: bool,
-    /// Scratch for [`Router::shown`], owned so the frame path does not allocate, on
-    /// [`Surface::inbox`](Surface)'s terms exactly.
+    /// Pre-allocated buffer for outgoing wire bytes to avoid allocations on render thread.
     outbox: Vec<[u8; 3]>,
     router: Router,
-    /// What the map is called, or `None` for a surface running without one. The
-    /// file's stem rather than its path: it is what a readout names — the transport
-    /// row's `map · <name>` pill — and a path is not a name (P-0087).
+    /// Name stem of the active map file, or `None` if running unmapped.
     map_name: Option<String>,
-    /// Scratch for [`Port::drain`]. Owned, and given a capacity at construction
-    /// rather than grown into one, because this is read on the frame path — see
-    /// [`INBOX`].
+    /// Pre-allocated inbox buffer for draining incoming MIDI messages.
     inbox: Vec<Message>,
 }
 
-/// Messages a frame is sized for.
-///
-/// A surface's fastest gesture is a fader sweep, which a device sends at a few
-/// hundred messages a second — so a 60 Hz frame sees single figures, and a
-/// stall of a second's worth of eight faders moving together is still under
-/// this. Reserved at construction so the frame path does not `realloc`, which
-/// is the same reason `karakuri-environment`'s `audio.rs` sizes its buffers up
-/// front rather than letting them find their own high-water mark.
+/// Buffer capacity for incoming messages per frame.
 const INBOX: usize = 256;
 
 impl Surface {
-    /// Open a port and load a map, or say why not.
-    ///
-    /// A missing map is not an error: a surface with no map still prints what it
-    /// sends, which is exactly the state an operator is in before they have written
-    /// one.
+    /// Opens the specified input port and loads its map file if provided.
     pub fn open(port: &str, map_path: Option<&Path>) -> Result<Surface, String> {
         let (surface, notes) = Surface::assembled(Port::open(port)?, map_path)?;
         for note in &notes {
@@ -66,9 +41,6 @@ impl Surface {
                 ""
             }
         );
-        // **Said only when there is one.** A surface with no output port is
-        // the state every run before MIDI out existed was in, and a line
-        // announcing its absence would be a complaint about most controllers.
         if let Some(out) = surface.out_name() {
             eprintln!("midi out: `{out}` — mapped controls follow the deck");
         }
@@ -85,14 +57,7 @@ impl Surface {
         Surface::assembled(Port::waking("", wake)?, map_path)
     }
 
-    /// The half that has no device in it: a port, a map file, and the router over
-    /// the two. Said once so that the two constructors above cannot come to
-    /// disagree about what loading a map means.
-    ///
-    /// A missing map is not an error: a surface with no map still reports what it
-    /// sends, which is exactly the state an operator is in before they have written
-    /// one. A map file that is *named* and will not open is, because somebody said
-    /// that one.
+    /// Assembles a surface from an open port and optional map file path.
     fn assembled(port: Port, map_path: Option<&Path>) -> Result<(Surface, Vec<String>), String> {
         let (map, notes) = match map_path {
             Some(path) => {
@@ -149,25 +114,7 @@ impl Surface {
         }
     }
 
-    /// The first hand on a control this frame, for a caller that is learning rather
-    /// than playing — or `None` where nothing arrived.
-    ///
-    /// Learn needs the message and not what it is worth: nothing is mapped to the
-    /// knob yet, so [`Surface::take`] would report it as a discovery and hand back
-    /// no operation. This is the same drain, one step earlier and narrowed to the
-    /// one message a learn is about.
-    ///
-    /// A release is not a hand on a control, which is this crate's rule everywhere:
-    /// every pad acts on the press, so learning from a `NoteOff` would bind the
-    /// knob on the way back up.
-    ///
-    /// The first and not the last, which is the opposite of what a *fader* wants
-    /// and is right here: a sweep is one gesture, and the value is thrown away
-    /// anyway — what a learn takes from the message is which knob it was. Taking
-    /// the last would make a learn depend on where the hand stopped.
-    ///
-    /// It drains, so a frame spent learning is a frame nothing is played from — see
-    /// `App::mapped`, where that is the point rather than a side effect.
+    /// Returns the first non-release MIDI message received this frame for interactive learn mode.
     pub fn learning(&mut self) -> Option<Message> {
         self.port.drain(&mut self.inbox);
         self.inbox
@@ -176,38 +123,12 @@ impl Surface {
             .find(|message| !matches!(message, Message::NoteOff { .. }))
     }
 
-    /// Bind `message` to `target` and put the line in the operator's own map,
-    /// giving back what to say about it.
-    ///
-    /// `to` is where the operator's map lives — `<store>/maps/default.map`,
-    /// [`map_for`]'s first tier — and it is always that file whatever map this run
-    /// loaded. A run playing the shipped `examples/surface.map` and learning a
-    /// control writes the line into the store, which is
-    /// [P-0096](../../../docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md)
-    /// held rather than argued: nothing in this program writes the preset tier, and
-    /// the first learn is what promotes a map into the operator's.
-    ///
-    /// # What it does to the file is [`appended`], and that is the decision
-    ///
-    /// A line for this same knob is replaced where it sits; a knob nothing is
-    /// mapped to is appended; everything else in the file is bytes. The alternative
-    /// — rewriting the file from the table, which is what a map editor would do —
-    /// loses every comment in it, and the shipped map an operator starts from is
-    /// two-thirds prose explaining what a line means.
-    ///
-    /// The file is created with what is loaded where it does not exist yet, so a
-    /// learn against the shipped map does not leave the store holding one line and
-    /// the rest silently lost on the next start.
+    /// Binds `message` to `target` and updates or creates the map file at `to` (P-0096).
     pub fn learn(&mut self, message: Message, target: &str, to: &Path) -> Result<String, String> {
         let line = self.router.map.learn(message, target)?;
         if let Some(dir) = to.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("making `{}`: {e}", dir.display()))?;
         }
-        // **Seeded from what is loaded, once.** Reaching here with no file is
-        // either the first learn of the run or a store somebody has just
-        // emptied; either way the lines in force are the ones this surface is
-        // playing, and a file holding only the newest of them would be a map
-        // that shrank on a press.
         let held = std::fs::read_to_string(to).ok();
         let key = line.split_once("->").map(|(from, _)| from).unwrap_or("");
         let text = appended(held, &self.seed(), key, &line);
@@ -215,18 +136,11 @@ impl Surface {
         self.map_name = to
             .file_stem()
             .map(|stem| stem.to_string_lossy().into_owned());
-        // **The map changed, so the map read the other way changed too.** A
-        // knob just bound has never been shown, and the control it took over
-        // may have been shown on another knob a moment ago.
         self.router.relit();
         Ok(line)
     }
 
-    /// The map in force, as lines, for seeding an operator's map file that does not
-    /// exist yet.
-    ///
-    /// Sorted, because a `HashMap`'s order is not an order and a file that came out
-    /// shuffled on every run is a file nobody can diff.
+    /// Returns sorted map declaration lines to seed a newly initialized map file.
     fn seed(&self) -> String {
         let mut lines: Vec<String> = self.router.map.lines().collect();
         lines.sort();
@@ -255,22 +169,7 @@ impl Surface {
         self.out.as_ref().map(Out::name)
     }
 
-    /// Show the surface where the deck is — [`Router::shown`] with the port in
-    /// front of it, called once a frame beside the drain.
-    ///
-    /// Every mapped control the deck has moved since the last call is written to
-    /// the wire: a `cc` per continuous control at its 7-bit or 14-bit position, and
-    /// a note per pad whose state changed. Nothing is sent for a control nothing is
-    /// mapped to, because the map is the list, and nothing is written into the
-    /// session stream at all.
-    ///
-    /// It does not wait. `Out::send` is a bounded queue to a thread that owns the
-    /// connection, and a frame that finds it full drops rather than blocking
-    /// (P-0094, ADR-0067's shape). The drop is counted and said once a run, because
-    /// a surface that quietly stopped following the deck is the failure nobody
-    /// notices.
-    ///
-    /// A surface with no output port does nothing here, and costs one branch.
+    /// Dispatches feedback wire messages for changed deck controls to the hardware output port (P-0094).
     pub fn show(&mut self, values: &dyn Feedback) {
         let Some(out) = self.out.as_ref() else {
             return;
@@ -290,19 +189,7 @@ impl Surface {
     }
 }
 
-/// The output port that goes with an input, or `None`.
-///
-/// A device's two ports carry the manufacturer's name and often differ past it
-/// — "nanoKONTROL2 SLIDER/KNOB" in and "nanoKONTROL2 CTRL" out — so the whole
-/// name is tried first and the first word after it. The first word is the
-/// device, which is what makes this a pairing rather than a guess: two
-/// controllers plugged in at once have two different first words, and a device
-/// whose output is named nothing like its input is answered `None` rather than
-/// paired with somebody else's port.
-///
-/// It is deliberately silent. A surface with no output is the state every run
-/// before this existed was in, and a program that printed a complaint for it
-/// would be complaining about most controllers.
+/// Discovers matching output port for a given input device name by full name or prefix match.
 fn paired_out(input: &str) -> Option<Out> {
     let first = input.split_whitespace().next().unwrap_or(input);
     Out::open(input).or_else(|_| Out::open(first)).ok()

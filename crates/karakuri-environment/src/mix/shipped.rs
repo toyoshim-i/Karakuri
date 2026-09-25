@@ -1,13 +1,4 @@
-//! The three procedures this repository ships as the master chain's presets,
-//! and their content addresses.
-//!
-//! They were `master.wgsl`'s three fragment entry points until 2026-09-10 and
-//! are `.kir` files now (ADR-0340). They are compiled in rather than read from
-//! disk for one reason: an address has to be the same number on every machine
-//! and in every working directory, and a file read relative to a cwd is not
-//! that. Putting them in a store is a separate act, done by whoever is
-//! recording — `store.put_artifact(source)` — exactly as a Set's sources are,
-//! so a run that records nothing creates nothing.
+//! Presets and content addresses for shipped master chain procedures (ADR-0340).
 
 use std::sync::OnceLock;
 
@@ -73,12 +64,7 @@ pub fn name_of(address_of: &str) -> Option<&'static str> {
     }
 }
 
-/// The source one address names, where it is one of the three.
-///
-/// This is the only resolver that needs no store, which is what lets a windowed
-/// run with no store at all put the shipped presets in its chain. Anything else
-/// is the store's to answer, and a stream naming an address nothing holds is
-/// refused with the address in the message.
+/// Returns the source code for a shipped preset address, or `None` if unknown.
 pub fn source(address_of: &str) -> Option<&'static str> {
     ALL.into_iter()
         .map(|(_, src)| src)

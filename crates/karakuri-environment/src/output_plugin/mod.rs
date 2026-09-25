@@ -1,8 +1,6 @@
 //! Out-of-process output sink plugins (Syphon, Spout, NDI).
-//!
 //! Spawns a foreign helper process, negotiates zero-copy GPU surface sharing, and transmits
-//! frame notifications over a non-blocking pipe. Foreign crashes and stalls are isolated and
-//! never interrupt the live render loop (ADR-0358, docs/plugins.md).
+//! frame notifications over a non-blocking pipe (ADR-0358, docs/plugins.md).
 
 pub mod discovery;
 pub mod message;

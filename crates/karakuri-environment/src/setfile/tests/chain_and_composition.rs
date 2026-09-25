@@ -35,13 +35,7 @@ fn the_decoder_carries_the_diagnostics_the_flag_used_to_hold_alone() {
     assert!(err.contains("fbm"), "{err}");
 }
 
-/// Two `slot L1` lines are two geometries, and one address is one node.
-///
-/// The index used to be destructured and thrown away on this arm: every `slot
-/// L1` landed in the same entry, so a file describing two sources loaded as
-/// one. Index 1 is now the second geometry it always described, and what is
-/// left to report is the collision — two lines claiming index 0, which the
-/// projection folds to one whatever this loader does.
+/// Verifies multiple geometry slots are preserved by index and colliding slot addresses are reported.
 #[test]
 fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
     let (_dir, store, l1, l4) = fixture();
@@ -82,14 +76,7 @@ fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
     assert_eq!(loaded.l1s[0].name, "ring_two");
 }
 
-/// A name the file recorded comes back, where it used to be reported and
-/// dropped.
-///
-/// "Nothing this build points at a node by name" was true until an `edge` did:
-/// an edge names the node that declares a slot and the node bound to it, so a
-/// load that dropped the names is a load whose edges resolve against the wrong
-/// spellings — or, for a name nobody wrote, against the procedure's own and by
-/// luck.
+/// Verifies recorded node names are preserved for edge resolution.
 #[test]
 fn a_name_the_file_recorded_comes_back_with_the_node() {
     let (_dir, store, l1, l4) = fixture();
@@ -127,14 +114,7 @@ fn a_name_the_file_recorded_comes_back_with_the_node() {
     );
 }
 
-/// The whole chain, through the file and back.
-///
-/// A Set file recorded an L1 and its renderers: [`save`] refused an L2, an L3
-/// or a `kind Field` outright, so a cube morphing into a sphere was a Set that
-/// could be played and not kept — and `--record-session` refused it with the
-/// same message, because a session opens with a Set file. Every layer is
-/// asserted separately, because writing them all as `L4` slots is exactly what
-/// used to happen and a count would not have noticed.
+/// Verifies round-trip persistence across all pipeline layers (L1 through L4 and Field).
 #[test]
 fn the_whole_chain_survives_the_file_it_is_written_to() {
     let (dir, store, l1, l4) = fixture();
@@ -240,17 +220,7 @@ fn the_whole_chain_survives_the_file_it_is_written_to() {
     assert_eq!(loaded.names.l2s, [None]);
 }
 
-/// Two fields, each at its own index, through the file and back.
-///
-/// The format could always say it — a `slot` record carries a layer and an
-/// index, and Field is a layer like any other — and the loader would not: it
-/// took `field_srcs.first()` and filed the rest under a note. So a Set whose
-/// marcher took a shape and a cutter saved as a Set that came back with one of
-/// them, and the edge naming the missing one no longer resolved.
-///
-/// Index as well as count, because a pair that came back in the other order is
-/// a Set whose `--param Field:1:…` moves the wrong shape, and a count would not
-/// have noticed.
+/// Verifies multiple field procedures persist and restore at their respective indices.
 #[test]
 fn two_fields_come_back_at_their_own_indices() {
     let (dir, store, l1, l4) = fixture();
@@ -333,12 +303,7 @@ fn two_fields_come_back_at_their_own_indices() {
     assert_eq!(loaded.edges.len(), 1, "the edge that binds the second");
 }
 
-/// Each geometry runs at the number written against it.
-///
-/// The capacity was keyed by node in the format and by Set in this loader: a
-/// `capacity` on L1 index 1 was reported and dropped, so a Set whose two
-/// sources were sized differently came back with the second at whatever its
-/// `.kir` declared. The engine takes one per source and now so does this.
+/// Verifies distinct geometry capacities are maintained per node index.
 #[test]
 fn each_geometry_keeps_the_capacity_it_was_saved_with() {
     let (dir, store, l1, l4) = fixture();
@@ -386,16 +351,7 @@ fn each_geometry_keeps_the_capacity_it_was_saved_with() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// A salt is recorded per geometry and comes back per geometry, which is what
-/// makes a saved Set reproduce its colours whatever order its records are in —
-/// `docs/ir-spec.md`, "A `source` value is assigned and recorded, never
-/// derived". This wrote one `seed` for the whole Set and read node 0's, so the
-/// second geometry's randomness was a function of where its path sat on the
-/// command line and of nothing in the file.
-///
-/// The bytes are asserted, not just the round trip. Index 0 is absent and index
-/// 1 is written, which is the whole of what keeps the file a Set of one
-/// geometry has always written unchanged.
+/// Verifies random salts are recorded and loaded per geometry node index.
 #[test]
 fn each_geometry_keeps_the_salt_it_was_saved_with() {
     let (dir, store, l1, l4) = fixture();
@@ -450,15 +406,7 @@ fn each_geometry_keeps_the_salt_it_was_saved_with() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// A Set file written when a seed salted the whole Set still loads, and says so
-/// by carrying one salt for the geometry it was written against.
-///
-/// That is the older file's shape: one `seed` record, no index on it, and
-/// however many geometries. The geometry it names keeps the colours it was
-/// saved with; the ones it does not are salted the way an unsaved run is, which
-/// is what `None` in [`Loaded::salts`] asks the engine for. Refusing or
-/// defaulting either half would be a file that loads and draws something nobody
-/// saved.
+/// Verifies backwards compatibility for legacy unindexed seed records applied to the first geometry.
 #[test]
 fn a_file_that_salted_the_whole_set_still_loads() {
     let (dir, store, l1, l4) = fixture();
@@ -491,21 +439,7 @@ fn a_file_that_salted_the_whole_set_still_loads() {
     assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
 }
 
-/// A one-geometry Set is byte for byte the file it has always been, except for
-/// the one field the format has grown since.
-///
-/// Every Set file ever written is one L1 and its renderers, and the fields that
-/// carry a chain — `index` on every layer, `name` on a slot — are absent rather
-/// than defaulted for exactly this reason. A literal, not a re-save compared
-/// against itself: a round trip through one writer agrees with itself however
-/// far both halves have drifted.
-///
-/// `height` on the `camera` line is the exception, and it is a decision rather
-/// than drift (ADR-0318, 2026-09-09): the record carried two of the orbit's
-/// three placement numbers, so a camera saved looking down came back looking
-/// along the equator. This literal grew the field; a file written without it
-/// still reads as the 2.0 it meant. What this test is for is that nothing grows
-/// one *silently*, and it did its job.
+/// Verifies byte-for-byte serialization format stability for standard single-geometry Sets.
 #[test]
 fn a_one_geometry_set_is_byte_for_byte_the_file_it_always_was() {
     let (_dir, store, l1, l4) = fixture();
@@ -537,16 +471,7 @@ fn a_one_geometry_set_is_byte_for_byte_the_file_it_always_was() {
     );
 }
 
-/// A composited Set is saved as one and comes back as one, folded to the
-/// renderer it was folded to.
-///
-/// This is the round trip the `merge` record exists for. A Set file could not
-/// say that a slot composites, so a variant pool written out came back
-/// overdrawing: no L5, no edges into one, and `Set::select_renderer` with
-/// nothing to select between. Both halves are asserted here because either one
-/// alone is useless — a layering that survived without its selection comes up
-/// folding every alternative at once, which is a different picture from the one
-/// that was saved.
+/// Verifies composited Sets round-trip their layering mode and active live renderer selection.
 #[test]
 fn a_composited_set_comes_back_composited_and_still_folded_where_it_was() {
     let (dir, store, l1, l4) = fixture();
@@ -595,14 +520,7 @@ fn a_composited_set_comes_back_composited_and_still_folded_where_it_was() {
     );
 }
 
-/// A Set that overdraws writes no `merge` line at all, and loads back
-/// overdrawing.
-///
-/// The record's absence is how overdraw has always been spelled — there is no
-/// boolean field, because a record that could say `false` would be a second
-/// spelling of not writing one. So this asserts the *bytes*: a Set that
-/// overdraws is byte for byte the file it was before the record existed, and
-/// every file written by an older build reads as what it was.
+/// Ensures default overdraw layering omits redundant merge records and restores as overdraw.
 #[test]
 fn an_overdrawing_set_writes_no_merge_line_and_loads_back_overdrawing() {
     let (dir, store, l1, l4) = fixture();
@@ -629,21 +547,7 @@ fn an_overdrawing_set_writes_no_merge_line_and_loads_back_overdrawing() {
     assert_eq!(loaded.live, None, "a Set with no merge recorded a fold");
 }
 
-/// A save a model asked for lands in the sandbox and never in the operator's
-/// library.
-///
-/// This is
-/// `docs/principles/0096-the-operators-library-is-written-by-an-operators-own-act.md`
-/// at the one line that decides it — [`save`]'s match on [`Asked`] — and the
-/// property it holds is a *negative* one: the file that must not be there.
-/// Delete the `Asked::Model` arm and the sandbox assertion still passes on
-/// nothing, so the assertion that matters is the second: `sets/` is where the
-/// operator's presets are, and a model writing an id one of them already has is
-/// the loss P-0096 exists against.
-///
-/// The control is the same call with the other actor, which is what stops this
-/// passing against a `save` that had stopped writing anywhere the library can
-/// see.
+/// Ensures model-initiated saves are routed exclusively to the sandbox directory per P-0096.
 #[test]
 fn a_save_a_model_asked_for_lands_in_the_sandbox_and_never_in_the_library() {
     let (dir, store, l1, l4) = fixture();
@@ -675,16 +579,7 @@ fn a_save_a_model_asked_for_lands_in_the_sandbox_and_never_in_the_library() {
     load(&store, "night01").expect("and the library loads it back");
 }
 
-/// Two saves a model asked for under one name are two files.
-///
-/// `filed_as` is where this is decided and the reason is written there: the
-/// sandbox holds snapshots, and a snapshot a later snapshot can replace is not
-/// one. Asserted here rather than beside that function because the property is
-/// about what is on the disk afterwards — a rule about an id that never reached
-/// a store would be a rule about a string.
-///
-/// The control is the operator's own name, which overwrites, and that is
-/// ADR-0128 unchanged: an id an operator types is an instruction.
+/// Verifies successive model saves generate distinct snapshot files rather than overwriting.
 #[test]
 fn two_saves_a_model_asked_for_under_one_name_are_two_files() {
     let (dir, store, l1, l4) = fixture();
@@ -734,12 +629,7 @@ fn two_saves_a_model_asked_for_under_one_name_are_two_files() {
     );
 }
 
-/// A composited Set nobody selected in writes no `live`, and comes back with
-/// every renderer live.
-///
-/// Absent is *not* renderer 0. Read that way it would silence every renderer
-/// but the first in every composited Set ever saved without a selection — a
-/// picture nobody asked for, from a file that said nothing had changed.
+/// Verifies unselected composited Sets omit `live` field and restore with all renderers active.
 #[test]
 fn a_composited_set_nobody_selected_in_writes_no_live() {
     let (dir, store, l1, l4) = fixture();
@@ -775,13 +665,7 @@ fn a_composited_set_nobody_selected_in_writes_no_live() {
     );
 }
 
-/// A fold naming a renderer the file does not have is said and dropped.
-///
-/// A hand-written or hand-edited file can name one; the Set is whole either
-/// way, so the honest answer is to load it with every renderer live — the state
-/// it would have come up in — and say which line was not honoured. Checked
-/// where the `camera` index is checked and for its reason: how many renderers a
-/// file names is only known once every `slot` record has been met.
+/// Ensures references to non-existent renderer indices in merge records are dropped and reported.
 #[test]
 fn a_fold_naming_a_renderer_that_is_not_there_is_reported_and_dropped() {
     let (_dir, store, l1, l4) = fixture();

@@ -110,11 +110,7 @@ fn over(
     out
 }
 
-/// A message naming a slot the deck does not have is dropped here, so the
-/// refusal is said once per slot rather than once per message — a fader sweep
-/// into `gain 4` on a deck of four is several hundred of them, and `cc 1 ->
-/// gain 4` is the likeliest typo a map has because the `ch` on the same line
-/// *is* one-based.
+/// Drops operations referencing unallocated slots, emitting notice once per slot.
 #[test]
 fn an_operation_past_the_end_of_the_deck_is_dropped_rather_than_routed() {
     let mut r = router("cc 1 -> gain 3\ncc 2 -> gain 0");
@@ -126,12 +122,7 @@ fn an_operation_past_the_end_of_the_deck_is_dropped_rather_than_routed() {
     assert_eq!(routed(&mut r, &[cc(1, 127)], 3).len(), 0);
 }
 
-/// The mask's front is checked here too, and for a sharper reason than the
-/// other five: a `gain 4` that got past this is refused once by `mix::change`,
-/// where a `mask-position 4` is stopped at `Live::operate` — which cannot read
-/// a mask the deck does not hold, answers `Owed::NotRead` and prints it every
-/// time. Left out of `deck_of`, a fader sweep into a mistyped slot would be a
-/// blocking write per message inside `Live::frame`.
+/// Verifies out-of-range mask positions are filtered before attempting deck access.
 #[test]
 fn a_mask_front_past_the_end_of_the_deck_is_dropped_here_rather_than_printed() {
     let mut r = router("cc 9 -> mask-position 4\ncc 10 -> mask-position 1");
@@ -235,13 +226,7 @@ fn two_different_controls_are_two_discoveries() {
     assert_eq!(r.notices().len(), 3, "{:?}", r.notices());
 }
 
-/// A sweep in one frame is one operation, carrying the value the fader ended
-/// the frame at. Several hundred messages arrive between two frames; each one
-/// built a record, and on `exposure` and `mask-position` that record carries a
-/// name, which is a heap allocation per message inside `Live::frame` — the
-/// first rule this repository has. The values before the last were never on
-/// screen: the frame draws what the deck holds once, after all of them have
-/// been applied.
+/// Verifies that multiple messages for a continuous control in one frame coalesce to the final value.
 #[test]
 fn a_sweep_in_one_frame_is_one_operation_carrying_the_last_value() {
     let mut r = router("cc 20 -> exposure");
@@ -252,11 +237,7 @@ fn a_sweep_in_one_frame_is_one_operation_carrying_the_last_value() {
     assert_eq!(out[0], Operation::SetExposure { exposure: 4.0 });
 }
 
-/// Two presses in one frame are two operations, and that is the half of this
-/// that must not coalesce: `residency 0 live` then `residency 0 allocated` is
-/// not the second one alone in intent, and a note is a press rather than a
-/// position. The same control, so a coalescer that keyed on the pad would keep
-/// one of them.
+/// Verifies that discrete button/pad hits are not coalesced even within the same frame.
 #[test]
 fn two_presses_of_one_pad_in_one_frame_are_two_operations() {
     let mut r = router("note 36 -> residency 0 live\nnote 37 -> residency 0 allocated");
@@ -306,11 +287,7 @@ fn two_continuous_controls_in_one_frame_are_one_operation_each() {
     );
 }
 
-/// Coalescing is per frame and not a filter on change. The same value on the
-/// next frame is asked for again, because nothing here holds what a control
-/// last sent and nothing could: MIDI out is not built, so a transition can move
-/// the mask front under a hand that is not moving, and a fader re-asserting its
-/// position is asking for somewhere the deck may no longer be.
+/// Verifies that repeating the same value across frames produces operations each frame.
 #[test]
 fn a_value_repeated_on_the_next_frame_is_not_swallowed() {
     let mut r = router("cc 9 -> mask-position 0");
@@ -377,17 +354,7 @@ fn the_operators_own_map_wins_over_the_one_that_ships_and_neither_is_a_fault() {
     assert_eq!(map_for(store.path(), None), Some(learned));
 }
 
-/// A mapped knob lands as the record a press lands, which is the whole claim
-/// this crate's header makes and the one nothing here checked: the tests above
-/// stop at an [`Operation`], and *a session recorded from a controller replays
-/// with neither controller nor map attached* (P-0092, P-0090) is about what
-/// reaches the stream.
-///
-/// So this goes one crate further on — through
-/// [`karakuri_operation_record::written`], the one exhaustive match every
-/// surface's operation goes through — and asserts the record itself. A route
-/// that produced its own record beside this one would be two spellings of a
-/// `gain`, and a replay would then depend on which surface wrote it.
+/// Verifies that MIDI operations map to standard record structures identically to keyboard gestures.
 #[test]
 fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
     use karakuri_operation_record::{written, Current, Written};
@@ -398,9 +365,6 @@ fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
     let out = routed(&mut r, &[cc(1, 127)], 4);
     assert_eq!(out.len(), 1, "{out:?}");
 
-    // The same operation a fader on the panel and the `]` key emit, so
-    // the record is the same record by construction rather than by
-    // resemblance.
     let by_hand = Operation::SetGain { deck: 0, gain: 1.0 };
     assert_eq!(out[0], by_hand);
 
@@ -419,14 +383,7 @@ fn a_mapped_control_change_lands_as_the_record_a_press_lands() {
     );
 }
 
-/// A `param` line is resolved against the deck's published interface, and it is
-/// the one target the map cannot finish on its own — so this is the seam that
-/// makes *Write a parameter* reachable from a knob at all.
-///
-/// The value is scaled over the range the Set published, not over a default
-/// this crate chose: a control declared `0 – 8` reaches 8 at the top of the
-/// fader, and a knob that stopped at 1.0 would be a fader that cannot reach
-/// what the procedure says is in range.
+/// Verifies that param target mappings resolve against published interface ranges.
 #[test]
 fn a_param_line_resolves_to_the_control_at_that_position_over_the_sets_own_range() {
     let deck = Fake(vec![
@@ -467,13 +424,7 @@ fn a_param_line_resolves_to_the_control_at_that_position_over_the_sets_own_range
     assert!(r.notices().is_empty(), "{:?}", r.notices());
 }
 
-/// Two knobs on two parameters of one deck are two operations.
-///
-/// The coalescing key is the discriminant and the deck for every other
-/// continuous control, because a deck has one gain and one exposure. It has as
-/// many parameters as its Set published, so the position is in the key too —
-/// without it a hand on one knob would swallow the other, and the Set's *third*
-/// control would be written with the *fifth*'s value.
+/// Verifies distinct parameter positions on the same deck coalesce independently.
 #[test]
 fn two_knobs_on_two_parameters_of_one_deck_do_not_coalesce_into_one() {
     let deck = Fake(vec![vec![
@@ -515,14 +466,7 @@ fn two_knobs_on_two_parameters_of_one_deck_do_not_coalesce_into_one() {
     assert_eq!(over(&mut r, &sweep, 4, &deck).len(), 1);
 }
 
-/// A position the Set has no control at is said once, and it is not the same
-/// sentence a missing slot gets.
-///
-/// This is the ordinary state after a load rather than a typo: a map learned
-/// against a Set with nine controls has five dead lines against one with four.
-/// A knob that goes quiet with nothing said is what P-0094 rules out, and a
-/// sentence per message is the blocking write this router exists to keep off
-/// the frame path.
+/// Verifies that referencing an unindexed parameter position emits a single notification.
 #[test]
 fn a_position_past_the_end_of_an_interface_is_said_once_and_not_as_a_missing_slot() {
     let deck = Fake(vec![vec![("radius", [0.0, 1.0])]]);

@@ -25,110 +25,35 @@ pub struct Loaded {
     /// The deformers, by `slot` index — which is chain order, each one reading what
     /// the one before it wrote.
     pub l2s: Vec<Checked>,
-    /// The cameras, by `slot` index. Empty for a Set that looks from the built-in
-    /// orbit — which is a node all the same, so such a Set still holds one camera
-    /// and still addresses it at `L3:0`.
-    ///
-    /// Several `slot` records on L3 is how a file says so, which the format already
-    /// allowed: this loader used to read the first and report the rest as skipped,
-    /// because the engine took one. A file written before this commit names at most
-    /// one and reads back unchanged.
+    /// Cameras by slot index, or empty if using the built-in orbit.
     pub l3s: Vec<Checked>,
-    /// The fields, by `slot` index. Empty for a Set that evaluates none. Several
-    /// `slot` records on Field is how a file says so, which the format already
-    /// allowed — nothing new had to be added, and a file written before this commit
-    /// still names exactly one.
+    /// The fields, by `slot` index. Empty for a Set that evaluates none.
     pub fields: Vec<Checked>,
-    /// The renderers, in the order their `slot` records indexed them — which is
-    /// draw order. Several `slot` records on L4 is how a file says a stack; the
-    /// format already allowed it and nothing new had to be added.
+    /// The renderers, in the order their `slot` records indexed them.
     pub l4s: Vec<Checked>,
-    /// Every procedure as text, in node order — the L1s, the L2s, the L3s, the
-    /// renderers, then the fields, which is the order `Set::node_names` reports and
-    /// the order [`Loaded::nodes`] walks.
-    ///
-    /// The built-in camera has no entry, because it has no source: a Set that
-    /// declares no L3 holds a camera node with no procedure behind it, so this list
-    /// is one shorter than that Set's node names. See [`Loaded::node_names`].
-    ///
-    /// Carried because a Set file has no `.kir` on disk and an editable run needs
-    /// one. A Set names its procedures by hash; the sources come out of the store,
-    /// or out of the file when it was bundled. Before the scratch existed there was
-    /// nowhere to put them and `--mcp` with `--load-set` was refused for exactly
-    /// that reason. See `scratch::place`.
+    /// Source procedure code in node order, excluding built-in cameras.
     pub srcs: Vec<String>,
-    /// What each geometry runs at, by `slot` index, one entry per L1.
-    ///
-    /// `None` where the file gave no `capacity` record for that geometry, which
-    /// means the `.kir` default applies — the spec's own wording. Per geometry
-    /// rather than per Set, because each source declares its own range and one
-    /// number cannot serve two of them; the format has keyed it by node since the
-    /// address existed.
+    /// Vertex/point capacities per geometry slot, or `None` if engine default.
     pub capacities: Vec<Option<u32>>,
     pub params: Vec<ParamWrite>,
     pub bindings: Vec<Binding>,
-    /// What each node the file named is called, in the same per-layer shape the
-    /// procedures come back in, and `None` for a node the file left unnamed.
-    ///
-    /// Read and carried rather than read and reported. Nothing used to point at a
-    /// node by name, so a name was noted as unhonoured and dropped; an `edge`
-    /// points at two of them, so a loaded Set whose names were dropped is a loaded
-    /// Set whose edges cannot resolve.
+    /// Explicit node names by layer and slot index, preserved for wiring resolution.
     pub names: Names,
     /// Which node fills each declared input slot, as the file recorded it.
     pub edges: Vec<karakuri_engine::set::Edge>,
     pub camera: Option<Orbit>,
-    /// Whether this Set composites its renderers or overdraws them, as the file
-    /// said.
-    ///
-    /// [`Layering::Composite`] for a file carrying a `merge` record and
-    /// [`Layering::Overdraw`] for one that does not — which is every file written
-    /// before the record existed, and is what overdrawing has always been recorded
-    /// as: its absence. See [`Record::Merge`].
+    /// Layering mode: [`Layering::Composite`] if `merge` record present, else [`Layering::Overdraw`].
     pub layering: Layering,
-    /// Which renderer the file left selected, in draw order, and `None` where every
-    /// input is live.
-    ///
-    /// `None` is not renderer 0 — see [`Record::Merge`]'s `live`, where the whole
-    /// of that argument lives: a Set nobody selected in writes no `live` and comes
-    /// back with every renderer folded, which is the state it was saved in.
-    ///
-    /// Always `None` under [`Layering::Overdraw`], because the only record that can
-    /// carry a selection is the one that says the Set composites.
+    /// Active solo renderer index under compositing, or `None` if all live or overdrawing.
     pub live: Option<u32>,
-    /// What each geometry was salted with, by `slot` index, one entry per `seed`
-    /// record the file carried.
-    ///
-    /// `None` where the file named no seed for that geometry — an older file that
-    /// recorded one salt for the whole Set, or none at all — and the engine then
-    /// derives that source's from the Set's seed and its ordinal. The first entry
-    /// is also the Set's own seed, which is what an L3 reads and what an unsalted
-    /// source is derived from: one number in one place rather than a `seed` field
-    /// beside a `salts` field, disagreeing.
+    /// Per-geometry salt seeds, or `None` if derived from Set seed and ordinal.
     pub salts: Vec<Option<u32>>,
-    /// What could not be carried across, in the operator's words.
-    ///
-    /// Not warnings to be counted and not errors: a Set file that mentions a second
-    /// layer's seed is a valid file this engine cannot honour in full, and the
-    /// honest response is to load it and say so. Silence here would be the load
-    /// succeeding and the material being subtly not what was saved.
+    /// Non-fatal decoding diagnostics and unsupported feature notices.
     pub notes: Vec<String>,
 }
 
 impl Loaded {
-    /// Every node, compiled and as text, in node order.
-    ///
-    /// The one place the two halves are walked together. `srcs` is a flat list and
-    /// the procedures are per layer, so pairing them anywhere else would be a
-    /// second copy of what node order is — and a caller that got it wrong would
-    /// write one node's source into another node's file. See `scratch::place`,
-    /// which is what wants the pairing. What each node is called, in the same node
-    /// order [`Loaded::nodes`] walks, and `None` for one the file left unnamed.
-    ///
-    /// For the one caller that has node order and not layers: a Set file
-    /// materialised into the scratch becomes a flat `--set` list, and the name has
-    /// to travel with the path it is written beside. Everything else takes its
-    /// names per layer, which is the shape `Set::build_many` wants.
+    /// Returns node names in canonical execution order, padded with `None` where unnamed.
     pub fn node_names(&self) -> impl Iterator<Item = Option<String>> + '_ {
         let at = |v: &[Option<String>], n: usize| -> Vec<Option<String>> {
             let mut out = v.to_vec();
@@ -154,26 +79,7 @@ impl Loaded {
     }
 }
 
-/// One node of a Set on its way into a file: the content address its source is
-/// already stored under, which layer its `kind` declaration puts it on, which
-/// node of that layer it is, and what the operator called it.
-///
-/// The layer is read where the chain was sorted, not worked out again here.
-/// [`crate::compile::sort_compiled`] already sorts a `--set` list by the `kind`
-/// each file declares — that is how the engine gets its nodes — so asking the
-/// same question a second time is how a Set file comes to disagree with the run
-/// it was saved from. A `slot` record is exactly this, which is why the fields
-/// are these four.
-///
-/// A hash and not a path, and moving `put_artifact` out to the callers is the
-/// point of the change. The writer's job is to write records; where the bytes
-/// came from is the caller's, and the two callers have genuinely different
-/// answers. A one-shot `--save-set` holds paths that are still true, so it
-/// reads them and puts them. A live save holds the hashes the *watcher* stored
-/// when the build it is playing landed — and re-reading those paths would
-/// record whatever is on disk now, which after a rolled-back build is a version
-/// that is not on screen. A writer that read files could only ever have served
-/// the first of those.
+/// Persisted node descriptor specifying artifact hash, layer kind, slot index, and optional name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     /// The store's address for this node's source. Already `put`, because a hash
@@ -183,14 +89,7 @@ pub struct Node {
     /// Which node of that layer, numbered from 0 with no gaps. Index is position:
     /// the L2s deform in it and the L4s draw in it.
     pub index: u32,
-    /// `None` for a path written bare, which is the ordinary case — a name is a
-    /// cost paid when something wants to point at the node. See `Named`.
-    ///
-    /// Owned, unlike everything else [`Saving`] borrows. A live save gathers on the
-    /// render thread and writes on another one, so this value has to be able to
-    /// outlive the frame that read it; the writer copies it into the record either
-    /// way, so owning it costs a save one allocation per node and buys a whole
-    /// borrow-free [`Owned`].
+    /// Custom name assigned to the node, or `None`.
     pub name: Option<String>,
 }
 
@@ -214,11 +113,7 @@ pub struct Saving<'a> {
     /// Every node of the Set, in any order — [`save`] writes them by layer and
     /// index, so the file is the same bytes however the caller gathered them.
     pub nodes: &'a [Node],
-    /// What each geometry runs at, one per L1 node in index order.
-    ///
-    /// Per geometry, because the record is. A Set holds several sources, each with
-    /// its own declared range, and a single number written against node 0 was the
-    /// only thing this could say before the address existed.
+    /// Capacity overrides per geometry slot in index order.
     pub capacities: &'a [u32],
     pub params: &'a [ParamWrite],
     pub bindings: &'a [Binding],
@@ -226,50 +121,20 @@ pub struct Saving<'a> {
     /// Empty for a Set no node of which takes a second geometry, which is most of
     /// them.
     pub edges: &'a [karakuri_engine::set::Edge],
-    /// The built-in camera as it is now, which is `Set::orbit` and not the
-    /// `Set::camera` field beside it: three of the six are that node's parameters,
-    /// so the field holds what was last stated and the map holds what a hand moved.
-    /// A caller that passes the field saves a camera nobody is looking through
-    /// (ADR-0318).
+    /// Active orbit camera state at save time.
     pub camera: &'a Orbit,
     /// Whether this Set composites its renderers or overdraws them.
     ///
     /// [`Layering::Composite`] serializes as a `merge` record; [`Layering::Overdraw`]
     /// is the default and omits the record.
     pub layering: Layering,
-    /// Which renderer is the only live one, in draw order, and `None` where every
-    /// one of them is — the state a Set nobody has selected in is in.
-    ///
-    /// Read only under [`Layering::Composite`], because it rides the record that
-    /// says so. An overdrawing Set has edges like any other and nothing reads them
-    /// — `Set::select_renderer` is silently ineffective there — so a selection made
-    /// on one is a property of the run with nothing in the file for it to be about,
-    /// exactly as `Record::Select` has always been.
+    /// Solo renderer index under composite layering, or `None`.
     pub live: Option<u32>,
-    /// What each geometry is salted with, one per L1 node in index order.
-    ///
-    /// Per geometry, because the record is. `seed` carries a stream and an index,
-    /// so a Set holding two grids records the salt each one is running at — and
-    /// comes back with the colours it had whichever order the paths were spelled
-    /// in. A Set of one geometry writes the one line it always wrote: index 0 is
-    /// absent from the record, so the bytes do not move.
+    /// Salt seeds per geometry slot in index order.
     pub seeds: &'a [u32],
 }
 
-/// [`Saving`] with every part owned: the same nine facts, gathered where they
-/// live and able to leave the thread that gathered them.
-///
-/// It exists because a live save is two threads. The values are read off the
-/// running deck, which only the render thread may touch, and the store write
-/// must not happen on a frame — so what crosses between them cannot be a bundle
-/// of borrows into a `Set`. Everything here is a `Vec` or a `Copy` of what
-/// [`Saving`] points at, which is also why it is this type and not a second
-/// writer: [`saving`](Owned::saving) hands the borrows back and the one
-/// function that knows the file format stays the one function.
-///
-/// Not what `--save-set` uses, and deliberately not made to be: that path has
-/// every value in hand on one thread with nothing to outlive, and copying them
-/// to write them would be a cost paid for nothing.
+/// Thread-safe, fully owned representation of [`Saving`] for cross-thread persistence.
 pub struct Owned {
     pub nodes: Vec<Node>,
     pub capacities: Vec<u32>,

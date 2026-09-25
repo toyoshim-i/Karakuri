@@ -1,130 +1,49 @@
-//! Audio, from the device to the session — and through the record stream on
-//! the way.
+//! Audio input management and beat synchronization for live sessions.
 //!
-//! This is the only place in this instrument that knows a microphone exists,
-//! and it is deliberately the same shape as the one place that knows a clock
-//! exists — `karakuri-cli`'s `Clock`, which ADR-0215 says belongs beside this
-//! file and has not moved yet: it
-//! measures, emits records, and hands the engine what the records say. The
-//! engine is given an `AudioFrame` and a tempo correction, never a device, so
-//! a replay that decoded the same records would hand it the same two things.
-//!
-//! ```text
-//!   device → analyser → tracker ┐
-//!                               ├→ Record::Audio ─→ Signals::set_audio
-//!                     beat lock ┴→ Record::Tempo ─→ Oscillator::correct
-//! ```
-//!
-//! Every arrow above is a value, and the two records are the payloads, field
-//! for field — the same relationship `Binding` has to `Record::Bind`. The live
-//! path builds them and reads them back, so the conversion is exercised every
-//! frame rather than only by a test.
-//!
-//! Both halves this module was waiting on are built. `--record-session`
-//! writes these records to disk and `--replay` reads them back instead of
-//! opening a device, so a binding to `energy` replays against what the room
-//! actually sounded like rather than against the bus's invented values.
+//! Emits audio and tempo records into the session stream and applies measured signals
+//! and beat lock adjustments to the engine oscillator.
 
 use std::time::Instant;
 
 use karakuri_audio::lock::BeatLock;
 
-/// What the last correction was for — a trim, an acquire, a tap, an octave.
-/// Re-exported for [`inputs`]' reason: a surface that says out loud what the
-/// grid just did has to be able to name which of the four it was, and
-/// `karakuri` reaches this crate and not `karakuri-audio`.
+/// Reason for the last tempo correction.
 pub use karakuri_audio::lock::Reason;
 use karakuri_audio::{AudioInput, Correction};
 
-/// Why an input did not open, so a surface can say which of the reasons it was
-/// rather than only that something failed. [`Audio::open`] hands it back, and a
-/// caller that could not name the type would have nothing to match on — which
-/// is the difference between *a room with no microphone* and *the device you
-/// named is not there*, and those are two different answers.
+/// Audio input device open error.
 pub use karakuri_audio::AudioError;
 
-/// What input devices there are, for whoever is about to offer a choice of them
-/// — `karakuri_audio::inputs`, re-exported rather than wrapped.
-///
-/// It is here because this module is the door: `karakuri` takes its audio
-/// through this file and does not name `karakuri-audio` in its manifest at all,
-/// so without this the one surface that wants to offer a choice of inputs could
-/// not ask what there is. (`karakuri-cli` does name that crate, for `Reason`,
-/// and could ask it directly; it asks here, because two callers asking two
-/// crates the same question is how the answers come apart.)
-///
-/// Re-exported rather than wrapped. A wrapper would be a second function that
-/// can only ever return what this one returns, and the listing and the refusal
-/// a bad selector produces have only just been made one answer — putting a
-/// third name in front of it is how they come apart again.
+/// Enumerates available host audio input devices.
 pub use karakuri_audio::inputs;
 
-/// The tempo range the tracker searches, so a surface can say *before* a press
-/// which way the grid can still be moved an octave — `Audio::octave` refuses
-/// outside it, and a control that only found out by asking would have to
-/// perform the move to learn it could not.
-///
-/// Re-exported for [`inputs`]' reason, word for word: this module is the door,
-/// and `karakuri` does not name `karakuri-audio` in its manifest at all.
+/// Searchable BPM range for beat tracking.
 pub use karakuri_audio::tempo::BPM_RANGE;
 
 use karakuri_engine::Signals;
 use karakuri_signal::measured::{AudioFrame, MAX_BANDS};
 use karakuri_store::record::Record;
 
-/// How many frames the presentation queue holds.
-/// `desired_maximum_frame_latency` is 2 where the surface is configured, and
-/// this has to agree with it: it is half of the output lag a beat correction
-/// leads by.
+/// Number of frames held in the presentation queue.
 const QUEUE_FRAMES: f32 = 2.0;
 
-/// A starting value for everything past the two outputs that cannot be measured
-/// here. 20 ms is a plausible display pipeline and nothing more: it is where
-/// the operator starts adjusting, not an answer.
-///
-/// See `karakuri-audio`'s "Why the offset is the answer and not a better
-/// measurement". A sound path and a picture path leave this machine separately
-/// and neither ends at it, so the only instrument that can read this is a
-/// person standing where the audience stands.
+/// Default baseline display pipeline latency offset in milliseconds.
 pub const DEFAULT_LATENCY_OFFSET_MS: f32 = 20.0;
 
-/// One press of the offset keys.
+/// Step size for manual latency offset adjustment.
 pub const LATENCY_OFFSET_STEP_MS: f32 = 5.0;
 
-/// The bounds the offset is held inside. Signed, and that is not symmetry for
-/// its own sake: which of the two outputs is the late one depends on the room.
-/// A PA delayed to the back of a hall, or a desk with processing on the master,
-/// puts the sound behind a projector that had looked slow; the correction then
-/// has to lead *less*, and a floor at zero would leave the operator holding a
-/// control that cannot reach the answer.
-///
-/// 200 ms either way is past any single device and well into the region where a
-/// performer has mistaken a whole beat for an offset.
+/// Valid range for manual latency offset adjustment.
 pub const LATENCY_OFFSET_RANGE: std::ops::RangeInclusive<f32> = -200.0..=200.0;
 
-/// The audio session: an open input, the beat lock, and the operator's offset.
+/// Live audio session managing hardware input, beat locking, and latency compensation.
 pub struct Audio {
     input: AudioInput,
     lock: BeatLock,
     latency_offset_ms: f32,
-    /// A smoothed frame interval, for the queue part of the output lag. Fed from
-    /// the same elapsed-time measurement `steps` comes from — the frame rate is a
-    /// property of the machine and the display, and guessing it from `dt` would be
-    /// wrong on exactly the 120 Hz panel this was built on.
     frame_interval: f32,
-    /// What was last read, for the status line.
     last: Status,
-    /// This frame's `Record::Audio`, reused. Rewritten in place every frame and
-    /// handed out by reference.
-    ///
-    /// The record carries its bands as a `Vec` on purpose — the length is the band
-    /// count, so a stream with more bands than a reader knows about still decodes,
-    /// and `record.rs` argues that at length. Building a fresh one per frame would
-    /// put a heap allocation on the render thread, which
-    /// `docs/principles/0091-cost-is-known-before-it-is-paid.md` forbids without a
-    /// size qualifier and deliberately: "one small allocation" is the argument that
-    /// ends with a hitch nobody can account for. `Vec::clear` keeps the buffer, so
-    /// the only allocation is the one here, before the first frame.
+    /// Pre-allocated record reused across frames to prevent heap allocation on the render thread.
     audio: Record,
 }
 
@@ -206,33 +125,10 @@ impl Audio {
         output_lag(self.frame_interval, self.latency_offset_ms)
     }
 
-    /// One frame's worth of audio: read the device, emit the records, and apply
-    /// what they say to the session's signals.
+    /// Processes one frame of audio input, emits records, and updates session signals and beat tracking.
     ///
-    /// Returns the records, which is what a session writer would take. Nothing
-    /// writes them yet — see the module doc — but they are *built here and read
-    /// back here*, so the path the engine is driven through is the record's rather
-    /// than one that happens to agree with it.
-    ///
-    /// The audio record is handed out by reference and is overwritten next frame:
-    /// it is one buffer, reused, because building a fresh one would allocate on the
-    /// render thread. A writer serialises it before returning; a caller that wants
-    /// to keep it past the frame owes itself a clone.
-    ///
-    /// Never blocks: the device read is a `try_lock` that keeps the previous value
-    /// on contention, and nothing on this path allocates. `grid` says whether this
-    /// tracker is allowed to move the session's grid.
-    ///
-    /// `Grid::Followed` when something else is already on it. A tempo source
-    /// carries a beat number every peer agrees on; this tracker carries an estimate
-    /// made from a microphone. When both are present the estimate must not fight
-    /// the agreement — and it would, every frame: once locked, `Lock::update`
-    /// returns a trim on *every* call, so the two would take turns writing the
-    /// phase sixty times a second and the picture would sit between them.
-    ///
-    /// Everything else the tracker does is unaffected. `energy`, `onset` and the
-    /// bands are still measured, still recorded, and still drive every binding —
-    /// what is withheld is only the authority to move the grid.
+    /// The audio record is returned by reference and overwritten on the next call.
+    /// When `grid` is `Grid::Followed`, beat lock writes to the grid are inhibited.
     pub fn frame(
         &mut self,
         signals: &mut Signals,
@@ -240,34 +136,21 @@ impl Audio {
         step: f32,
         grid: Grid,
     ) -> (&Record, Option<Record>) {
-        // A frame interval measured on the host clock, smoothed hard: this is
-        // an input to a latency, and a single hitched frame is not a change in
-        // how deep the queue is.
         if elapsed > 0.0 && elapsed < 1.0 {
             self.frame_interval += (elapsed - self.frame_interval) * 0.05;
         }
 
-        // **Where the tracker looks, every frame.** The grid's tempo is the
-        // centre of the one-octave window every candidate period folds into, so
-        // a tempo that drifts is followed without anything deciding anything —
-        // and the ×2 key works by moving the grid and letting this carry the
-        // window with it.
+        // Center tracking window on the current oscillator tempo.
         self.input.set_centre_bpm(signals.oscillator().bpm());
 
         let reading = self.input.read();
         write_audio_record(&mut self.audio, &reading.frame);
-        // Read back rather than used directly, which is the whole point: the
-        // live path and a replay reach `set_audio` through the same decode, so
-        // the conversion is exercised every frame instead of only by a test.
         signals.set_audio(audio_frame(&self.audio));
 
         let ahead = reading.age + self.output_lag();
         let correction = self
             .lock
             .update(&reading.estimate, ahead, signals.oscillator(), step);
-        // The lock is updated either way, so that a source going away leaves a
-        // tracker that has been following all along rather than one starting
-        // cold — it is only the *writing* that is withheld.
         let correction = match grid {
             Grid::Owned => correction,
             Grid::Followed => None,
@@ -291,14 +174,7 @@ impl Audio {
         (&self.audio, tempo)
     }
 
-    /// This frame's audio record, to be taken.
-    ///
-    /// Handed out mutably so a session recorder can *swap* it for an empty shell
-    /// rather than clone it: the record carries a `Vec` of bands and this is the
-    /// frame path. See `session::Recorder::push_audio`.
-    ///
-    /// Whatever is left here is overwritten by the next [`Audio::frame`], so a
-    /// caller that swaps in a shell loses nothing.
+    /// Returns a mutable reference to the frame's audio record for session capture.
     pub fn record_mut(&mut self) -> &mut Record {
         &mut self.audio
     }
@@ -310,54 +186,13 @@ impl Audio {
         let correction = self.lock.octave(factor, signals.oscillator())?;
         let record = tempo_record(&correction);
         apply_tempo(signals, &record);
-        // The tracker is told at once rather than waiting for the next frame:
-        // an estimate published in between would otherwise be folded into the
-        // octave the operator has just left.
         self.input.set_centre_bpm(signals.oscillator().bpm());
         self.last.locked = self.lock.locked();
         self.last.error = self.lock.error();
         Some(record)
     }
 
-    /// The operator naming the grid's tempo outright —
-    /// `Operation::SetFreeRunTempo`, which is *what the grid runs at with
-    /// nothing driving it*.
-    ///
-    /// # It takes no signals, because it moves nothing
-    ///
-    /// [`Audio::octave`] and [`Audio::tap`] both write the correction they
-    /// computed straight into the session, because the *lock* is what decided
-    /// the number — a factor and a phase, or four tap instants. Here the number
-    /// came from the operator, `karakuri_operation_record` turns the operation
-    /// into a `Record::Tempo`, and [`apply_tempo`] is what applies it: the one
-    /// road into the oscillator, live and on replay, taken by the live run for
-    /// the same reason the audio frame is read back through its own record.
-    /// A second application here would be the second route
-    /// `docs/principles/0090-every-control-ends-in-the-same-record.md`
-    /// exists to refuse — and it would be the route taken only when a device
-    /// happens to be open, which is the worst kind.
-    ///
-    /// So what is left is the session state the record does not carry, and it
-    /// is exactly two things:
-    ///
-    /// - The lock's run of evidence, which is [`BeatLock::retarget`] and is
-    ///   argued there.
-    /// - The tracker's window, told at once rather than left to the next
-    ///   frame — [`Audio::octave`]'s own sentence, and for the reason it gives:
-    ///   an estimate published in between would be folded into a window centred
-    ///   on the tempo the operator has just left.
-    ///
-    /// `bpm` is where the grid is going and is not read back off the
-    /// oscillator, so this may be called on either side of the record without
-    /// changing what it does. A session whose oscillator clamped the number —
-    /// `karakuri_signal`'s `BPM_RANGE` is a guard against a frozen phase — has
-    /// a window a hair off the grid for one frame, which the next
-    /// [`Audio::frame`] corrects from the oscillator itself.
-    ///
-    /// Nothing is refused here, and the ±15% a hand is held to is nowhere
-    /// near this file: it is a guard against a mis-click and lives where the
-    /// press becomes an operation
-    /// ([ADR-0291](../../../docs/adr/0291-the-tempo-figure-is-the-track-and-the-band-is-a-guard-on-the-hand.md)).
+    /// Retargets the beat lock and tracker window to a user-specified free-run tempo (ADR-0291).
     pub fn set_tempo(&mut self, bpm: f32) {
         self.lock.retarget(bpm);
         self.input.set_centre_bpm(bpm);
@@ -385,20 +220,7 @@ impl Audio {
     }
 }
 
-/// D, in seconds: the frame queue, at the rate frames are actually arriving,
-/// plus the operator's offset for everything past the two outputs.
-///
-/// May be negative, when the offset is turned down past the queue — a room
-/// whose sound arrives later than its picture. Nothing downstream needs it
-/// positive: the lead it feeds is a signed quantity all the way into
-/// `Oscillator::correct`, and a negative one is a correction that trails the
-/// measurement instead of leading it, which is exactly what such a room wants.
-///
-/// A free function because [`Audio`] cannot be constructed without opening a
-/// device, and this is the half of the lead that has nothing to do with one:
-/// two terms in two different units, which is exactly the arithmetic that is
-/// wrong by a factor of a thousand in somebody's first draft and reads as a
-/// tuning problem forever after.
+/// Calculates presentation output lag in seconds from queue frame depth and latency offset.
 pub fn output_lag(frame_interval: f32, latency_offset_ms: f32) -> f32 {
     QUEUE_FRAMES * frame_interval + latency_offset_ms / 1000.0
 }
@@ -418,15 +240,7 @@ fn clamped_latency(ms: f32) -> f32 {
     ms.clamp(*LATENCY_OFFSET_RANGE.start(), *LATENCY_OFFSET_RANGE.end())
 }
 
-/// A measured frame into an existing [`Record::Audio`], reusing its band
-/// buffer. `clear` keeps the allocation, so this allocates nothing once the
-/// buffer has been sized once — which is what lets the frame path emit a record
-/// at all.
-///
-/// Panics on anything but a `Record::Audio`, deliberately: the caller owns the
-/// buffer it is passing and cannot be handed the wrong variant by accident.
-/// Silently doing nothing would leave the previous frame's measurement in place
-/// and present it as this one's.
+/// Populates an existing `Record::Audio` from an `AudioFrame`, reusing its band buffer without heap allocation.
 fn write_audio_record(record: &mut Record, frame: &AudioFrame) {
     let Record::Audio {
         energy,
@@ -444,19 +258,7 @@ fn write_audio_record(record: &mut Record, frame: &AudioFrame) {
     bands.extend_from_slice(&frame.bands[..usize::from(frame.band_count).min(MAX_BANDS)]);
 }
 
-/// The record as the frame the bus reads, or `None` for a record that is not a
-/// measurement at all.
-///
-/// A record carrying more bands than this build knows names for keeps the
-/// bottom [`MAX_BANDS`] of them: the extra ones are names nothing here can ask
-/// for, and dropping the *low* bands instead would silently renumber every
-/// binding.
-///
-/// The `None` is the difference between no measurement and a measurement of
-/// nothing, and it is not a hair being split: `None` leaves every name
-/// answering exactly as it did before audio existed, invented `energy`
-/// included, while a zeroed frame at confidence 0.0 would claim `energy` and
-/// answer it with a zero nobody measured.
+/// Converts a `Record::Audio` back into an `AudioFrame`, or `None` if the record is not an audio frame.
 pub fn audio_frame(record: &Record) -> Option<AudioFrame> {
     let Record::Audio {
         energy,
@@ -524,18 +326,7 @@ mod tests {
         }
     }
 
-    /// Rewriting the record does not touch the heap. `Audio::frame` emits one of
-    /// these per frame on the render thread, where no allocation at all is allowed,
-    /// so the band buffer has to be the one from before.
-    ///
-    /// A counting allocator would be the direct assertion, but a
-    /// `#[global_allocator]` is per binary and this is one — it would count every
-    /// other test in the crate. The buffer's pointer and capacity are the
-    /// observable consequence instead, and they are not a proxy: a `to_vec`, a
-    /// fresh `Vec`, or any growth past the reserved length moves one or both. Band
-    /// counts are varied across the calls, including up to the maximum and back
-    /// down, because a buffer that is only ever written at one length would hold
-    /// under an implementation that reallocates on any change of length.
+    /// Verifies that rewriting the audio record reuses its band buffer without allocating.
     #[test]
     fn rewriting_the_audio_record_reuses_its_band_buffer() {
         let mut record = Record::Audio {
@@ -665,12 +456,7 @@ mod tests {
         assert_eq!(replayed.oscillator().bpm(), signals.oscillator().bpm());
     }
 
-    /// The output lag is the queue plus the offset, and the offset is a dial with
-    /// ends.
-    ///
-    /// The dial's arithmetic is `clamped_latency`'s, called rather than copied: a
-    /// test that re-implements the thing it is testing passes whatever the
-    /// implementation does.
+    /// Verifies latency offset clamping behavior at range limits.
     #[test]
     fn the_offset_moves_the_output_lag_and_stops_at_its_bounds() {
         let mut latency = clamped_latency(DEFAULT_LATENCY_OFFSET_MS + LATENCY_OFFSET_STEP_MS);
@@ -708,13 +494,7 @@ mod tests {
         );
     }
 
-    /// The offset reaches below zero and takes the lead with it.
-    ///
-    /// A room whose sound arrives after its picture — a delayed PA, processing on
-    /// the master — needs the correction to lead *less* than the queue alone, and
-    /// past a point to trail it. A floor at zero would hand the operator a control
-    /// that stops short of the answer, and there is no other control: nothing at
-    /// this end can see either output path.
+    /// Verifies negative latency offsets allow output lag compensation for delayed sound systems.
     #[test]
     fn the_offset_goes_negative_so_a_late_room_can_be_corrected_for() {
         assert!(
