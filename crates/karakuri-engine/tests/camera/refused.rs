@@ -39,13 +39,7 @@ fn validate_wired(
     .map(|_| ())
 }
 
-/// **A declared Camera slot must be bound**, exactly as a geometry slot and a
-/// Field slot must be.
-///
-/// Filling it in from the Set's only camera would be right every time today and
-/// is the rule this notation exists to remove: "if there is exactly one, use
-/// it" is what capped a Set at one viewpoint, and a renderer that means the
-/// Set's camera says so by declaring no slot.
+/// Verifies that declared Camera slots must be explicitly bound.
 #[test]
 fn an_unbound_camera_slot_is_refused() {
     let named = through("named", [1.0, 0.0, 0.0]);

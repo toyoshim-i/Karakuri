@@ -90,14 +90,7 @@ fn steps_taken(set: &Set) -> u64 {
     (set.time() * 60.0).round() as u64
 }
 
-/// **A Set larger than the whole budget is refused.**
-///
-/// It used to need saying twice. A rate could spread a cost across frames, so a
-/// Set measured at six times the budget divided by eight, read as fitting, and
-/// bought a hundred-millisecond hidden step every eighth frame — which is why a
-/// peak cap sat in front of the amortisation. With the rate gone (ADR-0269) the
-/// cap and the comparison are the same test, and this is it: the budget answers
-/// "is there room to step one more simulation", and for this Set there is not.
+/// Verifies that a Set exceeding the entire budget is refused rather than amortized across frames.
 #[test]
 fn a_slot_costing_more_than_the_whole_budget_is_refused() {
     let report = Governor::new(16.7).decide(&[priming(100.0)]);
@@ -117,13 +110,7 @@ fn a_slot_costing_more_than_the_whole_budget_is_refused() {
     assert_eq!(fits.decisions[0].reason, Reason::Fits);
 }
 
-/// The master chain is reserved out of the budget ahead of every slot, and it
-/// is charged against no one of them.
-///
-/// A chain is one pass per slot over the whole frame and belongs to no deck, so
-/// what it costs leaves the headroom a priming request is judged against and
-/// never appears in `committed_ms` — a slot that fitted before the chain was
-/// added may not fit after it.
+/// Verifies that master chain compute cost is reserved from total budget prior to slot allocation.
 #[test]
 fn the_master_chain_is_reserved_ahead_of_the_slots() {
     let mut governor = Governor::new(16.0);
@@ -172,12 +159,7 @@ fn the_master_chain_is_reserved_ahead_of_the_slots() {
     );
 }
 
-/// What a chain costs is its ops against the frame's area, linear in both, and
-/// the rate is calibrated on one measurement whose resolution is named.
-///
-/// The engine-side half — that a `Deck` charges what its `Present` is running,
-/// and that the governor spends it — is in `src/frame.rs`'s
-/// `a_composed_frame_hands_the_chain_its_clock_and_the_deck_its_price`.
+/// Verifies that chain price scales linearly with op count and target frame area.
 #[test]
 fn a_chains_price_is_linear_in_its_ops_and_in_the_frames_area() {
     use karakuri_engine::estimate::{
@@ -214,13 +196,7 @@ fn a_chains_price_is_linear_in_its_ops_and_in_the_frames_area() {
 mod gpu {
     use super::*;
 
-    /// **The verdict is applied, not merely reported.**
-    ///
-    /// A demoted slot has to actually stop stepping and an untouched Live slot has
-    /// to actually keep going — a `govern` that returned a correct report and wrote
-    /// nothing back would satisfy every assertion in the first half of this file.
-    /// `t` is what says so: it advances only through `Set::prepare`, so a slot the
-    /// governor parked is one whose clock stands still.
+    /// Verifies that govern decisions update actual deck residency and simulation state.
     #[test]
     fn govern_applies_its_verdict_to_the_deck_and_leaves_the_live_slot_running() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -260,13 +236,7 @@ mod gpu {
             FRAMES as u64,
             "the Live slot stopped stepping"
         );
-        // **The demotion is not visible in the slot's `t`, and that is the
-        // point rather than a hole in the test.** A parked slot steps every
-        // frame like every other off-air slot (ADR-0269), so what `govern`
-        // applied is the *residency* — asserted above, off the deck — and what
-        // it deliberately did not touch is the simulation. This used to read
-        // `0` here, and the sentence it carried, *the demotion was a report and
-        // not an action*, is now the wrong test of the right claim.
+        // Demotion updates slot residency while leaving off-air simulation stepping intact (ADR-0269).
         assert_eq!(
             steps_taken(deck.slot(karakuri_engine::DeckSlot(1)).set()),
             FRAMES as u64,
@@ -274,11 +244,7 @@ mod gpu {
          candidate by went to a still the moment the budget refused it"
         );
 
-        // The negative control on the same deck: raise the budget and the same slot
-        // is admitted. Without this, the assertions above would pass on a `govern`
-        // that parked everything it was ever shown. Nothing re-asks for priming
-        // here — the request outlived the demotion, which is
-        // `a_parked_slot_primes_again_by_itself_when_the_deck_empties`'s subject.
+        // Verify candidate admission under higher budget without requiring residency re-request.
         deck.set_compute_budget_ms(100.0);
         assert_eq!(deck.govern().decisions[1].reason, Reason::Fits);
         assert_eq!(
@@ -328,16 +294,7 @@ mod gpu {
             "an accumulating Set was refused priming as though it were closed form"
         );
     }
-    /// **`govern` is idempotent, and a parked slot goes on running.**
-    ///
-    /// A caller that runs it every frame — which is the shape a status line
-    /// invites — has to get the same answer every time, since the pass has no
-    /// memory and its inputs did not move. It used to have a second half: the
-    /// call must not reset the priming counter, because `prime_phase = 0` every
-    /// frame turned "one frame in four" into "every frame". There is no counter
-    /// now, and what replaces that half is the other side of the same coin —
-    /// the parked slot steps every frame, and repeated governing does not stop
-    /// it (ADR-0269).
+    /// Verifies that govern is idempotent across frames and preserves stepping for parked slots.
     #[test]
     fn calling_govern_every_frame_changes_nothing_and_the_parked_slot_runs() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -381,17 +338,7 @@ mod gpu {
          still without it"
         );
     }
-    /// **A slot parked for lack of headroom primes again by itself.**
-    ///
-    /// The deck empties and nobody says anything about slot 1: no `set_residency`,
-    /// no re-request, nothing. The next pass primes it, because the request was
-    /// never the governor's to consume — a demotion writes the *effective*
-    /// residency and leaves the operator's ask where it was.
-    ///
-    /// The version of this that does not work writes `Allocated` back through
-    /// `Deck::set_residency`. The slot then reads `Allocated` on every later pass,
-    /// is reported as a slot nobody asked about, and never primes again however
-    /// empty the deck gets.
+    /// Verifies that a parked slot automatically transitions to priming once headroom becomes available.
     #[test]
     fn a_parked_slot_primes_again_by_itself_when_the_deck_empties() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -466,16 +413,7 @@ mod gpu {
             "the report said Priming and the slot did not step"
         );
     }
-    /// **One over-budget pass defers every priming request and cancels none.**
-    ///
-    /// `over_budget` clamps the headroom to zero, so every Priming slot on the deck
-    /// is refused in the same pass — which is correct, and is exactly why the
-    /// refusal must not be written over the requests. A single heavy Set put on air
-    /// for one pass would otherwise cancel the whole deck's worth of priming, and
-    /// the operator would find out by noticing that nothing ever warmed up again.
-    ///
-    /// The transient is an operator action with a natural end: a fourth Set goes on
-    /// air, and comes off again.
+    /// Verifies that transient over-budget conditions park priming requests without cancelling them.
     #[test]
     fn a_transient_over_budget_pass_cancels_nothing() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -540,20 +478,7 @@ mod gpu {
             assert_eq!(after.decisions[slot].reason, Reason::Fits);
         }
     }
-    /// **A deck of Sets nobody measured refuses to prime, and measuring them is
-    /// what unblocks it.**
-    ///
-    /// Every `HotSwap::fixed` Set and every Set `HotSwap::new` is constructed with
-    /// arrives unmeasured, so this is the state a deck comes up in — and while a
-    /// *Live* slot is in it, the committed cost is unknown and there is no headroom
-    /// to admit against. `Deck::measure_slots` is the startup call that fixes it,
-    /// and this is the whole round trip: refused, measured, admitted, with the
-    /// budget never moving.
-    ///
-    /// The measurement here is a real probe run rather than a number handed in,
-    /// because what is being asserted is that the fix is *reachable* — a rule that
-    /// turns priming off by default with no pleasant way to turn it back on is not
-    /// a fix.
+    /// Verifies that measuring unmeasured live slots resolves unknown commitment and unblocks priming.
     #[test]
     fn measuring_the_live_slots_is_what_lets_an_unmeasured_deck_prime() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -608,14 +533,7 @@ mod gpu {
         );
         assert_eq!(deck.priming_slots(), 1);
     }
-    /// **Measuring is stepping, so a Set that has already stepped is left alone.**
-    ///
-    /// `swap::measure` ends in `Set::rewind`, which restores what `Set::build`
-    /// left — cold, `t` at zero — rather than what it found. That is correct for
-    /// the cold Set it is meant for and is a state reset for any other, so a
-    /// `measure_slots` called late must skip a running slot rather than take an
-    /// hour of simulation off it to fill in a budget figure. The governor already
-    /// has a way to say it cannot budget a slot; it has no way to undo this.
+    /// Verifies that measuring skips already-stepped slots to prevent resetting simulation progress.
     #[test]
     fn measuring_never_resets_a_slot_that_has_already_stepped() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -654,23 +572,7 @@ mod gpu {
         );
     }
 
-    /// **`estimate` reaches `Deck::govern`, end to end on a device.**
-    ///
-    /// Everything above pins the arithmetic on hand-built numbers, which is
-    /// what the split in this file's header is for. What needs a device is the
-    /// path: that `Deck::estimate_slots` draws each cold slot twice at its own
-    /// output's size, that the answer is stored on the slot, and that the next
-    /// `govern` is decided on it. A report nobody wired would satisfy every
-    /// assertion in the first half of this file.
-    ///
-    /// **No timing is asserted and no fit is demanded**, for
-    /// `tests/estimate.rs`' reason: this machine's timestamps demote to a host
-    /// clock, so two draws at 32x32 and 64x64 are two noise figures and the
-    /// slope through them comes out negative here — a real
-    /// `Unfit::FragmentTermNegative`. So both outcomes are asserted, and that
-    /// is not a weakened test: ADR-0296's fallback is exercised for real on
-    /// this machine rather than simulated. The arithmetic of both branches is
-    /// pinned above, on numbers no adapter chose.
+    /// Verifies end-to-end integration between Deck::estimate_slots and Deck::govern.
     #[test]
     fn estimate_slots_gives_govern_a_number_at_the_decks_own_size() {
         let gpu = Gpu::headless().expect("no GPU available");
@@ -720,15 +622,7 @@ mod gpu {
         assert_eq!(e.floor, Some(32));
         assert!(matches!(e.floor_from, Floor::Analysed { .. }));
         assert_eq!(e.floored, None);
-        // **Whether it fitted is this machine's business and not this test's.**
-        // `docs/contributing.md` §1: the probe demotes to a host clock here, so
-        // two draws at 32x32 and 64x64 are two noise figures — and on this
-        // crate's development machine the upper rung reads *cheaper* than the
-        // lower one, which is `Unfit::FragmentTermNegative`, a failed
-        // measurement rather than a cheap Set. Both outcomes are asserted,
-        // because both are the wiring working: an answer is budgeted on, and a
-        // refusal falls back to the measurement and says why. A threshold on
-        // the number would be a test of the adapter.
+        // Verify both fit and refusal fallback branches, supporting host-clock probe variance.
         let after = deck.govern();
         let d = after.decisions[0];
         match e.ms() {
@@ -769,13 +663,7 @@ mod gpu {
             "the floor's provenance did not survive the summary"
         );
 
-        // **A resize re-reads it at the new size rather than dropping it**
-        // (ADR-0356). ADR-0296 dropped it, because a number taken for 128x128
-        // is the wrong number for a frame twice as wide — true of the number
-        // and not of the estimate: the fit and the rungs it came from are on
-        // the record, so the answer at the new target is arithmetic and no
-        // draw. Dropping it put every slot back on its measurement for every
-        // frame of a drag.
+        // Re-evaluates estimate at new dimensions on resize without dropping fit data (ADR-0356).
         deck.resize(&gpu.device, WIDTH * 2, HEIGHT * 2);
         let kept = deck
             .slot(karakuri_engine::DeckSlot(0))

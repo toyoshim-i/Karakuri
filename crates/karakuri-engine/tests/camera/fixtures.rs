@@ -5,18 +5,7 @@ use karakuri_ir::typed::Checked;
 
 use super::common::{compile, f16};
 
-/// **One element, off the view axis and away from what the camera looks at.**
-///
-/// The `Orbit` below is pinned at angle zero, which puts the eye on `+x` looking
-/// back at the origin — so screen-right is world `-z` and screen-up is world
-/// `+y`. `(0, 1, -1.5)` therefore lands up and to the right of centre, and every
-/// measurement here is that offset.
-///
-/// **Away from the origin is the part that took two tries.** An orbit turns
-/// *about* the point it looks at, so material near that point stays near the
-/// centre of the frame however far the camera swings — a first fixture at
-/// `(0, 0, -1)` moved four texels over a fifth of a revolution, which reads
-/// exactly like a camera that never reached the draw.
+/// Single-element procedural fixture positioned off the view axis for camera transform tracking.
 pub const MARK: &str = r#"
 proc mark {
   kind     L1
