@@ -130,11 +130,7 @@ pub struct Clock {
     pub seed_salt: u32,
 }
 
-/// Retention targets and their bind groups, detached from any manager.
-///
-/// What [`RetentionManager::build`] produces and [`RetentionManager::install`]
-/// adopts: the per-cut history textures and the bind groups that copy into
-/// them. Holds only wgpu handles, so it crosses a thread boundary.
+/// Intermediate retention targets and bind groups detached from [`RetentionManager`].
 #[derive(Default)]
 pub struct Retained {
     retained: [Option<wgpu::TextureView>; 2],
@@ -293,13 +289,7 @@ impl RetentionManager {
         self.install(held);
     }
 
-    /// Build targets and bind groups for the requested cuts against `layout`,
-    /// holding no manager.
-    ///
-    /// Takes a device and nothing of the caller's, so it runs wherever a chain
-    /// is built — including a worker thread. [`RetentionManager::allocate`] is
-    /// this function against the manager's own layout, and is the only other
-    /// derivation of these textures.
+    /// Builds intermediate retention targets and bind groups for requested cuts against `layout`.
     pub fn build(
         layout: &wgpu::BindGroupLayout,
         device: &wgpu::Device,

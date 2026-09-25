@@ -82,11 +82,7 @@ pub struct SlotParam {
     pub default: f32,
 }
 
-/// One slot of the running chain, as a surface reads it.
-///
-/// [`SlotSpec`] says what to build and this says what is built: a spec carries
-/// no declared range, no declared name and no `retains`, and a surface that
-/// draws a slot needs all three.
+/// Runtime inspection state of an active master chain slot.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SlotReading {
     /// The content address of the procedure's source.
@@ -299,14 +295,7 @@ impl Slot {
     }
 }
 
-/// Everything a chain needs from a running [`Present`](crate::Present) in order
-/// to be built somewhere else.
-///
-/// Holds wgpu handles and two numbers, so it crosses a thread boundary. Taken
-/// from the `Present` at the moment a build is asked for, which is what fixes
-/// the size the build's targets are made at: a build whose `at` no longer
-/// matches the `Present` at install time is stale and its targets are retired
-/// unused.
+/// Configuration snapshot from [`Present`](crate::Present) required for background chain compilation.
 #[derive(Clone)]
 pub struct ChainWorkshop {
     layout: wgpu::BindGroupLayout,
@@ -329,14 +318,7 @@ impl ChainWorkshop {
     }
 }
 
-/// The GPU textures and bind groups one chain runs through: the entry target
-/// the mix writes, the ping-pong targets between slots, the retention history,
-/// and one bind group per slot.
-///
-/// Allocated by [`ChainTargets::build`], which takes a device and a
-/// [`ChainWorkshop`] and nothing else, so it runs on a worker thread. Holds
-/// only wgpu handles, so it crosses a thread boundary in both directions:
-/// built off the render thread, and dropped off it once retired.
+/// Intermediate GPU render targets, ping-pong textures, and bind groups for a master chain.
 pub struct ChainTargets {
     at: (u32, u32),
     entry: Option<wgpu::TextureView>,
@@ -421,12 +403,7 @@ impl ChainTargets {
     }
 }
 
-/// The GPU objects one install took out of service: the outgoing chain's slots
-/// — each holding a pipeline and a uniform buffer — and its targets.
-///
-/// Dropping this frees GPU memory, which is the allocation invariant read
-/// backwards (ADR-0033), so a render thread hands it to a worker rather than
-/// letting it fall out of scope.
+/// Retired GPU pipelines and intermediate textures scheduled for background deallocation (ADR-0033).
 #[derive(Default)]
 pub struct RetiredChain {
     slots: Vec<Slot>,
@@ -591,12 +568,7 @@ impl MasterChain {
         self.allocate(device, queue, out);
     }
 
-    /// Installs a new chain and returns what it took out of service.
-    ///
-    /// Targets built alongside the incoming chain are adopted where their size
-    /// matches this chain's; otherwise they are retired unused and the targets
-    /// are allocated here. The returned [`RetiredChain`] owns the outgoing
-    /// slots and targets and frees them when dropped.
+    /// Installs an incoming master chain, returning displaced resources in [`RetiredChain`].
     #[must_use = "the outgoing chain's GPU objects are freed where this is dropped"]
     pub(crate) fn set(
         &mut self,
@@ -646,11 +618,7 @@ impl MasterChain {
         }
     }
 
-    /// Adopts `targets` and writes every slot's uniform block against them.
-    ///
-    /// The uniform write is a `queue.write_buffer` per slot and carries the
-    /// clock that is running, so a chain installed mid-session reads the
-    /// session clock on its first frame rather than a default.
+    /// Adopts intermediate targets and updates uniform blocks across all chain slots.
     fn install_targets(&mut self, queue: &wgpu::Queue, targets: ChainTargets) {
         self.entry = targets.entry;
         self.ping = targets.ping;
@@ -691,10 +659,6 @@ impl MasterChain {
     }
 
     /// Updates the clock uniform across all active chain slots.
-    ///
-    /// A `queue.write_buffer` of the uniform block's head per slot, and nothing
-    /// else: an empty chain writes nothing. The value is kept so that a later
-    /// repack of a whole uniform block carries the clock that is running.
     pub(crate) fn set_clock(&self, queue: &wgpu::Queue, clock: Clock) {
         self.clock.set(clock);
         for slot in &self.slots {
@@ -794,11 +758,7 @@ impl MasterChain {
         self.retention.record(encoder);
     }
 
-    /// Allocates intermediate targets, ping-pong views, and slot bind groups
-    /// on the calling thread.
-    ///
-    /// [`ChainTargets::build`] is the one derivation of these textures; this
-    /// calls it against this chain's own workshop and installs the result.
+    /// Allocates intermediate targets, ping-pong views, and slot bind groups on the calling thread.
     fn allocate(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, out: &wgpu::TextureView) {
         let targets = ChainTargets::build(device, &self.workshop(out), &self.slots);
         self.install_targets(queue, targets);

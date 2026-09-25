@@ -45,12 +45,7 @@ pub struct Deck {
     pub(crate) signals: Signals,
     pub(crate) governor: Governor,
     pub(crate) frame_budget_ms: f32,
-    /// The running master chain's summed `ops_per_fragment`, charged against the
-    /// frame beside the slots and against no one of them. Zero while the chain
-    /// is empty. Written once a frame by `crate::frame::compose` from the
-    /// `Present` that holds the chain; the milliseconds are derived at
-    /// [`Deck::chain_ms`] against this deck's current size, so a resize moves
-    /// the charge with no second write.
+    /// Summed `ops_per_fragment` across active master chain slots (ADR-0340).
     pub(crate) chain_ops_per_fragment: u32,
     pub(crate) transitions: Vec<Transition>,
     pub(crate) selections: Vec<Selection>,
@@ -490,12 +485,7 @@ impl Deck {
         self.frame_budget_ms
     }
 
-    /// Records what the running master chain costs per texel — the sum over its
-    /// slots of `ops_per_fragment`, which is `Present::chain_ops_per_fragment`.
-    ///
-    /// Zero for an empty chain. It is a rate and not a duration: what it costs
-    /// in milliseconds is [`Deck::chain_ms`], taken against this deck's current
-    /// size, so a resize needs no second call.
+    /// Sets the master chain's summed `ops_per_fragment`.
     pub fn set_chain_ops_per_fragment(&mut self, ops: u32) {
         self.chain_ops_per_fragment = ops;
     }
@@ -505,27 +495,12 @@ impl Deck {
         self.chain_ops_per_fragment
     }
 
-    /// What the running master chain costs this frame, in milliseconds at the
-    /// size this deck renders at.
-    ///
-    /// Charged against the frame beside the slots and against no one of them
-    /// (ADR-0340), which is what [`Deck::govern`] spends it as.
+    /// Estimated compute time of the running master chain in milliseconds (ADR-0340).
     pub fn chain_ms(&self) -> f32 {
         crate::estimate::chain_ms(self.chain_ops_per_fragment, (self.width, self.height))
     }
 
-    /// The clock a master chain slot reads on a frame that advances by `steps`.
-    ///
-    /// `t` and `beats` are the session clock at that frame's last substep — the
-    /// instant every Live slot's own last substep lands on — and `dt` is the
-    /// fixed simulation step, the same number every other layer reads. All
-    /// three come from the `tick` this frame was committed with and none from a
-    /// wall clock
-    /// ([P-0092](../../../docs/principles/0092-the-same-inputs-produce-the-same-frame.md)).
-    ///
-    /// Nothing is advanced here: the value is what [`Frame::render`] will have
-    /// advanced the session to, so it may be written before the frame's encoder
-    /// exists. `seed_salt` is zero — an L5 reads no `seed`.
+    /// Returns the session clock uniform for the master chain after advancing by `steps`.
     pub fn chain_clock(&self, steps: u8) -> crate::pass::Clock {
         let mut signals = self.signals;
         signals.advance(steps.min(MAX_STEPS), DT);
@@ -603,11 +578,7 @@ impl Deck {
                 closed_form: s.swap.set().is_closed_form(),
             })
             .collect();
-        // The chain first: it is not one of the slots. A chain covers the
-        // whole frame once per slot and belongs to no deck, so it is reserved
-        // out of the budget ahead of every slot rather than summed into
-        // `committed_ms` (ADR-0340). It is taken here so that a resize moves it
-        // without a second writer.
+        // Master chain compute cost is reserved ahead of slots (ADR-0340).
         let chain_ms = self.chain_ms();
         self.governor.set_chain_ms(chain_ms);
         let mut report = self.governor.decide(&states);

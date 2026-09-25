@@ -248,14 +248,7 @@ pub fn said(basis: Basis) -> &'static str {
     }
 }
 
-/// The two resolutions the worker takes its readings at, shared with the render
-/// thread.
-///
-/// They are two questions and not one size read twice. A measurement is one
-/// draw at `measure_at`, which is whatever a caller named — the preview cell a
-/// slot is auditioned in. An `estimate` is a fit whose rungs are placed against
-/// `estimate_at`, which is the frame the slot actually draws; it is written by
-/// [`HotSwap::resize`](crate::swap::HotSwap::resize), the only call that knows it.
+/// Measurement and estimation resolutions shared between the worker and render threads.
 #[derive(Clone)]
 pub(crate) struct Sizes {
     pub(crate) measure_at: Arc<AtomicU64>,

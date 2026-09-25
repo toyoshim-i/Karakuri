@@ -239,11 +239,7 @@ impl Present {
         self.height = height;
     }
 
-    /// Selects the tone-mapping operator, exposure, and white point.
-    ///
-    /// Writes the parameters into the uniform buffer via `queue.write_buffer`
-    /// without rebuilding the shader pipeline. `white_point` is only used by
-    /// `TonemapOp::Reinhard`.
+    /// Sets tone-mapping operator, exposure, and Reinhard white point via uniform write.
     pub fn set_tonemap(&self, queue: &wgpu::Queue, op: TonemapOp, exposure: f32, white_point: f32) {
         let uniform = TonemapUniform {
             op: op as u32,
@@ -310,24 +306,12 @@ impl Present {
         self.chain.layout()
     }
 
-    /// Everything a chain build needs from this `Present`, in one value.
-    ///
-    /// Taken at the moment a build is asked for and carried to wherever the
-    /// build runs — see [`crate::chain_swap::ChainSwap`]. It fixes the size the
-    /// build's targets are made at, so a resize between the request and the
-    /// install is detectable rather than silent.
+    /// Returns a [`ChainWorkshop`](crate::master::ChainWorkshop) snapshot for off-thread compilation.
     pub fn chain_workshop(&self) -> crate::master::ChainWorkshop {
         self.chain.workshop(&self.hdr_view)
     }
 
-    /// Installs an ordered master chain and returns what it displaced.
-    ///
-    /// Targets built alongside `chain` are adopted where they were made at this
-    /// `Present`'s current size; otherwise they are retired and the textures are
-    /// allocated here, on the calling thread. The returned [`RetiredChain`]
-    /// owns the outgoing chain's pipelines and textures and frees them when it
-    /// is dropped — which is why the render thread hands it to a worker rather
-    /// than dropping it (ADR-0033).
+    /// Installs an ordered master chain, returning displaced GPU objects in [`RetiredChain`].
     #[must_use = "the outgoing chain's GPU objects are freed where this is dropped"]
     pub fn set_chain(
         &mut self,
@@ -355,14 +339,7 @@ impl Present {
         self.chain.set_params(queue, shape, params)
     }
 
-    /// Updates the clock uniform every master chain slot reads — `t`, `beats`
-    /// and `dt`.
-    ///
-    /// Written once per frame, before the frame's encoder exists, from the
-    /// session clock the frame is about to advance to — see
-    /// `crate::frame::compose` and [`crate::deck::Deck::chain_clock`]. An empty
-    /// chain writes nothing. Takes `&self` for [`Present::set_tonemap`]'s
-    /// reason: this is a `queue.write_buffer` into buffers sized at build.
+    /// Updates the session clock uniform across all active master chain slots.
     pub fn set_chain_clock(&self, queue: &wgpu::Queue, clock: Clock) {
         self.chain.set_clock(queue, clock);
     }
