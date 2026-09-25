@@ -2,27 +2,14 @@
 //!
 //! # Architecture
 //!
-//! - **Background Compilation**: A chain's shader modules, render pipelines,
-//!   intermediate targets, retention history and bind groups are created on a
-//!   worker thread named `karakuri-chain`, against cloned `wgpu::Device` and
-//!   `wgpu::Queue` handles. The render thread polls with `try_recv` and never
-//!   blocks.
-//! - **Frame Boundary Installation**: A finished chain is installed by
-//!   [`ChainSwap::begin_frame`] and never mid-frame. Until it lands, the chain
-//!   that is running keeps drawing.
-//! - **Newest Wins**: Where more than one build is waiting, the newest is
-//!   installed and the others are retired unbuilt.
-//! - **Asynchronous Deallocation**: The outgoing chain — its pipelines, uniform
-//!   buffers, entry and ping targets, retention textures and bind groups — is
-//!   queued into a graveyard by `try_lock` and dropped by the worker.
-//! - **Size**: A build's targets are made at the size the `Present` had when the
-//!   build was asked for. A resize in between retires them unused and the
-//!   install allocates on the render thread instead.
-//!
-//! The clock every installed slot reads and the charge its cost makes against
-//! the frame are written by `crate::frame::compose` on every frame, from the
-//! `Present` — so an install needs neither and a host mentions neither
-//! (ADR-0349).
+//! - **Background Compilation**: Pipeline creation, intermediate targets, retention
+//!   history, and bind groups are constructed on a dedicated worker thread.
+//! - **Frame Boundary Installation**: Completed chains are installed at frame start
+//!   via [`ChainSwap::begin_frame`] without blocking the render loop.
+//! - **Newest Wins**: Superceded pending builds are retired unbuilt.
+//! - **Asynchronous Deallocation**: Retired chains are handed back to the worker
+//!   graveyard for non-blocking disposal.
+//! - **Size Invariance**: Build targets are sized to the `Present` state at request time.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -41,12 +28,7 @@ const GRAVEYARD_CAPACITY: usize = 2;
 /// Initial capacity for the lifecycle event accumulator.
 const EVENT_CAPACITY: usize = 2;
 
-/// One slot to build: what the slot is, and the checked source behind it.
-///
-/// Resolving an address to a source and checking that source are the caller's,
-/// as they are for a Set ([`crate::swap::Request`] carries `Checked` too): a
-/// store is not a GPU object and an address that nothing holds is refused
-/// before a thread is asked for anything.
+/// Slot specification and checked source representation for chain compilation.
 pub struct ChainSlot {
     pub spec: SlotSpec,
     pub checked: Checked,
@@ -114,12 +96,7 @@ impl std::fmt::Display for ChainEvent {
     }
 }
 
-/// Compiles master chains on a worker thread and installs them at frame
-/// boundaries.
-///
-/// One per `Present` whose chain a live operator can change. The two real-time
-/// hosts hold one; the offline renderer and replay do not, because
-/// `karakuri_environment::mix::install_chain` is their synchronous path.
+/// Manages asynchronous master chain compilation and frame-boundary installation.
 pub struct ChainSwap {
     /// Requests to the worker. `None` once the worker has gone.
     jobs: Option<Sender<Job>>,
@@ -144,10 +121,6 @@ pub struct ChainSwap {
 
 impl ChainSwap {
     /// Creates a coordinator backed by a `karakuri-chain` worker thread.
-    ///
-    /// The worker holds clones of `device` and `queue` — a refcount bump rather
-    /// than a second device, which is what makes the pipelines it builds usable
-    /// when they arrive.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> ChainSwap {
         let (jobs_tx, jobs_rx) = mpsc::channel();
         let (done_tx, done_rx) = mpsc::channel();
@@ -190,20 +163,12 @@ impl ChainSwap {
         self.building.as_ref().map(|(_, slots)| slots.as_slice())
     }
 
-    /// Whether `slots` is already what the newest build in flight is of.
-    ///
-    /// What keeps a host that asks every frame from asking for the same build
-    /// every frame: between the press and the install, `Present::chain_spec` is
-    /// still the outgoing list.
+    /// Returns true if an in-flight build matches `slots`.
     pub fn is_building(&self, slots: &[SlotSpec]) -> bool {
         self.building().is_some_and(|want| want == slots)
     }
 
-    /// Asks the worker for a chain, and returns its build id.
-    ///
-    /// Takes the workshop from `present` here, which fixes the size the build's
-    /// targets are made at. Nothing on the `Present` changes until
-    /// [`ChainSwap::begin_frame`] installs the result.
+    /// Enqueues a chain compilation job and returns its tracking ID.
     pub fn request(&mut self, present: &Present, slots: Vec<ChainSlot>) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
@@ -226,11 +191,7 @@ impl ChainSwap {
         id
     }
 
-    /// Advances the frame boundary: hands retired chains to the worker and
-    /// installs the newest finished build, if there is one.
-    ///
-    /// Never blocks. Call before the frame's encoder exists — a chain arriving
-    /// mid-frame would move what the mix writes into after the mix decided.
+    /// Advances the frame boundary: delegates retired chains and installs newest finished build.
     pub fn begin_frame(
         &mut self,
         present: &mut Present,

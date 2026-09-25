@@ -277,11 +277,7 @@ fn a_bare_name_is_refused_only_where_the_nodes_it_lands_on_disagree() {
 mod gpu {
     use super::*;
 
-    /// End-to-end smoke test that a procedure *with* a `spawn` block builds
-    /// a `Set` successfully and starts with a zero live count —
-    /// exercising the real `generate_l1`/`generate_l4` path (not the
-    /// hand-built `ElementLayout` the two tests above use) for the one
-    /// shape `crates/karakuri-engine/tests/generated.rs` never covers.
+    /// Verifies that a procedure with a spawn block builds a `Set` starting with zero live count.
     #[test]
     fn a_procedure_with_a_spawn_block_builds_and_starts_empty() {
         let gpu = Gpu::headless().expect("no GPU available");

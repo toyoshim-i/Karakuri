@@ -1,12 +1,8 @@
 //! Signal binding evaluation and parameter mapping.
 //!
-//! Evaluates mappings between continuous signals (such as oscillator phase,
-//! audio features, or procedural noise generators) and shader/simulation
-//! parameters.
-//!
-//! Each binding samples a signal, applies a shaping [`Curve`], maps the
-//! normalized value to a target range, and blends against any manual parameter
-//! setting according to the signal's confidence value.
+//! Evaluates mappings between continuous signals (such as oscillator phase, audio
+//! features, or procedural noise) and shader/simulation parameters. Applies shaping
+//! curves, maps to target ranges, and blends with manual settings using signal confidence.
 
 use karakuri_ir::Kind;
 use karakuri_signal::{
@@ -92,14 +88,10 @@ impl Signals {
         }
     }
 
-    /// Install this frame's measured signals, or `None` for "nothing is measuring".
+    /// Installs this frame's measured signals, or `None` if unmeasured.
     ///
-    /// Once per frame, before the frame is rendered, from the same place `steps`
-    /// comes from — a measurement live, a record on replay. A frame's worth of
-    /// measurement is latched here and does not change while the frame is drawn,
-    /// for the same reason `steps` does not: two bindings sampling `energy` in one
-    /// frame have to get one answer, or the record that says what this frame saw is
-    /// a record of neither.
+    /// Latches the measurement for the duration of the frame to ensure all
+    /// bindings sample a consistent signal value.
     pub fn set_audio(&mut self, audio: Option<AudioFrame>) {
         self.audio = audio;
     }

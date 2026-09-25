@@ -1,11 +1,8 @@
 //! Compute budget governor and admission controller for deck slot priming.
 //!
 //! Evaluates requested residency states against available GPU compute headroom,
-//! admitting candidates to `Residency::Priming` or parking them as `Residency::Allocated`
-//! when headroom is insufficient.
-//!
-//! Live slots are never modified or demoted by the governor. Budgets are evaluated
-//! against slot estimates or probe measurements taken at set build time.
+//! admitting candidates to `Residency::Priming` or parking them as `Residency::Allocated`.
+//! Live slots are never demoted; budgets are evaluated against estimates or probe measurements.
 
 use crate::deck::Residency;
 use crate::estimate::{Estimate, Floor, Floored, Unfit};
@@ -139,12 +136,8 @@ pub struct Report {
     pub budget_ms: f32,
     /// Summed budgeted compute time of active Live slots in milliseconds.
     pub committed_ms: f32,
-    /// What the running master chain costs this frame, in milliseconds at the
-    /// size the frame is composited at.
-    ///
-    /// Charged against the frame beside the slots and against no one of them,
-    /// so it is reserved out of `budget_ms` before any slot is considered and
-    /// is never part of `committed_ms` (ADR-0340). Zero for an empty chain.
+    /// Execution cost of the active master chain in milliseconds.
+    /// Reserved from `budget_ms` before slot admission evaluation (ADR-0340).
     pub chain_ms: f32,
     /// Summed budgeted compute time of admitted Priming slots in milliseconds.
     pub priming_ms: f32,
@@ -320,9 +313,7 @@ impl SlotState {
 
 /// Determines the budgeting basis and expected execution time for a slot.
 ///
-/// Prefers an available cost estimate. Falls back to a direct measurement if the
-/// estimate is unavailable or refused, and returns `(Basis::Unbudgetable, None)` if neither
-/// is present.
+/// Prefers cost estimates, falling back to probe measurements, or `(Basis::Unbudgetable, None)`.
 pub fn budgeted(cost: Option<Measurement>, estimate: Option<Estimated>) -> (Basis, Option<f32>) {
     if let Some(ms) = estimate.and_then(|e| e.ms()) {
         return (Basis::Estimated, Some(ms));
@@ -367,13 +358,7 @@ impl Governor {
         self.chain_ms
     }
 
-    /// Reserves `ms` for the master chain out of the compute budget, ahead of
-    /// every slot.
-    ///
-    /// The chain is one pass per slot over the whole frame and belongs to no
-    /// deck, so it is charged against the frame beside them and never against
-    /// one of them (ADR-0340). A non-finite or negative `ms` is ignored, and
-    /// zero is what an empty chain costs.
+    /// Reserves `ms` for the master chain ahead of deck slot admission (ADR-0340).
     pub fn set_chain_ms(&mut self, ms: f32) {
         if ms.is_finite() && ms >= 0.0 {
             self.chain_ms = ms;

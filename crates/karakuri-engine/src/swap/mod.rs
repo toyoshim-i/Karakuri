@@ -65,11 +65,7 @@ pub struct HotSwap {
     done: Receiver<Done>,
     /// Target resolution for probe measurements, packed as `(width << 32) | height`.
     measure_at: Arc<AtomicU64>,
-    /// Output resolution the worker's `estimate` answers for, packed as
-    /// `(width << 32) | height`. Distinct from `measure_at`: a measurement is
-    /// one draw at whatever size the caller named, and an estimate is a fit
-    /// evaluated at the frame the slot actually draws. Written by
-    /// [`HotSwap::resize`], which is the only call that knows that size.
+    /// Output resolution the worker's `estimate` answers for, packed as `(width << 32) | height`.
     estimate_at: Arc<AtomicU64>,
     graveyard: Arc<Mutex<Vec<Set>>>,
     /// Sets retired by the render thread pending handover to the worker graveyard.
@@ -298,18 +294,7 @@ impl HotSwap {
         &self.events
     }
 
-    /// Resizes the live Set viewport to `(width, height)` and re-targets the
-    /// estimate to it.
-    ///
-    /// An `estimate` is a fit rather than a number at one size, so a resize
-    /// re-evaluates it at the new viewport instead of dropping it: the rungs it
-    /// was taken through are on the record and re-reading them is arithmetic.
-    /// Where the new target is one those rungs cannot answer for, the
-    /// re-evaluation is a named refusal and the slot falls back to its
-    /// measurement.
-    ///
-    /// This is also the only call that knows the size the worker's `estimate`
-    /// should answer for, so it is what tells the worker.
+    /// Resizes the live Set viewport to `(width, height)` and re-targets the estimate arithmetic.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = (width, height);
         self.live.resize(device, width, height);
@@ -332,11 +317,6 @@ impl HotSwap {
     }
 
     /// Returns the output resolution the worker's `estimate` answers for.
-    ///
-    /// The live viewport, written by [`HotSwap::resize`]. Not
-    /// [`HotSwap::measure_size`]: a measurement is one draw at the size a
-    /// caller named — the preview cell, where a slot is auditioned — and an
-    /// estimate is about the frame this slot draws.
     pub fn estimate_size(&self) -> (u32, u32) {
         unpacked(self.estimate_at.load(Ordering::Relaxed))
     }
@@ -420,12 +400,7 @@ impl HotSwap {
                 candidate.carry_bound_from(&self.live);
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.cost = built.cost;
-                // **The candidate's own estimate, re-targeted to the viewport
-                // it is landing in.** The worker takes the estimate at the
-                // output size this slot last reported, and the output may have
-                // moved while the build was in flight; an estimate is a fit,
-                // so the answer at the size the Set is actually installed at is
-                // arithmetic over the rungs already on the record.
+                // Re-target candidate estimate to the active viewport (ADR-0356).
                 self.estimate = built.estimate.map(|e| e.at(self.viewport));
                 self.retire(outgoing);
                 self.overloaded = false;

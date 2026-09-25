@@ -96,12 +96,7 @@ pub fn compose(
     let Committed { steps, look } = commit(deck);
 
     present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
-    // The master chain's two frame-level quantities, handed over here and in
-    // no host. The clock a chain slot reads is the session clock this frame
-    // advances to — the same `steps` the deck is about to take — and what the
-    // chain costs is charged against the frame beside the decks (ADR-0340).
-    // The clock is a `queue.write_buffer` per slot, and an empty chain writes
-    // nothing.
+    // Synchronize session clock uniform and ops_per_fragment with master chain (ADR-0340).
     present.set_chain_clock(&gpu.queue, deck.chain_clock(steps));
     deck.set_chain_ops_per_fragment(present.chain_ops_per_fragment());
 

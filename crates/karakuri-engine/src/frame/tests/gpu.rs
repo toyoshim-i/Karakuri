@@ -3,26 +3,7 @@ use std::rc::Rc;
 
 use super::*;
 
-/// A frame with nowhere to draw commits anyway.
-///
-/// This test used to be `a_refused_frame_never_reaches_the_committing_work` and
-/// asserted the exact opposite: refuse, and the closure never runs. The defect
-/// behind that was real and is still worth knowing — the loop read the clock,
-/// wrote a `tick` claiming those steps, measured the audio, and only then found
-/// the swapchain had no texture, so an abandoned frame told the session it had
-/// simulated steps the deck never took and a replay obeyed the record.
-/// `Outdated` arrives on every resize, so resizing during a recording was
-/// enough to diverge the replay.
-///
-/// It stopped being the right question the moment a frame could reach more than
-/// one sink. "Was this frame abandoned?" has no answer that is right for a
-/// frame the projector took and the window missed, and it was already the wrong
-/// answer for one sink held off for a whole set: every output off stopped the
-/// instrument rather than stopped publishing it. What keeps a `tick` honest now
-/// is that there is nothing between the commit and the render — which is
-/// `a_frame_commits_before_it_draws` below, the claim that survived — and the
-/// deck advancing on every frame makes the promise unconditional rather than
-/// conditional on a swapchain.
+/// Verifies that frame commit callbacks execute even when all sinks refuse presentation.
 #[test]
 fn a_refused_frame_still_reaches_the_committing_work() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -82,15 +63,7 @@ fn a_refused_frame_still_reaches_the_committing_work() {
     );
 }
 
-/// And it advances the deck — the other half of the same reversal, seen in the
-/// material rather than in the stream.
-///
-/// This was `a_refused_frame_does_not_advance_the_simulation` and asserted that
-/// the deck stood still. It stopped being the right question for the reason
-/// above, and the assertion that replaces it is the stronger one: a refused
-/// frame advances the deck by the same amount an accepted one does. "It moved"
-/// would pass on a deck that moved by anything at all; the promise is that a
-/// sink has no say in how far the simulation goes.
+/// Verifies that simulation time advances identically regardless of sink refusal.
 #[test]
 fn a_refused_frame_still_advances_the_simulation() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -149,18 +122,7 @@ fn a_refused_frame_still_advances_the_simulation() {
     assert_eq!(sink.presented, 1, "and only the accepted one was presented");
 }
 
-/// Every output off is a frame, and the deck still runs.
-///
-/// `docs/manual/console.html`'s promise about the outputs row — *"all of them
-/// may be off, and that is a state worth having"*, because the deck previews
-/// are auditions rather than outputs — is this: with no sink at all the frame
-/// is composed, the closure commits, the deck steps, and nothing is published.
-/// `reached` being zero *is* "nothing was presented": it is the count of the
-/// sinks that were drawn into and presented.
-///
-/// Zero sinks is also not a miss. Nothing was asked, so nothing refused, and
-/// the reporting closure has nothing to say — a run with the outputs off must
-/// not print a line a second about it.
+/// Verifies that composing with zero sinks still commits and advances the simulation.
 #[test]
 fn a_frame_with_no_sinks_at_all_still_advances_the_deck() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -204,14 +166,7 @@ fn a_frame_with_no_sinks_at_all_still_advances_the_deck() {
     assert_eq!(refusals, 0, "nothing refused, because nothing was asked");
 }
 
-/// A sink that refuses costs the others nothing, and is told nothing else.
-///
-/// Three sinks rather than the two this is really about, and the arrangement is
-/// the point. The first refuses, so a `compose` that drew into the slice in the
-/// order it was given rather than into the ones that answered would draw into
-/// it. The last refuses too, so its reported index is 2 while the number of
-/// sinks that had answered by then is 1 — with two sinks those two numbers
-/// coincide and the index asserts nothing.
+/// Verifies that sink refusals are reported by index without affecting accepted sinks.
 #[test]
 fn a_sink_that_refuses_costs_the_others_nothing() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -275,18 +230,7 @@ fn a_sink_that_refuses_costs_the_others_nothing() {
     );
 }
 
-/// One canvas, two sinks of different shapes, fitted per sink.
-///
-/// What the console example already does with one `Present` and two targets —
-/// the picture and a deck preview a fifth the size — and what a projector
-/// beside a window will be. `Present::draw` letterboxes into whatever
-/// `Sink::size` says, so the wide sink gets the canvas in a centred band with
-/// black either side of it.
-///
-/// The black is the half that catches the defect worth catching: "both are lit"
-/// passes on a `compose` that hands every sink the *first* sink's size, or its
-/// own canvas size, and draws the canvas into a corner. Where the light stops
-/// is the only thing that says which size was used.
+/// Verifies that multiple sinks with different resolutions render letterboxed correctly.
 #[test]
 fn two_sinks_of_different_sizes_both_get_the_canvas() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -331,14 +275,7 @@ fn two_sinks_of_different_sizes_both_get_the_canvas() {
     );
 }
 
-/// A sink whose `present` fails does not cost the sinks after it their frame.
-///
-/// `docs/plugins.md` is explicit that the window never waits on anything else,
-/// and returning at the first error is exactly how a wedged output would make
-/// it: every sink below it in the slice had already been drawn into and would
-/// go unpresented. So all of them are presented and the first error is the one
-/// returned — two failing sinks here, so "first" is falsifiable rather than a
-/// word.
+/// Verifies that presentation failure on one sink does not prevent remaining sinks from presenting.
 #[test]
 fn a_present_that_fails_does_not_cost_the_next_sink_its_frame() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -382,20 +319,7 @@ fn a_present_that_fails_does_not_cost_the_next_sink_its_frame() {
     );
 }
 
-/// The committing closure runs before anything is drawn, seen in the pixels
-/// rather than in the deck.
-///
-/// This is the claim that survived the reversal, and it is now the only thing
-/// keeping a `tick` honest — the closure is no longer withheld from a frame
-/// with nowhere to draw, so what a `tick` promises rests entirely on the commit
-/// and the render being adjacent.
-///
-/// This test was vacuous first, and the mutation is what said so: it set a gain
-/// in the closure and asserted the deck held it afterwards, which is true
-/// whichever side of the draw the closure ran on. It was testing that
-/// `set_gain` works. A claim about order has to be read off the thing the order
-/// affects, so it reads the frame: a slot faded to nothing in the closure must
-/// produce a dark frame, and it only does if the closure ran first.
+/// Verifies that commit closure modifications take effect before frame rendering occurs.
 #[test]
 fn a_frame_commits_before_it_draws() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -454,27 +378,7 @@ fn a_frame_commits_before_it_draws() {
     );
 }
 
-/// `finally` is recorded into the frame's own encoder, after every sink that
-/// took the frame has been drawn into.
-///
-/// This is the parameter `karakuri-console`'s panel pass goes in, and the
-/// argument for it is on [`compose`]: a frame's submission is not only its
-/// sinks. Three things have to hold for that to be worth anything, and each
-/// fails a different way.
-///
-/// - It runs, or the panel is never drawn.
-/// - It runs after every sink was drawn into. A panel recorded before the
-///   present pass samples a picture nothing has written yet, and that is not
-///   an error anywhere — an unwritten texture is transparent and `egui`
-///   blends premultiplied, so what an operator gets is the bay's card showing
-///   through. So the order is read off the texels the closure copies out
-///   rather than off a call count: the canvas is already there when it records.
-/// - It is handed the frame's own encoder. An encoder of `compose`'s own would
-///   be a second command buffer over a texture the first one is still writing,
-///   whose order is the queue's business rather than the caller's — which is
-///   ADR-0166's whole subject and is the failure that would look correct here.
-///   The address is what says so; pixels cannot, because two submissions in
-///   the right order produce the right pixels.
+/// Verifies that `finally` callback executes after sink draws within the same command encoder.
 #[test]
 fn finally_is_recorded_after_every_sink_into_the_frames_own_encoder() {
     let gpu = Gpu::headless().expect("no GPU");
@@ -486,11 +390,7 @@ fn finally_is_recorded_after_every_sink_into_the_frames_own_encoder() {
     square.ordered_by(&order);
     wide.ordered_by(&order);
 
-    // **The sinks' own textures, held here as well.** A `wgpu::Texture`
-    // is a handle, so these are the same two textures rather than
-    // copies of them, and holding them is what lets the closure read
-    // what the sinks were drawn into while `compose` has the sinks
-    // themselves borrowed.
+    // Textures retained directly to verify content post-draw while sinks remain borrowed.
     let sizes = [(SIZE, SIZE), (WIDE, SIZE)];
     let targets = [square.target.clone(), wide.target.clone()];
     let seen: Vec<wgpu::Buffer> = sizes
@@ -607,21 +507,7 @@ fn finally_is_recorded_after_every_sink_into_the_frames_own_encoder() {
     );
 }
 
-/// `finally` runs on a frame no sink took, and what it records is submitted
-/// with that frame.
-///
-/// The case that decides whether the parameter is the frame's or the sinks':
-/// `karakuri-console`'s panel is drawn whether or not the picture is on screen
-/// — folding the picture away hides the picture, not the console — so a
-/// `finally` conditional on a sink having answered would black the whole window
-/// the moment an operator folded one region. It is asked twice, because there
-/// are two ways to have no sink and they are different code paths: a slice with
-/// nothing in it, and a slice whose every sink refused.
-///
-/// What is asserted is the buffer and not the call count. A closure that ran
-/// and was handed an encoder `compose` then dropped would satisfy "it ran" and
-/// record nothing at all, so the sentinel is written first and the clear is
-/// what has to reach it.
+/// Verifies that `finally` callback executes and submits commands even when no sink accepts the frame.
 #[test]
 fn finally_runs_when_no_sink_took_the_frame() {
     const SENTINEL: [u8; 256] = [0xAA; 256];
@@ -726,14 +612,7 @@ fn finally_runs_when_no_sink_took_the_frame() {
     );
 }
 
-/// The master chain is handed the clock of the frame it is about to be
-/// drawn in, and the deck is handed what the chain costs, by `compose`
-/// and by no host.
-///
-/// The clock is the session clock *after* this frame's `steps`, which
-/// is the instant every Live slot's own last substep lands on, so two
-/// consecutive frames advance it and neither reads the clock of the
-/// frame before it.
+/// Verifies that master chain receives updated session clock uniforms and deck receives chain cost.
 #[test]
 fn a_composed_frame_hands_the_chain_its_clock_and_the_deck_its_price() {
     let gpu = Gpu::headless().expect("no GPU available");

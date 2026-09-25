@@ -429,12 +429,7 @@ mod tests {
 
         #[test]
         fn the_pass_derives_what_the_host_would_have() {
-            // Panics rather than skipping when there is no adapter, as every
-            // other GPU test in this workspace does. These four used to print
-            // and return, so a machine with no device ran them green — and the
-            // reason that was tolerable (there was no other way to get a run
-            // out of such a machine) stopped being true when `--skip gpu::`
-            // arrived. See `../../tests/gpu_tests_are_under_mod_gpu.rs`.
+            // Panics if no adapter is available; filter with `--skip gpu::` on headless machines.
             let gpu = Gpu::headless().expect("no GPU available");
             // Nothing axis-aligned and nothing at the origin: a camera looking down
             // an axis at (0,0,0) with `up` exactly +Y makes several columns of the

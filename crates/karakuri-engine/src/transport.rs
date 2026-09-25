@@ -119,15 +119,7 @@ impl Transport {
         }
     }
 
-    /// Engage a mode. `session_bpm` becomes the anchor whenever the mode
-    /// changes, so **engaging sync never moves the picture**: the material is at
-    /// 1× at that instant and stays there until the room's tempo does.
-    ///
-    /// Re-engaging the mode a slot is already in re-anchors it, which is how an
-    /// operator says "call *this* the reference tempo" without a second
-    /// control.
-    ///
-    /// Engages `sync` with `session_bpm` as the anchor tempo, resetting scrub and carry.
+    /// Engages `sync` with `session_bpm` as anchor tempo, resetting scrub and carry.
     pub fn engage(&mut self, sync: Sync, session_bpm: f32) {
         *self = Transport::engaged(sync, session_bpm);
     }

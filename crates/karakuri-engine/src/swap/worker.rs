@@ -169,12 +169,7 @@ pub(crate) fn run_worker(
                 eprintln!("  `{label}` could not be measured; it will not be budgeted for");
             }
 
-            // **And the estimate beside the measurement, at the output's
-            // size.** `estimate` places its two rungs against the target it is
-            // asked for, so the target is the frame this slot draws rather
-            // than `measure_at`, which is the cell a slot is auditioned in. A
-            // refusal is a value here and not a failure: it travels on the
-            // build and leaves the measurement deciding.
+            // Compute estimate at the slot's target output resolution (ADR-0303).
             let target = unpacked(sizes.estimate_at.load(Ordering::Relaxed));
             prediction = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 estimate(probe, &device, &queue, set, target)

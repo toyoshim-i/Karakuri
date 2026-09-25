@@ -5,16 +5,7 @@ use karakuri_ir::typed::Checked;
 use std::cell::Cell;
 use std::rc::Rc;
 
-/// A sink that draws nowhere and can be told to refuse.
-///
-/// This is the third implementation, and the reason the other two were worth
-/// putting behind a trait. `karakuri-cli`'s `Live::frame` had never been
-/// reached by a test: it needs a window, and `Outdated` — the case that
-/// produced a real defect — cannot be synthesised at all. (It was
-/// `SurfaceError::Outdated` until wgpu 30 replaced the `Result` with
-/// `CurrentSurfaceTexture`; the point survives the rename.) Two of the three
-/// record-ordering bugs found in this codebase lived in that function. A sink
-/// that refuses on demand is what makes the case reachable.
+/// Mock sink implementation that can simulate acquisition and presentation refusals.
 pub(crate) struct TestSink {
     pub(crate) target: wgpu::Texture,
     pub(crate) view: wgpu::TextureView,
@@ -218,11 +209,7 @@ pub(crate) fn look() -> Look {
     }
 }
 
-/// The three stages a `.kir` goes through before [`Set::build`] will take it,
-/// the way every other test in this crate spells them — except that these tests
-/// read the shipped `examples/` pair rather than an inline fixture, because
-/// what they want is material that draws something at [`SIZE`] and the
-/// workspace already has some.
+/// Compiles a `.kir` file through parse, typecheck, and cost estimation stages.
 pub(crate) fn compile(path: &std::path::Path) -> Checked {
     let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let render = |errs: &[karakuri_ir::IrError]| {
@@ -248,11 +235,7 @@ pub(crate) fn one_slot_deck(gpu: &Gpu) -> Deck {
     Deck::new(&gpu.device, vec![HotSwap::fixed(set)], SIZE, SIZE)
 }
 
-/// A chain of one L5, built against the `Present` that will run it.
-///
-/// The procedure reads the clock and nothing else. What it draws is not
-/// read here; `tests/master.rs` holds a chain slot's picture to its
-/// uniform.
+/// Builds a single-slot L5 master chain reading clock uniforms for testing.
 pub(crate) fn clock_chain(gpu: &Gpu, present: &Present) -> crate::master::Chain {
     const CLOCK: &str = r#"
 proc clock_probe {
