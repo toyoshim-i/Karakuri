@@ -1,20 +1,7 @@
-//! Renders the same HDR frame through every tone-mapping operator, at several
-//! exposures, so a person can look at the four side by side and pick one.
+//! Renders HDR test scenes across all tone-mapping operators and exposure sweeps.
 //!
-//! Not a test: there is no correct image to assert against, only material
-//! this project actually renders. `examples/spark_fountain.kir` (dense,
-//! saturated, additive, with a bright core) is paired with
-//! `examples/soft_points.kir` — the pairing `docs/manual.md` gives as the
-//! non-default one — and `examples/drift_shell.kir` (sparser, the default L1)
-//! is included alongside it so the grid also shows the case that motivates
-//! AgX the least.
-//!
-//! `cargo run -p karakuri-engine --example tonemap_compare` writes PNGs under
-//! `target/tonemap_compare/`, one per (scene, operator, exposure) triple, plus
-//! a second small sweep of `soft_points`' own `exposure` param against a
-//! fixed operator — see `material_exposure_sweep` below for why. Run from the
-//! repository root: the `.kir` paths are relative to it, same as
-//! `karakuri-cli`'s own defaults.
+//! Outputs PNG captures to `target/tonemap_compare/`.
+//! Run with: `cargo run -p karakuri-engine --example tonemap_compare`
 
 use std::path::{Path, PathBuf};
 
@@ -27,11 +14,7 @@ const HEIGHT: u32 = 360;
 const CAPACITY: u32 = 262_144;
 const SEED: u32 = 19_274;
 
-/// Simulation steps to run before capturing, at `dt = 1/60`. `spark_fountain`
-/// needs to reach the steady population its lifetime and spawn rate settle at
-/// — around 74000 of 262144 slots, reached well inside
-/// five seconds — and `drift_shell` is run the same distance so both scenes
-/// are compared at the same simulation instant rather than at frame zero.
+/// Simulation warmup steps to reach steady-state element population prior to capture.
 const WARMUP_STEPS: u32 = 300;
 
 /// Parse, check, and cost-estimate one `.kir` file — the same three stages
@@ -48,12 +31,7 @@ fn compile(path: &Path) -> Checked {
     checked
 }
 
-/// Advances `set` `WARMUP_STEPS` worth of simulation, rendering into
-/// `present`'s HDR target as it goes. `MAX_STEPS` caps a single
-/// `prepare`/`render` call, so this is a loop of small steps rather than one
-/// big one — the same shape a real frame loop uses, just with no wall clock
-/// behind it. The HDR target is cleared and redrawn every call, never
-/// accumulated across calls, so only the final render's content survives.
+/// Simulates `WARMUP_STEPS` in chunks of `MAX_STEPS` and renders into the HDR target.
 fn warm_up(gpu: &Gpu, set: &mut Set, present: &Present) {
     let mut remaining = WARMUP_STEPS;
     while remaining > 0 {
@@ -66,12 +44,7 @@ fn warm_up(gpu: &Gpu, set: &mut Set, present: &Present) {
     }
 }
 
-/// Selects `op`/`exposure`/`white_point` on `present` — a uniform write, so
-/// this never touches a pipeline — then presents whatever is already in its
-/// HDR target (set by the last `warm_up` or `Set::render` call) to an
-/// `Rgba8UnormSrgb` target and writes it as a PNG. The sRGB encode happens on
-/// this write, in hardware, exactly once — the same path `karakuri-cli`'s
-/// `--render` takes.
+/// Sets tone-mapping uniforms on `present`, renders to sRGB target, and saves to PNG.
 fn capture(
     gpu: &Gpu,
     present: &Present,
@@ -176,14 +149,7 @@ fn operator_grid(gpu: &Gpu, present: &Present, out_dir: &Path, scene_name: &str)
     }
 }
 
-/// A second, narrower sweep: `soft_points.kir` carries `param exposure = 0.3`
-/// today, a workaround for the tone mapper that did not exist when that
-/// default was chosen. This holds the *tone-mapping* exposure fixed at a
-/// reasonable value and instead varies the Set's runtime `exposure`
-/// parameter — a `--param exposure=...` override, same mechanism the CLI
-/// exposes — through the file's current default and a few candidates above
-/// it, so the two workarounds (a low material exposure and a missing tone
-/// mapper) are not compared against each other by accident.
+/// Sweeps procedure-level exposure parameter against fixed tone-mapping settings.
 fn material_exposure_sweep(gpu: &Gpu, l1: &Checked, l4: &Checked, out_dir: &Path) {
     const OP_NAME: &str = "aces";
     const OP: TonemapOp = TonemapOp::Aces;

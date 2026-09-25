@@ -11,13 +11,7 @@ use karakuri_engine::set::{Edge, Layering, Wiring};
 use karakuri_engine::{Gpu, Probe, Set, Signals};
 use karakuri_ir::typed::Checked;
 
-/// **A size to measure at**, and a fixture rather than a reference.
-///
-/// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
-/// constant: this application has an output size and a preview size and no
-/// third one, so the size a measurement is taken at is named by whoever knows
-/// the layout. This example has no layout, so it names one, and it is
-/// 1280x720 because that is what it was written against.
+/// Target resolution used for benchmark measurements.
 const AT: (u32, u32) = (1280, 720);
 
 const CAPACITY: u32 = 262_144;

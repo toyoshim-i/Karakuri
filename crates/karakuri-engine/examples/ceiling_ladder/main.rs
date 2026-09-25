@@ -1,17 +1,6 @@
-//! **Measurement scaffolding, not a shipped example.** Times a ladder of
-//! procedures whose estimated ops cross each of the four ceilings in
-//! `karakuri_ir::cost`, so the ceilings can be compared against a frame budget
-//! for the first time.
+//! Measurement scaffolding benchmarking execution cost against IR operation ceilings.
 //!
-//! Requires the four constants in `crates/karakuri-ir/src/cost.rs` to be
-//! temporarily raised — the ceilings gate the compile, and the over-ceiling
-//! rungs are the point of the exercise. The guard below refuses to print a
-//! table unless the printed estimates are strictly increasing and at least one
-//! rung exceeds the ceiling it is testing, so a run against an unpatched tree
-//! is loud rather than flat.
-//!
-//! `cargo run -p karakuri-engine --example ceiling_ladder --release`
-//! Run from the repository root: the `.kir` paths are relative to it.
+//! Run with: `cargo run -p karakuri-engine --example ceiling_ladder --release`
 
 use karakuri_engine::probe::{Measurement, MeasurementMethod};
 use karakuri_engine::set::{Edge, Layering, Wiring, MAX_STEPS};
@@ -21,13 +10,7 @@ use karakuri_ir::typed::{Checked, Cost};
 mod procedures;
 use procedures::*;
 
-/// **A size to measure at**, and a fixture rather than a reference.
-///
-/// It was `swap::PROBE_RESOLUTION` until ADR-0303, which removed that
-/// constant: this application has an output size and a preview size and no
-/// third one, so the size a measurement is taken at is named by whoever knows
-/// the layout. This example has no layout, so it names one, and it is
-/// 1280x720 because that is what it was written against.
+/// Target resolution used for ladder benchmark measurements.
 const AT: (u32, u32) = (1280, 720);
 
 const CAPACITY: u32 = 262_144;
@@ -164,11 +147,7 @@ struct Rung {
     hi: f32,
 }
 
-/// One rung's material, kept whole so a ladder can be run **interleaved**:
-/// several passes over every rung in turn, rather than every sample of one
-/// rung before the next. A sequential pass measured the same configuration
-/// 34% heavier at the top of a ladder than the same rung measured cold —
-/// heating, not ops — which would have read as curvature in the ladder.
+/// Ladder benchmark configuration and procedure metadata for interleaved passes.
 struct Spec {
     label: String,
     dial: String,
