@@ -684,7 +684,13 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         #[cfg(target_os = "windows")]
         {
             let surface = windows::WindowsSurface::new(gpu, width, height, format)?;
-            let plugin = OutputPlugin::open(command, "dxgi", width, height, "bgra8unorm")
+            // The plugin copies from this surface into a texture of the format
+            // named here, and a copy between formats is a silent no-op.
+            let format_name = match format.remove_srgb_suffix() {
+                wgpu::TextureFormat::Rgba8Unorm => "rgba8unorm",
+                _ => "bgra8unorm",
+            };
+            let plugin = OutputPlugin::open(command, "dxgi", width, height, format_name)
                 .map_err(|e| format!("{e}"))?;
 
             let child_surface_id = unsafe {
@@ -988,7 +994,7 @@ mod tests {
             assert_eq!(sink.server_name(), "Karakuri");
             assert_eq!(sink.size(), (1280, 720));
 
-            let present = karakuri_engine::Present::new(
+            let _present = karakuri_engine::Present::new(
                 &gpu.device,
                 wgpu::TextureFormat::Bgra8Unorm.add_srgb_suffix(),
                 1280,
@@ -997,7 +1003,29 @@ mod tests {
             let mut encoder = gpu
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            present.draw(&mut encoder, sink.view(), sink.size());
+            {
+                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("test red clear"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: sink.view(),
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 1.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+            }
             sink.after_draw(&mut encoder);
             gpu.queue.submit([encoder.finish()]);
 
