@@ -224,6 +224,7 @@ mod windows {
         #[allow(dead_code)]
         pub height: u32,
         _d3d11_device: Option<ID3D11Device>,
+        _d3d11_texture: Option<ID3D11Texture2D>,
     }
 
     impl WindowsSurface {
@@ -375,6 +376,7 @@ mod windows {
                         width,
                         height,
                         _d3d11_device: Some(d3d11_device),
+                        _d3d11_texture: Some(d3d11_texture),
                     });
                 }
 
@@ -464,6 +466,7 @@ mod windows {
                         width,
                         height,
                         _d3d11_device: None,
+                        _d3d11_texture: None,
                     });
                 }
             }
