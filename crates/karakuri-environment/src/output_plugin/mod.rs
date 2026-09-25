@@ -4,6 +4,7 @@
 //! frame notifications over a non-blocking pipe. Foreign crashes and stalls are isolated and
 //! never interrupt the live render loop (ADR-0358, docs/plugins.md).
 
+pub mod discovery;
 pub mod message;
 
 use std::io::{BufRead, BufReader, Write};
@@ -13,6 +14,7 @@ use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+pub use discovery::{discover_plugins, probe_plugin, DiscoveredPlugin};
 pub use message::{HostMessage, PluginMessage, PROTOCOL_VERSION};
 
 const GREETING_TIMEOUT: Duration = Duration::from_secs(3);
