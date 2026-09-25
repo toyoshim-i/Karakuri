@@ -1,4 +1,3 @@
-use super::super::*;
 use super::*;
 
 /// One item of the `+ lane` chooser: a target a lane may be pointed at, and the

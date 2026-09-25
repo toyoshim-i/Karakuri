@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use egui::Rect;
 
-use super::super::super::*;
 use super::super::*;
 
 /// `.trim .lbl`: the `g`, which is the only word in this bay that is neither
