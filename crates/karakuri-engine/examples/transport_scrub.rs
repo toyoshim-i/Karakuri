@@ -1,20 +1,7 @@
-//! Runs a beat-locked slot forward, scrubs it back, and shows that the rewound
-//! frame **is** the earlier frame rather than something like it.
+//! Demonstrates transport scrubbing and deterministic rewinding of beat-locked slots.
 //!
-//! Not a test — `tests/transport.rs` asserts the same property. What this adds
-//! is that the claim becomes something a person can check: it writes the frame
-//! it rewound to, the frame it had drawn at that step on the way past, and the
-//! frame it was at before scrubbing, then says whether the first two are
-//! identical. Three files, and the answer is in the pixels rather than in an
-//! assertion nobody watched run.
-//!
-//! The transport has no CLI flag — it is on the `y` and `u`/`i` keys, which a
-//! headless run cannot press — so this is the only way to see it without a
-//! window and a keyboard.
-//!
-//! `cargo run -p karakuri-engine --example transport_scrub` writes PNGs under
-//! `target/transport_scrub/`. Run from the repository root: the `.kir` paths
-//! are relative to it.
+//! Outputs comparison PNG frames to `target/transport_scrub/`.
+//! Run with: `cargo run -p karakuri-engine --example transport_scrub`
 
 use std::path::{Path, PathBuf};
 

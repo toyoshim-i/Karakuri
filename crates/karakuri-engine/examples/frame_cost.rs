@@ -1,40 +1,6 @@
-//! **What a whole frame costs, and what a slot's measurement costs to take** —
-//! measurement scaffolding for
-//! [ADR-0303](../../../docs/adr/0303-a-frames-cost-is-the-period-and-a-measurement-names-which-resolution-it-is-about.md),
-//! not a shipped example.
+//! Benchmarks CPU recording duration and GPU queue execution cost per frame.
 //!
-//! Two questions, and each is one this repository could not answer before:
-//!
-//! - **What did the frame cost, GPU included.** Everything the panel's startup
-//!   reading prints stops at a submission — three CPU medians and a vsync wait
-//!   reported beside them rather than in them — so a frame that is almost
-//!   entirely GPU reads there as a loop that is almost entirely idle. Here the
-//!   CPU stretch and the GPU drain are timed separately for the same frame and
-//!   printed side by side, which is the ratio the panel cannot show.
-//! - **What `Deck::measure_slots` costs at each of this application's two
-//!   resolutions.** ADR-0303 removed `swap::PROBE_RESOLUTION`, a constant
-//!   1280x720 that nothing renders at; a measurement is now taken at a size the
-//!   caller names. This walks a deck's startup at the output size and at a
-//!   preview cell's size and prints both, along with what each slot measured —
-//!   because the second number is not the first one scaled, and the difference
-//!   is what a governor would be spending.
-//!
-//! **Host clock throughout, and it says so.** GPU timestamps are advertised on
-//! this crate's development adapter and do not survive `Probe::new`'s
-//! calibration (P-0095, ADR-0169), and a *frame* would be a host figure on any
-//! adapter regardless: most of one is outside every command buffer. The GPU
-//! figure here is `Device::poll` to a drained queue — an upper bound, biased
-//! high by the poll's own round trip.
-//!
-//! **What this is not.** There is no swapchain and no vsync here, so the wait
-//! the panel spends most of its frame in does not exist: what is printed is
-//! what the frame would cost a loop that never waits, which is the quantity a
-//! `Fifo` loop's period is the maximum of. There is no panel either — no `egui`
-//! pass, no upload, no submission of a console's geometry — so the CPU stretch
-//! here is the engine's half alone.
-//!
-//! `cargo run -p karakuri-engine --example frame_cost --release`
-//! Run from the repository root: the `.kir` paths are relative to it.
+//! Run with: `cargo run -p karakuri-engine --example frame_cost --release`
 
 use std::time::{Duration, Instant};
 
@@ -43,16 +9,10 @@ use karakuri_engine::swap::HotSwap;
 use karakuri_engine::{Gpu, Present, Set};
 use karakuri_ir::typed::Checked;
 
-/// **The final output size**, which the mix is composited once at and which
-/// every output is a resize of (ADR-0247). One of this application's two
-/// resolutions.
+/// Final composited output resolution.
 const OUTPUT: (u32, u32) = (1280, 720);
 
-/// **A deck preview cell**, which is the other one. 252x142 is the size
-/// `karakuri`'s own `deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one`
-/// measures beside the picture on a 1440x900 window; the same test reads
-/// 112x63 in the row arrangement, so a cell is somewhere in that band and
-/// this names the larger of the two.
+/// Target resolution used for preview cell probe benchmarking.
 const CELL: (u32, u32) = (252, 142);
 
 /// The pair a bare `cargo run -p karakuri` opens on (ADR-0271), which is what
@@ -129,11 +89,7 @@ fn main() {
     let l1 = compile(L1);
     let l4 = compile(L4);
 
-    // -- what a slot's measurement costs, at each of the two sizes ----------
-    //
-    // **A fresh deck each time**, because `measure_slots` skips a slot that has
-    // already been measured or stepped — the whole point of the number is the
-    // startup a cold run pays.
+    // Measure slot execution cost across output and preview resolutions.
     for at in [OUTPUT, CELL] {
         let mut deck = deck_of(&gpu, &l1, &l4, OUTPUT);
         // The deck's output size is always `OUTPUT`; only the size the
@@ -201,11 +157,7 @@ fn main() {
         }
         let recorded = started.elapsed();
 
-        // **And what the GPU still owed when that returned.** The panel takes
-        // this on one frame in every 500 ms; here every frame is audited,
-        // because there is no vsync to stand in for it and a headless loop
-        // that never drains queues thousands of command buffers ahead of the
-        // device.
+        // Measure GPU execution time by polling until device queue drains.
         let owed = Instant::now();
         gpu.device
             .poll(wgpu::PollType::wait_indefinitely())

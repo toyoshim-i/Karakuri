@@ -75,18 +75,7 @@ fn median(xs: &mut [f64]) -> f64 {
     xs[xs.len() / 2]
 }
 
-/// **The chain alone, timed as its own submission.**
-///
-/// The deck is drawn *outside* the timed stretch, once, so that what is timed
-/// is the chain's passes and the retentions and nothing else. That is the
-/// number P-0091 asks for — what a pass costs per frame — and it is the one a
-/// whole frame cannot give: four slots and a composite are 4.6 ms of GPU on
-/// this machine and the chain is a fraction of a millisecond, so a difference
-/// of differences is inside the drift.
-///
-/// **The chain-off row is not zero and is not meant to be**: it is an encoder,
-/// a submit and a poll with nothing recorded between them, which is exactly the
-/// floor every other row is over.
+/// Measures execution time of master chain passes in an isolated submission.
 fn run(gpu: &Gpu, deck: &mut Deck, present: &mut Present, chain: Chain) -> f64 {
     drop(present.set_chain(&gpu.device, &gpu.queue, chain));
     // One real frame into whatever the mix writes now, so the chain's entry
@@ -131,11 +120,7 @@ fn main() {
     let mut deck = deck_of(&gpu, &l1, &l4);
     let mut present = Present::new(&gpu.device, Present::HDR_FORMAT, OUTPUT.0, OUTPUT.1);
 
-    // **Each list is made fresh**, because a `Chain` owns its slots' pipelines
-    // and installing one moves it: what is being timed is a chain running, not
-    // a chain being built, and building is what `Present::set_chain` is
-    // measured as costing by the resize figure beside it (ADR-0325).
-    // A named type because a list is built fresh per row — see below.
+    // Fresh chains instantiated per configuration to isolate steady-state runtime cost.
     type Make = fn(&Gpu, &Present) -> Chain;
     let lists: [(&str, Make); 6] = [
         ("empty chain (no pass recorded)", |_, _| Chain::default()),
