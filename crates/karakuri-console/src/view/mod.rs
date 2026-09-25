@@ -299,6 +299,7 @@ impl View {
             projector: false,
             plugin: false,
             plugin_available: false,
+            plugin_name: None,
             picture: None,
             previews: [None; DECKS],
             // Nothing is stopped on a console with no engine behind it, which

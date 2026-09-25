@@ -186,6 +186,7 @@ impl View {
         let projector = self.projector;
         let plugin = self.plugin;
         let plugin_available = self.plugin_available;
+        let plugin_name = self.plugin_name;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -250,9 +251,14 @@ impl View {
                     // the chip that is painted is the chip that is clicked.
                     Kind::Outputs => {
                         bay_card(ui, &pal, rect);
-                        if let Some(row) =
-                            outputs_with(ui.ctx(), panel.layout(), opening, plugin_available)
-                                .map(|r| r.told(projector).told_plugin(0, plugin, plugin_available))
+                        if let Some(row) = outputs_with_plugin_name(
+                            ui.ctx(),
+                            panel.layout(),
+                            opening,
+                            plugin_available,
+                            plugin_name,
+                        )
+                        .map(|r| r.told(projector).told_plugin_name(0, plugin, plugin_available, plugin_name))
                         {
                             outputs::outputs_into(ui, &pal, &row);
                         }

@@ -10,8 +10,10 @@ pub struct View {
     pub projector: bool,
     /// Whether plugin sink 0 (Syphon) is active.
     pub plugin: bool,
-    /// Whether plugin sink 0 (Syphon) is available on this machine.
+    /// Whether plugin sink 0 is available on this machine.
     pub plugin_available: bool,
+    /// Discovered display name of plugin sink 0, if available (e.g. "Spout", "Syphon").
+    pub plugin_name: Option<&'static str>,
     /// What to draw in the Program bay's picture this frame, or `None` for a
     /// console with no engine behind it — which is every test in this crate and the
     /// whole of what `cargo test -p karakuri-console` sees.
