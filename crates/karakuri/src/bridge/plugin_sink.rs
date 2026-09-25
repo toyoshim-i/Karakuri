@@ -214,6 +214,7 @@ mod windows {
 
     pub struct WindowsSurface {
         pub handle: HANDLE,
+        #[allow(dead_code)]
         pub surface_id: u64,
         #[allow(dead_code)]
         pub texture: wgpu::Texture,
@@ -501,6 +502,8 @@ pub(crate) struct PluginSink {
     flip_bind_group: wgpu::BindGroup,
     #[cfg(target_os = "windows")]
     surface: windows::WindowsSurface,
+    #[cfg(target_os = "windows")]
+    child_surface_id: u64,
     frame_index: u64,
     width: u32,
     height: u32,
@@ -681,9 +684,29 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
             let plugin = OutputPlugin::open(command, "dxgi", width, height, "bgra8unorm")
                 .map_err(|e| format!("{e}"))?;
 
+            let child_surface_id = unsafe {
+                use ::windows::Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE};
+                use ::windows::Win32::System::Threading::GetCurrentProcess;
+
+                let child_proc = HANDLE(plugin.child_raw_handle());
+                let mut target_handle = HANDLE::default();
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    surface.handle,
+                    child_proc,
+                    &mut target_handle,
+                    0,
+                    false,
+                    DUPLICATE_SAME_ACCESS,
+                )
+                .map_err(|e| format!("DuplicateHandle to child plugin failed: {e}"))?;
+                target_handle.0 as usize as u64
+            };
+
             Ok(Self {
                 plugin,
                 surface,
+                child_surface_id,
                 frame_index: 0,
                 width,
                 height,
@@ -786,9 +809,10 @@ impl Sink for PluginSink {
         }
         #[cfg(target_os = "windows")]
         {
+            let _ = _gpu.device.poll(wgpu::PollType::wait_indefinitely());
             self.plugin.send_frame(
                 self.frame_index,
-                self.surface.surface_id,
+                self.child_surface_id,
                 self.width,
                 self.height,
             );

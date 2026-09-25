@@ -151,6 +151,7 @@ windows = { version = "0.62.2", features = [
     "Win32_Graphics_Dxgi_Common",
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_System_Threading",
 ] }
 
 [lints]
