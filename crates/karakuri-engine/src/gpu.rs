@@ -55,6 +55,10 @@ impl Gpu {
         if available.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS) {
             required_features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
         }
+        #[cfg(target_os = "windows")]
+        if available.contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32) {
+            required_features |= wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32;
+        }
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
