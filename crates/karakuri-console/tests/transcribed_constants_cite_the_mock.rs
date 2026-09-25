@@ -360,7 +360,7 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
         .filter(|p| p.is_file())
         .map(|p| {
             let text = fs::read_to_string(&p).expect("read the mock");
-            (p.display().to_string(), tighten(&text))
+            (p.to_string_lossy().replace('\\', "/"), tighten(&text))
         })
         .collect();
 
@@ -429,9 +429,10 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
                     Source::File(file) => {
                         anchored += 1;
                         let want = tighten(&format!("{property}: {value}"));
+                        let norm_file = file.replace('\\', "/");
                         let text = mock
                             .iter()
-                            .find(|(path, _)| path.ends_with(file.as_str()))
+                            .find(|(path, _)| path.ends_with(norm_file.as_str()))
                             .unwrap_or_else(|| {
                                 panic!(
                                 "{named}: the doc comment cites `{file}`, which is not in {MOCK}"
