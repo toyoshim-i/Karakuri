@@ -1,16 +1,6 @@
 use super::common::*;
 
-// ---------------------------------------------------------------------------
-// The second number.
-//
-// `estimate` was built on 2026-09-06 and exported to no caller; ADR-0293 made
-// it answer for every piece of material this instrument ships, and these are
-// the tests of it reaching `Governor::decide`. The estimates below are fitted
-// through **synthetic** rungs built from a known `a` and `b`, exactly as
-// `src/estimate.rs`'s own unit tests are and for the same reason: the
-// arithmetic is the whole of the rule, and a threshold on a real draw would be
-// a test of this machine (`docs/contributing.md` §1).
-// ---------------------------------------------------------------------------
+// Synthetic rungs verifying linear cost fitting within Governor::decide.
 
 fn area((w, h): (u32, u32)) -> f64 {
     f64::from(w) * f64::from(h)
@@ -26,19 +16,7 @@ fn at(ms: f64, resolution: (u32, u32)) -> Measurement {
     }
 }
 
-/// **An estimate for `target` costing `a + fragment_ms` there**, fitted through
-/// the two rungs `estimate::rungs` would itself place under `floor`.
-///
-/// The floor is what decides *which* pair, so passing a real one is what makes
-/// the floored branch reachable from here: a floor at or below a quarter of the
-/// target's height gets the cheap pair and an exact fit, and one above half its
-/// height gets the accurate pair and a correction. ADR-0293's table is the map.
-///
-/// `Floor::Analysed` rather than the `Floor::Stated` `fit` produces, because
-/// that is what `estimate` writes on the way out and it is the difference the
-/// governor reports. The bounds themselves are empty here — this file is about
-/// what the governor does with the floor's *provenance*, and
-/// `crates/karakuri-ir/tests/rate.rs` is where the bounds are written out.
+/// Helper creating a synthetic estimate for `target` costing `a + fragment_ms` under `floor`.
 fn estimate_of(a: f64, fragment_ms: f64, target: (u32, u32), floor: u32) -> Estimate {
     let [low, high] = rungs(target, floor).expect("the target holds two rungs");
     let b = fragment_ms / area(target);
@@ -89,14 +67,7 @@ fn with_estimate(mut slot: SlotState, e: &Estimate) -> SlotState {
 // The decision procedure.
 // ---------------------------------------------------------------------------
 
-/// **A Priming slot is demoted when the committed cost leaves no room for it,
-/// and the Live slot it is competing with is not touched.**
-///
-/// 12 ms is on air against a 16 ms budget, leaving 4 ms. The candidate costs
-/// 40 ms, which does not fit at any rate the governor is willing to call
-/// priming — 40/8 is still 5 ms — so it is parked. Nothing about slot 0
-/// changes, and that is asserted explicitly rather than left implied: the worst
-/// thing this component could do is take a slot off air mid-set.
+/// Verifies that a priming slot is demoted to allocated when committed cost exceeds headroom.
 #[test]
 fn a_priming_slot_is_demoted_when_the_committed_cost_leaves_no_room() {
     let report = Governor::new(16.0).decide(&[live(12.0), priming(40.0)]);
@@ -129,13 +100,7 @@ fn the_same_slot_primes_when_there_is_room() {
     assert_eq!(report.priming_ms, 40.0);
 }
 
-/// **There is nothing between the two.** 16 ms committed against a 20 ms budget
-/// leaves 4, and a 10 ms candidate is parked — where it used to be admitted at
-/// one frame in three and charged 10/3 against the budget.
-///
-/// Kept as a test of its own, and kept at these numbers, because this is the
-/// case ADR-0269 changed the answer to: a rate could spread a cost that fits in
-/// a frame across several frames, and there is no such spreading left to do.
+/// Verifies that a candidate exceeding headroom is parked rather than partially stepped (ADR-0269).
 #[test]
 fn a_candidate_that_does_not_fit_is_parked_rather_than_slowed() {
     let report = Governor::new(20.0).decide(&[live(16.0), priming(10.0)]);
@@ -147,11 +112,7 @@ fn a_candidate_that_does_not_fit_is_parked_rather_than_slowed() {
     assert_eq!(report.priming_ms, 0.0);
 }
 
-/// **Two priming slots share what is left, in index order**, and the second one
-/// is decided against the headroom the first already spent. Order is by index
-/// and nothing else, for the same reason the composite's sum order is: an
-/// answer that depended on which slot last had a build land on it would not
-/// reproduce.
+/// Verifies that priming slots are admitted in index order against remaining headroom.
 #[test]
 fn priming_slots_are_admitted_in_index_order_against_a_shrinking_headroom() {
     let report = Governor::new(20.0).decide(&[live(10.0), priming(8.0), priming(3.0)]);
@@ -207,14 +168,7 @@ fn live_slots_over_the_budget_are_warned_about_and_left_alone() {
     assert_eq!(report.decisions[2].reason, Reason::NoHeadroom);
 }
 
-/// **A closed-form Set is not primed, and the reason says why.**
-///
-/// It has no state to warm — any `t` is reachable directly — so priming it
-/// would spend budget to arrive where it was already going to be, and would
-/// spend it instead of a slot that needed it. Parked with a reason that is not
-/// a refusal: it can go Cold to Live whenever it is wanted.
-///
-/// The budget here is enormous, so "no headroom" cannot be the explanation.
+/// Verifies that closed-form sets are not primed and report NoPrimingNeeded.
 #[test]
 fn a_closed_form_slot_is_not_primed_however_much_budget_there_is() {
     let slot = SlotState {
@@ -234,11 +188,7 @@ fn a_closed_form_slot_is_not_primed_however_much_budget_there_is() {
     assert_eq!(report.priming_ms, 0.0);
 }
 
-/// **An unmeasured Set is not a free one.** Treating `None` as zero would make
-/// the least-known Set the cheapest thing on the deck and the first thing
-/// admitted, which inverts the whole point of budgeting.
-///
-/// The budget is again enormous, so the refusal cannot be about room.
+/// Verifies that unmeasured priming slots are refused rather than treated as zero cost.
 #[test]
 fn an_unmeasured_priming_slot_is_refused_rather_than_treated_as_free() {
     let slot = SlotState {
@@ -268,14 +218,7 @@ fn an_unmeasured_live_slot_is_reported_because_the_headroom_understates_it() {
     assert!(report.to_string().contains("+1 unmeasured"));
 }
 
-/// **An unmeasured Live slot creates no headroom, and priming is refused while
-/// there is one.**
-///
-/// The committed cost is not "4 ms" on this deck, it is "4 ms plus something
-/// nobody measured", and the difference is the whole budget: a 16 ms candidate
-/// admitted at full rate against it is spending room that may not exist. The
-/// rule the module already applies to a priming candidate — an unmeasured Set
-/// is unbudgetable rather than free — is the same rule one field over.
+/// Verifies that priming is refused while any active live slot remains unmeasured.
 #[test]
 fn priming_is_refused_while_a_live_slot_is_unmeasured() {
     let report = Governor::new(16.0).decide(&[live(4.0), unmeasured_live(), priming(1.0)]);
@@ -297,13 +240,7 @@ fn priming_is_refused_while_a_live_slot_is_unmeasured() {
     assert_eq!(measured.decisions[2].reason, Reason::Fits);
 }
 
-/// **"I cannot tell" is a different answer from "there is no room",** and the
-/// report says which.
-///
-/// They call for different actions — one waits for a slot to come off air, the
-/// other for a measurement — so a status line that could not tell them apart
-/// would send the operator after the wrong one. The `Display` line says so in
-/// words too, because that is what an operator actually reads.
+/// Verifies distinct reasons and display messages for unknown vs exhausted commitment.
 #[test]
 fn an_unknown_commitment_is_reported_differently_from_a_full_one() {
     let unknown = Governor::new(16.0).decide(&[unmeasured_live(), priming(1.0)]);
@@ -320,12 +257,7 @@ fn an_unknown_commitment_is_reported_differently_from_a_full_one() {
     );
 }
 
-/// **`headroom_ms` refuses to answer when the commitment is unknown.**
-///
-/// The defect this closes is a caller writing `if headroom > x`: on a deck with
-/// an unmeasured Live slot, `budget - committed` is a confident-looking number
-/// computed from an understated commitment, and nothing in it says so. An
-/// `Option` makes that caller handle it, at compile time.
+/// Verifies that headroom_ms returns None when commitment is unknown.
 #[test]
 fn headroom_is_not_a_number_when_the_committed_cost_is_unknown() {
     let unknown = Governor::new(16.0).decide(&[live(4.0), unmeasured_live()]);
@@ -346,12 +278,7 @@ fn headroom_is_not_a_number_when_the_committed_cost_is_unknown() {
     assert!(over.over_budget);
 }
 
-/// **An unmeasured Live slot does not hide an over-budget deck.**
-///
-/// `committed_ms` is a lower bound when something is unmeasured, and an unknown
-/// can only add to it — so measured-alone-over-budget is still over budget, and
-/// the one warning this module raises has to survive the state that suspends
-/// priming. Otherwise the deck that is worst off reports the least.
+/// Verifies that an over-budget condition is reported even if unmeasured live slots are present.
 #[test]
 fn over_budget_still_fires_when_a_live_slot_is_unmeasured() {
     let report = Governor::new(16.0).decide(&[live(20.0), unmeasured_live()]);
@@ -361,11 +288,7 @@ fn over_budget_still_fires_when_a_live_slot_is_unmeasured() {
     assert_eq!(report.headroom_ms(), None);
 }
 
-/// **The request survives the demotion, in the report.**
-///
-/// A park is "not now", and the only thing that distinguishes it from "no" is
-/// that the request is still there to be read. `Decision::is_parked` is the
-/// question a status line asks; `requested` is the fact under it.
+/// Verifies that a parked slot preserves its requested residency in the report.
 #[test]
 fn a_parked_slot_still_carries_the_request_that_was_refused() {
     let report = Governor::new(16.0).decide(&[live(15.0), priming(16.0)]);
@@ -410,17 +333,7 @@ fn an_allocated_slot_is_never_promoted_by_the_governor() {
     assert_eq!(report.decisions[0].reason, Reason::OffAir);
 }
 
-/// **The estimate is what a slot is budgeted at, and the measurement is not.**
-///
-/// The two numbers are of different things: `cost` is one draw at 1280x720 and
-/// the estimate is a fit at the size the deck is actually drawing. Here the
-/// deck draws into 640x360, where this material costs 3 ms, and the 12 ms
-/// measurement is a figure about a frame nobody is rendering.
-///
-/// **It changes an admission and not only a report.** Against 12 ms committed
-/// there are 4.7 ms of headroom and the 10 ms candidate is parked; against
-/// 3 ms there are 13.7 and it primes. That is the whole of what wiring
-/// `estimate` to the governor buys, in one assertion.
+/// Verifies that governor prioritizes estimates over measurements when evaluating admission.
 #[test]
 fn the_estimate_is_what_a_slot_is_budgeted_at_and_the_measurement_is_not() {
     let output = (640, 360);
@@ -459,14 +372,7 @@ fn the_estimate_is_what_a_slot_is_budgeted_at_and_the_measurement_is_not() {
     assert_eq!(unwired.estimated(), 0);
 }
 
-/// **An estimate that refuses leaves the measurement deciding, and says it
-/// refused.**
-///
-/// A refusal is not a number and not a zero — it is `P-0095`'s instrument
-/// declining to answer — so the slot goes back to exactly the arithmetic it
-/// would have had before any of this existed. What is new is that the refusal
-/// is on the record: a slot that fell back must not read like one nothing ever
-/// asked.
+/// Verifies that a refused estimate falls back to the measurement basis.
 #[test]
 fn an_estimate_that_refuses_leaves_the_measurement_deciding() {
     let refused = refused_estimate((1280, 720), 180);
@@ -501,14 +407,7 @@ fn an_estimate_that_refuses_leaves_the_measurement_deciding() {
     );
 }
 
-/// **An estimate that refuses is not a licence.**
-///
-/// With no measurement behind it there is no number at all, and the governor
-/// does what it has always done with a slot it cannot budget: parks a request
-/// rather than granting it, and refuses the whole deck's priming while such a
-/// slot is on air. An instrument declining to answer has not said the answer is
-/// small — which is the same rule as "Why an unmeasured Set is not a free one",
-/// reached from the second direction.
+/// Verifies that a refused estimate without measurement is treated as unbudgetable.
 #[test]
 fn an_estimate_that_refuses_is_not_a_licence_to_admit() {
     let refused = refused_estimate((1280, 720), 180);
@@ -539,21 +438,7 @@ fn an_estimate_that_refuses_is_not_a_licence_to_admit() {
     assert_eq!(deck.decisions[1].reason, Reason::CommittedUnknown);
 }
 
-/// **Where the floor came from and how strictly it was read travel with the
-/// number, and neither is spent twice.**
-///
-/// `P-0095` at one remove: an estimate taken with every primitive at least a
-/// pixel across at both rungs and one taken with some of them rounded up are
-/// not the same statement. `Estimate::floor_from` says the first half and
-/// `Estimate::floored` the second, and a governor that acted on `ms` alone
-/// would be handing a status line a number nobody can check.
-///
-/// **What the governor does with them is report them and nothing arithmetic.**
-/// `Fit::ms` already carries `Floored::correction` — ADR-0293 §4 applies it to
-/// the answer rather than to either term — so a governor applying it again
-/// would inflate a number that is already sound. The assertion below is that
-/// the budgeted figure is the corrected one **exactly**, neither the raw line
-/// nor the line corrected twice.
+/// Verifies that floor details and corrections are preserved and applied once without duplication.
 #[test]
 fn the_floor_and_how_strictly_it_was_read_travel_with_the_number() {
     let target = (1280, 720);
@@ -605,14 +490,7 @@ fn the_floor_and_how_strictly_it_was_read_travel_with_the_number() {
     assert!(line.contains("1 corrected for a floored rung"), "{line}");
 }
 
-/// **A floor nothing could establish is an answer, and it is named as one.**
-///
-/// ADR-0293 §6 reads an unknown floor as the greatest floor there is — a
-/// placement rather than a sentinel — so the estimate answers, and a held value
-/// that falsified a bound is the same case. Both are numbers the governor
-/// spends; both are numbers it says it spent, because an answer taken at the
-/// widest placement is not the same statement as one taken against a floor
-/// somebody proved.
+/// Verifies that an unknown or contradicted floor is tracked and reported accurately.
 #[test]
 fn an_unknown_floor_is_an_answer_the_report_still_names() {
     let target = (1280, 720);
@@ -640,15 +518,7 @@ fn an_unknown_floor_is_an_answer_the_report_still_names() {
     assert!(line.contains("1 on an unknown floor"), "{line}");
 }
 
-/// **A host clock reaches the report through an estimate as well as through a
-/// measurement.**
-///
-/// A host measurement brackets a submit-and-wait the GPU never spent, and the
-/// fit inherits it whole: the round trip does not move with the target, so it
-/// lands in the invariant term and is added to the answer once. A report whose
-/// numbers came from two rungs on a host clock is as biased as one whose came
-/// from a single draw on it, and `Report::host_clock` is the only caveat the
-/// `Display` line carries.
+/// Verifies that host clock bias on estimate rungs is propagated into the report caveat.
 #[test]
 fn a_host_clock_under_an_estimate_reaches_the_reports_one_caveat() {
     let target = (640, 360);
@@ -675,27 +545,7 @@ fn a_host_clock_under_an_estimate_reaches_the_reports_one_caveat() {
     assert!(report.to_string().contains("[host clock]"));
 }
 
-/// **A governed slot now has a number a band can be predicted from.**
-///
-/// The risk badge reads one number into five bands and there was no such number
-/// anywhere in this workspace: `estimate` refused every per-element Set, so the
-/// badge was omitted rather than drawn, and **the only mechanised statement
-/// about it is the console's assertion that it is absent** — which fails when
-/// somebody draws one and never when the number arrives. ADR-0293 made the
-/// estimate answer and ADR-0296 wired it here; this is the assertion from the
-/// other side, and **it fails when the number stops arriving**.
-///
-/// **This predicts a band, it does not draw one.** The five bands and their
-/// boundaries belong to the console and are specified in
-/// `docs/manual/console.html` under *What a deck preview cell shows, and when*.
-/// They are quoted here rather than shared because the engine does not read a
-/// number into a badge and this file is not where that table should end up
-/// living. What is asserted is the half that is the engine's: given the
-/// estimate, the band is determined.
-///
-/// The three slots carry measurements that would all land in the first band, so
-/// a governor that had gone back to budgeting on them would fail this rather
-/// than pass it more easily.
+/// Verifies that budgeted estimates provide valid numerical inputs for UI performance bands.
 #[test]
 fn a_governed_slot_now_has_a_number_a_band_can_be_predicted_from() {
     /// The console's scale: 4, 8, 12 and 16 ms, and **a value on a boundary

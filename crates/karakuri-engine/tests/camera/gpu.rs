@@ -3,16 +3,7 @@ use karakuri_engine::{Gpu, Set};
 
 use super::fixtures::*;
 
-/// **The camera reaches the frame.** Nothing about it is on the host any more —
-/// the state goes into a buffer, a pass derives the matrix, and a bind group
-/// carries it to the vertex stage — so a picture that moves when the camera does
-/// is the only proof that all three happened.
-///
-/// Dollying in rather than pitching up, because a pitch rotates about the point
-/// the camera looks at and this material is close to it: raising the eye by 1.5
-/// moves the material half a texel, which is a fact about the geometry and not
-/// about the camera. Distance scales the whole offset and cannot be cancelled by
-/// where the material happens to sit.
+/// Verifies that camera translation moves rendered geometry on the frame.
 #[test]
 fn moving_the_camera_moves_the_material() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -39,11 +30,7 @@ fn moving_the_camera_moves_the_material() {
     );
 }
 
-/// **And it is derived every frame**, not once at build.
-///
-/// An orbit that turns is the case a cached derivation gets wrong, and it gets
-/// it wrong silently: the first frame is correct, so a still fixture and a
-/// single-frame test both pass. This one lets the same Set run on.
+/// Verifies that camera transform matrices are recomputed each frame rather than cached.
 #[test]
 fn a_turning_camera_keeps_turning() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -74,15 +61,7 @@ fn a_turning_camera_keeps_turning() {
     );
 }
 
-/// **The aspect ratio reaches the projection**, and it is the piece most easily
-/// lost: it belongs to the canvas rather than to the camera, so it arrives at
-/// the derivation from its own buffer, written by its own call, and every test
-/// above passes with it stuck at 1.
-///
-/// Same width, twice the height. The field of view is vertical, so a taller
-/// frame at a fixed width is a *narrower* one horizontally — the same world
-/// spreads over twice as many texels across, and the material's distance from
-/// the centre column doubles.
+/// Verifies that canvas aspect ratio propagates into the camera projection matrix.
 #[test]
 fn the_canvas_shape_reaches_the_projection() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -139,12 +118,7 @@ fn a_cameras_parameters_are_addressed_as_a_nodes() {
     const H: u32 = 96;
     let mut set = with_camera(&gpu, Some(&sweep(5.0)), GAIN_DOT, W, H);
 
-    // **A procedure's map and the built-in's, side by side.** `L3:0` is the
-    // `sweep` this Set names and `L3:1` is the orbit after it, which
-    // declares the three placement numbers the engine states for it
-    // (ADR-0318) — so this asserts two things at once: each camera's params
-    // are reported at that camera's address, and the built-in's are its own
-    // rather than a procedure's.
+    // Verify procedure parameter map and built-in placement parameter map isolation.
     let mut declared: Vec<(u32, &str, f32)> = set
         .params()
         .filter(|(layer, ..)| *layer == karakuri_ir::Kind::L3)
@@ -174,17 +148,7 @@ fn a_cameras_parameters_are_addressed_as_a_nodes() {
     );
 }
 
-/// **A camera between the deformations and the renderers does not shift what a
-/// renderer reads.** This is a regression: the L4 uniform pass spelled out its
-/// own slot arithmetic instead of asking [`Set::slot_of`], so inserting an L3
-/// gave every renderer the node before it — and `soft_points` drew a black
-/// frame, because its `exposure` resolved against the camera's parameter map
-/// and came back missing.
-///
-/// The reading is a brightness rather than a position, on purpose: a shifted map
-/// leaves a declared param with no value, which the uniform path writes as
-/// `0.0`. A renderer whose colour *is* its param then goes black — which is
-/// exactly what happened, and is the one symptom a picture can show.
+/// Verifies that inserting an L3 camera does not shift uniform binding slots for downstream L4 renderers.
 #[test]
 fn a_camera_does_not_shift_the_parameters_a_renderer_reads() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -214,12 +178,7 @@ fn a_camera_does_not_shift_the_parameters_a_renderer_reads() {
     );
 }
 
-/// **The built-in orbit is not a second producer of a procedure's camera.** A
-/// Set whose files declare an L3 still has the `camera` field on it — a
-/// `camera` record and a Set file both set one — and it writes the orbit's own
-/// node, which is a different edge: this renderer declares no slot, so it draws
-/// from `L3:0`, which is the procedure. Two producers writing *one* edge would
-/// resolve by whichever ran last, which is what having a node apiece prevents.
+/// Verifies that built-in orbit assignments do not overwrite an active L3 camera procedure.
 #[test]
 fn an_orbit_assigned_beside_a_camera_procedure_reaches_nothing() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -245,20 +204,7 @@ fn an_orbit_assigned_beside_a_camera_procedure_reaches_nothing() {
     );
 }
 
-/// **An address past a layer's last node reaches nothing**, rather than the
-/// first node of the layer after it.
-///
-/// The parameter maps are laid end to end in node order, so `slot_of(layer) +
-/// index` is a position and says nothing about whose it is. A Set with no
-/// camera makes that concrete: with nothing between the deformations and the
-/// renderers, `L3` and `L4` start at the same slot, and `--param
-/// L3:0:exposure=0.0` reached renderer 0 and blacked out the frame — silently,
-/// because the caller only reports an address that reached *zero* nodes.
-///
-/// Two addresses, and the second is the same defect without an L3 in it:
-/// `L4:1:` on a Set of one renderer. That one is safe today only because the
-/// renderers are last and their range runs to the end of the list, which is a
-/// property of the ordering rather than of the check.
+/// Verifies that addressing past a layer's terminal node returns an error without spilling into adjacent layers.
 #[test]
 fn an_address_past_a_layers_last_node_reaches_nothing() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -293,28 +239,7 @@ fn an_address_past_a_layers_last_node_reaches_nothing() {
     assert_eq!(set.param("gain"), Some(0.25));
 }
 
-/// **A vector param is driven by component, and used to panic the render
-/// thread for being declared at all.**
-///
-/// Two defects, one after the other, and this is the test that has watched
-/// both. First: every node's uniform path wrote *every* declared name as an
-/// `f32`, and the packer panics on a field its layout says is a
-/// `vec3<f32>` — so a `.kir` that parses, checks and costs took the render
-/// thread down on the first `prepare`, and not in the swap worker, so not
-/// caught as `SetError::Panicked`. That was closed by writing the field as
-/// a vector, with zeroes, because nothing could state the value.
-///
-/// Second: the zeroes. `Param::default_scalar` folds a scalar, so a vector
-/// never entered a node's value map and a declared `vec3(0.5, 0.5, 0.5)`
-/// reached the shader as `vec3(0.0)`. The map holds one `f32` per component
-/// now — `centre.x`, `centre.y`, `centre.z`
-/// (`docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`).
-///
-/// The bare name still holds nothing, and that is the part that did not
-/// change: it names three numbers and `Set::param` answers with one.
-///
-/// Building and preparing is still most of the test: the panic was
-/// unconditional.
+/// Verifies that vector parameters are driven by individual component keys without crashing uniform packing.
 #[test]
 fn a_vector_param_is_driven_by_component_rather_than_packed_as_a_scalar() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -406,12 +331,7 @@ fn two_renderers_draw_from_the_cameras_their_edges_name() {
     );
 }
 
-/// **A renderer that declares no slot reads the Set's camera**, which is the
-/// first one — and that is what `camera`, `eye` and `ray` have always meant.
-///
-/// Every renderer in the library is this one, so it is the case that must not
-/// have moved: the slot is how a renderer says *which*, and saying nothing has
-/// to keep meaning what it meant.
+/// Verifies that renderers declaring no explicit camera slot default to binding the primary camera (index 0).
 #[test]
 fn a_renderer_with_no_slot_reads_the_sets_camera() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -446,12 +366,7 @@ fn a_renderer_with_no_slot_reads_the_sets_camera() {
     );
 }
 
-/// **The built-in camera is a node, and an edge can name it.**
-///
-/// It was a field on the `Set` and reachable from nowhere: a Set with no L3 had
-/// no L3 node at all, so a renderer could draw from the orbit only by saying
-/// nothing. Now it is `orbit` — a name like any other — and the proof that the
-/// edge reached the *producer* is that moving the orbit moves the material.
+/// Verifies that the built-in orbit camera acts as a node addressable by wiring edges.
 #[test]
 fn the_built_in_camera_is_a_node_an_edge_can_name() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -486,15 +401,7 @@ fn the_built_in_camera_is_a_node_an_edge_can_name() {
     );
 }
 
-/// **The built-in camera is addressable as `L3:0`, and `L4:0` still reaches the
-/// first renderer.**
-///
-/// This is the off-by-one this commit could have introduced. `slot_of` computes
-/// a layer's origin by summing the layers before it, so giving the camera layer
-/// a node in a Set that had none shifts every renderer's parameter map by one —
-/// unless [`Set::params`] grows an entry at the same position, which is a
-/// different file's job. Get it wrong and `--param L4:0:gain` writes the
-/// camera's map and the renderer keeps its default, silently.
+/// Verifies that the built-in camera occupies L3:0 while preserving L4:0 alignment for the primary renderer.
 #[test]
 fn the_built_in_camera_takes_a_slot_without_moving_the_renderers() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -505,12 +412,7 @@ fn the_built_in_camera_takes_a_slot_without_moving_the_renderers() {
         Some((karakuri_ir::Kind::L3, 0)),
         "a Set with no camera procedure holds the built-in as its L3 node"
     );
-    // The renderer is still the first node of L4, and its params are still
-    // reported as its own — beside the camera's three, which are reported
-    // at `L3:0` and not at the renderer's address (ADR-0318). **That is
-    // what makes this test sharper rather than weaker**: the camera's map
-    // is no longer empty, so an origin off by one now lands the orbit's
-    // `radius` on the renderer instead of landing nothing there.
+    // Verify L4:0 renderer parameter reporting remains distinct from L3:0 camera parameters (ADR-0318).
     let mut declared: Vec<(karakuri_ir::Kind, u32, &str)> = set
         .params()
         .map(|(layer, index, name, _)| (layer, index, name))
@@ -555,21 +457,9 @@ fn the_built_in_camera_takes_a_slot_without_moving_the_renderers() {
     );
 }
 
-// ----- The built-in camera's three placement numbers ------------------
-//
-// `docs/adr/0318-the-built-in-cameras-three-placement-numbers-are-parameter-rows.md`:
-// the orbit's `radius`, `speed` and `height` are parameters of the camera
-// node, so every route a parameter has reaches them and no route was
-// invented for them. These four are the four claims that decision makes,
-// and each was watched to fail against the tree that did not carry it.
+// Built-in camera placement parameters (radius, speed, height) as parameter rows (ADR-0318).
 
-/// **The built-in camera declares three parameters**, at the values the
-/// Set was aimed with and over the ranges the engine states.
-///
-/// The Set here holds no camera procedure, so `L3:0` is the built-in — and
-/// the values are `pinned()`'s rather than `Orbit::default()`'s, which is
-/// the second claim in one: `Set::aim_camera` states the three into the
-/// node's map and not only into the field beside it.
+/// Verifies that the built-in camera exposes radius, speed, and height parameter rows.
 #[test]
 fn the_built_in_camera_declares_its_three_placement_numbers() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -588,13 +478,7 @@ fn the_built_in_camera_declares_its_three_placement_numbers() {
     );
 }
 
-/// **They are published, addressed, in the order the orbit states them**,
-/// and over the declared ranges — which is what a fader draws and what a
-/// MIDI control is learned against.
-///
-/// **Addressed and not bare**, which is the part with a picture behind it:
-/// seven of this repository's example procedures declare a `radius`, so a
-/// bare control would weld the camera to a geometry.
+/// Verifies that built-in camera parameters are published in order with explicit layer addresses and ranges.
 #[test]
 fn the_cameras_three_publish_addressed_and_in_order() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -626,14 +510,7 @@ fn the_cameras_three_publish_addressed_and_in_order() {
     );
 }
 
-/// **A write to `L3:0:radius` reaches the frame**, which is the whole
-/// claim: a row that emits a write nothing draws is a row that does
-/// nothing.
-///
-/// The same measurement `a_camera_procedure_produces_the_view` makes, with
-/// the built-in as the producer instead of an L3 — so it is the plumbing
-/// from the parameter map to the state buffer that is under test and
-/// nothing else.
+/// Verifies that parameter writes to L3:0:radius update the camera transform and move rendered output.
 #[test]
 fn a_write_to_the_cameras_radius_reaches_the_frame() {
     let gpu = Gpu::headless().expect("no GPU available");
