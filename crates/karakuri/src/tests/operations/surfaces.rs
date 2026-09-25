@@ -320,8 +320,9 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
             }
         }
     }
-    assert!(
-        fresh.len() == 1 && fresh[0].starts_with("app/handler/mod.rs:"),
+    assert_eq!(
+        fresh,
+        vec!["app/handler/mod.rs:80".to_string()],
         "a second wgpu::Instance would hold none of the first one's adapters: {fresh:?}"
     );
     assert!(!surfaces.is_empty(), "no surface is made anywhere");

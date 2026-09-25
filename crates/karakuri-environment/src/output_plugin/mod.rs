@@ -317,6 +317,13 @@ impl OutputPlugin {
             host_dropped: self.host_dropped.load(Ordering::Acquire),
         }
     }
+
+    #[cfg(target_os = "windows")]
+    /// Returns the raw process handle of the child plugin process.
+    pub fn child_raw_handle(&self) -> std::os::windows::io::RawHandle {
+        use std::os::windows::io::AsRawHandle;
+        self.child.as_raw_handle()
+    }
 }
 
 impl Drop for OutputPlugin {
