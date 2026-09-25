@@ -1,59 +1,7 @@
-//! Writing a session stream, and replaying one.
+//! Session stream recording and replay.
 //!
-//! A Set file says what one Set's material *is*. A session stream is the
-//! timeline: a **head** saying what the whole deck held, then `tick` records and
-//! the edits between them, so every edit lands at an exact frame position
-//! because it sits between two known ticks.
-//!
-//! ## The head
-//!
-//! Everything before the first `tick` that is not a frame's own — see [`split`]
-//! and [`head`], and `docs/ir-spec.md` for the specification. One Set file's
-//! records for slot 0, one `procedure` record per node of every other slot, and
-//! then the deck: the canvas, every slot's gain, opacity, blend, residency, mask
-//! and transport, the look, the level at the master chain's entry and the chain
-//! itself. A replay builds a deck as wide as the head names and puts all of it
-//! back before the first frame renders.
-//!
-//! With this, `tick` finally has a writer and the record stream is the whole
-//! path — every control ending at the same record
-//! (`docs/principles/0090-a-surface-offers-it-never-decides.md`) stops being a
-//! target. What a session reproduces is the *performance*: the same material,
-//! the same frames, the same fader moves at the same instants, and the same
-//! audio, without a microphone.
-//!
-//! ## The render thread writes nothing
-//!
-//! `Line::new` serialises eagerly and a `String` is an allocation, so a frame
-//! that produced a line would be allocating on the render thread, which nothing
-//! does — and a rule this instrument has already had to repair once for a
-//! record it built per frame.
-//!
-//! So the frame path only ever moves a `Record` into a `Vec` that already has
-//! room, and a writer thread does the serialising and the I/O. An `audio`
-//! record carries a `Vec` of its own, so it is *swapped* for an empty shell
-//! rather than copied — see [`Recorder::push_audio`] — and the writer returns
-//! each band buffer after serialising it so the shells circulate too. The batch
-//! is handed over whole and an empty one comes back on a return channel, so
-//! there is one allocation per batch buffer for the life of the run and none
-//! after the buffers exist.
-//!
-//! What happens when the writer falls behind is the interesting part. The
-//! channel is bounded. A frame that finds it full does not block, does not
-//! grow, and does not silently skip: it counts the batch as dropped and says so
-//! at the end. A session with a hole in it is not a session, and the honest
-//! response to a disk that cannot keep up is to say which frames are missing
-//! rather than to stall the show or to hand back a file that looks complete.
-//!
-//! ## Replay drives the same engine
-//!
-//! Nothing about the engine changes. A replay reads `tick` for the step count
-//! that a live run measures from the clock, reads `audio` and `tempo` instead
-//! of opening a device — so a binding to `energy` replays at what a microphone
-//! heard rather than at what the bus invents — and applies the mix and
-//! transport records where they sit. That is the whole of it — the arrangement
-//! `audio.rs` and `mix.rs`, both beside this file now, were built for, with a
-//! file on the other end instead of a device and a keyboard.
+//! Captures timeline events (ticks, audio, mix controls, Set heads) with non-blocking
+//! batching on the render thread and asynchronous disk serialization.
 
 use std::io::Write;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
@@ -127,14 +75,7 @@ impl Recorder {
         }
 
         let (to_writer, from_frames) = std::sync::mpsc::sync_channel::<Vec<Record>>(QUEUE);
-        // Shells go round the same way batches do, and there have to be enough
-        // to cover **everything in flight**, not everything in a frame. A shell
-        // does not come back until the batch holding it has been written, and a
-        // batch is not handed over until it is full — so in the worst case,
-        // every record being a measurement, the pool has to carry the batch
-        // being filled plus the ones queued behind it. Three was not enough by
-        // two orders of magnitude and the frame path spent the run without one:
-        // the batch never filled, because almost nothing was going into it.
+        // Shell pool covers worst-case active batch plus queue capacity.
         const SHELLS: usize = BATCH * (QUEUE + 1);
         let (return_shells, audio_shells) = std::sync::mpsc::sync_channel::<Record>(SHELLS);
         for _ in 0..SHELLS {
@@ -220,17 +161,9 @@ impl Recorder {
         self.batch.push(record);
     }
 
-    /// Put an audio record in the stream by swapping, never by cloning.
+    /// Records an audio measurement by swapping buffers to avoid allocation.
     ///
-    /// The caller keeps a record it reuses every frame; this takes that one and
-    /// leaves an empty shell in its place, so the band buffer moves rather than
-    /// being copied. Allocates nothing, and is the only way `Record::Audio` can
-    /// reach a session stream from a frame at all.
-    ///
-    /// With no shell free the frame's audio is not recorded and is counted. A
-    /// stream missing a measurement replays with that frame's bindings at the
-    /// confidence the bus invents, which is wrong quietly — so the count is
-    /// reported at the end rather than left to be inferred.
+    /// Increments `dropped_audio` if no preallocated shell is currently available.
     pub fn push_audio(&mut self, record: &mut Record) {
         match self.audio_shells.try_recv() {
             Ok(shell) => {
@@ -241,12 +174,9 @@ impl Recorder {
         }
     }
 
-    /// Hand this batch to the writer and take an empty one back.
+    /// Dispatches the current batch to the writer thread and acquires a spare buffer.
     ///
-    /// Both halves are non-blocking. A writer that cannot take the batch loses it,
-    /// counted; a run with no spare to take reuses this one after clearing it,
-    /// which is the same loss seen from the other side. Neither stalls a frame, and
-    /// both are reported at the end.
+    /// Increments `dropped_batches` if the writer channel is full or disconnected.
     fn hand_off(&mut self) {
         let spare = self.spares.try_recv().ok();
         let batch = match spare {
@@ -316,20 +246,9 @@ impl Drop for Recorder {
 /// A session stream, split into what it says about the material and what it
 /// says about the performance.
 pub struct Session {
-    /// The head's material: one Set file's records, in order, so the Set the head
-    /// slot held can be built the same way `--load-set` builds it.
-    ///
-    /// One Set file and not one per slot. The other slots' material is named in
-    /// [`Session::opening`], by the `procedure` records that already name it
-    /// mid-stream — see [`head`].
+    /// Initial Set state records for the primary slot.
     pub head: Vec<Line>,
-    /// The deck's state at frame 0: every record before the first `tick` that is
-    /// not a Set file's and not a frame's own measurement.
-    ///
-    /// `procedure` records naming what every slot beyond the head's held, and then
-    /// the mix — `canvas`, `look`, `master_out`, `master_chain`, and per slot
-    /// `gain`, `opacity`, `blend`, `residency`, `mask` and `transport`. Applied
-    /// before the first frame renders, which is where they were true.
+    /// Deck configuration and state records applied before frame 0.
     pub opening: Vec<Record>,
     /// One entry per `tick`: what to apply *before* that frame, and how many steps
     /// the frame advances.
@@ -340,30 +259,11 @@ pub struct Session {
 }
 
 impl Session {
-    /// What the performance rendered at, and how many *later* `canvas` records the
-    /// stream also holds.
-    ///
-    /// Read before the deck is built rather than applied as the replay reaches it,
-    /// because it decides the size of everything a replay allocates: the deck's
-    /// slot targets, the HDR target, the PNG target and the readback buffer are all
-    /// made once, and honouring this after they exist would mean remaking all four
-    /// mid-run — the allocation the frame path forbids, and the reason
-    /// [`Record::Canvas`] is fixed for a run in the first place.
-    ///
-    /// The count is returned rather than swallowed. A stream with a second one was
-    /// not written by this program, and a replay that quietly obeyed the first
-    /// would look exactly like one that had obeyed all of them.
+    /// Returns the initial canvas dimensions and the count of any subsequent duplicate declarations.
     pub fn canvas(&self) -> (Option<(u32, u32)>, usize) {
         let mut found = None;
         let mut extra = 0;
-        // **`opening` and `trailing` as well.** The canvas is written into the
-        // head by both writers, so `opening` is where a session written by this
-        // program keeps it; `trailing` is where a session that never drew a
-        // frame puts everything, because no tick means no `Frame` to hold it,
-        // and a run closed before the first frame — or one whose every frame
-        // was abandoned — still recorded the canvas it was going to use.
-        // Scanning the frames alone reported "no `canvas` record" about a
-        // stream that plainly has one.
+        // Check opening, per-frame, and trailing records to discover canvas dimensions.
         for record in self
             .opening
             .iter()
@@ -390,21 +290,10 @@ pub struct Frame {
     pub steps: u8,
 }
 
-/// Split a session stream into its head and its frames.
+/// Partitions a session NDJSON stream into head Set records, opening mix records, and frames.
 ///
-/// **The head is everything before the first `tick` that is not a frame's own.**
-/// A record after the first tick is an edit made during the performance, and
-/// folding it into the head would apply it before the run started; a
-/// [`Record::is_measurement`] record before the first tick is the first frame's
-/// `audio` or `tempo` and belongs to that frame, because a frame writes its
-/// edits, then what it heard, then the tick that closes it.
-///
-/// The head reaches the caller as two lists rather than one, because it has two
-/// readers and they read two vocabularies. [`Record::is_set_state`] says which:
-/// a Set file's records go to [`Session::head`], where `setfile::from_lines`
-/// builds a Set out of them, and the deck's own records go to
-/// [`Session::opening`], where a replay applies them to the deck it has just
-/// built. The file has one rule and the struct has two fields.
+/// Records prior to the first `Tick` are split into Set definitions and opening deck states.
+/// Subsequent records are grouped into per-frame slices demarcated by `Tick`.
 pub fn split(lines: Vec<Line>) -> Session {
     let mut head = Vec::new();
     let mut opening = Vec::new();
@@ -435,19 +324,10 @@ pub fn split(lines: Vec<Line>) -> Session {
     }
 }
 
-/// What one deck slot held when a recording began.
-///
-/// The nodes it was playing, by the addresses a [`Record::Procedure`] names, and
-/// the mix controls the deck holds for it. Plain data with nothing borrowed, so
-/// a surface can read it on a frame and write it on a thread.
+/// Initial state and mix parameters of a single deck slot at recording start.
 #[derive(Debug, Clone)]
 pub struct SlotHeld {
-    /// Every node of the Set in the slot: which layer, which index on that layer,
-    /// and the store address its source is at.
-    ///
-    /// The address is the promise. A `procedure` record names bytes the store must
-    /// already hold, so a writer puts every one of these before it writes a head —
-    /// `setfile::Sources::into_nodes` on one side, `Placed::put` on the other.
+    /// Set procedures running in this slot as `(layer, index, source_hash)`.
     pub nodes: Vec<(Layer, u32, Hash)>,
     pub gain: f32,
     pub opacity: f32,
@@ -478,41 +358,16 @@ pub struct Held {
     pub slots: Vec<SlotHeld>,
 }
 
-/// The head of a session stream: what the deck held at frame 0, said in the
-/// records that already say it.
-///
-/// `material` is one Set file's records, read back out of the store — the Set in
-/// the head slot, with its params, its bindings, its seeds and its edges. Every
-/// other slot is named by `procedure` records, one per node, which is the record
-/// a swap already writes and a replay already obeys; those slots are built
-/// against this file's parameter table rather than against a second copy of it.
-///
-/// Then the deck, as ordinary session records: the canvas, every slot's gain,
-/// opacity, blend, residency, mask and transport, the look, the level at the
-/// chain's entry and the chain itself.
-///
-/// **Written always and never only where it differs from a fresh deck.** A
-/// replay that had to know what a deck starts at would be a second derivation of
-/// the deck's defaults, kept in step with the engine's by nothing; a head that
-/// says all of it is a head a reader can obey without knowing anything.
-///
-/// The one derivation of the sentence *what did this deck hold*. Both writers —
-/// `karakuri-cli`'s `--record-session` and the console's `rec` pill — call this
-/// one function, so the two cannot spell a head two ways.
+/// Constructs the session head stream combining initial Set records with deck state records.
 pub fn head(material: Vec<Line>, held: &Held) -> Vec<Line> {
     let mut lines = material;
-    // **The canvas first among the deck's records**, because a replay reads it
-    // before it allocates anything — see [`Session::canvas`].
+    // Canvas dimensions are written first among the deck records.
     lines.push(Line::new(Record::Canvas {
         width: held.canvas.0,
         height: held.canvas.1,
     }));
     for (slot, state) in held.slots.iter().enumerate() {
-        // **Material before mix, and the head slot's material is the file
-        // above.** A `procedure` record for slot 0 would restate what the Set
-        // file already says, and a replay obeying it would rebuild that slot
-        // from addresses alone — without the params, bindings and seeds only
-        // the file carries.
+        // Slot 0 is defined by the preceding Set material; other slots emit procedure records.
         if slot > 0 {
             for (layer, index, hash) in &state.nodes {
                 lines.push(Line::new(Record::Procedure {

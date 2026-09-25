@@ -1,12 +1,6 @@
 use super::common::*;
 
-/// A knob turn goes operation → record → the writes the deck takes, which is
-/// the whole road this module exists to be the middle of.
-///
-/// Through `from_operation` and a real serialisation, on the terms every case
-/// in this file uses: the claim is that what a surface asked for survives the
-/// wire and comes back as writes at the same address, not that two structs in
-/// this crate agree.
+/// Verifies that WriteParam operations decode into proper ParamWrites.
 #[test]
 fn a_ride_decodes_into_the_write_a_deck_takes() {
     let record = from_operation(karakuri_operation::Operation::WriteParam {
@@ -36,9 +30,7 @@ fn a_ride_decodes_into_the_write_a_deck_takes() {
         "through {line}"
     );
 
-    // The wildcard, which has to stay one: a bare key that came back
-    // addressed would move one node where the operator moved every node
-    // declaring the name.
+    // Wildcard target moves every node declaring the key.
     let record = from_operation(karakuri_operation::Operation::WriteParam {
         deck: 0,
         param: karakuri_operation::ParamAt {
@@ -56,15 +48,7 @@ fn a_ride_decodes_into_the_write_a_deck_takes() {
     );
 }
 
-/// An attachment and the taking of it back go operation → record → what the
-/// deck does, which is the road this module is the middle of and the one a
-/// replay travels.
-///
-/// Three things: the binding comes out of the record with the source, the shape
-/// and the range the operation named; the take-back comes out with no binding,
-/// which is what says the two are one record; and the decoder's own diagnostics
-/// are reached, because there is one decoder for a live attachment and a Set
-/// file's `bind` rather than two.
+/// Verifies that signal attachments and take-backs decode into appropriate bindings.
 #[test]
 fn an_attachment_decodes_into_the_binding_a_deck_takes_and_a_take_back_into_none() {
     let record = from_operation(karakuri_operation::Operation::AttachSignal {
@@ -202,13 +186,7 @@ fn an_authority_decodes_into_the_level_it_names() {
     );
 }
 
-/// A wide value is one record and three writes, under the component keys
-/// ADR-0268 made — and the expansion is here rather than at the applier, so the
-/// two binaries cannot come to disagree about what `{"value":[…]}` means.
-///
-/// `karakuri_ir::component_key` is asserted through rather than around:
-/// spelling `"glow.x"` here and in the decoder would be two spellings of one
-/// address, which is what that function exists to stop.
+/// Verifies that vector writes expand into writes per component key (`key.x`, `key.y`, etc.).
 #[test]
 fn a_wide_ride_becomes_one_write_per_component() {
     let record = from_operation(karakuri_operation::Operation::WriteParam {
@@ -348,13 +326,7 @@ fn a_record_this_build_cannot_obey_says_so_rather_than_vanishing() {
     assert!(message.contains("over"), "{message}");
 }
 
-/// A slot the deck does not have is caught in the decode, where there is
-/// something to say about it, rather than four frames later in an index.
-///
-/// In the words every other surface says it in, which is the assertion that had
-/// to be an `assert_eq!`: this module spelled the refusal itself, as `slot 4:
-/// this deck holds slots 0-3` against the keys' `no slot 4:`, and
-/// `contains("slots 0-3")` passed under both. See [`crate::no_such_slot`].
+/// Verifies that referencing an out-of-range slot is refused with no_such_slot.
 #[test]
 fn a_slot_past_the_deck_is_refused_with_the_range_it_missed() {
     let message = change(
@@ -402,11 +374,7 @@ fn a_record_that_is_not_the_mixs_is_left_alone() {
     assert_eq!(change(&Record::Tick { steps: 1 }, 4), Ok(None));
 }
 
-/// The shipped three resolve with no store at all, so a run that has saved
-/// nothing can put a preset in its chain.
-///
-/// Their addresses are the hash of their bytes, so this also says that
-/// `shipped::address` and `karakuri_store::hash::Hash` agree.
+/// Verifies that shipped presets resolve without requiring a store.
 #[test]
 fn a_shipped_procedure_resolves_without_a_store() {
     for (name, source) in shipped::ALL {
@@ -423,12 +391,7 @@ fn a_shipped_procedure_resolves_without_a_store() {
     }
 }
 
-/// Anything else is the store's to answer, and the same one function answers
-/// it.
-///
-/// A procedure nobody shipped is put in a store exactly as a session's
-/// `procedure` records put one there, and the address the store hands back is
-/// the address a chain slot names.
+/// Verifies that stored procedures resolve through the run's Store.
 #[test]
 fn a_stored_procedure_resolves_through_the_runs_store() {
     const OWN: &str = "proc dimmer {\n  kind L5\n\n  frame {\n    color = texel(src);\n  }\n}\n";
@@ -456,11 +419,7 @@ fn a_stored_procedure_resolves_through_the_runs_store() {
     );
 }
 
-/// One refusal, and it names the address and the slot.
-///
-/// It is decided before anything is compiled, so it is the same sentence on the
-/// frame path and at replay. The chain that resolves whole is the acceptance
-/// beside it.
+/// Verifies that resolving a chain with an unknown address refuses with the slot and address.
 #[test]
 fn a_chain_naming_an_address_nothing_holds_is_refused_with_the_address() {
     let root = tempfile::tempdir().expect("a temporary store root");

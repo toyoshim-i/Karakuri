@@ -2,19 +2,11 @@
 
 use super::common::*;
 
-/// Refused rather than written into a file that cannot be read back.
-///
-/// What [`save`] refuses is no longer a layer — it has a slot for every one —
-/// but the two shapes that are not a Set, and the two a projection keyed by
-/// address cannot fold: a repeat, and a gap.
+/// Verifies that invalid Set structures (missing layers, duplicate addresses, or gaps) are rejected on save.
 #[test]
 fn what_the_file_cannot_hold_is_refused_rather_than_written() {
     let (_dir, store, l1, l4) = fixture();
-    // **Stored once and addressed many times**, which is exactly what a
-    // content address buys: the two fixtures go in here, and every case
-    // below is a different arrangement of the same two hashes. This used to
-    // leak both paths to `'static` so that a borrowing `Node` could outlive
-    // them; a `Hash` is `Copy` and there is nothing left to outlive.
+    // Fixtures stored once and referenced by content address across test cases.
     let (l1, l4) = (stored(&store, &l1), stored(&store, &l4));
     let node = |hash: Hash, layer, index| Node {
         hash,
@@ -80,17 +72,7 @@ fn what_the_file_cannot_hold_is_refused_rather_than_written() {
     }
 }
 
-/// A gap in a layer is refused on the way in too, and on every layer: index 2
-/// with no index 1 says a chain with a hole in it, and closing it up would
-/// silently change what deforms what — or, on L4, draw order. The built-in
-/// camera's three are written once, and the `camera` record is where.
-///
-/// They are that node's parameters since ADR-0318, so `Set::params` reports
-/// them and a writer that took the list whole would put `radius` in the file
-/// twice — once as a `param` at `L3:0` and once on the `camera` line. Two
-/// spellings of one fact leave a reader asking which a writer meant by choosing
-/// the other, so the `param` run leaves that node to the record that describes
-/// it, exactly as the `slot` run already does.
+/// Verifies that built-in camera parameters are serialized in the `camera` record rather than redundant `param` lines.
 #[test]
 fn the_built_in_cameras_three_are_written_as_the_camera_record_and_not_as_params() {
     let (_dir, store, l1, l4) = fixture();
@@ -142,12 +124,7 @@ fn the_built_in_cameras_three_are_written_as_the_camera_record_and_not_as_params
     );
 }
 
-/// A file written before `height` reads as the default it meant, and that
-/// default is the engine's own.
-///
-/// `karakuri-store` restates `Orbit::default().height` because it depends on
-/// nothing and cannot ask for it; this is the test that holds the two together,
-/// here because this crate is where a Set file meets an `Orbit`.
+/// Verifies that legacy camera records omitting `height` receive the engine's default camera height.
 #[test]
 fn a_camera_line_without_a_height_reads_as_the_engines_default() {
     let (_dir, store, l1, l4) = fixture();
@@ -203,11 +180,7 @@ fn a_gap_in_a_chain_is_refused_rather_than_closed_up() {
     );
 }
 
-/// A second camera is a second camera. The format could address one all along
-/// and this loader used to read the first and report the rest as skipped — a
-/// refusal about the plumbing, which took a `Vec` here and in the engine to
-/// lift. Which renderer draws from which is an `edge`, so there is nothing here
-/// to arbitrate.
+/// Verifies that multiple camera nodes in layer L3 are preserved during load.
 #[test]
 fn a_second_camera_loads_beside_the_first() {
     let (dir, store, l1, l4) = fixture();
@@ -248,15 +221,7 @@ fn a_second_camera_loads_beside_the_first() {
     );
 }
 
-/// A `camera` record with no index is node 0's, which is what every file ever
-/// written means by it: a Set held one camera, so there was one node for the
-/// record to describe, and a file that names no camera procedure still has the
-/// built-in at `L3:0`.
-///
-/// The index exists because the L3 layer holds several now. The built-in orbit
-/// is the node after the procedures, and the only one a `camera` record can be
-/// about — a camera that is a procedure writes its own six numbers every frame
-/// — so an index naming one of those is said rather than applied to it.
+/// Verifies that an unindexed `camera` record defaults to describing node index 0.
 #[test]
 fn a_camera_record_with_no_index_is_node_zeros() {
     let (_dir, store, l1, l4) = fixture();

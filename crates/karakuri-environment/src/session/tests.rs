@@ -80,12 +80,7 @@ fn a_frames_own_records_land_in_that_frame_and_not_the_next() {
     }
 }
 
-/// The canvas is read out of the stream, not out of the head.
-///
-/// It is session state, so `split` puts it in the *first frame's* edits rather
-/// than in the head — and a replay needs it strictly earlier than that, before
-/// it allocates anything. The two facts together are why [`Session::canvas`]
-/// exists instead of a field on the head.
+/// Verifies that canvas dimensions are recovered via `Session::canvas` even when stored as frame edits.
 #[test]
 fn the_canvas_is_found_before_the_first_frame_renders() {
     let session = split(vec![
@@ -105,12 +100,7 @@ fn the_canvas_is_found_before_the_first_frame_renders() {
     assert_eq!(session.canvas(), (Some((1920, 1080)), 0));
 }
 
-/// A session that never drew a frame still carries its canvas.
-///
-/// The record is written before the first tick, so with no tick at all there is
-/// no `Frame` to hold it and it lands in `trailing` — the one place a scan over
-/// frames alone cannot see. A run closed during startup produces exactly this
-/// stream.
+/// Verifies that canvas dimensions are captured even for sessions that terminate without rendering a frame.
 #[test]
 fn a_session_with_no_tick_still_carries_its_canvas() {
     let session = split(vec![
@@ -124,24 +114,14 @@ fn a_session_with_no_tick_still_carries_its_canvas() {
     assert_eq!(session.canvas(), (Some((1920, 1080)), 0));
 }
 
-/// A stream with no canvas says so rather than answering with a size.
-///
-/// `None` and "the default" have to stay distinguishable here: the caller
-/// prints a line saying the size is a guess, and a `Session::canvas` that
-/// helpfully returned 1920x1080 would make that line unwritable.
+/// Verifies that a session without canvas records returns `None` rather than falling back to default dimensions.
 #[test]
 fn a_stream_without_a_canvas_has_no_opinion_about_its_size() {
     let session = split(vec![set_line(), Line::new(Record::Tick { steps: 1 })]);
     assert_eq!(session.canvas(), (None, 0));
 }
 
-/// Later ones are counted, not obeyed and not swallowed.
-///
-/// This program writes exactly one, at the head — a canvas change would be a
-/// GPU reallocation mid-run. So a second one means a stream something else
-/// wrote, and the count is what lets a replay say it did not honour it.
-/// Silently taking the first would be indistinguishable from a replay that had
-/// followed every one.
+/// Verifies that multiple canvas declarations are counted as extraneous rather than silently applied.
 #[test]
 fn later_canvases_are_counted_rather_than_obeyed() {
     let session = split(vec![
@@ -186,14 +166,7 @@ fn records_after_the_last_tick_are_not_lost() {
     assert_eq!(session.trailing.len(), 1);
 }
 
-/// The frame path allocates nothing. A batch is handed away the moment it is
-/// full and an empty one comes back, so the buffer's capacity — and therefore
-/// its pointer — never changes.
-///
-/// A counting allocator would be the direct assertion and cannot be used here:
-/// `#[global_allocator]` is per binary and this is one. The capacity is the
-/// observable consequence, and it is not a proxy — a `Vec` that grew would
-/// report a larger one.
+/// Verifies that the recording buffer capacity remains constant across frames without heap reallocation.
 #[test]
 fn pushing_records_never_grows_the_batch() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -211,12 +184,7 @@ fn pushing_records_never_grows_the_batch() {
             "the batch grew, so a frame allocated"
         );
     }
-    // **Drops are expected here and are the second half of the claim.**
-    // Nothing paces this loop, so it offers batches far faster than a disk
-    // takes them — which is precisely the case the design is about. What
-    // must hold is that the frame path did not grow, did not block, and
-    // *counted* what was lost. A recorder that silently skipped would pass
-    // the capacity assertion above and hand back a file that looked whole.
+    // Verify that frame batches dropped under load are accounted for without unbounded growth.
     let w = recorder.finish().expect("finish");
     assert!(w.records > 0, "nothing reached the file");
     assert_eq!(
@@ -247,13 +215,7 @@ fn a_session_at_a_frames_pace_loses_nothing() {
     assert_eq!(w.records, (BATCH * 3) as u64);
 }
 
-/// The audio record is swapped, not copied, which is the whole reason it can be
-/// recorded from a frame at all.
-///
-/// The caller's record comes back with a *different* band buffer — the shell's
-/// — and the one it had went into the stream. Pointer identity is the
-/// observable form of that: a clone would leave the caller's own buffer where
-/// it was.
+/// Verifies that audio buffers are exchanged with preallocated shells rather than cloned.
 #[test]
 fn pushing_audio_takes_the_buffer_rather_than_copying_it() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -363,15 +325,7 @@ fn held(slots: usize) -> Held {
     }
 }
 
-/// **The head names every slot of the deck and the chain**, which is the whole
-/// of what a session stream could not say.
-///
-/// One Set file for slot 0 and a `procedure` record per node of every other
-/// slot — never one for slot 0, whose Set file already carries its nodes *and*
-/// the params, bindings and seeds a `procedure` record cannot. Then the mix,
-/// for every slot and not only for the ones that differ from a fresh deck: a
-/// replay that had to know the deck's defaults would be a second derivation of
-/// them.
+/// Verifies that the head record encompasses complete deck state, slot assignments, and master chain.
 #[test]
 fn the_head_names_every_slot_and_the_chain() {
     let head = head(vec![set_line()], &held(3));
@@ -461,14 +415,7 @@ fn a_head_round_trips_through_split() {
     );
 }
 
-/// **A measurement before the first tick belongs to the first frame**, not to
-/// the head.
-///
-/// A frame writes its edits, then what it heard, then the tick that closes it —
-/// so the `audio` line in front of the very first tick is frame 0's
-/// measurement. Sorting the head by position alone would move it into the head
-/// and replay frame 0 at what the bus invents rather than at what the room
-/// heard.
+/// Verifies that pre-tick measurement records are attributed to frame 0 rather than the head.
 #[test]
 fn the_first_frames_measurement_is_not_the_heads() {
     let session = split(vec![
@@ -495,25 +442,7 @@ fn the_first_frames_measurement_is_not_the_heads() {
     assert!(matches!(session.frames[0].before[0], Record::Audio { .. }));
 }
 
-/// **Every program that opens a recorder writes its head through [`head`].**
-///
-/// A recorder takes a head and appends nothing to it afterwards, so whatever
-/// is handed to [`Recorder::open`] *is* the head of that stream. Two surfaces
-/// record sessions — `karakuri-cli`'s `--record-session` and the console's
-/// `rec` pill — and what a head has to say is the same sentence for both: what
-/// every slot of the deck held. A second assembly of that sentence is a second
-/// answer to it, which is what this file's two writers used to be.
-///
-/// **A source scan, because the round trip it would rather be cannot be run.**
-/// Both writers need a deck and a deck needs a device; `karakuri-cli`'s live
-/// path needs a *window* on top of that, which is why `--record-session` is
-/// refused alongside `--render`, `--seq` and `--replay`. So the far end of the
-/// claim is checked where it can be — `karakuri-cli/tests/replay.rs` drives a
-/// hand-written two-slot head through the binary — and this is the near end.
-///
-/// What it cannot see is a writer that calls [`head`] and then appends records
-/// of its own. It is coarse in the safe direction: the failure it refuses is
-/// the one that already happened.
+/// Verifies that all call sites instantiating `Recorder::open` generate head data via `session::head`.
 #[test]
 fn every_recorder_is_opened_over_a_head_this_module_wrote() {
     fn walk(dir: &std::path::Path, into: &mut Vec<std::path::PathBuf>) {

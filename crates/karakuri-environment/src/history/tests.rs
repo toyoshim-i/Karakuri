@@ -20,14 +20,7 @@ fn files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Every word in [`LAYERS`] is a word [`declared_kind`] reads back, and the
-/// sixth is the one that would have gone quietly wrong.
-///
-/// The layer a snapshot is filed under has to be the layer an agent addresses
-/// it by; `declared_kind` answers off `LAYERS` rather than off a match written
-/// out here for exactly that reason, and this is the assertion that the
-/// indirection holds — including for a `kind` line with a trailing comment,
-/// which is the shape the scan's *first token after the space* rule exists for.
+/// Verifies that declared_kind reads back every layer in LAYERS, including trailing comments.
 #[test]
 fn declared_kind_reads_back_every_layer_including_l5() {
     for layer in LAYERS {
@@ -123,18 +116,7 @@ fn each_slot_and_layer_has_its_own_chain() {
     assert_eq!(files(tmp.path()).len(), 3);
 }
 
-/// And per renderer, which is the one this was actually wrong about.
-///
-/// A slot draws with a list of L4s. Keyed by layer alone, every renderer of a
-/// stack shared one chain and one `last`, so two renderers holding different
-/// sources recorded one snapshot per save — each overwriting the other's memory
-/// of what it had last written, and each then looking changed on the next save.
-/// The chain a surface walks back through was alternating between two
-/// procedures neither of which had been edited.
-///
-/// Both halves are asserted: two renderers are two chains, and the second
-/// renderer's own repeat is still skipped, so fixing the collision did not cost
-/// the "unchanged is not written again" property it was hiding.
+/// Verifies that multiple renderers within the same layer maintain distinct snapshot chains.
 #[test]
 fn each_renderer_of_a_stack_has_its_own_chain() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -265,11 +247,7 @@ fn seeding_writes_the_version_a_run_starts_with() {
     assert!(names.iter().any(|n| n.contains("draw_one")), "{names:?}");
 }
 
-/// A chain's starting version is filed under the layer its file declares. Every
-/// path after the first was filed as `L4`, so an L2's first snapshot landed
-/// under a name the watcher does not use for the later ones — and the chain an
-/// operator walks back through began at the second edit, with the version the
-/// run started from unreachable under any name they would think to look for.
+/// Verifies that initial seed snapshots preserve declared layer kinds rather than defaulting to L4.
 #[test]
 fn a_seeded_chain_is_filed_under_the_layer_its_file_declares() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -349,19 +327,7 @@ fn a_rebuild_after_seeding_does_not_rewrite_an_untouched_procedure() {
     );
 }
 
-/// Two saves inside one millisecond get two ids, so the second does not write
-/// over the first.
-///
-/// The clock is the only thing a live save can be named by — a key press cannot
-/// type a name — and it resolves to a millisecond, which is finer than a hand
-/// and not finer than a program. `Live::save_set` prints the id and reports
-/// that the file was kept, so a collision is not a lost save but a save
-/// reported as kept and then overwritten by the next one.
-///
-/// Driven through [`unused`] with a fixed stamp rather than by calling
-/// `stamped_id` in a tight loop: this is about the rule, and a test that
-/// depended on two calls landing in the same millisecond would pass by accident
-/// on a slow machine.
+/// Verifies that sub-millisecond saves receive unique disambiguated identifiers via `unused`.
 #[test]
 fn two_ids_taken_off_one_millisecond_are_two_ids() {
     let mut issued = std::collections::HashSet::new();
@@ -409,21 +375,9 @@ fn a_procedure_name_cannot_escape_the_history_directory() {
     assert!(!path.to_string_lossy().contains(".."), "{}", path.display());
 }
 
-// ----- The lister ---------------------------------------------------
-//
-// **Every fixture below is written by `Snapshots::record`.** A history
-// built by hand here would be this module's naming rule typed a second
-// time, and the listing and the writer could then drift apart in exactly
-// the way neither would notice — the tests would go on passing against a
-// layout nothing writes.
+// Test fixtures constructed via `Snapshots::record` to ensure consistency with runtime formatting.
 
-/// Put a snapshot the writer produced under another day, keeping the name the
-/// writer gave it.
-///
-/// The clock is the one argument `record` does not take — the day comes from
-/// `Local::now()` — so a history spanning two days is built by moving what the
-/// writer wrote rather than by typing a file name this module might no longer
-/// spell that way.
+/// Helper copying a generated snapshot into an alternate date directory to test multi-day walks.
 fn on(day: &str, store: &Path, path: &Path) -> PathBuf {
     let dir = store.join(DIR).join(day);
     std::fs::create_dir_all(&dir).expect("the day directory");
@@ -432,13 +386,7 @@ fn on(day: &str, store: &Path, path: &Path) -> PathBuf {
     moved
 }
 
-/// A store nothing has edited lists nothing, and does not fail.
-///
-/// `Store::open` does not create `history/` — `record` does, on the first
-/// snapshot — so *no directory* is the ordinary state of a store that has never
-/// been edited, and of every store a panel run filled, because only
-/// `karakuri-cli` builds a `Snapshots` today. An error here would report a
-/// damaged store for the commonest case there is.
+/// Verifies that querying an uninitialized or empty history directory succeeds with zero versions.
 #[test]
 fn a_store_that_has_never_been_edited_lists_no_versions() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -446,13 +394,7 @@ fn a_store_that_has_never_been_edited_lists_no_versions() {
     assert_eq!(listing, Listing::default());
 }
 
-/// A row carries the address the snapshot was recorded under, all four fields
-/// of it, and the file it names is the one that was written.
-///
-/// This is the anti-drift test: `record`'s arguments go in and the same numbers
-/// come back out of the name, including the two the name spells oddly — a
-/// renderer index that is left off when it is zero, and a multi-digit index
-/// that runs into the layer word (`L410`).
+/// Verifies round-trip fidelity of node addresses and snapshot metadata parsed from file names.
 #[test]
 fn a_row_reads_back_the_address_the_snapshot_was_recorded_under() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -510,21 +452,7 @@ fn a_row_reads_back_the_address_the_snapshot_was_recorded_under() {
     );
 }
 
-/// What a row is called is the file's own name, less the `.kir` and less the
-/// `@<set>` every row of one walk shares.
-///
-/// [`Version::filed_as`] is the one spelling of it, because two surfaces hand
-/// it to each other: the Library bay draws it and hands it back at the press, a
-/// model reads it out of `walk_history` and hands it back in
-/// `Revision::Picked`, and whoever lands one rebuilds it per candidate to find
-/// the file again. So it is checked against the name on disk rather than
-/// against a second `format!` — a copy of the spelling asserted against itself
-/// would agree with anything
-/// (`docs/adr/0342-a-walk-names-the-set-it-is-of-and-the-two-rows-beside-it-are-gap.md`).
-///
-/// Watched to fail with the index spelled on every row, which is the difference
-/// between `…_L4_beat_strokes` and `…_L40_beat_strokes` and is a landing that
-/// finds no file.
+/// Verifies that `Version::filed_as` matches the canonical base filename format.
 #[test]
 fn a_rows_name_is_the_snapshots_own_name_without_the_suffix_or_the_set() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -615,12 +543,7 @@ fn versions_are_listed_most_recent_first_across_two_days() {
     let listing = list(tmp.path(), 100).expect("listed");
     let ats: Vec<&str> = listing.versions.iter().map(|v| v.at.as_str()).collect();
     assert_eq!(ats.len(), 4, "{listing:?}");
-    // **Non-ascending rather than strictly descending, and that is the
-    // contract.** Four `record` calls in a row land inside one millisecond
-    // on an unloaded machine — the first draft of this asserted `>` and
-    // failed on exactly that — so `at` is not unique and the order it
-    // gives is the order it can give. What breaks the tie is the file
-    // name, asserted below, which is what makes the listing repeatable.
+    // Order is non-ascending by timestamp, with filename breaking sub-millisecond ties.
     assert!(
         ats.windows(2).all(|pair| pair[0] >= pair[1]),
         "not most recent first: {ats:?}"
@@ -643,13 +566,7 @@ fn versions_are_listed_most_recent_first_across_two_days() {
     );
 }
 
-/// What the layout does not claim is skipped and counted, at every level, and
-/// never repaired into a row that points at somebody else's file.
-///
-/// A day directory is a place an operator is invited into — `rm -rf
-/// history/2026/07` is the whole retention policy — so things that are not
-/// snapshots turn up in it as a matter of course, and the count is what stops
-/// the listing being the only party who knew.
+/// Verifies that unrecognized files and non-directory entries are skipped and tallied in `unclaimed`.
 #[test]
 fn a_name_the_layout_does_not_claim_is_counted_and_not_listed() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -674,17 +591,9 @@ fn a_name_the_layout_does_not_claim_is_counted_and_not_listed() {
     std::fs::create_dir(day.join("120000-000_slot0_L4_x.kir")).expect("mkdir");
     std::fs::write(day.join("120000-000_slotX_L4_x.kir"), "x").expect("write");
     std::fs::write(day.join("120000-000_slot0_L9_x.kir"), "x").expect("write");
-    // **And a name that is the right length in bytes and not in
-    // characters.** `123456é90` is ten bytes with the `é` across the
-    // seventh and eighth, so a stamp check that sliced `&time[7..]` would
-    // panic on a boundary rather than pass the name over — a file somebody
-    // else put in the directory taking the listing down with it.
+    // Verify multi-byte UTF-8 sequences do not trigger slicing panics during timestamp validation.
     std::fs::write(day.join("123456é90_slot0_L4_x.kir"), "x").expect("write");
-    // **And a name with an `@` whose tail is not something `record` could
-    // have written**, `a.b` being outside `sanitize`'s alphabet. Refused
-    // outright rather than read back as a procedure with an `@` in its
-    // name: this reader is the inverse of the naming and nothing else, so
-    // a name it could not have produced is somebody else's file.
+    // Reject invalid Set suffix characters not conforming to sanitize rules.
     std::fs::write(day.join("120000-000_slot0_L4_x@a.b.kir"), "x").expect("write");
 
     let listing = list(tmp.path(), 100).expect("listed");
@@ -700,13 +609,7 @@ fn a_name_the_layout_does_not_claim_is_counted_and_not_listed() {
     );
 }
 
-/// A version carries the Set the slot was running, and the reader gets it back
-/// off the name.
-///
-/// The load-bearing half of *a version is filed under the Set*: `record`'s
-/// argument goes in and the same string comes out of `list`, which opens no
-/// file — so the id is in the layout rather than in something a reader would
-/// have to fetch.
+/// Verifies that Set identifiers are preserved and parsed round-trip through snapshot filenames.
 #[test]
 fn a_version_written_under_a_set_reads_back_under_it() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -744,17 +647,7 @@ fn a_version_written_under_a_set_reads_back_under_it() {
     assert_eq!(row.file, written);
 }
 
-/// Two Sets on one slot are two chains, and the second is not swallowed as the
-/// first's unchanged source.
-///
-/// This is the whole gap. A library load moves a slot to different material,
-/// and the two sides of it were indistinguishable: one chain, one `last`, and
-/// the incoming Set's first version skipped whenever its source happened to
-/// match what the outgoing one had — so that Set's history began at its first
-/// *edit*, which is the hole `seed` exists to close one level up.
-///
-/// Byte-identical on purpose. Different sources would pass under the old key
-/// too and would prove nothing about it.
+/// Verifies that loading distinct Sets maintains separate snapshot chains even for identical source code.
 #[test]
 fn two_sets_on_one_slot_are_two_chains() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -780,10 +673,7 @@ fn two_sets_on_one_slot_are_two_chains() {
             .is_none(),
         "an unchanged source was written again once the key grew a field"
     );
-    // **And a slot loaded back to a Set it has already played dedups
-    // against what that Set last had.** The memory is per chain, and the
-    // chain came back — so switching between two Sets is not a file per
-    // switch.
+    // Dedup against previous source per chain when switching back.
     assert!(
         snaps
             .record(0, "L4", 0, Some("drift_cloud"), "shell", b"same")
@@ -810,16 +700,7 @@ fn two_sets_on_one_slot_are_two_chains() {
     assert_ne!(listing.versions[0].file, listing.versions[1].file);
 }
 
-/// A run with no Set files versions under none, and a save does not go back and
-/// re-file them.
-///
-/// Both of the cases where there is no id, in the order they happen. A run
-/// launched with a pair on the command line has none at all — there is nothing
-/// to write, and `Option` is what says so rather than a word an operator is
-/// free to name a Set. Then something saves what is playing, and from that
-/// point the answer to *what is this slot running* may be a Set — but the
-/// versions already filed were versions of what the slot was running when they
-/// were written, and nothing renames a file this module has already written.
+/// Verifies that runs without Sets record versions with None and are not retroactively renamed.
 #[test]
 fn a_run_with_no_set_files_under_none_and_a_later_id_does_not_reach_back() {
     let tmp = tempfile::tempdir().expect("tempdir");

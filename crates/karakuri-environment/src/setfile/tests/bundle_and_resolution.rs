@@ -17,20 +17,7 @@ fn as_a_file(lines: &[Line]) -> Vec<Line> {
     )
 }
 
-/// The round trip both flags exist for: a bundle written out of one store loads
-/// in a store that has never held its artifacts.
-///
-/// `inlined_source_loads_without_a_store_that_knows_the_artifact` above proves
-/// the *reader* does that, from `src` records a test hand-built. This is the
-/// writing half beside it: nothing here spells a record out — [`bundle`]
-/// produces the file and [`unbundle`] takes it in, and the material arrives on
-/// the far side as procedures with their own names.
-///
-/// And the cards come with it. An artifact whose card is missing is an ordinary
-/// store rather than a damaged one, so this is not the difference between a
-/// bundle that works and one that does not — but a bundle that dropped them
-/// would leave every library taken in thinner than the one it came from,
-/// silently.
+/// Verifies round-trip bundling and unbundling across separate store instances.
 #[test]
 fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
     let (_dir, store, l1, l4) = fixture();
@@ -60,11 +47,7 @@ fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
     }
 }
 
-/// A bundle missing one procedure is refused whole, naming it.
-///
-/// The alternative is a file that looks self-contained and is not, whose
-/// failure surfaces on somebody else's machine — where the artifact it wants is
-/// not, and never was.
+/// Ensures bundling is refused if any referenced procedure is missing from the store.
 #[test]
 fn a_bundle_is_refused_when_the_store_lacks_a_source() {
     let (_dir, store, l1, _l4) = fixture();
@@ -122,14 +105,7 @@ fn one_artifact_referenced_twice_is_inlined_once() {
     assert_eq!(run, L4.split('\n').count());
 }
 
-/// A source that does not hash to the address its `slot` names is refused, and
-/// nothing is stored.
-///
-/// This is the check that makes a bundle worth trusting at all: without it a
-/// `src` run is a way to file arbitrary text under an address the operator on
-/// the far side recognises, and every guarantee content addressing makes is
-/// gone. Refusing *after* storing some of it would be nearly as bad — the store
-/// would hold half a stranger's file.
+/// Ensures unbundling rejects inlined source content that does not hash to its slot address.
 #[test]
 fn an_unbundle_refuses_a_source_that_does_not_hash_to_its_address() {
     let (_dir, store, l1, l4) = fixture();
@@ -176,13 +152,7 @@ fn an_unbundle_refuses_a_source_that_does_not_hash_to_its_address() {
     );
 }
 
-/// An id already taken is refused, and the Set that was there is left exactly
-/// as it was.
-///
-/// Deliberately not `--save-set`'s rule, which overwrites: an id you type is an
-/// instruction, and an id that arrived inside somebody else's file is not. The
-/// bytes are compared before and after, because "it refused" and "it refused
-/// without having written" are two different claims.
+/// Verifies that unbundling rejects overwriting existing Set IDs from external sources.
 #[test]
 fn an_unbundle_refuses_an_id_already_taken_and_leaves_the_set_alone() {
     let (dir, store, l1, l4) = fixture();
@@ -229,14 +199,7 @@ fn an_unbundle_refuses_an_id_already_taken_and_leaves_the_set_alone() {
     assert_eq!(before, written(&theirs, "s1"), "the preset was overwritten");
 }
 
-/// The shipped library replaces its own row, and the Set that was there is kept
-/// under a stamped id (ADR-0347).
-///
-/// The pair of the test above: same taken id, same store, one argument
-/// different. "It wrote" would pass on a plain overwrite, so what is asserted
-/// is that both Sets are there afterwards, that the plain id holds the new
-/// material, and that the retired copy names itself by the id it is filed
-/// under.
+/// Verifies that shipped library updates replace matching IDs while archiving existing versions.
 #[test]
 fn a_shipped_row_replaces_a_taken_id_and_what_was_there_is_kept() {
     let (dir, store, l1, l4) = fixture();
@@ -300,12 +263,7 @@ fn a_shipped_row_replaces_a_taken_id_and_what_was_there_is_kept() {
     );
 }
 
-/// A shipped row this store already holds unchanged writes nothing, says so,
-/// and is not an error.
-///
-/// Two claims. Not an error, because a press is a take-in and then a load, and
-/// the refusal this replaced meant nothing loaded. Nothing written, because the
-/// alternative files a dated copy of an unchanged Set on every press.
+/// Ensures taking in an identical shipped library row avoids redundant writes.
 #[test]
 fn a_shipped_row_this_store_already_holds_writes_nothing_and_says_so() {
     let (_dir, store, l1, l4) = fixture();
@@ -341,14 +299,7 @@ fn a_shipped_row_this_store_already_holds_writes_nothing_and_says_so() {
     );
 }
 
-/// A source this build cannot compile is stored, keeps its slot, and is
-/// reported.
-///
-/// Refusing the whole file would tell an operator that *something* is wrong.
-/// Storing it means `--load-set` fails against the source itself, with the
-/// checker's span and hint on the line that is wrong — which is a thing they
-/// can fix. So the note says which node and what the checker said, and the
-/// artifact is on disk to be read and edited.
+/// Verifies that unbundling retains non-compiling sources and records diagnostic notes.
 #[test]
 fn an_unbundle_stores_a_source_that_does_not_compile_and_says_so() {
     let broken = "proc veil {\n  kind L4\n  this is not a renderer\n}\n";
@@ -418,12 +369,7 @@ fn an_unbundle_stores_a_source_that_does_not_compile_and_says_so() {
 
 // -- The authoring form: resolution, and the wall around it -----------
 
-/// An authoring Set file beside the two `.kir` the fixture wrote, naming them
-/// by the relative paths they actually have.
-///
-/// Written by hand rather than by a writer, because there is no writer: a
-/// `.kset` is a file a person authors, and what these tests are about is
-/// reading one somebody else wrote.
+/// Writes a test .kset file referencing parts by relative path.
 fn authored(dir: &tempfile::TempDir, name: &str, parts: &str) -> std::path::PathBuf {
     let path = dir.path().join(name);
     std::fs::write(
@@ -434,14 +380,7 @@ fn authored(dir: &tempfile::TempDir, name: &str, parts: &str) -> std::path::Path
     path
 }
 
-/// A `.kset` resolves to the `.kbset` it names, with its parts in the store as
-/// artifacts.
-///
-/// The whole of what resolution is, checked as three separate facts because two
-/// of them can hold while the third does not: every `part` has become a `slot`,
-/// each `slot` names the content address of the bytes on disk, and the store
-/// can hand those bytes back. A resolver that emitted the right records and
-/// stored nothing would pass the first two and produce a file nobody can load.
+/// Verifies .kset resolution converts relative part entries into content-addressed slot records.
 #[test]
 fn a_kset_resolves_to_the_kbset_it_names_with_its_parts_in_the_store() {
     let (dir, store, l1, l4) = fixture();
@@ -500,15 +439,7 @@ fn a_kset_resolves_to_the_kbset_it_names_with_its_parts_in_the_store() {
     }
 }
 
-/// A `.kbset` made from a `.kset` loads with the authoring file deleted, and
-/// with the parts it named deleted too — which is the whole point of the form.
-///
-/// An authoring file is only readable beside its neighbours; the resolved one
-/// is readable anywhere its material is, and a bundle carries the material with
-/// it. So this deletes the entire directory the `.kset` and its `.kir` files
-/// lived in, takes it into a store that has never held any of it, and loads.
-/// Nothing that resolves a path could survive that, which is what makes it the
-/// test of the difference rather than of the pipeline.
+/// Verifies resolved .kbset bundles function independently of authoring files and directories.
 #[test]
 fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -542,13 +473,7 @@ fn a_kbset_made_from_a_kset_loads_with_the_authoring_file_deleted() {
     assert_eq!(loaded.l4s[0].name, "points");
 }
 
-/// A `part` in a `.kbset` refuses the load, because it is a file disagreeing
-/// with its own extension.
-///
-/// Not skipped with a note, which is what this reader does with every other
-/// line it cannot honour: a `part` is a *node*, and skipping one hands back a
-/// Set that is a geometry short. The refusal names the node and the path it
-/// wanted.
+/// Ensures loading rejects unresolved part records present in a .kbset file.
 #[test]
 fn a_part_in_a_resolved_set_file_refuses_the_load() {
     let (_dir, store, l1, _l4) = fixture();
@@ -563,11 +488,7 @@ fn a_part_in_a_resolved_set_file_refuses_the_load() {
     assert!(refused.contains("content address"), "{refused}");
 }
 
-/// A part naming an absolute path is refused, and the refusal names the path.
-///
-/// The first of the three spellings of one escape. It is refused without the
-/// filesystem being asked anything, which is why the path here need not exist —
-/// and why a machine where it *does* exist gets the same answer.
+/// Ensures .kset resolution rejects absolute part paths.
 #[test]
 fn a_part_naming_an_absolute_path_is_refused() {
     let (dir, store, _l1, _l4) = fixture();
@@ -585,12 +506,7 @@ fn a_part_naming_an_absolute_path_is_refused() {
     );
 }
 
-/// A part that climbs out of the Set file's own directory is refused, naming
-/// what it climbed out of.
-///
-/// The second spelling. The `.kset` is one level down so that `..` has
-/// somewhere to go, and the file it reaches for genuinely exists — a wall that
-/// only refuses paths that were not there anyway is not a wall.
+/// Ensures .kset resolution rejects parent-directory traversal (..) escaping the root directory.
 #[test]
 fn a_part_that_climbs_out_of_the_set_files_directory_is_refused() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -621,13 +537,7 @@ fn a_part_that_climbs_out_of_the_set_files_directory_is_refused() {
     );
 }
 
-/// A `..` that lands back inside is an ordinary path and is allowed.
-///
-/// What the wall refuses is *leaving*, not the spelling — a rule that refused
-/// every `..` would refuse `parts/../l1.kir`, which names a file in the
-/// directory the Set file is in, and an operator would learn that by
-/// experiment. This is the test that keeps the check on containment rather than
-/// on characters.
+/// Ensures .kset resolution permits parent-directory segments that remain within the root.
 #[test]
 fn a_dotdot_that_lands_back_inside_is_a_path_and_is_allowed() {
     let (dir, store, l1, _l4) = fixture();
@@ -646,15 +556,7 @@ fn a_dotdot_that_lands_back_inside_is_a_path_and_is_allowed() {
     );
 }
 
-/// A part that is a symlink out of the directory is refused, which is the
-/// spelling that gets missed.
-///
-/// Lexically this include is one plain component with no `..` and no leading
-/// `/`; every character in it is one the other two rules allow. It is only an
-/// escape once the link is followed, which is why the comparison is between
-/// canonical paths — and why the fixture's own directory is canonicalised too,
-/// since on macOS a temporary directory is itself reached through a symlink and
-/// a naive comparison would refuse everything.
+/// Ensures .kset resolution rejects symlinks pointing outside the parent directory.
 #[test]
 #[cfg(unix)]
 fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
@@ -690,13 +592,7 @@ fn a_part_that_is_a_symlink_out_of_the_directory_is_refused() {
     );
 }
 
-/// A directory reached through a symlink still contains its own parts.
-///
-/// The other half of the sentence above, and the failure the first
-/// implementation of a containment check makes: canonicalise the target and not
-/// the root, and every part of every Set authored under `/var/folders` on macOS
-/// — or under any linked path anywhere — is refused as an escape. A wall that
-/// refuses everything is a wall somebody switches off.
+/// Verifies resolution works correctly when authoring root directories are accessed via symlink.
 #[test]
 #[cfg(unix)]
 fn a_directory_reached_through_a_symlink_still_contains_its_own_parts() {
@@ -732,13 +628,7 @@ fn a_file_that_is_not_a_kset_is_not_resolved() {
     assert!(refused.contains(".kset"), "{refused}");
 }
 
-/// A part naming a file that is not there says so, rather than saying it
-/// escaped.
-///
-/// The two are different mistakes and an operator fixes them differently: one
-/// is a typo or a part left behind, the other is a file that was trying to
-/// leave. A wall that answered "refused" to both would send whoever mistyped
-/// `l1.kir` looking for a security problem.
+/// Ensures missing part files produce a dedicated missing file diagnostic rather than traversal error.
 #[test]
 fn a_part_naming_a_file_that_is_not_there_says_so() {
     let (dir, store, _l1, _l4) = fixture();

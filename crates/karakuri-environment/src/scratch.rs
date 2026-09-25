@@ -1,39 +1,12 @@
 //! Working copy management for live editable sessions.
-//!
 //! Materializes editable shaders into `<store>/scratch/` per slot, ensuring each slot
-//! owns an isolated copy of its files (`<letter><node_index>-<name>.kir`) so that edits
-//! and watcher triggers do not collide across channels (P-0096, ADR-0228).
-
+//! owns an isolated copy of its files (`<letter><node_index>-<name>.kir`) (P-0096, ADR-0228).
 use std::path::{Path, PathBuf};
 
 /// The subdirectory of the store this lives in.
 pub const DIR: &str = "scratch";
 
-/// Copy every node of every slot into the scratch and rewrite the paths to
-/// point at the copies. Returns the directory, for printing.
-///
-/// Call this only when the run can be edited — `--watch`, `--mcp`, or a surface
-/// that is permanently both. A run with none of those writes no `.kir` at all,
-/// so there is nothing to protect the originals from, and copying would leave a
-/// directory behind for a render that is supposed to be a function of its
-/// arguments.
-///
-/// Existing scratch files are overwritten and the rest of the directory is left
-/// alone. Not cleared: an operator may have put something here, and deleting a
-/// directory whose name we chose is a bad way to find that out.
-///
-/// Takes the slots rather than a flat list of paths, which is the change this
-/// function exists to carry: the name of a copy is [`node_name`]'s, and that
-/// name is the slot and the node's place in it. A flat list could not spell
-/// one. What is *not* taken is what a slot is — the caller hands over each
-/// slot's paths in node order and keeps the names beside them, because a node
-/// name is the Set file's business and not this module's.
-///
-/// No dedup, and that is the rule rather than an omission. The same source
-/// given to four slots becomes four files. See this module's header for why the
-/// opposite rule was there and why it went; the short of it is that a slot is
-/// the unit that gets replaced, so a slot whose file is also somebody else's
-/// cannot be moved on its own.
+/// Copies each slot's node files into `<store>/scratch/` and updates paths to reference copies.
 pub fn materialise<'a, S, N>(store_root: &Path, slots: S) -> Result<PathBuf, String>
 where
     S: IntoIterator<Item = N>,
@@ -44,19 +17,9 @@ where
 
     for (slot, nodes) in slots.into_iter().enumerate() {
         for (at, path) in nodes.into_iter().enumerate() {
-            // Already the working copy — a Set loaded from the store, placed
-            // here by `place` before this ran, under a name that already
-            // carries this slot. Copying it onto itself would at best be a
-            // no-op and at worst rewrite it from itself mid-run.
             if path.starts_with(&dir) {
                 continue;
             }
-            // **Every file in this directory is a `<letter><at>-<name>.kir`**,
-            // which is the rule `place` has always followed and is now the
-            // whole directory's: one spelling, so an operator reading a
-            // listing of it is reading one kind of thing. A source named
-            // something else keeps its name and gains the extension its
-            // content already had.
             let target = dir.join(format!("{}.kir", node_name(slot, at, &stem_of(path))));
             let source =
                 std::fs::read(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -76,18 +39,7 @@ pub fn node_name(slot: usize, at: usize, name: &str) -> String {
 
 /// The letter the deck is drawn with, `A` for slot 0.
 ///
-/// `karakuri_console::view::DECK_LETTERS` is `["A", "B", "C", "D"]` and is the
-/// answer everywhere a surface *says* which deck; this crate cannot name it —
-/// `karakuri-console` is not a dependency of this package and is not becoming
-/// one for four strings, since that crate takes no device and this one is
-/// nothing but doors. So the letters are counted from `A`, which agrees with
-/// that list on every slot a `Deck` has: `karakuri_engine::deck::MAX_SLOTS` is
-/// 4, and `the_deck_letters_are_the_ones_the_preview_cells_carry` asserts the
-/// agreement rather than assuming it.
-///
-/// Past the twenty-sixth slot it is `S26`, which no deck can reach and which is
-/// still a legal, unique path component — the one thing this function must not
-/// do is hand back a name two slots share.
+/// Returns a deck letter identifier for a given slot index (A..Z or S<slot>).
 fn deck_letter(slot: usize) -> String {
     match u8::try_from(slot) {
         Ok(n) if n < 26 => char::from(b'A' + n).to_string(),
@@ -95,13 +47,7 @@ fn deck_letter(slot: usize) -> String {
     }
 }
 
-/// The material's own name, out of the path the operator gave, without the
-/// extension — [`materialise`] puts `.kir` back on, so the copy is the one kind
-/// of file this directory holds.
-///
-/// A path with no file name at all is `procedure`, which is [`sanitize`]'s
-/// fallback said again at the one place that can reach it: `materialise` has
-/// already read the file, so whatever it is, it is not a directory.
+/// Extracts file stem or defaults to "procedure" if unavailable.
 fn stem_of(source: &Path) -> String {
     source
         .file_stem()
@@ -109,12 +55,7 @@ fn stem_of(source: &Path) -> String {
         .unwrap_or_else(|| "procedure".to_string())
 }
 
-/// Write a procedure that has no file of its own into the scratch, and return
-/// the path the deck should use.
-///
-/// `name` is a suggestion — the procedure's own name makes the scratch readable
-/// — and is made safe as a path component here, because it arrives from a Set
-/// file rather than from this program.
+/// Writes procedure source into the scratch directory and returns its target path.
 pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, String> {
     let dir = store_root.join(DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -123,12 +64,7 @@ pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, Str
     Ok(path)
 }
 
-/// Write `bytes` to `path` atomically by writing to a temporary file (`.tmp`)
-/// in the same directory and renaming it into place.
-///
-/// This guarantees that a file watcher or reader never observes a partially
-/// written or empty file, and that intermediate write states cannot trigger
-/// broken compiler runs.
+/// Writes `bytes` to `path` atomically via a temporary file rename.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -141,8 +77,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// A name as a path component. The same rule the edit history uses, and here
-/// for the same reason: the name comes out of a file somebody else wrote.
+/// Sanitizes `name` for safe use as a file path component.
 fn sanitize(name: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -211,13 +146,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&l1).expect("read"), "original l1");
     }
 
-    /// The requirement, and the one test this whole change is about.
-    ///
-    /// The same preset in two slots, edited in one place, moves one deck. Under the
-    /// rule this replaces the two slots shared one file, so the edit below moved
-    /// both — silently, with nothing in the program able to say which deck the
-    /// operator had meant. A slot is the unit that gets replaced; a slot that
-    /// cannot be moved on its own is not one.
+    /// Verifies that the same preset in two slots materializes as distinct files so editing one slot does not affect the other.
     #[test]
     fn the_same_preset_in_two_slots_is_two_files_and_an_edit_moves_one_deck() {
         let tmp = tempfile::tempdir().expect("tempdir");

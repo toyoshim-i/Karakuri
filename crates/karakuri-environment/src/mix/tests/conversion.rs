@@ -1,25 +1,6 @@
 use super::common::*;
 
-/// The two copies of every list, checked against each other — and this is the
-/// only place in the workspace where that can happen.
-///
-/// `karakuri-operation` owns its own `BlendMode`, `Residency`, `Sync`,
-/// `Tonemap` and `Authority` because a vocabulary that refuses to name a value
-/// cannot say *set blend to over*, and the cost is stated rather than hidden:
-/// they are third spellings of lists the engine and the store already hold
-/// (P-0090, ADR-0180). A record carries the name, so a level spelled `prime`
-/// here and `priming` there is a record that decodes to a refusal on replay and
-/// moves nothing in the mix — a failure that would show up as a session
-/// replaying differently and nowhere earlier.
-///
-/// `karakuri-operation` cannot check this (it has no engine, by charter) and
-/// neither can `karakuri-operation-record` (it has no engine either,
-/// deliberately). This package depends on both, so this is where the two lists
-/// meet and where they are made to agree.
-///
-/// Both directions per value, over the engine's own lists, so a value added to
-/// the engine arrives here as a missing match arm in [`blend_mode`] and its
-/// neighbours rather than as a silent extra.
+/// Verifies that vocabulary names match engine names across all shared types.
 #[test]
 fn the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it() {
     for mode in Blend::ALL {
@@ -54,11 +35,6 @@ fn the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it() {
                  `Record::Look` carries the name"
         );
     }
-    // Over the engine's `ALL` and not the vocabulary's, which has none —
-    // `karakuri_operation::Authority` says so at its `name`, on
-    // `WipeKind`'s terms: that constant exists for a map target, and no map
-    // line can say a node address. The engine's list is the one this has to
-    // be exhaustive over anyway, for the reason stated above.
     for level in Authority::ALL {
         assert_eq!(
             authority(level).name(),
@@ -78,24 +54,8 @@ fn the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it() {
         );
     }
 }
-/// The records `crossfade` and `wipe` used to build by hand are the ones the
-/// conversion writes.
-///
-/// The two gestures asked this module for a `Record::Opacity`, a
-/// `Record::Blend` and a `Record::Residency` while their own operations were
-/// unsettled, because what was owed was the *scheduled move* and never the
-/// silencing or the put-on-air. Both operations are settled now — a crossfade
-/// when the quantum and the length became a reading, a wipe when the front
-/// shape followed them and the soft edge turned out to be the deck's — so each
-/// gesture is one `operate` call and these three records come out of `written`
-/// whole. This is what says neither change of route changed a byte of what they
-/// write.
-///
-/// Literals on the right-hand side on purpose. An expectation derived from
-/// `written` would assert that `written` equals itself; these are the records
-/// the deleted builders produced, spelled out, including the values the two
-/// gestures pass — `0.0` on the deck being silenced and `1.0` on the one
-/// arriving under a mask.
+
+/// Verifies that operation conversion matches the expected records for gestures.
 #[test]
 fn the_records_the_gestures_built_by_hand_are_what_the_conversion_writes() {
     use karakuri_operation::Operation;
@@ -146,18 +106,7 @@ fn the_records_the_gestures_built_by_hand_are_what_the_conversion_writes() {
     );
 }
 
-/// A quantum of zero starts the move on the beat it was asked on, which is what
-/// a surface with no opinion about the grid hands in.
-///
-/// `karakuri_engine::transition::quantise` documents 0 as *"now"* — *"an
-/// operator who wants a cut does not want to wait for the bar"* — and this is
-/// what makes that reachable through the conversion rather than only through
-/// the engine: the reading carries the instant the session is already at, so
-/// `written` has nothing to invent and no grid to consult.
-///
-/// The three quanta a keyboard offers are asserted together, because what is
-/// being checked is that this function is `quantise` and not a second opinion
-/// about it.
+/// Verifies that a quantum of zero schedules the transition immediately.
 #[test]
 fn a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on() {
     let grid = grid_at(33);
@@ -193,17 +142,7 @@ fn a_quantum_of_zero_starts_the_move_on_the_beat_it_was_asked_on() {
     );
 }
 
-/// What the conversion schedules decodes back onto the fader, which is the one
-/// wire name in `karakuri-operation-record` with no list behind it.
-///
-/// `Record::Transition`'s `control` is `karakuri_engine::transition::Control`'s
-/// list, the vocabulary owns no copy of it — no operation names a control,
-/// because `Operation::FadeDeck` *is* the opacity one — and that crate cannot
-/// reach the engine. So the literal it writes is checked here, in the one
-/// package that sees both, exactly as the blend and residency spellings one
-/// test up are. A fade that decoded to `gain` would move the trim instead of
-/// the fader, which under `over` is a deck that dims without ever getting out
-/// of the way.
+/// Verifies that scheduled fader transitions decode back to Control::Opacity moves.
 #[test]
 fn what_the_conversion_schedules_decodes_back_onto_the_fader() {
     for shape in karakuri_engine::binding::CURVES {
@@ -229,21 +168,7 @@ fn what_the_conversion_schedules_decodes_back_onto_the_fader() {
     }
 }
 
-/// What a wipe schedules decodes back onto the mask's front, which is the
-/// second wire name in `karakuri-operation-record` with no list behind it and
-/// is checked here for the first one's reason exactly.
-///
-/// `Operation::Wipe` *is* the mask-position move — no operation names a control
-/// — so the crate writes the literal `mask` and cannot reach
-/// `karakuri_engine::transition::Control` to check it. A wipe that spelled it
-/// `mask-position` would fail to decode and replay as nothing at all, which is
-/// the one failure that looks identical to a wipe nobody asked for.
-///
-/// The whole gesture is decoded and not only the move, because a wipe is six
-/// records and what makes it a picture is that the mask lands before the move
-/// that carries it: the front is at 0 when the transition is scheduled, and the
-/// shape it is at 0 in is the transition row's rather than whatever the deck
-/// was wearing.
+/// Verifies that wipe operations decode into properly sequenced mask setup and position transition.
 #[test]
 fn what_a_wipe_schedules_decodes_back_onto_the_masks_front() {
     use karakuri_operation_record::Written;
@@ -362,21 +287,7 @@ fn a_wipe_leaves_the_mode_the_operator_chose_on_the_deck() {
     );
 }
 
-/// The records `fade_slot` and `cycle_renderer` built by hand are the ones the
-/// conversion writes.
-///
-/// The two functions are gone: a fade, a crossfade and a renderer selection go
-/// through `Live::operate` now that the transition settings are a reading. This
-/// is what says the change of route did not change a byte of what they write,
-/// on
-/// [`the_records_the_gestures_built_by_hand_are_what_the_conversion_writes`]'s
-/// terms — literals on the right-hand side, because an expectation derived from
-/// `written` would assert that `written` equals itself.
-///
-/// The crossfade is here whole, and it is the one that could not be checked
-/// this way before: it is four records out of one press, and its two halves
-/// have to carry the same instant or they are two fades that happen to be near
-/// each other.
+/// Verifies that operation conversion for fade_slot and cycle_renderer matches hand-built records.
 #[test]
 fn the_moves_the_keys_built_by_hand_are_what_the_conversion_writes() {
     use karakuri_operation::Operation;

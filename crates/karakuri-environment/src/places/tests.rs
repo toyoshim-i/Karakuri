@@ -1,10 +1,6 @@
 use super::*;
 
-/// A directory with a Set in it, at `path` — which is what a library is since
-/// [`is_a_library`] started asking for the listing rather than the parts. The
-/// part is written too, because a real root holds both and a fixture that held
-/// only the file under test would pass a check that happened to be looking at
-/// the wrong one.
+/// Creates a test library directory containing parts and a set file.
 fn library(path: PathBuf) -> PathBuf {
     parts(path.clone());
     set(&path, "drift_cloud");
@@ -19,14 +15,7 @@ fn parts(path: PathBuf) -> PathBuf {
     path
 }
 
-/// The `.kir` files a presets root ships are rows too, each under the name a
-/// load names it by and the kind it declares (ADR-0338).
-///
-/// Everything `list_sets` refuses is refused here for its reasons — a backup, a
-/// `.tmp`, a name the layout does not claim, a directory — and the one thing
-/// that is not is a file with no `kind` line: that is a row with no badge,
-/// because dropping it would answer *what ships here* with a file missing and
-/// nothing said.
+/// Verifies that list_procedures enumerates valid `.kir` files with their declared kind.
 #[test]
 fn a_presets_root_lists_its_procedures_with_the_kind_each_declares() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -238,11 +227,7 @@ fn a_directory_of_something_else_is_not_a_library_however_it_is_named() {
     );
 }
 
-/// A directory of parts is not a library, which is the whole of what changed
-/// today: `.kir` files are what a Set is made of, and a library is the listing
-/// of what can go on a deck rather than the material it is cut from. Before the
-/// `.kset` files existed this directory *was* the answer, so this test would
-/// have failed on purpose yesterday.
+/// Verifies that a directory containing only `.kir` part files is not recognized as a preset library.
 #[test]
 fn a_directory_of_parts_is_not_a_library_because_a_library_lists_what_goes_on_a_deck() {
     let tmp = tempfile::tempdir().expect("tempdir");

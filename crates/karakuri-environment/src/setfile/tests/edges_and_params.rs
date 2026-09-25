@@ -2,14 +2,7 @@
 
 use super::common::*;
 
-/// The edge survives the file, and so do the names it points with.
-///
-/// The two halves are one fact: an edge is between *names*, and a file that
-/// carried the edge and dropped the names would come back naming nodes that are
-/// no longer called that. What makes it round-trip at all is that the names it
-/// points with are either written down beside the node — as `far` is here — or
-/// derived from the procedure, which is a function of the artifact the `slot`
-/// record already references.
+/// Verifies that edges and their associated node names round-trip through file serialization.
 #[test]
 fn an_edge_and_the_names_it_points_with_survive_the_file() {
     let (dir, store, l1, l4) = fixture();
@@ -107,13 +100,7 @@ proc dissolve {
 }
 "#;
 
-/// A Source-slot edge survives the file, with the name it points with.
-///
-/// The record is the same `edge` a geometry slot writes — node, slot, and the
-/// node it is bound to — because what an edge says is one fact whatever type
-/// the slot was declared with. That is the claim: the fourth slot type cost
-/// this file nothing, and a Set whose mask names a source can be saved and
-/// loaded like any other.
+/// Verifies round-trip persistence of source-slot edges and target node names.
 #[test]
 fn a_source_slot_edge_survives_the_file() {
     let (dir, store, l1, l4) = fixture();
@@ -319,19 +306,7 @@ fn inlined_source_loads_without_a_store_that_knows_the_artifact() {
     assert_eq!(loaded.l4s[0].name, "points");
 }
 
-/// A file written before the address existed still means what it meant.
-///
-/// `layer` on a `param` record was a placeholder: the writer put `L1` on
-/// everything and said so in a comment, and the loader ignored it. So honouring
-/// `layer` now would silently retarget every Set file ever written — an
-/// `exposure` that reached the renderer would start reaching the L1 and doing
-/// nothing.
-///
-/// What stops that is the address being `(layer, index)` present or absent as a
-/// unit: no `index`, no address, whatever `layer` says. This reads a
-/// hand-written old-style file to prove it, rather than one this build produced
-/// — a round trip through the new writer would agree with itself however wrong
-/// both halves were.
+/// Verifies legacy param records without an index are treated as wildcard writes across layers.
 #[test]
 fn a_param_record_without_an_index_is_a_wildcard_whatever_its_layer_says() {
     let (_dir, store, l1, l4) = fixture();
@@ -365,11 +340,7 @@ fn a_param_record_without_an_index_is_a_wildcard_whatever_its_layer_says() {
     );
 }
 
-/// What could not be carried is said, not dropped. Three shapes, and each is a
-/// real disagreement between what the format can address and what the engine
-/// has: a salt and a capacity belong to a *geometry*, so one written against a
-/// renderer names something that does not exist, and a vector param has no
-/// `f32` to become.
+/// Ensures unsupported parameter or seed records produce diagnostics rather than silent omissions.
 #[test]
 fn what_the_engine_cannot_carry_is_reported_rather_than_dropped() {
     let (_dir, store, l1, l4) = fixture();
@@ -449,20 +420,7 @@ fn glowing_lines(store: &Store, nodes: &[Node], extra: Vec<Record>) -> Vec<Line>
     lines
 }
 
-/// A vector `param` line becomes one write per component.
-///
-/// This is where the wide `Value` earns its keep: a file — or a model through
-/// one MCP call — says the vector once, and the reader expands it into the
-/// three writes the engine can carry, because a parameter is driven one
-/// component at a time
-/// (`docs/adr/0268-a-vector-parameter-is-driven-one-component-at-a-time.md`).
-/// It used to be reported and dropped, with *"the engine holds scalar parameter
-/// values only"*.
-///
-/// The order is the components' own, not the file's and not a map's: `glow.x`
-/// then `glow.y` then `glow.z`, carrying `0.4`, `0.7`, `1.0` in the order the
-/// line wrote them. A reversal here would be a Set that loads and is the wrong
-/// colour.
+/// Verifies vector param records expand into individual component writes (x, y, z) per ADR-0268.
 #[test]
 fn a_vector_param_record_is_expanded_into_its_components() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -495,14 +453,7 @@ fn a_vector_param_record_is_expanded_into_its_components() {
     );
 }
 
-/// One component, written and read back as itself — and the same three numbers
-/// however the file spells them.
-///
-/// What a `save` puts on the line is components, one `param` record each, which
-/// is what lets a Set file record the single component an operator moved. What
-/// a *person or a model* writes is the vector, once. The last assertion is that
-/// the two spellings load to the same list: the wide value earns its keep on
-/// the line and nowhere past it.
+/// Verifies single-component writes round-trip and produce equivalent results to full vector writes.
 #[test]
 fn a_component_write_round_trips_through_the_file() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -573,11 +524,7 @@ fn a_component_write_round_trips_through_the_file() {
     );
 }
 
-/// A single number against a `vec3` names no component, and the note says which
-/// keys would — the refusal carries what the next attempt needs
-/// (`docs/principles/0083-a-refusal-carries-what-the-next-attempt-needs.md`).
-/// Reported and skipped rather than landed on a component this reader picked,
-/// which would be inventing an address the file did not write.
+/// Ensures assigning a scalar to a vector parameter reports available component keys per P-0083.
 #[test]
 fn a_scalar_against_a_vector_declaration_is_reported_with_its_components() {
     let (_dir, store, nodes) = glowing_fixture();
@@ -602,16 +549,7 @@ fn a_scalar_against_a_vector_declaration_is_reported_with_its_components() {
     }
 }
 
-/// A `bind` on a bare vector key is refused, and the sentence spells the
-/// components.
-///
-/// A binding resolves to one number and a `vec3` has three places to put it.
-/// `Set::bind` would answer `Bound::NoSuchParam`, which says the parameter does
-/// not exist — not what is wrong, and not what the next attempt needs.
-///
-/// Paired with the binding that must be accepted, because a reader that refused
-/// every binding would pass a test made only of refusals: one component is an
-/// ordinary key and binds like any scalar.
+/// Ensures bindings targeting a bare vector key are rejected with suggested component targets.
 #[test]
 fn a_binding_on_a_bare_vector_key_is_refused_with_the_component_spelling() {
     let (_dir, store, nodes) = glowing_fixture();

@@ -1,44 +1,4 @@
-//! An artifact's metadata card, produced from the compile that already
-//! happened.
-//!
-//! `docs/ir-spec.md`, "Metadata file format", specifies `<hash>.meta.ndjson` as
-//! nine record types and says the store regenerates it *"from the `.kir` plus a
-//! compile pass"*. This is that sentence, for the four of the nine a compile
-//! pass can answer: `meta`, `param_decl`, `capacity_decl` and `emit`. Every one
-//! of them is read straight off a [`Checked`] and off nothing else.
-//!
-//! The five that are not here have no producer, and an empty one would be
-//! worse than none.
-//!
-//! - `perf` carries `ns_per_element`, which is a *measurement*. What a compile
-//!   pass can answer is `ops_per_element`, from `karakuri_ir::cost::estimate`,
-//!   which is a different quantity in different units; writing one under the
-//!   other's name is exactly the shape of number the specification withdrew a
-//!   `bytes_per_element` for — a figure published under a name that reads as a
-//!   measurement, with no way for the record to say which of the two it is. It
-//!   wants the stage-7 probe. Not `Checked::cost`, which is the field named
-//!   for that number and reads as the place to find it: the check pass sets it
-//!   `None` unconditionally and nothing else fills it, so a writer reaching for
-//!   it here would publish an absence rather than the wrong number — see its
-//!   own doc, which says to ask `cost::estimate` instead.
-//! - `origin`, `parent` and `tag` describe where an artifact *came from*, and
-//!   nothing generates procedures yet, so there is nothing to say. `parent` is
-//!   the demand most likely to be missed by
-//!   arriving late: leaving room for it is the point, and writing a `parent`
-//!   with nothing in it would fill the hole with a lie rather than leave it
-//!   visible.
-//! - `thumbnail` is a stored asset — a short loop and a still, rendered at
-//!   promotion time — and nothing renders one. It is `thumbnail` and not
-//!   `preview` because the deck's `preview` is a different thing under a name
-//!   that was taken; see `Record::is_metadata`.
-//!
-//! This crate rather than either of the two it joins. The records are
-//! `karakuri-store`'s and the declarations are `karakuri-ir`'s, and the store
-//! does not depend on the IR — a content-addressed blob store that had to link
-//! a type checker to write a file name would be the wrong shape, and nothing
-//! about a `.kir`'s *bytes* needs one. This package holds both, and it is also
-//! the one holding a `Checked` at the moment an artifact is put — see
-//! [`crate::compile::Placed`], which is the caller and is in this package now.
+//! Generates metadata cards for compiled artifacts according to `docs/ir-spec.md`.
 
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
@@ -128,55 +88,23 @@ pub fn layer_named(name: &str) -> Option<Kind> {
 /// Set file.
 const VERSION: u32 = 1;
 
-/// What one artifact's metadata file says, in the order it is written.
-///
-/// `hash` is passed in rather than hashed from the source here, because the
-/// caller has it — it is [`crate::compile::Placed::hash`], derived off the node
-/// the card belongs to — and a second derivation would be a second answer to
-/// "which artifact is this", which is the mistake `Placed::hash` being a method
-/// rather than a field exists to stop being made twice. `sort_compiled` builds
-/// the node before it builds the card for exactly that reason. See
-/// `Placed::put`, which puts the source and then this.
-///
-/// A `Vec<Line>` and not a written file: what a card says is decided here,
-/// where a `Checked` is, and where it lands is `karakuri-store`'s. That split
-/// is what lets the whole of this be checked without a store, a disk or a GPU.
+/// Generates metadata record lines describing the compiled procedure and its interface declarations.
 pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
     let mut lines = vec![Line::new(Record::Meta {
         hash: *hash,
-        // **The procedure's own declared name**, from `proc <name>`, and never
-        // the name a Set gave the node. That one belongs to the *use* — see
-        // `Record::Slot`'s `name` — and one artifact loaded twice under two
-        // names is still one artifact with one card.
         name: checked.name.clone(),
         kind: layer_of(checked.kind),
         v: VERSION,
     })];
-    // **Declaration order, which is the file's.** `Checked::params` is built by
-    // walking the header, so the card reads down the `.kir` — a surface
-    // rendering knobs from this gets the order the author chose rather than
-    // whatever a sort would have imposed on it.
     for p in &checked.params {
         lines.push(Line::new(Record::ParamDecl {
             key: p.name.clone(),
             ty: p.ty.name().to_string(),
             min: p.min,
             max: p.max,
-            // **One fold, `karakuri-ir`'s, and the same call the engine makes
-            // when it builds the uniform.** A reader of its own here would
-            // agree with the shader by coincidence, and the coincidence breaks
-            // on `= -0.35`: a card claiming `0.0` where the run loaded `-0.35`
-            // describes a procedure nobody ran, and nothing downstream could
-            // tell which of the two was wrong. See
-            // `karakuri_ir::Param::default_scalar` and `Record::ParamDecl`'s
-            // `default`, which is why `None` is written as an absent key rather
-            // than as an absent record.
             default: p.default_scalar(),
         }));
     }
-    // Only an L1 declares one, so most cards have no `capacity_decl` — and an
-    // absent record is the honest form of "this procedure declares no
-    // capacity", where zeroes would be a range nobody wrote.
     if let Some(c) = checked.capacity {
         lines.push(Line::new(Record::CapacityDecl {
             min: c.min,
@@ -184,9 +112,6 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
             default: c.default,
         }));
     }
-    // The same rule: a renderer emits nothing and gets no record, rather than
-    // an `emit` with an empty list. Both read as "nothing declared" and only
-    // one of them is a line somebody has to explain.
     if !checked.emit.is_empty() {
         lines.push(Line::new(Record::Emit {
             attrs: checked.emit.iter().map(|a| a.name().to_string()).collect(),
@@ -195,24 +120,7 @@ pub fn card(hash: &Hash, checked: &Checked) -> Vec<Line> {
     lines
 }
 
-/// Write an artifact's metadata card, and never let it stop a save.
-///
-/// The one place either put path says this, so that the judgement — the card is
-/// derived and the artifact is not — is made once and the sentence is one
-/// sentence. See [`crate::compile::Placed::put`], which is the other caller's
-/// other half.
-///
-/// The hash is passed rather than recomputed: the caller has just put the bytes
-/// under it, and deriving it again here would be a second answer to which
-/// artifact this card is for.
-///
-/// It hands back what it said, and both callers drop it. The policy — a card
-/// that will not write is reported and does not fail the save — was asserted in
-/// prose and nowhere else, because a sentence that is only printed is a
-/// sentence no test can hold. Returning it costs one `Option` and buys
-/// `karakuri-cli`'s
-/// `live_save_tests::a_card_that_will_not_write_is_said_and_does_not_fail_the_save`,
-/// which reads it back. `None` is a card on disk.
+/// Writes artifact metadata card to store, returning warning message if write fails.
 pub fn put_meta(
     store: &karakuri_store::store::Store,
     hash: &karakuri_store::hash::Hash,

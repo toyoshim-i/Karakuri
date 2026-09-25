@@ -10,12 +10,7 @@ fn round_trip(line: &str) -> Message {
     message
 }
 
-/// The three lines the module doc prints, parsed and written back.
-///
-/// The doc is the specification — the helper is another repository and may be
-/// another language, so it implements what is written here rather than
-/// importing a type. That only works if what is written here is what this build
-/// actually reads, which is what this test is.
+/// Verifies serialization round-trip for sample messages documented in specification.
 #[test]
 fn the_lines_the_doc_prints_are_the_lines_this_reads() {
     assert_eq!(
@@ -42,13 +37,7 @@ fn the_lines_the_doc_prints_are_the_lines_this_reads() {
     );
 }
 
-/// A newer helper saying something this build has no use for is ignored rather
-/// than fatal, and so is a field it has never heard of.
-///
-/// This is the normal case rather than the exceptional one, which is the whole
-/// argument for a self-describing format here: the helper is released on its
-/// own schedule from its own repository, so the versions being out of step is
-/// what usually happens.
+/// Verifies forward compatibility: unknown message types and unknown fields are safely ignored.
 #[test]
 fn a_newer_helper_is_understood_as_far_as_it_goes() {
     assert_eq!(
@@ -75,11 +64,7 @@ fn a_newer_helper_is_understood_as_far_as_it_goes() {
     );
 }
 
-/// The greeting is checked once and names both versions when it fails.
-///
-/// A shared library rots loudly at compile time; a separately released program
-/// rots quietly at run time, so the one thing that must not happen is a
-/// mismatch that looks like a working connection. See `docs/plugins.md`.
+/// Verifies protocol version check rejects incompatible helpers with informative error messages.
 #[test]
 fn a_version_this_build_cannot_read_is_refused_by_name() {
     let ours = accept(&Message::Hello {
@@ -114,17 +99,7 @@ fn a_version_this_build_cannot_read_is_refused_by_name() {
 
 // Runner tests
 
-/// A fake source as a script on disk.
-///
-/// A script file rather than `sh -c '...'` because [`Source::open`] takes a
-/// program and space-separated arguments and deliberately does not parse quotes
-/// — so a test that needed quoting would be testing a shell this program does
-/// not have.
-///
-/// What these tests prove and do not prove is worth stating. They exercise the
-/// spawn, the handshake, the reader thread, the clock offset and the poll. They
-/// say nothing whatever about Ableton Link, which is a network protocol nothing
-/// here speaks. Only a second peer can say that.
+/// Spawns a shell script wrapper as a mock tempo source child process.
 fn fake(lines: &str) -> (Source, tempfile::TempDir) {
     let (source, dir) = try_fake(lines);
     (source.expect("open"), dir)
@@ -186,23 +161,12 @@ fn an_anchor_arrives_and_extrapolates_from_its_own_timestamp() {
     source.close();
 }
 
-/// A source that dies says so once.
-///
-/// The caller prints that once and does nothing else — the grid holds where it
-/// was, because the last tempo a source gave is still the best anyone has and a
-/// beat that jumped because a helper crashed would be worse than one that
-/// merely stopped being corrected. What is asserted here is the part this
-/// module owns: that a caller polling every frame cannot be handed the news
-/// more than once.
+/// Verifies that source termination is reported exactly once even when polled repeatedly.
 #[test]
 fn a_source_that_dies_is_reported_once() {
     let (mut source, _dir) = fake("echo '{\"t\":\"hello\",\"v\":1,\"source\":\"fake\"}'\n");
     let mut said = Vec::new();
-    // **Polled until the child is gone, not a fixed number of times.** How
-    // long a `sh` takes to print a line and exit is the machine's business,
-    // and a count that was ample alone failed once in a whole-workspace run
-    // where a dozen test binaries were competing for the same cores. The
-    // ceiling is a stall guard, not a timing assumption.
+    // Poll until the child process terminates or the deadline expires.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while source.ended().is_none() && std::time::Instant::now() < deadline {
         source.poll();
@@ -249,12 +213,8 @@ fn the_offset_is_estimated_from_the_least_delayed_message() {
     source.close();
 }
 
-/// One forward clock step must not pin the estimate forever.
-///
-/// A running minimum can only fall, so a single message reading ahead of us — a
-/// helper on a clock that counts suspend, one reporting milliseconds — used to
-/// latch the offset there permanently and place every later anchor that far in
-/// the past. The window forgets.
+/// Verifies that the sliding window prevents a temporary forward clock jump
+/// from permanently skewing the estimated offset.
 #[test]
 fn a_single_clock_step_does_not_latch_the_offset() {
     let far_ahead = 3_600_000_000_i64;
@@ -297,13 +257,7 @@ fn a_single_clock_step_does_not_latch_the_offset() {
     source.close();
 }
 
-/// A message that was written long before it arrived must not drag the
-/// estimate, which is the whole reason the estimate is a minimum.
-///
-/// The window test above catches a clock reading *ahead*; this catches the case
-/// the minimum exists for — a message delayed on its way here. Without both,
-/// inverting `min` to `max` leaves the suite green, which is exactly what a
-/// review found it doing.
+/// Verifies that delayed messages do not distort the minimum-based offset calculation.
 #[test]
 fn a_message_that_arrived_late_does_not_drag_the_offset() {
     let stale = -30_000_000_i64;
@@ -369,12 +323,7 @@ fn an_unusable_anchor_is_counted_and_dropped() {
     source.close();
 }
 
-/// The first anchor aligns; the ones after it are bounded.
-///
-/// The bound is the difference between a wrong reading and a wrong show.
-/// Without it a source with a broken clock moves the grid by whatever it says,
-/// instantly, at full confidence — which is exactly what the in-process tracker
-/// has never been allowed to do.
+/// Verifies that initial anchors align directly while subsequent adjustments are bounded.
 #[test]
 fn the_first_anchor_aligns_and_the_rest_are_trimmed() {
     let (mut source, _dir) = fake(concat!(

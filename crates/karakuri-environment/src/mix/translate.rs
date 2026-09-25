@@ -33,16 +33,7 @@ pub fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
     }
 }
 
-/// The engine's sync mode, as the vocabulary's. See [`blend_mode`]. The
-/// engine's curve as the vocabulary's, for the one of these lists that had no
-/// wire to reach until a fade converted.
-///
-/// `karakuri_operation::Curve` has existed since the vocabulary did —
-/// `Operation::AttachSignal` carries one — and nothing ever needed its name,
-/// because that operation writes no session record. A scheduled move does:
-/// `Record::Transition`'s `curve` is what a replay reads the shape of a fade
-/// back out of. So this is the fifth of these functions and it arrived last,
-/// for the reason the others arrived when they did.
+/// Converts an engine [`Curve`] to the vocabulary [`karakuri_operation::Curve`].
 pub fn curve(shape: Curve) -> karakuri_operation::Curve {
     match shape {
         Curve::Lin => karakuri_operation::Curve::Lin,
@@ -70,14 +61,7 @@ pub fn tonemap(op: TonemapOp) -> karakuri_operation::Tonemap {
     }
 }
 
-/// The engine's feedback cut, as the vocabulary's. See [`blend_mode`].
-///
-/// There is no function the other way, and that is not an omission: a press
-/// carries the vocabulary's cut into a record as a *word*, and
-/// `karakuri_engine::master::Cut::parse` is what reads the word back — so the
-/// return leg goes through the record rather than around it, which is where
-/// every other closed list's does. [`change`]'s `master_chain` arm is that
-/// reader.
+/// Converts an engine feedback [`Cut`] to the vocabulary [`karakuri_operation::Cut`].
 pub fn cut(cut: Cut) -> karakuri_operation::Cut {
     match cut {
         Cut::Mix => karakuri_operation::Cut::Mix,
@@ -85,17 +69,7 @@ pub fn cut(cut: Cut) -> karakuri_operation::Cut {
     }
 }
 
-/// The engine's authority level, as the vocabulary's. See [`blend_mode`].
-///
-/// Written before there is a reader for it, which is why the lint has to be
-/// told, and it is here anyway for the reason the five above it are here at
-/// all: the two spellings have to be *checked* against each other somewhere,
-/// this is the only crate that can see both, and the check below needs a
-/// conversion to check. Nothing on the CLI's paths reads `Set::authority` yet —
-/// the console's `man / sug / auto` chip and a live save that writes a
-/// `Record::Authority` were the two readers this waited for, and the chip
-/// arrived on 2026-08-29 — the Inspector bay draws a node's authority, so this
-/// has a caller outside the tests and the attribute it carried is gone.
+/// Converts an engine [`Authority`] to the vocabulary [`karakuri_operation::Authority`].
 pub fn authority(level: Authority) -> karakuri_operation::Authority {
     match level {
         Authority::Manual => karakuri_operation::Authority::Manual,
@@ -104,22 +78,10 @@ pub fn authority(level: Authority) -> karakuri_operation::Authority {
     }
 }
 
-/// Every residency level there is, with its length in its type. `Residency` is
-/// the engine's and has no iterator, so this is the list — and
-/// [`residency_wire_name`] below is the exhaustive match that stops a level
-/// from reaching the wire without a name.
+/// Every residency level in the engine.
 pub const LEVELS: [Residency; 3] = [Residency::Live, Residency::Priming, Residency::Allocated];
 
-/// The wire spelling of a residency level. Lower case and stable; the status
-/// line's `LIVE`/`prim`/`park` are a different vocabulary for a different
-/// reader and are deliberately not this one.
-///
-/// A match rather than a table lookup, so a level added to the engine does not
-/// compile until it has a spelling. [`parse_residency`] is derived from this
-/// one over [`LEVELS`], so the two directions cannot disagree — the remaining
-/// hand-written thing is `LEVELS` itself, and a level missing from it is a
-/// record that fails to decode with a message naming what was available, rather
-/// than one that decodes as the wrong level.
+/// Returns the stable lowercase wire name of a residency level.
 pub fn residency_wire_name(level: Residency) -> &'static str {
     match level {
         Residency::Live => "live",
@@ -128,15 +90,7 @@ pub fn residency_wire_name(level: Residency) -> &'static str {
     }
 }
 
-/// A wire spelling back to the engine's residency — [`residency_wire_name`]
-/// read the other way, over [`LEVELS`], so the two directions cannot disagree.
-///
-/// `pub` for a second surface. [`change`] below is the one caller in this
-/// crate; the other is the panel program, whose `apply` decodes a
-/// `Record::Residency` a control just wrote. That program transcribed these
-/// three words for as long as they lived in a package with no library target
-/// (ADR-0214), which is the transcription this `pub` deletes rather than
-/// carries.
+/// Parses a wire string into an engine [`Residency`].
 pub fn parse_residency(name: &str) -> Option<Residency> {
     LEVELS
         .iter()

@@ -141,13 +141,7 @@ fn every_residency_level_has_a_wire_name_that_decodes_back() {
     }
 }
 
-/// Every mask shape round-trips, so a shape added to the engine and not to the
-/// wire vocabulary is a deck slot silently unmasked.
-///
-/// Through `Operation::SetMaskShape` rather than a record spelled here, which
-/// is `from_operation`'s rule and buys the third spelling with it: the engine's
-/// `MaskKind`, the vocabulary's `WipeKind` and the wire name all have to agree
-/// for this to decode back.
+/// Verifies that all mask shapes round-trip through operation records and decode correctly.
 #[test]
 fn every_mask_shape_has_a_wire_name_that_decodes_back() {
     for kind in MaskKind::ALL {
@@ -169,18 +163,7 @@ fn every_mask_shape_has_a_wire_name_that_decodes_back() {
     }
 }
 
-/// Every control and every curve a transition can name round-trips, so one
-/// added to the engine and not to the wire vocabulary is a move that fails to
-/// decode rather than one that moves the wrong thing.
-///
-/// Spelled here rather than asked of the conversion, which is the one place in
-/// this module that has to be: `written` writes two of the three controls —
-/// `opacity` for a fade and `mask` for a wipe — and no operation names a
-/// control at all, so a `gain` move has nothing to be converted from. What is
-/// checked is the decoder against the engine's own list, and the two literals
-/// the conversion does write are checked against it in
-/// [`what_the_conversion_schedules_decodes_back_onto_the_fader`] and
-/// [`what_a_wipe_schedules_decodes_back_onto_the_masks_front`].
+/// Verifies that all transition controls and curves round-trip through their wire names.
 #[test]
 fn every_transition_control_and_curve_has_a_wire_name_that_decodes_back() {
     for control in Control::ALL {
@@ -256,29 +239,7 @@ fn every_sync_mode_has_a_wire_name_that_decodes_back() {
     }
 }
 
-/// The conversion writes exactly the transport the engine would engage, which
-/// is the one thing `karakuri-operation-record` cannot check about itself.
-///
-/// `Transport::engaged` is where engaging a mode is *decided* — the anchor is
-/// the session tempo, the scrub is cleared — and it says so in order that *"a
-/// caller building a record of the change and a caller applying one agree by
-/// construction"*. The record-builder is `written`, and it cannot call it:
-/// `karakuri-operation-record` depends on `karakuri-operation` and
-/// `karakuri-store` and on nothing else, by charter (ADR-0180, ADR-0194), so an
-/// engine under it would be a serialiser and a `wgpu` every surface pays for.
-/// The agreement is therefore a convention, and this is the place that enforces
-/// it (`docs/contributing.md` §4) — the only crate in the workspace that can
-/// see the policy and the conversion at once, which is the argument
-/// [`the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it`]
-/// makes about the name lists, one field along.
-///
-/// The tempos are the ones a session can actually reach, taken off an
-/// oscillator rather than written here, and both of its writers are exercised:
-/// `Oscillator::new` for the launch tempo and `Oscillator::correct` for a
-/// tracked one. The out-of-range and NaN asks are in the list because they are
-/// what the clamp exists for — an oscillator swallows them, so `current_tempo`
-/// never reports one, and if it ever did this is what would notice that the
-/// record and the engine had come apart on it.
+/// Verifies that SetSync operations write the exact transport parameters engaged by the engine.
 #[test]
 fn a_sync_mode_writes_exactly_what_the_engine_would_engage() {
     let mut corrected = Oscillator::new(120.0);
@@ -346,13 +307,7 @@ fn every_tonemap_operator_has_a_wire_name_that_decodes_back() {
     }
 }
 
-/// Both ends of the master chain decode, which is the claim that stops a replay
-/// rendering a session's master with the level at 1.0 and the chain off.
-///
-/// They were under this decoder's wildcard arm until 2026-09-09, and the cost
-/// of that was exactly this: `karakuri-cli`'s live path and its replay path
-/// both go through `change`, so a stream that pulled the out down or turned a
-/// trail up came back without either.
+/// Verifies that both MasterOut and MasterChain decode properly from their records.
 #[test]
 fn both_ends_of_the_master_chain_decode_from_their_records() {
     let Some(Change::MasterOut(level)) =
