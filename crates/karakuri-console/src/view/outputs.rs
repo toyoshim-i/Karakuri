@@ -213,15 +213,26 @@ impl Outputs {
     }
 
     /// Say whether an output plugin sink is active and whether it is available on this machine.
-    pub fn told_plugin(mut self, index: usize, on: bool, present: bool) -> Outputs {
+    pub fn told_plugin(self, index: usize, on: bool, present: bool) -> Outputs {
+        self.told_plugin_name(index, on, present, None)
+    }
+
+    /// Say whether an output plugin sink is active, available, and its custom display name.
+    pub fn told_plugin_name(
+        mut self,
+        index: usize,
+        on: bool,
+        present: bool,
+        name: Option<&'static str>,
+    ) -> Outputs {
         if let Some(chip) = self.more.get_mut(index + 1) {
             chip.on = on;
             chip.present = present;
             if index == 0 {
-                chip.name = if present {
-                    PLUGIN_0_NAME
-                } else {
-                    PLUGIN_SINKS[0]
+                chip.name = match (present, name) {
+                    (true, Some(n)) => n,
+                    (true, None) => PLUGIN_0_NAME,
+                    (false, _) => PLUGIN_SINKS[0],
                 };
             }
         }
@@ -313,6 +324,19 @@ pub fn outputs_with(
     open: Open,
     plugin_available: bool,
 ) -> Option<Outputs> {
+    outputs_with_plugin_name(ctx, layout, open, plugin_available, None)
+}
+
+/// The Outputs row, laid out: where the word goes, where the console's one
+/// control is, and whether that control is lit. Allows specifying whether plugin
+/// sink 0 is present on this machine and an optional custom plugin display name.
+pub fn outputs_with_plugin_name(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    open: Open,
+    plugin_available: bool,
+    plugin_name: Option<&'static str>,
+) -> Option<Outputs> {
     // **Fonts are not valid until `egui` has run a pass**, and it says so
     // outright. A pointer event can reach this before the first frame — the
     // window is up and the loop has not drawn yet — so the answer there is
@@ -329,6 +353,9 @@ pub fn outputs_with(
     // not the same width.
     let opened = open.holds(Class::InputsAndOutputs);
     let pill = pill_width(ctx, mcp_word(opened));
+
+    let custom_0_name = plugin_name.unwrap_or(PLUGIN_0_NAME);
+
     // **Every chip's name is measured, not just the first.** A capsule is as
     // wide as what is in it, so where the third starts depends on what the
     // second says — the same rule the class pill above made this row take for
@@ -339,7 +366,7 @@ pub fn outputs_with(
             1 => PROJECTOR,
             2 => {
                 if plugin_available {
-                    PLUGIN_0_NAME
+                    custom_0_name
                 } else {
                     PLUGIN_SINKS[0]
                 }
@@ -381,7 +408,7 @@ pub fn outputs_with(
                 0 => PROJECTOR,
                 1 => {
                     if plugin_available {
-                        PLUGIN_0_NAME
+                        custom_0_name
                     } else {
                         PLUGIN_SINKS[0]
                     }
@@ -538,6 +565,6 @@ pub(super) fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     };
     chip_into(row.sink, row.dot, PROGRAM_VIEW, row.on, true);
     for c in &row.more {
-        chip_into(c.chip, c.dot, c.name, c.on, c.present);
+        chip_into(c.chip, c.dot, &c.name, c.on, c.present);
     }
 }

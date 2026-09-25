@@ -4,8 +4,9 @@ use karakuri_operation::gate::Class;
 use crate::panel::Panel;
 use crate::view::{
     arrangement, audio_in, bay_grip, deck_head, deck_name, inspector, keep_pill, learn_pill,
-    library, look, map_pill, master, mcp_pill, mixer, outputs_with, program_bay, program_head,
-    sequencer, slot_mcp_pill, staging, tracker_group, transition, transport, View, REGIONS,
+    library, look, map_pill, master, mcp_pill, mixer, outputs_with_plugin_name,
+    program_bay, program_head, sequencer, slot_mcp_pill, staging, tracker_group, transition,
+    transport, View, REGIONS,
 };
 
 /// The Sequencer bay's controls, derived once for all of them, which is a mixer
@@ -64,9 +65,22 @@ pub(super) fn on_candidate(panel: &Panel, ctx: &egui::Context, view: &View, p: P
 /// sits in, so a press there falls through to whatever is under it exactly as a
 /// press on the row's ground does.
 pub(super) fn on_sink(panel: &Panel, ctx: &egui::Context, view: &View, p: Point) -> bool {
-    outputs_with(ctx, panel.layout(), view.opening, view.plugin_available)
-        .map(|row| row.told_plugin(0, view.plugin, view.plugin_available))
-        .is_some_and(|row| row.chip_at(p).is_some())
+    outputs_with_plugin_name(
+        ctx,
+        panel.layout(),
+        view.opening,
+        view.plugin_available,
+        view.plugin_name,
+    )
+    .map(|row| {
+        row.told_plugin_name(
+            0,
+            view.plugin,
+            view.plugin_available,
+            view.plugin_name,
+        )
+    })
+    .is_some_and(|row| row.chip_at(p).is_some())
 }
 
 /// The two pills that are not in a bay, and the only two asked with their cards
