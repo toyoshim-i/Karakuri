@@ -92,6 +92,8 @@ impl Readout {
         budget_ms: Option<f32>,
         governed: &Report,
         presets: Option<&karakuri_environment::places::Presets>,
+        plugins: Option<&karakuri_environment::places::Plugins>,
+        discovered_plugins: usize,
         store: &std::path::Path,
         mcp_port: Option<u16>,
     ) {
@@ -114,6 +116,17 @@ impl Readout {
                 );
             }
             None => println!("  presets: none"),
+        }
+        match plugins {
+            Some(plugins) => {
+                println!(
+                    "  plugins: {} ({} plugins, {})",
+                    plugins.dir.display(),
+                    discovered_plugins,
+                    plugins.found.how_plugin()
+                );
+            }
+            None => println!("  plugins: none"),
         }
         println!("  store: {}", store.display());
 

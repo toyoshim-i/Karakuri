@@ -219,7 +219,8 @@ impl App {
         // picture's own registration is — see `view::View::projector`.
         self.readout.view.projector = projector.is_some();
         self.readout.view.plugin = gfx.plugin.is_some();
-        self.readout.view.plugin_available = crate::app::operations::is_plugin_available(0);
+        self.readout.view.plugin_available = crate::app::operations::is_plugin_available(gfx, 0);
+        self.readout.view.plugin_name = gfx.plugin_name;
         self.readout.view.picture = picture;
         self.readout.view.previews = previews;
         // **Which of those pictures is a still, and why** — the deck's

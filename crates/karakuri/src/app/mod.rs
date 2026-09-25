@@ -52,6 +52,10 @@ pub(crate) struct App {
     /// machine with no library, which reaches this far only on a run that was given
     /// its pair by hand.
     pub(crate) presets: Option<karakuri_environment::places::Presets>,
+    /// The plugin directory resolved for this run, if available.
+    pub(crate) plugins: Option<karakuri_environment::places::Plugins>,
+    /// Discovered out-of-process output plugins.
+    pub(crate) discovered_plugins: Vec<karakuri_environment::output_plugin::DiscoveredPlugin>,
     /// The directory the Library bay is pointed at, or `None` until a folder has
     /// been dropped on this window — which is where every run starts, because
     /// nothing names one before the run (ADR-0275).
@@ -356,12 +360,20 @@ impl App {
         let (send_tx, sends) = std::sync::mpsc::channel();
         let (keep_tx, keeps) = std::sync::mpsc::channel();
         let keymap = crate::keymap::Keymap::load_or_default(&launch.store);
+        let discovered_plugins = match &launch.plugins {
+            Some(places) => {
+                karakuri_environment::output_plugin::discovery::discover_plugins(places)
+            }
+            None => Vec::new(),
+        };
         App {
             gfx: None,
             sources: launch.sources,
             running,
             store: launch.store,
             presets: launch.presets,
+            plugins: launch.plugins,
+            discovered_plugins,
             // **Pointed nowhere**, which is where every run starts: a folder
             // is chosen by dropping one on this window and no flag names one
             // before it opens (ADR-0275).
