@@ -418,3 +418,49 @@ fn the_default_store_is_one_directory_beside_the_session() {
         "the default store is no longer beside the session"
     );
 }
+
+#[test]
+fn plugin_directory_search_peels_off_candidates_in_order() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let exe_dir = tmp.path().join("bin");
+    let workspace = tmp.path().join("tree");
+
+    let bundle = exe_dir.join("..").join("PlugIns");
+    let prefix = exe_dir.join("..").join("lib").join("karakuri").join("plugins");
+    let beside = exe_dir.join("plugins");
+    let ws = workspace.join("plugins");
+
+    std::fs::create_dir_all(&bundle).expect("mkdir bundle");
+    std::fs::create_dir_all(&prefix).expect("mkdir prefix");
+    std::fs::create_dir_all(&beside).expect("mkdir beside");
+    std::fs::create_dir_all(&ws).expect("mkdir ws");
+
+    for expected in [
+        Found::Bundle,
+        Found::Prefix,
+        Found::Beside,
+        Found::Workspace,
+    ] {
+        let found = searched_plugins(Some(&exe_dir), &workspace)
+            .expect("one of the four holds a plugin directory");
+        assert_eq!(
+            found.found,
+            expected,
+            "{} answered ahead of its turn",
+            found.dir.display()
+        );
+        std::fs::remove_dir_all(&found.dir).expect("rmdir");
+    }
+}
+
+#[test]
+fn given_plugins_directory_is_respected_or_refused() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path().join("my_plugins");
+    assert!(plugins(Some(&dir)).is_err());
+
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    let res = plugins(Some(&dir)).expect("valid dir").expect("found");
+    assert_eq!(res.found, Found::Given);
+    assert_eq!(res.dir, dir);
+}
