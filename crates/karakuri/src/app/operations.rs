@@ -84,10 +84,10 @@ pub(crate) fn routed(
         // fullscreen, and the frame follows.
         .with_inner_size(winit::dpi::LogicalSize::new(CANVAS.0, CANVAS.1));
     #[cfg(target_os = "macos")]
-    {
+    let attrs = {
         use winit::platform::macos::WindowAttributesExtMacOS;
-        attrs = attrs.with_tabbing_identifier("projector");
-    }
+        attrs.with_tabbing_identifier("projector")
+    };
     let window = match event_loop.create_window(attrs) {
         Ok(window) => Arc::new(window),
         // **Reported rather than panicked**, for `resumed`'s reason: a panic
