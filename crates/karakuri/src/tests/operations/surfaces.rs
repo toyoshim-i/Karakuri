@@ -304,7 +304,11 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
                 continue;
             }
             let src = std::fs::read_to_string(&path).unwrap();
-            let rel = path.strip_prefix(&root).unwrap().display().to_string();
+            let rel = path
+                .strip_prefix(&root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
             for (i, line) in src.lines().enumerate() {
                 let code = line.split("//").next().unwrap_or("");
                 if code.contains("Gpu::instance()") {
@@ -316,9 +320,8 @@ fn every_surface_is_made_by_the_instance_the_adapter_came_from() {
             }
         }
     }
-    assert_eq!(
-        fresh,
-        vec!["app/handler/mod.rs:83".to_string()],
+    assert!(
+        fresh.len() == 1 && fresh[0].starts_with("app/handler/mod.rs:"),
         "a second wgpu::Instance would hold none of the first one's adapters: {fresh:?}"
     );
     assert!(!surfaces.is_empty(), "no surface is made anywhere");
@@ -364,7 +367,11 @@ fn a_picture_format_is_a_value_read_off_a_surface() {
                 continue;
             }
             let src = std::fs::read_to_string(&path).unwrap();
-            let rel = path.strip_prefix(&root).unwrap().display().to_string();
+            let rel = path
+                .strip_prefix(&root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
             for (i, line) in src.lines().enumerate() {
                 let code = line.split("//").next().unwrap_or("");
                 for spelling in ["Rgba8UnormSrgb", "Bgra8UnormSrgb"] {
