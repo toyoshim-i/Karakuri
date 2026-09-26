@@ -19,10 +19,22 @@ pub enum SessionStatus {
     Failed(String),
 }
 
-/// Filter for ANSI escape sequences preserving UTF-8 text and newlines.
-#[derive(Default)]
-struct AnsiFilter {
-    state: AnsiState,
+/// ANSI terminal escape events for cursor manipulation, line clearing, and character output.
+#[derive(Debug, PartialEq, Eq)]
+pub enum AnsiEvent {
+    Print(char),
+    Newline,
+    CarriageReturn,
+    Backspace,
+    Tab,
+    ClearLine(u8),
+    ClearDisplay(u8),
+    CursorUp(usize),
+    CursorDown(usize),
+    CursorForward(usize),
+    CursorBack(usize),
+    CursorCol(usize),
+    CursorPos(usize, usize),
 }
 
 #[derive(Default, PartialEq, Eq)]
@@ -35,22 +47,38 @@ enum AnsiState {
     Charset,
 }
 
-impl AnsiFilter {
-    fn filter_char(&mut self, c: char) -> Option<char> {
+/// Streaming parser for ANSI escape sequences converting characters into terminal events.
+#[derive(Default)]
+struct AnsiParser {
+    state: AnsiState,
+    csi_params: String,
+}
+
+impl AnsiParser {
+    fn parse_char(&mut self, c: char) -> Option<AnsiEvent> {
         match self.state {
             AnsiState::Normal => {
                 if c == '\x1b' {
                     self.state = AnsiState::Escape;
                     None
-                } else if c.is_control() && c != '\n' && c != '\r' && c != '\t' && c != '\x08' {
+                } else if c == '\r' {
+                    Some(AnsiEvent::CarriageReturn)
+                } else if c == '\n' {
+                    Some(AnsiEvent::Newline)
+                } else if c == '\x08' {
+                    Some(AnsiEvent::Backspace)
+                } else if c == '\t' {
+                    Some(AnsiEvent::Tab)
+                } else if c.is_control() {
                     None
                 } else {
-                    Some(c)
+                    Some(AnsiEvent::Print(c))
                 }
             }
             AnsiState::Escape => match c {
                 '[' => {
                     self.state = AnsiState::Csi;
+                    self.csi_params.clear();
                     None
                 }
                 ']' => {
@@ -67,13 +95,62 @@ impl AnsiFilter {
                 }
             },
             AnsiState::Csi => {
-                if ('@'..='~').contains(&c) {
+                if c.is_ascii_digit() || c == ';' || c == '?' || c == '<' || c == '>' {
+                    self.csi_params.push(c);
+                    None
+                } else if ('@'..='~').contains(&c) {
                     self.state = AnsiState::Normal;
+                    match c {
+                        'K' => {
+                            let n: u8 = self.csi_params.parse().unwrap_or(0);
+                            Some(AnsiEvent::ClearLine(n))
+                        }
+                        'J' => {
+                            let n: u8 = self.csi_params.parse().unwrap_or(0);
+                            Some(AnsiEvent::ClearDisplay(n))
+                        }
+                        'A' => {
+                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
+                            Some(AnsiEvent::CursorUp(n))
+                        }
+                        'B' => {
+                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
+                            Some(AnsiEvent::CursorDown(n))
+                        }
+                        'C' => {
+                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
+                            Some(AnsiEvent::CursorForward(n))
+                        }
+                        'D' => {
+                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
+                            Some(AnsiEvent::CursorBack(n))
+                        }
+                        'G' => {
+                            let n: usize = self.csi_params.parse().unwrap_or(1).max(1);
+                            Some(AnsiEvent::CursorCol(n))
+                        }
+                        'H' | 'f' => {
+                            let mut parts = self.csi_params.split(';');
+                            let r: usize = parts
+                                .next()
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or(1)
+                                .max(1);
+                            let col: usize = parts
+                                .next()
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or(1)
+                                .max(1);
+                            Some(AnsiEvent::CursorPos(r, col))
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
                 }
-                None
             }
             AnsiState::Osc => {
-                if c == '\x07' {
+                if c == '\x07' || c == '\x1b' {
                     self.state = AnsiState::Normal;
                 }
                 None
@@ -86,55 +163,134 @@ impl AnsiFilter {
     }
 }
 
-/// Buffer holding completed scrollback lines and in-progress line output.
+/// Buffer holding terminal lines and active cursor position.
 #[derive(Debug, Default)]
 pub struct Scrollback {
-    /// Completed lines received from PTY.
-    pub completed: Vec<String>,
-    /// In-progress partial line currently being built.
-    pub current: String,
-    pending_cr: bool,
+    /// Rendered lines of text.
+    pub lines: Vec<String>,
+    /// Active cursor coordinates (row, col) (0-indexed).
+    pub cursor: (usize, usize),
 }
 
 impl Scrollback {
     /// Maximum number of scrollback lines retained in memory.
     pub const MAX_LINES: usize = 2048;
 
+    /// Dispatches an ANSI terminal event to update buffer lines and cursor.
+    pub fn handle_event(&mut self, ev: AnsiEvent) {
+        if self.lines.is_empty() {
+            self.lines.push(String::new());
+        }
+        match ev {
+            AnsiEvent::Print(c) => {
+                while self.lines.len() <= self.cursor.0 {
+                    self.lines.push(String::new());
+                }
+                let line = &mut self.lines[self.cursor.0];
+                let char_count = line.chars().count();
+                if self.cursor.1 >= char_count {
+                    while line.chars().count() < self.cursor.1 {
+                        line.push(' ');
+                    }
+                    line.push(c);
+                } else {
+                    let mut new_line = String::with_capacity(line.len());
+                    for (i, existing_ch) in line.chars().enumerate() {
+                        if i == self.cursor.1 {
+                            new_line.push(c);
+                        } else {
+                            new_line.push(existing_ch);
+                        }
+                    }
+                    *line = new_line;
+                }
+                self.cursor.1 += 1;
+            }
+            AnsiEvent::Newline => {
+                self.cursor.0 += 1;
+                self.cursor.1 = 0;
+                while self.lines.len() <= self.cursor.0 {
+                    self.lines.push(String::new());
+                }
+                if self.lines.len() > Self::MAX_LINES {
+                    self.lines.remove(0);
+                    self.cursor.0 = self.cursor.0.saturating_sub(1);
+                }
+            }
+            AnsiEvent::CarriageReturn => {
+                self.cursor.1 = 0;
+            }
+            AnsiEvent::Backspace => {
+                self.cursor.1 = self.cursor.1.saturating_sub(1);
+            }
+            AnsiEvent::Tab => {
+                self.cursor.1 = (self.cursor.1 / 8 + 1) * 8;
+            }
+            AnsiEvent::ClearLine(mode) => {
+                if self.cursor.0 < self.lines.len() {
+                    match mode {
+                        2 => {
+                            self.lines[self.cursor.0].clear();
+                            self.cursor.1 = 0;
+                        }
+                        1 => {
+                            let line = &mut self.lines[self.cursor.0];
+                            let remaining: String = line.chars().skip(self.cursor.1).collect();
+                            *line = format!("{}{}", " ".repeat(self.cursor.1), remaining);
+                        }
+                        _ => {
+                            let line = &mut self.lines[self.cursor.0];
+                            let kept: String = line.chars().take(self.cursor.1).collect();
+                            *line = kept;
+                        }
+                    }
+                }
+            }
+            AnsiEvent::ClearDisplay(mode) => {
+                if mode == 2 || mode == 3 {
+                    self.lines.clear();
+                    self.lines.push(String::new());
+                    self.cursor = (0, 0);
+                }
+            }
+            AnsiEvent::CursorUp(n) => {
+                self.cursor.0 = self.cursor.0.saturating_sub(n);
+            }
+            AnsiEvent::CursorDown(n) => {
+                self.cursor.0 = (self.cursor.0 + n).min(self.lines.len().saturating_sub(1));
+            }
+            AnsiEvent::CursorForward(n) => {
+                self.cursor.1 += n;
+            }
+            AnsiEvent::CursorBack(n) => {
+                self.cursor.1 = self.cursor.1.saturating_sub(n);
+            }
+            AnsiEvent::CursorCol(n) => {
+                self.cursor.1 = n.saturating_sub(1);
+            }
+            AnsiEvent::CursorPos(r, col) => {
+                self.cursor.0 = r.saturating_sub(1).min(self.lines.len().saturating_sub(1));
+                self.cursor.1 = col.saturating_sub(1);
+            }
+        }
+    }
+
     /// Pushes a single character into the scrollback buffer.
     pub fn push_char(&mut self, ch: char) {
-        match ch {
-            '\r' => {
-                self.pending_cr = true;
-            }
-            '\n' => {
-                self.pending_cr = false;
-                let line = std::mem::take(&mut self.current);
-                if self.completed.len() >= Self::MAX_LINES {
-                    self.completed.remove(0);
-                }
-                self.completed.push(line);
-            }
-            '\x08' => {
-                self.pending_cr = false;
-                self.current.pop();
-            }
-            c => {
-                if self.pending_cr {
-                    self.pending_cr = false;
-                    self.current.clear();
-                }
-                self.current.push(c);
-            }
+        let mut parser = AnsiParser::default();
+        if let Some(ev) = parser.parse_char(ch) {
+            self.handle_event(ev);
         }
     }
 
     /// Returns all completed lines plus any current in-progress line.
     pub fn lines(&self) -> Vec<String> {
-        let mut all = self.completed.clone();
-        if !self.current.is_empty() {
-            all.push(self.current.clone());
-        }
-        all
+        self.lines.clone()
+    }
+
+    /// Returns the active cursor coordinates (row, col).
+    pub fn cursor(&self) -> (usize, usize) {
+        self.cursor
     }
 }
 
@@ -178,7 +334,7 @@ impl TerminalSession {
             Err(e) => {
                 let err_msg = format!("[PTY allocation failed: {e}]");
                 if let Ok(mut sb) = scrollback.lock() {
-                    sb.completed.push(err_msg.clone());
+                    sb.lines.push(err_msg.clone());
                 }
                 if let Ok(mut st) = status.lock() {
                     *st = SessionStatus::Failed(err_msg);
@@ -193,7 +349,10 @@ impl TerminalSession {
             }
         };
 
-        let mut cmd = CommandBuilder::new(program);
+        let resolved_program = super::cli::resolve_executable(program)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| program.to_string());
+        let mut cmd = CommandBuilder::new(&resolved_program);
         for arg in args {
             cmd.arg(arg);
         }
@@ -206,7 +365,7 @@ impl TerminalSession {
             Err(e) => {
                 let err_msg = format!("[Failed to start `{program}`: {e}]");
                 if let Ok(mut sb) = scrollback.lock() {
-                    sb.completed.push(err_msg.clone());
+                    sb.lines.push(err_msg.clone());
                 }
                 if let Ok(mut st) = status.lock() {
                     *st = SessionStatus::Failed(err_msg);
@@ -261,7 +420,7 @@ impl TerminalSession {
             .spawn(move || {
                 let mut reader = reader;
                 let mut buf = [0u8; 1024];
-                let mut filter = AnsiFilter::default();
+                let mut parser = AnsiParser::default();
 
                 while let Ok(n) = reader.read(&mut buf) {
                     if n == 0 {
@@ -270,8 +429,8 @@ impl TerminalSession {
                     let chunk = String::from_utf8_lossy(&buf[..n]);
                     if let Ok(mut sb) = scrollback_clone.lock() {
                         for c in chunk.chars() {
-                            if let Some(filtered) = filter.filter_char(c) {
-                                sb.push_char(filtered);
+                            if let Some(event) = parser.parse_char(c) {
+                                sb.handle_event(event);
                             }
                         }
                     }
@@ -299,7 +458,25 @@ impl TerminalSession {
         }
     }
 
-    /// Sends a line of text followed by newline to the PTY stdin.
+    /// Sends raw bytes directly to the PTY stdin.
+    pub fn send_bytes(&self, bytes: &[u8]) -> std::io::Result<()> {
+        let mut writer_lock = self
+            .writer
+            .lock()
+            .map_err(|_| std::io::Error::other("session writer lock poisoned"))?;
+        if let Some(ref mut w) = *writer_lock {
+            w.write_all(bytes)?;
+            w.flush()?;
+            Ok(())
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "session writer closed",
+            ))
+        }
+    }
+
+    /// Sends a line of text followed by carriage return (`\r`) to the PTY stdin.
     pub fn send_line(&self, text: &str) -> std::io::Result<()> {
         let mut writer_lock = self
             .writer
@@ -307,7 +484,7 @@ impl TerminalSession {
             .map_err(|_| std::io::Error::other("session writer lock poisoned"))?;
         if let Some(ref mut w) = *writer_lock {
             w.write_all(text.as_bytes())?;
-            w.write_all(b"\n")?;
+            w.write_all(b"\r")?;
             w.flush()?;
             Ok(())
         } else {
@@ -350,6 +527,14 @@ impl TerminalSession {
             .lock()
             .map(|sb| sb.lines())
             .unwrap_or_default()
+    }
+
+    /// Returns the active cursor coordinates (row, col) in the terminal.
+    pub fn cursor(&self) -> (usize, usize) {
+        self.scrollback
+            .lock()
+            .map(|sb| sb.cursor())
+            .unwrap_or((0, 0))
     }
 
     /// Returns the OS process ID if the child is still running.

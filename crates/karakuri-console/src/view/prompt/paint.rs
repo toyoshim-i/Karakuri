@@ -132,7 +132,7 @@ pub fn prompt_menu_into(ui: &Ui, pal: &Palette, layout: &Layout, state: &PromptS
 /// Terminal and input font size in the Prompt bay.
 pub const PROMPT_FONT_SIZE: f32 = 10.0;
 
-/// Paints the internal body of the Prompt bay (terminal area with scrollback and prompt bar).
+/// Paints the internal body of the Prompt bay with interactive cursor-anchored terminal.
 pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptState) {
     let head = head_box(bay_rect);
     let body_top = head.max.y;
@@ -141,21 +141,15 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
     }
 
     let body_rect = Rect::from_min_max(Pos2::new(bay_rect.min.x, body_top), bay_rect.max);
-    let input_h = 24.0;
-    let sep_y = (body_rect.max.y - input_h).max(body_rect.min.y);
-
-    let output_rect = Rect::from_min_max(body_rect.min, Pos2::new(body_rect.max.x, sep_y));
-    let input_rect = Rect::from_min_max(Pos2::new(body_rect.min.x, sep_y), body_rect.max);
-
     let font_id = FontId::new(PROMPT_FONT_SIZE, FontFamily::Monospace);
 
-    // 1. Output scrollback area
-    let mut output_ui = ui.new_child(egui::UiBuilder::new().max_rect(output_rect));
-    output_ui.spacing_mut().item_spacing.y = 2.0;
+    let mut terminal_ui = ui.new_child(egui::UiBuilder::new().max_rect(body_rect));
+    terminal_ui.spacing_mut().item_spacing.y = 2.0;
+
     egui::ScrollArea::vertical()
         .stick_to_bottom(true)
         .auto_shrink([false, false])
-        .show(&mut output_ui, |ui| {
+        .show(&mut terminal_ui, |ui| {
             ui.add_space(4.0);
             match &state.selection {
                 CliSelection::Unselected => {
@@ -170,22 +164,15 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                             .color(pal.faint),
                     );
                 }
-                CliSelection::Preset(preset) => {
+                CliSelection::Preset(_) | CliSelection::Custom(_) => {
                     if let Some(session) = state.active_session() {
                         let lines = session.lines();
-                        if lines.is_empty() {
-                            let label = if session.is_running() {
-                                format!("session: {} (running)", preset.display_name())
-                            } else {
-                                format!("session: {} (ready)", preset.display_name())
-                            };
-                            ui.label(
-                                egui::RichText::new(label)
-                                    .font(font_id.clone())
-                                    .color(pal.pink),
-                            );
-                        } else {
-                            for line in lines {
+                        let cursor = session.cursor();
+                        let active_row = cursor.0.min(lines.len().saturating_sub(1));
+
+                        // 1. Output lines before the active cursor row
+                        for (idx, line) in lines.iter().enumerate() {
+                            if idx < active_row {
                                 ui.label(
                                     egui::RichText::new(line)
                                         .font(font_id.clone())
@@ -193,19 +180,78 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
                                 );
                             }
                         }
-                    }
-                }
-                CliSelection::Custom(cmd) => {
-                    if let Some(session) = state.active_session() {
-                        let lines = session.lines();
-                        if lines.is_empty() {
-                            ui.label(
-                                egui::RichText::new(format!("session: custom [{}] (ready)", cmd))
+
+                        // 2. Active line with embedded cursor-anchored input
+                        let active_line = lines.get(active_row).cloned().unwrap_or_default();
+                        let prefix: String = active_line.chars().take(cursor.1).collect();
+
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            if !prefix.is_empty() {
+                                ui.label(
+                                    egui::RichText::new(&prefix)
+                                        .font(font_id.clone())
+                                        .color(pal.text),
+                                );
+                            }
+
+                            let mut buf_guard = state.input_buffer.lock().ok();
+                            if let Some(ref mut buf) = buf_guard {
+                                let edit = egui::TextEdit::singleline(&mut **buf)
                                     .font(font_id.clone())
-                                    .color(pal.pink),
-                            );
-                        } else {
-                            for line in lines {
+                                    .text_color(pal.text)
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(f32::INFINITY)
+                                    .lock_focus(true);
+
+                                let response = ui.add(edit);
+
+                                // Enter submission: send buffer content (or empty CR to accept/advance)
+                                let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                                if enter_pressed && response.has_focus() {
+                                    let text = std::mem::take(&mut **buf);
+                                    if text.is_empty() {
+                                        let _ = session.send_bytes(b"\r");
+                                    } else {
+                                        let _ = session.send_line(&text);
+                                    }
+                                }
+
+                                // Interactive terminal shortcuts while focused
+                                if response.has_focus() {
+                                    let ctrl = ui.input(|i| i.modifiers.ctrl);
+                                    if ctrl && ui.input(|i| i.key_pressed(egui::Key::C)) {
+                                        let _ = session.send_bytes(b"\x03");
+                                    } else if ctrl && ui.input(|i| i.key_pressed(egui::Key::D)) {
+                                        let _ = session.send_bytes(b"\x04");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                                        let _ = session.send_bytes(b"\x1b[A");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                                        let _ = session.send_bytes(b"\x1b[B");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+                                        let _ = session.send_bytes(b"\x1b[D");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+                                        let _ = session.send_bytes(b"\x1b[C");
+                                    } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                        response.surrender_focus();
+                                    }
+                                }
+
+                                // Auto-focus on click in terminal body
+                                let pointer_clicked = ui.input(|i| i.pointer.primary_clicked());
+                                if pointer_clicked {
+                                    if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
+                                        if body_rect.contains(pos) {
+                                            response.request_focus();
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        // 3. Any lines after the active cursor row
+                        for idx in (active_row + 1)..lines.len() {
+                            if let Some(line) = lines.get(idx) {
                                 ui.label(
                                     egui::RichText::new(line)
                                         .font(font_id.clone())
@@ -218,48 +264,4 @@ pub fn prompt_into(ui: &mut Ui, pal: &Palette, bay_rect: Rect, state: &PromptSta
             }
             ui.add_space(4.0);
         });
-
-    // 2. Separator line above prompt input
-    ui.painter().line_segment(
-        [
-            Pos2::new(input_rect.min.x, input_rect.min.y),
-            Pos2::new(input_rect.max.x, input_rect.min.y),
-        ],
-        Stroke::new(size::HAIRLINE, pal.hair),
-    );
-
-    // 3. Prompt input bar
-    let mut input_ui = ui.new_child(egui::UiBuilder::new().max_rect(input_rect));
-    input_ui.horizontal_centered(|ui| {
-        ui.add_space(6.0);
-        ui.label(
-            egui::RichText::new(">")
-                .font(font_id.clone())
-                .color(pal.pink),
-        );
-
-        let mut buf_guard = state.input_buffer.lock().ok();
-        if let Some(ref mut buf) = buf_guard {
-            let edit = egui::TextEdit::singleline(&mut **buf)
-                .font(font_id)
-                .text_color(pal.text)
-                .hint_text("Ask agent...")
-                .frame(egui::Frame::NONE)
-                .desired_width(f32::INFINITY);
-
-            let response = ui.add(edit);
-
-            let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if enter_pressed && response.has_focus() {
-                let text = std::mem::take(&mut **buf);
-                let trimmed = text.trim();
-                if !trimmed.is_empty() {
-                    if let Some(session) = state.active_session() {
-                        let _ = session.send_line(trimmed);
-                    }
-                }
-                response.request_focus();
-            }
-        }
-    });
 }
